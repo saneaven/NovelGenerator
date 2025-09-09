@@ -18,8 +18,8 @@ const ProjectMenu: React.FC = () => {
   if (!currentProject) {
     return (
       <div className="error-container">
-        <h2>프로젝트를 찾을 수 없습니다</h2>
-        <button onClick={() => navigate('/')}>홈으로 돌아가기</button>
+        <h2>Project Not Found</h2>
+        <button onClick={() => navigate('/')}>Go back to Home</button>
       </div>
     );
   }
@@ -36,7 +36,7 @@ const ProjectMenu: React.FC = () => {
     <div className="project-menu-container">
       <div className="project-header">
         <div className="breadcrumb">
-          <Link to="/" className="breadcrumb-link">홈</Link>
+          <Link to="/" className="breadcrumb-link">Home</Link>
           <span className="breadcrumb-separator"> / </span>
           <span className="breadcrumb-current">{currentProject.name}</span>
         </div>
@@ -45,48 +45,48 @@ const ProjectMenu: React.FC = () => {
           <p className="project-description">{currentProject.description}</p>
         )}
         <div className="project-meta">
-          <p>생성일: {currentProject.createdAt.toLocaleDateString()}</p>
-          <p>마지막 수정: {currentProject.updatedAt.toLocaleDateString()}</p>
+          <p>Created: {currentProject.createdAt.toLocaleDateString()}</p>
+          <p>Last updated: {currentProject.updatedAt.toLocaleDateString()}</p>
         </div>
       </div>
 
       <div className="menu-grid">
         <div className="menu-card" onClick={handleChatClick}>
           <div className="menu-icon">💬</div>
-          <h3>AI 채팅</h3>
-          <p>AI와 대화하며 소설 아이디어를 발전시켜보세요</p>
+          <h3>AI Chat</h3>
+          <p>Develop your novel ideas by chatting with the AI</p>
           <div className="menu-arrow">→</div>
         </div>
 
         <div className="menu-card" onClick={handleStoryObjectsClick}>
           <div className="menu-icon">📋</div>
-          <h3>스토리 오브젝트</h3>
-          <p>등장인물, 배경, 설정 등을 체계적으로 관리하세요</p>
+          <h3>Story Objects</h3>
+          <p>Systematically manage characters, backgrounds, settings, etc.</p>
           <div className="menu-arrow">→</div>
         </div>
 
         <div className="menu-card disabled">
           <div className="menu-icon">📝</div>
-          <h3>소설 편집기</h3>
-          <p>구조화된 편집기로 소설을 작성하세요 (준비 중)</p>
+          <h3>Novel Editor</h3>
+          <p>Write your novel with a structured editor (Coming soon)</p>
         </div>
 
         <div className="menu-card disabled">
           <div className="menu-icon">🗺️</div>
-          <h3>월드 빌딩</h3>
-          <p>세계관과 설정을 시각적으로 관리하세요 (준비 중)</p>
+          <h3>World Building</h3>
+          <p>Visually manage your world and settings (Coming soon)</p>
         </div>
 
         <div className="menu-card disabled">
           <div className="menu-icon">📊</div>
-          <h3>진행 상황</h3>
-          <p>작업 진행도를 확인하세요 (준비 중)</p>
+          <h3>Progress</h3>
+          <p>Check your work progress (Coming soon)</p>
         </div>
 
         <div className="menu-card disabled">
           <div className="menu-icon">⚙️</div>
-          <h3>설정</h3>
-          <p>프로젝트 설정을 변경하세요 (준비 중)</p>
+          <h3>Settings</h3>
+          <p>Change project settings (Coming soon)</p>
         </div>
       </div>
     </div>

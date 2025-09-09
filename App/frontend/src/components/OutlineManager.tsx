@@ -62,7 +62,7 @@ const OutlineManager: React.FC = () => {
   };
 
   const handleDeleteAct = (actId: string) => {
-    if (confirm('이 막을 삭제하시겠습니까? 포함된 모든 장도 삭제됩니다.')) {
+    if (confirm('Are you sure you want to delete this act? All chapters within it will also be deleted.')) {
       if (projectId) {
         deleteAct(projectId, actId);
         refreshOutline();
@@ -87,7 +87,7 @@ const OutlineManager: React.FC = () => {
   };
 
   const handleDeleteChapter = (chapterId: string) => {
-    if (confirm('이 장을 삭제하시겠습니까?')) {
+    if (confirm('Are you sure you want to delete this chapter?')) {
       if (projectId) {
         deleteChapter(projectId, chapterId);
         refreshOutline();
@@ -96,13 +96,13 @@ const OutlineManager: React.FC = () => {
   };
 
   const handleAIResult = (result: any) => {
-    console.log('[Outline] AI 결과 받음:', result);
+    console.log('[Outline] AI result received:', result);
     console.log('[Outline] projectId:', projectId);
     
     if (!projectId) return;
     
     if (result && result.acts && Array.isArray(result.acts)) {
-      console.log('[Outline] 아웃라인 편집 모드');
+      console.log('[Outline] Outline edit mode');
       const newOutline = createEmptyOutline();
       
       newOutline.acts = result.acts.map((actData: any) => {
@@ -129,11 +129,11 @@ const OutlineManager: React.FC = () => {
         };
       });
       
-      console.log('[Outline] 처리된 아웃라인:', newOutline);
+      console.log('[Outline] Processed outline:', newOutline);
       setOutline(projectId, newOutline);
       refreshOutline();
     } else {
-      console.log('[Outline] 결과 형식 오류:', result);
+      console.log('[Outline] Result format error:', result);
     }
   };
 
@@ -175,7 +175,7 @@ const OutlineManager: React.FC = () => {
   if (!projectId) {
     return (
       <div className="error-container">
-        <p>프로젝트 ID를 찾을 수 없습니다.</p>
+        <p>Project ID not found.</p>
       </div>
     );
   }
@@ -185,26 +185,26 @@ const OutlineManager: React.FC = () => {
   return (
     <div className="outline-manager">
       <div className="section-header">
-        <h2>스토리 아웃라인</h2>
+        <h2>Story Outline</h2>
         <div className="header-buttons">
           <button 
             onClick={() => setShowVersionHistory(true)} 
             className="version-history-button"
           >
-            📚 버전 히스토리
+            📚 Version History
           </button>
           <button 
             onClick={() => setShowAIModal(true)} 
             className="ai-edit-button"
           >
-            🤖 AI 편집
+            🤖 AI Edit
           </button>
           <button 
             onClick={() => setShowAddActForm(true)} 
             className="add-button"
             disabled={showAddActForm}
           >
-            막 추가
+            Add Act
           </button>
         </div>
       </div>
@@ -219,15 +219,15 @@ const OutlineManager: React.FC = () => {
       <div className="acts-list">
         {acts.length === 0 ? (
           <div className="empty-state">
-            <p>아직 생성된 막이 없습니다.</p>
-            <p>새로운 막을 추가해서 스토리 구조를 만들어보세요!</p>
+            <p>No acts have been created yet.</p>
+            <p>Add a new act to build your story structure!</p>
           </div>
         ) : (
           acts.map((act, actIndex) => (
             <div key={act.id} className="act-card">
               <div className="act-header">
                 <div className="act-title">
-                  <span className="act-number">제 {actIndex + 1}막</span>
+                  <span className="act-number">Act {actIndex + 1}</span>
                   <h3>{act.name}</h3>
                 </div>
                 <div className="act-actions">
@@ -235,20 +235,20 @@ const OutlineManager: React.FC = () => {
                     onClick={() => setEditingAct(act)}
                     className="edit-button"
                   >
-                    편집
+                    Edit
                   </button>
                   <button
                     onClick={() => setShowAddChapterForm(act.id)}
                     className="add-chapter-button"
                     disabled={showAddChapterForm === act.id}
                   >
-                    장 추가
+                    Add Chapter
                   </button>
                   <button
                     onClick={() => handleDeleteAct(act.id)}
                     className="delete-button"
                   >
-                    삭제
+                    Delete
                   </button>
                 </div>
               </div>
@@ -262,7 +262,7 @@ const OutlineManager: React.FC = () => {
               ) : (
                 <div className="act-content">
                   <p className="act-description">
-                    {act.description || '설명이 없습니다.'}
+                    {act.description || 'No description.'}
                   </p>
                 </div>
               )}
@@ -281,7 +281,7 @@ const OutlineManager: React.FC = () => {
                     <div className="chapter-header">
                       <div className="chapter-title">
                         <span className="chapter-number">
-                          {chapterIndex + 1}장
+                          Chapter {chapterIndex + 1}
                         </span>
                         <h4>{chapter.name}</h4>
                       </div>
@@ -290,13 +290,13 @@ const OutlineManager: React.FC = () => {
                           onClick={() => setEditingChapter(chapter)}
                           className="edit-button"
                         >
-                          편집
+                          Edit
                         </button>
                         <button
                           onClick={() => handleDeleteChapter(chapter.id)}
                           className="delete-button"
                         >
-                          삭제
+                          Delete
                         </button>
                       </div>
                     </div>
@@ -310,7 +310,7 @@ const OutlineManager: React.FC = () => {
                     ) : (
                       <div className="chapter-content">
                         <p className="chapter-description">
-                          {chapter.description || '설명이 없습니다.'}
+                          {chapter.description || 'No description.'}
                         </p>
                       </div>
                     )}
@@ -327,7 +327,7 @@ const OutlineManager: React.FC = () => {
         onClose={() => setShowAIModal(false)}
         category="outline"
         projectId={projectId || ''}
-        targetId={outline?.id}
+        targetId={outline?.id || ''}
         onResult={handleAIResult}
       />
 
@@ -336,7 +336,7 @@ const OutlineManager: React.FC = () => {
         onClose={() => setShowVersionHistory(false)}
         projectId={projectId || ''}
         category="outline"
-        targetId={outline?.id}
+        targetId={outline?.id || ''}
         onRestoreVersion={handleRestoreVersion}
       />
     </div>
@@ -362,35 +362,35 @@ const AddActForm: React.FC<AddActFormProps> = ({ onAdd, onCancel }) => {
 
   return (
     <div className="item-form add-form">
-      <h3>새 막 추가</h3>
+      <h3>Add New Act</h3>
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label htmlFor="add-act-name">막 제목</label>
+          <label htmlFor="add-act-name">Act Title</label>
           <input
             id="add-act-name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="막의 제목을 입력하세요"
+            placeholder="Enter the title of the act"
             required
           />
         </div>
         <div className="form-group">
-          <label htmlFor="add-act-description">막 설명</label>
+          <label htmlFor="add-act-description">Act Description</label>
           <textarea
             id="add-act-description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="이 막에서 일어나는 주요 사건들을 설명하세요"
+            placeholder="Describe the main events that happen in this act"
             rows={4}
           />
         </div>
         <div className="form-actions">
           <button type="button" onClick={onCancel} className="cancel-button">
-            취소
+            Cancel
           </button>
           <button type="submit" className="save-button">
-            추가
+            Add
           </button>
         </div>
       </form>
@@ -418,32 +418,32 @@ const EditActForm: React.FC<EditActFormProps> = ({ act, onUpdate, onCancel }) =>
     <div className="item-form edit-form">
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label htmlFor="edit-act-name">막 제목</label>
+          <label htmlFor="edit-act-name">Act Title</label>
           <input
             id="edit-act-name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="막의 제목을 입력하세요"
+            placeholder="Enter the title of the act"
             required
           />
         </div>
         <div className="form-group">
-          <label htmlFor="edit-act-description">막 설명</label>
+          <label htmlFor="edit-act-description">Act Description</label>
           <textarea
             id="edit-act-description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="이 막에서 일어나는 주요 사건들을 설명하세요"
+            placeholder="Describe the main events that happen in this act"
             rows={4}
           />
         </div>
         <div className="form-actions">
           <button type="button" onClick={onCancel} className="cancel-button">
-            취소
+            Cancel
           </button>
           <button type="submit" className="save-button">
-            저장
+            Save
           </button>
         </div>
       </form>
@@ -471,35 +471,35 @@ const AddChapterForm: React.FC<AddChapterFormProps> = ({ actId, onAdd, onCancel 
 
   return (
     <div className="item-form add-form chapter-form">
-      <h4>새 장 추가</h4>
+      <h4>Add New Chapter</h4>
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label htmlFor="add-chapter-name">장 제목</label>
+          <label htmlFor="add-chapter-name">Chapter Title</label>
           <input
             id="add-chapter-name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="장의 제목을 입력하세요"
+            placeholder="Enter the title of the chapter"
             required
           />
         </div>
         <div className="form-group">
-          <label htmlFor="add-chapter-description">장 설명</label>
+          <label htmlFor="add-chapter-description">Chapter Description</label>
           <textarea
             id="add-chapter-description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="이 장에서 일어나는 일들을 설명하세요"
+            placeholder="Describe what happens in this chapter"
             rows={3}
           />
         </div>
         <div className="form-actions">
           <button type="button" onClick={onCancel} className="cancel-button">
-            취소
+            Cancel
           </button>
           <button type="submit" className="save-button">
-            추가
+            Add
           </button>
         </div>
       </form>
@@ -527,32 +527,32 @@ const EditChapterForm: React.FC<EditChapterFormProps> = ({ chapter, onUpdate, on
     <div className="item-form edit-form chapter-form">
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label htmlFor="edit-chapter-name">장 제목</label>
+          <label htmlFor="edit-chapter-name">Chapter Title</label>
           <input
             id="edit-chapter-name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="장의 제목을 입력하세요"
+            placeholder="Enter the title of the chapter"
             required
           />
         </div>
         <div className="form-group">
-          <label htmlFor="edit-chapter-description">장 설명</label>
+          <label htmlFor="edit-chapter-description">Chapter Description</label>
           <textarea
             id="edit-chapter-description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="이 장에서 일어나는 일들을 설명하세요"
+            placeholder="Describe what happens in this chapter"
             rows={3}
           />
         </div>
         <div className="form-actions">
           <button type="button" onClick={onCancel} className="cancel-button">
-            취소
+            Cancel
           </button>
           <button type="submit" className="save-button">
-            저장
+            Save
           </button>
         </div>
       </form>

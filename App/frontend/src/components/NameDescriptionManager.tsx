@@ -21,7 +21,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   title,
   singularName,
   pluralName,
-  placeholder = { name: '이름을 입력하세요', description: '설명을 입력하세요' },
+  placeholder = { name: 'Enter name', description: 'Enter description' },
 }) => {
   const { projectId } = useParams<{ projectId: string }>();
   const storeActions = useStoryObjectStore();
@@ -128,7 +128,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   };
 
   const handleDelete = (id: string) => {
-    if (confirm(`이 ${singularName}을(를) 삭제하시겠습니까?`)) {
+    if (confirm(`Are you sure you want to delete this ${singularName}?`)) {
       deleteItem(id);
       setItems(getItems());
     }
@@ -144,7 +144,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   };
 
   const handleAIResult = (result: any) => {
-    console.log(`[${category}] AI 결과 받음:`, result);
+    console.log(`[${category}] AI result received:`, result);
     console.log(`[${category}] aiEditTargetId:`, aiEditTargetId);
     console.log(`[${category}] projectId:`, projectId);
     
@@ -152,51 +152,51 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     
     if (aiEditTargetId) {
       // Editing specific item - should always be an update
-      console.log(`[${category}] 개별 아이템 편집 모드`);
+      console.log(`[${category}] Individual item edit mode`);
       if (result && result.name !== undefined && result.description !== undefined) {
-        console.log(`[${category}] 아이템 업데이트 중:`, result.id || aiEditTargetId, result);
+        console.log(`[${category}] Updating item:`, result.id || aiEditTargetId, result);
         updateItem(result.id || aiEditTargetId, {
           name: result.name,
           description: result.description,
         });
       } else {
-        console.log(`[${category}] 결과 데이터 형식이 잘못됨:`, result);
+        console.log(`[${category}] Invalid result data format:`, result);
       }
     } else {
       // Editing entire category - handle based on ID (null = add, existing ID = update)
-      console.log(`[${category}] 전체 카테고리 편집 모드`);
+      console.log(`[${category}] Entire category edit mode`);
       if (Array.isArray(result)) {
-        console.log(`[${category}] 배열 길이:`, result.length);
+        console.log(`[${category}] Array length:`, result.length);
         
         result.forEach((item: any, index: number) => {
-          console.log(`[${category}] 아이템 ${index}:`, item);
+          console.log(`[${category}] Item ${index}:`, item);
           if (item.name !== undefined && item.description !== undefined) {
             if (item.id === null || item.id === undefined) {
-              // 새 아이템 추가
-              console.log(`[${category}] 새 아이템 ${index} 추가:`, item);
+              // Add new item
+              console.log(`[${category}] Adding new item ${index}:`, item);
               addItem({
                 name: item.name,
                 description: item.description,
               });
             } else {
-              // 기존 아이템 수정
-              console.log(`[${category}] 기존 아이템 ${index} 업데이트:`, item.id);
+              // Update existing item
+              console.log(`[${category}] Updating existing item ${index}:`, item.id);
               updateItem(item.id, {
                 name: item.name,
                 description: item.description,
               });
             }
           } else {
-            console.log(`[${category}] 아이템 ${index} 형식 오류:`, item);
+            console.log(`[${category}] Item ${index} format error:`, item);
           }
         });
       } else {
-        console.log(`[${category}] 결과가 배열이 아님:`, result);
+        console.log(`[${category}] Result is not an array:`, result);
       }
     }
     
     setItems(getItems());
-    console.log(`[${category}] 아이템 목록 새로고침 완료`);
+    console.log(`[${category}] Item list refresh complete`);
   };
 
   const handleShowVersionHistory = (itemId: string) => {
@@ -220,7 +220,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   if (!projectId) {
     return (
       <div className="error-container">
-        <p>프로젝트 ID를 찾을 수 없습니다.</p>
+        <p>Project ID not found.</p>
       </div>
     );
   }
@@ -235,14 +235,14 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
             className="ai-edit-button"
             disabled={showAddForm}
           >
-            🤖 전체 AI 편집
+            🤖 AI Edit All
           </button>
           <button 
             onClick={() => setShowAddForm(true)} 
             className="add-button"
             disabled={showAddForm}
           >
-            {singularName} 추가
+            Add {singularName}
           </button>
         </div>
       </div>
@@ -259,8 +259,8 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
       <div className="items-list">
         {items.length === 0 ? (
           <div className="empty-state">
-            <p>{pluralName}이(가) 없습니다.</p>
-            <p>새로운 {singularName}을(를) 추가해보세요!</p>
+            <p>No {pluralName} found.</p>
+            <p>Try adding a new {singularName}!</p>
           </div>
         ) : (
           items.map((item) => (
@@ -341,10 +341,10 @@ const AddItemForm: React.FC<AddItemFormProps> = ({
 
   return (
     <div className="item-form add-form">
-      <h3>새 {singularName} 추가</h3>
+      <h3>Add New {singularName}</h3>
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label htmlFor="add-name">이름</label>
+          <label htmlFor="add-name">Name</label>
           <input
             id="add-name"
             type="text"
@@ -355,7 +355,7 @@ const AddItemForm: React.FC<AddItemFormProps> = ({
           />
         </div>
         <div className="form-group">
-          <label htmlFor="add-description">설명</label>
+          <label htmlFor="add-description">Description</label>
           <textarea
             id="add-description"
             value={description}
@@ -366,10 +366,10 @@ const AddItemForm: React.FC<AddItemFormProps> = ({
         </div>
         <div className="form-actions">
           <button type="button" onClick={onCancel} className="cancel-button">
-            취소
+            Cancel
           </button>
           <button type="submit" className="save-button">
-            추가
+            Add
           </button>
         </div>
       </form>
@@ -403,7 +403,7 @@ const EditItemForm: React.FC<EditItemFormProps> = ({
     <div className="item-form edit-form">
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label htmlFor="edit-name">이름</label>
+          <label htmlFor="edit-name">Name</label>
           <input
             id="edit-name"
             type="text"
@@ -414,7 +414,7 @@ const EditItemForm: React.FC<EditItemFormProps> = ({
           />
         </div>
         <div className="form-group">
-          <label htmlFor="edit-description">설명</label>
+          <label htmlFor="edit-description">Description</label>
           <textarea
             id="edit-description"
             value={description}
@@ -425,10 +425,10 @@ const EditItemForm: React.FC<EditItemFormProps> = ({
         </div>
         <div className="form-actions">
           <button type="button" onClick={onCancel} className="cancel-button">
-            취소
+            Cancel
           </button>
           <button type="submit" className="save-button">
-            저장
+            Save
           </button>
         </div>
       </form>
@@ -455,24 +455,24 @@ const ItemDisplay: React.FC<ItemDisplayProps> = ({ item, onEdit, onDelete, onAIE
             📚
           </button>
           <button onClick={onAIEdit} className="ai-edit-button">
-            🤖 AI 편집
+            🤖 AI Edit
           </button>
           <button onClick={onEdit} className="edit-button">
-            편집
+            Edit
           </button>
           <button onClick={onDelete} className="delete-button">
-            삭제
+            Delete
           </button>
         </div>
       </div>
       <div className="item-content">
         <p className="item-description">
-          {item.description || '설명이 없습니다.'}
+          {item.description || 'No description.'}
         </p>
       </div>
       <div className="item-metadata">
         <p className="last-updated">
-          마지막 수정: {item.updatedAt.toLocaleString()}
+          Last updated: {item.updatedAt.toLocaleString()}
         </p>
       </div>
     </div>

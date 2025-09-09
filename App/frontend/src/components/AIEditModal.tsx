@@ -123,12 +123,12 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
 
   const getCategoryDisplayName = (cat: StoryObjectCategory): string => {
     const names = {
-      basicInfo: '기본 정보',
-      character: '등장인물',
-      organization: '조직/단체',
-      location: '장소',
-      lorebook: '로어북',
-      outline: '아웃라인',
+      basicInfo: 'Basic Info',
+      character: 'Character',
+      organization: 'Organization',
+      location: 'Location',
+      lorebook: 'Lorebook',
+      outline: 'Outline',
     };
     return names[cat] || cat;
   };
@@ -185,7 +185,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         case 'location':
         case 'lorebook':
           return JSON.stringify({
-            id: "string (기존 ID 유지)",
+            id: "string (keep existing ID)",
             name: "string",
             description: "string"
           }, null, 2);
@@ -198,11 +198,11 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         case 'outline':
           return JSON.stringify({
             acts: [{
-              id: "string (기존 ID 유지)",
+              id: "string (keep existing ID)",
               name: "string",
               description: "string",
               chapters: [{
-                id: "string (기존 ID 유지)",
+                id: "string (keep existing ID)",
                 name: "string",
                 description: "string"
               }]
@@ -219,7 +219,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         case 'location':
         case 'lorebook':
           return JSON.stringify([{
-            id: "string | null (수정시 기존 ID, 추가시 null)",
+            id: "string | null (existing ID for modification, null for addition)",
             name: "string",
             description: "string"
           }], null, 2);
@@ -232,11 +232,11 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         case 'outline':
           return JSON.stringify({
             acts: [{
-              id: "string | null (수정시 기존 ID, 추가시 null)",
+              id: "string | null (existing ID for modification, null for addition)",
               name: "string",
               description: "string",
               chapters: [{
-                id: "string | null (수정시 기존 ID, 추가시 null)",
+                id: "string | null (existing ID for modification, null for addition)",
                 name: "string",
                 description: "string"
               }]
@@ -263,26 +263,26 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       const currentData = getCurrentData();
       const jsonSchema = getJSONSchema();
       
-      const editType = targetId ? '특정 항목' : '전체 카테고리';
+      const editType = targetId ? 'specific item' : 'entire category';
       const categoryName = getCategoryDisplayName(category);
 
-      const systemPrompt = `당신은 소설 창작을 도와주는 AI 어시스턴트입니다. 사용자가 스토리 오브젝트의 ${editType}(${categoryName})를 수정하고자 합니다.
-다음 컨텍스트를 참고하여 사용자의 요청에 따라 JSON 형식으로 수정된 데이터를 반환해주세요.
+      const systemPrompt = `You are an AI assistant that helps with novel writing. The user wants to modify the ${editType} (${categoryName}) of a story object.
+Please refer to the following context and return the modified data in JSON format according to the user's request.
 
 <Context>
 ${Object.keys(context).map(key => `# ${key.charAt(0).toUpperCase() + key.slice(1)}\n${JSON.stringify(context[key], null, 2)}`).join('\n\n')}
 </Context>
 
-현재 데이터:
+Current data:
 ${JSON.stringify(currentData, null, 2)}
 
-요청사항에 따라 위 데이터를 수정하여 다음 JSON 스키마에 맞춰 반환해주세요:
+Please modify the above data according to the request and return it in the following JSON schema:
 ${jsonSchema}
 
-중요 규칙:
-1. ID 처리 방법:
-   - 기존 항목을 수정하는 경우: 현재 데이터의 ID를 그대로 유지
-   - 새로운 항목을 추가하는 경우: id를 null로 설정`;
+Important rules:
+1. ID handling:
+   - When modifying an existing item: Keep the current data's ID.
+   - When adding a new item: Set the id to null.`;
 
       const messages: ConversationBlock[] = [
         { role: 'system', content: systemPrompt },
@@ -303,18 +303,18 @@ ${jsonSchema}
       try {
         // Extract JSON from markdown code blocks if present
         let jsonText = fullResponse.trim();
-        console.log('원본 AI 응답:', fullResponse);
+        console.log('Original AI response:', fullResponse);
         
         const codeBlockMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
         if (codeBlockMatch) {
           jsonText = codeBlockMatch[1].trim();
-          console.log('코드블록에서 추출한 JSON:', jsonText);
+          console.log('JSON extracted from code block:', jsonText);
         } else {
-          console.log('코드블록 없음, 원본 사용:', jsonText);
+          console.log('No code block, using original:', jsonText);
         }
         
         const parsedResult = JSON.parse(jsonText);
-        console.log('파싱된 JSON:', parsedResult);
+        console.log('Parsed JSON:', parsedResult);
         
         // Save version before applying result
         if (targetId) {
@@ -326,14 +326,14 @@ ${jsonSchema}
             userRequest,
             parsedResult
           );
-          console.log('버전 저장됨:', versionId);
+          console.log('Version saved:', versionId);
         }
         
         onResult(parsedResult);
         onClose();
       } catch (parseError) {
-        console.error('JSON 파싱 오류:', parseError);
-        setError(`AI 응답을 JSON으로 파싱할 수 없습니다: ${parseError}`);
+        console.error('JSON parsing error:', parseError);
+        setError(`Could not parse AI response as JSON: ${parseError}`);
       }
 
     } catch (err) {
@@ -343,7 +343,7 @@ ${jsonSchema}
         }
         setError(err.message);
       } else {
-        setError('알 수 없는 오류가 발생했습니다.');
+        setError('An unknown error occurred.');
       }
     } finally {
       setIsProcessing(false);
@@ -368,25 +368,25 @@ ${jsonSchema}
   if (!isOpen) return null;
 
   const categoryDisplayName = getCategoryDisplayName(category);
-  const editTypeText = targetId ? '항목' : '전체';
+  const editTypeText = targetId ? 'Item' : 'All';
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content ai-edit-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>🤖 AI {categoryDisplayName} {editTypeText} 편집</h2>
+          <h2>🤖 AI {categoryDisplayName} {editTypeText} Edit</h2>
           <button className="modal-close" onClick={handleCancel}>×</button>
         </div>
 
         <form onSubmit={handleSubmit} className="ai-edit-form">
           <div className="form-group">
-            <label htmlFor="user-request">수정 요청사항</label>
+            <label htmlFor="user-request">Edit Request</label>
             <textarea
               id="user-request"
               value={userRequest}
               onChange={(e) => setUserRequest(e.target.value)}
-              placeholder={`${categoryDisplayName} ${editTypeText}에 대한 수정 요청사항을 입력하세요.
-예: "주인공의 성격을 더 적극적으로 바꿔주세요", "모든 장소의 분위기를 더 어둡게 만들어주세요"`}
+              placeholder={`Enter your edit request for the ${categoryDisplayName} ${editTypeText}.
+e.g., "Make the main character's personality more proactive", "Make the atmosphere of all locations darker"`}
               rows={4}
               required
               disabled={isProcessing}
@@ -394,7 +394,7 @@ ${jsonSchema}
           </div>
 
           <div className="form-group context-options">
-            <label>컨텍스트 포함 옵션</label>
+            <label>Context Inclusion Options</label>
             <div className="checkbox-group">
               {Object.entries(contextOptions).map(([key, checked]) => (
                 <label key={key} className="checkbox-label">
@@ -411,7 +411,7 @@ ${jsonSchema}
               ))}
             </div>
             <p className="context-help">
-              AI가 참고할 컨텍스트를 선택하세요. 더 많은 컨텍스트를 제공할수록 일관성 있는 결과를 얻을 수 있습니다.
+              Select the context for the AI to refer to. Providing more context will lead to more consistent results.
             </p>
           </div>
 
@@ -423,7 +423,7 @@ ${jsonSchema}
 
           {streamContent && (
             <div className="ai-response">
-              <h3>AI 응답:</h3>
+              <h3>AI Response:</h3>
               <pre className="response-content">{streamContent}</pre>
             </div>
           )}
@@ -435,14 +435,14 @@ ${jsonSchema}
               className="cancel-button"
               disabled={isProcessing}
             >
-              취소
+              Cancel
             </button>
             <button 
               type="submit" 
               className="submit-button"
               disabled={!userRequest.trim() || isProcessing}
             >
-              {isProcessing ? 'AI 처리 중...' : 'AI 편집 요청'}
+              {isProcessing ? 'AI Processing...' : 'Request AI Edit'}
             </button>
           </div>
         </form>

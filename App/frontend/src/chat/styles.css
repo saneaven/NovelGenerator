@@ -1,0 +1,261 @@
+/* Message Edit Cards Styles */
+.message-edit-cards {
+  margin: 0.75rem 0 1rem 3rem; /* Align with message content */
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.edit-card {
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.edit-card:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.edit-card.applied {
+  border-color: #28a745;
+  background: #f8fff9;
+}
+
+.edit-card.pending {
+  border-color: #ffc107;
+}
+
+.edit-card-header {
+  display: flex;
+  justify-content: between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.edit-card-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #343a40;
+}
+
+.edit-card-status {
+  margin-left: auto;
+}
+
+.status-applied {
+  color: #28a745;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.status-pending {
+  color: #ffc107;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.edit-card-description {
+  margin: 0.5rem 0;
+  color: #6c757d;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.edit-card-preview {
+  margin: 0.75rem 0;
+}
+
+.edit-card-preview details summary {
+  cursor: pointer;
+  color: #007bff;
+  font-size: 0.9rem;
+  font-weight: 500;
+  outline: none;
+  user-select: none;
+}
+
+.edit-card-preview details summary:hover {
+  text-decoration: underline;
+}
+
+.json-preview {
+  margin: 0.5rem 0 0 0;
+  padding: 0.75rem;
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  overflow-x: auto;
+  white-space: pre;
+  color: #495057;
+}
+
+.edit-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #f0f0f0;
+}
+
+.apply-button {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.apply-button:hover {
+  background: #218838;
+}
+
+.reject-button {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.reject-button:hover {
+  background: #5a6268;
+}
+
+/* Chat Controls Styles */
+.chat-controls {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.system-insert-toggle {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.system-insert-toggle input[type="checkbox"] {
+  margin-right: 0.5rem;
+  transform: scale(1.1);
+}
+
+.toggle-label {
+  color: #495057;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.system-insert-toggle:hover .toggle-label {
+  color: #007bff;
+}
+
+/* Message Content Styles */
+.message-content .message-text {
+  line-height: 1.6;
+}
+
+.message-content .message-text code {
+  background: #f8f9fa;
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.9em;
+  color: #e83e8c;
+}
+
+.message-content .message-text pre {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+  overflow-x: auto;
+  margin: 0.5rem 0;
+}
+
+.message-content .message-text pre code {
+  background: none;
+  padding: 0;
+  color: #495057;
+  font-size: 0.9rem;
+}
+
+.message-content .message-text strong {
+  font-weight: 600;
+  color: #343a40;
+}
+
+.message-content .message-text em {
+  font-style: italic;
+  color: #6c757d;
+}
+
+/* Inline Tag Cards */
+.inline-tag-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  margin: 0.25rem 0;
+  background: #f8f9fa;
+  border: 2px solid #dee2e6;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #495057;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.inline-tag-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.inline-tag-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.inline-tag-title {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Specific tag type styles */
+.inline-tag-init {
+  background: #e7f3ff;
+  color: #0056b3;
+}
+
+.inline-tag-add {
+  background: #f0f8f0;
+  color: #155724;
+}
+
+.inline-tag-edit {
+  background: #fff8e1;
+  color: #856404;
+}
+
+.inline-tag-remove {
+  background: #f8e6e6;
+  color: #721c24;
+}

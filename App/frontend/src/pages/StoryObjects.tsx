@@ -17,19 +17,19 @@ const StoryObjects: React.FC = () => {
   if (!currentProject) {
     return (
       <div className="error-container">
-        <h2>프로젝트를 찾을 수 없습니다</h2>
-        <Link to="/">홈으로 돌아가기</Link>
+        <h2>Project Not Found</h2>
+        <Link to="/">Go back to Home</Link>
       </div>
     );
   }
 
   const tabs: { id: TabType; label: string; icon: string }[] = [
-    { id: 'basicInfo', label: '기본 정보', icon: '📋' },
-    { id: 'characters', label: '등장인물', icon: '👥' },
-    { id: 'organizations', label: '조직/단체', icon: '🏛️' },
-    { id: 'locations', label: '장소', icon: '🗺️' },
-    { id: 'lorebook', label: '로어북', icon: '📚' },
-    { id: 'outline', label: '아웃라인', icon: '📝' },
+    { id: 'basicInfo', label: 'Basic Info', icon: '📋' },
+    { id: 'characters', label: 'Characters', icon: '👥' },
+    { id: 'organizations', label: 'Organizations', icon: '🏛️' },
+    { id: 'locations', label: 'Locations', icon: '🗺️' },
+    { id: 'lorebook', label: 'Lorebook', icon: '📚' },
+    { id: 'outline', label: 'Outline', icon: '📝' },
   ];
 
   const renderContent = () => {
@@ -40,12 +40,12 @@ const StoryObjects: React.FC = () => {
         return (
           <NameDescriptionManager
             category="character"
-            title="등장인물"
-            singularName="등장인물"
-            pluralName="등장인물"
+            title="Characters"
+            singularName="Character"
+            pluralName="Characters"
             placeholder={{
-              name: '등장인물 이름을 입력하세요',
-              description: '등장인물의 외모, 성격, 배경 등을 설명하세요'
+              name: 'Enter character name',
+              description: 'Describe the character\'s appearance, personality, background, etc.'
             }}
           />
         );
@@ -53,12 +53,12 @@ const StoryObjects: React.FC = () => {
         return (
           <NameDescriptionManager
             category="organization"
-            title="조직/단체"
-            singularName="조직"
-            pluralName="조직"
+            title="Organizations"
+            singularName="Organization"
+            pluralName="Organizations"
             placeholder={{
-              name: '조직명을 입력하세요',
-              description: '조직의 목적, 구조, 역할 등을 설명하세요'
+              name: 'Enter organization name',
+              description: 'Describe the organization\'s purpose, structure, role, etc.'
             }}
           />
         );
@@ -66,12 +66,12 @@ const StoryObjects: React.FC = () => {
         return (
           <NameDescriptionManager
             category="location"
-            title="장소"
-            singularName="장소"
-            pluralName="장소"
+            title="Locations"
+            singularName="Location"
+            pluralName="Locations"
             placeholder={{
-              name: '장소명을 입력하세요',
-              description: '장소의 특징, 분위기, 중요성 등을 설명하세요'
+              name: 'Enter location name',
+              description: 'Describe the location\'s features, atmosphere, importance, etc.'
             }}
           />
         );
@@ -79,12 +79,12 @@ const StoryObjects: React.FC = () => {
         return (
           <NameDescriptionManager
             category="lorebook"
-            title="로어북"
-            singularName="항목"
-            pluralName="항목"
+            title="Lorebook"
+            singularName="Entry"
+            pluralName="Entries"
             placeholder={{
-              name: '용어나 개념명을 입력하세요',
-              description: '이 용어나 개념에 대한 자세한 설명을 작성하세요'
+              name: 'Enter term or concept name',
+              description: 'Write a detailed description of this term or concept'
             }}
           />
         );
@@ -99,16 +99,16 @@ const StoryObjects: React.FC = () => {
     <div className="story-objects-container">
       <div className="story-objects-header">
         <div className="breadcrumb">
-          <Link to="/" className="breadcrumb-link">홈</Link>
+          <Link to="/" className="breadcrumb-link">Home</Link>
           <span className="breadcrumb-separator"> / </span>
           <Link to={`/project/${projectId}`} className="breadcrumb-link">
             {currentProject.name}
           </Link>
           <span className="breadcrumb-separator"> / </span>
-          <span className="breadcrumb-current">스토리 오브젝트</span>
+          <span className="breadcrumb-current">Story Objects</span>
         </div>
-        <h1>스토리 오브젝트 관리</h1>
-        <p>소설의 기본 정보, 등장인물, 배경 설정 등을 관리하세요</p>
+        <h1>Manage Story Objects</h1>
+        <p>Manage the basic information, characters, background settings, etc. of your novel</p>
       </div>
 
       <div className="story-objects-tabs">

@@ -51,7 +51,7 @@ const BasicInfoManager: React.FC = () => {
   };
 
   const handleAIResult = (result: any) => {
-    console.log('[BasicInfo] AI 결과 받음:', result);
+    console.log('[BasicInfo] AI result received:', result);
     console.log('[BasicInfo] projectId:', projectId);
     
     if (!projectId) return;
@@ -63,17 +63,17 @@ const BasicInfoManager: React.FC = () => {
       if (result.logline !== undefined) updates.logline = result.logline;
       if (result.genre !== undefined) updates.genre = result.genre;
       
-      console.log('[BasicInfo] 업데이트할 내용:', updates);
+      console.log('[BasicInfo] Content to update:', updates);
       updateBasicInfo(projectId, updates);
       
       // Refresh the local state
       const updatedBasicInfo = getBasicInfo(projectId);
-      console.log('[BasicInfo] 업데이트 후 데이터:', updatedBasicInfo);
+      console.log('[BasicInfo] Data after update:', updatedBasicInfo);
       if (updatedBasicInfo) {
         setBasicInfo(updatedBasicInfo);
       }
     } else {
-      console.log('[BasicInfo] 결과 데이터 형식이 잘못됨:', result);
+      console.log('[BasicInfo] Invalid result data format:', result);
     }
   };
 
@@ -100,7 +100,7 @@ const BasicInfoManager: React.FC = () => {
   if (!projectId) {
     return (
       <div className="error-container">
-        <p>프로젝트 ID를 찾을 수 없습니다.</p>
+        <p>Project ID not found.</p>
       </div>
     );
   }
@@ -108,26 +108,26 @@ const BasicInfoManager: React.FC = () => {
   return (
     <div className="basic-info-manager">
       <div className="section-header">
-        <h2>기본 정보</h2>
+        <h2>Basic Information</h2>
         {!isEditing ? (
           <div className="header-buttons">
             <button onClick={() => setShowVersionHistory(true)} className="version-history-button">
-              📚 버전 히스토리
+              📚 Version History
             </button>
             <button onClick={() => setShowAIModal(true)} className="ai-edit-button">
-              🤖 AI 편집
+              🤖 AI Edit
             </button>
             <button onClick={() => setIsEditing(true)} className="edit-button">
-              편집
+              Edit
             </button>
           </div>
         ) : (
           <div className="edit-buttons">
             <button onClick={handleSave} className="save-button">
-              저장
+              Save
             </button>
             <button onClick={handleCancel} className="cancel-button">
-              취소
+              Cancel
             </button>
           </div>
         )}
@@ -135,52 +135,52 @@ const BasicInfoManager: React.FC = () => {
 
       <div className="basic-info-content">
         <div className="form-group">
-          <label htmlFor="title">제목</label>
+          <label htmlFor="title">Title</label>
           {isEditing ? (
             <input
               id="title"
               type="text"
               value={basicInfo.title}
               onChange={(e) => handleChange('title', e.target.value)}
-              placeholder="소설의 제목을 입력하세요"
+              placeholder="Enter the title of the novel"
             />
           ) : (
             <div className="display-value">
-              {basicInfo.title || '제목이 설정되지 않았습니다.'}
+              {basicInfo.title || 'Title not set.'}
             </div>
           )}
         </div>
 
         <div className="form-group">
-          <label htmlFor="genre">장르</label>
+          <label htmlFor="genre">Genre</label>
           {isEditing ? (
             <input
               id="genre"
               type="text"
               value={basicInfo.genre}
               onChange={(e) => handleChange('genre', e.target.value)}
-              placeholder="장르를 입력하세요 (예: 판타지, 로맨스, SF)"
+              placeholder="Enter the genre (e.g., Fantasy, Romance, Sci-Fi)"
             />
           ) : (
             <div className="display-value">
-              {basicInfo.genre || '장르가 설정되지 않았습니다.'}
+              {basicInfo.genre || 'Genre not set.'}
             </div>
           )}
         </div>
 
         <div className="form-group">
-          <label htmlFor="logline">로그라인</label>
+          <label htmlFor="logline">Logline</label>
           {isEditing ? (
             <textarea
               id="logline"
               value={basicInfo.logline}
               onChange={(e) => handleChange('logline', e.target.value)}
-              placeholder="소설의 핵심 내용을 한두 문장으로 요약해주세요"
+              placeholder="Summarize the core content of the novel in one or two sentences"
               rows={4}
             />
           ) : (
             <div className="display-value multiline">
-              {basicInfo.logline || '로그라인이 설정되지 않았습니다.'}
+              {basicInfo.logline || 'Logline not set.'}
             </div>
           )}
         </div>
@@ -188,7 +188,7 @@ const BasicInfoManager: React.FC = () => {
         {basicInfo.updatedAt && (
           <div className="metadata">
             <p className="last-updated">
-              마지막 수정: {basicInfo.updatedAt.toLocaleString()}
+              Last updated: {basicInfo.updatedAt.toLocaleString()}
             </p>
           </div>
         )}

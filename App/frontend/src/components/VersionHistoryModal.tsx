@@ -39,12 +39,12 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
 
   const getCategoryDisplayName = (cat: StoryObjectCategory): string => {
     const names = {
-      basicInfo: '기본 정보',
-      character: '등장인물',
-      organization: '조직/단체',
-      location: '장소',
-      lorebook: '로어북',
-      outline: '아웃라인',
+      basicInfo: 'Basic Info',
+      character: 'Character',
+      organization: 'Organization',
+      location: 'Location',
+      lorebook: 'Lorebook',
+      outline: 'Outline',
     };
     return names[cat] || cat;
   };
@@ -59,7 +59,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   };
 
   const handleDeleteVersion = (versionId: string) => {
-    if (confirm('이 버전을 삭제하시겠습니까?')) {
+    if (confirm('Are you sure you want to delete this version?')) {
       storyObjectStore.deleteVersion(projectId, category, targetId, versionId);
       const updatedVersions = storyObjectStore.getVersions(projectId, category, targetId);
       setVersions(updatedVersions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
@@ -90,14 +90,14 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content version-history-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>📚 {getCategoryDisplayName(category)} 버전 히스토리</h2>
+          <h2>📚 {getCategoryDisplayName(category)} Version History</h2>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
 
         <div className="version-history-content">
           {versions.length === 0 ? (
             <div className="empty-state">
-              <p>저장된 버전이 없습니다.</p>
+              <p>No saved versions.</p>
             </div>
           ) : (
             <div className="versions-list">
@@ -111,15 +111,15 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                   <div className="version-header">
                     <div className="version-info">
                       <div className="version-title">
-                        <span className="version-number">버전 #{versions.length - index}</span>
-                        {version.isActive && <span className="active-badge">현재 사용중</span>}
+                        <span className="version-number">Version #{versions.length - index}</span>
+                        {version.isActive && <span className="active-badge">Currently Active</span>}
                       </div>
                       <div className="version-metadata">
                         <span className="version-timestamp">
                           {version.timestamp.toLocaleString()}
                         </span>
                         <span className="version-request">
-                          요청: {version.userRequest}
+                          Request: {version.userRequest}
                         </span>
                       </div>
                     </div>
@@ -137,7 +137,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                           onClick={() => handleSetActiveVersion(version.versionId)}
                           className="restore-button"
                         >
-                          복원
+                          Restore
                         </button>
                       )}
                       
@@ -147,7 +147,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                           className="delete-version-button"
                           disabled={version.isActive}
                         >
-                          삭제
+                          Delete
                         </button>
                       )}
                     </div>
@@ -155,7 +155,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
 
                   {expandedVersions.has(version.versionId) && (
                     <div className="version-content">
-                      <h4>버전 데이터:</h4>
+                      <h4>Version Data:</h4>
                       <pre className="version-data">
                         {formatVersionData(version.data)}
                       </pre>
@@ -169,7 +169,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
 
         <div className="modal-footer">
           <button onClick={onClose} className="cancel-button">
-            닫기
+            Close
           </button>
         </div>
       </div>

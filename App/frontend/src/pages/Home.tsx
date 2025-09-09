@@ -28,7 +28,7 @@ const Home: React.FC = () => {
 
   const handleDeleteProject = (projectId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('프로젝트를 삭제하시겠습니까?')) {
+    if (confirm('Are you sure you want to delete this project?')) {
       deleteProject(projectId);
     }
   };
@@ -36,8 +36,8 @@ const Home: React.FC = () => {
   return (
     <div className="home-container">
       <div className="home-header">
-        <h1>소설 생성기</h1>
-        <p>AI와 함께 창의적인 소설을 써보세요</p>
+        <h1>Novel Generator</h1>
+        <p>Write creative novels with AI</p>
       </div>
 
       <div className="actions">
@@ -45,41 +45,41 @@ const Home: React.FC = () => {
           className="create-button" 
           onClick={() => setShowCreateForm(true)}
         >
-          새 프로젝트 만들기
+          Create New Project
         </button>
       </div>
 
       {showCreateForm && (
         <div className="modal-overlay">
           <div className="modal">
-            <h2>새 프로젝트 만들기</h2>
+            <h2>Create New Project</h2>
             <form onSubmit={handleCreateProject}>
               <div className="form-group">
-                <label htmlFor="projectName">프로젝트 이름</label>
+                <label htmlFor="projectName">Project Name</label>
                 <input
                   id="projectName"
                   type="text"
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
-                  placeholder="프로젝트 이름을 입력하세요"
+                  placeholder="Enter project name"
                   required
                 />
               </div>
               <div className="form-group">
-                <label htmlFor="projectDescription">설명 (선택사항)</label>
+                <label htmlFor="projectDescription">Description (Optional)</label>
                 <textarea
                   id="projectDescription"
                   value={projectDescription}
                   onChange={(e) => setProjectDescription(e.target.value)}
-                  placeholder="프로젝트에 대한 간단한 설명"
+                  placeholder="A brief description of the project"
                   rows={3}
                 />
               </div>
               <div className="form-actions">
                 <button type="button" onClick={() => setShowCreateForm(false)}>
-                  취소
+                  Cancel
                 </button>
-                <button type="submit">만들기</button>
+                <button type="submit">Create</button>
               </div>
             </form>
           </div>
@@ -87,11 +87,11 @@ const Home: React.FC = () => {
       )}
 
       <div className="projects-section">
-        <h2>내 프로젝트</h2>
+        <h2>My Projects</h2>
         {projects.length === 0 ? (
           <div className="empty-state">
-            <p>아직 프로젝트가 없습니다.</p>
-            <p>새 프로젝트를 만들어 시작해보세요!</p>
+            <p>No projects yet.</p>
+            <p>Create a new project to get started!</p>
           </div>
         ) : (
           <div className="projects-grid">
@@ -107,13 +107,13 @@ const Home: React.FC = () => {
                     <p className="project-description">{project.description}</p>
                   )}
                   <p className="project-date">
-                    생성일: {project.createdAt.toLocaleDateString()}
+                    Created: {project.createdAt.toLocaleDateString()}
                   </p>
                 </div>
                 <button 
                   className="delete-button"
                   onClick={(e) => handleDeleteProject(project.id, e)}
-                  title="프로젝트 삭제"
+                  title="Delete project"
                 >
                   ✕
                 </button>
