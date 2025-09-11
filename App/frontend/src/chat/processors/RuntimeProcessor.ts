@@ -5,7 +5,7 @@ import { ChatPipeline } from '../ChatPipeline';
 
 export interface RuntimeProcessingConfig {
   projectId: string;
-  storyObjects: any;
+  getStoryObjects: () => any; // Changed from static value to function
   systemInsertConfig: any;
   chatPipeline: ChatPipeline;
   isLoading: boolean;
@@ -16,10 +16,10 @@ export interface RuntimeProcessingConfig {
 export interface RuntimeProcessingCallbacks {
   onNewMessage: (messageId: string, content: string) => void;
   onNewFunctionCalls: (messageId: string, functionCalls: FunctionCallMetadata[]) => void;
-  onNewEditTags: (messageId: string, editCards: any[]) => void;
   onAddMessage: (projectId: string, message: ChatMessage) => void;
   onGetChatHistory: (projectId: string) => ChatMessage[];
   onError: (error: Error) => void;
+  onFunctionCallsDetected?: (messageId: string, functionCalls: any[]) => void;
 }
 
 export class RuntimeProcessor {
@@ -32,7 +32,7 @@ export class RuntimeProcessor {
   }
 
   /**
-   * 초기 사용자 메시지 처리 및 스트리밍 시작
+   * Process initial user message and start streaming
    */
   async processUserMessage(userMessage: ChatMessage): Promise<void> {
     if (this.config.isLoading) return;
@@ -40,14 +40,14 @@ export class RuntimeProcessor {
     this.config.setIsLoading(true);
 
     try {
-      // 사용자 메시지 추가
+      // Add user message
       this.callbacks.onAddMessage(this.config.projectId, userMessage);
 
-      // 새로운 AI 응답을 위한 메시지 생성
+      // Create new AI response message
       const assistantMessage = this.createAssistantMessage();
       this.callbacks.onAddMessage(this.config.projectId, assistantMessage);
 
-      // 스트리밍 시작
+      // Start streaming
       await this.startStreaming(assistantMessage.id);
 
     } catch (error) {
@@ -60,7 +60,7 @@ export class RuntimeProcessor {
   }
 
   /**
-   * Function call 처리 후 스트리밍을 계속 진행
+   * Continue streaming after function call processing
    */
   async continueAfterFunctionCall(
     functionCall: FunctionCallMetadata,
@@ -72,15 +72,15 @@ export class RuntimeProcessor {
     this.config.setIsLoading(true);
 
     try {
-      // 1. 시스템 메시지로 function call 결과 전달
+      // 1. Send function call result as system message
       const systemMessage = this.createResultMessage(functionCall, accepted, resultMessage);
       this.callbacks.onAddMessage(this.config.projectId, systemMessage);
 
-      // 2. 새로운 AI 응답을 위한 메시지 생성
+      // 2. Create new AI response message
       const assistantMessage = this.createAssistantMessage();
       this.callbacks.onAddMessage(this.config.projectId, assistantMessage);
 
-      // 3. 스트리밍 시작
+      // 3. Start streaming
       await this.startStreaming(assistantMessage.id);
 
     } catch (error) {
@@ -93,7 +93,7 @@ export class RuntimeProcessor {
   }
 
   /**
-   * 시스템 메시지 생성
+   * Create system message
    */
   private createResultMessage(
     functionCall: FunctionCallMetadata,
@@ -109,7 +109,7 @@ export class RuntimeProcessor {
   }
 
   /**
-   * AI 응답 메시지 생성
+   * Create AI response message
    */
   private createAssistantMessage(): ChatMessage {
     return {
@@ -121,27 +121,26 @@ export class RuntimeProcessor {
   }
 
   /**
-   * 스트리밍 시작
+   * Start streaming
    */
   private async startStreaming(assistantMessageId: string): Promise<void> {
-    // 현재 대화 히스토리 가져오기
+    // Get current chat history
     const chatHistory = this.callbacks.onGetChatHistory(this.config.projectId);
 
-
-    // Pipeline context 생성
+    // Create pipeline context with fresh storyObjects
     const context = ChatPipeline.createContext(
       this.config.projectId,
-      this.config.storyObjects,
+      this.config.getStoryObjects(), // Get fresh story objects at streaming time
       this.config.systemInsertConfig
     );
 
     // Pre-process messages
     const { conversationBlocks, functions } = this.config.chatPipeline.preProcess(
-      chatHistory.slice(0, -1), // 새로 추가한 빈 assistant 메시지 제외
+      chatHistory.slice(0, -1), // Exclude the newly added empty assistant message
       context
     );
 
-    // 스트리밍 시작
+    // Start streaming
     this.config.abortControllerRef.current = new AbortController();
     
     let accumulatedContent = '';
@@ -155,7 +154,7 @@ export class RuntimeProcessor {
         accumulatedContent += chunk;
         this.callbacks.onNewMessage(assistantMessageId, accumulatedContent);
       } else {
-        // Tool call 처리
+        // Process tool calls
         if (chunk.content) {
           accumulatedContent += chunk.content;
           this.callbacks.onNewMessage(assistantMessageId, accumulatedContent);
@@ -163,6 +162,11 @@ export class RuntimeProcessor {
         
         if (chunk.tool_calls) {
           accumulatedToolCalls = this.accumulateToolCalls(accumulatedToolCalls, chunk.tool_calls);
+          
+          // Notify about function calls being detected during streaming
+          if (this.callbacks.onFunctionCallsDetected) {
+            this.callbacks.onFunctionCallsDetected(assistantMessageId, accumulatedToolCalls);
+          }
         }
       }
     }
@@ -172,7 +176,7 @@ export class RuntimeProcessor {
   }
 
   /**
-   * Tool calls 누적
+   * Accumulate tool calls
    */
   private accumulateToolCalls(existing: any[], newCalls: any[]): any[] {
     newCalls.forEach((newToolCall, index) => {
@@ -199,7 +203,7 @@ export class RuntimeProcessor {
   }
 
   /**
-   * 최종 처리
+   * Final processing
    */
   private async finishProcessing(
     messageId: string,
@@ -220,18 +224,14 @@ export class RuntimeProcessor {
     // Process for display and generate edit cards
     const { editCards } = this.config.chatPipeline.processForDisplay(processedMessage, context);
     
-    // Function calls가 있으면 콜백 호출
+    // Call callback if function calls exist
     if (processedMessage.functionCalls && processedMessage.functionCalls.length > 0) {
       this.callbacks.onNewFunctionCalls(messageId, processedMessage.functionCalls);
-    }
-    // Legacy edit tags 처리
-    else if (editCards.length > 0) {
-      this.callbacks.onNewEditTags(messageId, editCards);
     }
   }
 
   /**
-   * 스트리밍 중단
+   * Abort streaming
    */
   abort(): void {
     if (this.config.abortControllerRef.current) {

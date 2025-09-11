@@ -24,6 +24,10 @@ const ProjectMenu: React.FC = () => {
     );
   }
 
+  const handleWorkspaceClick = () => {
+    navigate(`/project/${projectId}/workspace`);
+  };
+
   const handleChatClick = () => {
     navigate(`/project/${projectId}/chat`);
   };
@@ -51,6 +55,13 @@ const ProjectMenu: React.FC = () => {
       </div>
 
       <div className="menu-grid">
+        <div className="menu-card" onClick={handleWorkspaceClick}>
+          <div className="menu-icon">🏢</div>
+          <h3>Workspace</h3>
+          <p>Unified workspace with AI chat and story editing</p>
+          <div className="menu-arrow">→</div>
+        </div>
+
         <div className="menu-card" onClick={handleChatClick}>
           <div className="menu-icon">💬</div>
           <h3>AI Chat</h3>

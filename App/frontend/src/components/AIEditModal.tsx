@@ -308,17 +308,8 @@ Important rules:
           jsonText = codeBlockMatch[1].trim();        } else {        }
         
         const parsedResult = JSON.parse(jsonText);        
-        // Save version before applying result
-        if (targetId) {
-          // For individual item edits, save as a new version
-          const versionId = storyObjectStore.addVersion(
-            projectId,
-            category,
-            targetId,
-            userRequest,
-            parsedResult
-          );        }
         
+        // Apply the result
         onResult(parsedResult);
         onClose();
       } catch (parseError) {

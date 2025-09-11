@@ -6,18 +6,6 @@ import type { FunctionCallSchema } from './types/functionCalling';
 export interface ProcessedChatMessage extends ChatMessage {
   originalContent?: string;
   processedForAI?: boolean;
-  editTags?: EditTag[];
-}
-
-// Edit tags that AI can use
-export type EditTagType = 'init' | 'add' | 'edit' | 'remove';
-
-export interface EditTag {
-  type: EditTagType;
-  content: any;
-  id: string;
-  isApplied?: boolean;
-  summary?: string;
 }
 
 // System insertion mode for AI context
@@ -36,7 +24,6 @@ export interface PreProcessingResult {
 
 export interface PostProcessingResult {
   message: ProcessedChatMessage;
-  extractedEditTags: EditTag[];
 }
 
 export interface DisplayProcessingResult {
@@ -47,7 +34,7 @@ export interface DisplayProcessingResult {
 // Edit card for display
 export interface EditCard {
   id: string;
-  type: EditTagType | 'system';
+  type: string | 'system';
   title: string;
   description: string;
   isApplied: boolean;

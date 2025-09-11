@@ -35,8 +35,7 @@ export const STORY_FUNCTIONS: FunctionCallSchema[] = [
           properties: {
             title: { type: "string" },
             logline: { type: "string" },
-            genre: { type: "string" },
-            description: { type: "string" }
+            genre: { type: "string" }
           }
         },
         characters: {
@@ -45,12 +44,9 @@ export const STORY_FUNCTIONS: FunctionCallSchema[] = [
             type: "object",
             properties: {
               name: { type: "string" },
-              description: { type: "string" },
-              age: { type: "number" },
-              role: { type: "string" },
-              backstory: { type: "string" }
+              description: { type: "string" }
             },
-            required: ["name"]
+            required: ["name", "description"]
           }
         },
         organizations: {
@@ -59,11 +55,9 @@ export const STORY_FUNCTIONS: FunctionCallSchema[] = [
             type: "object",
             properties: {
               name: { type: "string" },
-              description: { type: "string" },
-              type: { type: "string" },
-              purpose: { type: "string" }
+              description: { type: "string" }
             },
-            required: ["name"]
+            required: ["name", "description"]
           }
         },
         locations: {
@@ -72,11 +66,9 @@ export const STORY_FUNCTIONS: FunctionCallSchema[] = [
             type: "object",
             properties: {
               name: { type: "string" },
-              description: { type: "string" },
-              type: { type: "string" },
-              significance: { type: "string" }
+              description: { type: "string" }
             },
-            required: ["name"]
+            required: ["name", "description"]
           }
         },
         lorebook: {
@@ -85,11 +77,9 @@ export const STORY_FUNCTIONS: FunctionCallSchema[] = [
             type: "object",
             properties: {
               name: { type: "string" },
-              description: { type: "string" },
-              category: { type: "string" },
-              content: { type: "string" }
+              description: { type: "string" }
             },
-            required: ["name"]
+            required: ["name", "description"]
           }
         },
         acts: {
@@ -105,14 +95,13 @@ export const STORY_FUNCTIONS: FunctionCallSchema[] = [
                   type: "object",
                   properties: {
                     name: { type: "string" },
-                    description: { type: "string" },
-                    summary: { type: "string" }
+                    description: { type: "string" }
                   },
-                  required: ["name"]
+                  required: ["name", "description"]
                 }
               }
             },
-            required: ["name"]
+            required: ["name", "description", "chapters"]
           }
         }
       },
@@ -131,12 +120,9 @@ export const STORY_FUNCTIONS: FunctionCallSchema[] = [
             type: "object",
             properties: {
               name: { type: "string" },
-              description: { type: "string" },
-              age: { type: "number" },
-              role: { type: "string" },
-              backstory: { type: "string" }
+              description: { type: "string" }
             },
-            required: ["name"]
+            required: ["name", "description"]
           }
         },
         organizations: {
@@ -145,11 +131,9 @@ export const STORY_FUNCTIONS: FunctionCallSchema[] = [
             type: "object",
             properties: {
               name: { type: "string" },
-              description: { type: "string" },
-              type: { type: "string" },
-              purpose: { type: "string" }
+              description: { type: "string" }
             },
-            required: ["name"]
+            required: ["name", "description"]
           }
         },
         locations: {
@@ -158,11 +142,9 @@ export const STORY_FUNCTIONS: FunctionCallSchema[] = [
             type: "object",
             properties: {
               name: { type: "string" },
-              description: { type: "string" },
-              type: { type: "string" },
-              significance: { type: "string" }
+              description: { type: "string" }
             },
-            required: ["name"]
+            required: ["name", "description"]
           }
         },
         lorebook: {
@@ -171,11 +153,9 @@ export const STORY_FUNCTIONS: FunctionCallSchema[] = [
             type: "object",
             properties: {
               name: { type: "string" },
-              description: { type: "string" },
-              category: { type: "string" },
-              content: { type: "string" }
+              description: { type: "string" }
             },
-            required: ["name"]
+            required: ["name", "description"]
           }
         },
         acts: {
@@ -191,14 +171,13 @@ export const STORY_FUNCTIONS: FunctionCallSchema[] = [
                   type: "object",
                   properties: {
                     name: { type: "string" },
-                    description: { type: "string" },
-                    summary: { type: "string" }
+                    description: { type: "string" }
                   },
-                  required: ["name"]
+                  required: ["name", "description"]
                 }
               }
             },
-            required: ["name"]
+            required: ["name", "description"]
           }
         },
         chapters: {
@@ -208,10 +187,9 @@ export const STORY_FUNCTIONS: FunctionCallSchema[] = [
             properties: {
               actId: { type: "string" },
               name: { type: "string" },
-              description: { type: "string" },
-              summary: { type: "string" }
+              description: { type: "string" }
             },
-            required: ["actId", "name"]
+            required: ["actId", "name", "description"]
           }
         }
       },
@@ -245,17 +223,8 @@ export const STORY_FUNCTIONS: FunctionCallSchema[] = [
               },
               name: { type: "string" },
               description: { type: "string" },
-              age: { type: "number" },
-              role: { type: "string" },
-              backstory: { type: "string" },
-              type_field: { type: "string" },
-              purpose: { type: "string" },
-              significance: { type: "string" },
-              category: { type: "string" },
-              content: { type: "string" },
-              summary: { type: "string" }
             },
-            required: ["id", "type"]
+            required: ["id", "type", "name", "description"]
           }
         }
       },

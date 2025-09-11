@@ -30,11 +30,13 @@ interface StoryObjectStore {
   // Basic Info Actions
   setBasicInfo: (projectId: string, basicInfo: BasicInfo) => void;
   updateBasicInfo: (projectId: string, updates: Partial<Omit<BasicInfo, 'id' | 'createdAt'>>) => void;
+  updateBasicInfoAI: (projectId: string, updates: Partial<Omit<BasicInfo, 'id' | 'createdAt'>>) => void;
   getBasicInfo: (projectId: string) => BasicInfo | null;
   
   // Character Actions
   addCharacter: (projectId: string, character?: Partial<Character>) => Character;
   updateCharacter: (projectId: string, id: string, updates: Partial<Omit<Character, 'id' | 'createdAt'>>) => void;
+  updateCharacterAI: (projectId: string, id: string, updates: Partial<Omit<Character, 'id' | 'createdAt'>>) => void;
   deleteCharacter: (projectId: string, id: string) => void;
   getCharacters: (projectId: string) => Character[];
   
@@ -87,6 +89,124 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
     (set, get) => ({
       storyObjectsByProject: {},
 
+      // Helper function to create version for update
+      createUpdateVersion: (currentData: any, userRequest: string = 'User Edit') => {
+        const versionId = crypto.randomUUID();
+        const now = new Date();
+        
+        // Extract only essential data
+        let versionData: any = currentData;
+        if (currentData && typeof currentData === 'object') {
+          if ('name' in currentData && 'description' in currentData) {
+            versionData = {
+              name: currentData.name,
+              description: currentData.description,
+            };
+          } else if ('title' in currentData && 'logline' in currentData && 'genre' in currentData) {
+            versionData = {
+              title: currentData.title,
+              logline: currentData.logline,
+              genre: currentData.genre,
+            };
+          } else if ('acts' in currentData) {
+            versionData = {
+              acts: currentData.acts?.map((act: any) => ({
+                id: act.id,
+                name: act.name,
+                description: act.description,
+                chapters: act.chapters?.map((chapter: any) => ({
+                  id: chapter.id,
+                  name: chapter.name,
+                  description: chapter.description
+                })) || []
+              })) || []
+            };
+          }
+        }
+        
+        return {
+          versionId,
+          timestamp: now,
+          userRequest,
+          data: versionData,
+          isActive: true,
+        };
+      },
+
+      // Helper function to add version to item
+      addVersionToItem: (item: any, newVersion: any) => {
+        const updatedVersions = item.versions.map((v: any) => ({ ...v, isActive: false }));
+        updatedVersions.push(newVersion);
+        
+        return {
+          ...item,
+          versions: updatedVersions,
+          activeVersionId: newVersion.versionId,
+        };
+      },
+
+      // AI Edit specific update functions with custom userRequest
+      updateCharacterAI: (projectId: string, id: string, updates: Partial<Omit<Character, 'id' | 'createdAt'>>) => {
+        set((state) => {
+          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
+          const { createUpdateVersion, addVersionToItem } = get();
+          
+          const updatedCharacters = projectObjects.characters.map((char) => {
+            if (char.id === id) {
+              const updatedChar = { 
+                ...char, 
+                name: updates.name !== undefined ? updates.name : char.name,
+                description: updates.description !== undefined ? updates.description : char.description,
+                updatedAt: new Date() 
+              };
+              
+              // Auto-create version for AI edit
+              const newVersion = createUpdateVersion(updatedChar, 'AI Edit');
+              return addVersionToItem(updatedChar, newVersion);
+            }
+            return char;
+          });
+          
+          return {
+            storyObjectsByProject: {
+              ...state.storyObjectsByProject,
+              [projectId]: {
+                ...projectObjects,
+                characters: updatedCharacters,
+              },
+            },
+          };
+        });
+      },
+
+      updateBasicInfoAI: (projectId: string, updates: Partial<Omit<BasicInfo, 'id' | 'createdAt'>>) => {
+        set((state) => {
+          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
+          const currentBasicInfo = projectObjects.basicInfo || createEmptyBasicInfo();
+          const { createUpdateVersion, addVersionToItem } = get();
+          
+          const updatedBasicInfo = {
+            ...currentBasicInfo,
+            ...updates,
+            updatedAt: new Date(),
+          };
+          
+          // Auto-create version for AI edit
+          const newVersion = createUpdateVersion(updatedBasicInfo, 'AI Edit');
+          const basicInfoWithVersion = addVersionToItem(updatedBasicInfo, newVersion);
+          
+          return {
+            storyObjectsByProject: {
+              ...state.storyObjectsByProject,
+              [projectId]: {
+                ...projectObjects,
+                basicInfo: basicInfoWithVersion,
+              },
+            },
+          };
+        });
+      },
+
       // Utility to ensure project exists
       ensureProject: (projectId: string) => {
         const state = get();
@@ -120,16 +240,24 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
         set((state) => {
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
           const currentBasicInfo = projectObjects.basicInfo || createEmptyBasicInfo();
+          const { createUpdateVersion, addVersionToItem } = get();
+          
+          const updatedBasicInfo = {
+            ...currentBasicInfo,
+            ...updates,
+            updatedAt: new Date(),
+          };
+          
+          // Auto-create version for update
+          const newVersion = createUpdateVersion(updatedBasicInfo);
+          const basicInfoWithVersion = addVersionToItem(updatedBasicInfo, newVersion);
+          
           return {
             storyObjectsByProject: {
               ...state.storyObjectsByProject,
               [projectId]: {
                 ...projectObjects,
-                basicInfo: {
-                  ...currentBasicInfo,
-                  ...updates,
-                  updatedAt: new Date(),
-                },
+                basicInfo: basicInfoWithVersion,
               },
             },
           };
@@ -145,7 +273,6 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
       addCharacter: (projectId: string, character?: Partial<Character>) => {
         const newCharacter = {
           ...createNameDescriptionItem(character?.name || '', character?.description || ''),
-          ...character,
         } as Character;
 
         set((state) => {
@@ -167,14 +294,30 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
       updateCharacter: (projectId: string, id: string, updates: Partial<Omit<Character, 'id' | 'createdAt'>>) => {
         set((state) => {
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
+          const { createUpdateVersion, addVersionToItem } = get();
+          
+          const updatedCharacters = projectObjects.characters.map((char) => {
+            if (char.id === id) {
+              const updatedChar = { 
+                ...char, 
+                name: updates.name !== undefined ? updates.name : char.name,
+                description: updates.description !== undefined ? updates.description : char.description,
+                updatedAt: new Date() 
+              };
+              
+              // Auto-create version for update
+              const newVersion = createUpdateVersion(updatedChar);
+              return addVersionToItem(updatedChar, newVersion);
+            }
+            return char;
+          });
+          
           return {
             storyObjectsByProject: {
               ...state.storyObjectsByProject,
               [projectId]: {
                 ...projectObjects,
-                characters: projectObjects.characters.map((char) =>
-                  char.id === id ? { ...char, ...updates, updatedAt: new Date() } : char
-                ),
+                characters: updatedCharacters,
               },
             },
           };
@@ -205,7 +348,6 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
       addOrganization: (projectId: string, organization?: Partial<Organization>) => {
         const newOrganization = {
           ...createNameDescriptionItem(organization?.name || '', organization?.description || ''),
-          ...organization,
         } as Organization;
 
         set((state) => {
@@ -227,14 +369,30 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
       updateOrganization: (projectId: string, id: string, updates: Partial<Omit<Organization, 'id' | 'createdAt'>>) => {
         set((state) => {
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
+          const { createUpdateVersion, addVersionToItem } = get();
+          
+          const updatedOrganizations = projectObjects.organizations.map((org) => {
+            if (org.id === id) {
+              const updatedOrg = { 
+                ...org, 
+                name: updates.name !== undefined ? updates.name : org.name,
+                description: updates.description !== undefined ? updates.description : org.description,
+                updatedAt: new Date() 
+              };
+              
+              // Auto-create version for update
+              const newVersion = createUpdateVersion(updatedOrg);
+              return addVersionToItem(updatedOrg, newVersion);
+            }
+            return org;
+          });
+          
           return {
             storyObjectsByProject: {
               ...state.storyObjectsByProject,
               [projectId]: {
                 ...projectObjects,
-                organizations: projectObjects.organizations.map((org) =>
-                  org.id === id ? { ...org, ...updates, updatedAt: new Date() } : org
-                ),
+                organizations: updatedOrganizations,
               },
             },
           };
@@ -265,7 +423,6 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
       addLocation: (projectId: string, location?: Partial<Location>) => {
         const newLocation = {
           ...createNameDescriptionItem(location?.name || '', location?.description || ''),
-          ...location,
         } as Location;
 
         set((state) => {
@@ -287,14 +444,30 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
       updateLocation: (projectId: string, id: string, updates: Partial<Omit<Location, 'id' | 'createdAt'>>) => {
         set((state) => {
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
+          const { createUpdateVersion, addVersionToItem } = get();
+          
+          const updatedLocations = projectObjects.locations.map((loc) => {
+            if (loc.id === id) {
+              const updatedLoc = { 
+                ...loc, 
+                name: updates.name !== undefined ? updates.name : loc.name,
+                description: updates.description !== undefined ? updates.description : loc.description,
+                updatedAt: new Date() 
+              };
+              
+              // Auto-create version for update
+              const newVersion = createUpdateVersion(updatedLoc);
+              return addVersionToItem(updatedLoc, newVersion);
+            }
+            return loc;
+          });
+          
           return {
             storyObjectsByProject: {
               ...state.storyObjectsByProject,
               [projectId]: {
                 ...projectObjects,
-                locations: projectObjects.locations.map((loc) =>
-                  loc.id === id ? { ...loc, ...updates, updatedAt: new Date() } : loc
-                ),
+                locations: updatedLocations,
               },
             },
           };
@@ -325,7 +498,6 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
       addLorebookEntry: (projectId: string, entry?: Partial<LorebookEntry>) => {
         const newEntry = {
           ...createNameDescriptionItem(entry?.name || '', entry?.description || ''),
-          ...entry,
         } as LorebookEntry;
 
         set((state) => {
@@ -347,14 +519,30 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
       updateLorebookEntry: (projectId: string, id: string, updates: Partial<Omit<LorebookEntry, 'id' | 'createdAt'>>) => {
         set((state) => {
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
+          const { createUpdateVersion, addVersionToItem } = get();
+          
+          const updatedLorebook = projectObjects.lorebook.map((entry) => {
+            if (entry.id === id) {
+              const updatedEntry = { 
+                ...entry, 
+                name: updates.name !== undefined ? updates.name : entry.name,
+                description: updates.description !== undefined ? updates.description : entry.description,
+                updatedAt: new Date() 
+              };
+              
+              // Auto-create version for update
+              const newVersion = createUpdateVersion(updatedEntry);
+              return addVersionToItem(updatedEntry, newVersion);
+            }
+            return entry;
+          });
+          
           return {
             storyObjectsByProject: {
               ...state.storyObjectsByProject,
               [projectId]: {
                 ...projectObjects,
-                lorebook: projectObjects.lorebook.map((entry) =>
-                  entry.id === id ? { ...entry, ...updates, updatedAt: new Date() } : entry
-                ),
+                lorebook: updatedLorebook,
               },
             },
           };
@@ -406,7 +594,8 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
       addAct: (projectId: string, act?: Partial<Act>) => {
         const newAct = {
           ...createEmptyAct(),
-          ...act,
+          name: act?.name || '',
+          description: act?.description || '',
         } as Act;
 
         set((state) => {
@@ -435,6 +624,24 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
           const currentOutline = projectObjects.outline;
           if (!currentOutline) return state;
+          
+          const { createUpdateVersion, addVersionToItem } = get();
+
+          const updatedActs = currentOutline.acts.map((act) => {
+            if (act.id === actId) {
+              const updatedAct = { 
+                ...act, 
+                name: updates.name !== undefined ? updates.name : act.name,
+                description: updates.description !== undefined ? updates.description : act.description,
+                updatedAt: new Date() 
+              };
+              
+              // Auto-create version for update
+              const newVersion = createUpdateVersion(updatedAct);
+              return addVersionToItem(updatedAct, newVersion);
+            }
+            return act;
+          });
 
           return {
             storyObjectsByProject: {
@@ -443,9 +650,7 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
                 ...projectObjects,
                 outline: {
                   ...currentOutline,
-                  acts: currentOutline.acts.map((act) =>
-                    act.id === actId ? { ...act, ...updates, updatedAt: new Date() } : act
-                  ),
+                  acts: updatedActs,
                   updatedAt: new Date(),
                 },
               },
@@ -480,7 +685,8 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
       addChapter: (projectId: string, actId: string, chapter?: Partial<Chapter>) => {
         const newChapter = {
           ...createEmptyChapter(actId),
-          ...chapter,
+          name: chapter?.name || '',
+          description: chapter?.description || '',
           actId,
         } as Chapter;
 
@@ -516,6 +722,28 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
           const currentOutline = projectObjects.outline;
           if (!currentOutline) return state;
+          
+          const { createUpdateVersion, addVersionToItem } = get();
+
+          const updatedActs = currentOutline.acts.map((act) => ({
+            ...act,
+            chapters: act.chapters.map((chapter) => {
+              if (chapter.id === chapterId) {
+                const updatedChapter = { 
+                  ...chapter, 
+                  name: updates.name !== undefined ? updates.name : chapter.name,
+                  description: updates.description !== undefined ? updates.description : chapter.description,
+                  updatedAt: new Date() 
+                };
+                
+                // Auto-create version for update
+                const newVersion = createUpdateVersion(updatedChapter);
+                return addVersionToItem(updatedChapter, newVersion);
+              }
+              return chapter;
+            }),
+            updatedAt: new Date(),
+          }));
 
           return {
             storyObjectsByProject: {
@@ -524,15 +752,7 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
                 ...projectObjects,
                 outline: {
                   ...currentOutline,
-                  acts: currentOutline.acts.map((act) => ({
-                    ...act,
-                    chapters: act.chapters.map((chapter) =>
-                      chapter.id === chapterId
-                        ? { ...chapter, ...updates, updatedAt: new Date() }
-                        : chapter
-                    ),
-                    updatedAt: new Date(),
-                  })),
+                  acts: updatedActs,
                   updatedAt: new Date(),
                 },
               },

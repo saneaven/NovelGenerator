@@ -1,5 +1,63 @@
 import type { FunctionCallMetadata } from '../../llm_request/types';
-import type { StoryObjectStoreActions, EditTagApplicationResult } from './editTagApplicator';
+import type { 
+  StoryObjects,
+  BasicInfo,
+  Character,
+  Organization,
+  Location,
+  LorebookEntry,
+  Act,
+  Chapter
+} from '../../types/storyObject';
+
+export interface EditTagApplicationResult {
+  success: boolean;
+  message: string;
+  error?: string;
+}
+
+export interface StoryObjectStoreActions {
+  // Basic Info
+  setBasicInfo: (projectId: string, basicInfo: BasicInfo) => void;
+  updateBasicInfo: (projectId: string, updates: Partial<BasicInfo>) => void;
+  
+  // Characters
+  addCharacter: (projectId: string, character?: Partial<Character>) => Character;
+  updateCharacter: (projectId: string, id: string, updates: Partial<Character>) => void;
+  deleteCharacter: (projectId: string, id: string) => void;
+  
+  // Organizations
+  addOrganization: (projectId: string, organization?: Partial<Organization>) => Organization;
+  updateOrganization: (projectId: string, id: string, updates: Partial<Organization>) => void;
+  deleteOrganization: (projectId: string, id: string) => void;
+  
+  // Locations
+  addLocation: (projectId: string, location?: Partial<Location>) => Location;
+  updateLocation: (projectId: string, id: string, updates: Partial<Location>) => void;
+  deleteLocation: (projectId: string, id: string) => void;
+  
+  // Lorebook
+  addLorebookEntry: (projectId: string, entry?: Partial<LorebookEntry>) => LorebookEntry;
+  updateLorebookEntry: (projectId: string, id: string, updates: Partial<LorebookEntry>) => void;
+  deleteLorebookEntry: (projectId: string, id: string) => void;
+  
+  // Acts
+  addAct: (projectId: string, act?: Partial<Act>) => Act;
+  updateAct: (projectId: string, actId: string, updates: Partial<Act>) => void;
+  deleteAct: (projectId: string, actId: string) => void;
+  
+  // Chapters
+  addChapter: (projectId: string, actId: string, chapter?: Partial<Chapter>) => Chapter;
+  updateChapter: (projectId: string, chapterId: string, updates: Partial<Chapter>) => void;
+  deleteChapter: (projectId: string, chapterId: string) => void;
+  
+  // Version Management
+  addVersion: <T>(projectId: string, category: import('../../types/storyObject').StoryObjectCategory, itemId: string, userRequest: string, data: T) => string;
+  
+  // Utility
+  getStoryObjects: (projectId: string) => StoryObjects;
+  clearStoryObjects: (projectId: string) => void;
+}
 
 export class FunctionCallApplicator {
   private storeActions: StoryObjectStoreActions;
@@ -47,7 +105,17 @@ export class FunctionCallApplicator {
     summary?: string
   ): void {
     const userRequest = `AI Function Call (${editType})${summary ? `: ${summary}` : ''}`;
-    this.storeActions.addVersion(projectId, category, itemId, userRequest, data);
+    
+    // Extract only essential data to match initial version format
+    let essentialData: any = data;
+    if (data && typeof data === 'object' && 'name' in data && 'description' in data) {
+      essentialData = {
+        name: (data as any).name,
+        description: (data as any).description,
+      };
+    }
+    
+    this.storeActions.addVersion(projectId, category, itemId, userRequest, essentialData);
   }
 
   private async applyInitializeStoryObjects(
@@ -101,21 +169,8 @@ export class FunctionCallApplicator {
       args.characters.forEach((char: any) => {
         const newCharacter = this.storeActions.addCharacter(projectId, {
           name: char.name || '',
-          description: char.description || '',
-          age: char.age,
-          role: char.role || '',
-          backstory: char.backstory || '',
-          ...char
+          description: char.description || ''
         });
-        
-        this.createVersionForItem(
-          projectId, 
-          'character', 
-          newCharacter.id, 
-          newCharacter, 
-          'initialize', 
-          `Initialize character: ${newCharacter.name}`
-        );
         
         appliedCount++;
       });
@@ -126,20 +181,8 @@ export class FunctionCallApplicator {
       args.organizations.forEach((org: any) => {
         const newOrganization = this.storeActions.addOrganization(projectId, {
           name: org.name || '',
-          description: org.description || '',
-          type: org.type || '',
-          purpose: org.purpose || '',
-          ...org
+          description: org.description || ''
         });
-        
-        this.createVersionForItem(
-          projectId, 
-          'organization', 
-          newOrganization.id, 
-          newOrganization, 
-          'initialize', 
-          `Initialize organization: ${newOrganization.name}`
-        );
         
         appliedCount++;
       });
@@ -150,20 +193,8 @@ export class FunctionCallApplicator {
       args.locations.forEach((loc: any) => {
         const newLocation = this.storeActions.addLocation(projectId, {
           name: loc.name || '',
-          description: loc.description || '',
-          type: loc.type || '',
-          significance: loc.significance || '',
-          ...loc
+          description: loc.description || ''
         });
-        
-        this.createVersionForItem(
-          projectId, 
-          'location', 
-          newLocation.id, 
-          newLocation, 
-          'initialize', 
-          `Initialize location: ${newLocation.name}`
-        );
         
         appliedCount++;
       });
@@ -174,20 +205,8 @@ export class FunctionCallApplicator {
       args.lorebook.forEach((entry: any) => {
         const newEntry = this.storeActions.addLorebookEntry(projectId, {
           name: entry.name || '',
-          description: entry.description || '',
-          category: entry.category || '',
-          content: entry.content || '',
-          ...entry
+          description: entry.description || ''
         });
-        
-        this.createVersionForItem(
-          projectId, 
-          'lorebook', 
-          newEntry.id, 
-          newEntry, 
-          'initialize', 
-          `Initialize lorebook entry: ${newEntry.name}`
-        );
         
         appliedCount++;
       });

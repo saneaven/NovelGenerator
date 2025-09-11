@@ -1,12 +1,10 @@
 import React from 'react';
-import type { EditTagMetadata, FunctionCallMetadata } from '../../llm_request/types';
+import type { FunctionCallMetadata } from '../../llm_request/types';
 import type { 
   DisplayProcessor, 
   DisplayProcessingResult, 
   ProcessedChatMessage, 
   EditCard,
-  EditTag,
-  EditTagType,
   ChatPipelineContext 
 } from '../types';
 
@@ -26,19 +24,6 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
           editCards = this.generateEditCardsFromFunctionCalls(unappliedFunctionCalls, context);
         }
       } 
-      // Fallback to legacy edit tags
-      else if (message.editTags && message.editTags.length > 0) {
-        const unappliedEditTags = message.editTags.filter(tag => !tag.isApplied);
-        if (unappliedEditTags.length > 0) {
-          editCards = this.generateEditCardsFromMetadata(unappliedEditTags, context);
-        }
-      } 
-      // Extract legacy tags from content
-      else if (message.content) {
-        const extractedEditTags = this.extractEditTags(message.content);
-        const editTagsMetadata = this.convertToMetadata(extractedEditTags);
-        editCards = this.generateEditCardsFromMetadata(editTagsMetadata, context);
-      }
     } else if (message.role === 'user') {
       // User messages: only show system message result cards
       const systemCards = this.extractSystemCards(message);
@@ -54,184 +39,12 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
     };
   }
 
-  private extractEditTags(content: string): EditTag[] {
-    const editTags: EditTag[] = [];
-    
-    // Extract init tags
-    const initMatches = this.extractTagMatches(content, 'init');
-    initMatches.forEach(match => {
-      editTags.push({
-        type: 'init',
-        content: match.jsonContent,
-        id: crypto.randomUUID(),
-        isApplied: false,
-        summary: 'Initialize story objects'
-      });
-    });
-
-    // Extract add tags
-    const addMatches = this.extractTagMatches(content, 'add');
-    addMatches.forEach(match => {
-      editTags.push({
-        type: 'add',
-        content: match.jsonContent,
-        id: crypto.randomUUID(),
-        isApplied: false,
-        summary: this.generateAddSummary(match.jsonContent)
-      });
-    });
-
-    // Extract edit tags
-    const editMatches = this.extractTagMatches(content, 'edit');
-    editMatches.forEach(match => {
-      editTags.push({
-        type: 'edit',
-        content: match.jsonContent,
-        id: crypto.randomUUID(),
-        isApplied: false,
-        summary: this.generateEditSummary(match.jsonContent)
-      });
-    });
-
-    // Extract remove tags
-    const removeMatches = this.extractTagMatches(content, 'remove');
-    removeMatches.forEach(match => {
-      editTags.push({
-        type: 'remove',
-        content: match.jsonContent,
-        id: crypto.randomUUID(),
-        isApplied: false,
-        summary: this.generateRemoveSummary(match.jsonContent)
-      });
-    });
-
-    return editTags;
-  }
-
-  private extractTagMatches(content: string, tagType: string): { jsonContent: any; rawMatch: string }[] {
-    const regex = new RegExp(`<${tagType}>[\\s\\S]*?<\\/${tagType}>`, 'gi');
-    const matches = content.match(regex) || [];
-    
-    return matches.map(match => {
-      // Extract content from between the tags
-      const tagContent = match.replace(new RegExp(`<${tagType}>|<\\/${tagType}>`, 'gi'), '').trim();
-      let jsonContent = null;
-      
-      // First try to extract from ```json code block
-      const jsonMatch = tagContent.match(/```json\s*\n?([\s\S]*?)\n?```/);
-      if (jsonMatch) {
-        try {
-          jsonContent = JSON.parse(jsonMatch[1]);
-        } catch (e) {
-          console.warn(`Failed to parse JSON from code block in ${tagType} tag:`, e);
-        }
-      }
-      
-      // If no code block found, try to parse the content directly as JSON
-      if (!jsonContent && tagContent) {
-        try {
-          jsonContent = JSON.parse(tagContent);
-        } catch (e) {
-          console.warn(`Failed to parse direct JSON in ${tagType} tag:`, e);
-          // For backward compatibility, store raw content if JSON parsing fails
-          jsonContent = tagContent;
-        }
-      }
-      
-      return {
-        jsonContent,
-        rawMatch: match
-      };
-    });
-  }
-
-  private generateAddSummary(data: any): string {
-    if (!data) return 'Add items';
-    
-    const parts: string[] = [];
-    
-    if (data.characters?.length) {
-      const names = data.characters.map((c: any) => c.name).filter(Boolean);
-      parts.push(`${data.characters.length} character${data.characters.length > 1 ? 's' : ''}`);
-      if (names.length > 0) {
-        parts[parts.length - 1] += ` (${names.join(', ')})`;
-      }
-    }
-    
-    if (data.organizations?.length) {
-      const names = data.organizations.map((o: any) => o.name).filter(Boolean);
-      parts.push(`${data.organizations.length} organization${data.organizations.length > 1 ? 's' : ''}`);
-      if (names.length > 0) {
-        parts[parts.length - 1] += ` (${names.join(', ')})`;
-      }
-    }
-    
-    if (data.locations?.length) {
-      const names = data.locations.map((l: any) => l.name).filter(Boolean);
-      parts.push(`${data.locations.length} location${data.locations.length > 1 ? 's' : ''}`);
-      if (names.length > 0) {
-        parts[parts.length - 1] += ` (${names.join(', ')})`;
-      }
-    }
-    
-    if (data.acts?.length) {
-      const names = data.acts.map((a: any) => a.name).filter(Boolean);
-      parts.push(`${data.acts.length} act${data.acts.length > 1 ? 's' : ''}`);
-      if (names.length > 0) {
-        parts[parts.length - 1] += ` (${names.join(', ')})`;
-      }
-    }
-    
-    if (data.chapters?.length) {
-      const names = data.chapters.map((c: any) => c.name).filter(Boolean);
-      parts.push(`${data.chapters.length} chapter${data.chapters.length > 1 ? 's' : ''}`);
-      if (names.length > 0) {
-        parts[parts.length - 1] += ` (${names.join(', ')})`;
-      }
-    }
-    
-    return parts.length > 0 ? `Add ${parts.join(', ')}` : 'Add items';
-  }
-
-  private generateEditSummary(data: any): string {
-    if (!data) return 'Edit items';
-    
-    const parts: string[] = [];
-    
-    if (data.basic_info) {
-      const changes: string[] = [];
-      if (data.basic_info.title) changes.push('title');
-      if (data.basic_info.logline) changes.push('logline');
-      if (data.basic_info.genre) changes.push('genre');
-      parts.push(`basic info${changes.length > 0 ? ` (${changes.join(', ')})` : ''}`);
-    }
-    
-    if (data.objects?.length) {
-      const names = data.objects.map((o: any) => o.name).filter(Boolean);
-      parts.push(`${data.objects.length} object${data.objects.length > 1 ? 's' : ''}`);
-      if (names.length > 0) {
-        parts[parts.length - 1] += ` (${names.join(', ')})`;
-      }
-    }
-    
-    return parts.length > 0 ? `Edit ${parts.join(', ')}` : 'Edit items';
-  }
-
-  private generateRemoveSummary(data: any): string {
-    if (!data) return 'Remove items';
-    
-    if (Array.isArray(data)) {
-      return `Remove ${data.length} item${data.length > 1 ? 's' : ''}`;
-    }
-    
-    return 'Remove items';
-  }
 
   private processMessageContent(message: ProcessedChatMessage): React.ReactNode {
     let content = message.originalContent || message.content || '';
 
     // Remove edit tags and system messages from display content
-    content = this.removeEditTags(this.removeSystemTags(content));
+    content = this.removeSystemTags(content);
     
     // Process markdown-like formatting
     content = this.processMarkdown(content);
@@ -246,46 +59,6 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
     );
   }
 
-  private removeEditTags(content: string): string {
-    // Replace edit tags with inline preview cards instead of removing them
-    if (!content || typeof content !== 'string') return '';
-    let processedContent = content;
-
-    // Replace init tags
-    processedContent = processedContent.replace(/<init>([\s\S]*?)<\/init>/gi, (match) => {
-      return this.createInlineTagCard('init', 'Initialize Story', '🔄', '#007bff');
-    });
-
-    // Replace add tags
-    processedContent = processedContent.replace(/<add>([\s\S]*?)<\/add>/gi, (match) => {
-      const summary = this.extractTagSummary(match, 'add');
-      return this.createInlineTagCard('add', summary || 'Add Items', '➕', '#28a745');
-    });
-
-    // Replace edit tags
-    processedContent = processedContent.replace(/<edit>([\s\S]*?)<\/edit>/gi, (match) => {
-      const summary = this.extractTagSummary(match, 'edit');
-      return this.createInlineTagCard('edit', summary || 'Edit Items', '✏️', '#ffc107');
-    });
-
-    // Replace remove tags
-    processedContent = processedContent.replace(/<remove>([\s\S]*?)<\/remove>/gi, (match) => {
-      const summary = this.extractTagSummary(match, 'remove');
-      return this.createInlineTagCard('remove', summary || 'Remove Items', '🗑️', '#dc3545');
-    });
-
-    // Remove system tags (these shouldn't be shown to user)
-    processedContent = processedContent.replace(/<system>[\s\S]*?<\/system>/gi, '');
-
-    return processedContent.trim();
-  }
-
-  private createInlineTagCard(type: string, title: string, icon: string, color: string): string {
-    return `<div class="inline-tag-card inline-tag-${type}" style="border-color: ${color};">
-      <span class="inline-tag-icon">${icon}</span>
-      <span class="inline-tag-title">${title}</span>
-    </div>`;
-  }
 
   /**
    * Remove system tags from content for display
@@ -297,25 +70,6 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
     return content.replace(/<system>[\s\S]*?<\/system>/gi, '').trim();
   }
 
-  private extractTagSummary(tagMatch: string, tagType: string): string | null {
-    try {
-      const jsonMatch = tagMatch.match(/```json\n([\s\S]*?)\n```/);
-      if (jsonMatch) {
-        const data = JSON.parse(jsonMatch[1]);
-        
-        if (tagType === 'add') {
-          return this.generateAddSummary(data);
-        } else if (tagType === 'edit') {
-          return this.generateEditSummary(data);
-        } else if (tagType === 'remove') {
-          return this.generateRemoveSummary(data);
-        }
-      }
-    } catch (e) {
-      // If parsing fails, return null to use default
-    }
-    return null;
-  }
 
   private processMarkdown(content: string): string {
     // Basic markdown processing
@@ -332,116 +86,6 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
       .replace(/\n/g, '<br>');
   }
 
-  private generateEditCards(editTags: EditTag[], context: ChatPipelineContext): EditCard[] {
-    return editTags.map(tag => ({
-      id: tag.id,
-      type: tag.type,
-      title: this.getCardTitle(tag),
-      description: tag.summary || this.getCardDescription(tag),
-      isApplied: tag.isApplied || false,
-      data: tag.content,
-      onApply: () => this.handleApplyEdit(tag, context),
-      onReject: () => this.handleRejectEdit(tag, context)
-    }));
-  }
-
-  private convertToMetadata(editTags: EditTag[]): EditTagMetadata[] {
-    return editTags.map(tag => ({
-      id: tag.id,
-      type: tag.type,
-      content: tag.content,
-      summary: tag.summary || this.getDefaultSummary(tag.type),
-      isApplied: tag.isApplied || false,
-      appliedAt: undefined
-    }));
-  }
-
-  private generateEditCardsFromMetadata(editTagsMetadata: EditTagMetadata[], context: ChatPipelineContext): EditCard[] {
-    return editTagsMetadata.map(tag => {
-      return {
-        id: tag.id,
-        type: tag.type,
-        title: this.getCardTitleFromType(tag.type),
-        description: tag.summary || '',
-        isApplied: tag.isApplied || false,
-        data: tag.content,
-        onApply: () => {
-          // This will be overridden by Chat.tsx when creating the final edit cards
-        },
-        onReject: () => {
-          // This will be overridden by Chat.tsx when creating the final edit cards
-        }
-      };
-    });
-  }
-
-  private getDefaultSummary(type: string): string {
-    switch (type) {
-      case 'init': return 'Initialize story objects';
-      case 'add': return 'Add items';
-      case 'edit': return 'Edit items';
-      case 'remove': return 'Remove items';
-      default: return 'Edit operation';
-    }
-  }
-
-  private getCardTitleFromType(type: string): string {
-    switch (type) {
-      case 'init': return '🔄 Initialize Story';
-      case 'add': return '➕ Add Items';
-      case 'edit': return '✏️ Edit Items';
-      case 'remove': return '🗑️ Remove Items';
-      default: return '📝 Edit';
-    }
-  }
-
-  private handleApplyEditMetadata(tag: EditTagMetadata, context: ChatPipelineContext): void {
-    // This will be implemented to actually apply the edits to the store    // TODO: Update the tag status in chat store
-    // TODO: Apply changes to story object store
-  }
-
-  private handleRejectEditMetadata(tag: EditTagMetadata, context: ChatPipelineContext): void {
-    // This will be implemented to reject the edit    // TODO: Update the tag status in chat store
-  }
-
-  private getCardTitle(tag: EditTag): string {
-    switch (tag.type) {
-      case 'init':
-        return '🔄 Initialize Story';
-      case 'add':
-        return '➕ Add Items';
-      case 'edit':
-        return '✏️ Edit Items';
-      case 'remove':
-        return '🗑️ Remove Items';
-      default:
-        return '📝 Edit';
-    }
-  }
-
-  private getCardDescription(tag: EditTag): string {
-    switch (tag.type) {
-      case 'init':
-        return 'Initialize and overwrite story objects with new data';
-      case 'add':
-        return 'Add new story objects to the project';
-      case 'edit':
-        return 'Modify existing story objects';
-      case 'remove':
-        return 'Remove story objects from the project';
-      default:
-        return 'Perform story object operation';
-    }
-  }
-
-  private handleApplyEdit(tag: EditTag, context: ChatPipelineContext): void {
-    // This would be implemented to actually apply the edits to the store    // TODO: Implement actual edit application logic
-    // This would interact with the story object store to apply changes
-  }
-
-  private handleRejectEdit(tag: EditTag, context: ChatPipelineContext): void {
-    // This would be implemented to reject the edit    // TODO: Implement edit rejection logic
-  }
 
   /**
    * Extract system messages and convert to status cards
@@ -547,7 +191,7 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
   /**
    * Map function name to edit tag type
    */
-  private mapFunctionToEditType(functionName: string): EditTagType {
+  private mapFunctionToEditType(functionName: string): string {
     switch (functionName) {
       case 'initialize_story_objects': return 'init';
       case 'add_story_objects': return 'add';

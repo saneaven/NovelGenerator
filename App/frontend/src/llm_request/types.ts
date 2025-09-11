@@ -13,14 +13,6 @@ export interface ConversationBlock {
   name?: string; // for function role messages
 }
 
-export interface EditTagMetadata {
-  id: string;
-  type: 'init' | 'add' | 'edit' | 'remove';
-  content: any;
-  summary?: string;
-  isApplied?: boolean;
-  appliedAt?: Date;
-}
 
 export interface FunctionCallMetadata {
   id: string;
@@ -35,8 +27,7 @@ export interface FunctionCallMetadata {
 export interface ChatMessage extends ConversationBlock {
   id: string;
   timestamp: Date;
-  editTags?: EditTagMetadata[]; // Legacy support
-  functionCalls?: FunctionCallMetadata[]; // New function calling support
+  functionCalls?: FunctionCallMetadata[]; // Function calling support
 }
 
 

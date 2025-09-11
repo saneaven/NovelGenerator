@@ -4,6 +4,7 @@ import Home from '../pages/Home';
 import ProjectMenu from '../pages/ProjectMenu';
 import Chat from '../pages/Chat';
 import StoryObjects from '../pages/StoryObjects';
+import Workspace from '../pages/Workspace';
 
 export const router = createBrowserRouter([
   {
@@ -17,6 +18,10 @@ export const router = createBrowserRouter([
       {
         path: '/project/:projectId',
         element: <ProjectMenu />,
+      },
+      {
+        path: '/project/:projectId/workspace',
+        element: <Workspace />,
       },
       {
         path: '/project/:projectId/chat',

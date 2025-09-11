@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStoryObjectStore } from '../store/storyObjectStore';
 import AIEditModal from './AIEditModal';
@@ -9,45 +9,37 @@ import { createEmptyBasicInfo } from '../types/storyObject';
 const BasicInfoManager: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const { getBasicInfo, updateBasicInfo } = useStoryObjectStore();
-  const [basicInfo, setBasicInfo] = useState<BasicInfo>(createEmptyBasicInfo());
   const [isEditing, setIsEditing] = useState(false);
+  const [editFormData, setEditFormData] = useState<BasicInfo>(createEmptyBasicInfo());
   const [showAIModal, setShowAIModal] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
 
-  useEffect(() => {
-    if (projectId) {
-      const storedBasicInfo = getBasicInfo(projectId);
-      if (storedBasicInfo) {
-        setBasicInfo(storedBasicInfo);
-      }
-    }
-  }, [projectId, getBasicInfo]);
+  // Get basic info directly from store - this will automatically re-render when store updates
+  const basicInfo = projectId ? (getBasicInfo(projectId) || createEmptyBasicInfo()) : createEmptyBasicInfo();
 
   const handleSave = () => {
     if (projectId) {
       updateBasicInfo(projectId, {
-        title: basicInfo.title,
-        logline: basicInfo.logline,
-        genre: basicInfo.genre,
+        title: editFormData.title,
+        logline: editFormData.logline,
+        genre: editFormData.genre,
       });
       setIsEditing(false);
     }
   };
 
   const handleCancel = () => {
-    if (projectId) {
-      const storedBasicInfo = getBasicInfo(projectId);
-      if (storedBasicInfo) {
-        setBasicInfo(storedBasicInfo);
-      } else {
-        setBasicInfo(createEmptyBasicInfo());
-      }
-    }
+    setEditFormData(basicInfo);
     setIsEditing(false);
   };
 
   const handleChange = (field: keyof Pick<BasicInfo, 'title' | 'logline' | 'genre'>, value: string) => {
-    setBasicInfo(prev => ({ ...prev, [field]: value }));
+    setEditFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleEdit = () => {
+    setEditFormData(basicInfo);
+    setIsEditing(true);
   };
 
   const handleAIResult = (result: any) => {    
@@ -58,13 +50,12 @@ const BasicInfoManager: React.FC = () => {
       
       if (result.title !== undefined) updates.title = result.title;
       if (result.logline !== undefined) updates.logline = result.logline;
-      if (result.genre !== undefined) updates.genre = result.genre;      updateBasicInfo(projectId, updates);
+      if (result.genre !== undefined) updates.genre = result.genre;
       
-      // Refresh the local state
-      const updatedBasicInfo = getBasicInfo(projectId);      if (updatedBasicInfo) {
-        setBasicInfo(updatedBasicInfo);
-      }
-    } else {    }
+      // Use AI-specific update function that automatically creates version
+      const { updateBasicInfoAI } = useStoryObjectStore.getState();
+      updateBasicInfoAI(projectId, updates);
+    }
   };
 
   const handleRestoreVersion = (versionData: any) => {
@@ -78,12 +69,6 @@ const BasicInfoManager: React.FC = () => {
       if (versionData.genre !== undefined) updates.genre = versionData.genre;
       
       updateBasicInfo(projectId, updates);
-      
-      // Refresh the local state
-      const updatedBasicInfo = getBasicInfo(projectId);
-      if (updatedBasicInfo) {
-        setBasicInfo(updatedBasicInfo);
-      }
     }
   };
 
@@ -107,7 +92,7 @@ const BasicInfoManager: React.FC = () => {
             <button onClick={() => setShowAIModal(true)} className="ai-edit-button">
               🤖 AI Edit
             </button>
-            <button onClick={() => setIsEditing(true)} className="edit-button">
+            <button onClick={handleEdit} className="edit-button">
               Edit
             </button>
           </div>
@@ -130,7 +115,7 @@ const BasicInfoManager: React.FC = () => {
             <input
               id="title"
               type="text"
-              value={basicInfo.title}
+              value={editFormData.title}
               onChange={(e) => handleChange('title', e.target.value)}
               placeholder="Enter the title of the novel"
             />
@@ -147,7 +132,7 @@ const BasicInfoManager: React.FC = () => {
             <input
               id="genre"
               type="text"
-              value={basicInfo.genre}
+              value={editFormData.genre}
               onChange={(e) => handleChange('genre', e.target.value)}
               placeholder="Enter the genre (e.g., Fantasy, Romance, Sci-Fi)"
             />
@@ -163,7 +148,7 @@ const BasicInfoManager: React.FC = () => {
           {isEditing ? (
             <textarea
               id="logline"
-              value={basicInfo.logline}
+              value={editFormData.logline}
               onChange={(e) => handleChange('logline', e.target.value)}
               placeholder="Summarize the core content of the novel in one or two sentences"
               rows={4}

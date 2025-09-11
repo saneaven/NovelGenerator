@@ -1,14 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { type ChatMessage, type EditTagMetadata, type FunctionCallMetadata } from '../llm_request/types';
+import { type ChatMessage, type FunctionCallMetadata } from '../llm_request/types';
 
 interface ChatStore {
   chatsByProject: Record<string, ChatMessage[]>;
   
   addMessage: (projectId: string, message: ChatMessage) => void;
   updateMessage: (projectId: string, messageId: string, content: string) => void;
-  updateMessageEditTags: (projectId: string, messageId: string, editTags: EditTagMetadata[]) => void;
-  updateEditTagStatus: (projectId: string, messageId: string, tagId: string, isApplied: boolean) => void;
   getChatHistory: (projectId: string) => ChatMessage[];
   clearChat: (projectId: string) => void;
   editMessage: (projectId: string, messageId: string, content: string) => void;
@@ -52,36 +50,6 @@ export const useChatStore = create<ChatStore>()(
         }));
       },
 
-      updateMessageEditTags: (projectId: string, messageId: string, editTags: EditTagMetadata[]) => {
-        set((state) => ({
-          chatsByProject: {
-            ...state.chatsByProject,
-            [projectId]: (state.chatsByProject[projectId] || []).map((msg) =>
-              msg.id === messageId ? { ...msg, editTags } : msg
-            ),
-          },
-        }));
-      },
-
-      updateEditTagStatus: (projectId: string, messageId: string, tagId: string, isApplied: boolean) => {
-        set((state) => ({
-          chatsByProject: {
-            ...state.chatsByProject,
-            [projectId]: (state.chatsByProject[projectId] || []).map((msg) =>
-              msg.id === messageId ? {
-                ...msg,
-                editTags: msg.editTags?.map(tag => 
-                  tag.id === tagId ? { 
-                    ...tag, 
-                    isApplied, 
-                    appliedAt: isApplied ? new Date() : undefined 
-                  } : tag
-                )
-              } : msg
-            ),
-          },
-        }));
-      },
 
       clearChat: (projectId: string) => {
         set((state) => ({

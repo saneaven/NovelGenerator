@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStoryObjectStore } from '../store/storyObjectStore';
 import AIEditModal from './AIEditModal';
@@ -19,7 +19,6 @@ const OutlineManager: React.FC = () => {
     deleteChapter,
   } = useStoryObjectStore();
 
-  const [outline, setOutlineState] = useState<Outline | null>(null);
   const [editingAct, setEditingAct] = useState<Act | null>(null);
   const [editingChapter, setEditingChapter] = useState<Chapter | null>(null);
   const [showAddActForm, setShowAddActForm] = useState(false);
@@ -27,19 +26,8 @@ const OutlineManager: React.FC = () => {
   const [showAIModal, setShowAIModal] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
 
-  useEffect(() => {
-    if (projectId) {
-      const storedOutline = getOutline(projectId);
-      setOutlineState(storedOutline);
-    }
-  }, [projectId, getOutline]);
-
-  const refreshOutline = () => {
-    if (projectId) {
-      const updatedOutline = getOutline(projectId);
-      setOutlineState(updatedOutline);
-    }
-  };
+  // Get outline directly from store - this will automatically re-render when store updates
+  const outline = projectId ? getOutline(projectId) : null;
 
   const handleAddAct = (name: string, description: string) => {
     if (projectId && name.trim()) {
@@ -48,7 +36,6 @@ const OutlineManager: React.FC = () => {
         setOutline(projectId, newOutline);
       }
       addAct(projectId, { name: name.trim(), description: description.trim() });
-      refreshOutline();
       setShowAddActForm(false);
     }
   };
@@ -56,7 +43,6 @@ const OutlineManager: React.FC = () => {
   const handleUpdateAct = (actId: string, name: string, description: string) => {
     if (projectId && name.trim()) {
       updateAct(projectId, actId, { name: name.trim(), description: description.trim() });
-      refreshOutline();
       setEditingAct(null);
     }
   };
@@ -65,7 +51,6 @@ const OutlineManager: React.FC = () => {
     if (confirm('Are you sure you want to delete this act? All chapters within it will also be deleted.')) {
       if (projectId) {
         deleteAct(projectId, actId);
-        refreshOutline();
       }
     }
   };
@@ -73,7 +58,6 @@ const OutlineManager: React.FC = () => {
   const handleAddChapter = (actId: string, name: string, description: string) => {
     if (projectId && name.trim()) {
       addChapter(projectId, actId, { name: name.trim(), description: description.trim() });
-      refreshOutline();
       setShowAddChapterForm(null);
     }
   };
@@ -81,7 +65,6 @@ const OutlineManager: React.FC = () => {
   const handleUpdateChapter = (chapterId: string, name: string, description: string) => {
     if (projectId && name.trim()) {
       updateChapter(projectId, chapterId, { name: name.trim(), description: description.trim() });
-      refreshOutline();
       setEditingChapter(null);
     }
   };
@@ -90,7 +73,6 @@ const OutlineManager: React.FC = () => {
     if (confirm('Are you sure you want to delete this chapter?')) {
       if (projectId) {
         deleteChapter(projectId, chapterId);
-        refreshOutline();
       }
     }
   };
@@ -105,8 +87,9 @@ const OutlineManager: React.FC = () => {
         const existingAct = outline?.acts.find(a => a.id === actId);
         
         return {
-          ...actData,
           id: actId,
+          name: actData.name || '',
+          description: actData.description || '',
           createdAt: existingAct?.createdAt || new Date(),
           updatedAt: new Date(),
           chapters: (actData.chapters || []).map((chapterData: any) => {
@@ -114,17 +97,21 @@ const OutlineManager: React.FC = () => {
             const existingChapter = existingAct?.chapters.find(c => c.id === chapterId);
             
             return {
-              ...chapterData,
               id: chapterId,
+              name: chapterData.name || '',
+              description: chapterData.description || '',
               createdAt: existingChapter?.createdAt || new Date(),
               updatedAt: new Date(),
               actId: actId,
             };
           }),
         };
-      });      setOutline(projectId, newOutline);
-      refreshOutline();
-    } else {    }
+      });
+      
+      setOutline(projectId, newOutline);
+      
+      // Version is already automatically created by the outline update functions
+    }
   };
 
   const handleRestoreVersion = (versionData: any) => {
@@ -138,8 +125,9 @@ const OutlineManager: React.FC = () => {
         const existingAct = outline?.acts.find(a => a.id === actId);
         
         return {
-          ...actData,
           id: actId,
+          name: actData.name || '',
+          description: actData.description || '',
           createdAt: existingAct?.createdAt || new Date(),
           updatedAt: new Date(),
           chapters: (actData.chapters || []).map((chapterData: any) => {
@@ -147,8 +135,9 @@ const OutlineManager: React.FC = () => {
             const existingChapter = existingAct?.chapters.find(c => c.id === chapterId);
             
             return {
-              ...chapterData,
               id: chapterId,
+              name: chapterData.name || '',
+              description: chapterData.description || '',
               createdAt: existingChapter?.createdAt || new Date(),
               updatedAt: new Date(),
               actId: actId,
@@ -158,7 +147,6 @@ const OutlineManager: React.FC = () => {
       });
       
       setOutline(projectId, restoredOutline);
-      refreshOutline();
     }
   };
 
@@ -291,7 +279,7 @@ const OutlineManager: React.FC = () => {
                       </div>
                     </div>
 
-                    {editingChapter?.id === chapter.id ? (
+                    {editingChapter?.id === chapter.id && editingChapter ? (
                       <EditChapterForm
                         chapter={editingChapter}
                         onUpdate={(name, description) => handleUpdateChapter(chapter.id, name, description)}

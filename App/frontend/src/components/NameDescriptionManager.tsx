@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStoryObjectStore } from '../store/storyObjectStore';
 import AIEditModal from './AIEditModal';
@@ -25,7 +25,6 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 }) => {
   const { projectId } = useParams<{ projectId: string }>();
   const storeActions = useStoryObjectStore();
-  const [items, setItems] = useState<NameDescriptionItem[]>([]);
   const [editingItem, setEditingItem] = useState<NameDescriptionItem | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
@@ -33,8 +32,8 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [versionHistoryTargetId, setVersionHistoryTargetId] = useState<string | undefined>(undefined);
 
-  // Get appropriate store methods based on category
-  const getItems = () => {
+  // Get items directly from store - this will automatically re-render when store updates
+  const items = (() => {
     if (!projectId) return [];
     switch (category) {
       case 'character':
@@ -48,7 +47,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
       default:
         return [];
     }
-  };
+  })();
 
   const addItem = (item: Partial<NameDescriptionItem>) => {
     if (!projectId) return;
@@ -100,14 +99,10 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     }
   };
 
-  useEffect(() => {
-    setItems(getItems());
-  }, [projectId, category]);
 
   const handleAdd = (name: string, description: string) => {
     if (name.trim()) {
       addItem({ name: name.trim(), description: description.trim() });
-      setItems(getItems());
       setShowAddForm(false);
     }
   };
@@ -122,7 +117,6 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
         name: name.trim(),
         description: description.trim(),
       });
-      setItems(getItems());
       setEditingItem(null);
     }
   };
@@ -130,7 +124,6 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   const handleDelete = (id: string) => {
     if (confirm(`Are you sure you want to delete this ${singularName}?`)) {
       deleteItem(id);
-      setItems(getItems());
     }
   };
 
@@ -149,12 +142,48 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     if (aiEditTargetId) {
       // Editing specific item - should always be an update
       if (result && result.name !== undefined && result.description !== undefined) {
-        updateItem(result.id || aiEditTargetId, {
-          name: result.name,
-          description: result.description,
-        });
-      } else {
-        // Invalid result data format
+        // Use AI-specific update function that automatically creates version
+        switch (category) {
+          case 'character':
+            storeActions.updateCharacterAI(projectId, result.id || aiEditTargetId, {
+              name: result.name,
+              description: result.description,
+            });
+            break;
+          case 'organization':
+            updateItem(result.id || aiEditTargetId, {
+              name: result.name,
+              description: result.description,
+            });
+            // Manual version creation for now - TODO: add AI update function
+            storeActions.addVersion(projectId, category, result.id || aiEditTargetId, 'AI Edit', {
+              name: result.name,
+              description: result.description,
+            });
+            break;
+          case 'location':
+            updateItem(result.id || aiEditTargetId, {
+              name: result.name,
+              description: result.description,
+            });
+            // Manual version creation for now - TODO: add AI update function
+            storeActions.addVersion(projectId, category, result.id || aiEditTargetId, 'AI Edit', {
+              name: result.name,
+              description: result.description,
+            });
+            break;
+          case 'lorebook':
+            updateItem(result.id || aiEditTargetId, {
+              name: result.name,
+              description: result.description,
+            });
+            // Manual version creation for now - TODO: add AI update function
+            storeActions.addVersion(projectId, category, result.id || aiEditTargetId, 'AI Edit', {
+              name: result.name,
+              description: result.description,
+            });
+            break;
+        }
       }
     } else {
       // Editing entire category - handle based on ID (null = add, existing ID = update)
@@ -168,22 +197,16 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
                 description: item.description,
               });
             } else {
-              // Update existing item
+              // Update existing item using regular update function (versions auto-created)
               updateItem(item.id, {
                 name: item.name,
                 description: item.description,
               });
             }
-          } else {
-            // Item format error
           }
         });
-      } else {
-        // Result is not an array
       }
     }
-
-    setItems(getItems());
   };
 
   const handleShowVersionHistory = (itemId: string) => {
@@ -200,7 +223,6 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
         name: versionData.name,
         description: versionData.description,
       });
-      setItems(getItems());
     }
   };
 

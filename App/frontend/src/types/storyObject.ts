@@ -127,11 +127,22 @@ export const ensureVersionFields = <T extends BaseMetadata>(obj: T): T => {
 export const createNameDescriptionItem = (
   name: string = '',
   description: string = ''
-): NameDescriptionItem => ({
-  ...createBaseMetadata(),
-  name,
-  description,
-});
+): NameDescriptionItem => {
+  const baseMetadata = createBaseMetadata();
+  const item = {
+    ...baseMetadata,
+    name,
+    description,
+  };
+  
+  // Set the initial version data to the item itself
+  item.versions[0].data = {
+    name,
+    description,
+  };
+  
+  return item;
+};
 
 // Utility function to create empty story objects
 export const createEmptyStoryObjects = (): StoryObjects => ({
@@ -144,31 +155,75 @@ export const createEmptyStoryObjects = (): StoryObjects => ({
 });
 
 // Utility function to create empty basic info
-export const createEmptyBasicInfo = (): BasicInfo => ({
-  ...createBaseMetadata(),
-  title: '',
-  logline: '',
-  genre: '',
-});
+export const createEmptyBasicInfo = (): BasicInfo => {
+  const baseMetadata = createBaseMetadata();
+  const basicInfo = {
+    ...baseMetadata,
+    title: '',
+    logline: '',
+    genre: '',
+  };
+  
+  // Set the initial version data
+  basicInfo.versions[0].data = {
+    title: '',
+    logline: '',
+    genre: '',
+  };
+  
+  return basicInfo;
+};
 
 // Utility function to create empty chapter
-export const createEmptyChapter = (actId: string): Chapter => ({
-  ...createBaseMetadata(),
-  name: '',
-  description: '',
-  actId,
-});
+export const createEmptyChapter = (actId: string): Chapter => {
+  const baseMetadata = createBaseMetadata();
+  const chapter = {
+    ...baseMetadata,
+    name: '',
+    description: '',
+    actId,
+  };
+  
+  // Set the initial version data
+  chapter.versions[0].data = {
+    name: '',
+    description: '',
+  };
+  
+  return chapter;
+};
 
 // Utility function to create empty act
-export const createEmptyAct = (): Act => ({
-  ...createBaseMetadata(),
-  name: '',
-  description: '',
-  chapters: [],
-});
+export const createEmptyAct = (): Act => {
+  const baseMetadata = createBaseMetadata();
+  const act = {
+    ...baseMetadata,
+    name: '',
+    description: '',
+    chapters: [],
+  };
+  
+  // Set the initial version data
+  act.versions[0].data = {
+    name: '',
+    description: '',
+  };
+  
+  return act;
+};
 
 // Utility function to create empty outline
-export const createEmptyOutline = (): Outline => ({
-  ...createBaseMetadata(),
-  acts: [],
-});
+export const createEmptyOutline = (): Outline => {
+  const baseMetadata = createBaseMetadata();
+  const outline = {
+    ...baseMetadata,
+    acts: [],
+  };
+  
+  // Set the initial version data
+  outline.versions[0].data = {
+    acts: [],
+  };
+  
+  return outline;
+};

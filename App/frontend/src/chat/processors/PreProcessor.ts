@@ -153,6 +153,7 @@ ${JSON.stringify(this.simplifyStoryObjects(context.storyObjects), null, 2)}
     // Convert complex story objects to simple format for AI
     const simplified: any = {};
 
+    // Always include basic_info (even if null/empty)
     if (storyObjects.basicInfo) {
       simplified.basic_info = {
         id: storyObjects.basicInfo.id,
@@ -160,32 +161,39 @@ ${JSON.stringify(this.simplifyStoryObjects(context.storyObjects), null, 2)}
         logline: storyObjects.basicInfo.logline,
         genre: storyObjects.basicInfo.genre
       };
+    } else {
+      simplified.basic_info = null;
     }
 
-    if (storyObjects.characters?.length > 0) {
-      simplified.characters = storyObjects.characters.map((char: any) => ({
-        id: char.id,
-        name: char.name,
-        description: char.description
-      }));
-    }
+    // Always include characters array (even if empty)
+    simplified.characters = (storyObjects.characters || []).map((char: any) => ({
+      id: char.id,
+      name: char.name,
+      description: char.description
+    }));
 
-    if (storyObjects.organizations?.length > 0) {
-      simplified.organizations = storyObjects.organizations.map((org: any) => ({
-        id: org.id,
-        name: org.name,
-        description: org.description
-      }));
-    }
+    // Always include organizations array (even if empty)
+    simplified.organizations = (storyObjects.organizations || []).map((org: any) => ({
+      id: org.id,
+      name: org.name,
+      description: org.description
+    }));
 
-    if (storyObjects.locations?.length > 0) {
-      simplified.locations = storyObjects.locations.map((loc: any) => ({
-        id: loc.id,
-        name: loc.name,
-        description: loc.description
-      }));
-    }
+    // Always include locations array (even if empty)
+    simplified.locations = (storyObjects.locations || []).map((loc: any) => ({
+      id: loc.id,
+      name: loc.name,
+      description: loc.description
+    }));
 
+    // Always include lorebook array (even if empty)
+    simplified.lorebook = (storyObjects.lorebook || []).map((entry: any) => ({
+      id: entry.id,
+      name: entry.name,
+      description: entry.description
+    }));
+
+    // Always include outline (even if null/empty)
     if (storyObjects.outline) {
       simplified.outline = {
         acts: storyObjects.outline.acts?.map((act: any) => ({
@@ -199,91 +207,17 @@ ${JSON.stringify(this.simplifyStoryObjects(context.storyObjects), null, 2)}
           })) || []
         })) || []
       };
+    } else {
+      simplified.outline = null;
     }
 
     return simplified;
   }
 
   private summarizeEditTags(content: string): string {
-    // Find and summarize edit tags
-    const initRegex = /<init>([\s\S]*?)<\/init>/gi;
-    const addRegex = /<add>([\s\S]*?)<\/add>/gi;
-    const editRegex = /<edit>([\s\S]*?)<\/edit>/gi;
-    const removeRegex = /<remove>([\s\S]*?)<\/remove>/gi;
-
-    let processedContent = content;
-
-    // Replace init tags
-    processedContent = processedContent.replace(initRegex, () => {
-      return `<init>\n[Summarized by system: Story objects initialized]\n</init>`;
-    });
-
-    // Replace add tags
-    processedContent = processedContent.replace(addRegex, (match) => {
-      try {
-        const jsonMatch = match.match(/```json\n([\s\S]*?)\n```/);
-        if (jsonMatch) {
-          const data = JSON.parse(jsonMatch[1]);
-          const counts = this.countAddedItems(data);
-          return `<add>\n[Summarized by system: ${counts}]\n</add>`;
-        }
-      } catch (e) {
-        // If parsing fails, keep original
-      }
-      return `<add>\n[Summarized by system: Items added]\n</add>`;
-    });
-
-    // Replace edit tags
-    processedContent = processedContent.replace(editRegex, (match) => {
-      try {
-        const jsonMatch = match.match(/```json\n([\s\S]*?)\n```/);
-        if (jsonMatch) {
-          const data = JSON.parse(jsonMatch[1]);
-          const counts = this.countEditedItems(data);
-          return `<edit>\n[Summarized by system: ${counts}]\n</edit>`;
-        }
-      } catch (e) {
-        // If parsing fails, keep original
-      }
-      return `<edit>\n[Summarized by system: Items edited]\n</edit>`;
-    });
-
-    // Replace remove tags
-    processedContent = processedContent.replace(removeRegex, (match) => {
-      try {
-        const jsonMatch = match.match(/```json\n([\s\S]*?)\n```/);
-        if (jsonMatch) {
-          const data = JSON.parse(jsonMatch[1]);
-          const count = Array.isArray(data) ? data.length : 0;
-          return `<remove>\n[Summarized by system: ${count} items removed]\n</remove>`;
-        }
-      } catch (e) {
-        // If parsing fails, keep original
-      }
-      return `<remove>\n[Summarized by system: Items removed]\n</remove>`;
-    });
-
-    return processedContent;
+    // No edit tags to summarize anymore, just return content as-is
+    return content;
   }
 
-  private countAddedItems(data: any): string {
-    const counts: string[] = [];
-    
-    if (data.characters?.length) counts.push(`${data.characters.length} characters`);
-    if (data.organizations?.length) counts.push(`${data.organizations.length} organizations`);
-    if (data.locations?.length) counts.push(`${data.locations.length} locations`);
-    if (data.acts?.length) counts.push(`${data.acts.length} acts`);
-    if (data.chapters?.length) counts.push(`${data.chapters.length} chapters`);
-    
-    return counts.length > 0 ? `Added ${counts.join(', ')}` : 'Items added';
-  }
 
-  private countEditedItems(data: any): string {
-    const counts: string[] = [];
-    
-    if (data.basic_info) counts.push('basic info');
-    if (data.objects?.length) counts.push(`${data.objects.length} objects`);
-    
-    return counts.length > 0 ? `Edited ${counts.join(', ')}` : 'Items edited';
-  }
 }

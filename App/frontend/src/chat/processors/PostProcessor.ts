@@ -4,7 +4,6 @@ import type {
   ProcessedChatMessage, 
   ChatPipelineContext 
 } from '../types';
-import type { FunctionCall } from '../../llm_request/types';
 
 export class DefaultPostProcessor implements PostProcessor {
   process(
@@ -37,13 +36,13 @@ export class DefaultPostProcessor implements PostProcessor {
         let parsedArguments = {};
         
         try {
-          // arguments가 유효한 JSON인지 확인
+          // Check if arguments is valid JSON
           if (toolCall.function?.arguments && toolCall.function.arguments.trim()) {
             parsedArguments = JSON.parse(toolCall.function.arguments);
           }
         } catch (error) {
           console.error('Failed to parse tool call arguments:', error, 'Raw arguments:', toolCall.function?.arguments);
-          // JSON 파싱 실패해도 계속 진행
+          // Continue processing even if JSON parsing fails
         }
         
         return {
@@ -58,8 +57,7 @@ export class DefaultPostProcessor implements PostProcessor {
     }
 
     return {
-      message,
-      extractedEditTags: [] // Legacy support - edit tags are extracted in display-processing
+      message
     };
   }
 }
