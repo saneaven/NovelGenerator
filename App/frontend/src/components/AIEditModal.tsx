@@ -302,20 +302,12 @@ Important rules:
       // Parse and validate JSON response
       try {
         // Extract JSON from markdown code blocks if present
-        let jsonText = fullResponse.trim();
-        console.log('Original AI response:', fullResponse);
-        
+        let jsonText = fullResponse.trim();        
         const codeBlockMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
         if (codeBlockMatch) {
-          jsonText = codeBlockMatch[1].trim();
-          console.log('JSON extracted from code block:', jsonText);
-        } else {
-          console.log('No code block, using original:', jsonText);
-        }
+          jsonText = codeBlockMatch[1].trim();        } else {        }
         
-        const parsedResult = JSON.parse(jsonText);
-        console.log('Parsed JSON:', parsedResult);
-        
+        const parsedResult = JSON.parse(jsonText);        
         // Save version before applying result
         if (targetId) {
           // For individual item edits, save as a new version
@@ -325,9 +317,7 @@ Important rules:
             targetId,
             userRequest,
             parsedResult
-          );
-          console.log('Version saved:', versionId);
-        }
+          );        }
         
         onResult(parsedResult);
         onClose();

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { type ChatMessage, type EditTagMetadata } from '../llm_request/types';
+import { type ChatMessage, type EditTagMetadata, type FunctionCallMetadata } from '../llm_request/types';
 
 interface ChatStore {
   chatsByProject: Record<string, ChatMessage[]>;
@@ -11,6 +11,10 @@ interface ChatStore {
   updateEditTagStatus: (projectId: string, messageId: string, tagId: string, isApplied: boolean) => void;
   getChatHistory: (projectId: string) => ChatMessage[];
   clearChat: (projectId: string) => void;
+  editMessage: (projectId: string, messageId: string, content: string) => void;
+  deleteMessage: (projectId: string, messageId: string) => void;
+  updateMessageFunctionCalls: (projectId: string, messageId: string, functionCalls: FunctionCallMetadata[]) => void;
+  updateFunctionCallStatus: (projectId: string, messageId: string, functionCallId: string, isApplied: boolean, result?: any, error?: string) => void;
 }
 
 export const useChatStore = create<ChatStore>()(
@@ -84,6 +88,59 @@ export const useChatStore = create<ChatStore>()(
           chatsByProject: {
             ...state.chatsByProject,
             [projectId]: [],
+          },
+        }));
+      },
+
+      editMessage: (projectId: string, messageId: string, content: string) => {
+        set((state) => ({
+          chatsByProject: {
+            ...state.chatsByProject,
+            [projectId]: (state.chatsByProject[projectId] || []).map((msg) =>
+              msg.id === messageId ? { ...msg, content } : msg
+            ),
+          },
+        }));
+      },
+
+      deleteMessage: (projectId: string, messageId: string) => {
+        set((state) => ({
+          chatsByProject: {
+            ...state.chatsByProject,
+            [projectId]: (state.chatsByProject[projectId] || []).filter((msg) => msg.id !== messageId),
+          },
+        }));
+      },
+
+      updateMessageFunctionCalls: (projectId: string, messageId: string, functionCalls: FunctionCallMetadata[]) => {
+        set((state) => ({
+          chatsByProject: {
+            ...state.chatsByProject,
+            [projectId]: (state.chatsByProject[projectId] || []).map((msg) =>
+              msg.id === messageId ? { ...msg, functionCalls } : msg
+            ),
+          },
+        }));
+      },
+
+      updateFunctionCallStatus: (projectId: string, messageId: string, functionCallId: string, isApplied: boolean, result?: any, error?: string) => {
+        set((state) => ({
+          chatsByProject: {
+            ...state.chatsByProject,
+            [projectId]: (state.chatsByProject[projectId] || []).map((msg) =>
+              msg.id === messageId ? {
+                ...msg,
+                functionCalls: msg.functionCalls?.map(funcCall => 
+                  funcCall.id === functionCallId ? { 
+                    ...funcCall, 
+                    isApplied, 
+                    result,
+                    error,
+                    appliedAt: isApplied ? new Date() : undefined 
+                  } : funcCall
+                )
+              } : msg
+            ),
           },
         }));
       },

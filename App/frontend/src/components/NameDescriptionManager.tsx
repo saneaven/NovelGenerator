@@ -144,59 +144,46 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   };
 
   const handleAIResult = (result: any) => {
-    console.log(`[${category}] AI result received:`, result);
-    console.log(`[${category}] aiEditTargetId:`, aiEditTargetId);
-    console.log(`[${category}] projectId:`, projectId);
-    
     if (!projectId) return;
-    
+
     if (aiEditTargetId) {
       // Editing specific item - should always be an update
-      console.log(`[${category}] Individual item edit mode`);
       if (result && result.name !== undefined && result.description !== undefined) {
-        console.log(`[${category}] Updating item:`, result.id || aiEditTargetId, result);
         updateItem(result.id || aiEditTargetId, {
           name: result.name,
           description: result.description,
         });
       } else {
-        console.log(`[${category}] Invalid result data format:`, result);
+        // Invalid result data format
       }
     } else {
       // Editing entire category - handle based on ID (null = add, existing ID = update)
-      console.log(`[${category}] Entire category edit mode`);
       if (Array.isArray(result)) {
-        console.log(`[${category}] Array length:`, result.length);
-        
-        result.forEach((item: any, index: number) => {
-          console.log(`[${category}] Item ${index}:`, item);
+        result.forEach((item: any) => {
           if (item.name !== undefined && item.description !== undefined) {
             if (item.id === null || item.id === undefined) {
               // Add new item
-              console.log(`[${category}] Adding new item ${index}:`, item);
               addItem({
                 name: item.name,
                 description: item.description,
               });
             } else {
               // Update existing item
-              console.log(`[${category}] Updating existing item ${index}:`, item.id);
               updateItem(item.id, {
                 name: item.name,
                 description: item.description,
               });
             }
           } else {
-            console.log(`[${category}] Item ${index} format error:`, item);
+            // Item format error
           }
         });
       } else {
-        console.log(`[${category}] Result is not an array:`, result);
+        // Result is not an array
       }
     }
-    
+
     setItems(getItems());
-    console.log(`[${category}] Item list refresh complete`);
   };
 
   const handleShowVersionHistory = (itemId: string) => {

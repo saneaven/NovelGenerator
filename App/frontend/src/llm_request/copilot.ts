@@ -12,8 +12,9 @@ export async function* streamCopilot(
     signal?: AbortSignal;        // 취소 신호
     temperature?: number;        // 0-1 범위
     model?: string;              // AI 모델 이름
+    functions?: any[];           // OpenAI function calling schemas
   }
-): AsyncGenerator<string> {
+): AsyncGenerator<string | { content: string | null; tool_calls?: any[] }> {
   const endpoint = opts?.endpoint ?? "/copilot/stream";
 
   // 요청 바디 구성
@@ -23,6 +24,9 @@ export async function* streamCopilot(
   }
   if (opts?.model) {
     requestBody.model = opts.model;
+  }
+  if (opts?.functions) {
+    requestBody.functions = opts.functions;
   }
 
   const res = await fetch("http://localhost:8000"+endpoint, {
@@ -84,16 +88,27 @@ export async function* streamCopilot(
         if (!data) continue;
         if (data === "[DONE]") return;
 
-        // OpenAI 호환 스트림: choices[0].delta.content 누적
+        // OpenAI 호환 스트림: content와 function_call 모두 처리
         try {
           const chunk = JSON.parse(data);
+          
           const delta = chunk?.choices?.[0]?.delta;
           const content: string | undefined = delta?.content;
-          if (content) yield content;
+          const tool_calls = delta?.tool_calls;
+
+          // Tool calls가 있으면 객체 형태로 yield
+          if (tool_calls && tool_calls.length > 0) {
+            yield {
+              content: content || null,
+              tool_calls: tool_calls
+            };
+          } else if (content) {
+            yield content;
+          }
 
           const finish = chunk?.choices?.[0]?.finish_reason;
           if (finish && finish !== null) return; // "stop", "length" 등
-        } catch {
+        } catch (error) {
           // 혹시 JSON이 아니면(서버 에러 data) 그대로 토스
           yield data;
         }

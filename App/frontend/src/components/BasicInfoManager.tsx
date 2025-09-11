@@ -50,10 +50,7 @@ const BasicInfoManager: React.FC = () => {
     setBasicInfo(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleAIResult = (result: any) => {
-    console.log('[BasicInfo] AI result received:', result);
-    console.log('[BasicInfo] projectId:', projectId);
-    
+  const handleAIResult = (result: any) => {    
     if (!projectId) return;
     
     if (result && typeof result === 'object') {
@@ -61,20 +58,13 @@ const BasicInfoManager: React.FC = () => {
       
       if (result.title !== undefined) updates.title = result.title;
       if (result.logline !== undefined) updates.logline = result.logline;
-      if (result.genre !== undefined) updates.genre = result.genre;
-      
-      console.log('[BasicInfo] Content to update:', updates);
-      updateBasicInfo(projectId, updates);
+      if (result.genre !== undefined) updates.genre = result.genre;      updateBasicInfo(projectId, updates);
       
       // Refresh the local state
-      const updatedBasicInfo = getBasicInfo(projectId);
-      console.log('[BasicInfo] Data after update:', updatedBasicInfo);
-      if (updatedBasicInfo) {
+      const updatedBasicInfo = getBasicInfo(projectId);      if (updatedBasicInfo) {
         setBasicInfo(updatedBasicInfo);
       }
-    } else {
-      console.log('[BasicInfo] Invalid result data format:', result);
-    }
+    } else {    }
   };
 
   const handleRestoreVersion = (versionData: any) => {

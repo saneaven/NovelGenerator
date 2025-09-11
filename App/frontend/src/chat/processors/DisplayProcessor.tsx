@@ -1,5 +1,5 @@
 import React from 'react';
-import type { EditTagMetadata } from '../../llm_request/types';
+import type { EditTagMetadata, FunctionCallMetadata } from '../../llm_request/types';
 import type { 
   DisplayProcessor, 
   DisplayProcessingResult, 
@@ -15,23 +15,38 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
     message: ProcessedChatMessage,
     context: ChatPipelineContext
   ): DisplayProcessingResult {
-    // Use existing edit tags from message or extract new ones
-    let editTagsMetadata: EditTagMetadata[] = [];
-    
-    if (message.editTags && message.editTags.length > 0) {
-      // Use persisted edit tags
-      editTagsMetadata = message.editTags;
-    } else {
-      // Extract new edit tags from content
-      const extractedEditTags = this.extractEditTags(message.content);
-      editTagsMetadata = this.convertToMetadata(extractedEditTags);
+    let editCards: EditCard[] = [];
+
+    if (message.role === 'assistant') {
+      // Assistant messages: only show function call selection cards if not yet applied
+      if (message.functionCalls && message.functionCalls.length > 0) {
+        // Only show cards for unapplied function calls
+        const unappliedFunctionCalls = message.functionCalls.filter(fc => !fc.isApplied);
+        if (unappliedFunctionCalls.length > 0) {
+          editCards = this.generateEditCardsFromFunctionCalls(unappliedFunctionCalls, context);
+        }
+      } 
+      // Fallback to legacy edit tags
+      else if (message.editTags && message.editTags.length > 0) {
+        const unappliedEditTags = message.editTags.filter(tag => !tag.isApplied);
+        if (unappliedEditTags.length > 0) {
+          editCards = this.generateEditCardsFromMetadata(unappliedEditTags, context);
+        }
+      } 
+      // Extract legacy tags from content
+      else if (message.content) {
+        const extractedEditTags = this.extractEditTags(message.content);
+        const editTagsMetadata = this.convertToMetadata(extractedEditTags);
+        editCards = this.generateEditCardsFromMetadata(editTagsMetadata, context);
+      }
+    } else if (message.role === 'user') {
+      // User messages: only show system message result cards
+      const systemCards = this.extractSystemCards(message);
+      editCards = systemCards;
     }
     
     // Process message content for display
     const displayContent = this.processMessageContent(message);
-    
-    // Generate edit cards from edit tags metadata
-    const editCards = this.generateEditCardsFromMetadata(editTagsMetadata, context);
 
     return {
       displayContent,
@@ -98,16 +113,28 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
     const matches = content.match(regex) || [];
     
     return matches.map(match => {
-      // Extract JSON content from the tag
-      const jsonMatch = match.match(/```json\n([\s\S]*?)\n```/);
+      // Extract content from between the tags
+      const tagContent = match.replace(new RegExp(`<${tagType}>|<\\/${tagType}>`, 'gi'), '').trim();
       let jsonContent = null;
       
+      // First try to extract from ```json code block
+      const jsonMatch = tagContent.match(/```json\s*\n?([\s\S]*?)\n?```/);
       if (jsonMatch) {
         try {
           jsonContent = JSON.parse(jsonMatch[1]);
         } catch (e) {
-          console.warn(`Failed to parse JSON in ${tagType} tag:`, e);
-          jsonContent = { error: 'Invalid JSON format' };
+          console.warn(`Failed to parse JSON from code block in ${tagType} tag:`, e);
+        }
+      }
+      
+      // If no code block found, try to parse the content directly as JSON
+      if (!jsonContent && tagContent) {
+        try {
+          jsonContent = JSON.parse(tagContent);
+        } catch (e) {
+          console.warn(`Failed to parse direct JSON in ${tagType} tag:`, e);
+          // For backward compatibility, store raw content if JSON parsing fails
+          jsonContent = tagContent;
         }
       }
       
@@ -201,10 +228,10 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
   }
 
   private processMessageContent(message: ProcessedChatMessage): React.ReactNode {
-    let content = message.originalContent || message.content;
+    let content = message.originalContent || message.content || '';
 
-    // Remove edit tags from display content
-    content = this.removeEditTags(content);
+    // Remove edit tags and system messages from display content
+    content = this.removeEditTags(this.removeSystemTags(content));
     
     // Process markdown-like formatting
     content = this.processMarkdown(content);
@@ -221,6 +248,7 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
 
   private removeEditTags(content: string): string {
     // Replace edit tags with inline preview cards instead of removing them
+    if (!content || typeof content !== 'string') return '';
     let processedContent = content;
 
     // Replace init tags
@@ -257,6 +285,16 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
       <span class="inline-tag-icon">${icon}</span>
       <span class="inline-tag-title">${title}</span>
     </div>`;
+  }
+
+  /**
+   * Remove system tags from content for display
+   */
+  private removeSystemTags(content: string): string {
+    if (!content || typeof content !== 'string') return '';
+    
+    // Remove system tags completely
+    return content.replace(/<system>[\s\S]*?<\/system>/gi, '').trim();
   }
 
   private extractTagSummary(tagMatch: string, tagType: string): string | null {
@@ -319,22 +357,22 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
   }
 
   private generateEditCardsFromMetadata(editTagsMetadata: EditTagMetadata[], context: ChatPipelineContext): EditCard[] {
-    return editTagsMetadata.map(tag => ({
-      id: tag.id,
-      type: tag.type,
-      title: this.getCardTitleFromType(tag.type),
-      description: tag.summary,
-      isApplied: tag.isApplied,
-      data: tag.content,
-      onApply: () => {
-        // This will be overridden by Chat.tsx when creating the final edit cards
-        console.log('Apply button clicked for tag:', tag.id);
-      },
-      onReject: () => {
-        // This will be overridden by Chat.tsx when creating the final edit cards
-        console.log('Reject button clicked for tag:', tag.id);
-      }
-    }));
+    return editTagsMetadata.map(tag => {
+      return {
+        id: tag.id,
+        type: tag.type,
+        title: this.getCardTitleFromType(tag.type),
+        description: tag.summary || '',
+        isApplied: tag.isApplied || false,
+        data: tag.content,
+        onApply: () => {
+          // This will be overridden by Chat.tsx when creating the final edit cards
+        },
+        onReject: () => {
+          // This will be overridden by Chat.tsx when creating the final edit cards
+        }
+      };
+    });
   }
 
   private getDefaultSummary(type: string): string {
@@ -358,16 +396,12 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
   }
 
   private handleApplyEditMetadata(tag: EditTagMetadata, context: ChatPipelineContext): void {
-    // This will be implemented to actually apply the edits to the store
-    console.log('Applying edit metadata:', tag);
-    // TODO: Update the tag status in chat store
+    // This will be implemented to actually apply the edits to the store    // TODO: Update the tag status in chat store
     // TODO: Apply changes to story object store
   }
 
   private handleRejectEditMetadata(tag: EditTagMetadata, context: ChatPipelineContext): void {
-    // This will be implemented to reject the edit
-    console.log('Rejecting edit metadata:', tag);
-    // TODO: Update the tag status in chat store
+    // This will be implemented to reject the edit    // TODO: Update the tag status in chat store
   }
 
   private getCardTitle(tag: EditTag): string {
@@ -401,16 +435,195 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
   }
 
   private handleApplyEdit(tag: EditTag, context: ChatPipelineContext): void {
-    // This would be implemented to actually apply the edits to the store
-    console.log('Applying edit:', tag);
-    // TODO: Implement actual edit application logic
+    // This would be implemented to actually apply the edits to the store    // TODO: Implement actual edit application logic
     // This would interact with the story object store to apply changes
   }
 
   private handleRejectEdit(tag: EditTag, context: ChatPipelineContext): void {
-    // This would be implemented to reject the edit
-    console.log('Rejecting edit:', tag);
-    // TODO: Implement edit rejection logic
+    // This would be implemented to reject the edit    // TODO: Implement edit rejection logic
+  }
+
+  /**
+   * Extract system messages and convert to status cards
+   */
+  private extractSystemCards(message: ProcessedChatMessage): EditCard[] {
+    if (!message.content || typeof message.content !== 'string') return [];
+    
+    const systemCards: EditCard[] = [];
+    const systemRegex = /<system>(.*?)<\/system>/gi;
+    let match;
+    
+    while ((match = systemRegex.exec(message.content)) !== null) {
+      const systemText = match[1].trim();
+      const card = this.createSystemCard(systemText);
+      if (card) {
+        systemCards.push(card);
+      }
+    }
+    
+    return systemCards;
+  }
+
+  /**
+   * Create a system status card
+   */
+  private createSystemCard(systemText: string): EditCard | null {
+    // Parse system message patterns
+    const functionCallPattern = /Function call (\w+) was (accepted|rejected)\.\s*(.*)/i;
+    const match = functionCallPattern.exec(systemText);
+    
+    if (match) {
+      const [, functionName, status, details] = match;
+      const isAccepted = status.toLowerCase() === 'accepted';
+      
+      return {
+        id: crypto.randomUUID(),
+        type: 'system',
+        title: isAccepted ? '✅ Function Applied' : '❌ Function Rejected',
+        description: this.formatSystemCardDescription(functionName, details, isAccepted),
+        isApplied: true, // System cards are always "applied" (completed)
+        data: { functionName, status, details },
+        onApply: () => {}, // No-op for system cards
+        onReject: () => {} // No-op for system cards
+      };
+    }
+    
+    // Fallback for other system messages
+    return {
+      id: crypto.randomUUID(),
+      type: 'system',
+      title: '📋 System Status',
+      description: systemText,
+      isApplied: true,
+      data: { message: systemText },
+      onApply: () => {},
+      onReject: () => {}
+    };
+  }
+
+  /**
+   * Format system card description
+   */
+  private formatSystemCardDescription(functionName: string, details: string, isAccepted: boolean): string {
+    const action = this.getFunctionDisplayName(functionName);
+    const status = isAccepted ? 'successfully applied' : 'was rejected';
+    
+    if (details.trim()) {
+      return `${action} ${status}: ${details}`;
+    } else {
+      return `${action} ${status}`;
+    }
+  }
+
+  /**
+   * Get user-friendly function name
+   */
+  private getFunctionDisplayName(functionName: string): string {
+    switch (functionName) {
+      case 'initialize_story_objects': return 'Story initialization';
+      case 'add_story_objects': return 'Story objects addition';
+      case 'edit_story_objects': return 'Story objects modification';
+      case 'remove_story_objects': return 'Story objects removal';
+      default: return `Function "${functionName}"`;
+    }
+  }
+
+  /**
+   * Generate edit cards from function calls
+   */
+  generateEditCardsFromFunctionCalls(functionCalls: FunctionCallMetadata[], context: ChatPipelineContext): EditCard[] {
+    return functionCalls.map(funcCall => ({
+      id: funcCall.id,
+      type: this.mapFunctionToEditType(funcCall.function_name),
+      title: this.getFunctionCallTitle(funcCall.function_name),
+      description: this.generateFunctionCallSummary(funcCall.function_name, funcCall.arguments),
+      isApplied: funcCall.isApplied,
+      data: funcCall.arguments,
+      onApply: () => {}, // Will be set by the chat component
+      onReject: () => {} // Will be set by the chat component
+    }));
+  }
+
+  /**
+   * Map function name to edit tag type
+   */
+  private mapFunctionToEditType(functionName: string): EditTagType {
+    switch (functionName) {
+      case 'initialize_story_objects': return 'init';
+      case 'add_story_objects': return 'add';
+      case 'edit_story_objects': return 'edit';
+      case 'remove_story_objects': return 'remove';
+      default: return 'edit';
+    }
+  }
+
+  /**
+   * Get function call title for display
+   */
+  private getFunctionCallTitle(functionName: string): string {
+    switch (functionName) {
+      case 'initialize_story_objects': return '🔄 Initialize Story';
+      case 'add_story_objects': return '➕ Add Items';
+      case 'edit_story_objects': return '✏️ Edit Items';
+      case 'remove_story_objects': return '🗑️ Remove Items';
+      default: return '📝 Function Call';
+    }
+  }
+
+  /**
+   * Get function call description
+   */
+  private getFunctionCallDescription(functionName: string): string {
+    switch (functionName) {
+      case 'initialize_story_objects': return 'Initialize all story objects for the project';
+      case 'add_story_objects': return 'Add new story objects to the project';
+      case 'edit_story_objects': return 'Modify existing story objects';
+      case 'remove_story_objects': return 'Remove story objects from the project';
+      default: return 'Execute function call';
+    }
+  }
+
+  /**
+   * Generate function call summary based on arguments
+   */
+  generateFunctionCallSummary(functionName: string, args: any): string {
+    if (!args) return this.getFunctionCallDescription(functionName);
+    
+    const parts: string[] = [];
+    
+    // Generate summary based on function arguments
+    switch (functionName) {
+      case 'initialize_story_objects':
+        if (args.basic_info) parts.push('basic info');
+        if (args.characters?.length) parts.push(`${args.characters.length} character${args.characters.length > 1 ? 's' : ''}`);
+        if (args.organizations?.length) parts.push(`${args.organizations.length} organization${args.organizations.length > 1 ? 's' : ''}`);
+        if (args.locations?.length) parts.push(`${args.locations.length} location${args.locations.length > 1 ? 's' : ''}`);
+        if (args.lorebook?.length) parts.push(`${args.lorebook.length} lorebook entr${args.lorebook.length > 1 ? 'ies' : 'y'}`);
+        if (args.acts?.length) parts.push(`${args.acts.length} act${args.acts.length > 1 ? 's' : ''}`);
+        break;
+        
+      case 'add_story_objects':
+        if (args.characters?.length) parts.push(`${args.characters.length} character${args.characters.length > 1 ? 's' : ''}`);
+        if (args.organizations?.length) parts.push(`${args.organizations.length} organization${args.organizations.length > 1 ? 's' : ''}`);
+        if (args.locations?.length) parts.push(`${args.locations.length} location${args.locations.length > 1 ? 's' : ''}`);
+        if (args.lorebook?.length) parts.push(`${args.lorebook.length} lorebook entr${args.lorebook.length > 1 ? 'ies' : 'y'}`);
+        if (args.acts?.length) parts.push(`${args.acts.length} act${args.acts.length > 1 ? 's' : ''}`);
+        if (args.chapters?.length) parts.push(`${args.chapters.length} chapter${args.chapters.length > 1 ? 's' : ''}`);
+        break;
+        
+      case 'edit_story_objects':
+        if (args.basic_info) parts.push('basic info');
+        if (args.objects?.length) parts.push(`${args.objects.length} object${args.objects.length > 1 ? 's' : ''}`);
+        break;
+        
+      case 'remove_story_objects':
+        if (args.objects?.length) parts.push(`${args.objects.length} object${args.objects.length > 1 ? 's' : ''}`);
+        break;
+    }
+    
+    return parts.length > 0 
+      ? `${this.getFunctionCallDescription(functionName)}: ${parts.join(', ')}`
+      : this.getFunctionCallDescription(functionName);
   }
 }
 
@@ -461,3 +674,4 @@ export const EditCardComponent: React.FC<{ card: EditCard }> = ({ card }) => {
     </div>
   );
 };
+

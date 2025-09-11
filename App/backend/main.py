@@ -25,6 +25,7 @@ class ChatIn(BaseModel):
     messages: List[ConversationBlock]
     temperature: Optional[float] = 0.7
     model: Optional[str] = "claude-sonnet-4"
+    functions: Optional[List[dict]] = None
 
 # ---- 앱/미들웨어 ----
 app = FastAPI()
@@ -44,6 +45,15 @@ async def copilot_stream(
     payload: ChatIn,
     request: Request,
 ):
+    # 디버깅용 로그
+    print(f"[DEBUG] Request received")
+    print(f"[DEBUG] Payload keys: {list(payload.__dict__.keys())}")
+    print(f"[DEBUG] Functions received: {payload.functions is not None}")
+    if payload.functions:
+        print(f"[DEBUG] Functions count: {len(payload.functions)}")
+        print(f"[DEBUG] Function names: {[f.get('name') for f in payload.functions]}")
+    else:
+        print(f"[DEBUG] Functions is None or empty")
 
     upstream_headers = {
         "authorization": f"Bearer {COPILOT_TOKEN}",
@@ -54,10 +64,15 @@ async def copilot_stream(
         "stream": True,
         "temperature": payload.temperature,
         "model": payload.model
-        # 필요시 추가 OpenAI 호환 파라미터:
-        # "tools": [...],
-        # "tool_choice": "auto",
     }
+    
+    # OpenAI tools (신형 function calling) 지원
+    if payload.functions:
+        # functions를 tools 형식으로 변환
+        tools = [{"type": "function", "function": func} for func in payload.functions]
+        upstream_body["tools"] = tools
+        upstream_body["tool_choice"] = "auto"
+        print(f"[DEBUG] Sending to API with tools: {len(tools)} tools")
 
     async def event_gen():
         MAX_RETRIES = 5

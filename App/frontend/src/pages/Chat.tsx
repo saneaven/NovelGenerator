@@ -1,20 +1,32 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useProjectStore } from '../store/projectStore';
 import { useChatStore } from '../store/chatStore';
 import { useStoryObjectStore } from '../store/storyObjectStore';
 import { streamCopilot } from '../llm_request/copilot';
-import { type ChatMessage } from '../llm_request/types';
+import { type ChatMessage, type FunctionCallMetadata } from '../llm_request/types';
 import { ChatPipeline } from '../chat/ChatPipeline';
 import type { ProcessedChatMessage, SystemInsertConfig, EditCard } from '../chat/types';
-import { EditCardComponent } from '../chat/processors/DisplayProcessor';
+import { EditCardComponent, DefaultDisplayProcessor } from '../chat/processors/DisplayProcessor';
 import { EditTagApplicator } from '../chat/utils/editTagApplicator';
+import { FunctionCallApplicator } from '../chat/utils/functionCallApplicator';
+import { RuntimeProcessor, type RuntimeProcessingConfig, type RuntimeProcessingCallbacks } from '../chat/processors/RuntimeProcessor';
 import '../chat/styles.css';
 
 const Chat: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const { getCurrentProject } = useProjectStore();
-  const { addMessage, updateMessage, updateMessageEditTags, updateEditTagStatus, getChatHistory } = useChatStore();
+  const { 
+    addMessage, 
+    updateMessage, 
+    updateMessageEditTags, 
+    updateEditTagStatus, 
+    getChatHistory, 
+    editMessage, 
+    deleteMessage,
+    updateMessageFunctionCalls,
+    updateFunctionCallStatus
+  } = useChatStore();
   const storyObjectStore = useStoryObjectStore();
   const { getStoryObjects } = storyObjectStore;
   const [input, setInput] = useState('');
@@ -25,12 +37,96 @@ const Chat: React.FC = () => {
   const [chatPipeline] = useState(() => new ChatPipeline());
   const [messageEditCards, setMessageEditCards] = useState<Record<string, EditCard[]>>({});
   const [editTagApplicator] = useState(() => new EditTagApplicator(storyObjectStore));
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const [functionCallApplicator] = useState(() => new FunctionCallApplicator(storyObjectStore));
+  const [displayProcessor] = useState(() => new DefaultDisplayProcessor());
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
 
   const currentProject = getCurrentProject();
   const chatHistory = getChatHistory(projectId || '');
   const storyObjects = getStoryObjects(projectId || '');
+
+  // Refs 먼저 선언
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const runtimeCallbacks: RuntimeProcessingCallbacks = {
+    onNewMessage: (messageId: string, content: string) => {
+      updateMessage(projectId || '', messageId, content);
+    },
+    onNewFunctionCalls: (messageId: string, functionCalls: FunctionCallMetadata[]) => {
+      updateMessageFunctionCalls(projectId || '', messageId, functionCalls);
+      
+      const functionCallCards = functionCalls.map(funcCall => ({
+        id: funcCall.id,
+        type: mapFunctionToEditType(funcCall.function_name),
+        title: getFunctionCallTitle(funcCall.function_name),
+        description: generateFunctionCallSummary(funcCall.function_name, funcCall.arguments),
+        isApplied: funcCall.isApplied,
+        data: funcCall.arguments,
+        onApply: createFunctionCallApplyHandler(messageId, funcCall),
+        onReject: createFunctionCallRejectHandler(messageId, funcCall)
+      }));
+      
+      setMessageEditCards(prev => ({
+        ...prev,
+        [messageId]: functionCallCards
+      }));
+    },
+    onNewEditTags: (messageId: string, editCards: any[]) => {
+      // Legacy edit tags processing
+      const editTagsMetadata = editCards.map(card => ({
+        id: card.id,
+        type: card.type,
+        content: card.data,
+        summary: card.description,
+        isApplied: card.isApplied,
+        appliedAt: undefined
+      }));
+      
+      updateMessageEditTags(projectId || '', messageId, editTagsMetadata);
+      
+      // Create edit cards with correct handlers
+      const editCardsWithHandlers = editCards.map((card, index) => {
+        const editTag = editTagsMetadata[index];
+        return {
+          ...card,
+          onApply: createApplyHandler(messageId, editTag),
+          onReject: createRejectHandler(messageId, card.id)
+        };
+      });
+      
+      setMessageEditCards(prev => ({
+        ...prev,
+        [messageId]: editCardsWithHandlers
+      }));
+    },
+    onAddMessage: (projectId: string, message: ChatMessage) => {
+      addMessage(projectId, message);
+    },
+    onGetChatHistory: (projectId: string) => {
+      return getChatHistory(projectId);
+    },
+    onError: (error: Error) => {
+      console.error('Runtime processing error:', error);
+      alert('An error occurred during processing. Please try again.');
+    }
+  };
+
+  // RuntimeProcessor는 매번 새로운 config로 업데이트
+  const runtimeProcessor = useMemo(() => {
+    const updatedConfig = {
+      projectId: projectId || '',
+      storyObjects,
+      systemInsertConfig,
+      chatPipeline,
+      isLoading,
+      setIsLoading,
+      abortControllerRef
+    };
+    return new RuntimeProcessor(updatedConfig, runtimeCallbacks);
+  }, [projectId, storyObjects, systemInsertConfig, isLoading]);
+  const [editContent, setEditContent] = useState('');
 
   // Create pipeline context for message display
   const displayContext = ChatPipeline.createContext(
@@ -54,24 +150,121 @@ const Chat: React.FC = () => {
     const restoredEditCards: Record<string, EditCard[]> = {};
     
     chatHistory.forEach(message => {
-      if (message.role === 'assistant' && message.editTags && message.editTags.length > 0) {
-        const editCards = message.editTags.map(tag => ({
-          id: tag.id,
-          type: tag.type,
-          title: getCardTitleFromType(tag.type),
-          description: tag.summary,
-          isApplied: tag.isApplied,
-          data: tag.content,
-          onApply: createApplyHandler(message.id, tag),
-          onReject: createRejectHandler(message.id, tag.id)
-        }));
+      // Process both user and assistant messages for system cards and edit cards
+      // Use DisplayProcessor to properly process all types of cards including system cards
+      const processed = displayProcessor.process(message, {
+        projectId,
+        storyObjects,
+        systemInsertConfig
+      });
+      
+      if (processed.editCards.length > 0) {
+        // Set up handlers for the edit cards
+        const editCardsWithHandlers = processed.editCards.map((card, index) => {
+          if (message.role === 'assistant' && message.functionCalls) {
+            // Function call cards (only for assistant messages)
+            const funcCall = message.functionCalls.find(fc => fc.id === card.id);
+            if (funcCall) {
+              return {
+                ...card,
+                onApply: createFunctionCallApplyHandler(message.id, funcCall),
+                onReject: createFunctionCallRejectHandler(message.id, funcCall)
+              };
+            }
+          }
+          
+          if (message.role === 'assistant' && message.editTags) {
+            // Legacy edit tag cards (only for assistant messages)
+            const editTag = message.editTags.find(tag => tag.id === card.id);
+            if (editTag) {
+              return {
+                ...card,
+                onApply: createApplyHandler(message.id, editTag),
+                onReject: createRejectHandler(message.id, editTag.id)
+              };
+            }
+          }
+          
+          // System cards (from user messages) or other cards without specific handlers
+          return card;
+        });
         
-        restoredEditCards[message.id] = editCards;
+        restoredEditCards[message.id] = editCardsWithHandlers;
       }
     });
     
     setMessageEditCards(restoredEditCards);
-  }, [projectId]); // Only run when projectId changes
+  }, [projectId, chatHistory.length]); // Only re-run when chat history length changes
+
+  // Function call mapping functions
+  const mapFunctionToEditType = (functionName: string): any => {
+    switch (functionName) {
+      case 'initialize_story_objects': return 'init';
+      case 'add_story_objects': return 'add';
+      case 'edit_story_objects': return 'edit';
+      case 'remove_story_objects': return 'remove';
+      default: return 'edit';
+    }
+  };
+
+  const getFunctionCallTitle = (functionName: string): string => {
+    switch (functionName) {
+      case 'initialize_story_objects': return '🔄 Initialize Story';
+      case 'add_story_objects': return '➕ Add Items';
+      case 'edit_story_objects': return '✏️ Edit Items';
+      case 'remove_story_objects': return '🗑️ Remove Items';
+      default: return '📝 Function Call';
+    }
+  };
+
+  const generateFunctionCallSummary = (functionName: string, args: any): string => {
+    if (!args) return getFunctionCallDescription(functionName);
+    
+    const parts: string[] = [];
+    
+    switch (functionName) {
+      case 'initialize_story_objects':
+        if (args.basic_info) parts.push('basic info');
+        if (args.characters?.length) parts.push(`${args.characters.length} character${args.characters.length > 1 ? 's' : ''}`);
+        if (args.organizations?.length) parts.push(`${args.organizations.length} organization${args.organizations.length > 1 ? 's' : ''}`);
+        if (args.locations?.length) parts.push(`${args.locations.length} location${args.locations.length > 1 ? 's' : ''}`);
+        if (args.lorebook?.length) parts.push(`${args.lorebook.length} lorebook entr${args.lorebook.length > 1 ? 'ies' : 'y'}`);
+        if (args.acts?.length) parts.push(`${args.acts.length} act${args.acts.length > 1 ? 's' : ''}`);
+        break;
+        
+      case 'add_story_objects':
+        if (args.characters?.length) parts.push(`${args.characters.length} character${args.characters.length > 1 ? 's' : ''}`);
+        if (args.organizations?.length) parts.push(`${args.organizations.length} organization${args.organizations.length > 1 ? 's' : ''}`);
+        if (args.locations?.length) parts.push(`${args.locations.length} location${args.locations.length > 1 ? 's' : ''}`);
+        if (args.lorebook?.length) parts.push(`${args.lorebook.length} lorebook entr${args.lorebook.length > 1 ? 'ies' : 'y'}`);
+        if (args.acts?.length) parts.push(`${args.acts.length} act${args.acts.length > 1 ? 's' : ''}`);
+        if (args.chapters?.length) parts.push(`${args.chapters.length} chapter${args.chapters.length > 1 ? 's' : ''}`);
+        break;
+        
+      case 'edit_story_objects':
+        if (args.basic_info) parts.push('basic info');
+        if (args.objects?.length) parts.push(`${args.objects.length} object${args.objects.length > 1 ? 's' : ''}`);
+        break;
+        
+      case 'remove_story_objects':
+        if (args.objects?.length) parts.push(`${args.objects.length} object${args.objects.length > 1 ? 's' : ''}`);
+        break;
+    }
+    
+    return parts.length > 0 
+      ? `${getFunctionCallDescription(functionName)}: ${parts.join(', ')}`
+      : getFunctionCallDescription(functionName);
+  };
+
+  const getFunctionCallDescription = (functionName: string): string => {
+    switch (functionName) {
+      case 'initialize_story_objects': return 'Initialize all story objects for the project';
+      case 'add_story_objects': return 'Add new story objects to the project';
+      case 'edit_story_objects': return 'Modify existing story objects';
+      case 'remove_story_objects': return 'Remove story objects from the project';
+      default: return 'Execute function call';
+    }
+  };
 
   const getCardTitleFromType = (type: string): string => {
     switch (type) {
@@ -102,10 +295,7 @@ const Chat: React.FC = () => {
                 ? { ...card, isApplied: true }
                 : card
             ) || []
-          }));
-          
-          console.log('Successfully applied edit tag:', result.message);
-        } else {
+          }));        } else {
           console.error('Failed to apply edit tag:', result.error || result.message);
           alert(`Failed to apply changes: ${result.error || result.message}`);
         }
@@ -131,12 +321,69 @@ const Chat: React.FC = () => {
             ? { ...card, isApplied: true }
             : card
         ) || []
-      }));
-      
-      console.log('Rejecting edit tag:', tagId, 'from message:', messageId);
+      }));    };
+  };
+
+  // Function call handlers
+  const createFunctionCallApplyHandler = (messageId: string, functionCall: FunctionCallMetadata) => {
+    return async () => {
+      if (!projectId) return;
+
+      try {
+        const result = await functionCallApplicator.applyFunctionCall(projectId, functionCall);
+        
+        if (result.success) {
+          // Mark as applied in the chat store
+          updateFunctionCallStatus(projectId, messageId, functionCall.id, true, result);
+          
+          // Update the messageEditCards state immediately for real-time UI update
+          setMessageEditCards(prev => ({
+            ...prev,
+            [messageId]: prev[messageId]?.map(card => 
+              card.id === functionCall.id 
+                ? { ...card, isApplied: true }
+                : card
+            ) || []
+          }));          
+          // 자동으로 다음 스트리밍 시작
+          await runtimeProcessor.continueAfterFunctionCall(functionCall, true, result.message);
+        } else {
+          console.error('Failed to apply function call:', result.error || result.message);
+          alert(`Failed to apply changes: ${result.error || result.message}`);
+          
+          // Mark as failed
+          updateFunctionCallStatus(projectId, messageId, functionCall.id, false, result, result.error);
+        }
+      } catch (error) {
+        console.error('Error applying function call:', error);
+        alert('An error occurred while applying changes. Please try again.');
+        
+        // Mark as failed
+        updateFunctionCallStatus(projectId, messageId, functionCall.id, false, undefined, error instanceof Error ? error.message : 'Unknown error');
+      }
     };
   };
 
+  const createFunctionCallRejectHandler = (messageId: string, functionCall: FunctionCallMetadata) => {
+    return async () => {
+      if (!projectId) return;
+      
+      // Mark as processed but rejected in the chat store
+      updateFunctionCallStatus(projectId, messageId, functionCall.id, true);
+      
+      // Update the messageEditCards state immediately for real-time UI update
+      setMessageEditCards(prev => ({
+        ...prev,
+        [messageId]: prev[messageId]?.map(card => 
+          card.id === functionCall.id 
+            ? { ...card, isApplied: true }
+            : card
+        ) || []
+      }));      
+      // 자동으로 다음 스트리밍 시작
+      await runtimeProcessor.continueAfterFunctionCall(functionCall, false, 'User rejected the function call');
+    };
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -149,118 +396,60 @@ const Chat: React.FC = () => {
       timestamp: new Date(),
     };
 
-    addMessage(projectId, userMessage);
     setInput('');
-    setIsLoading(true);
 
-    const assistantMessageId = crypto.randomUUID();
-    const assistantMessage: ChatMessage = {
-      id: assistantMessageId,
-      role: 'assistant',
-      content: '',
-      timestamp: new Date(),
-    };
-
-    addMessage(projectId, assistantMessage);
-
-    try {
-      // Create pipeline context
-      const context = ChatPipeline.createContext(
-        projectId,
-        storyObjects,
-        systemInsertConfig
-      );
-
-      // Debug: Log pipeline context
-      console.log('=== DEBUG: Pipeline Context ===');
-      console.log('Project ID:', projectId);
-      console.log('System Insert Config:', systemInsertConfig);
-      console.log('Story Objects:', storyObjects);
-      console.log('=== END DEBUG ===');
-
-      // Pre-process messages
-      const { conversationBlocks } = chatPipeline.preProcess(
-        chatHistory,
-        userMessage,
-        context
-      );
-
-      // Debug: Log conversation blocks being sent to AI
-      console.log('=== DEBUG: Conversation blocks sent to AI ===');
-      conversationBlocks.forEach((block, index) => {
-        console.log(`Block ${index} (${block.role}):`);
-        console.log(block.content);
-        console.log('---');
-      });
-      console.log('=== END DEBUG ===');
-
-      abortControllerRef.current = new AbortController();
-      
-      let accumulatedContent = '';
-      for await (const chunk of streamCopilot(conversationBlocks, {
-        signal: abortControllerRef.current.signal,
-      })) {
-        accumulatedContent += chunk;
-        updateMessage(projectId, assistantMessageId, accumulatedContent);
-      }
-
-      // Post-process the final AI response
-      const { message: processedMessage } = chatPipeline.postProcess(
-        accumulatedContent,
-        context
-      );
-
-      // Process for display and generate edit cards
-      const { editCards } = chatPipeline.processForDisplay(processedMessage, context);
-      
-      // Save edit tags to message metadata
-      if (editCards.length > 0) {
-        const editTagsMetadata = editCards.map(card => ({
-          id: card.id,
-          type: card.type,
-          content: card.data,
-          summary: card.description,
-          isApplied: card.isApplied,
-          appliedAt: undefined
-        }));
-        
-        updateMessageEditTags(projectId, assistantMessageId, editTagsMetadata);
-        
-        // Create edit cards with correct handlers
-        const editCardsWithHandlers = editCards.map((card, index) => {
-          const editTag = editTagsMetadata[index];
-          return {
-            ...card,
-            onApply: createApplyHandler(assistantMessageId, editTag),
-            onReject: createRejectHandler(assistantMessageId, card.id)
-          };
-        });
-        
-        setMessageEditCards(prev => ({
-          ...prev,
-          [assistantMessageId]: editCardsWithHandlers
-        }));
-      }
-
-    } catch (error) {
-      console.error('Chat error:', error);
-      if (error instanceof Error && error.name !== 'AbortError') {
-        updateMessage(
-          projectId,
-          assistantMessageId,
-          'Sorry, an error occurred while generating a response. Please try again.'
-        );
-      }
-    } finally {
-      setIsLoading(false);
-      abortControllerRef.current = null;
-    }
+    // RuntimeProcessor를 통해 처리
+    await runtimeProcessor.processUserMessage(userMessage);
   };
 
   const handleStop = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      setIsLoading(false);
+    runtimeProcessor.abort();
+  };
+
+  const adjustTextareaHeight = () => {
+    if (editTextareaRef.current) {
+      editTextareaRef.current.style.height = 'auto';
+      editTextareaRef.current.style.height = `${editTextareaRef.current.scrollHeight}px`;
+    }
+  };
+
+  const handleEditMessage = (messageId: string, content: string | null) => {
+    if (!content) return;
+    setEditingMessageId(messageId);
+    setEditContent(content);
+    // Use setTimeout to ensure the textarea is rendered before adjusting height
+    setTimeout(() => {
+      adjustTextareaHeight();
+    }, 0);
+  };
+
+  const handleEditContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setEditContent(e.target.value);
+    adjustTextareaHeight();
+  };
+
+  const handleSaveEdit = () => {
+    if (!projectId || !editingMessageId) return;
+    editMessage(projectId, editingMessageId, editContent);
+    setEditingMessageId(null);
+    setEditContent('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessageId(null);
+    setEditContent('');
+  };
+
+  const handleDeleteMessage = (messageId: string) => {
+    if (!projectId) return;
+    if (confirm('Are you sure you want to delete this message?')) {
+      deleteMessage(projectId, messageId);
+      // Also remove any edit cards for this message (both function calls and legacy edit tags)
+      setMessageEditCards(prev => {
+        const updated = { ...prev };
+        delete updated[messageId];
+        return updated;
+      });
     }
   };
 
@@ -307,49 +496,105 @@ const Chat: React.FC = () => {
           </div>
         )}
 
-        {chatHistory.map((message) => (
-          <div key={message.id}>
-            <div className={`message ${message.role}`}>
-              <div className="message-avatar">
-                {message.role === 'user' ? '👤' : '🤖'}
-              </div>
-              <div className="message-content">
-                {message.role === 'assistant' ? (
-                  // Process AI messages for display
-                  chatPipeline.processForDisplay({ ...message }, displayContext).displayContent
-                ) : (
-                  // Show user messages as is
-                  <div className="message-text">{message.content}</div>
-                )}
-                <div className="message-time">
-                  {message.timestamp.toLocaleTimeString()}
+        {chatHistory.map((message, index) => {
+          const isLastAssistantMessage = message.role === 'assistant' && 
+            index === chatHistory.length - 1 &&
+            isLoading;
+          
+          // Check if this is a system message (contains system tags and should only show as cards)
+          const isSystemMessage = message.content && 
+            typeof message.content === 'string' && 
+            /<system>[\s\S]*?<\/system>/i.test(message.content) &&
+            message.role === 'user';
+          
+          return (
+            <div key={message.id}>
+              {/* Only render message bubble if it's not a pure system message */}
+              {!isSystemMessage && (
+                <div className={`message ${message.role}`}>
+                <div className="message-avatar">
+                  {message.role === 'user' ? '👤' : '🤖'}
+                </div>
+                <div className="message-content">
+                  {editingMessageId === message.id ? (
+                    // Edit mode
+                    <div className="message-edit-form">
+                      <textarea
+                        ref={editTextareaRef}
+                        value={editContent}
+                        onChange={handleEditContentChange}
+                        className="message-edit-textarea"
+                        placeholder="Edit your message..."
+                      />
+                      <div className="message-edit-buttons">
+                        <button onClick={handleSaveEdit} className="save-edit-button">
+                          Save
+                        </button>
+                        <button onClick={handleCancelEdit} className="cancel-edit-button">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    // Display mode
+                    <>
+                      <div className="message-text-container">
+                        {message.role === 'assistant' ? (
+                          // Process AI messages for display
+                          chatPipeline.processForDisplay({ ...message }, displayContext).displayContent
+                        ) : (
+                          // Show user messages as is
+                          <div className="message-text">{message.content}</div>
+                        )}
+                        
+                        {/* 스트리밍 중인 마지막 AI 메시지에 타이핑 애니메이션 추가 */}
+                        {isLastAssistantMessage && (
+                          <div className="typing-indicator inline">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="message-footer">
+                        <div className="message-time">
+                          {message.timestamp.toLocaleTimeString()}
+                        </div>
+                        <div className="message-actions">
+                          <button 
+                            onClick={() => handleEditMessage(message.id, message.content)} 
+                            className="message-action-button edit-button"
+                            title="Edit message"
+                          >
+                            ✏️
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteMessage(message.id)} 
+                            className="message-action-button delete-button"
+                            title="Delete message"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
+              )}
+              
+              {/* Edit Cards for this specific message */}
+              {messageEditCards[message.id] && (
+                <div className="message-edit-cards">
+                  {messageEditCards[message.id].map(card => (
+                    <EditCardComponent key={card.id} card={card} />
+                  ))}
+                </div>
+              )}
             </div>
-            
-            {/* Edit Cards for this specific message */}
-            {message.role === 'assistant' && messageEditCards[message.id] && (
-              <div className="message-edit-cards">
-                {messageEditCards[message.id].map(card => (
-                  <EditCardComponent key={card.id} card={card} />
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-
-        {isLoading && (
-          <div className="message assistant">
-            <div className="message-avatar">🤖</div>
-            <div className="message-content">
-              <div className="typing-indicator">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-            </div>
-          </div>
-        )}
+          );
+        })}
 
         <div ref={messagesEndRef} />
       </div>

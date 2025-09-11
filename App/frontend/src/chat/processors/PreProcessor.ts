@@ -5,15 +5,28 @@ import type {
   ProcessedChatMessage, 
   ChatPipelineContext 
 } from '../types';
+import { STORY_FUNCTIONS } from '../types/functionCalling';
+
+function findLastUserMessageIdx(messages: ChatMessage[]): number
+  {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') 
+      {
+        return i;
+      }
+    }
+    return -1;
+  }
 
 export class DefaultPreProcessor implements PreProcessor {
   process(
     messages: ChatMessage[], 
-    newMessage: ChatMessage,
     context: ChatPipelineContext
   ): PreProcessingResult {
     const processedMessages: ProcessedChatMessage[] = [];
     const conversationBlocks: ConversationBlock[] = [];
+
+    const lastUserMessageIdx = findLastUserMessageIdx(messages);
 
     // Add comprehensive system prompt
     conversationBlocks.push({
@@ -22,26 +35,40 @@ export class DefaultPreProcessor implements PreProcessor {
     });
 
     // Process existing messages
-    for (const message of messages) {
-      const processed = this.processExistingMessage(message);
-      processedMessages.push(processed);
-      conversationBlocks.push({
-        role: processed.role,
-        content: processed.content
-      });
+    for (let i = 0; i < messages.length; i++) 
+    {
+      const message = messages[i];
+
+      let processed : ProcessedChatMessage = {} as ProcessedChatMessage;
+      if (messages.indexOf(message) === lastUserMessageIdx)
+      {
+        processed = this.processLastUserMessage(message, context);
+      }
+      else
+      {
+        processed = this.processExistingMessage(message);
+      }
+
+        processedMessages.push(processed);
+        conversationBlocks.push({
+          role: processed.role,
+          content: processed.content,
+          function_call: processed.function_call,
+          name: processed.name
+        });
     }
 
-    // Process new message
-    const processedNewMessage = this.processNewMessage(newMessage, context);
-    processedMessages.push(processedNewMessage);
-    conversationBlocks.push({
-      role: processedNewMessage.role,
-      content: processedNewMessage.content
+    const functions = context.systemInsertConfig.enabled ? STORY_FUNCTIONS : undefined;
+    
+    // Debug: Log function preparation
+    console.log("Chat to be sent to backend:", {
+      conversationBlocks,
+      functions
     });
-
     return {
       conversationBlocks,
-      processedMessages
+      processedMessages,
+      functions
     };
   }
 
@@ -58,114 +85,19 @@ Your primary capabilities include:
     if (context.systemInsertConfig.enabled && context.systemInsertConfig.includeProjectInfo) {
       systemPrompt += `
 
-IMPORTANT: You have special editing capabilities using XML tags. You can modify story objects using these tags:
+IMPORTANT: You have access to specialized functions for managing story objects. When the user requests changes to their story (characters, locations, plot, etc.), you can call these functions:
 
-1. <init> - Initialize/overwrite all story objects (use only when starting fresh)
-Format:
-<init>
-\`\`\`json
-{
-    "basic_info": {
-        "title": "string",
-        "logline": "string", 
-        "genre": "string"
-    },
-    "characters": [{
-        "name": "string",
-        "description": "string"
-    }],
-    "organizations": [{
-        "name": "string",
-        "description": "string"
-    }],
-    "locations": [{
-        "name": "string", 
-        "description": "string"
-    }],
-    "outline": {
-        "acts": [{
-            "name": "string",
-            "description": "string",
-            "chapters": [{
-                "name": "string",
-                "description": "string"
-            }]
-        }]
-    }
-}
-\`\`\`
-</init>
+Available Functions:
+1. initialize_story_objects - Initialize or completely replace all story objects
+2. add_story_objects - Add new characters, locations, organizations, etc.
+3. edit_story_objects - Modify existing story objects by ID
+4. remove_story_objects - Remove story objects by ID
 
-2. <add> - Add new story objects
-Examples:
-- Add characters/locations: 
-<add>
-\`\`\`json
-{
-    "characters": [{"name": "...", "description": "..."}],
-    "locations": [{"name": "...", "description": "..."}]
-}
-\`\`\`
-</add>
-
-- Add new acts:
-<add>
-\`\`\`json
-{
-    "acts": [{
-        "name": "...",
-        "description": "...",
-        "chapters": [{"name": "...", "description": "..."}]
-    }]
-}
-\`\`\`
-</add>
-
-- Add chapters to existing act:
-<add>
-\`\`\`json
-{
-    "chapters": [{
-        "act_id": "existing_act_id",
-        "name": "...",
-        "description": "..."
-    }]
-}
-\`\`\`
-</add>
-
-3. <edit> - Modify existing objects
-<edit>
-\`\`\`json
-{
-    "basic_info": {
-        "title": "...",
-        "logline": "...",
-        "genre": "..."
-    },
-    "objects": [{
-        "id": "object_id",
-        "name": "new_name",
-        "description": "new_description"
-    }]
-}
-\`\`\`
-</edit>
-
-4. <remove> - Delete objects by ID
-<remove>
-\`\`\`json
-[{
-    "id": "object_id_to_delete"
-}]
-\`\`\`
-</remove>
-
-RULES:
-- Only use these tags when the user explicitly requests changes to story objects
-- Always use the exact JSON format shown above
-- The user will be asked to approve changes before they're applied
-- Continue your normal conversation after using tags`;
+Function Usage Rules:
+- Only call these functions when the user explicitly requests changes to story objects
+- The user will be asked to approve function calls before they're applied
+- You can continue your normal conversation along with function calls
+- Use the exact parameter formats as defined in the function schemas`;
     }
 
     return systemPrompt;
@@ -174,26 +106,26 @@ RULES:
   private processExistingMessage(message: ChatMessage): ProcessedChatMessage {
     const processed: ProcessedChatMessage = {
       ...message,
-      originalContent: message.content
+      originalContent: message.content ?? undefined
     };
 
     // Summarize edit tags in existing AI messages
     if (message.role === 'assistant') {
-      processed.content = this.summarizeEditTags(message.content);
+      processed.content = this.summarizeEditTags(message.content || '');
     }
 
     return processed;
   }
 
-  private processNewMessage(message: ChatMessage, context: ChatPipelineContext): ProcessedChatMessage {
+  private processLastUserMessage(message: ChatMessage, context: ChatPipelineContext): ProcessedChatMessage {
     const processed: ProcessedChatMessage = {
       ...message,
-      originalContent: message.content
+      originalContent: message.content ?? undefined
     };
 
     // Add system info to user messages if enabled
     if (message.role === 'user' && context.systemInsertConfig.enabled) {
-      processed.content = this.addSystemInfo(message.content, context);
+      processed.content = this.addSystemInfo(message.content || '', context);
       processed.processedForAI = true;
     }
 

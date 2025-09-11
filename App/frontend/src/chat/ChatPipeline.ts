@@ -30,14 +30,16 @@ export class ChatPipeline {
   // Pre-process messages before sending to AI
   preProcess(
     messages: ChatMessage[],
-    newMessage: ChatMessage,
     context: ChatPipelineContext
   ) {
-    return this.preProcessor.process(messages, newMessage, context);
+    return this.preProcessor.process(messages, context);
   }
 
   // Post-process AI response
-  postProcess(aiResponse: string, context: ChatPipelineContext) {
+  postProcess(
+    aiResponse: string | { content: string | null; tool_calls?: any[] },
+    context: ChatPipelineContext
+  ) {
     return this.postProcessor.process(aiResponse, context);
   }
 
@@ -49,7 +51,7 @@ export class ChatPipeline {
   // Create default system insert config
   static createDefaultSystemConfig(): SystemInsertConfig {
     return {
-      enabled: false,
+      enabled: true,
       includeProjectInfo: true,
       includeStoryObjects: true
     };

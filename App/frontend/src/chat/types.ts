@@ -1,5 +1,6 @@
 import type { ConversationBlock, ChatMessage, Role } from '../llm_request/types';
 import type { StoryObjects } from '../types/storyObject';
+import type { FunctionCallSchema } from './types/functionCalling';
 
 // Extend existing ChatMessage for pipeline processing
 export interface ProcessedChatMessage extends ChatMessage {
@@ -30,6 +31,7 @@ export interface SystemInsertConfig {
 export interface PreProcessingResult {
   conversationBlocks: ConversationBlock[];
   processedMessages: ProcessedChatMessage[];
+  functions?: FunctionCallSchema[]; // For OpenAI function calling
 }
 
 export interface PostProcessingResult {
@@ -45,7 +47,7 @@ export interface DisplayProcessingResult {
 // Edit card for display
 export interface EditCard {
   id: string;
-  type: EditTagType;
+  type: EditTagType | 'system';
   title: string;
   description: string;
   isApplied: boolean;
@@ -65,15 +67,14 @@ export interface ChatPipelineContext {
 // Pipeline processor interfaces
 export interface PreProcessor {
   process(
-    messages: ChatMessage[], 
-    newMessage: ChatMessage,
+    messages: ChatMessage[],
     context: ChatPipelineContext
   ): PreProcessingResult;
 }
 
 export interface PostProcessor {
   process(
-    aiResponse: string,
+    aiResponse: string | { content: string | null; tool_calls?: any[] },
     context: ChatPipelineContext
   ): PostProcessingResult;
 }

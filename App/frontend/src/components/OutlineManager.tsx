@@ -95,15 +95,10 @@ const OutlineManager: React.FC = () => {
     }
   };
 
-  const handleAIResult = (result: any) => {
-    console.log('[Outline] AI result received:', result);
-    console.log('[Outline] projectId:', projectId);
-    
+  const handleAIResult = (result: any) => {    
     if (!projectId) return;
     
-    if (result && result.acts && Array.isArray(result.acts)) {
-      console.log('[Outline] Outline edit mode');
-      const newOutline = createEmptyOutline();
+    if (result && result.acts && Array.isArray(result.acts)) {      const newOutline = createEmptyOutline();
       
       newOutline.acts = result.acts.map((actData: any) => {
         const actId = actData.id || crypto.randomUUID();
@@ -127,14 +122,9 @@ const OutlineManager: React.FC = () => {
             };
           }),
         };
-      });
-      
-      console.log('[Outline] Processed outline:', newOutline);
-      setOutline(projectId, newOutline);
+      });      setOutline(projectId, newOutline);
       refreshOutline();
-    } else {
-      console.log('[Outline] Result format error:', result);
-    }
+    } else {    }
   };
 
   const handleRestoreVersion = (versionData: any) => {

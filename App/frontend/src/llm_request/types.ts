@@ -1,24 +1,42 @@
 
-export type Role = "system" | "user" | "assistant";
+export type Role = "system" | "user" | "assistant" | "function";
+
+export interface FunctionCall {
+  name: string;
+  arguments: string;
+}
 
 export interface ConversationBlock {
   role: Role;
-  content: string;
+  content: string | null;
+  function_call?: FunctionCall;
+  name?: string; // for function role messages
 }
 
 export interface EditTagMetadata {
   id: string;
   type: 'init' | 'add' | 'edit' | 'remove';
   content: any;
-  summary: string;
+  summary?: string;
+  isApplied?: boolean;
+  appliedAt?: Date;
+}
+
+export interface FunctionCallMetadata {
+  id: string;
+  function_name: string;
+  arguments: any;
+  result?: any;
   isApplied: boolean;
   appliedAt?: Date;
+  error?: string;
 }
 
 export interface ChatMessage extends ConversationBlock {
   id: string;
   timestamp: Date;
-  editTags?: EditTagMetadata[];
+  editTags?: EditTagMetadata[]; // Legacy support
+  functionCalls?: FunctionCallMetadata[]; // New function calling support
 }
 
 

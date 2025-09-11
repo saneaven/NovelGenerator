@@ -1,7 +1,27 @@
+/* 전체 페이지 설정 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+
 .app {
   min-height: 100vh;
+  width: 100%;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: #333;
+  position: relative;
 }
 
 /* Ensure all inputs and textareas have proper colors */
@@ -39,7 +59,7 @@ label {
 }
 
 /* Global safety net for white text issues */
-* {
+*:not(html):not(body) {
   color: inherit;
 }
 
@@ -60,16 +80,59 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
 
 .main-content {
   min-height: 100vh;
+  width: 100%;
   padding: 20px;
-  max-width: 1200px;
-  margin: 0 auto;
+  box-sizing: border-box;
+  background: transparent;
+}
+
+/* 모바일에서 패딩 최소화 */
+@media (max-width: 767px) {
+  .main-content {
+    padding: 15px;
+  }
+}
+
+/* 태블릿에서 적당한 패딩 */
+@media (min-width: 768px) and (max-width: 1199px) {
+  .main-content {
+    padding: 30px 50px;
+  }
+}
+
+/* PC에서 효율적인 패딩 */
+@media (min-width: 1200px) {
+  .main-content {
+    padding: 40px 80px;
+  }
+}
+
+/* 대형 화면에서 적절한 여백 유지 */
+@media (min-width: 1600px) {
+  .main-content {
+    padding: 40px 120px;
+  }
 }
 
 /* Home Page Styles */
 .home-container {
-  max-width: 800px;
-  margin: 0 auto;
+  width: 100%;
   padding: 40px 20px;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+/* PC에서 적절한 여백 */
+@media (min-width: 1200px) {
+  .home-container {
+    padding: 60px 200px;
+  }
+}
+
+@media (min-width: 1600px) {
+  .home-container {
+    padding: 60px 300px;
+  }
 }
 
 .home-header {
@@ -227,8 +290,15 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
 
 .projects-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 20px;
+}
+
+/* PC에서 더 많은 컬럼 표시 */
+@media (min-width: 1200px) {
+  .projects-grid {
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  }
 }
 
 .project-card {
@@ -284,9 +354,9 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
 
 /* Project Menu Styles */
 .project-menu-container {
-  max-width: 900px;
-  margin: 0 auto;
+  width: 100%;
   padding: 20px;
+  box-sizing: border-box;
 }
 
 .project-header {
@@ -336,8 +406,15 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
 
 .menu-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 20px;
+}
+
+/* PC에서 더 많은 메뉴 카드를 한 줄에 표시 */
+@media (min-width: 1200px) {
+  .menu-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
 }
 
 .menu-card {
@@ -388,9 +465,35 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
 .chat-container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  max-width: 1000px;
-  margin: 0 auto;
+  height: calc(100vh - 40px);
+  width: 100%;
+  box-sizing: border-box;
+  background: transparent;
+  margin-top: 20px;
+}
+
+/* 모바일에서 여백 조정 */
+@media (max-width: 767px) {
+  .chat-container {
+    height: calc(100vh - 30px);
+    margin-top: 15px;
+  }
+}
+
+/* 태블릿에서 여백 조정 */
+@media (min-width: 768px) and (max-width: 1199px) {
+  .chat-container {
+    height: calc(100vh - 60px);
+    margin-top: 30px;
+  }
+}
+
+/* PC에서 여백 조정 */
+@media (min-width: 1200px) {
+  .chat-container {
+    height: calc(100vh - 80px);
+    margin-top: 40px;
+  }
 }
 
 .chat-header {
@@ -408,6 +511,7 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  min-height: 0; /* 플렉스 컨테이너에서 스크롤 가능하게 */
 }
 
 .welcome-message {
@@ -439,6 +543,16 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
   flex-direction: row-reverse;
 }
 
+.message.assistant {
+  width: 100%;
+  padding: 20px 0;
+  margin: 0;
+  gap: 20px;
+  border-top: 1px solid #e9ecef;
+  border-bottom: 1px solid #e9ecef;
+  background: #fafbfc;
+}
+
 .message-avatar {
   width: 40px;
   height: 40px;
@@ -456,7 +570,9 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
 }
 
 .message.assistant .message-avatar {
-  background: #f0f0f0;
+  background: #4a90e2;
+  color: white;
+  margin-left: 20px;
 }
 
 .message-content {
@@ -466,6 +582,19 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
   position: relative;
 }
 
+/* PC에서 메시지 영역을 화면에 맞게 조정 */
+@media (min-width: 768px) {
+  .message-content {
+    max-width: 85%;
+  }
+}
+
+@media (min-width: 1200px) {
+  .message-content {
+    max-width: 90%;
+  }
+}
+
 .message.user .message-content {
   background: #667eea;
   color: white;
@@ -473,9 +602,12 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
 }
 
 .message.assistant .message-content {
-  background: #f0f0f0;
+  background: transparent;
   color: #333;
-  border-bottom-left-radius: 5px;
+  max-width: none;
+  width: 100%;
+  padding: 0;
+  margin-right: 20px;
 }
 
 .message-text {
@@ -493,6 +625,19 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
   display: flex;
   gap: 4px;
   padding: 10px 0;
+}
+
+.typing-indicator.inline {
+  display: inline-flex;
+  padding: 0;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.message-text-container {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
 }
 
 .typing-indicator span {
@@ -529,8 +674,27 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
 
 .input-group {
   display: flex;
-  gap: 10px;
+  gap: 15px;
   align-items: end;
+  max-width: 100%;
+}
+
+/* PC에서 입력 영역 최적화 */
+@media (min-width: 1200px) {
+  .input-group {
+    gap: 20px;
+  }
+  
+  .chat-input {
+    padding: 15px 25px;
+    font-size: 1.1rem;
+  }
+  
+  .send-button,
+  .stop-button {
+    width: 55px;
+    height: 55px;
+  }
 }
 
 .chat-input {
@@ -612,9 +776,9 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
 
 /* Story Objects Styles */
 .story-objects-container {
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
   padding: 20px;
+  box-sizing: border-box;
 }
 
 .story-objects-header {
@@ -630,6 +794,14 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
   gap: 10px;
   margin-bottom: 30px;
   flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* PC에서 탭을 왼쪽 정렬 */
+@media (min-width: 768px) {
+  .story-objects-tabs {
+    justify-content: flex-start;
+  }
 }
 
 .tab-button {
@@ -804,7 +976,7 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
   padding: 30px;
 }
 
-.empty-state {
+.name-description-manager .empty-state {
   text-align: center;
   padding: 60px 20px;
   color: #666;
@@ -1617,7 +1789,7 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
   line-height: 1.6;
 }
 
-/* Responsive design for version history */
+/* Responsive design improvements */
 @media (max-width: 768px) {
   .version-history-modal {
     max-width: 95%;
@@ -1636,5 +1808,81 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
   
   .version-actions {
     justify-content: flex-end;
+  }
+  
+  /* 모바일에서 채팅 패딩 줄이기 */
+  .chat-container {
+    padding: 0 10px;
+  }
+  
+  .message-content {
+    max-width: 85%;
+  }
+  
+  /* 모바일에서 그리드 최소 너비 줄이기 */
+  .projects-grid {
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  }
+  
+  .menu-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+}
+
+/* 화면 크기별 그리드 최적화 */
+.projects-grid {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.menu-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+}
+
+/* 태블릿 크기 */
+@media (min-width: 768px) and (max-width: 1199px) {
+  .projects-grid {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 25px;
+  }
+  
+  .menu-grid {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 25px;
+  }
+}
+
+/* PC 크기 - 화면을 효율적으로 활용 */
+@media (min-width: 1200px) {
+  .projects-grid {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 30px;
+  }
+  
+  .menu-grid {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 30px;
+  }
+  
+  .home-header h1 {
+    font-size: 3.5rem;
+  }
+}
+
+/* 대형 PC 화면 */
+@media (min-width: 1600px) {
+  .projects-grid {
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 40px;
+  }
+  
+  .menu-grid {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 40px;
+  }
+  
+  .home-header h1 {
+    font-size: 4rem;
   }
 }

@@ -1,69 +1,41 @@
-import type { EditTagMetadata } from '../../llm_request/types';
-import type { 
-  StoryObjects,
-  BasicInfo,
-  Character,
-  Organization,
-  Location,
-  LorebookEntry,
-  Act,
-  Chapter
-} from '../../types/storyObject';
+import type { FunctionCallMetadata } from '../../llm_request/types';
+import type { StoryObjectStoreActions, EditTagApplicationResult } from './editTagApplicator';
 
-export interface EditTagApplicationResult {
-  success: boolean;
-  message: string;
-  error?: string;
-}
-
-export interface StoryObjectStoreActions {
-  // Basic Info
-  setBasicInfo: (projectId: string, basicInfo: BasicInfo) => void;
-  updateBasicInfo: (projectId: string, updates: Partial<BasicInfo>) => void;
-  
-  // Characters
-  addCharacter: (projectId: string, character?: Partial<Character>) => Character;
-  updateCharacter: (projectId: string, id: string, updates: Partial<Character>) => void;
-  deleteCharacter: (projectId: string, id: string) => void;
-  
-  // Organizations
-  addOrganization: (projectId: string, organization?: Partial<Organization>) => Organization;
-  updateOrganization: (projectId: string, id: string, updates: Partial<Organization>) => void;
-  deleteOrganization: (projectId: string, id: string) => void;
-  
-  // Locations
-  addLocation: (projectId: string, location?: Partial<Location>) => Location;
-  updateLocation: (projectId: string, id: string, updates: Partial<Location>) => void;
-  deleteLocation: (projectId: string, id: string) => void;
-  
-  // Lorebook
-  addLorebookEntry: (projectId: string, entry?: Partial<LorebookEntry>) => LorebookEntry;
-  updateLorebookEntry: (projectId: string, id: string, updates: Partial<LorebookEntry>) => void;
-  deleteLorebookEntry: (projectId: string, id: string) => void;
-  
-  // Acts
-  addAct: (projectId: string, act?: Partial<Act>) => Act;
-  updateAct: (projectId: string, actId: string, updates: Partial<Act>) => void;
-  deleteAct: (projectId: string, actId: string) => void;
-  
-  // Chapters
-  addChapter: (projectId: string, actId: string, chapter?: Partial<Chapter>) => Chapter;
-  updateChapter: (projectId: string, chapterId: string, updates: Partial<Chapter>) => void;
-  deleteChapter: (projectId: string, chapterId: string) => void;
-  
-  // Version Management
-  addVersion: <T>(projectId: string, category: import('../../types/storyObject').StoryObjectCategory, itemId: string, userRequest: string, data: T) => string;
-  
-  // Utility
-  getStoryObjects: (projectId: string) => StoryObjects;
-  clearStoryObjects: (projectId: string) => void;
-}
-
-export class EditTagApplicator {
+export class FunctionCallApplicator {
   private storeActions: StoryObjectStoreActions;
 
   constructor(storeActions: StoryObjectStoreActions) {
     this.storeActions = storeActions;
+  }
+
+  async applyFunctionCall(
+    projectId: string, 
+    functionCall: FunctionCallMetadata
+  ): Promise<EditTagApplicationResult> {
+    try {
+      switch (functionCall.function_name) {
+        case 'initialize_story_objects':
+          return await this.applyInitializeStoryObjects(projectId, functionCall.arguments);
+        case 'add_story_objects':
+          return await this.applyAddStoryObjects(projectId, functionCall.arguments);
+        case 'edit_story_objects':
+          return await this.applyEditStoryObjects(projectId, functionCall.arguments);
+        case 'remove_story_objects':
+          return await this.applyRemoveStoryObjects(projectId, functionCall.arguments);
+        default:
+          return {
+            success: false,
+            message: 'Unknown function name',
+            error: `Unsupported function: ${functionCall.function_name}`
+          };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to apply function call',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
   }
 
   private createVersionForItem<T>(
@@ -74,51 +46,19 @@ export class EditTagApplicator {
     editType: string, 
     summary?: string
   ): void {
-    const userRequest = `AI Edit (${editType})${summary ? `: ${summary}` : ''}`;
+    const userRequest = `AI Function Call (${editType})${summary ? `: ${summary}` : ''}`;
     this.storeActions.addVersion(projectId, category, itemId, userRequest, data);
   }
 
-  async applyEditTag(
+  private async applyInitializeStoryObjects(
     projectId: string, 
-    editTag: EditTagMetadata
+    args: any
   ): Promise<EditTagApplicationResult> {
-    try {
-      switch (editTag.type) {
-        case 'init':
-          return await this.applyInitTag(projectId, editTag);
-        case 'add':
-          return await this.applyAddTag(projectId, editTag);
-        case 'edit':
-          return await this.applyEditTagContent(projectId, editTag);
-        case 'remove':
-          return await this.applyRemoveTag(projectId, editTag);
-        default:
-          return {
-            success: false,
-            message: 'Unknown edit tag type',
-            error: `Unsupported edit tag type: ${editTag.type}`
-          };
-      }
-    } catch (error) {
+    if (!args || typeof args !== 'object') {
       return {
         success: false,
-        message: 'Failed to apply edit tag',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
-    }
-  }
-
-  private async applyInitTag(
-    projectId: string, 
-    editTag: EditTagMetadata
-  ): Promise<EditTagApplicationResult> {
-    const data = editTag.content;
-    
-    if (!data || typeof data !== 'object') {
-      return {
-        success: false,
-        message: 'Invalid init data format',
-        error: 'Init tag must contain valid JSON data'
+        message: 'Invalid initialize arguments',
+        error: 'Initialize function must receive valid arguments'
       };
     }
 
@@ -128,14 +68,14 @@ export class EditTagApplicator {
     let appliedCount = 0;
 
     // Initialize basic info if provided
-    if (data.basic_info) {
+    if (args.basic_info) {
       const basicInfoId = crypto.randomUUID();
       const basicInfoData = {
         id: basicInfoId,
-        title: data.basic_info.title || '',
-        logline: data.basic_info.logline || '',
-        genre: data.basic_info.genre || '',
-        description: data.basic_info.description || '',
+        title: args.basic_info.title || '',
+        logline: args.basic_info.logline || '',
+        genre: args.basic_info.genre || '',
+        description: args.basic_info.description || '',
         createdAt: new Date(),
         updatedAt: new Date(),
         versions: [],
@@ -144,13 +84,12 @@ export class EditTagApplicator {
       
       this.storeActions.setBasicInfo(projectId, basicInfoData);
       
-      // Create version for this initialization
       this.createVersionForItem(
         projectId, 
         'basicInfo', 
         basicInfoId, 
         basicInfoData, 
-        'init', 
+        'initialize', 
         'Initialize basic info'
       );
       
@@ -158,21 +97,23 @@ export class EditTagApplicator {
     }
 
     // Initialize characters if provided
-    if (data.characters && Array.isArray(data.characters)) {
-      data.characters.forEach((char: any) => {
+    if (args.characters && Array.isArray(args.characters)) {
+      args.characters.forEach((char: any) => {
         const newCharacter = this.storeActions.addCharacter(projectId, {
           name: char.name || '',
           description: char.description || '',
+          age: char.age,
+          role: char.role || '',
+          backstory: char.backstory || '',
           ...char
         });
         
-        // Create version for this character initialization
         this.createVersionForItem(
           projectId, 
           'character', 
           newCharacter.id, 
           newCharacter, 
-          'init', 
+          'initialize', 
           `Initialize character: ${newCharacter.name}`
         );
         
@@ -181,21 +122,22 @@ export class EditTagApplicator {
     }
 
     // Initialize organizations if provided
-    if (data.organizations && Array.isArray(data.organizations)) {
-      data.organizations.forEach((org: any) => {
+    if (args.organizations && Array.isArray(args.organizations)) {
+      args.organizations.forEach((org: any) => {
         const newOrganization = this.storeActions.addOrganization(projectId, {
           name: org.name || '',
           description: org.description || '',
+          type: org.type || '',
+          purpose: org.purpose || '',
           ...org
         });
         
-        // Create version for this organization initialization
         this.createVersionForItem(
           projectId, 
           'organization', 
           newOrganization.id, 
           newOrganization, 
-          'init', 
+          'initialize', 
           `Initialize organization: ${newOrganization.name}`
         );
         
@@ -204,21 +146,22 @@ export class EditTagApplicator {
     }
 
     // Initialize locations if provided
-    if (data.locations && Array.isArray(data.locations)) {
-      data.locations.forEach((loc: any) => {
+    if (args.locations && Array.isArray(args.locations)) {
+      args.locations.forEach((loc: any) => {
         const newLocation = this.storeActions.addLocation(projectId, {
           name: loc.name || '',
           description: loc.description || '',
+          type: loc.type || '',
+          significance: loc.significance || '',
           ...loc
         });
         
-        // Create version for this location initialization
         this.createVersionForItem(
           projectId, 
           'location', 
           newLocation.id, 
           newLocation, 
-          'init', 
+          'initialize', 
           `Initialize location: ${newLocation.name}`
         );
         
@@ -226,22 +169,45 @@ export class EditTagApplicator {
       });
     }
 
+    // Initialize lorebook if provided
+    if (args.lorebook && Array.isArray(args.lorebook)) {
+      args.lorebook.forEach((entry: any) => {
+        const newEntry = this.storeActions.addLorebookEntry(projectId, {
+          name: entry.name || '',
+          description: entry.description || '',
+          category: entry.category || '',
+          content: entry.content || '',
+          ...entry
+        });
+        
+        this.createVersionForItem(
+          projectId, 
+          'lorebook', 
+          newEntry.id, 
+          newEntry, 
+          'initialize', 
+          `Initialize lorebook entry: ${newEntry.name}`
+        );
+        
+        appliedCount++;
+      });
+    }
+
     // Initialize acts if provided
-    if (data.acts && Array.isArray(data.acts)) {
-      data.acts.forEach((act: any) => {
+    if (args.acts && Array.isArray(args.acts)) {
+      args.acts.forEach((act: any) => {
         const newAct = this.storeActions.addAct(projectId, {
           name: act.name || '',
           description: act.description || '',
           ...act
         });
         
-        // Create version for this act initialization
         this.createVersionForItem(
           projectId, 
           'outline', 
           newAct.id, 
           newAct, 
-          'init', 
+          'initialize', 
           `Initialize act: ${newAct.name}`
         );
         
@@ -251,16 +217,16 @@ export class EditTagApplicator {
             const newChapter = this.storeActions.addChapter(projectId, newAct.id, {
               name: chapter.name || '',
               description: chapter.description || '',
+              summary: chapter.summary || '',
               ...chapter
             });
             
-            // Create version for chapter initialization
             this.createVersionForItem(
               projectId, 
               'outline', 
               newChapter.id, 
               newChapter, 
-              'init', 
+              'initialize', 
               `Initialize chapter: ${newChapter.name}`
             );
           });
@@ -275,32 +241,32 @@ export class EditTagApplicator {
     };
   }
 
-  private async applyAddTag(
+  private async applyAddStoryObjects(
     projectId: string, 
-    editTag: EditTagMetadata
+    args: any
   ): Promise<EditTagApplicationResult> {
-    const data = editTag.content;
-    
-    if (!data || typeof data !== 'object') {
+    if (!args || typeof args !== 'object') {
       return {
         success: false,
-        message: 'Invalid add data format',
-        error: 'Add tag must contain valid JSON data'
+        message: 'Invalid add arguments',
+        error: 'Add function must receive valid arguments'
       };
     }
 
     let addedCount = 0;
 
     // Add characters
-    if (data.characters && Array.isArray(data.characters)) {
-      data.characters.forEach((char: any) => {
+    if (args.characters && Array.isArray(args.characters)) {
+      args.characters.forEach((char: any) => {
         const newCharacter = this.storeActions.addCharacter(projectId, {
           name: char.name || '',
           description: char.description || '',
+          age: char.age,
+          role: char.role || '',
+          backstory: char.backstory || '',
           ...char
         });
         
-        // Create version for this character addition
         this.createVersionForItem(
           projectId, 
           'character', 
@@ -315,15 +281,16 @@ export class EditTagApplicator {
     }
 
     // Add organizations
-    if (data.organizations && Array.isArray(data.organizations)) {
-      data.organizations.forEach((org: any) => {
+    if (args.organizations && Array.isArray(args.organizations)) {
+      args.organizations.forEach((org: any) => {
         const newOrganization = this.storeActions.addOrganization(projectId, {
           name: org.name || '',
           description: org.description || '',
+          type: org.type || '',
+          purpose: org.purpose || '',
           ...org
         });
         
-        // Create version for this organization addition
         this.createVersionForItem(
           projectId, 
           'organization', 
@@ -338,15 +305,16 @@ export class EditTagApplicator {
     }
 
     // Add locations
-    if (data.locations && Array.isArray(data.locations)) {
-      data.locations.forEach((loc: any) => {
+    if (args.locations && Array.isArray(args.locations)) {
+      args.locations.forEach((loc: any) => {
         const newLocation = this.storeActions.addLocation(projectId, {
           name: loc.name || '',
           description: loc.description || '',
+          type: loc.type || '',
+          significance: loc.significance || '',
           ...loc
         });
         
-        // Create version for this location addition
         this.createVersionForItem(
           projectId, 
           'location', 
@@ -361,15 +329,16 @@ export class EditTagApplicator {
     }
 
     // Add lorebook entries
-    if (data.lorebook && Array.isArray(data.lorebook)) {
-      data.lorebook.forEach((entry: any) => {
+    if (args.lorebook && Array.isArray(args.lorebook)) {
+      args.lorebook.forEach((entry: any) => {
         const newEntry = this.storeActions.addLorebookEntry(projectId, {
           name: entry.name || '',
           description: entry.description || '',
+          category: entry.category || '',
+          content: entry.content || '',
           ...entry
         });
         
-        // Create version for this lorebook entry addition
         this.createVersionForItem(
           projectId, 
           'lorebook', 
@@ -384,15 +353,14 @@ export class EditTagApplicator {
     }
 
     // Add acts
-    if (data.acts && Array.isArray(data.acts)) {
-      data.acts.forEach((act: any) => {
+    if (args.acts && Array.isArray(args.acts)) {
+      args.acts.forEach((act: any) => {
         const newAct = this.storeActions.addAct(projectId, {
           name: act.name || '',
           description: act.description || '',
           ...act
         });
         
-        // Create version for this act addition
         this.createVersionForItem(
           projectId, 
           'outline', 
@@ -408,10 +376,10 @@ export class EditTagApplicator {
             const newChapter = this.storeActions.addChapter(projectId, newAct.id, {
               name: chapter.name || '',
               description: chapter.description || '',
+              summary: chapter.summary || '',
               ...chapter
             });
             
-            // Create version for this chapter addition
             this.createVersionForItem(
               projectId, 
               'outline', 
@@ -427,16 +395,16 @@ export class EditTagApplicator {
     }
 
     // Add chapters to existing acts
-    if (data.chapters && Array.isArray(data.chapters)) {
-      data.chapters.forEach((chapter: any) => {
+    if (args.chapters && Array.isArray(args.chapters)) {
+      args.chapters.forEach((chapter: any) => {
         if (chapter.actId) {
           const newChapter = this.storeActions.addChapter(projectId, chapter.actId, {
             name: chapter.name || '',
             description: chapter.description || '',
+            summary: chapter.summary || '',
             ...chapter
           });
           
-          // Create version for this chapter addition
           this.createVersionForItem(
             projectId, 
             'outline', 
@@ -457,27 +425,24 @@ export class EditTagApplicator {
     };
   }
 
-  private async applyEditTagContent(
+  private async applyEditStoryObjects(
     projectId: string, 
-    editTag: EditTagMetadata
+    args: any
   ): Promise<EditTagApplicationResult> {
-    const data = editTag.content;
-    
-    if (!data || typeof data !== 'object') {
+    if (!args || typeof args !== 'object') {
       return {
         success: false,
-        message: 'Invalid edit data format',
-        error: 'Edit tag must contain valid JSON data'
+        message: 'Invalid edit arguments',
+        error: 'Edit function must receive valid arguments'
       };
     }
 
     let editedCount = 0;
 
     // Edit basic info
-    if (data.basic_info) {
-      this.storeActions.updateBasicInfo(projectId, data.basic_info);
+    if (args.basic_info) {
+      this.storeActions.updateBasicInfo(projectId, args.basic_info);
       
-      // Get the updated basic info to create version
       const storyObjects = this.storeActions.getStoryObjects(projectId);
       if (storyObjects.basicInfo) {
         this.createVersionForItem(
@@ -494,8 +459,8 @@ export class EditTagApplicator {
     }
 
     // Edit objects by type and ID
-    if (data.objects && Array.isArray(data.objects)) {
-      data.objects.forEach((obj: any) => {
+    if (args.objects && Array.isArray(args.objects)) {
+      args.objects.forEach((obj: any) => {
         if (!obj.id || !obj.type) return;
 
         const updates = { ...obj };
@@ -508,7 +473,6 @@ export class EditTagApplicator {
           case 'character':
             this.storeActions.updateCharacter(projectId, obj.id, updates);
             
-            // Get updated item and create version
             const storyObjects = this.storeActions.getStoryObjects(projectId);
             const updatedCharacter = storyObjects.characters.find(c => c.id === obj.id);
             if (updatedCharacter) {
@@ -527,7 +491,6 @@ export class EditTagApplicator {
           case 'organization':
             this.storeActions.updateOrganization(projectId, obj.id, updates);
             
-            // Get updated item and create version
             const storyObjects2 = this.storeActions.getStoryObjects(projectId);
             const updatedOrganization = storyObjects2.organizations.find(o => o.id === obj.id);
             if (updatedOrganization) {
@@ -546,7 +509,6 @@ export class EditTagApplicator {
           case 'location':
             this.storeActions.updateLocation(projectId, obj.id, updates);
             
-            // Get updated item and create version
             const storyObjects3 = this.storeActions.getStoryObjects(projectId);
             const updatedLocation = storyObjects3.locations.find(l => l.id === obj.id);
             if (updatedLocation) {
@@ -565,7 +527,6 @@ export class EditTagApplicator {
           case 'lorebook':
             this.storeActions.updateLorebookEntry(projectId, obj.id, updates);
             
-            // Get updated item and create version
             const storyObjects4 = this.storeActions.getStoryObjects(projectId);
             const updatedEntry = storyObjects4.lorebook.find(e => e.id === obj.id);
             if (updatedEntry) {
@@ -584,7 +545,6 @@ export class EditTagApplicator {
           case 'act':
             this.storeActions.updateAct(projectId, obj.id, updates);
             
-            // Get updated item and create version
             const storyObjects5 = this.storeActions.getStoryObjects(projectId);
             const updatedAct = storyObjects5.outline?.acts.find(a => a.id === obj.id);
             if (updatedAct) {
@@ -603,7 +563,6 @@ export class EditTagApplicator {
           case 'chapter':
             this.storeActions.updateChapter(projectId, obj.id, updates);
             
-            // Find chapter across all acts
             const storyObjects6 = this.storeActions.getStoryObjects(projectId);
             let updatedChapter = null;
             if (storyObjects6.outline) {
@@ -639,59 +598,21 @@ export class EditTagApplicator {
     };
   }
 
-  private async applyRemoveTag(
+  private async applyRemoveStoryObjects(
     projectId: string, 
-    editTag: EditTagMetadata
+    args: any
   ): Promise<EditTagApplicationResult> {
-    let data = editTag.content;
-    
-    // Handle different data formats
-    if (typeof data === 'string') {
-      try {
-        data = JSON.parse(data);
-      } catch (e) {
-        return {
-          success: false,
-          message: 'Invalid remove data format',
-          error: 'Could not parse remove data as JSON'
-        };
-      }
-    }
-    
-    // Ensure data is an array
-    if (!Array.isArray(data)) {
-      // If it's an object with array properties, extract them
-      if (data && typeof data === 'object') {
-        const extractedItems: any[] = [];
-        
-        // Extract from different possible properties
-        ['items', 'objects', 'characters', 'organizations', 'locations', 'lorebook', 'acts', 'chapters'].forEach(key => {
-          if (Array.isArray(data[key])) {
-            extractedItems.push(...data[key]);
-          }
-        });
-        
-        if (extractedItems.length > 0) {
-          data = extractedItems;
-        } else {
-          return {
-            success: false,
-            message: 'Invalid remove data format',
-            error: 'Remove tag must contain an array of objects with id and type'
-          };
-        }
-      } else {
-        return {
-          success: false,
-          message: 'Invalid remove data format',
-          error: 'Remove tag must contain an array of objects with id and type'
-        };
-      }
+    if (!args || !args.objects || !Array.isArray(args.objects)) {
+      return {
+        success: false,
+        message: 'Invalid remove arguments',
+        error: 'Remove function must receive objects array'
+      };
     }
 
     let removedCount = 0;
 
-    data.forEach((obj: any) => {
+    args.objects.forEach((obj: any) => {
       if (!obj.type || !obj.id) {
         console.warn(`Remove object missing required fields - type: "${obj.type}", id: "${obj.id}"`);
         return;
@@ -701,7 +622,6 @@ export class EditTagApplicator {
 
       switch (obj.type) {
         case 'character':
-          // Get item before deletion to create version
           const storyObjects = this.storeActions.getStoryObjects(projectId);
           const characterToDelete = storyObjects.characters.find(c => c.id === targetId);
           
@@ -724,7 +644,6 @@ export class EditTagApplicator {
           removedCount++;
           break;
         case 'organization':
-          // Get item before deletion to create version
           const storyObjects2 = this.storeActions.getStoryObjects(projectId);
           const orgToDelete = storyObjects2.organizations.find(o => o.id === targetId);
           
@@ -747,7 +666,6 @@ export class EditTagApplicator {
           removedCount++;
           break;
         case 'location':
-          // Get item before deletion to create version
           const storyObjects3 = this.storeActions.getStoryObjects(projectId);
           const locationToDelete = storyObjects3.locations.find(l => l.id === targetId);
           
@@ -770,7 +688,6 @@ export class EditTagApplicator {
           removedCount++;
           break;
         case 'lorebook':
-          // Get item before deletion to create version
           const storyObjects4 = this.storeActions.getStoryObjects(projectId);
           const entryToDelete = storyObjects4.lorebook.find(e => e.id === targetId);
           
@@ -793,7 +710,6 @@ export class EditTagApplicator {
           removedCount++;
           break;
         case 'act':
-          // Get item before deletion to create version
           const storyObjects5 = this.storeActions.getStoryObjects(projectId);
           const actToDelete = storyObjects5.outline?.acts.find(a => a.id === targetId);
           
@@ -816,7 +732,6 @@ export class EditTagApplicator {
           removedCount++;
           break;
         case 'chapter':
-          // Find chapter before deletion to create version
           const storyObjects6 = this.storeActions.getStoryObjects(projectId);
           let chapterToDelete = null;
           if (storyObjects6.outline) {

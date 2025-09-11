@@ -141,8 +141,22 @@
   margin-bottom: 1rem;
   padding: 0.75rem;
   background: #f8f9fa;
-  border-radius: 6px;
+  border-radius: 8px;
   border: 1px solid #e9ecef;
+  max-width: 100%;
+}
+
+/* PC에서 컨트롤 영역 최적화 */
+@media (min-width: 1200px) {
+  .chat-controls {
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    border-radius: 10px;
+  }
+  
+  .toggle-label {
+    font-size: 1rem;
+  }
 }
 
 .system-insert-toggle {
@@ -168,6 +182,12 @@
 }
 
 /* Message Content Styles */
+.message-content {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+
 .message-content .message-text {
   line-height: 1.6;
 }
@@ -258,4 +278,285 @@
 .inline-tag-remove {
   background: #f8e6e6;
   color: #721c24;
+}
+
+/* Message Edit and Delete Styles */
+.message-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.message-actions {
+  display: flex;
+  gap: 0.25rem;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.message:hover .message-actions {
+  opacity: 1;
+}
+
+.message-action-button {
+  background: none;
+  border: none;
+  padding: 0.25rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+}
+
+.message-action-button:hover {
+  background: #f8f9fa;
+}
+
+.edit-button:hover {
+  background: #e3f2fd;
+}
+
+.delete-button:hover {
+  background: #ffebee;
+}
+
+.message-edit-form {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.message-edit-textarea {
+  width: 100%;
+  max-width: 100%;
+  min-height: 80px;
+  max-height: 500px;
+  padding: 1.25rem;
+  border: 2px solid #e1e8ed;
+  border-radius: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  resize: none;
+  outline: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafb 100%);
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.04),
+    0 1px 3px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  color: #2c3e50;
+  overflow-y: auto;
+}
+
+/* PC에서 텍스트 영역 최적화 */
+@media (min-width: 1200px) {
+  .message-edit-textarea {
+    min-height: 100px;
+    max-height: 600px;
+    padding: 1.5rem;
+    font-size: 1.05rem;
+    line-height: 1.7;
+    border-radius: 15px;
+  }
+}
+
+.message-edit-textarea:focus {
+  border-color: #4a90e2;
+  background: #ffffff;
+  box-shadow: 
+    0 0 0 3px rgba(74, 144, 226, 0.15),
+    0 4px 16px rgba(0, 0, 0, 0.08),
+    0 2px 6px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transform: translateY(-1px);
+}
+
+.message-edit-textarea::placeholder {
+  color: #8899a6;
+  font-style: italic;
+}
+
+.message-edit-buttons {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  justify-content: flex-end;
+}
+
+.save-edit-button {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+  border: none;
+  padding: 0.875rem 2rem;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 
+    0 4px 12px rgba(40, 167, 69, 0.2),
+    0 2px 4px rgba(40, 167, 69, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.save-edit-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.save-edit-button:hover {
+  background: linear-gradient(135deg, #218838 0%, #1ea085 100%);
+  transform: translateY(-2px);
+  box-shadow: 
+    0 6px 20px rgba(40, 167, 69, 0.3),
+    0 4px 8px rgba(40, 167, 69, 0.4);
+}
+
+.save-edit-button:hover::before {
+  left: 100%;
+}
+
+.cancel-edit-button {
+  background: linear-gradient(135deg, #6c757d 0%, #868e96 100%);
+  color: white;
+  border: none;
+  padding: 0.875rem 2rem;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 
+    0 4px 12px rgba(108, 117, 125, 0.2),
+    0 2px 4px rgba(108, 117, 125, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.cancel-edit-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.cancel-edit-button:hover {
+  background: linear-gradient(135deg, #5a6268 0%, #6f767e 100%);
+  transform: translateY(-2px);
+  box-shadow: 
+    0 6px 20px rgba(108, 117, 125, 0.3),
+    0 4px 8px rgba(108, 117, 125, 0.4);
+}
+
+.cancel-edit-button:hover::before {
+  left: 100%;
+}
+
+/* Custom Scrollbar Styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+/* PC에서 스크롤바 더 넓게 */
+@media (min-width: 1200px) {
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  
+  .chat-messages::-webkit-scrollbar {
+    width: 12px;
+  }
+}
+
+/* 전체적인 메시지 영역 반응형 최적화 */
+@media (min-width: 768px) {
+  .message-content .message-text {
+    max-width: 100%;
+    word-break: break-word;
+  }
+  
+  .message-edit-textarea {
+    width: 100%;
+  }
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #c1c8d4 0%, #8fa0b3 100%);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: all 0.3s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.3);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(135deg, #357abd 0%, #2868a8 100%);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* For Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c1c8d4 transparent;
+}
+
+/* Chat messages container specific scrollbar */
+.chat-messages::-webkit-scrollbar {
+  width: 10px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #e9ecef 0%, #c1c8d4 100%);
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+  box-shadow: 0 4px 12px rgba(74, 144, 226, 0.25);
+}
+
+/* Edit textarea specific scrollbar */
+.message-edit-textarea::-webkit-scrollbar {
+  width: 6px;
+}
+
+.message-edit-textarea::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #dee2e6 0%, #adb5bd 100%);
+  border-radius: 6px;
+}
+
+.message-edit-textarea::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
 }
