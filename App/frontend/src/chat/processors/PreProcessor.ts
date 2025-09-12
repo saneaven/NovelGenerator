@@ -21,7 +21,8 @@ function findLastUserMessageIdx(messages: ChatMessage[]): number
 export class DefaultPreProcessor implements PreProcessor {
   process(
     messages: ChatMessage[], 
-    context: ChatPipelineContext
+    context: ChatPipelineContext,
+    outputLanguage?: string
   ): PreProcessingResult {
     const processedMessages: ProcessedChatMessage[] = [];
     const conversationBlocks: ConversationBlock[] = [];
@@ -31,7 +32,7 @@ export class DefaultPreProcessor implements PreProcessor {
     // Add comprehensive system prompt
     conversationBlocks.push({
       role: 'system',
-      content: this.generateSystemPrompt(context)
+      content: this.generateSystemPrompt(context, outputLanguage)
     });
 
     // Process existing messages
@@ -72,7 +73,9 @@ export class DefaultPreProcessor implements PreProcessor {
     };
   }
 
-  private generateSystemPrompt(context: ChatPipelineContext): string {
+  private generateSystemPrompt(context: ChatPipelineContext, outputLanguage?: string): string 
+  {
+
     let systemPrompt = `You are an AI assistant specialized in novel writing and story development. You help writers create, develop, and refine their stories.
 
 Your primary capabilities include:
@@ -80,7 +83,10 @@ Your primary capabilities include:
 - Character creation and development
 - Plot structure and story organization
 - World-building and setting creation
-- Writing advice and feedback`;
+- Writing advice and feedback
+
+# Language
+You Should respond in ${outputLanguage ? outputLanguage : 'the language used by the user'}.`;
 
     if (context.systemInsertConfig.enabled && context.systemInsertConfig.includeProjectInfo) {
       systemPrompt += `

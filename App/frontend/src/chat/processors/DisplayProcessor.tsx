@@ -8,6 +8,96 @@ import type {
   ChatPipelineContext 
 } from '../types';
 
+// Component to display preview changes in a user-friendly format
+const PreviewChangesComponent: React.FC<{ data: any }> = ({ data }) => {
+  const renderValue = (value: any, key?: string): React.ReactNode => {
+    if (value === null || value === undefined) {
+      return <span className="preview-null">null</span>;
+    }
+    
+    if (typeof value === 'boolean') {
+      return <span className="preview-boolean">{value.toString()}</span>;
+    }
+    
+    if (typeof value === 'number') {
+      return <span className="preview-number">{value}</span>;
+    }
+    
+    if (typeof value === 'string') {
+      // Show strings with limited length
+      if (value.length > 100) {
+        return <span className="preview-string" title={value}>{value.substring(0, 100)}...</span>;
+      }
+      return <span className="preview-string">{value}</span>;
+    }
+    
+    if (Array.isArray(value)) {
+      if (value.length === 0) {
+        return <span className="preview-empty">[]</span>;
+      }
+      
+      // For simple arrays (strings, numbers, booleans), show compactly
+      const isSimpleArray = value.every(item => 
+        typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean'
+      );
+      
+      if (isSimpleArray && value.length <= 5) {
+        return (
+          <div className="preview-array-compact">
+            <span className="preview-array-header">Array ({value.length}): </span>
+            <span className="preview-array-values">
+              {value.map((item, index) => (
+                <span key={index} className="preview-array-value">
+                  {renderValue(item)}
+                  {index < value.length - 1 && <span className="preview-separator">, </span>}
+                </span>
+              ))}
+            </span>
+          </div>
+        );
+      }
+      
+      // For complex arrays or long arrays, show in full format
+      return (
+        <div className="preview-array">
+          <div className="preview-array-header">Array ({value.length} items):</div>
+          {value.map((item, index) => (
+            <div key={index} className="preview-array-item">
+              <span className="preview-index">[{index}]</span>
+              <div className="preview-array-item-content">{renderValue(item)}</div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    
+    if (typeof value === 'object') {
+      const entries = Object.entries(value);
+      if (entries.length === 0) {
+        return <span className="preview-empty">{}</span>;
+      }
+      return (
+        <div className="preview-object">
+          {entries.map(([objKey, objValue]) => (
+            <div key={objKey} className="preview-object-item">
+              <span className="preview-key">{objKey}:</span>
+              <div className="preview-value">{renderValue(objValue, objKey)}</div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    
+    return <span className="preview-unknown">{String(value)}</span>;
+  };
+
+  return (
+    <div className="preview-changes">
+      {renderValue(data)}
+    </div>
+  );
+};
+
 export class DefaultDisplayProcessor implements DisplayProcessor {
   process(
     message: ProcessedChatMessage,
@@ -288,13 +378,11 @@ export const EditCardComponent: React.FC<{ card: EditCard }> = ({ card }) => {
       
       <p className="edit-card-description">{card.description}</p>
       
-      {card.data && (
+      {card.data && !card.isApplied && (
         <div className="edit-card-preview">
           <details>
             <summary>Preview Changes</summary>
-            <pre className="json-preview">
-              {JSON.stringify(card.data, null, 2)}
-            </pre>
+            <PreviewChangesComponent data={card.data} />
           </details>
         </div>
       )}

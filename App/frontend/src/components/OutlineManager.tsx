@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStoryObjectStore } from '../store/storyObjectStore';
 import AIEditModal from './AIEditModal';
@@ -11,12 +11,17 @@ const OutlineManager: React.FC = () => {
   const {
     getOutline,
     setOutline,
+    updateOutlineAI,
     addAct,
     updateAct,
     deleteAct,
     addChapter,
     updateChapter,
     deleteChapter,
+    getActById,
+    getChapterById,
+    getActVersions,
+    getChapterVersions,
   } = useStoryObjectStore();
 
   const [editingAct, setEditingAct] = useState<Act | null>(null);
@@ -24,7 +29,8 @@ const OutlineManager: React.FC = () => {
   const [showAddActForm, setShowAddActForm] = useState(false);
   const [showAddChapterForm, setShowAddChapterForm] = useState<string | null>(null);
   const [showAIModal, setShowAIModal] = useState(false);
-  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [showActVersionHistory, setShowActVersionHistory] = useState<string | null>(null);
+  const [showChapterVersionHistory, setShowChapterVersionHistory] = useState<string | null>(null);
 
   // Get outline directly from store - this will automatically re-render when store updates
   const outline = projectId ? getOutline(projectId) : null;
@@ -108,45 +114,38 @@ const OutlineManager: React.FC = () => {
         };
       });
       
-      setOutline(projectId, newOutline);
-      
-      // Version is already automatically created by the outline update functions
+      updateOutlineAI(projectId, newOutline);
     }
   };
 
-  const handleRestoreVersion = (versionData: any) => {
+
+  const handleRestoreActVersion = (versionData: any) => {
     if (!projectId) return;
     
-    if (versionData && versionData.acts && Array.isArray(versionData.acts)) {
-      const restoredOutline = createEmptyOutline();
-      
-      restoredOutline.acts = versionData.acts.map((actData: any) => {
-        const actId = actData.id || crypto.randomUUID();
-        const existingAct = outline?.acts.find(a => a.id === actId);
-        
-        return {
-          id: actId,
-          name: actData.name || '',
-          description: actData.description || '',
-          createdAt: existingAct?.createdAt || new Date(),
-          updatedAt: new Date(),
-          chapters: (actData.chapters || []).map((chapterData: any) => {
-            const chapterId = chapterData.id || crypto.randomUUID();
-            const existingChapter = existingAct?.chapters.find(c => c.id === chapterId);
-            
-            return {
-              id: chapterId,
-              name: chapterData.name || '',
-              description: chapterData.description || '',
-              createdAt: existingChapter?.createdAt || new Date(),
-              updatedAt: new Date(),
-              actId: actId,
-            };
-          }),
-        };
-      });
-      
-      setOutline(projectId, restoredOutline);
+    if (versionData && (versionData.name !== undefined || versionData.description !== undefined)) {
+      const actId = showActVersionHistory;
+      if (actId) {
+        updateAct(projectId, actId, {
+          name: versionData.name || '',
+          description: versionData.description || ''
+        });
+        setShowActVersionHistory(null);
+      }
+    }
+  };
+
+  const handleRestoreChapterVersion = (versionData: any) => {
+    if (!projectId) return;
+    
+    if (versionData && (versionData.name !== undefined || versionData.description !== undefined)) {
+      const chapterId = showChapterVersionHistory;
+      if (chapterId) {
+        updateChapter(projectId, chapterId, {
+          name: versionData.name || '',
+          description: versionData.description || ''
+        });
+        setShowChapterVersionHistory(null);
+      }
     }
   };
 
@@ -165,12 +164,6 @@ const OutlineManager: React.FC = () => {
       <div className="section-header">
         <h2>Story Outline</h2>
         <div className="header-buttons">
-          <button 
-            onClick={() => setShowVersionHistory(true)} 
-            className="version-history-button"
-          >
-            📚 Version History
-          </button>
           <button 
             onClick={() => setShowAIModal(true)} 
             className="ai-edit-button"
@@ -209,6 +202,12 @@ const OutlineManager: React.FC = () => {
                   <h3>{act.name}</h3>
                 </div>
                 <div className="act-actions">
+                  <button
+                    onClick={() => setShowActVersionHistory(act.id)}
+                    className="version-history-button"
+                  >
+                    📚 History
+                  </button>
                   <button
                     onClick={() => setEditingAct(act)}
                     className="edit-button"
@@ -265,6 +264,12 @@ const OutlineManager: React.FC = () => {
                       </div>
                       <div className="chapter-actions">
                         <button
+                          onClick={() => setShowChapterVersionHistory(chapter.id)}
+                          className="version-history-button"
+                        >
+                          📚 History
+                        </button>
+                        <button
                           onClick={() => setEditingChapter(chapter)}
                           className="edit-button"
                         >
@@ -309,14 +314,28 @@ const OutlineManager: React.FC = () => {
         onResult={handleAIResult}
       />
 
-      <VersionHistoryModal
-        isOpen={showVersionHistory}
-        onClose={() => setShowVersionHistory(false)}
-        projectId={projectId || ''}
-        category="outline"
-        targetId={outline?.id || ''}
-        onRestoreVersion={handleRestoreVersion}
-      />
+
+      {/* Act Version History Modal */}
+      {showActVersionHistory && (
+        <ActVersionHistoryModal
+          isOpen={!!showActVersionHistory}
+          onClose={() => setShowActVersionHistory(null)}
+          projectId={projectId || ''}
+          actId={showActVersionHistory}
+          onRestoreVersion={handleRestoreActVersion}
+        />
+      )}
+
+      {/* Chapter Version History Modal */}
+      {showChapterVersionHistory && (
+        <ChapterVersionHistoryModal
+          isOpen={!!showChapterVersionHistory}
+          onClose={() => setShowChapterVersionHistory(null)}
+          projectId={projectId || ''}
+          chapterId={showChapterVersionHistory}
+          onRestoreVersion={handleRestoreChapterVersion}
+        />
+      )}
     </div>
   );
 };
@@ -534,6 +553,272 @@ const EditChapterForm: React.FC<EditChapterFormProps> = ({ chapter, onUpdate, on
           </button>
         </div>
       </form>
+    </div>
+  );
+};
+
+// Act Version History Modal
+interface ActVersionHistoryModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  projectId: string;
+  actId: string;
+  onRestoreVersion: (versionData: any) => void;
+}
+
+const ActVersionHistoryModal: React.FC<ActVersionHistoryModalProps> = ({
+  isOpen,
+  onClose,
+  projectId,
+  actId,
+  onRestoreVersion,
+}) => {
+  const { getActById, getActVersions } = useStoryObjectStore();
+  const [versions, setVersions] = useState<any[]>([]);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (isOpen && actId) {
+      const actVersions = getActVersions(projectId, actId);
+      setVersions(actVersions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+      
+      const activeVersion = actVersions.find(v => v.isActive);
+      if (activeVersion) {
+        setSelectedVersionId(activeVersion.versionId);
+      }
+    }
+  }, [isOpen, projectId, actId, getActVersions]);
+
+  const act = getActById(projectId, actId);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content version-history-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>📚 Act "{act?.name || 'Unknown Act'}" Version History</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+
+        <div className="version-history-content">
+          {versions.length === 0 ? (
+            <div className="empty-state">
+              <p>No saved versions.</p>
+            </div>
+          ) : (
+            <div className="versions-list">
+              {versions.map((version, index) => (
+                <div 
+                  key={version.versionId} 
+                  className={`version-item ${version.isActive ? 'active' : ''}`}
+                >
+                  <div className="version-header">
+                    <div className="version-info">
+                      <div className="version-title">
+                        <span className="version-number">Version #{versions.length - index}</span>
+                        {version.isActive && <span className="active-badge">Currently Active</span>}
+                      </div>
+                      <div className="version-metadata">
+                        <span className="version-timestamp">
+                          {new Date(version.timestamp).toLocaleString()}
+                        </span>
+                        <span className="version-request">
+                          Request: {version.userRequest}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="version-actions">
+                      <button
+                        onClick={() => {
+                          const newExpanded = new Set(expandedVersions);
+                          if (newExpanded.has(version.versionId)) {
+                            newExpanded.delete(version.versionId);
+                          } else {
+                            newExpanded.add(version.versionId);
+                          }
+                          setExpandedVersions(newExpanded);
+                        }}
+                        className="expand-button"
+                      >
+                        {expandedVersions.has(version.versionId) ? '▼' : '▶'}
+                      </button>
+                      
+                      {!version.isActive && (
+                        <button
+                          onClick={() => onRestoreVersion(version.data)}
+                          className="restore-button"
+                        >
+                          Restore
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {expandedVersions.has(version.versionId) && (
+                    <div className="version-content">
+                      <h4>Version Data:</h4>
+                      <div className="version-data">
+                        <div className="version-data-formatted">
+                          <div className="data-field">
+                            <label>Name:</label>
+                            <span>{version.data?.name || 'Not set'}</span>
+                          </div>
+                          <div className="data-field">
+                            <label>Description:</label>
+                            <span className="description-text">{version.data?.description || 'Not set'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="modal-footer">
+          <button onClick={onClose} className="cancel-button">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Chapter Version History Modal
+interface ChapterVersionHistoryModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  projectId: string;
+  chapterId: string;
+  onRestoreVersion: (versionData: any) => void;
+}
+
+const ChapterVersionHistoryModal: React.FC<ChapterVersionHistoryModalProps> = ({
+  isOpen,
+  onClose,
+  projectId,
+  chapterId,
+  onRestoreVersion,
+}) => {
+  const { getChapterById, getChapterVersions } = useStoryObjectStore();
+  const [versions, setVersions] = useState<any[]>([]);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (isOpen && chapterId) {
+      const chapterVersions = getChapterVersions(projectId, chapterId);
+      setVersions(chapterVersions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+      
+      const activeVersion = chapterVersions.find(v => v.isActive);
+      if (activeVersion) {
+        setSelectedVersionId(activeVersion.versionId);
+      }
+    }
+  }, [isOpen, projectId, chapterId, getChapterVersions]);
+
+  const chapter = getChapterById(projectId, chapterId);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content version-history-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>📚 Chapter "{chapter?.name || 'Unknown Chapter'}" Version History</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+
+        <div className="version-history-content">
+          {versions.length === 0 ? (
+            <div className="empty-state">
+              <p>No saved versions.</p>
+            </div>
+          ) : (
+            <div className="versions-list">
+              {versions.map((version, index) => (
+                <div 
+                  key={version.versionId} 
+                  className={`version-item ${version.isActive ? 'active' : ''}`}
+                >
+                  <div className="version-header">
+                    <div className="version-info">
+                      <div className="version-title">
+                        <span className="version-number">Version #{versions.length - index}</span>
+                        {version.isActive && <span className="active-badge">Currently Active</span>}
+                      </div>
+                      <div className="version-metadata">
+                        <span className="version-timestamp">
+                          {new Date(version.timestamp).toLocaleString()}
+                        </span>
+                        <span className="version-request">
+                          Request: {version.userRequest}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="version-actions">
+                      <button
+                        onClick={() => {
+                          const newExpanded = new Set(expandedVersions);
+                          if (newExpanded.has(version.versionId)) {
+                            newExpanded.delete(version.versionId);
+                          } else {
+                            newExpanded.add(version.versionId);
+                          }
+                          setExpandedVersions(newExpanded);
+                        }}
+                        className="expand-button"
+                      >
+                        {expandedVersions.has(version.versionId) ? '▼' : '▶'}
+                      </button>
+                      
+                      {!version.isActive && (
+                        <button
+                          onClick={() => onRestoreVersion(version.data)}
+                          className="restore-button"
+                        >
+                          Restore
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {expandedVersions.has(version.versionId) && (
+                    <div className="version-content">
+                      <h4>Version Data:</h4>
+                      <div className="version-data">
+                        <div className="version-data-formatted">
+                          <div className="data-field">
+                            <label>Name:</label>
+                            <span>{version.data?.name || 'Not set'}</span>
+                          </div>
+                          <div className="data-field">
+                            <label>Description:</label>
+                            <span className="description-text">{version.data?.description || 'Not set'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="modal-footer">
+          <button onClick={onClose} className="cancel-button">
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

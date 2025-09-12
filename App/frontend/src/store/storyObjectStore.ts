@@ -60,6 +60,7 @@ interface StoryObjectStore {
   
   // Outline Actions
   setOutline: (projectId: string, outline: Outline) => void;
+  updateOutlineAI: (projectId: string, outline: Outline) => void;
   getOutline: (projectId: string) => Outline | null;
   
   // Act Actions
@@ -78,6 +79,10 @@ interface StoryObjectStore {
   getVersions: (projectId: string, category: StoryObjectCategory, itemId: string) => ObjectVersion[];
   deleteVersion: (projectId: string, category: StoryObjectCategory, itemId: string, versionId: string) => void;
   getItemByCategoryAndId: (projectId: string, category: StoryObjectCategory, itemId: string) => any;
+  getActById: (projectId: string, actId: string) => Act | null;
+  getChapterById: (projectId: string, chapterId: string) => Chapter | null;
+  getActVersions: (projectId: string, actId: string) => ObjectVersion[];
+  getChapterVersions: (projectId: string, chapterId: string) => ObjectVersion[];
   
   // Utility Actions
   getStoryObjects: (projectId: string) => StoryObjects;
@@ -89,11 +94,31 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
     (set, get) => ({
       storyObjectsByProject: {},
 
+      // Helper function to deeply compare version data
+      compareVersionData: (data1: any, data2: any): boolean => {
+        if (data1 === data2) return true;
+        if (data1 == null || data2 == null) return data1 === data2;
+        if (typeof data1 !== typeof data2) return false;
+        
+        if (typeof data1 === 'object') {
+          const keys1 = Object.keys(data1);
+          const keys2 = Object.keys(data2);
+          
+          if (keys1.length !== keys2.length) return false;
+          
+          for (const key of keys1) {
+            if (!keys2.includes(key)) return false;
+            if (!get().compareVersionData(data1[key], data2[key])) return false;
+          }
+          
+          return true;
+        }
+        
+        return false;
+      },
+
       // Helper function to create version for update
       createUpdateVersion: (currentData: any, userRequest: string = 'User Edit') => {
-        const versionId = crypto.randomUUID();
-        const now = new Date();
-        
         // Extract only essential data
         let versionData: any = currentData;
         if (currentData && typeof currentData === 'object') {
@@ -124,6 +149,18 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
           }
         }
         
+        // Check if there's an active version to compare with
+        if (currentData.versions && currentData.versions.length > 0) {
+          const activeVersion = currentData.versions.find((v: ObjectVersion) => v.isActive);
+          if (activeVersion && get().compareVersionData(activeVersion.data, versionData)) {
+            // Data is identical, return null to indicate no version should be created
+            return null;
+          }
+        }
+        
+        const versionId = crypto.randomUUID();
+        const now = new Date();
+        
         return {
           versionId,
           timestamp: now,
@@ -135,6 +172,11 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
 
       // Helper function to add version to item
       addVersionToItem: (item: any, newVersion: any) => {
+        // If newVersion is null, return the item unchanged
+        if (!newVersion) {
+          return item;
+        }
+        
         const updatedVersions = item.versions.map((v: any) => ({ ...v, isActive: false }));
         updatedVersions.push(newVersion);
         
@@ -573,12 +615,50 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
       setOutline: (projectId: string, outline: Outline) => {
         set((state) => {
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
+          const { createUpdateVersion, addVersionToItem } = get();
+          
+          const updatedOutline = { 
+            ...outline, 
+            updatedAt: new Date() 
+          };
+          
+          // Auto-create version for outline updates
+          const newVersion = createUpdateVersion(updatedOutline);
+          const outlineWithVersion = addVersionToItem(updatedOutline, newVersion);
+          
           return {
             storyObjectsByProject: {
               ...state.storyObjectsByProject,
               [projectId]: {
                 ...projectObjects,
-                outline: { ...outline, updatedAt: new Date() },
+                outline: outlineWithVersion,
+              },
+            },
+          };
+        });
+      },
+
+      // AI Edit for outline
+      updateOutlineAI: (projectId: string, outline: Outline) => {
+        set((state) => {
+          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
+          const { createUpdateVersion, addVersionToItem } = get();
+          
+          const updatedOutline = { 
+            ...outline, 
+            updatedAt: new Date() 
+          };
+          
+          // Auto-create version for AI edit
+          const newVersion = createUpdateVersion(updatedOutline, 'AI Edit');
+          const outlineWithVersion = addVersionToItem(updatedOutline, newVersion);
+          
+          return {
+            storyObjectsByProject: {
+              ...state.storyObjectsByProject,
+              [projectId]: {
+                ...projectObjects,
+                outline: outlineWithVersion,
               },
             },
           };
@@ -598,9 +678,16 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
           description: act?.description || '',
         } as Act;
 
+        // Update the initial version data with actual values
+        newAct.versions[0].data = {
+          name: newAct.name,
+          description: newAct.description,
+        };
+
         set((state) => {
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
           const currentOutline = projectObjects.outline || createEmptyOutline();
+          
           return {
             storyObjectsByProject: {
               ...state.storyObjectsByProject,
@@ -636,7 +723,7 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
                 updatedAt: new Date() 
               };
               
-              // Auto-create version for update
+              // Auto-create version for the individual act
               const newVersion = createUpdateVersion(updatedAct);
               return addVersionToItem(updatedAct, newVersion);
             }
@@ -664,7 +751,7 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
           const currentOutline = projectObjects.outline;
           if (!currentOutline) return state;
-
+          
           return {
             storyObjectsByProject: {
               ...state.storyObjectsByProject,
@@ -690,11 +777,17 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
           actId,
         } as Chapter;
 
+        // Update the initial version data with actual values
+        newChapter.versions[0].data = {
+          name: newChapter.name,
+          description: newChapter.description,
+        };
+
         set((state) => {
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
           const currentOutline = projectObjects.outline;
           if (!currentOutline) return state;
-
+          
           return {
             storyObjectsByProject: {
               ...state.storyObjectsByProject,
@@ -736,7 +829,7 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
                   updatedAt: new Date() 
                 };
                 
-                // Auto-create version for update
+                // Auto-create version for individual chapter
                 const newVersion = createUpdateVersion(updatedChapter);
                 return addVersionToItem(updatedChapter, newVersion);
               }
@@ -766,7 +859,7 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
           const currentOutline = projectObjects.outline;
           if (!currentOutline) return state;
-
+          
           return {
             storyObjectsByProject: {
               ...state.storyObjectsByProject,
@@ -824,6 +917,37 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
           default:
             return null;
         }
+      },
+
+      // Helper functions for acts and chapters
+      getActById: (projectId: string, actId: string) => {
+        const state = get();
+        const projectObjects = state.storyObjectsByProject[projectId];
+        if (!projectObjects?.outline) return null;
+        
+        return projectObjects.outline.acts.find(act => act.id === actId) || null;
+      },
+
+      getChapterById: (projectId: string, chapterId: string) => {
+        const state = get();
+        const projectObjects = state.storyObjectsByProject[projectId];
+        if (!projectObjects?.outline) return null;
+        
+        for (const act of projectObjects.outline.acts) {
+          const chapter = act.chapters.find(ch => ch.id === chapterId);
+          if (chapter) return chapter;
+        }
+        return null;
+      },
+
+      getActVersions: (projectId: string, actId: string) => {
+        const act = get().getActById(projectId, actId);
+        return act?.versions || [];
+      },
+
+      getChapterVersions: (projectId: string, chapterId: string) => {
+        const chapter = get().getChapterById(projectId, chapterId);
+        return chapter?.versions || [];
       },
 
       // Version Management Actions

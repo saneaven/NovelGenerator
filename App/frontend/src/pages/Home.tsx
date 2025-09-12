@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../store/projectStore';
+import SettingsModal from '../components/SettingsModal';
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
@@ -8,6 +9,7 @@ const Home: React.FC = () => {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [projectName, setProjectName] = useState('');
   const [projectDescription, setProjectDescription] = useState('');
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   const handleCreateProject = (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,8 +38,19 @@ const Home: React.FC = () => {
   return (
     <div className="home-container">
       <div className="home-header">
-        <h1>Novel Generator</h1>
-        <p>Write creative novels with AI</p>
+        <div className="header-top">
+          <div>
+            <h1>Novel Generator</h1>
+            <p>Write creative novels with AI</p>
+          </div>
+          <button 
+            className="settings-btn"
+            onClick={() => setIsSettingsModalOpen(true)}
+            title="Settings"
+          >
+            ⚙️
+          </button>
+        </div>
       </div>
 
       <div className="actions">
@@ -122,6 +135,12 @@ const Home: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+      />
     </div>
   );
 };

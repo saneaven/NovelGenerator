@@ -1,8 +1,11 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useProjectStore } from '../store/projectStore';
 import { useChatStore } from '../store/chatStore';
 import { useStoryObjectStore } from '../store/storyObjectStore';
+import { useSettingsStore } from '../store/settingsStore';
+import { useErrorStore } from '../store/errorStore';
 import { streamCopilot } from '../llm_request/copilot';
 import { type ChatMessage, type FunctionCallMetadata } from '../llm_request/types';
 import { ChatPipeline } from '../chat/ChatPipeline';
@@ -15,6 +18,8 @@ import { RuntimeProcessor, type RuntimeProcessingConfig, type RuntimeProcessingC
 import BasicInfoManager from '../components/BasicInfoManager';
 import NameDescriptionManager from '../components/NameDescriptionManager';
 import OutlineManager from '../components/OutlineManager';
+import ChatSidebar from '../components/ChatSidebar';
+import ErrorModal from '../components/ErrorModal';
 
 import '../chat/styles.css';
 import './Workspace.css';
@@ -25,9 +30,15 @@ const Workspace: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const { getCurrentProject } = useProjectStore();
   const { 
+    // Multi-chat methods
+    getChats,
+    getSelectedChatId,
+    selectChat,
+    createChat,
+    getChatMessages,
+    // Legacy methods (work with selected chat)
     addMessage, 
     updateMessage, 
- 
     getChatHistory, 
     editMessage, 
     deleteMessage,
@@ -36,10 +47,15 @@ const Workspace: React.FC = () => {
   } = useChatStore();
   const storyObjectStore = useStoryObjectStore();
   const { getStoryObjects } = storyObjectStore;
+  const { settings } = useSettingsStore();
+  const { currentError, showError, hideError } = useErrorStore();
 
   // UI State
   const [isChatVisible, setIsChatVisible] = useState(true);
   const [activeStoryTab, setActiveStoryTab] = useState<TabType>('basicInfo');
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const [isMobileSidebarVisible, setIsMobileSidebarVisible] = useState(false);
+  const [isDesktopChatListVisible, setIsDesktopChatListVisible] = useState(false);
 
   // Chat State
   const [input, setInput] = useState('');
@@ -58,6 +74,36 @@ const Workspace: React.FC = () => {
   const currentProject = getCurrentProject();
   const chatHistory = getChatHistory(projectId || '');
   const storyObjects = getStoryObjects(projectId || '');
+
+  // Initialize chat selection
+  useEffect(() => {
+    if (!projectId) return;
+    
+    const chats = getChats(projectId);
+    const currentSelectedId = getSelectedChatId(projectId);
+    
+    if (chats.length === 0) {
+      // No chats exist, create the first one
+      const newChatId = createChat(projectId, 'Main Chat');
+      setSelectedChatId(newChatId);
+    } else if (!currentSelectedId) {
+      // Chats exist but none selected, select the first one
+      selectChat(projectId, chats[0].id);
+      setSelectedChatId(chats[0].id);
+    } else {
+      // Use the currently selected chat
+      setSelectedChatId(currentSelectedId);
+    }
+  }, [projectId]);
+
+  const handleSelectChat = (chatId: string) => {
+    if (!projectId) return;
+    selectChat(projectId, chatId);
+    setSelectedChatId(chatId);
+    // Close sidebar when chat is selected
+    setIsMobileSidebarVisible(false);
+    setIsDesktopChatListVisible(false);
+  };
 
   // Refs
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -128,7 +174,7 @@ const Workspace: React.FC = () => {
     },
     onError: (error: Error) => {
       console.error('Runtime processing error:', error);
-      alert('An error occurred during processing. Please try again.');
+      showError('Chat Error', 'An error occurred during processing. Please try again.');
     },
     onFunctionCallsDetected: (messageId: string, functionCalls: any[]) => {
       setActiveFunctionCalls(prev => ({
@@ -146,10 +192,12 @@ const Workspace: React.FC = () => {
       chatPipeline,
       isLoading,
       setIsLoading,
-      abortControllerRef
+      abortControllerRef,
+      outputLanguage: settings.outputLanguage,
+      aiModel: settings.aiModel
     };
     return new RuntimeProcessor(updatedConfig, runtimeCallbacks);
-  }, [projectId, systemInsertConfig, isLoading, getStoryObjects]); // Removed storyObjects from deps since we get it dynamically
+  }, [projectId, systemInsertConfig, isLoading, getStoryObjects, settings]); // Removed storyObjects from deps since we get it dynamically
 
   const displayContext = ChatPipeline.createContext(
     projectId || '',
@@ -158,7 +206,12 @@ const Workspace: React.FC = () => {
   );
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messagesEndRef.current) {
+      const chatMessagesContainer = messagesEndRef.current.closest('.chat-messages');
+      if (chatMessagesContainer) {
+        chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+      }
+    }
   };
 
   useEffect(() => {
@@ -319,13 +372,13 @@ const Workspace: React.FC = () => {
           await runtimeProcessor.continueAfterFunctionCall(functionCall, true, result.message);
         } else {
           console.error('Failed to apply function call:', result.error || result.message);
-          alert(`Failed to apply changes: ${result.error || result.message}`);
+          showError('Function Call Failed', `Failed to apply changes: ${result.error || result.message}`);
           
           updateFunctionCallStatus(projectId, messageId, functionCall.id, false, result, result.error);
         }
       } catch (error) {
         console.error('Error applying function call:', error);
-        alert('An error occurred while applying changes. Please try again.');
+        showError('Function Call Error', 'An error occurred while applying changes. Please try again.');
         
         updateFunctionCallStatus(projectId, messageId, functionCall.id, false, undefined, error instanceof Error ? error.message : 'Unknown error');
       }
@@ -514,20 +567,46 @@ const Workspace: React.FC = () => {
           <div className="workspace-controls">
             <button 
               className={`chat-toggle-btn mobile-only ${isChatVisible ? 'active' : ''}`}
-              onClick={() => setIsChatVisible(!isChatVisible)}
+              onClick={() => {
+                setIsChatVisible(!isChatVisible);
+                setIsMobileSidebarVisible(false); // Always close sidebar when opening chat
+              }}
             >
-              💬 Chat {isChatVisible ? '(Hide)' : '(Show)'}
+              💬 Chat
             </button>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="workspace-content">
+      <div className={`workspace-content ${isChatVisible ? 'chat-visible' : ''}`}>
+        {/* Chat Sidebar */}
+        <ChatSidebar 
+          projectId={projectId || ''}
+          onSelectChat={handleSelectChat}
+          isMobileVisible={isMobileSidebarVisible}
+          isDesktopVisible={isDesktopChatListVisible}
+        />
+
         {/* Chat Panel */}
         <div className={`chat-panel ${isChatVisible ? 'visible' : 'hidden'}`}>
           <div className="chat-header">
-            <h2>💬 AI Chat</h2>
+            <div className="chat-header-left">
+              <button 
+                className="chat-list-btn"
+                onClick={() => {
+                  if (window.innerWidth <= 768) {
+                    setIsMobileSidebarVisible(true);
+                  } else {
+                    setIsDesktopChatListVisible(!isDesktopChatListVisible);
+                  }
+                }}
+                title="View chat list"
+              >
+                📋
+              </button>
+              <h2>💬 {selectedChatId ? getChats(projectId || '').find(chat => chat.id === selectedChatId)?.name || 'AI Chat' : 'AI Chat'}</h2>
+            </div>
             <button 
               className="chat-close-btn mobile-only"
               onClick={() => setIsChatVisible(false)}
@@ -749,6 +828,20 @@ const Workspace: React.FC = () => {
       {isChatVisible && (
         <div className="chat-overlay mobile-only" onClick={() => setIsChatVisible(false)} />
       )}
+
+      {/* Mobile Sidebar Overlay */}
+      {isMobileSidebarVisible && (
+        <div className="sidebar-overlay mobile-only" onClick={() => setIsMobileSidebarVisible(false)} />
+      )}
+
+      {/* Error Modal */}
+      <ErrorModal
+        isOpen={!!currentError}
+        title={currentError?.title || ''}
+        message={currentError?.message || ''}
+        onClose={hideError}
+      />
+
     </div>
   );
 };

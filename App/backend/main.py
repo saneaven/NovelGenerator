@@ -62,7 +62,7 @@ async def copilot_stream(
     upstream_body = {
         "messages": [m.model_dump() for m in payload.messages],
         "stream": True,
-        "temperature": payload.temperature,
+        # "temperature": payload.temperature,
         "model": payload.model
     }
     
@@ -95,7 +95,7 @@ async def copilot_stream(
                             print(r.status_code, err_msg)  # 로깅용
                             
                             # 5xx 에러는 재시도, 4xx 에러는 바로 실패
-                            if (r.status_code >= 500 or r.status_code == 403) and retry_count < MAX_RETRIES - 1:
+                            if (r.status_code >= 500 or r.status_code == 403 or r.status_code == 400) and retry_count < MAX_RETRIES - 1:
                                 retry_count += 1
                                 continue
                             else:

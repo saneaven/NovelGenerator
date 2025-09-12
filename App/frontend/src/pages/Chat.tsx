@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useProjectStore } from '../store/projectStore';
 import { useChatStore } from '../store/chatStore';
 import { useStoryObjectStore } from '../store/storyObjectStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { streamCopilot } from '../llm_request/copilot';
 import { type ChatMessage, type FunctionCallMetadata } from '../llm_request/types';
 import { ChatPipeline } from '../chat/ChatPipeline';
@@ -27,6 +28,7 @@ const Chat: React.FC = () => {
   } = useChatStore();
   const storyObjectStore = useStoryObjectStore();
   const { getStoryObjects } = storyObjectStore;
+  const { settings } = useSettingsStore();
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [systemInsertConfig, setSystemInsertConfig] = useState<SystemInsertConfig>(
@@ -105,10 +107,12 @@ const Chat: React.FC = () => {
       chatPipeline,
       isLoading,
       setIsLoading,
-      abortControllerRef
+      abortControllerRef,
+      outputLanguage: settings.outputLanguage,
+      aiModel: settings.aiModel
     };
     return new RuntimeProcessor(updatedConfig, runtimeCallbacks);
-  }, [projectId, systemInsertConfig, isLoading, getStoryObjects]); // Removed storyObjects from deps since we get it dynamically
+  }, [projectId, systemInsertConfig, isLoading, getStoryObjects, settings]); // Removed storyObjects from deps since we get it dynamically
   const [editContent, setEditContent] = useState('');
 
   // Create pipeline context for message display

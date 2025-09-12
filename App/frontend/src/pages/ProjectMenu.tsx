@@ -28,12 +28,8 @@ const ProjectMenu: React.FC = () => {
     navigate(`/project/${projectId}/workspace`);
   };
 
-  const handleChatClick = () => {
-    navigate(`/project/${projectId}/chat`);
-  };
-
-  const handleStoryObjectsClick = () => {
-    navigate(`/project/${projectId}/story-objects`);
+  const handleNovelEditorClick = () => {
+    navigate(`/project/${projectId}/novel-editor`);
   };
 
   return (
@@ -62,42 +58,11 @@ const ProjectMenu: React.FC = () => {
           <div className="menu-arrow">→</div>
         </div>
 
-        <div className="menu-card" onClick={handleChatClick}>
-          <div className="menu-icon">💬</div>
-          <h3>AI Chat</h3>
-          <p>Develop your novel ideas by chatting with the AI</p>
-          <div className="menu-arrow">→</div>
-        </div>
-
-        <div className="menu-card" onClick={handleStoryObjectsClick}>
-          <div className="menu-icon">📋</div>
-          <h3>Story Objects</h3>
-          <p>Systematically manage characters, backgrounds, settings, etc.</p>
-          <div className="menu-arrow">→</div>
-        </div>
-
-        <div className="menu-card disabled">
+        <div className="menu-card" onClick={handleNovelEditorClick}>
           <div className="menu-icon">📝</div>
           <h3>Novel Editor</h3>
-          <p>Write your novel with a structured editor (Coming soon)</p>
-        </div>
-
-        <div className="menu-card disabled">
-          <div className="menu-icon">🗺️</div>
-          <h3>World Building</h3>
-          <p>Visually manage your world and settings (Coming soon)</p>
-        </div>
-
-        <div className="menu-card disabled">
-          <div className="menu-icon">📊</div>
-          <h3>Progress</h3>
-          <p>Check your work progress (Coming soon)</p>
-        </div>
-
-        <div className="menu-card disabled">
-          <div className="menu-icon">⚙️</div>
-          <h3>Settings</h3>
-          <p>Change project settings (Coming soon)</p>
+          <p>Write your novel with a structured editor</p>
+          <div className="menu-arrow">→</div>
         </div>
       </div>
     </div>

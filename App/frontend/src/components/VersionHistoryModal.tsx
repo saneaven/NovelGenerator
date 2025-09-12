@@ -76,12 +76,91 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     setExpandedVersions(newExpanded);
   };
 
-  const formatVersionData = (data: any) => {
-    if (typeof data === 'string') return data;
-    if (typeof data === 'object' && data !== null) {
-      return JSON.stringify(data, null, 2);
+  const renderVersionData = (data: any, category: StoryObjectCategory) => {
+    if (!data || typeof data !== 'object') {
+      return <div className="version-data-simple">{String(data)}</div>;
     }
-    return String(data);
+
+    // For basic info
+    if (category === 'basicInfo') {
+      return (
+        <div className="version-data-formatted">
+          <div className="data-field">
+            <label>Title:</label>
+            <span>{data.title || 'Not set'}</span>
+          </div>
+          <div className="data-field">
+            <label>Logline:</label>
+            <span>{data.logline || 'Not set'}</span>
+          </div>
+          <div className="data-field">
+            <label>Genre:</label>
+            <span>{data.genre || 'Not set'}</span>
+          </div>
+        </div>
+      );
+    }
+
+    // For outline
+    if (category === 'outline') {
+      return (
+        <div className="version-data-formatted">
+          {data.acts && data.acts.length > 0 ? (
+            <div className="outline-structure">
+              <h4>Acts ({data.acts.length}):</h4>
+              {data.acts.map((act: any, actIndex: number) => (
+                <div key={actIndex} className="act-item">
+                  <div className="act-header">
+                    <strong>Act {actIndex + 1}: {act.name || 'Unnamed Act'}</strong>
+                  </div>
+                  {act.description && (
+                    <div className="act-description">{act.description}</div>
+                  )}
+                  {act.chapters && act.chapters.length > 0 && (
+                    <div className="chapters-list">
+                      <strong>Chapters ({act.chapters.length}):</strong>
+                      {act.chapters.map((chapter: any, chapterIndex: number) => (
+                        <div key={chapterIndex} className="chapter-item">
+                          <div className="chapter-name">Chapter {chapterIndex + 1}: {chapter.name || 'Unnamed Chapter'}</div>
+                          {chapter.description && (
+                            <div className="chapter-description">{chapter.description}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-outline">No acts defined</div>
+          )}
+        </div>
+      );
+    }
+
+    // For name-description objects (character, organization, location, lorebook)
+    if (data.name !== undefined || data.description !== undefined) {
+      return (
+        <div className="version-data-formatted">
+          <div className="data-field">
+            <label>Name:</label>
+            <span>{data.name || 'Not set'}</span>
+          </div>
+          <div className="data-field">
+            <label>Description:</label>
+            <span className="description-text">{data.description || 'Not set'}</span>
+          </div>
+        </div>
+      );
+    }
+
+    // Fallback to JSON for unknown structures
+    return (
+      <div className="version-data-json">
+        <pre>{JSON.stringify(data, null, 2)}</pre>
+      </div>
+    );
   };
 
   if (!isOpen) return null;
@@ -156,9 +235,9 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                   {expandedVersions.has(version.versionId) && (
                     <div className="version-content">
                       <h4>Version Data:</h4>
-                      <pre className="version-data">
-                        {formatVersionData(version.data)}
-                      </pre>
+                      <div className="version-data">
+                        {renderVersionData(version.data, category)}
+                      </div>
                     </div>
                   )}
                 </div>

@@ -11,6 +11,8 @@ export interface RuntimeProcessingConfig {
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
   abortControllerRef: React.MutableRefObject<AbortController | null>;
+  outputLanguage?: string;
+  aiModel?: string;
 }
 
 export interface RuntimeProcessingCallbacks {
@@ -137,7 +139,8 @@ export class RuntimeProcessor {
     // Pre-process messages
     const { conversationBlocks, functions } = this.config.chatPipeline.preProcess(
       chatHistory.slice(0, -1), // Exclude the newly added empty assistant message
-      context
+      context,
+      this.config.outputLanguage
     );
 
     // Start streaming
@@ -148,7 +151,8 @@ export class RuntimeProcessor {
     
     for await (const chunk of streamCopilot(conversationBlocks, {
       signal: this.config.abortControllerRef.current.signal,
-      functions: functions
+      functions: functions,
+      model: this.config.aiModel
     })) {
       if (typeof chunk === 'string') {
         accumulatedContent += chunk;

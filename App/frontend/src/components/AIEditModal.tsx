@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStoryObjectStore } from '../store/storyObjectStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { streamCopilot } from '../llm_request/copilot';
 import type { ConversationBlock } from '../llm_request/types';
 import type { StoryObjectCategory } from '../types/storyObject';
+import { AIEditService, type ContextOptions } from '../services/aiEditService';
 
 interface AIEditModalProps {
   isOpen: boolean;
@@ -13,14 +15,6 @@ interface AIEditModalProps {
   onResult: (result: any) => void;
 }
 
-interface ContextOptions {
-  basicInfo: boolean;
-  characters: boolean;
-  organizations: boolean;
-  locations: boolean;
-  lorebook: boolean;
-  outline: boolean;
-}
 
 const AIEditModal: React.FC<AIEditModalProps> = ({
   isOpen,
@@ -44,6 +38,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   
   const storyObjectStore = useStoryObjectStore();
+  const settingsStore = useSettingsStore();
   const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -59,194 +54,6 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     }
   }, [isOpen]);
 
-  const getContextData = () => {
-    const storyObjects = storyObjectStore.getStoryObjects(projectId);
-    const context: Record<string, any> = {};
-
-    if (contextOptions.basicInfo && storyObjects.basicInfo) {
-      context.basicInfo = {
-        title: storyObjects.basicInfo.title,
-        logline: storyObjects.basicInfo.logline,
-        genre: storyObjects.basicInfo.genre,
-      };
-    }
-
-    if (contextOptions.characters && storyObjects.characters.length > 0) {
-      context.characters = storyObjects.characters.map(char => ({
-        id: char.id,
-        name: char.name,
-        description: char.description,
-      }));
-    }
-
-    if (contextOptions.organizations && storyObjects.organizations.length > 0) {
-      context.organizations = storyObjects.organizations.map(org => ({
-        id: org.id,
-        name: org.name,
-        description: org.description,
-      }));
-    }
-
-    if (contextOptions.locations && storyObjects.locations.length > 0) {
-      context.locations = storyObjects.locations.map(loc => ({
-        id: loc.id,
-        name: loc.name,
-        description: loc.description,
-      }));
-    }
-
-    if (contextOptions.lorebook && storyObjects.lorebook.length > 0) {
-      context.lorebook = storyObjects.lorebook.map(entry => ({
-        id: entry.id,
-        name: entry.name,
-        description: entry.description,
-      }));
-    }
-
-    if (contextOptions.outline && storyObjects.outline) {
-      context.outline = {
-        acts: storyObjects.outline.acts.map(act => ({
-          id: act.id,
-          name: act.name,
-          description: act.description,
-          chapters: act.chapters.map(chapter => ({
-            id: chapter.id,
-            name: chapter.name,
-            description: chapter.description,
-          })),
-        })),
-      };
-    }
-
-    return context;
-  };
-
-  const getCategoryDisplayName = (cat: StoryObjectCategory): string => {
-    const names = {
-      basicInfo: 'Basic Info',
-      character: 'Character',
-      organization: 'Organization',
-      location: 'Location',
-      lorebook: 'Lorebook',
-      outline: 'Outline',
-    };
-    return names[cat] || cat;
-  };
-
-
-  const getCurrentData = () => {
-    const storyObjects = storyObjectStore.getStoryObjects(projectId);
-    
-    if (targetId) {
-      // Editing specific item
-      switch (category) {
-        case 'character':
-          return storyObjects.characters.find(c => c.id === targetId);
-        case 'organization':
-          return storyObjects.organizations.find(o => o.id === targetId);
-        case 'location':
-          return storyObjects.locations.find(l => l.id === targetId);
-        case 'lorebook':
-          return storyObjects.lorebook.find(e => e.id === targetId);
-        case 'basicInfo':
-          return storyObjects.basicInfo;
-        case 'outline':
-          return storyObjects.outline;
-        default:
-          return null;
-      }
-    } else {
-      // Editing entire category
-      switch (category) {
-        case 'character':
-          return storyObjects.characters;
-        case 'organization':
-          return storyObjects.organizations;
-        case 'location':
-          return storyObjects.locations;
-        case 'lorebook':
-          return storyObjects.lorebook;
-        case 'basicInfo':
-          return storyObjects.basicInfo;
-        case 'outline':
-          return storyObjects.outline;
-        default:
-          return null;
-      }
-    }
-  };
-
-  const getJSONSchema = (): string => {
-    if (targetId) {
-      // Schema for individual items
-      switch (category) {
-        case 'character':
-        case 'organization':
-        case 'location':
-        case 'lorebook':
-          return JSON.stringify({
-            id: "string (keep existing ID)",
-            name: "string",
-            description: "string"
-          }, null, 2);
-        case 'basicInfo':
-          return JSON.stringify({
-            title: "string",
-            logline: "string",
-            genre: "string"
-          }, null, 2);
-        case 'outline':
-          return JSON.stringify({
-            acts: [{
-              id: "string (keep existing ID)",
-              name: "string",
-              description: "string",
-              chapters: [{
-                id: "string (keep existing ID)",
-                name: "string",
-                description: "string"
-              }]
-            }]
-          }, null, 2);
-        default:
-          return "{}";
-      }
-    } else {
-      // Schema for entire category
-      switch (category) {
-        case 'character':
-        case 'organization':
-        case 'location':
-        case 'lorebook':
-          return JSON.stringify([{
-            id: "string | null (existing ID for modification, null for addition)",
-            name: "string",
-            description: "string"
-          }], null, 2);
-        case 'basicInfo':
-          return JSON.stringify({
-            title: "string",
-            logline: "string",
-            genre: "string"
-          }, null, 2);
-        case 'outline':
-          return JSON.stringify({
-            acts: [{
-              id: "string | null (existing ID for modification, null for addition)",
-              name: "string",
-              description: "string",
-              chapters: [{
-                id: "string | null (existing ID for modification, null for addition)",
-                name: "string",
-                description: "string"
-              }]
-            }]
-          }, null, 2);
-        default:
-          return "{}";
-      }
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -259,55 +66,39 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     try {
       abortControllerRef.current = new AbortController();
       
-      const context = getContextData();
-      const currentData = getCurrentData();
-      const jsonSchema = getJSONSchema();
+      const storyObjects = storyObjectStore.getStoryObjects(projectId);
       
-      const editType = targetId ? 'specific item' : 'entire category';
-      const categoryName = getCategoryDisplayName(category);
-
-      const systemPrompt = `You are an AI assistant that helps with novel writing. The user wants to modify the ${editType} (${categoryName}) of a story object.
-Please refer to the following context and return the modified data in JSON format according to the user's request.
-
-<Context>
-${Object.keys(context).map(key => `# ${key.charAt(0).toUpperCase() + key.slice(1)}\n${JSON.stringify(context[key], null, 2)}`).join('\n\n')}
-</Context>
-
-Current data:
-${JSON.stringify(currentData, null, 2)}
-
-Please modify the above data according to the request and return it in the following JSON schema:
-${jsonSchema}
-
-Important rules:
-1. ID handling:
-   - When modifying an existing item: Keep the current data's ID.
-   - When adding a new item: Set the id to null.`;
-
-      const messages: ConversationBlock[] = [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userRequest },
-      ];
+      // Prepare AI edit request using the service
+      const editRequest = AIEditService.prepareEditRequest({
+        category,
+        targetId,
+        userRequest,
+        contextOptions,
+        storyObjects,
+        outputLanguage: settingsStore.settings.outputLanguage,
+      });
 
       let fullResponse = '';
       
-      for await (const chunk of streamCopilot(messages, {
+      for await (const chunk of streamCopilot(editRequest.messages, {
         signal: abortControllerRef.current.signal,
         temperature: 0.3,
+        model: settingsStore.settings.aiModel,
       })) {
         fullResponse += chunk;
         setStreamContent(fullResponse);
       }
 
-      // Parse and validate JSON response
+      // Parse and validate JSON response using the service
       try {
-        // Extract JSON from markdown code blocks if present
-        let jsonText = fullResponse.trim();        
-        const codeBlockMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-        if (codeBlockMatch) {
-          jsonText = codeBlockMatch[1].trim();        } else {        }
+        const parsedResult = AIEditService.parseAIResponse(fullResponse);
         
-        const parsedResult = JSON.parse(jsonText);        
+        // Validate the result
+        const validation = AIEditService.validateResult(parsedResult, category, targetId);
+        if (!validation.isValid) {
+          setError(`Invalid AI response: ${validation.errors.join(', ')}`);
+          return;
+        }
         
         // Apply the result
         onResult(parsedResult);
@@ -348,7 +139,7 @@ Important rules:
 
   if (!isOpen) return null;
 
-  const categoryDisplayName = getCategoryDisplayName(category);
+  const categoryDisplayName = AIEditService.getCategoryDisplayName(category);
   const editTypeText = targetId ? 'Item' : 'All';
 
   return (
@@ -386,7 +177,7 @@ e.g., "Make the main character's personality more proactive", "Make the atmosphe
                     disabled={isProcessing}
                   />
                   <span className="checkbox-text">
-                    {getCategoryDisplayName(key as StoryObjectCategory)}
+                    {AIEditService.getCategoryDisplayName(key as StoryObjectCategory)}
                   </span>
                 </label>
               ))}

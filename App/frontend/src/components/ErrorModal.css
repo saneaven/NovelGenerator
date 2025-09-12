@@ -1,0 +1,141 @@
+.error-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.error-modal {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  width: 90%;
+  max-width: 500px;
+  min-width: 300px;
+  max-height: 80vh;
+  overflow: hidden;
+  animation: errorModalSlideIn 0.2s ease-out;
+}
+
+@keyframes errorModalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.error-modal-header {
+  display: flex;
+  align-items: center;
+  padding: 20px 24px 12px;
+  border-bottom: 1px solid #e5e7eb;
+  gap: 12px;
+}
+
+.error-icon {
+  font-size: 24px;
+  color: #f59e0b;
+}
+
+.error-title {
+  flex: 1;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.error-close-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: background-color 0.2s;
+}
+
+.error-close-btn:hover {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+.error-modal-body {
+  padding: 20px 24px;
+}
+
+.error-message {
+  margin: 0;
+  color: #374151;
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.error-modal-footer {
+  padding: 12px 24px 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.error-ok-btn {
+  background: #dc2626;
+  color: white;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.error-ok-btn:hover {
+  background: #b91c1c;
+}
+
+.error-ok-btn:focus {
+  outline: 2px solid #dc2626;
+  outline-offset: 2px;
+}
+
+/* Dark theme support */
+@media (prefers-color-scheme: dark) {
+  .error-modal {
+    background: #1f2937;
+    color: #f9fafb;
+  }
+  
+  .error-modal-header {
+    border-bottom-color: #374151;
+  }
+  
+  .error-title {
+    color: #f9fafb;
+  }
+  
+  .error-message {
+    color: #d1d5db;
+  }
+  
+  .error-close-btn {
+    color: #9ca3af;
+  }
+  
+  .error-close-btn:hover {
+    background-color: #374151;
+    color: #d1d5db;
+  }
+}
