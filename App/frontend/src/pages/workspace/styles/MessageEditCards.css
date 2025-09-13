@@ -1,6 +1,6 @@
 /* Message Edit Cards Styles */
 .message-edit-cards {
-  margin: 0.75rem 0 1rem 0;
+  margin: 1.25rem 0 1.25rem 0;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;

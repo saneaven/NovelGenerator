@@ -54,7 +54,7 @@
 .message {
   display: flex;
   flex-direction: column;
-  margin-bottom: 0.75rem;
+  margin-bottom: -1em;
   position: relative;
 }
 
@@ -111,7 +111,7 @@
 /* Message Actions - 심플하게 */
 .message-actions-top {
   text-align: right;
-  margin-bottom: 8px;
+  margin-bottom: 0px;
   opacity: 0;
   transition: opacity 0.2s;
 }
@@ -123,15 +123,15 @@
 .message-action-button {
   display: inline-block;
   position: static;
-  background: #f1f5f9;
-  border: 1px solid #d1d5db;
-  padding: 8px;
+  background: none;
+  border: none;
   margin-left: 6px;
-  border-radius: 4px;
+  border-radius: 6px;
+  padding: 2px;
   font-size: 14px;
   cursor: pointer;
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   text-align: center;
   line-height: 1;
 }
@@ -141,7 +141,7 @@
   display: flex;
   justify-content: flex-start;
   align-items: center;
-  margin-top: 0.25rem;
+  margin-top: 0;
   opacity: 0;
   transition: opacity 0.2s ease;
 }

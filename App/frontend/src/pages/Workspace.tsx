@@ -248,6 +248,11 @@ const Workspace: React.FC = () => {
         <div className="sidebar-overlay mobile-only" onClick={() => uiActions.setIsMobileSidebarVisible(false)} />
       )}
 
+      {/* Desktop Chat List Overlay */}
+      {uiState.isDesktopChatListVisible && (
+        <div className="desktop-chat-overlay desktop-only" onClick={() => uiActions.setIsDesktopChatListVisible(false)} />
+      )}
+
       {/* Error Modal */}
       <ErrorModal
         isOpen={!!currentError}

@@ -310,6 +310,27 @@
     width: 100% !important;
     margin-left: 0 !important;
   }
+
+  .desktop-chat-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.1);
+    z-index: 1005;
+    animation: fadeIn 0.3s ease-out;
+  }
+}
+
+/* Animation Keyframes */
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 
