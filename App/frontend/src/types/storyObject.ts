@@ -59,7 +59,9 @@ export type StoryObjectCategory =
   | 'organization'
   | 'location'
   | 'lorebook'
-  | 'outline';
+  | 'outline'
+  | 'act'
+  | 'chapter';
 
 // Combined Story Objects type
 export interface StoryObjects {

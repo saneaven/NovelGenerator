@@ -6,6 +6,7 @@ import type {
   ChatPipelineContext 
 } from '../types';
 import { STORY_FUNCTIONS } from '../types/functionCalling';
+import { SystemTagManager, type SystemTagData } from '../utils/SystemTagManager';
 
 function findLastUserMessageIdx(messages: ChatMessage[]): number
   {
@@ -91,19 +92,22 @@ You Should respond in ${outputLanguage ? outputLanguage : 'the language used by 
     if (context.systemInsertConfig.enabled && context.systemInsertConfig.includeProjectInfo) {
       systemPrompt += `
 
-IMPORTANT: You have access to specialized functions for managing story objects. When the user requests changes to their story (characters, locations, plot, etc.), you can call these functions:
+IMPORTANT: You have access to a unified function for managing story objects. When the user requests changes to their story (characters, locations, plot, etc.), you can call this function:
 
-Available Functions:
-1. initialize_story_objects - Initialize or completely replace all story objects
-2. add_story_objects - Add new characters, locations, organizations, etc.
-3. edit_story_objects - Modify existing story objects by ID
-4. remove_story_objects - Remove story objects by ID
+Available Function:
+manage_story_objects - Create, update, or delete story objects in batch operations
 
 Function Usage Rules:
-- Only call these functions when the user explicitly requests changes to story objects
+- Only call this function when the user explicitly requests changes to story objects
 - The user will be asked to approve function calls before they're applied
 - You can continue your normal conversation along with function calls
-- Use the exact parameter formats as defined in the function schemas`;
+- Use operations array with action: "create"/"update"/"delete", type, and data as needed
+- Multiple operations can be batched in a single function call for efficiency
+
+Example usage:
+- Create: {action: "create", type: "character", data: {name: "John", description: "Hero"}}
+- Update: {action: "update", type: "character", id: "123", data: {name: "John Updated"}}
+- Delete: {action: "delete", type: "character", id: "456"}`;
     }
 
     return systemPrompt;
@@ -139,86 +143,16 @@ Function Usage Rules:
   }
 
   private addSystemInfo(content: string, context: ChatPipelineContext): string {
-    let systemInfo = '';
+    const additionalSystemData: SystemTagData = {
+      storyContext: {
+        enabled: context.systemInsertConfig.includeStoryObjects,
+        storyObjects: context.storyObjects
+      }
+    };
 
-    if (context.systemInsertConfig.includeStoryObjects && context.storyObjects) {
-      systemInfo = `<system>
-# Current Project Status
-\`\`\`json
-${JSON.stringify(this.simplifyStoryObjects(context.storyObjects), null, 2)}
-\`\`\`
-</system>
-
-`;
-    }
-
-    return systemInfo + content;
+    return SystemTagManager.processMessageForUnifiedSystemTag(content, additionalSystemData, context);
   }
 
-  private simplifyStoryObjects(storyObjects: any): any {
-    // Convert complex story objects to simple format for AI
-    const simplified: any = {};
-
-    // Always include basic_info (even if null/empty)
-    if (storyObjects.basicInfo) {
-      simplified.basic_info = {
-        id: storyObjects.basicInfo.id,
-        title: storyObjects.basicInfo.title,
-        logline: storyObjects.basicInfo.logline,
-        genre: storyObjects.basicInfo.genre
-      };
-    } else {
-      simplified.basic_info = null;
-    }
-
-    // Always include characters array (even if empty)
-    simplified.characters = (storyObjects.characters || []).map((char: any) => ({
-      id: char.id,
-      name: char.name,
-      description: char.description
-    }));
-
-    // Always include organizations array (even if empty)
-    simplified.organizations = (storyObjects.organizations || []).map((org: any) => ({
-      id: org.id,
-      name: org.name,
-      description: org.description
-    }));
-
-    // Always include locations array (even if empty)
-    simplified.locations = (storyObjects.locations || []).map((loc: any) => ({
-      id: loc.id,
-      name: loc.name,
-      description: loc.description
-    }));
-
-    // Always include lorebook array (even if empty)
-    simplified.lorebook = (storyObjects.lorebook || []).map((entry: any) => ({
-      id: entry.id,
-      name: entry.name,
-      description: entry.description
-    }));
-
-    // Always include outline (even if null/empty)
-    if (storyObjects.outline) {
-      simplified.outline = {
-        acts: storyObjects.outline.acts?.map((act: any) => ({
-          id: act.id,
-          name: act.name,
-          description: act.description,
-          chapters: act.chapters?.map((chapter: any) => ({
-            id: chapter.id,
-            name: chapter.name,
-            description: chapter.description
-          })) || []
-        })) || []
-      };
-    } else {
-      simplified.outline = null;
-    }
-
-    return simplified;
-  }
 
   private summarizeEditTags(content: string): string {
     // No edit tags to summarize anymore, just return content as-is

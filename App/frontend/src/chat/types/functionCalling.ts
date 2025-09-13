@@ -25,234 +25,146 @@ export interface FunctionCallResult {
 // Story Object Function Schemas
 export const STORY_FUNCTIONS: FunctionCallSchema[] = [
   {
-    name: "initialize_story_objects",
-    description: "Initialize or completely replace all story objects for the project",
+    name: "manage_story_objects",
+    description: "Create, update, or delete story objects in a single operation. Supports batch operations for efficient management.",
     parameters: {
       type: "object",
       properties: {
-        basic_info: {
-          type: "object",
-          properties: {
-            title: { type: "string" },
-            logline: { type: "string" },
-            genre: { type: "string" }
-          }
-        },
-        characters: {
+        operations: {
           type: "array",
           items: {
             type: "object",
             properties: {
-              name: { type: "string" },
-              description: { type: "string" }
-            },
-            required: ["name", "description"]
-          }
-        },
-        organizations: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              name: { type: "string" },
-              description: { type: "string" }
-            },
-            required: ["name", "description"]
-          }
-        },
-        locations: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              name: { type: "string" },
-              description: { type: "string" }
-            },
-            required: ["name", "description"]
-          }
-        },
-        lorebook: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              name: { type: "string" },
-              description: { type: "string" }
-            },
-            required: ["name", "description"]
-          }
-        },
-        acts: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              name: { type: "string" },
-              description: { type: "string" },
-              chapters: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    name: { type: "string" },
-                    description: { type: "string" }
-                  },
-                  required: ["name", "description"]
-                }
-              }
-            },
-            required: ["name", "description", "chapters"]
-          }
-        }
-      },
-      required: []
-    }
-  },
-  {
-    name: "add_story_objects",
-    description: "Add new story objects to the project",
-    parameters: {
-      type: "object",
-      properties: {
-        characters: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              name: { type: "string" },
-              description: { type: "string" }
-            },
-            required: ["name", "description"]
-          }
-        },
-        organizations: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              name: { type: "string" },
-              description: { type: "string" }
-            },
-            required: ["name", "description"]
-          }
-        },
-        locations: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              name: { type: "string" },
-              description: { type: "string" }
-            },
-            required: ["name", "description"]
-          }
-        },
-        lorebook: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              name: { type: "string" },
-              description: { type: "string" }
-            },
-            required: ["name", "description"]
-          }
-        },
-        acts: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              name: { type: "string" },
-              description: { type: "string" },
-              chapters: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    name: { type: "string" },
-                    description: { type: "string" }
-                  },
-                  required: ["name", "description"]
-                }
-              }
-            },
-            required: ["name", "description"]
-          }
-        },
-        chapters: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              actId: { type: "string" },
-              name: { type: "string" },
-              description: { type: "string" }
-            },
-            required: ["actId", "name", "description"]
-          }
-        }
-      },
-      required: []
-    }
-  },
-  {
-    name: "edit_story_objects",
-    description: "Edit existing story objects by ID",
-    parameters: {
-      type: "object",
-      properties: {
-        basic_info: {
-          type: "object",
-          properties: {
-            title: { type: "string" },
-            logline: { type: "string" },
-            genre: { type: "string" },
-            description: { type: "string" }
-          }
-        },
-        objects: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              id: { type: "string" },
-              type: { 
+              action: {
                 type: "string",
-                enum: ["character", "organization", "location", "lorebook", "act", "chapter"]
+                enum: ["create", "update", "delete"],
+                description: "The action to perform on the story object"
               },
-              name: { type: "string" },
-              description: { type: "string" },
-            },
-            required: ["id", "type", "name", "description"]
-          }
-        }
-      },
-      required: []
-    }
-  },
-  {
-    name: "remove_story_objects",
-    description: "Remove story objects by ID",
-    parameters: {
-      type: "object",
-      properties: {
-        objects: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              id: { type: "string" },
-              type: { 
+              type: {
                 type: "string",
-                enum: ["character", "organization", "location", "lorebook", "act", "chapter"]
+                enum: ["basic_info", "character", "organization", "location", "lorebook", "act", "chapter"],
+                description: "The type of story object to manage"
+              },
+              id: {
+                type: "string",
+                description: "Required for update and delete actions. When action is 'create' just type 'null'. The ID of the object to modify or remove."
+              },
+              data: {
+                type: "object",
+                description: "Required for create and update actions. The object data.",
+                properties: {
+                  name: { type: "string" },
+                  description: { type: "string" },
+                  title: { type: "string", description: "Only for basic_info type" },
+                  logline: { type: "string", description: "Only for basic_info type" },
+                  genre: { type: "string", description: "Only for basic_info type" },
+                  actId: { type: "string", description: "Only for chapter type" },
+                  chapters: {
+                    type: "array",
+                    description: "Only for act type",
+                    items: {
+                      type: "object",
+                      properties: {
+                        name: { type: "string" },
+                        description: { type: "string" }
+                      },
+                      required: ["name", "description"]
+                    }
+                  }
+                }
               }
             },
-            required: ["id", "type"]
+            required: ["action", "type"],
+            allOf: [
+              {
+                if: {
+                  properties: { action: { const: "update" } }
+                },
+                then: {
+                  required: ["id", "data"]
+                }
+              },
+              {
+                if: {
+                  properties: { action: { const: "delete" } }
+                },
+                then: {
+                  required: ["id"]
+                }
+              },
+              {
+                if: {
+                  properties: { action: { const: "create" } }
+                },
+                then: {
+                  required: ["data"]
+                }
+              },
+              {
+                if: {
+                  properties: { 
+                    type: { const: "basic_info" },
+                    action: { enum: ["create", "update"] }
+                  }
+                },
+                then: {
+                  properties: {
+                    data: {
+                      required: ["title", "logline", "genre"]
+                    }
+                  }
+                }
+              },
+              {
+                if: {
+                  properties: { 
+                    type: { const: "chapter" },
+                    action: { enum: ["create", "update"] }
+                  }
+                },
+                then: {
+                  properties: {
+                    data: {
+                      required: ["name", "description", "actId"]
+                    }
+                  }
+                }
+              },
+              {
+                if: {
+                  properties: { 
+                    type: { const: "act" },
+                    action: { enum: ["create", "update"] }
+                  }
+                },
+                then: {
+                  properties: {
+                    data: {
+                      required: ["name", "description"]
+                    }
+                  }
+                }
+              },
+              {
+                if: {
+                  properties: { 
+                    type: { enum: ["character", "organization", "location", "lorebook"] },
+                    action: { enum: ["create", "update"] }
+                  }
+                },
+                then: {
+                  properties: {
+                    data: {
+                      required: ["name", "description"]
+                    }
+                  }
+                }
+              }
+            ]
           }
         }
       },
-      required: ["objects"]
+      required: ["operations"]
     }
   }
 ];

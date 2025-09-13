@@ -106,18 +106,13 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
     let editCards: EditCard[] = [];
 
     if (message.role === 'assistant') {
-      // Assistant messages: only show function call selection cards if not yet applied
+      // Assistant messages: show function call cards (both applied and unapplied)
       if (message.functionCalls && message.functionCalls.length > 0) {
-        // Only show cards for unapplied function calls
-        const unappliedFunctionCalls = message.functionCalls.filter(fc => !fc.isApplied);
-        if (unappliedFunctionCalls.length > 0) {
-          editCards = this.generateEditCardsFromFunctionCalls(unappliedFunctionCalls, context);
-        }
+        editCards = this.generateEditCardsFromFunctionCalls(message.functionCalls, context);
       } 
     } else if (message.role === 'user') {
-      // User messages: only show system message result cards
-      const systemCards = this.extractSystemCards(message);
-      editCards = systemCards;
+      // User messages: no longer show system cards - they're handled by function call cards directly
+      editCards = [];
     }
     
     // Process message content for display
@@ -133,19 +128,19 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
   private processMessageContent(message: ProcessedChatMessage): React.ReactNode {
     let content = message.originalContent || message.content || '';
 
-    // Remove edit tags and system messages from display content
-    content = this.removeSystemTags(content);
+    // Only remove system tags for user messages, not assistant messages
+    if (message.role === 'user') {
+      content = this.removeSystemTags(content);
+    }
     
     // Process markdown-like formatting
     content = this.processMarkdown(content);
 
     return (
-      <div className="message-content">
-        <div 
-          className="message-text"
-          dangerouslySetInnerHTML={{ __html: content }}
-        />
-      </div>
+      <div 
+        className="message-text"
+        dangerouslySetInnerHTML={{ __html: content }}
+      />
     );
   }
 
@@ -156,8 +151,19 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
   private removeSystemTags(content: string): string {
     if (!content || typeof content !== 'string') return '';
     
-    // Remove system tags completely
-    return content.replace(/<system>[\s\S]*?<\/system>/gi, '').trim();
+    // Remove system tags while preserving user content
+    // Be very careful to only remove complete <system>...</system> blocks
+    let result = content;
+    
+    // Match system tags with proper boundaries
+    const systemTagRegex = /<system>\s*[\s\S]*?\s*<\/system>\s*/gi;
+    result = result.replace(systemTagRegex, '');
+    
+    // Clean up multiple consecutive newlines but preserve single ones
+    result = result.replace(/\n\s*\n\s*\n/g, '\n\n');
+    result = result.trim();
+    
+    return result;
   }
 
 
@@ -177,90 +183,6 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
   }
 
 
-  /**
-   * Extract system messages and convert to status cards
-   */
-  private extractSystemCards(message: ProcessedChatMessage): EditCard[] {
-    if (!message.content || typeof message.content !== 'string') return [];
-    
-    const systemCards: EditCard[] = [];
-    const systemRegex = /<system>(.*?)<\/system>/gi;
-    let match;
-    
-    while ((match = systemRegex.exec(message.content)) !== null) {
-      const systemText = match[1].trim();
-      const card = this.createSystemCard(systemText);
-      if (card) {
-        systemCards.push(card);
-      }
-    }
-    
-    return systemCards;
-  }
-
-  /**
-   * Create a system status card
-   */
-  private createSystemCard(systemText: string): EditCard | null {
-    // Parse system message patterns
-    const functionCallPattern = /Function call (\w+) was (accepted|rejected)\.\s*(.*)/i;
-    const match = functionCallPattern.exec(systemText);
-    
-    if (match) {
-      const [, functionName, status, details] = match;
-      const isAccepted = status.toLowerCase() === 'accepted';
-      
-      return {
-        id: crypto.randomUUID(),
-        type: 'system',
-        title: isAccepted ? '✅ Function Applied' : '❌ Function Rejected',
-        description: this.formatSystemCardDescription(functionName, details, isAccepted),
-        isApplied: true, // System cards are always "applied" (completed)
-        data: { functionName, status, details },
-        onApply: () => {}, // No-op for system cards
-        onReject: () => {} // No-op for system cards
-      };
-    }
-    
-    // Fallback for other system messages
-    return {
-      id: crypto.randomUUID(),
-      type: 'system',
-      title: '📋 System Status',
-      description: systemText,
-      isApplied: true,
-      data: { message: systemText },
-      onApply: () => {},
-      onReject: () => {}
-    };
-  }
-
-  /**
-   * Format system card description
-   */
-  private formatSystemCardDescription(functionName: string, details: string, isAccepted: boolean): string {
-    const action = this.getFunctionDisplayName(functionName);
-    const status = isAccepted ? 'successfully applied' : 'was rejected';
-    
-    if (details.trim()) {
-      return `${action} ${status}: ${details}`;
-    } else {
-      return `${action} ${status}`;
-    }
-  }
-
-  /**
-   * Get user-friendly function name
-   */
-  private getFunctionDisplayName(functionName: string): string {
-    switch (functionName) {
-      case 'initialize_story_objects': return 'Story initialization';
-      case 'add_story_objects': return 'Story objects addition';
-      case 'edit_story_objects': return 'Story objects modification';
-      case 'remove_story_objects': return 'Story objects removal';
-      default: return `Function "${functionName}"`;
-    }
-  }
 
   /**
    * Generate edit cards from function calls
@@ -387,7 +309,7 @@ export const EditCardComponent: React.FC<{ card: EditCard }> = ({ card }) => {
         </div>
       )}
       
-      {!card.isApplied && (
+      {!card.isApplied ? (
         <div className="edit-card-actions">
           <button 
             className="apply-button"
@@ -401,6 +323,12 @@ export const EditCardComponent: React.FC<{ card: EditCard }> = ({ card }) => {
           >
             Reject
           </button>
+        </div>
+      ) : (
+        <div className="edit-card-applied-info">
+          <span className="applied-timestamp">
+            {card.appliedAt ? `Applied at ${new Date(card.appliedAt).toLocaleTimeString()}` : 'Applied'}
+          </span>
         </div>
       )}
     </div>

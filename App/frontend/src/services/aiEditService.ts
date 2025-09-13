@@ -109,6 +109,16 @@ export class AIEditService {
           return storyObjects.basicInfo;
         case 'outline':
           return storyObjects.outline;
+        case 'act':
+          // Find act in outline
+          return storyObjects.outline?.acts.find(a => a.id === targetId);
+        case 'chapter':
+          // Find chapter in any act
+          for (const act of storyObjects.outline?.acts || []) {
+            const chapter = act.chapters.find(c => c.id === targetId);
+            if (chapter) return chapter;
+          }
+          return null;
         default:
           return null;
       }
@@ -127,6 +137,15 @@ export class AIEditService {
           return storyObjects.basicInfo;
         case 'outline':
           return storyObjects.outline;
+        case 'act':
+          return storyObjects.outline?.acts || [];
+        case 'chapter':
+          // Return all chapters from all acts
+          const allChapters = [];
+          for (const act of storyObjects.outline?.acts || []) {
+            allChapters.push(...act.chapters);
+          }
+          return allChapters;
         default:
           return null;
       }
@@ -144,6 +163,8 @@ export class AIEditService {
         case 'organization':
         case 'location':
         case 'lorebook':
+        case 'act':
+        case 'chapter':
           return {
             id: "string (keep existing ID)",
             name: "string",
@@ -178,6 +199,8 @@ export class AIEditService {
         case 'organization':
         case 'location':
         case 'lorebook':
+        case 'act':
+        case 'chapter':
           return [{
             id: "string | null (existing ID for modification, null for addition)",
             name: "string",
@@ -219,6 +242,8 @@ export class AIEditService {
       location: 'Location',
       lorebook: 'Lorebook',
       outline: 'Outline',
+      act: 'Act',
+      chapter: 'Chapter',
     };
     return names[category] || category;
   }
@@ -330,6 +355,8 @@ Important rules:
         case 'organization':
         case 'location':
         case 'lorebook':
+        case 'act':
+        case 'chapter':
           if (!result.id || typeof result.name !== 'string' || typeof result.description !== 'string') {
             errors.push('Invalid name-description item format');
           }
@@ -352,6 +379,8 @@ Important rules:
         case 'organization':
         case 'location':
         case 'lorebook':
+        case 'act':
+        case 'chapter':
           if (!Array.isArray(result)) {
             errors.push(`Invalid ${category} format - must be an array`);
           }

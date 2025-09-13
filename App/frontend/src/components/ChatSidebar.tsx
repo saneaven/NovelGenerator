@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useChatStore, type Chat } from '../store/chatStore';
-import './ChatSidebar.css';
+// CSS is now imported from Workspace.tsx
 
 interface ChatSidebarProps {
   projectId: string;

@@ -1,29 +1,17 @@
-import React, { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { useProjectStore } from '../store/projectStore';
-import BasicInfoManager from '../components/BasicInfoManager';
-import NameDescriptionManager from '../components/NameDescriptionManager';
-import OutlineManager from '../components/OutlineManager';
+import React from 'react';
+import BasicInfoManager from '../../../components/BasicInfoManager';
+import NameDescriptionManager from '../../../components/NameDescriptionManager';
+import OutlineManager from '../../../components/OutlineManager';
 
 type TabType = 'basicInfo' | 'characters' | 'organizations' | 'locations' | 'lorebook' | 'outline';
 
-const StoryObjects: React.FC = () => {
-  const { projectId } = useParams<{ projectId: string }>();
-  const { getCurrentProject } = useProjectStore();
-  const [activeTab, setActiveTab] = useState<TabType>('basicInfo');
+interface StoryPanelProps {
+  activeStoryTab: TabType;
+  onTabChange: (tab: TabType) => void;
+}
 
-  const currentProject = getCurrentProject();
-
-  if (!currentProject) {
-    return (
-      <div className="error-container">
-        <h2>Project Not Found</h2>
-        <Link to="/">Go back to Home</Link>
-      </div>
-    );
-  }
-
-  const tabs: { id: TabType; label: string; icon: string }[] = [
+const StoryPanel: React.FC<StoryPanelProps> = ({ activeStoryTab, onTabChange }) => {
+  const storyTabs: { id: TabType; label: string; icon: string }[] = [
     { id: 'basicInfo', label: 'Basic Info', icon: '📋' },
     { id: 'characters', label: 'Characters', icon: '👥' },
     { id: 'organizations', label: 'Organizations', icon: '🏛️' },
@@ -32,8 +20,8 @@ const StoryObjects: React.FC = () => {
     { id: 'outline', label: 'Outline', icon: '📝' },
   ];
 
-  const renderContent = () => {
-    switch (activeTab) {
+  const renderStoryContent = () => {
+    switch (activeStoryTab) {
       case 'basicInfo':
         return <BasicInfoManager />;
       case 'characters':
@@ -96,27 +84,17 @@ const StoryObjects: React.FC = () => {
   };
 
   return (
-    <div className="story-objects-container">
-      <div className="story-objects-header">
-        <div className="breadcrumb">
-          <Link to="/" className="breadcrumb-link">Home</Link>
-          <span className="breadcrumb-separator"> / </span>
-          <Link to={`/project/${projectId}`} className="breadcrumb-link">
-            {currentProject.name}
-          </Link>
-          <span className="breadcrumb-separator"> / </span>
-          <span className="breadcrumb-current">Story Objects</span>
-        </div>
-        <h1>Manage Story Objects</h1>
-        <p>Manage the basic information, characters, background settings, etc. of your novel</p>
+    <div className="story-panel">
+      <div className="story-header">
+        <h2>📋 Story Objects</h2>
       </div>
 
-      <div className="story-objects-tabs">
-        {tabs.map((tab) => (
+      <div className="story-tabs">
+        {storyTabs.map((tab) => (
           <button
             key={tab.id}
-            className={`tab-button ${activeTab === tab.id ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
+            className={`tab-button ${activeStoryTab === tab.id ? 'active' : ''}`}
+            onClick={() => onTabChange(tab.id)}
           >
             <span className="tab-icon">{tab.icon}</span>
             <span className="tab-label">{tab.label}</span>
@@ -124,11 +102,11 @@ const StoryObjects: React.FC = () => {
         ))}
       </div>
 
-      <div className="story-objects-content">
-        {renderContent()}
+      <div className="story-content">
+        {renderStoryContent()}
       </div>
     </div>
   );
 };
 
-export default StoryObjects;
+export default StoryPanel;

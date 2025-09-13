@@ -29,6 +29,8 @@ const OutlineManager: React.FC = () => {
   const [showAddActForm, setShowAddActForm] = useState(false);
   const [showAddChapterForm, setShowAddChapterForm] = useState<string | null>(null);
   const [showAIModal, setShowAIModal] = useState(false);
+  const [showActAIModal, setShowActAIModal] = useState<string | null>(null);
+  const [showChapterAIModal, setShowChapterAIModal] = useState<string | null>(null);
   const [showActVersionHistory, setShowActVersionHistory] = useState<string | null>(null);
   const [showChapterVersionHistory, setShowChapterVersionHistory] = useState<string | null>(null);
 
@@ -115,6 +117,30 @@ const OutlineManager: React.FC = () => {
       });
       
       updateOutlineAI(projectId, newOutline);
+    }
+  };
+
+  const handleActAIResult = (result: any) => {
+    if (!projectId) return;
+
+    if (result && result.id && result.name !== undefined && result.description !== undefined) {
+      updateAct(projectId, result.id, {
+        name: result.name,
+        description: result.description
+      });
+      setShowActAIModal(null);
+    }
+  };
+
+  const handleChapterAIResult = (result: any) => {
+    if (!projectId) return;
+
+    if (result && result.id && result.name !== undefined && result.description !== undefined) {
+      updateChapter(projectId, result.id, {
+        name: result.name,
+        description: result.description
+      });
+      setShowChapterAIModal(null);
     }
   };
 
@@ -209,6 +235,12 @@ const OutlineManager: React.FC = () => {
                     📚 History
                   </button>
                   <button
+                    onClick={() => setShowActAIModal(act.id)}
+                    className="ai-edit-button"
+                  >
+                    🤖 AI Edit
+                  </button>
+                  <button
                     onClick={() => setEditingAct(act)}
                     className="edit-button"
                   >
@@ -270,6 +302,12 @@ const OutlineManager: React.FC = () => {
                           📚 History
                         </button>
                         <button
+                          onClick={() => setShowChapterAIModal(chapter.id)}
+                          className="ai-edit-button"
+                        >
+                          🤖 AI Edit
+                        </button>
+                        <button
                           onClick={() => setEditingChapter(chapter)}
                           className="edit-button"
                         >
@@ -314,6 +352,29 @@ const OutlineManager: React.FC = () => {
         onResult={handleAIResult}
       />
 
+      {/* Act AI Edit Modal */}
+      {showActAIModal && (
+        <AIEditModal
+          isOpen={!!showActAIModal}
+          onClose={() => setShowActAIModal(null)}
+          category="act"
+          projectId={projectId || ''}
+          targetId={showActAIModal}
+          onResult={handleActAIResult}
+        />
+      )}
+
+      {/* Chapter AI Edit Modal */}
+      {showChapterAIModal && (
+        <AIEditModal
+          isOpen={!!showChapterAIModal}
+          onClose={() => setShowChapterAIModal(null)}
+          category="chapter"
+          projectId={projectId || ''}
+          targetId={showChapterAIModal}
+          onResult={handleChapterAIResult}
+        />
+      )}
 
       {/* Act Version History Modal */}
       {showActVersionHistory && (

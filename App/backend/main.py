@@ -75,7 +75,7 @@ async def copilot_stream(
         print(f"[DEBUG] Sending to API with tools: {len(tools)} tools")
 
     async def event_gen():
-        MAX_RETRIES = 5
+        MAX_RETRIES = 10
         retry_count = 0
         
         while retry_count < MAX_RETRIES:
@@ -120,6 +120,36 @@ async def copilot_stream(
                 return
 
     return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@app.get("/models")
+async def get_models():
+    """Get available models from GitHub Copilot API"""
+    if not COPILOT_TOKEN:
+        raise HTTPException(status_code=500, detail="COPILOT_TOKEN not configured")
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://api.githubcopilot.com/models",
+                headers={
+                    "authorization": f"Bearer {COPILOT_TOKEN}",
+                    "content-type": "application/json"
+                }
+            )
+            
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=response.status_code, 
+                    detail=f"Failed to fetch models: {response.text}"
+                )
+            
+            return response.json()
+            
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=500, detail=f"Network error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching models: {str(e)}")
 
 
 @app.get("/healthz")

@@ -16,8 +16,8 @@ export interface RuntimeProcessingConfig {
 }
 
 export interface RuntimeProcessingCallbacks {
-  onNewMessage: (messageId: string, content: string) => void;
-  onNewFunctionCalls: (messageId: string, functionCalls: FunctionCallMetadata[]) => void;
+  onUpdateMessage: (messageId: string, content: string) => void;
+  onFunctionCalls: (messageId: string, functionCalls: FunctionCallMetadata[]) => void;
   onAddMessage: (projectId: string, message: ChatMessage) => void;
   onGetChatHistory: (projectId: string) => ChatMessage[];
   onError: (error: Error) => void;
@@ -61,54 +61,6 @@ export class RuntimeProcessor {
     }
   }
 
-  /**
-   * Continue streaming after function call processing
-   */
-  async continueAfterFunctionCall(
-    functionCall: FunctionCallMetadata,
-    accepted: boolean,
-    resultMessage: string
-  ): Promise<void> {
-    if (this.config.isLoading) return;
-
-    this.config.setIsLoading(true);
-
-    try {
-      // 1. Send function call result as system message
-      const systemMessage = this.createResultMessage(functionCall, accepted, resultMessage);
-      this.callbacks.onAddMessage(this.config.projectId, systemMessage);
-
-      // 2. Create new AI response message
-      const assistantMessage = this.createAssistantMessage();
-      this.callbacks.onAddMessage(this.config.projectId, assistantMessage);
-
-      // 3. Start streaming
-      await this.startStreaming(assistantMessage.id);
-
-    } catch (error) {
-      console.error('Runtime processing error:', error);
-      this.callbacks.onError(error instanceof Error ? error : new Error(String(error)));
-    } finally {
-      this.config.setIsLoading(false);
-      this.config.abortControllerRef.current = null;
-    }
-  }
-
-  /**
-   * Create system message
-   */
-  private createResultMessage(
-    functionCall: FunctionCallMetadata,
-    accepted: boolean,
-    resultMessage: string
-  ): ChatMessage {
-    return {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: `<system>Function call ${functionCall.function_name} was ${accepted ? 'accepted' : 'rejected'}. ${resultMessage}</system>`,
-      timestamp: new Date(),
-    };
-  }
 
   /**
    * Create AI response message
@@ -156,12 +108,12 @@ export class RuntimeProcessor {
     })) {
       if (typeof chunk === 'string') {
         accumulatedContent += chunk;
-        this.callbacks.onNewMessage(assistantMessageId, accumulatedContent);
+        this.callbacks.onUpdateMessage(assistantMessageId, accumulatedContent);
       } else {
         // Process tool calls
         if (chunk.content) {
           accumulatedContent += chunk.content;
-          this.callbacks.onNewMessage(assistantMessageId, accumulatedContent);
+          this.callbacks.onUpdateMessage(assistantMessageId, accumulatedContent);
         }
         
         if (chunk.tool_calls) {
@@ -220,17 +172,28 @@ export class RuntimeProcessor {
       ? { content: content, tool_calls: toolCalls }
       : content;
     
+    console.log('RuntimeProcessor: Processing final response', { finalResponse, toolCallsLength: toolCalls.length });
+    
     const { message: processedMessage } = this.config.chatPipeline.postProcess(
       finalResponse,
       context
     );
+
+    console.log('RuntimeProcessor: Processed message', { 
+      messageId, 
+      functionCallsLength: processedMessage.functionCalls?.length || 0,
+      functionCalls: processedMessage.functionCalls 
+    });
 
     // Process for display and generate edit cards
     const { editCards } = this.config.chatPipeline.processForDisplay(processedMessage, context);
     
     // Call callback if function calls exist
     if (processedMessage.functionCalls && processedMessage.functionCalls.length > 0) {
-      this.callbacks.onNewFunctionCalls(messageId, processedMessage.functionCalls);
+      console.log('RuntimeProcessor: Calling onFunctionCalls callback', { messageId, functionCalls: processedMessage.functionCalls });
+      this.callbacks.onFunctionCalls(messageId, processedMessage.functionCalls);
+    } else {
+      console.log('RuntimeProcessor: No function calls to process');
     }
   }
 

@@ -40,6 +40,7 @@ export interface EditCard {
   isApplied: boolean;
   data: any;
   editTagData?: any; // Store the full edit tag data for direct access
+  appliedAt?: Date; // When the card was applied
   onApply: () => void;
   onReject: () => void;
 }
