@@ -1,5 +1,5 @@
 import type { ChatMessage } from '../llm_request/types';
-import type { 
+import type {
   ChatPipelineContext,
   SystemInsertConfig,
   ProcessedChatMessage,
@@ -8,6 +8,7 @@ import type {
   PostProcessor,
   DisplayProcessor
 } from './types';
+import type { FunctionCallSchema } from './types/functionCalling';
 import { DefaultPreProcessor } from './processors/PreProcessor';
 import { DefaultPostProcessor } from './processors/PostProcessor';
 import { DefaultDisplayProcessor } from './processors/DisplayProcessor';
@@ -31,9 +32,10 @@ export class ChatPipeline {
   preProcess(
     messages: ChatMessage[],
     context: ChatPipelineContext,
-    outputLanguage?: string
+    outputLanguage?: string,
+    functions?: FunctionCallSchema[]
   ) {
-    return this.preProcessor.process(messages, context, outputLanguage);
+    return this.preProcessor.process(messages, context, outputLanguage, functions);
   }
 
   // Post-process AI response

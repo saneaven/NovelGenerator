@@ -22,8 +22,8 @@ export interface FunctionCallResult {
   data?: any;
 }
 
-// Story Object Function Schemas
-export const STORY_FUNCTIONS: FunctionCallSchema[] = [
+// Workspace Story Object Function Schemas (for story structure management)
+export const WORKSPACE_FUNCTIONS: FunctionCallSchema[] = [
   {
     name: "manage_story_objects",
     description: "Create, update, or delete story objects in a single operation. Supports batch operations for efficient management.",
@@ -102,7 +102,7 @@ export const STORY_FUNCTIONS: FunctionCallSchema[] = [
               },
               {
                 if: {
-                  properties: { 
+                  properties: {
                     type: { const: "basic_info" },
                     action: { enum: ["create", "update"] }
                   }
@@ -117,7 +117,7 @@ export const STORY_FUNCTIONS: FunctionCallSchema[] = [
               },
               {
                 if: {
-                  properties: { 
+                  properties: {
                     type: { const: "chapter" },
                     action: { enum: ["create", "update"] }
                   }
@@ -132,7 +132,7 @@ export const STORY_FUNCTIONS: FunctionCallSchema[] = [
               },
               {
                 if: {
-                  properties: { 
+                  properties: {
                     type: { const: "act" },
                     action: { enum: ["create", "update"] }
                   }
@@ -147,7 +147,7 @@ export const STORY_FUNCTIONS: FunctionCallSchema[] = [
               },
               {
                 if: {
-                  properties: { 
+                  properties: {
                     type: { enum: ["character", "organization", "location", "lorebook"] },
                     action: { enum: ["create", "update"] }
                   }
@@ -168,6 +168,29 @@ export const STORY_FUNCTIONS: FunctionCallSchema[] = [
     }
   }
 ];
+
+// Novel Editor Function Schemas (for chapter content management)
+export const NOVEL_EDITOR_FUNCTIONS: FunctionCallSchema[] = [
+  {
+    name: "update_chapter_content",
+    description: "Update the content of a specific chapter. Used for AI-generated chapter content or content modifications.",
+    parameters: {
+      type: "object",
+      properties: {
+        chapterId: {
+          type: "string",
+          description: "The ID of the chapter to update"
+        },
+        content: {
+          type: "string",
+          description: "The new content for the chapter"
+        }
+      },
+      required: ["chapterId", "content"]
+    }
+  }
+];
+
 
 // Function call message types for chat
 export interface FunctionCallMessage {

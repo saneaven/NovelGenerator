@@ -5,6 +5,12 @@ export interface SystemTagData {
     enabled: boolean;
     storyObjects: any;
   };
+  novelContent?: {
+    enabled: boolean;
+    content: string;
+    chapterName?: string;
+    wordCount?: number;
+  };
   functionCallResults?: Array<{
     functionCall: any;
     accepted: boolean;
@@ -27,9 +33,10 @@ ${JSON.stringify(this.simplifyStoryObjects(data.storyContext.storyObjects), null
 \`\`\``);
     }
 
+
     // Add function call results
     if (data.functionCallResults && data.functionCallResults.length > 0) {
-      const functionCallSection = data.functionCallResults.map(result => 
+      const functionCallSection = data.functionCallResults.map(result =>
         `Function call ${result.functionCall.function_name} was ${result.accepted ? 'accepted' : 'rejected'}. ${result.resultMessage}`
       ).join('\n');
       systemParts.push(`# Function Call Results\n${functionCallSection}`);

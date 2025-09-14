@@ -81,18 +81,11 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
 }
 
 .main-content {
-  min-height: 100vh;
+  height: 100dvh;
   width: 100%;
   padding: 20px;
   box-sizing: border-box;
   background: transparent;
-}
-
-/* Remove padding for workspace page */
-.main-content:has(.workspace-container) {
-  padding: 0;
-  height: 100vh;
-  min-height: 100vh;
 }
 
 /* 모바일에서 패딩 최소화 */
@@ -1175,6 +1168,51 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
   word-wrap: break-word;
   max-height: 200px;
   overflow-y: auto;
+}
+
+/* Novel Chapter AI Edit Modal Specific Styles */
+.novel-chapter-ai-edit-modal {
+  max-width: 800px;
+}
+
+.novel-chapter-ai-edit-modal .modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 15px;
+}
+
+.novel-chapter-ai-edit-modal .modal-header .chapter-info {
+  flex: 1;
+  text-align: center;
+  margin: 0 20px;
+}
+
+.novel-chapter-ai-edit-modal .chapter-name {
+  display: block;
+  font-size: 0.9rem;
+  color: #666;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 6px 12px;
+  border-radius: 15px;
+  border: 1px solid #e0e0e0;
+}
+
+.novel-chapter-ai-edit-modal .context-options .checkbox-group {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.novel-content-preview {
+  font-family: Georgia, 'Times New Roman', serif !important;
+  font-size: 0.95rem !important;
+  line-height: 1.6;
+  color: #333 !important;
+  max-height: 400px;
+  padding: 15px;
+  background: #fdfdfd;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
 }
 
 .error-message {

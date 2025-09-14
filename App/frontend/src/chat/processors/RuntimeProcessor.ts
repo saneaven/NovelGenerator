@@ -13,6 +13,7 @@ export interface RuntimeProcessingConfig {
   abortControllerRef: React.MutableRefObject<AbortController | null>;
   outputLanguage?: string;
   aiModel?: string;
+  functions?: any[]; // Function schemas for this context
 }
 
 export interface RuntimeProcessingCallbacks {
@@ -92,7 +93,8 @@ export class RuntimeProcessor {
     const { conversationBlocks, functions } = this.config.chatPipeline.preProcess(
       chatHistory.slice(0, -1), // Exclude the newly added empty assistant message
       context,
-      this.config.outputLanguage
+      this.config.outputLanguage,
+      this.config.functions
     );
 
     // Start streaming

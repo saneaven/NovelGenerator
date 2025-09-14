@@ -5,7 +5,7 @@ import type {
   ProcessedChatMessage, 
   ChatPipelineContext 
 } from '../types';
-import { STORY_FUNCTIONS } from '../types/functionCalling';
+import type { FunctionCallSchema } from '../types/functionCalling';
 import { SystemTagManager, type SystemTagData } from '../utils/SystemTagManager';
 
 function findLastUserMessageIdx(messages: ChatMessage[]): number
@@ -21,9 +21,10 @@ function findLastUserMessageIdx(messages: ChatMessage[]): number
 
 export class DefaultPreProcessor implements PreProcessor {
   process(
-    messages: ChatMessage[], 
+    messages: ChatMessage[],
     context: ChatPipelineContext,
-    outputLanguage?: string
+    outputLanguage?: string,
+    functions?: FunctionCallSchema[]
   ): PreProcessingResult {
     const processedMessages: ProcessedChatMessage[] = [];
     const conversationBlocks: ConversationBlock[] = [];
@@ -33,7 +34,7 @@ export class DefaultPreProcessor implements PreProcessor {
     // Add comprehensive system prompt
     conversationBlocks.push({
       role: 'system',
-      content: this.generateSystemPrompt(context, outputLanguage)
+      content: this.generateSystemPrompt(context, outputLanguage, functions)
     });
 
     // Process existing messages
@@ -60,23 +61,21 @@ export class DefaultPreProcessor implements PreProcessor {
         });
     }
 
-    const functions = context.systemInsertConfig.enabled ? STORY_FUNCTIONS : undefined;
+    const availableFunctions = context.systemInsertConfig.enabled ? functions : undefined;
     
     // Debug: Log function preparation
     console.log("Chat to be sent to backend:", {
       conversationBlocks,
-      functions
+      functions: availableFunctions
     });
     return {
       conversationBlocks,
       processedMessages,
-      functions
+      functions: availableFunctions
     };
   }
 
-  private generateSystemPrompt(context: ChatPipelineContext, outputLanguage?: string): string 
-  {
-
+  private generateSystemPrompt(context: ChatPipelineContext, outputLanguage?: string, functions?: FunctionCallSchema[]): string {
     let systemPrompt = `You are an AI assistant specialized in novel writing and story development. You help writers create, develop, and refine their stories.
 
 Your primary capabilities include:
@@ -89,10 +88,33 @@ Your primary capabilities include:
 # Language
 You Should respond in ${outputLanguage ? outputLanguage : 'the language used by the user'}.`;
 
-    if (context.systemInsertConfig.enabled && context.systemInsertConfig.includeProjectInfo) {
-      systemPrompt += `
+    if (context.systemInsertConfig.enabled && context.systemInsertConfig.includeProjectInfo && functions && functions.length > 0) {
+      // Check if this is novel editor context (has update_chapter_content function)
+      const hasChapterContentFunction = functions.some(f => f.name === 'update_chapter_content');
 
-IMPORTANT: You have access to a unified function for managing story objects. When the user requests changes to their story (characters, locations, plot, etc.), you can call this function:
+      if (hasChapterContentFunction) {
+        systemPrompt += `
+
+IMPORTANT: You are in Novel Editor mode. You can help with chapter content generation and modifications.
+
+Available Function:
+update_chapter_content - Update the content of a specific chapter with AI-generated text
+
+Function Usage Rules:
+- Only call this function when the user explicitly requests chapter content changes
+- Use this when generating new chapter content, rewriting sections, or making content modifications
+- The user will be asked to approve function calls before they're applied
+- You can continue your normal conversation along with function calls
+- Always provide the chapterId and content
+
+Example usage:
+- Generate: {chapterId: "ch123", content: "Chapter content here..."}
+- Rewrite: {chapterId: "ch123", content: "Rewritten content..."}`;
+      } else {
+        // Workspace context
+        systemPrompt += `
+
+IMPORTANT: You are in Workspace mode. You have access to story structure management functions.
 
 Available Function:
 manage_story_objects - Create, update, or delete story objects in batch operations
@@ -108,6 +130,7 @@ Example usage:
 - Create: {action: "create", type: "character", data: {name: "John", description: "Hero"}}
 - Update: {action: "update", type: "character", id: "123", data: {name: "John Updated"}}
 - Delete: {action: "delete", type: "character", id: "456"}`;
+      }
     }
 
     return systemPrompt;

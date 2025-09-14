@@ -5,6 +5,7 @@ import ProjectMenu from '../pages/ProjectMenu';
 // import Chat from '../pages/Chat';
 // import StoryObjectsEditor from '../pages/StoryObjectsEditor';
 import Workspace from '../pages/Workspace';
+import NovelEditor from '../pages/NovelEditor';
 
 export const router = createBrowserRouter([
   {
@@ -22,6 +23,10 @@ export const router = createBrowserRouter([
       {
         path: '/project/:projectId/workspace',
         element: <Workspace />,
+      },
+      {
+        path: '/project/:projectId/novel-editor',
+        element: <NovelEditor />,
       }
     ],
   },
