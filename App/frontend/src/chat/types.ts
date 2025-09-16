@@ -1,11 +1,10 @@
-import type { ConversationBlock, ChatMessage, Role } from '../llm_request/types';
+import type { ConversationBlock, ChatMessage } from '../llm_request/types';
 import type { StoryObjects } from '../types/storyObject';
 import type { FunctionCallSchema } from './types/functionCalling';
 
 // Extend existing ChatMessage for pipeline processing
 export interface ProcessedChatMessage extends ChatMessage {
   originalContent?: string;
-  processedForAI?: boolean;
 }
 
 // System insertion mode for AI context
@@ -13,6 +12,7 @@ export interface SystemInsertConfig {
   enabled: boolean;
   includeProjectInfo: boolean;
   includeStoryObjects: boolean;
+  includeNovelContent: boolean;
 }
 
 // Pipeline processing interfaces
@@ -50,6 +50,8 @@ export interface ChatPipelineContext {
   projectId: string;
   storyObjects: StoryObjects;
   systemInsertConfig: SystemInsertConfig;
+  novelData?: any; // Novel content data
+  mode: 'novel-editor' | 'workspace'; // Explicit mode distinction
 }
 
 // Pipeline processor interfaces

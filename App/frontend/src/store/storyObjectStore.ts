@@ -73,6 +73,10 @@ interface StoryObjectStore {
   updateChapter: (projectId: string, chapterId: string, updates: Partial<Omit<Chapter, 'id' | 'createdAt' | 'actId'>>) => void;
   deleteChapter: (projectId: string, chapterId: string) => void;
   
+  compareVersionData: (data1: unknown, data2: unknown) => boolean;
+  createUpdateVersion: (currentData: any, userRequest?: string) => ObjectVersion | null;
+  addVersionToItem: (item: any, newVersion: ObjectVersion | null) => any;
+
   // Version Management Actions
   addVersion: <T>(projectId: string, category: StoryObjectCategory, itemId: string, userRequest: string, data: T) => string;
   setActiveVersion: (projectId: string, category: StoryObjectCategory, itemId: string, versionId: string) => void;
@@ -249,19 +253,6 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
         });
       },
 
-      // Utility to ensure project exists
-      ensureProject: (projectId: string) => {
-        const state = get();
-        if (!state.storyObjectsByProject[projectId]) {
-          set({
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: createEmptyStoryObjects(),
-            },
-          });
-        }
-      },
-
       // Basic Info Actions
       setBasicInfo: (projectId: string, basicInfo: BasicInfo) => {
         set((state) => {
@@ -307,8 +298,8 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
       },
 
       getBasicInfo: (projectId: string) => {
-        const state = get();
-        return state.storyObjectsByProject[projectId]?.basicInfo || null;
+        const storeState = get();
+        return storeState.storyObjectsByProject[projectId]?.basicInfo || null;
       },
 
       // Character Actions
@@ -382,8 +373,8 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
       },
 
       getCharacters: (projectId: string) => {
-        const state = get();
-        return state.storyObjectsByProject[projectId]?.characters || [];
+        const storeState = get();
+        return storeState.storyObjectsByProject[projectId]?.characters || [];
       },
 
       // Organization Actions
@@ -457,8 +448,8 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
       },
 
       getOrganizations: (projectId: string) => {
-        const state = get();
-        return state.storyObjectsByProject[projectId]?.organizations || [];
+        const storeState = get();
+        return storeState.storyObjectsByProject[projectId]?.organizations || [];
       },
 
       // Location Actions
@@ -532,8 +523,8 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
       },
 
       getLocations: (projectId: string) => {
-        const state = get();
-        return state.storyObjectsByProject[projectId]?.locations || [];
+        const storeState = get();
+        return storeState.storyObjectsByProject[projectId]?.locations || [];
       },
 
       // Lorebook Actions
@@ -607,8 +598,8 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
       },
 
       getLorebookEntries: (projectId: string) => {
-        const state = get();
-        return state.storyObjectsByProject[projectId]?.lorebook || [];
+        const storeState = get();
+        return storeState.storyObjectsByProject[projectId]?.lorebook || [];
       },
 
       // Outline Actions
@@ -666,8 +657,8 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
       },
 
       getOutline: (projectId: string) => {
-        const state = get();
-        return state.storyObjectsByProject[projectId]?.outline || null;
+        const storeState = get();
+        return storeState.storyObjectsByProject[projectId]?.outline || null;
       },
 
       // Act Actions
@@ -882,8 +873,8 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
 
       // Utility Actions
       getStoryObjects: (projectId: string) => {
-        const state = get();
-        return state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
+        const storeState = get();
+        return storeState.storyObjectsByProject[projectId] || createEmptyStoryObjects();
       },
 
       clearStoryObjects: (projectId: string) => {
@@ -897,8 +888,7 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
 
       // Helper function to get item by category and id
       getItemByCategoryAndId: (projectId: string, category: StoryObjectCategory, itemId: string) => {
-        const state = get();
-        const projectObjects = state.storyObjectsByProject[projectId];
+        const projectObjects = get().storyObjectsByProject[projectId];
         if (!projectObjects) return null;
 
         switch (category) {
@@ -921,16 +911,14 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
 
       // Helper functions for acts and chapters
       getActById: (projectId: string, actId: string) => {
-        const state = get();
-        const projectObjects = state.storyObjectsByProject[projectId];
+        const projectObjects = get().storyObjectsByProject[projectId];
         if (!projectObjects?.outline) return null;
         
         return projectObjects.outline.acts.find(act => act.id === actId) || null;
       },
 
       getChapterById: (projectId: string, chapterId: string) => {
-        const state = get();
-        const projectObjects = state.storyObjectsByProject[projectId];
+        const projectObjects = get().storyObjectsByProject[projectId];
         if (!projectObjects?.outline) return null;
         
         for (const act of projectObjects.outline.acts) {
@@ -1083,7 +1071,6 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
       },
 
       getVersions: (projectId: string, category: StoryObjectCategory, itemId: string) => {
-        const state = get();
         const item = get().getItemByCategoryAndId(projectId, category, itemId);
         return item?.versions || [];
       },

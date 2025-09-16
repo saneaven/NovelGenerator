@@ -8,7 +8,7 @@ import type {
 export class DefaultPostProcessor implements PostProcessor {
   process(
     aiResponse: string | { content: string | null; tool_calls?: any[] },
-    context: ChatPipelineContext
+    _context: ChatPipelineContext
   ): PostProcessingResult {
     let content: string | null;
     let tool_calls: any[] | undefined;

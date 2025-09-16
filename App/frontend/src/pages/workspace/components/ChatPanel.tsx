@@ -14,6 +14,7 @@ interface ChatPanelProps {
   setSystemInsertConfig: (config: SystemInsertConfig | ((prev: SystemInsertConfig) => SystemInsertConfig)) => void;
   chatPipeline: ChatPipeline;
   storyObjects: any;
+  novelData?: any; // Novel content data for NovelEditor context
   messageEditCards: Record<string, EditCard[]>;
   activeFunctionCalls: Record<string, any[]>;
   onSubmit: (e: React.FormEvent, input: string, isLoading: boolean) => Promise<void>;
@@ -24,6 +25,7 @@ interface ChatPanelProps {
   onCancelEdit: () => void;
   onDeleteMessage: (messageId: string) => void;
   editTextareaRef: React.RefObject<HTMLTextAreaElement>;
+  mode: 'novel-editor' | 'workspace'; // Add mode prop
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({
@@ -34,6 +36,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   setSystemInsertConfig,
   chatPipeline,
   storyObjects,
+  novelData,
   messageEditCards,
   activeFunctionCalls,
   onSubmit,
@@ -44,6 +47,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   onCancelEdit,
   onDeleteMessage,
   editTextareaRef,
+  mode,
 }) => {
   const { getChats, getChatHistory } = useChatStore();
   const { getCurrentProject } = useProjectStore();
@@ -55,7 +59,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const displayContext = ChatPipeline.createContext(
     projectId,
     storyObjects,
-    systemInsertConfig
+    mode,
+    systemInsertConfig,
+    novelData
   );
 
   const scrollToBottom = () => {
@@ -121,17 +127,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             index === chatHistory.length - 1 &&
             uiState.isLoading;
           
-          // Check if message is ONLY system tags (no user content)
-          const isSystemMessage = message.content && 
-            typeof message.content === 'string' && 
-            /<system>[\s\S]*?<\/system>/i.test(message.content) &&
-            message.role === 'user' &&
-            // Only hide if the message contains ONLY system tags and whitespace
-            message.content.replace(/<system>[\s\S]*?<\/system>\s*/gi, '').trim() === '';
-          
           return (
             <div key={message.id}>
-              {!isSystemMessage && (
+              {(
                 <div className={`message ${message.role}`}>
                   <div className="message-wrapper">
                     {uiState.editingMessageId === message.id ? (
@@ -251,6 +249,19 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             />
             <span className="toggle-label">
               📋 Include story context in messages
+            </span>
+          </label>
+          <label className="system-insert-toggle">
+            <input
+              type="checkbox"
+              checked={systemInsertConfig.includeNovelContent}
+              onChange={(e) => setSystemInsertConfig(prev => ({
+                ...prev,
+                includeNovelContent: e.target.checked
+              }))}
+            />
+            <span className="toggle-label">
+              📖 Include novel content in messages
             </span>
           </label>
         </div>

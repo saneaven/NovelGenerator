@@ -10,7 +10,7 @@ import { type ChatMessage } from '../llm_request/types';
 import { ChatPipeline } from '../chat/ChatPipeline';
 import type { SystemInsertConfig } from '../chat/types';
 import { DefaultDisplayProcessor } from '../chat/processors/DisplayProcessor';
-import { RuntimeProcessor, type RuntimeProcessingCallbacks } from '../chat/processors/RuntimeProcessor';
+import { ChatManager, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
 import { NOVEL_EDITOR_FUNCTIONS } from '../chat/types/functionCalling';
 
 // Novel Editor Components
@@ -65,7 +65,7 @@ const NovelEditor: React.FC = () => {
   // Create a ref to store function call handlers for callbacks
   const functionCallHandlersRef = useRef<any>(null);
 
-  const runtimeCallbacks: RuntimeProcessingCallbacks = {
+  const chatManagerCallbacks: ChatManagerCallbacks = {
     onUpdateMessage: (messageId: string, content: string) => {
       updateMessage(projectId || '', messageId, content);
     },
@@ -91,10 +91,18 @@ const NovelEditor: React.FC = () => {
     }
   };
 
-  const runtimeProcessor = useMemo(() => {
+  // Update function call handlers first
+  const updatedFunctionCallHandlers = useNovelEditorFunctionCallHandlers(projectId);
+
+  const chatManager = useMemo(() => {
     const updatedConfig = {
       projectId: projectId || '',
       getStoryObjects: () => getStoryObjects(projectId || ''),
+      getNovelData: () => {
+        const { getAllChapterContents } = useNovelStore.getState();
+        return getAllChapterContents(projectId || '');
+      },
+      getFunctionCallResults: () => updatedFunctionCallHandlers.pendingFunctionCallResults,
       systemInsertConfig,
       chatPipeline,
       isLoading: uiState.isLoading,
@@ -102,13 +110,11 @@ const NovelEditor: React.FC = () => {
       abortControllerRef: { current: null },
       outputLanguage: settings.outputLanguage,
       aiModel: settings.aiModel,
-      functions: NOVEL_EDITOR_FUNCTIONS
+      functions: NOVEL_EDITOR_FUNCTIONS,
+      mode: 'novel-editor' as const
     };
-    return new RuntimeProcessor(updatedConfig, runtimeCallbacks);
-  }, [projectId, systemInsertConfig, uiState.isLoading, getStoryObjects, settings]);
-
-  // Update function call handlers with runtime processor
-  const updatedFunctionCallHandlers = useNovelEditorFunctionCallHandlers(projectId, runtimeProcessor);
+    return new ChatManager(updatedConfig, chatManagerCallbacks);
+  }, [projectId, systemInsertConfig, uiState.isLoading, getStoryObjects, settings, updatedFunctionCallHandlers.pendingFunctionCallResults]);
 
   // Update the ref with current handlers
   functionCallHandlersRef.current = updatedFunctionCallHandlers;
@@ -117,7 +123,7 @@ const NovelEditor: React.FC = () => {
   const chatHandlers = useChatHandlers(
     projectId,
     uiActions,
-    runtimeProcessor,
+    chatManager,
     updatedFunctionCallHandlers.pendingFunctionCallResults,
     () => updatedFunctionCallHandlers.setPendingFunctionCallResults([])
   );
@@ -147,7 +153,8 @@ const NovelEditor: React.FC = () => {
       const processed = displayProcessor.process(message, {
         projectId,
         storyObjects,
-        systemInsertConfig
+        systemInsertConfig,
+        mode: 'novel-editor'
       });
 
       if (processed.editCards.length > 0) {
@@ -228,6 +235,7 @@ const NovelEditor: React.FC = () => {
           setSystemInsertConfig={setSystemInsertConfig}
           chatPipeline={chatPipeline}
           storyObjects={storyObjects}
+          novelData={useNovelStore.getState().getAllChapterContents(projectId || '')}
           messageEditCards={updatedFunctionCallHandlers.messageEditCards}
           activeFunctionCalls={updatedFunctionCallHandlers.activeFunctionCalls}
           onSubmit={chatHandlers.handleSubmit}
@@ -237,7 +245,8 @@ const NovelEditor: React.FC = () => {
           onSaveEdit={chatHandlers.handleSaveEdit}
           onCancelEdit={chatHandlers.handleCancelEdit}
           onDeleteMessage={chatHandlers.handleDeleteMessage}
-          editTextareaRef={chatHandlers.editTextareaRef}
+          editTextareaRef={chatHandlers.editTextareaRef as React.RefObject<HTMLTextAreaElement>}
+          mode="novel-editor"
         />
 
         {/* Novel Editor Panel */}

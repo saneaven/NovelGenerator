@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useStoryObjectStore } from '../store/storyObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { streamCopilot } from '../llm_request/copilot';
-import type { ConversationBlock } from '../llm_request/types';
 import type { StoryObjectCategory } from '../types/storyObject';
 import { AIEditService, type ContextOptions } from '../services/aiEditService';
 

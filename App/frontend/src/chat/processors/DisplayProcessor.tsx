@@ -1,4 +1,6 @@
 import React from 'react';
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import type { FunctionCallMetadata } from '../../llm_request/types';
 import type { 
   DisplayProcessor, 
@@ -8,9 +10,14 @@ import type {
   ChatPipelineContext 
 } from '../types';
 
+marked.setOptions({
+  gfm: true,
+  breaks: true,
+});
+
 // Component to display preview changes in a user-friendly format
 const PreviewChangesComponent: React.FC<{ data: any }> = ({ data }) => {
-  const renderValue = (value: any, key?: string): React.ReactNode => {
+  const renderValue = (value: any): React.ReactNode => {
     if (value === null || value === undefined) {
       return <span className="preview-null">null</span>;
     }
@@ -81,7 +88,7 @@ const PreviewChangesComponent: React.FC<{ data: any }> = ({ data }) => {
           {entries.map(([objKey, objValue]) => (
             <div key={objKey} className="preview-object-item">
               <span className="preview-key">{objKey}:</span>
-              <div className="preview-value">{renderValue(objValue, objKey)}</div>
+              <div className="preview-value">{renderValue(objValue)}</div>
             </div>
           ))}
         </div>
@@ -101,14 +108,14 @@ const PreviewChangesComponent: React.FC<{ data: any }> = ({ data }) => {
 export class DefaultDisplayProcessor implements DisplayProcessor {
   process(
     message: ProcessedChatMessage,
-    context: ChatPipelineContext
+    _context: ChatPipelineContext
   ): DisplayProcessingResult {
     let editCards: EditCard[] = [];
 
     if (message.role === 'assistant') {
       // Assistant messages: show function call cards (both applied and unapplied)
       if (message.functionCalls && message.functionCalls.length > 0) {
-        editCards = this.generateEditCardsFromFunctionCalls(message.functionCalls, context);
+        editCards = this.generateEditCardsFromFunctionCalls(message.functionCalls);
       } 
     } else if (message.role === 'user') {
       // User messages: no longer show system cards - they're handled by function call cards directly
@@ -133,7 +140,7 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
       content = this.removeSystemTags(content);
     }
     
-    // Process markdown-like formatting
+    // Render markdown content with full syntax support
     content = this.processMarkdown(content);
 
     return (
@@ -168,18 +175,9 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
 
 
   private processMarkdown(content: string): string {
-    // Basic markdown processing
-    return content
-      // Bold
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      // Italic
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      // Code blocks
-      .replace(/```(\w+)?\n([\s\S]*?)\n```/g, '<pre><code class="language-$1">$2</code></pre>')
-      // Inline code
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
-      // Line breaks
-      .replace(/\n/g, '<br>');
+    const parsed = marked.parse(content, { async: false });
+    const html = typeof parsed === 'string' ? parsed : '';
+    return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
   }
 
 
@@ -187,7 +185,7 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
   /**
    * Generate edit cards from function calls
    */
-  generateEditCardsFromFunctionCalls(functionCalls: FunctionCallMetadata[], context: ChatPipelineContext): EditCard[] {
+  generateEditCardsFromFunctionCalls(functionCalls: FunctionCallMetadata[]): EditCard[] {
     return functionCalls.map(funcCall => ({
       id: funcCall.id,
       type: this.mapFunctionToEditType(funcCall.function_name),
@@ -334,4 +332,7 @@ export const EditCardComponent: React.FC<{ card: EditCard }> = ({ card }) => {
     </div>
   );
 };
+
+
+
 

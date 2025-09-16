@@ -86,7 +86,7 @@ export function useWorkspaceState(projectId: string | undefined) {
     setEditingMessageId: (id: string | null) => 
       setState(prev => ({ ...prev, editingMessageId: id })),
     setEditContent: (content: string) => 
-      setState(prev => ({ ...prev, editContent })),
+      setState(prev => ({ ...prev, editContent: content })),
   };
 
   return { state, actions };

@@ -22,6 +22,16 @@ export interface FunctionCallMetadata {
   isApplied: boolean;
   appliedAt?: Date;
   error?: string;
+  resultMessage?: string; // Human-readable result message
+}
+
+// Helper interface for tracking function call results systematically
+export interface FunctionCallResultSummary {
+  functionCallId: string;
+  functionName: string;
+  success: boolean;
+  resultMessage: string;
+  appliedAt: Date;
 }
 
 export interface ChatMessage extends ConversationBlock {

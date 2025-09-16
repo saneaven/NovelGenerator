@@ -6,11 +6,11 @@ import { useChatStore } from '../store/chatStore';
 import { useStoryObjectStore } from '../store/storyObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
-import { type ChatMessage, type FunctionCallMetadata } from '../llm_request/types';
+import { type ChatMessage } from '../llm_request/types';
 import { ChatPipeline } from '../chat/ChatPipeline';
 import type { SystemInsertConfig } from '../chat/types';
 import { DefaultDisplayProcessor } from '../chat/processors/DisplayProcessor';
-import { RuntimeProcessor, type RuntimeProcessingCallbacks } from '../chat/processors/RuntimeProcessor';
+import { ChatManager, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
 import { WORKSPACE_FUNCTIONS } from '../chat/types/functionCalling';
 
 // Workspace Components
@@ -59,7 +59,7 @@ const Workspace: React.FC = () => {
   // Create a ref to store function call handlers for callbacks
   const functionCallHandlersRef = useRef<any>(null);
 
-  const runtimeCallbacks: RuntimeProcessingCallbacks = {
+  const chatManagerCallbacks: ChatManagerCallbacks = {
     onUpdateMessage: (messageId: string, content: string) => {
       updateMessage(projectId || '', messageId, content);
     },
@@ -85,7 +85,10 @@ const Workspace: React.FC = () => {
     }
   };
 
-  const runtimeProcessor = useMemo(() => {
+  // Update function call handlers first
+  const updatedFunctionCallHandlers = useFunctionCallHandlers(projectId);
+
+  const chatManager = useMemo(() => {
     const updatedConfig = {
       projectId: projectId || '',
       getStoryObjects: () => getStoryObjects(projectId || ''),
@@ -96,22 +99,20 @@ const Workspace: React.FC = () => {
       abortControllerRef: { current: null },
       outputLanguage: settings.outputLanguage,
       aiModel: settings.aiModel,
-      functions: WORKSPACE_FUNCTIONS
+      functions: WORKSPACE_FUNCTIONS,
+      mode: 'workspace' as const
     };
-    return new RuntimeProcessor(updatedConfig, runtimeCallbacks);
+    return new ChatManager(updatedConfig, chatManagerCallbacks);
   }, [projectId, systemInsertConfig, uiState.isLoading, getStoryObjects, settings]);
-
-  // Update function call handlers with runtime processor
-  const updatedFunctionCallHandlers = useFunctionCallHandlers(projectId, runtimeProcessor);
   
   // Update the ref with current handlers
   functionCallHandlersRef.current = updatedFunctionCallHandlers;
 
   // Chat handlers
   const chatHandlers = useChatHandlers(
-    projectId, 
-    uiActions, 
-    runtimeProcessor,
+    projectId,
+    uiActions,
+    chatManager,
     updatedFunctionCallHandlers.pendingFunctionCallResults,
     () => updatedFunctionCallHandlers.setPendingFunctionCallResults([])
   );
@@ -127,11 +128,12 @@ const Workspace: React.FC = () => {
       const processed = displayProcessor.process(message, {
         projectId,
         storyObjects,
-        systemInsertConfig
+        systemInsertConfig,
+        mode: 'workspace'
       });
       
       if (processed.editCards.length > 0) {
-        const editCardsWithHandlers = processed.editCards.map((card, index) => {
+        const editCardsWithHandlers = processed.editCards.map((card) => {
           if (message.role === 'assistant' && message.functionCalls) {
             const funcCall = message.functionCalls.find(fc => fc.id === card.id);
             if (funcCall) {
@@ -230,7 +232,8 @@ const Workspace: React.FC = () => {
           onSaveEdit={chatHandlers.handleSaveEdit}
           onCancelEdit={chatHandlers.handleCancelEdit}
           onDeleteMessage={chatHandlers.handleDeleteMessage}
-          editTextareaRef={chatHandlers.editTextareaRef}
+          editTextareaRef={chatHandlers.editTextareaRef as React.RefObject<HTMLTextAreaElement>}
+          mode="workspace"
         />
 
         {/* Story Editor Panel */}
@@ -274,3 +277,5 @@ const Workspace: React.FC = () => {
 };
 
 export default Workspace;
+
+

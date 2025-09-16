@@ -4,13 +4,11 @@ import { useNovelStore } from '../../../store/novelStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { NovelEditorFunctionCallApplicator } from '../services/NovelEditorFunctionCallApplicator';
 import { NovelEditorFunctionCallService } from '../services/NovelEditorFunctionCallService';
-import type { FunctionCallMetadata } from '../../../llm_request/types';
+import type { FunctionCallMetadata, FunctionCallResultSummary } from '../../../llm_request/types';
 import type { EditCard } from '../../../chat/types';
-import type { RuntimeProcessor } from '../../../chat/processors/RuntimeProcessor';
 
 export function useNovelEditorFunctionCallHandlers(
-  projectId: string | undefined,
-  runtimeProcessor: RuntimeProcessor | null
+  projectId: string | undefined
 ) {
   const { updateMessageFunctionCalls, updateFunctionCallStatus } = useChatStore();
   const novelStore = useNovelStore();
@@ -21,11 +19,7 @@ export function useNovelEditorFunctionCallHandlers(
     updateChapterContent: novelStore.updateChapterContent
   }));
   const [activeFunctionCalls, setActiveFunctionCalls] = useState<Record<string, any[]>>({});
-  const [pendingFunctionCallResults, setPendingFunctionCallResults] = useState<Array<{
-    functionCall: FunctionCallMetadata;
-    accepted: boolean;
-    resultMessage: string;
-  }>>([]);
+  const [pendingFunctionCallResults, setPendingFunctionCallResults] = useState<FunctionCallResultSummary[]>([]);
 
   const createFunctionCallApplyHandler = (messageId: string, functionCall: FunctionCallMetadata) => {
     return async () => {
@@ -35,7 +29,7 @@ export function useNovelEditorFunctionCallHandlers(
         const result = await functionCallApplicator.applyFunctionCall(projectId, functionCall);
 
         if (result.success) {
-          updateFunctionCallStatus(projectId, messageId, functionCall.id, true, result);
+          updateFunctionCallStatus(projectId, messageId, functionCall.id, true, result, undefined, result.message);
 
           setMessageEditCards(prev => ({
             ...prev,
@@ -52,16 +46,28 @@ export function useNovelEditorFunctionCallHandlers(
             ) || []
           }));
 
+          // Add to pending function call results for SystemTagManager
           setPendingFunctionCallResults(prev => [...prev, {
-            functionCall,
-            accepted: true,
-            resultMessage: result.message
+            functionCallId: functionCall.id,
+            functionName: functionCall.function_name,
+            success: true,
+            resultMessage: result.message,
+            appliedAt: new Date()
           }]);
         } else {
           console.error('Failed to apply function call:', result.error || result.message);
           showError('Function Call Failed', `Failed to apply changes: ${result.error || result.message}`);
 
-          updateFunctionCallStatus(projectId, messageId, functionCall.id, false, result, result.error);
+          updateFunctionCallStatus(projectId, messageId, functionCall.id, false, result, result.error, result.error || result.message);
+
+          // Add failed result to pending function call results
+          setPendingFunctionCallResults(prev => [...prev, {
+            functionCallId: functionCall.id,
+            functionName: functionCall.function_name,
+            success: false,
+            resultMessage: result.error || result.message,
+            appliedAt: new Date()
+          }]);
 
           setMessageEditCards(prev => ({
             ...prev,
@@ -82,7 +88,17 @@ export function useNovelEditorFunctionCallHandlers(
         console.error('Error applying function call:', error);
         showError('Function Call Error', 'An error occurred while applying changes. Please try again.');
 
-        updateFunctionCallStatus(projectId, messageId, functionCall.id, false, undefined, error instanceof Error ? error.message : 'Unknown error');
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        updateFunctionCallStatus(projectId, messageId, functionCall.id, false, undefined, errorMessage, errorMessage);
+
+        // Add error result to pending function call results
+        setPendingFunctionCallResults(prev => [...prev, {
+          functionCallId: functionCall.id,
+          functionName: functionCall.function_name,
+          success: false,
+          resultMessage: errorMessage,
+          appliedAt: new Date()
+        }]);
 
         setMessageEditCards(prev => ({
           ...prev,
@@ -106,7 +122,8 @@ export function useNovelEditorFunctionCallHandlers(
     return async () => {
       if (!projectId) return;
 
-      updateFunctionCallStatus(projectId, messageId, functionCall.id, true);
+      const rejectionMessage = 'User rejected the function call';
+      updateFunctionCallStatus(projectId, messageId, functionCall.id, true, undefined, undefined, rejectionMessage);
 
       setMessageEditCards(prev => ({
         ...prev,
@@ -123,10 +140,13 @@ export function useNovelEditorFunctionCallHandlers(
         ) || []
       }));
 
+      // Add rejection to pending function call results
       setPendingFunctionCallResults(prev => [...prev, {
-        functionCall,
-        accepted: false,
-        resultMessage: 'User rejected the function call'
+        functionCallId: functionCall.id,
+        functionName: functionCall.function_name,
+        success: false,
+        resultMessage: rejectionMessage,
+        appliedAt: new Date()
       }]);
     };
   };

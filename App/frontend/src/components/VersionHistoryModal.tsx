@@ -45,6 +45,8 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       location: 'Location',
       lorebook: 'Lorebook',
       outline: 'Outline',
+      act: 'Act',
+      chapter: 'Chapter',
     };
     return names[cat] || cat;
   };

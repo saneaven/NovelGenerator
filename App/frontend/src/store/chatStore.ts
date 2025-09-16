@@ -13,8 +13,10 @@ export interface Chat {
 interface ChatStore {
   chatsByProject: Record<string, ChatMessage[]>; // Legacy format
   multiChatsByProject: Record<string, Chat[]>; // New multi-chat format
-  selectedChatByProject: Record<string, string>; // Track selected chat per project
+  selectedChatByProject: Record<string, string | undefined>; // Track selected chat per project
   
+  _migrateLegacyChat: (projectId: string) => string | null;
+
   // Legacy methods (for backwards compatibility)
   addMessage: (projectId: string, message: ChatMessage) => void;
   updateMessage: (projectId: string, messageId: string, content: string) => void;
@@ -23,7 +25,7 @@ interface ChatStore {
   editMessage: (projectId: string, messageId: string, content: string) => void;
   deleteMessage: (projectId: string, messageId: string) => void;
   updateMessageFunctionCalls: (projectId: string, messageId: string, functionCalls: FunctionCallMetadata[]) => void;
-  updateFunctionCallStatus: (projectId: string, messageId: string, functionCallId: string, isApplied: boolean, result?: any, error?: string) => void;
+  updateFunctionCallStatus: (projectId: string, messageId: string, functionCallId: string, isApplied: boolean, result?: any, error?: string, resultMessage?: string) => void;
   
   // New multi-chat methods
   createChat: (projectId: string, name?: string) => string;
@@ -42,7 +44,7 @@ interface ChatStore {
   editMessageInChat: (projectId: string, chatId: string, messageId: string, content: string) => void;
   deleteMessageInChat: (projectId: string, chatId: string, messageId: string) => void;
   updateMessageFunctionCallsInChat: (projectId: string, chatId: string, messageId: string, functionCalls: FunctionCallMetadata[]) => void;
-  updateFunctionCallStatusInChat: (projectId: string, chatId: string, messageId: string, functionCallId: string, isApplied: boolean, result?: any, error?: string) => void;
+  updateFunctionCallStatusInChat: (projectId: string, chatId: string, messageId: string, functionCallId: string, isApplied: boolean, result?: any, error?: string, resultMessage?: string) => void;
 }
 
 export const useChatStore = create<ChatStore>()(
@@ -164,11 +166,11 @@ export const useChatStore = create<ChatStore>()(
         }
       },
 
-      updateFunctionCallStatus: (projectId: string, messageId: string, functionCallId: string, isApplied: boolean, result?: any, error?: string) => {
+      updateFunctionCallStatus: (projectId: string, messageId: string, functionCallId: string, isApplied: boolean, result?: any, error?: string, resultMessage?: string) => {
         const state = get();
         const selectedChatId = state.getSelectedChatId(projectId);
         if (selectedChatId) {
-          state.updateFunctionCallStatusInChat(projectId, selectedChatId, messageId, functionCallId, isApplied, result, error);
+          state.updateFunctionCallStatusInChat(projectId, selectedChatId, messageId, functionCallId, isApplied, result, error, resultMessage);
         }
       },
 
@@ -203,7 +205,6 @@ export const useChatStore = create<ChatStore>()(
 
       getChats: (projectId: string) => {
         const state = get();
-        state._migrateLegacyChat(projectId);
         return state.multiChatsByProject[projectId] || [];
       },
 
@@ -365,29 +366,30 @@ export const useChatStore = create<ChatStore>()(
         }));
       },
 
-      updateFunctionCallStatusInChat: (projectId: string, chatId: string, messageId: string, functionCallId: string, isApplied: boolean, result?: any, error?: string) => {
+      updateFunctionCallStatusInChat: (projectId: string, chatId: string, messageId: string, functionCallId: string, isApplied: boolean, result?: any, error?: string, resultMessage?: string) => {
         set((state) => ({
           multiChatsByProject: {
             ...state.multiChatsByProject,
             [projectId]: state.multiChatsByProject[projectId]?.map(chat =>
               chat.id === chatId
-                ? { 
-                    ...chat, 
+                ? {
+                    ...chat,
                     messages: chat.messages.map(msg =>
                       msg.id === messageId ? {
                         ...msg,
-                        functionCalls: msg.functionCalls?.map(funcCall => 
-                          funcCall.id === functionCallId ? { 
-                            ...funcCall, 
-                            isApplied, 
+                        functionCalls: msg.functionCalls?.map(funcCall =>
+                          funcCall.id === functionCallId ? {
+                            ...funcCall,
+                            isApplied,
                             result,
                             error,
-                            appliedAt: isApplied ? new Date() : undefined 
+                            resultMessage: resultMessage || (isApplied ? 'Function call accepted and executed successfully' : 'Function call was rejected'),
+                            appliedAt: isApplied ? new Date() : undefined
                           } : funcCall
                         )
                       } : msg
-                    ), 
-                    updatedAt: new Date() 
+                    ),
+                    updatedAt: new Date()
                   }
                 : chat
             ) || []

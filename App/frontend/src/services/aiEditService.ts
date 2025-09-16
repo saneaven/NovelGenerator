@@ -1,5 +1,6 @@
-import type { StoryObjects, StoryObjectCategory, BasicInfo, Character, Organization, Location, LorebookEntry, Outline } from '../types/storyObject';
+import type { StoryObjects, StoryObjectCategory } from '../types/storyObject';
 import type { ConversationBlock } from '../llm_request/types';
+import { SystemPromptManager, PromptType, type StoryObjectEditPromptContext } from '../chat/managers/SystemPromptManager';
 
 export interface ContextOptions {
   basicInfo: boolean;
@@ -259,33 +260,16 @@ export class AIEditService {
     jsonSchema: any,
     outputLanguage?: string
   ): string {
-    const editType = targetId ? 'specific item' : 'entire category';
-    const categoryName = this.getCategoryDisplayName(category);
+    const promptContext: StoryObjectEditPromptContext = {
+      category,
+      targetId,
+      contextData: context,
+      currentData,
+      jsonSchema,
+      outputLanguage
+    };
 
-    const contextSection = Object.keys(context).length > 0 
-      ? `<Context>
-${Object.keys(context).map(key => `# ${key.charAt(0).toUpperCase() + key.slice(1)}\n${JSON.stringify(context[key], null, 2)}`).join('\n\n')}
-</Context>`
-      : '<Context>\nNo additional context provided.\n</Context>';
-
-    return `You are an AI assistant that helps with novel writing. The user wants to modify the ${editType} (${categoryName}) of a story object.
-Please refer to the following context and return the modified data in JSON format according to the user's request.
-
-# Language
-You Should respond in ${outputLanguage ? outputLanguage : 'the language used by the user'}.
-
-${contextSection}
-
-Current data:
-${JSON.stringify(currentData, null, 2)}
-
-Please modify the above data according to the request and return it in the following JSON schema:
-${JSON.stringify(jsonSchema, null, 2)}
-
-Important rules:
-1. ID handling:
-   - When modifying an existing item: Keep the current data's ID.
-   - When adding a new item: Set the id to null.`;
+    return SystemPromptManager.generatePrompt(PromptType.STORY_OBJECT_EDIT, promptContext);
   }
 
   /**

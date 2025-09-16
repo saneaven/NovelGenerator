@@ -16,7 +16,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [modelsData, setModelsData] = useState<any>(null);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
-  const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set());
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [showModels, setShowModels] = useState(false);
   const [showUnsupportedModels, setShowUnsupportedModels] = useState(false);
@@ -100,18 +99,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       grouped[family].push(model);
     });
     return grouped;
-  };
-
-  const toggleModelExpansion = (modelId: string) => {
-    setExpandedModels(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(modelId)) {
-        newSet.delete(modelId);
-      } else {
-        newSet.add(modelId);
-      }
-      return newSet;
-    });
   };
 
   const toggleSectionExpansion = (sectionKey: string) => {

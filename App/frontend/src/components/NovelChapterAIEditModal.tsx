@@ -5,6 +5,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { streamCopilot } from '../llm_request/copilot';
 import type { ConversationBlock } from '../llm_request/types';
 import type { StoryObjects } from '../types/storyObject';
+import { SystemPromptManager, PromptType, type ChapterEditPromptContext } from '../chat/managers/SystemPromptManager';
 
 interface NovelContextOptions {
   basicInfo: boolean;
@@ -154,34 +155,15 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
     userRequest: string,
     outputLanguage?: string
   ): string => {
-    const contextSection = Object.keys(context).length > 0
-      ? `<Context>
-${Object.keys(context).map(key => `# ${key.charAt(0).toUpperCase() + key.slice(1)}\n${JSON.stringify(context[key], null, 2)}`).join('\n\n')}
-</Context>`
-      : '<Context>\nNo additional context provided.\n</Context>';
+    const promptContext: ChapterEditPromptContext = {
+      chapterName,
+      currentContent,
+      userRequest,
+      contextData: context,
+      outputLanguage
+    };
 
-    return `You are an AI assistant that helps with novel writing and editing. The user wants to edit a specific chapter of their novel.
-
-# Language
-You should respond in ${outputLanguage ? outputLanguage : 'the language used by the user'}.
-
-${contextSection}
-
-# Current Chapter Content
-Chapter: ${chapterName}
-Current Content:
-${currentContent}
-
-# Task
-Please edit the above chapter content according to the user's request. Return ONLY the edited chapter content as plain text (no JSON, no code blocks, no additional formatting). The content should be ready to replace the existing chapter content directly.
-
-Important guidelines:
-1. Maintain consistency with the established story elements, characters, and world-building from the context
-2. Keep the narrative voice and writing style consistent with any existing novel content provided
-3. Ensure the edited content fits well within the overall story structure and outline
-4. Focus on improving the content according to the user's specific request while preserving the core narrative elements
-
-User's Edit Request: ${userRequest}`;
+    return SystemPromptManager.generatePrompt(PromptType.CHAPTER_EDIT, promptContext);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

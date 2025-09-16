@@ -1,22 +1,25 @@
+import type { MutableRefObject } from 'react';
 import type { ChatMessage, FunctionCallMetadata } from '../../llm_request/types';
 import type { ChatPipelineContext } from '../types';
 import { streamCopilot } from '../../llm_request/copilot';
 import { ChatPipeline } from '../ChatPipeline';
 
-export interface RuntimeProcessingConfig {
+export interface ChatManagerConfig {
   projectId: string;
   getStoryObjects: () => any; // Changed from static value to function
+  getNovelData?: () => any; // Novel content access function
   systemInsertConfig: any;
   chatPipeline: ChatPipeline;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
-  abortControllerRef: React.MutableRefObject<AbortController | null>;
+  abortControllerRef: MutableRefObject<AbortController | null>;
   outputLanguage?: string;
   aiModel?: string;
   functions?: any[]; // Function schemas for this context
+  mode: 'novel-editor' | 'workspace'; // Explicit mode distinction
 }
 
-export interface RuntimeProcessingCallbacks {
+export interface ChatManagerCallbacks {
   onUpdateMessage: (messageId: string, content: string) => void;
   onFunctionCalls: (messageId: string, functionCalls: FunctionCallMetadata[]) => void;
   onAddMessage: (projectId: string, message: ChatMessage) => void;
@@ -25,11 +28,11 @@ export interface RuntimeProcessingCallbacks {
   onFunctionCallsDetected?: (messageId: string, functionCalls: any[]) => void;
 }
 
-export class RuntimeProcessor {
-  private config: RuntimeProcessingConfig;
-  private callbacks: RuntimeProcessingCallbacks;
+export class ChatManager {
+  private config: ChatManagerConfig;
+  private callbacks: ChatManagerCallbacks;
 
-  constructor(config: RuntimeProcessingConfig, callbacks: RuntimeProcessingCallbacks) {
+  constructor(config: ChatManagerConfig, callbacks: ChatManagerCallbacks) {
     this.config = config;
     this.callbacks = callbacks;
   }
@@ -54,7 +57,7 @@ export class RuntimeProcessor {
       await this.startStreaming(assistantMessage.id);
 
     } catch (error) {
-      console.error('Runtime processing error:', error);
+      console.error('Chat processing error:', error);
       this.callbacks.onError(error instanceof Error ? error : new Error(String(error)));
     } finally {
       this.config.setIsLoading(false);
@@ -82,11 +85,14 @@ export class RuntimeProcessor {
     // Get current chat history
     const chatHistory = this.callbacks.onGetChatHistory(this.config.projectId);
 
-    // Create pipeline context with fresh storyObjects
+    // Create pipeline context with fresh storyObjects and novel data
+    // Function call results are now handled directly in the preprocessing pipeline
     const context = ChatPipeline.createContext(
       this.config.projectId,
       this.config.getStoryObjects(), // Get fresh story objects at streaming time
-      this.config.systemInsertConfig
+      this.config.mode,
+      this.config.systemInsertConfig,
+      this.config.getNovelData?.() // Get novel data if available
     );
 
     // Pre-process messages
@@ -174,28 +180,28 @@ export class RuntimeProcessor {
       ? { content: content, tool_calls: toolCalls }
       : content;
     
-    console.log('RuntimeProcessor: Processing final response', { finalResponse, toolCallsLength: toolCalls.length });
+    console.log('ChatManager: Processing final response', { finalResponse, toolCallsLength: toolCalls.length });
     
     const { message: processedMessage } = this.config.chatPipeline.postProcess(
       finalResponse,
       context
     );
 
-    console.log('RuntimeProcessor: Processed message', { 
+    console.log('ChatManager: Processed message', { 
       messageId, 
       functionCallsLength: processedMessage.functionCalls?.length || 0,
       functionCalls: processedMessage.functionCalls 
     });
 
     // Process for display and generate edit cards
-    const { editCards } = this.config.chatPipeline.processForDisplay(processedMessage, context);
+    this.config.chatPipeline.processForDisplay(processedMessage, context);
     
     // Call callback if function calls exist
     if (processedMessage.functionCalls && processedMessage.functionCalls.length > 0) {
-      console.log('RuntimeProcessor: Calling onFunctionCalls callback', { messageId, functionCalls: processedMessage.functionCalls });
+      console.log('ChatManager: Calling onFunctionCalls callback', { messageId, functionCalls: processedMessage.functionCalls });
       this.callbacks.onFunctionCalls(messageId, processedMessage.functionCalls);
     } else {
-      console.log('RuntimeProcessor: No function calls to process');
+      console.log('ChatManager: No function calls to process');
     }
   }
 
@@ -209,3 +215,15 @@ export class RuntimeProcessor {
     }
   }
 }
+
+export function findLastUserMessageIdx(messages: ChatMessage[]): number
+  {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') 
+      {
+        return i;
+      }
+    }
+    return -1;
+  }
+

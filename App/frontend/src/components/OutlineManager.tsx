@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStoryObjectStore } from '../store/storyObjectStore';
 import AIEditModal from './AIEditModal';
-import VersionHistoryModal from './VersionHistoryModal';
 import type { Outline, Act, Chapter } from '../types/storyObject';
 import { createEmptyOutline } from '../types/storyObject';
 
@@ -18,10 +17,6 @@ const OutlineManager: React.FC = () => {
     addChapter,
     updateChapter,
     deleteChapter,
-    getActById,
-    getChapterById,
-    getActVersions,
-    getChapterVersions,
   } = useStoryObjectStore();
 
   const [editingAct, setEditingAct] = useState<Act | null>(null);
@@ -35,7 +30,7 @@ const OutlineManager: React.FC = () => {
   const [showChapterVersionHistory, setShowChapterVersionHistory] = useState<string | null>(null);
 
   // Get outline directly from store - this will automatically re-render when store updates
-  const outline = projectId ? getOutline(projectId) : null;
+  const outline: Outline | null = projectId ? getOutline(projectId) : null;
 
   const handleAddAct = (name: string, description: string) => {
     if (projectId && name.trim()) {
@@ -636,7 +631,6 @@ const ActVersionHistoryModal: React.FC<ActVersionHistoryModalProps> = ({
 }) => {
   const { getActById, getActVersions } = useStoryObjectStore();
   const [versions, setVersions] = useState<any[]>([]);
-  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -646,7 +640,6 @@ const ActVersionHistoryModal: React.FC<ActVersionHistoryModalProps> = ({
       
       const activeVersion = actVersions.find(v => v.isActive);
       if (activeVersion) {
-        setSelectedVersionId(activeVersion.versionId);
       }
     }
   }, [isOpen, projectId, actId, getActVersions]);
@@ -769,7 +762,6 @@ const ChapterVersionHistoryModal: React.FC<ChapterVersionHistoryModalProps> = ({
 }) => {
   const { getChapterById, getChapterVersions } = useStoryObjectStore();
   const [versions, setVersions] = useState<any[]>([]);
-  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -779,7 +771,6 @@ const ChapterVersionHistoryModal: React.FC<ChapterVersionHistoryModalProps> = ({
       
       const activeVersion = chapterVersions.find(v => v.isActive);
       if (activeVersion) {
-        setSelectedVersionId(activeVersion.versionId);
       }
     }
   }, [isOpen, projectId, chapterId, getChapterVersions]);

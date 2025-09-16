@@ -1,151 +1,210 @@
 import type { ChatPipelineContext } from '../types';
+import type { FunctionCallResultSummary, ChatMessage } from '../../llm_request/types';
+import { findLastUserMessageIdx } from '../processors/ChatManager';
 
-export interface SystemTagData {
-  storyContext?: {
-    enabled: boolean;
-    storyObjects: any;
-  };
-  novelContent?: {
-    enabled: boolean;
-    content: string;
-    chapterName?: string;
-    wordCount?: number;
-  };
-  functionCallResults?: Array<{
-    functionCall: any;
-    accepted: boolean;
-    resultMessage: string;
-  }>;
+export interface NovelContentChapter {
+  name: string;
+  content: string;
+}
+
+export interface NovelContentAct {
+  name: string;
+  chapters: NovelContentChapter[];
 }
 
 export class SystemTagManager {
   /**
-   * Generate a single unified system tag containing all system information
+   * Main function: Generate complete system tag for a message
+   * This is the only entry point you should use
    */
-  static generateSystemTag(data: SystemTagData, context?: ChatPipelineContext): string {
-    const systemParts: string[] = [];
+  static buildSystemTag(
+    processingContent: string,
+    context: ChatPipelineContext,
+    messageIndex: number,
+    allMessages: ChatMessage[]
+  ): string 
+  {
 
-    // Add story context if enabled
-    if (data.storyContext?.enabled && context?.systemInsertConfig.includeStoryObjects && data.storyContext.storyObjects) {
-      systemParts.push(`# Current Project Status
-\`\`\`json
-${JSON.stringify(this.simplifyStoryObjects(data.storyContext.storyObjects), null, 2)}
-\`\`\``);
+    // Build system sections using individual checker functions
+    const systemSections: string[] = [];
+
+    const functionCallResults = this.extractLastFunctionCallResults(messageIndex, allMessages);
+    if (this.shouldIncludeFunctionCallResults(functionCallResults)) 
+    {
+      systemSections.push(this.buildFunctionCallResultsSection(functionCallResults));
     }
 
-
-    // Add function call results
-    if (data.functionCallResults && data.functionCallResults.length > 0) {
-      const functionCallSection = data.functionCallResults.map(result =>
-        `Function call ${result.functionCall.function_name} was ${result.accepted ? 'accepted' : 'rejected'}. ${result.resultMessage}`
-      ).join('\n');
-      systemParts.push(`# Function Call Results\n${functionCallSection}`);
+    const LAST_USER_IDX = findLastUserMessageIdx(allMessages);
+    if (messageIndex !== LAST_USER_IDX)
+    {
+      return this.exportSystemTagIncludedContent(systemSections, processingContent);
     }
 
-    // Return unified system tag if we have any content
-    if (systemParts.length > 0) {
-      return `<system>\n${systemParts.join('\n\n')}\n</system>`;
+    // If last user message, include novel content and story context if enabled
+    if (this.shouldIncludeStoryContext(context, context.storyObjects))
+    {
+      systemSections.push(this.buildStoryContextSection(context.storyObjects));
+    }
+    if (this.shouldIncludeNovelContent(context, context.novelData))
+    {
+      const novelActs = this.buildNovelContentActs(context.storyObjects, context.novelData);
+      if (novelActs.length > 0)
+      {
+        systemSections.push(this.buildNovelContentSection(novelActs));
+      }
     }
 
-    return '';
+    return this.exportSystemTagIncludedContent(systemSections, processingContent);
+  }
+
+  private static exportSystemTagIncludedContent(systemSections: string[], messageContent:string | null): string 
+  {
+    // Combine everything - if no system info, return raw message
+    if (systemSections.length === 0) 
+    {
+      return messageContent || '';
+    }
+
+    const systemTag = `<system>\n${systemSections.join('\n\n')}\n</system>`;
+    return `${systemTag}\n\n${messageContent}`;
+  }
+
+  // Individual checker functions
+  private static shouldIncludeStoryContext(context: ChatPipelineContext, storyObjects?: any): boolean {
+    return !!(context.systemInsertConfig.includeStoryObjects && storyObjects);
+  }
+
+  private static shouldIncludeNovelContent(context: ChatPipelineContext, novelData?: any): boolean {
+    return !!(context.systemInsertConfig.includeNovelContent && novelData);
+  }
+
+  private static shouldIncludeFunctionCallResults(functionCallResults?: FunctionCallResultSummary[]): boolean {
+    return !!(functionCallResults && functionCallResults.length > 0);
   }
 
   /**
-   * Parse existing system tags from message content and extract system data
+   * Extract function call results from the nearest assistant message above current message index
    */
-  static parseExistingSystemTags(content: string): { systemTagData: SystemTagData; cleanContent: string } {
-    const systemTagData: SystemTagData = {};
-    
-    // Extract and parse existing system tags
-    const systemTagRegex = /<system>([\s\S]*?)<\/system>/g;
-    let match;
-    const existingSystemContent: string[] = [];
-    
-    while ((match = systemTagRegex.exec(content)) !== null) {
-      const systemContent = match[1].trim();
-      existingSystemContent.push(systemContent);
+  private static extractLastFunctionCallResults(messageIndex: number, allMessages: ChatMessage[]): FunctionCallResultSummary[] {
+    // Find nearest assistant message
+    let assistantMessageIndex = -1;
+    for (let i = messageIndex - 1; i >= 0; i--) 
+    {
+      if (i < 0) break;
+      const message = allMessages[i];
       
-      // Check if this contains function call results
-      if (systemContent.includes('Function call') && systemContent.includes('was')) {
-        // This is likely function call results - parse them
-        const functionResults = systemContent.split('\n')
-          .filter(line => line.includes('Function call') && line.includes('was'))
-          .map(line => {
-            // Simple parsing - might need to be more robust
-            const parts = line.match(/Function call (\w+) was (accepted|rejected)\. (.+)/);
-            if (parts) {
-              return {
-                functionCall: { function_name: parts[1] },
-                accepted: parts[2] === 'accepted',
-                resultMessage: parts[3]
-              };
-            }
-            return null;
-          })
-          .filter(Boolean);
-        
-        if (functionResults.length > 0) {
-          systemTagData.functionCallResults = functionResults as any[];
-        }
+      if (message.role === 'assistant')
+      {
+        assistantMessageIndex = i;
+        break;
       }
     }
-    
-    // Remove all system tags from content
-    const cleanContent = content.replace(systemTagRegex, '').trim();
-    
-    return { systemTagData, cleanContent };
+
+    if (assistantMessageIndex === -1) return []; // If no assistant message found, return empty
+
+    // Extract function call results from that assistant message
+    const message = allMessages[assistantMessageIndex];
+    if (message.functionCalls && message.functionCalls.length > 0)
+    {
+      // Found nearest assistant message with function calls
+      const appliedFunctionCalls = message.functionCalls.filter(funcCall =>
+        funcCall.isApplied && funcCall.appliedAt
+      );
+
+      // Convert to FunctionCallResultSummary format
+      return appliedFunctionCalls.map(funcCall => ({
+        functionCallId: funcCall.id,
+        functionName: funcCall.function_name,
+        success: this.determineFunctionCallSuccess(funcCall),
+        resultMessage: this.extractResultMessage(funcCall),
+        appliedAt: funcCall.appliedAt!
+      }));
+    }
+
+    // No assistant message with function calls found
+    return [];
   }
 
   /**
-   * Merge system tag data from multiple sources
+   * Determine if function call was successful based on stored metadata
    */
-  static mergeSystemTagData(...dataSources: SystemTagData[]): SystemTagData {
-    const merged: SystemTagData = {};
-    
-    for (const data of dataSources) {
-      if (data.storyContext) {
-        merged.storyContext = data.storyContext;
-      }
-      if (data.functionCallResults) {
-        merged.functionCallResults = [...(merged.functionCallResults || []), ...data.functionCallResults];
-      }
+  private static determineFunctionCallSuccess(funcCall: any): boolean {
+    // If there's an error, it was not successful
+    if (funcCall.error) {
+      return false;
     }
-    
-    return merged;
+
+    // If resultMessage indicates rejection, it was not successful
+    if (funcCall.resultMessage?.includes('rejected') || funcCall.resultMessage?.includes('failed')) {
+      return false;
+    }
+
+    // If it was applied and has a result, it was successful
+    if (funcCall.isApplied && funcCall.result) {
+      return true;
+    }
+
+    // Default: if applied without error, consider successful
+    return funcCall.isApplied;
   }
 
   /**
-   * Process message content to ensure single unified system tag
+   * Extract appropriate result message from function call metadata
    */
-  static processMessageForUnifiedSystemTag(
-    content: string, 
-    additionalSystemData?: SystemTagData, 
-    context?: ChatPipelineContext
-  ): string {
-    // Parse existing system tags
-    const { systemTagData: existingData, cleanContent } = this.parseExistingSystemTags(content);
-    
-    // Merge with additional system data
-    const mergedData = additionalSystemData 
-      ? this.mergeSystemTagData(existingData, additionalSystemData)
-      : existingData;
-    
-    // Generate unified system tag
-    const unifiedSystemTag = this.generateSystemTag(mergedData, context);
-    
-    // Return content with unified system tag
-    return this.addSystemTagToMessage(cleanContent, unifiedSystemTag);
+  private static extractResultMessage(funcCall: any): string {
+    // Priority order: resultMessage > error > default success message
+    if (funcCall.resultMessage) {
+      return funcCall.resultMessage;
+    }
+
+    if (funcCall.error) {
+      return funcCall.error;
+    }
+
+    // Default success message based on function name
+    return `Successfully applied ${funcCall.function_name}`;
   }
 
-  /**
-   * Add system tag to user message content
-   */
-  static addSystemTagToMessage(content: string, systemTag: string): string {
-    if (!systemTag.trim()) {
-      return content;
-    }
-    return `${systemTag}\n\n${content}`;
+  // Individual section builders
+  private static buildStoryContextSection(storyObjects: any): string {
+    return `# Current Project Status
+\`\`\`json
+${JSON.stringify(this.simplifyStoryObjects(storyObjects), null, 2)}
+\`\`\``;
   }
+
+  private static buildNovelContentSection(acts: NovelContentAct[]): string {
+    return `# Current Novel Content
+\`\`\`json
+${JSON.stringify(acts, null, 2)}
+\`\`\``;
+  }
+
+  private static buildFunctionCallResultsSection(functionCallResults: FunctionCallResultSummary[]): string {
+    const results = functionCallResults.map(result =>
+      `Function call ${result.functionName} was ${result.success ? 'accepted' : 'rejected'}. ${result.resultMessage}`
+    ).join('\n');
+    return `# Function Call Results\n${results}`;
+  }
+
+  private static buildNovelContentActs(storyObjects: any, novelData: any): NovelContentAct[] {
+    if (!storyObjects?.outline?.acts || !novelData) {
+      return [];
+    }
+
+    return storyObjects.outline.acts.map((act: any) => ({
+      name: act.name,
+      chapters: act.chapters.map((chapter: any) => {
+        const chapterContent = novelData[chapter.id];
+        return {
+          name: chapter.name,
+          content: chapterContent?.content || ''
+        };
+      })
+    }));
+  }
+
+  // Keep only the simplifyStoryObjects helper
 
   /**
    * Simplify story objects for AI context

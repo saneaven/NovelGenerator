@@ -3,7 +3,6 @@ import type {
   ChatPipelineContext,
   SystemInsertConfig,
   ProcessedChatMessage,
-  EditCard,
   PreProcessor,
   PostProcessor,
   DisplayProcessor
@@ -56,7 +55,8 @@ export class ChatPipeline {
     return {
       enabled: true,
       includeProjectInfo: true,
-      includeStoryObjects: true
+      includeStoryObjects: true,
+      includeNovelContent: false
     };
   }
 
@@ -64,12 +64,16 @@ export class ChatPipeline {
   static createContext(
     projectId: string,
     storyObjects: any,
-    systemConfig?: SystemInsertConfig
+    mode: 'novel-editor' | 'workspace',
+    systemConfig?: SystemInsertConfig,
+    novelData?: any
   ): ChatPipelineContext {
     return {
       projectId,
       storyObjects,
-      systemInsertConfig: systemConfig || this.createDefaultSystemConfig()
+      systemInsertConfig: systemConfig || this.createDefaultSystemConfig(),
+      novelData,
+      mode
     };
   }
 }

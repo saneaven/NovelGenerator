@@ -4,13 +4,11 @@ import { useStoryObjectStore } from '../../../store/storyObjectStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { FunctionCallApplicator } from '../../../chat/utils/functionCallApplicator';
 import { FunctionCallService } from '../services/FunctionCallService';
-import type { FunctionCallMetadata } from '../../../llm_request/types';
+import type { FunctionCallMetadata, FunctionCallResultSummary } from '../../../llm_request/types';
 import type { EditCard } from '../../../chat/types';
-import type { RuntimeProcessor } from '../../../chat/processors/RuntimeProcessor';
 
 export function useFunctionCallHandlers(
-  projectId: string | undefined,
-  runtimeProcessor: RuntimeProcessor | null
+  projectId: string | undefined
 ) {
   const { updateMessageFunctionCalls, updateFunctionCallStatus } = useChatStore();
   const storyObjectStore = useStoryObjectStore();
@@ -19,11 +17,7 @@ export function useFunctionCallHandlers(
   const [messageEditCards, setMessageEditCards] = useState<Record<string, EditCard[]>>({});
   const [functionCallApplicator] = useState(() => new FunctionCallApplicator(storyObjectStore));
   const [activeFunctionCalls, setActiveFunctionCalls] = useState<Record<string, any[]>>({});
-  const [pendingFunctionCallResults, setPendingFunctionCallResults] = useState<Array<{
-    functionCall: FunctionCallMetadata;
-    accepted: boolean;
-    resultMessage: string;
-  }>>([]);
+  const [pendingFunctionCallResults, setPendingFunctionCallResults] = useState<FunctionCallResultSummary[]>([]);
 
   const createFunctionCallApplyHandler = (messageId: string, functionCall: FunctionCallMetadata) => {
     return async () => {
@@ -33,14 +27,14 @@ export function useFunctionCallHandlers(
         const result = await functionCallApplicator.applyFunctionCall(projectId, functionCall);
         
         if (result.success) {
-          updateFunctionCallStatus(projectId, messageId, functionCall.id, true, result);
-          
+          updateFunctionCallStatus(projectId, messageId, functionCall.id, true, result, undefined, result.message);
+
           setMessageEditCards(prev => ({
             ...prev,
-            [messageId]: prev[messageId]?.map(card => 
-              card.id === functionCall.id 
-                ? { 
-                    ...card, 
+            [messageId]: prev[messageId]?.map(card =>
+              card.id === functionCall.id
+                ? {
+                    ...card,
                     isApplied: true,
                     appliedAt: new Date(),
                     title: '✅ Applied by User',
@@ -49,18 +43,29 @@ export function useFunctionCallHandlers(
                 : card
             ) || []
           }));
-          
-          // Store function call result for later system message integration
+
+          // Add to pending function call results for SystemTagManager
           setPendingFunctionCallResults(prev => [...prev, {
-            functionCall,
-            accepted: true,
-            resultMessage: result.message
+            functionCallId: functionCall.id,
+            functionName: functionCall.function_name,
+            success: true,
+            resultMessage: result.message,
+            appliedAt: new Date()
           }]);
         } else {
           console.error('Failed to apply function call:', result.error || result.message);
           showError('Function Call Failed', `Failed to apply changes: ${result.error || result.message}`);
-          
-          updateFunctionCallStatus(projectId, messageId, functionCall.id, false, result, result.error);
+
+          updateFunctionCallStatus(projectId, messageId, functionCall.id, false, result, result.error, result.error || result.message);
+
+          // Add failed result to pending function call results
+          setPendingFunctionCallResults(prev => [...prev, {
+            functionCallId: functionCall.id,
+            functionName: functionCall.function_name,
+            success: false,
+            resultMessage: result.error || result.message,
+            appliedAt: new Date()
+          }]);
           
           setMessageEditCards(prev => ({
             ...prev,
@@ -80,8 +85,18 @@ export function useFunctionCallHandlers(
       } catch (error) {
         console.error('Error applying function call:', error);
         showError('Function Call Error', 'An error occurred while applying changes. Please try again.');
-        
-        updateFunctionCallStatus(projectId, messageId, functionCall.id, false, undefined, error instanceof Error ? error.message : 'Unknown error');
+
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        updateFunctionCallStatus(projectId, messageId, functionCall.id, false, undefined, errorMessage, errorMessage);
+
+        // Add error result to pending function call results
+        setPendingFunctionCallResults(prev => [...prev, {
+          functionCallId: functionCall.id,
+          functionName: functionCall.function_name,
+          success: false,
+          resultMessage: errorMessage,
+          appliedAt: new Date()
+        }]);
         
         setMessageEditCards(prev => ({
           ...prev,
@@ -105,14 +120,15 @@ export function useFunctionCallHandlers(
     return async () => {
       if (!projectId) return;
       
-      updateFunctionCallStatus(projectId, messageId, functionCall.id, true);
-      
+      const rejectionMessage = 'User rejected the function call';
+      updateFunctionCallStatus(projectId, messageId, functionCall.id, true, undefined, undefined, rejectionMessage);
+
       setMessageEditCards(prev => ({
         ...prev,
-        [messageId]: prev[messageId]?.map(card => 
-          card.id === functionCall.id 
-            ? { 
-                ...card, 
+        [messageId]: prev[messageId]?.map(card =>
+          card.id === functionCall.id
+            ? {
+                ...card,
                 isApplied: true,
                 appliedAt: new Date(),
                 title: '❌ Rejected by User',
@@ -121,12 +137,14 @@ export function useFunctionCallHandlers(
             : card
         ) || []
       }));
-      
-      // Store function call rejection for later system message integration
+
+      // Add rejection to pending function call results
       setPendingFunctionCallResults(prev => [...prev, {
-        functionCall,
-        accepted: false,
-        resultMessage: 'User rejected the function call'
+        functionCallId: functionCall.id,
+        functionName: functionCall.function_name,
+        success: false,
+        resultMessage: rejectionMessage,
+        appliedAt: new Date()
       }]);
     };
   };
