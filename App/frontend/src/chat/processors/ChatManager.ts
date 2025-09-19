@@ -65,6 +65,31 @@ export class ChatManager {
     }
   }
 
+  /**
+   * Process empty request without adding user message
+   */
+  async processEmptyRequest(): Promise<void> {
+    if (this.config.isLoading) return;
+
+    this.config.setIsLoading(true);
+
+    try {
+      // Create new AI response message
+      const assistantMessage = this.createAssistantMessage();
+      this.callbacks.onAddMessage(this.config.projectId, assistantMessage);
+
+      // Start streaming
+      await this.startStreaming(assistantMessage.id);
+
+    } catch (error) {
+      console.error('Chat processing error:', error);
+      this.callbacks.onError(error instanceof Error ? error : new Error(String(error)));
+    } finally {
+      this.config.setIsLoading(false);
+      this.config.abortControllerRef.current = null;
+    }
+  }
+
 
   /**
    * Create AI response message

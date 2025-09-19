@@ -287,7 +287,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 Stop
               </button>
             ) : (
-              <button type="submit" disabled={!uiState.input.trim()} className="send-button">
+              <button type="submit" className="send-button">
                 Send
               </button>
             )}

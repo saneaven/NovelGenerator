@@ -27,7 +27,20 @@ export function useChatHandlers(
     e.preventDefault();
     if (!uiActions || !projectId || !chatManager) return;
 
-    if (!input?.trim() || isLoading) return;
+    if (isLoading) return;
+
+    // Clear function call results - they will be processed through pipeline context
+    if (pendingFunctionCallResults && pendingFunctionCallResults.length > 0 && clearPendingFunctionCallResults) {
+      clearPendingFunctionCallResults();
+    }
+
+    uiActions.setInput('');
+
+    // If input is empty, send request without adding user message
+    if (!input?.trim()) {
+      await chatManager.processEmptyRequest();
+      return;
+    }
 
     // Create raw user message - no modifications, all system processing happens in pipeline
     const userMessage: ChatMessage = {
@@ -37,12 +50,6 @@ export function useChatHandlers(
       timestamp: new Date(),
     };
 
-    // Clear function call results - they will be processed through pipeline context
-    if (pendingFunctionCallResults && pendingFunctionCallResults.length > 0 && clearPendingFunctionCallResults) {
-      clearPendingFunctionCallResults();
-    }
-
-    uiActions.setInput('');
     await chatManager.processUserMessage(userMessage);
   };
 
