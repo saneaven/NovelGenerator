@@ -1,23 +1,29 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { LanguageData } from '../types/storyObject';
 
-export interface ChapterContent {
-  chapterId: string;
+// Language-specific data for chapter content
+export interface ChapterContentData {
   content: string;
   wordCount: number;
-  createdAt: Date;
-  updatedAt: Date;
-  versions: ChapterVersion[];
-  activeVersionId: string;
 }
 
+// Chapter content version with language support
 export interface ChapterVersion {
   versionId: string;
   timestamp: Date;
   userRequest: string;
-  content: string;
-  wordCount: number;
+  data: LanguageData<ChapterContentData>; // Language-specific content data
   isActive: boolean;
+}
+
+// Chapter content with multilingual versioning
+export interface ChapterContent {
+  chapterId: string;
+  createdAt: Date;
+  updatedAt: Date;
+  versions: ChapterVersion[];
+  activeVersionId: string;
 }
 
 interface NovelStore {
@@ -25,30 +31,37 @@ interface NovelStore {
   chapterContentsByProject: Record<string, Record<string, ChapterContent>>; // projectId -> chapterId -> content
   selectedChapterByProject: Record<string, string | undefined>; // projectId -> chapterId
 
-  // Private helper methods
-  _ensureProject: (projectId: string) => void;
-
-  // Chapter content management
+  // Core chapter management
   getChapterContent: (projectId: string, chapterId: string) => ChapterContent | null;
-  updateChapterContent: (projectId: string, chapterId: string, content: string, userRequest?: string) => void;
-  createChapterContent: (projectId: string, chapterId: string, initialContent?: string) => ChapterContent;
+  createChapterContent: (projectId: string, chapterId: string, initialContent?: string, language?: string) => ChapterContent;
   deleteChapterContent: (projectId: string, chapterId: string) => void;
   getAllChapterContents: (projectId: string) => Record<string, ChapterContent>;
+
+  // Language-specific content access
+  getChapterContentForLanguage: (projectId: string, chapterId: string, language: string) => ChapterContentData | null;
+  updateChapterContentForLanguage: (projectId: string, chapterId: string, content: string, language: string, userRequest?: string) => void;
+  hasContentInLanguage: (projectId: string, chapterId: string, language: string) => boolean;
 
   // Selected chapter management
   selectChapter: (projectId: string, chapterId: string) => void;
   getSelectedChapterId: (projectId: string) => string | undefined;
   getSelectedChapterContent: (projectId: string) => ChapterContent | null;
 
-  // Version management
-  addVersion: (projectId: string, chapterId: string, userRequest: string, content: string) => string;
+  // Version management with language support
+  addVersion: (projectId: string, chapterId: string, userRequest: string, contentData: LanguageData<ChapterContentData>) => string;
   setActiveVersion: (projectId: string, chapterId: string, versionId: string) => void;
   getVersions: (projectId: string, chapterId: string) => ChapterVersion[];
   deleteVersion: (projectId: string, chapterId: string, versionId: string) => void;
 
+  // Translation support
+  addTranslatedContent: (projectId: string, chapterId: string, versionId: string, translatedContent: string, targetLanguage: string) => void;
+
   // Utility functions
   clearProject: (projectId: string) => void;
   getWordCount: (content: string) => number;
+
+  // Private helper methods
+  _ensureProject: (projectId: string) => void;
 }
 
 // Helper function to count words
@@ -58,23 +71,25 @@ const countWords = (content: string): number => {
 };
 
 // Helper function to create initial chapter content
-const createInitialChapterContent = (chapterId: string, initialContent: string = ''): ChapterContent => {
+const createInitialChapterContent = (chapterId: string, initialContent: string = '', language: string = 'English'): ChapterContent => {
   const now = new Date();
   const versionId = crypto.randomUUID();
   const wordCount = countWords(initialContent);
 
   return {
     chapterId,
-    content: initialContent,
-    wordCount,
     createdAt: now,
     updatedAt: now,
     versions: [{
       versionId,
       timestamp: now,
       userRequest: 'Initial creation',
-      content: initialContent,
-      wordCount,
+      data: {
+        [language]: {
+          content: initialContent,
+          wordCount,
+        },
+      },
       isActive: true,
     }],
     activeVersionId: versionId,
@@ -100,71 +115,17 @@ export const useNovelStore = create<NovelStore>()(
         }
       },
 
-      // Chapter content management
+      // Core chapter management
       getChapterContent: (projectId: string, chapterId: string) => {
         const state = get();
         return state.chapterContentsByProject[projectId]?.[chapterId] || null;
       },
 
-      updateChapterContent: (projectId: string, chapterId: string, content: string, userRequest = 'Content update') => {
-        console.log('NovelStore: updateChapterContent called', { projectId, chapterId, userRequest, contentLength: content.length });
-
+      createChapterContent: (projectId: string, chapterId: string, initialContent = '', language = 'English') => {
         const state = get();
         state._ensureProject(projectId);
 
-        const existingContent = state.getChapterContent(projectId, chapterId);
-        if (!existingContent) {
-          // Create new if doesn't exist
-          state.createChapterContent(projectId, chapterId, content);
-          return;
-        }
-
-        const now = new Date();
-        const wordCount = countWords(content);
-        const versionId = crypto.randomUUID();
-
-        // Create new version
-        const newVersion: ChapterVersion = {
-          versionId,
-          timestamp: now,
-          userRequest,
-          content,
-          wordCount,
-          isActive: true,
-        };
-
-        // Update versions (mark previous as inactive)
-        const updatedVersions = existingContent.versions.map(v => ({
-          ...v,
-          isActive: false,
-        }));
-        updatedVersions.push(newVersion);
-
-        const updatedContent: ChapterContent = {
-          ...existingContent,
-          content,
-          wordCount,
-          updatedAt: now,
-          versions: updatedVersions,
-          activeVersionId: versionId,
-        };
-
-        set(state => ({
-          chapterContentsByProject: {
-            ...state.chapterContentsByProject,
-            [projectId]: {
-              ...state.chapterContentsByProject[projectId],
-              [chapterId]: updatedContent,
-            },
-          },
-        }));
-      },
-
-      createChapterContent: (projectId: string, chapterId: string, initialContent = '') => {
-        const state = get();
-        state._ensureProject(projectId);
-
-        const chapterContent = createInitialChapterContent(chapterId, initialContent);
+        const chapterContent = createInitialChapterContent(chapterId, initialContent, language);
 
         set(state => ({
           chapterContentsByProject: {
@@ -208,6 +169,84 @@ export const useNovelStore = create<NovelStore>()(
         return state.chapterContentsByProject[projectId] || {};
       },
 
+      // Language-specific content access
+      getChapterContentForLanguage: (projectId: string, chapterId: string, language: string) => {
+        const chapterContent = get().getChapterContent(projectId, chapterId);
+        if (!chapterContent) return null;
+
+        const activeVersion = chapterContent.versions.find(v => v.isActive);
+        if (!activeVersion || !activeVersion.data[language]) return null;
+
+        return activeVersion.data[language];
+      },
+
+      updateChapterContentForLanguage: (projectId: string, chapterId: string, content: string, language: string, userRequest = 'Content update') => {
+        const state = get();
+        state._ensureProject(projectId);
+
+        const existingContent = state.getChapterContent(projectId, chapterId);
+        if (!existingContent) {
+          // Create new if doesn't exist
+          state.createChapterContent(projectId, chapterId, content, language);
+          return;
+        }
+
+        const now = new Date();
+        const wordCount = countWords(content);
+        const versionId = crypto.randomUUID();
+
+        // Get current active version's data
+        const activeVersion = existingContent.versions.find(v => v.isActive);
+        const currentData = activeVersion?.data || {};
+
+        // Create new version with updated language data
+        const newVersion: ChapterVersion = {
+          versionId,
+          timestamp: now,
+          userRequest,
+          data: {
+            ...currentData,
+            [language]: {
+              content,
+              wordCount,
+            },
+          },
+          isActive: true,
+        };
+
+        // Update versions (mark previous as inactive)
+        const updatedVersions = existingContent.versions.map(v => ({
+          ...v,
+          isActive: false,
+        }));
+        updatedVersions.push(newVersion);
+
+        const updatedContent: ChapterContent = {
+          ...existingContent,
+          updatedAt: now,
+          versions: updatedVersions,
+          activeVersionId: versionId,
+        };
+
+        set(state => ({
+          chapterContentsByProject: {
+            ...state.chapterContentsByProject,
+            [projectId]: {
+              ...state.chapterContentsByProject[projectId],
+              [chapterId]: updatedContent,
+            },
+          },
+        }));
+      },
+
+      hasContentInLanguage: (projectId: string, chapterId: string, language: string) => {
+        const chapterContent = get().getChapterContent(projectId, chapterId);
+        if (!chapterContent) return false;
+
+        const activeVersion = chapterContent.versions.find(v => v.isActive);
+        return activeVersion ? language in activeVersion.data : false;
+      },
+
       // Selected chapter management
       selectChapter: (projectId: string, chapterId: string) => {
         set(state => ({
@@ -230,22 +269,20 @@ export const useNovelStore = create<NovelStore>()(
         return state.getChapterContent(projectId, selectedChapterId);
       },
 
-      // Version management
-      addVersion: (projectId: string, chapterId: string, userRequest: string, content: string) => {
+      // Version management with language support
+      addVersion: (projectId: string, chapterId: string, userRequest: string, contentData: LanguageData<ChapterContentData>) => {
         const state = get();
         const chapterContent = state.getChapterContent(projectId, chapterId);
         if (!chapterContent) return '';
 
         const versionId = crypto.randomUUID();
         const now = new Date();
-        const wordCount = countWords(content);
 
         const newVersion: ChapterVersion = {
           versionId,
           timestamp: now,
           userRequest,
-          content,
-          wordCount,
+          data: contentData,
           isActive: true,
         };
 
@@ -258,8 +295,6 @@ export const useNovelStore = create<NovelStore>()(
 
         const updatedContent: ChapterContent = {
           ...chapterContent,
-          content,
-          wordCount,
           updatedAt: now,
           versions: updatedVersions,
           activeVersionId: versionId,
@@ -293,8 +328,6 @@ export const useNovelStore = create<NovelStore>()(
 
         const updatedContent: ChapterContent = {
           ...chapterContent,
-          content: targetVersion.content,
-          wordCount: targetVersion.wordCount,
           updatedAt: new Date(),
           versions: updatedVersions,
           activeVersionId: versionId,
@@ -326,8 +359,6 @@ export const useNovelStore = create<NovelStore>()(
         if (filteredVersions.length === 0) return; // Can't delete all versions
 
         let newActiveVersionId = chapterContent.activeVersionId;
-        let newContent = chapterContent.content;
-        let newWordCount = chapterContent.wordCount;
 
         // If we deleted the active version, make the most recent remaining version active
         if (chapterContent.activeVersionId === versionId) {
@@ -335,8 +366,6 @@ export const useNovelStore = create<NovelStore>()(
             new Date(current.timestamp) > new Date(latest.timestamp) ? current : latest
           );
           newActiveVersionId = mostRecent.versionId;
-          newContent = mostRecent.content;
-          newWordCount = mostRecent.wordCount;
 
           // Update the active flag
           filteredVersions.forEach(v => {
@@ -346,11 +375,49 @@ export const useNovelStore = create<NovelStore>()(
 
         const updatedContent: ChapterContent = {
           ...chapterContent,
-          content: newContent,
-          wordCount: newWordCount,
           updatedAt: new Date(),
           versions: filteredVersions,
           activeVersionId: newActiveVersionId,
+        };
+
+        set(state => ({
+          chapterContentsByProject: {
+            ...state.chapterContentsByProject,
+            [projectId]: {
+              ...state.chapterContentsByProject[projectId],
+              [chapterId]: updatedContent,
+            },
+          },
+        }));
+      },
+
+      // Translation support
+      addTranslatedContent: (projectId: string, chapterId: string, versionId: string, translatedContent: string, targetLanguage: string) => {
+        const state = get();
+        const chapterContent = state.getChapterContent(projectId, chapterId);
+        if (!chapterContent) return;
+
+        const wordCount = countWords(translatedContent);
+
+        const updatedVersions = chapterContent.versions.map(v =>
+          v.versionId === versionId
+            ? {
+                ...v,
+                data: {
+                  ...v.data,
+                  [targetLanguage]: {
+                    content: translatedContent,
+                    wordCount,
+                  },
+                },
+              }
+            : v
+        );
+
+        const updatedContent: ChapterContent = {
+          ...chapterContent,
+          updatedAt: new Date(),
+          versions: updatedVersions,
         };
 
         set(state => ({

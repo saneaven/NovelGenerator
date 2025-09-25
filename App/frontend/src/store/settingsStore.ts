@@ -3,22 +3,25 @@ import { persist } from 'zustand/middleware';
 
 export interface Settings {
   aiModel: string;
-  outputLanguage: string;
+  primaryLanguage: string;
+  secondaryLanguage: string | null;
 }
 
 interface SettingsStore {
   settings: Settings;
-  
+
   // Actions
   setAiModel: (model: string) => void;
-  setOutputLanguage: (language: string) => void;
+  setPrimaryLanguage: (language: string) => void;
+  setSecondaryLanguage: (language: string | null) => void;
   updateSettings: (updates: Partial<Settings>) => void;
   resetToDefaults: () => void;
 }
 
 const defaultSettings: Settings = {
   aiModel: 'gpt-5-mini',
-  outputLanguage: 'English'
+  primaryLanguage: 'English',
+  secondaryLanguage: null
 };
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -35,11 +38,20 @@ export const useSettingsStore = create<SettingsStore>()(
         }));
       },
 
-      setOutputLanguage: (language: string) => {
+      setPrimaryLanguage: (language: string) => {
         set((state) => ({
           settings: {
             ...state.settings,
-            outputLanguage: language
+            primaryLanguage: language
+          }
+        }));
+      },
+
+      setSecondaryLanguage: (language: string | null) => {
+        set((state) => ({
+          settings: {
+            ...state.settings,
+            secondaryLanguage: language
           }
         }));
       },

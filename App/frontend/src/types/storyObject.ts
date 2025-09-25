@@ -1,9 +1,14 @@
-// Version history for story objects
+// Language data container
+export interface LanguageData<T = any> {
+  [languageName: string]: T; // e.g. 'English', 'Korean', etc.
+}
+
+// Version history for story objects with language support
 export interface ObjectVersion<T = any> {
   versionId: string;
   timestamp: Date;
   userRequest: string;
-  data: T;
+  data: LanguageData<T>; // Each version stores data for multiple languages
   isActive: boolean;
 }
 
@@ -128,7 +133,8 @@ export const ensureVersionFields = <T extends BaseMetadata>(obj: T): T => {
 // Utility function to create name-description item
 export const createNameDescriptionItem = (
   name: string = '',
-  description: string = ''
+  description: string = '',
+  primaryLanguage: string = 'English'
 ): NameDescriptionItem => {
   const baseMetadata = createBaseMetadata();
   const item = {
@@ -136,13 +142,15 @@ export const createNameDescriptionItem = (
     name,
     description,
   };
-  
-  // Set the initial version data to the item itself
+
+  // Set the initial version data with user's primary language
   item.versions[0].data = {
-    name,
-    description,
+    [primaryLanguage]: {
+      name,
+      description,
+    },
   };
-  
+
   return item;
 };
 
@@ -157,7 +165,7 @@ export const createEmptyStoryObjects = (): StoryObjects => ({
 });
 
 // Utility function to create empty basic info
-export const createEmptyBasicInfo = (): BasicInfo => {
+export const createEmptyBasicInfo = (primaryLanguage: string = 'English'): BasicInfo => {
   const baseMetadata = createBaseMetadata();
   const basicInfo = {
     ...baseMetadata,
@@ -165,19 +173,21 @@ export const createEmptyBasicInfo = (): BasicInfo => {
     logline: '',
     genre: '',
   };
-  
-  // Set the initial version data
+
+  // Set the initial version data with user's primary language
   basicInfo.versions[0].data = {
-    title: '',
-    logline: '',
-    genre: '',
+    [primaryLanguage]: {
+      title: '',
+      logline: '',
+      genre: '',
+    },
   };
-  
+
   return basicInfo;
 };
 
 // Utility function to create empty chapter
-export const createEmptyChapter = (actId: string): Chapter => {
+export const createEmptyChapter = (actId: string, primaryLanguage: string = 'English'): Chapter => {
   const baseMetadata = createBaseMetadata();
   const chapter = {
     ...baseMetadata,
@@ -185,18 +195,20 @@ export const createEmptyChapter = (actId: string): Chapter => {
     description: '',
     actId,
   };
-  
-  // Set the initial version data
+
+  // Set the initial version data with user's primary language
   chapter.versions[0].data = {
-    name: '',
-    description: '',
+    [primaryLanguage]: {
+      name: '',
+      description: '',
+    },
   };
-  
+
   return chapter;
 };
 
 // Utility function to create empty act
-export const createEmptyAct = (): Act => {
+export const createEmptyAct = (primaryLanguage: string = 'English'): Act => {
   const baseMetadata = createBaseMetadata();
   const act = {
     ...baseMetadata,
@@ -204,28 +216,32 @@ export const createEmptyAct = (): Act => {
     description: '',
     chapters: [],
   };
-  
-  // Set the initial version data
+
+  // Set the initial version data with user's primary language
   act.versions[0].data = {
-    name: '',
-    description: '',
+    [primaryLanguage]: {
+      name: '',
+      description: '',
+    },
   };
-  
+
   return act;
 };
 
 // Utility function to create empty outline
-export const createEmptyOutline = (): Outline => {
+export const createEmptyOutline = (primaryLanguage: string = 'English'): Outline => {
   const baseMetadata = createBaseMetadata();
   const outline = {
     ...baseMetadata,
     acts: [],
   };
-  
-  // Set the initial version data
+
+  // Set the initial version data with user's primary language
   outline.versions[0].data = {
-    acts: [],
+    [primaryLanguage]: {
+      acts: [],
+    },
   };
-  
+
   return outline;
 };
