@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useChatStore } from '../../../store/chatStore';
 import { useNovelStore } from '../../../store/novelStore';
+import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { NovelEditorFunctionCallApplicator } from '../services/NovelEditorFunctionCallApplicator';
 import { NovelEditorFunctionCallService } from '../services/NovelEditorFunctionCallService';
@@ -10,26 +11,114 @@ import type { EditCard } from '../../../chat/types';
 export function useNovelEditorFunctionCallHandlers(
   projectId: string | undefined
 ) {
-  const { updateMessageFunctionCalls, updateFunctionCallStatus } = useChatStore();
-  const novelStore = useNovelStore();
+  const { updateMessageFunctionCalls, updateFunctionCallStatus, getSelectedChatId } = useChatStore();
+  const { updateChapterContentForLanguage } = useNovelStore();
+  const { settings } = useSettingsStore();
   const { showError } = useErrorStore();
 
   const [messageEditCards, setMessageEditCards] = useState<Record<string, EditCard[]>>({});
-  const [functionCallApplicator] = useState(() => new NovelEditorFunctionCallApplicator({
-    updateChapterContent: novelStore.updateChapterContent
-  }));
+
+  const functionCallApplicator = useMemo(() => new NovelEditorFunctionCallApplicator({
+    updateChapterContent: (projectId: string, chapterId: string, content: string, userRequest?: string) => {
+      updateChapterContentForLanguage(projectId, chapterId, content, settings.primaryLanguage, userRequest);
+    }
+  }), [updateChapterContentForLanguage, settings.primaryLanguage]);
   const [activeFunctionCalls, setActiveFunctionCalls] = useState<Record<string, any[]>>({});
   const [pendingFunctionCallResults, setPendingFunctionCallResults] = useState<FunctionCallResultSummary[]>([]);
 
-  const createFunctionCallApplyHandler = (messageId: string, functionCall: FunctionCallMetadata) => {
-    return async () => {
-      if (!projectId) return;
+  const getActiveChatId = useCallback(
+    () => (projectId ? getSelectedChatId(projectId) : undefined),
+    [projectId, getSelectedChatId]
+  );
 
-      try {
-        const result = await functionCallApplicator.applyFunctionCall(projectId, functionCall);
+  const createFunctionCallApplyHandler = useCallback(
+    (messageId: string, functionCall: FunctionCallMetadata) => {
+      return async () => {
+        if (!projectId) return;
+        const chatId = getActiveChatId();
+        if (!chatId) return;
 
-        if (result.success) {
-          updateFunctionCallStatus(projectId, messageId, functionCall.id, true, result, undefined, result.message);
+        try {
+          const result = await functionCallApplicator.applyFunctionCall(projectId, functionCall);
+
+          if (result.success) {
+            updateFunctionCallStatus(projectId, chatId, messageId, functionCall.id, true, result, undefined, result.message);
+
+            setMessageEditCards(prev => ({
+              ...prev,
+              [messageId]: prev[messageId]?.map(card =>
+                card.id === functionCall.id
+                  ? {
+                      ...card,
+                      isApplied: true,
+                      appliedAt: new Date(),
+                      title: 'Applied by User',
+                      description: `${NovelEditorFunctionCallService.getFunctionDisplayName(functionCall.function_name)} was successfully applied`
+                    }
+                  : card
+              ) || []
+            }));
+
+            setPendingFunctionCallResults(prev => [...prev,
+              {
+                functionCallId: functionCall.id,
+                functionName: functionCall.function_name,
+                success: true,
+                resultMessage: result.message,
+                appliedAt: new Date()
+              }
+            ]);
+          } else {
+            const failureMessage = result.error || result.message;
+            console.error('Failed to apply function call:', failureMessage);
+            showError('Function Call Failed', `Failed to apply changes: ${failureMessage}`);
+
+            updateFunctionCallStatus(projectId, chatId, messageId, functionCall.id, false, result, result.error, failureMessage);
+
+            setPendingFunctionCallResults(prev => [...prev,
+              {
+                functionCallId: functionCall.id,
+                functionName: functionCall.function_name,
+                success: false,
+                resultMessage: failureMessage,
+                appliedAt: new Date()
+              }
+            ]);
+
+            setMessageEditCards(prev => ({
+              ...prev,
+              [messageId]: prev[messageId]?.map(card =>
+                card.id === functionCall.id
+                  ? {
+                      ...card,
+                      isApplied: true,
+                      appliedAt: new Date(),
+                      title: 'Apply Failed',
+                      description: `${NovelEditorFunctionCallService.getFunctionDisplayName(functionCall.function_name)} failed: ${failureMessage}`
+                    }
+                  : card
+              ) || []
+            }));
+          }
+        } catch (error) {
+          console.error('Error applying function call:', error);
+          showError('Function Call Error', 'An error occurred while applying changes. Please try again.');
+
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          const chatIdForError = getActiveChatId();
+          if (chatIdForError) {
+            updateFunctionCallStatus(projectId, chatIdForError, messageId, functionCall.id, false, undefined, errorMessage, errorMessage);
+          }
+
+          setPendingFunctionCallResults(prev => [...prev,
+            {
+              functionCallId: functionCall.id,
+              functionName: functionCall.function_name,
+              success: false,
+              resultMessage: errorMessage,
+              appliedAt: new Date()
+            }
+          ]);
 
           setMessageEditCards(prev => ({
             ...prev,
@@ -39,66 +128,35 @@ export function useNovelEditorFunctionCallHandlers(
                     ...card,
                     isApplied: true,
                     appliedAt: new Date(),
-                    title: '✅ Applied by User',
-                    description: `${NovelEditorFunctionCallService.getFunctionDisplayName(functionCall.function_name)} was successfully applied`
-                  }
-                : card
-            ) || []
-          }));
-
-          // Add to pending function call results for SystemTagManager
-          setPendingFunctionCallResults(prev => [...prev, {
-            functionCallId: functionCall.id,
-            functionName: functionCall.function_name,
-            success: true,
-            resultMessage: result.message,
-            appliedAt: new Date()
-          }]);
-        } else {
-          console.error('Failed to apply function call:', result.error || result.message);
-          showError('Function Call Failed', `Failed to apply changes: ${result.error || result.message}`);
-
-          updateFunctionCallStatus(projectId, messageId, functionCall.id, false, result, result.error, result.error || result.message);
-
-          // Add failed result to pending function call results
-          setPendingFunctionCallResults(prev => [...prev, {
-            functionCallId: functionCall.id,
-            functionName: functionCall.function_name,
-            success: false,
-            resultMessage: result.error || result.message,
-            appliedAt: new Date()
-          }]);
-
-          setMessageEditCards(prev => ({
-            ...prev,
-            [messageId]: prev[messageId]?.map(card =>
-              card.id === functionCall.id
-                ? {
-                    ...card,
-                    isApplied: true,
-                    appliedAt: new Date(),
-                    title: '❌ Apply Failed',
-                    description: `${NovelEditorFunctionCallService.getFunctionDisplayName(functionCall.function_name)} failed: ${result.error || result.message}`
+                    title: 'Apply Error',
+                    description: `${NovelEditorFunctionCallService.getFunctionDisplayName(functionCall.function_name)} error: ${errorMessage}`
                   }
                 : card
             ) || []
           }));
         }
-      } catch (error) {
-        console.error('Error applying function call:', error);
-        showError('Function Call Error', 'An error occurred while applying changes. Please try again.');
+      };
+    },
+    [
+      projectId,
+      getActiveChatId,
+      functionCallApplicator,
+      updateFunctionCallStatus,
+      setMessageEditCards,
+      setPendingFunctionCallResults,
+      showError,
+    ]
+  );
 
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        updateFunctionCallStatus(projectId, messageId, functionCall.id, false, undefined, errorMessage, errorMessage);
+  const createFunctionCallRejectHandler = useCallback(
+    (messageId: string, functionCall: FunctionCallMetadata) => {
+      return async () => {
+        if (!projectId) return;
+        const chatId = getActiveChatId();
+        if (!chatId) return;
 
-        // Add error result to pending function call results
-        setPendingFunctionCallResults(prev => [...prev, {
-          functionCallId: functionCall.id,
-          functionName: functionCall.function_name,
-          success: false,
-          resultMessage: errorMessage,
-          appliedAt: new Date()
-        }]);
+        const rejectionMessage = 'User rejected the function call';
+        updateFunctionCallStatus(projectId, chatId, messageId, functionCall.id, true, undefined, undefined, rejectionMessage);
 
         setMessageEditCards(prev => ({
           ...prev,
@@ -108,85 +166,83 @@ export function useNovelEditorFunctionCallHandlers(
                   ...card,
                   isApplied: true,
                   appliedAt: new Date(),
-                  title: '❌ Apply Error',
-                  description: `${NovelEditorFunctionCallService.getFunctionDisplayName(functionCall.function_name)} error: ${error instanceof Error ? error.message : 'Unknown error'}`
+                  title: 'Rejected by User',
+                  description: `${NovelEditorFunctionCallService.getFunctionDisplayName(functionCall.function_name)} was rejected by user`
                 }
               : card
           ) || []
         }));
-      }
-    };
-  };
 
-  const createFunctionCallRejectHandler = (messageId: string, functionCall: FunctionCallMetadata) => {
-    return async () => {
+        setPendingFunctionCallResults(prev => [...prev,
+          {
+            functionCallId: functionCall.id,
+            functionName: functionCall.function_name,
+            success: false,
+            resultMessage: rejectionMessage,
+            appliedAt: new Date()
+          }
+        ]);
+      };
+    },
+    [
+      projectId,
+      getActiveChatId,
+      updateFunctionCallStatus,
+      setMessageEditCards,
+      setPendingFunctionCallResults,
+    ]
+  );
+
+  const handleFunctionCalls = useCallback(
+    (messageId: string, functionCalls: FunctionCallMetadata[]) => {
       if (!projectId) return;
+      const chatId = getActiveChatId();
+      if (!chatId) return;
 
-      const rejectionMessage = 'User rejected the function call';
-      updateFunctionCallStatus(projectId, messageId, functionCall.id, true, undefined, undefined, rejectionMessage);
+      updateMessageFunctionCalls(projectId, chatId, messageId, functionCalls);
+
+      const functionCallCards = functionCalls.map(funcCall => ({
+        id: funcCall.id,
+        type: NovelEditorFunctionCallService.mapFunctionToEditType(funcCall.function_name),
+        title: NovelEditorFunctionCallService.getFunctionCallTitle(funcCall.function_name),
+        description: NovelEditorFunctionCallService.generateFunctionCallSummary(funcCall.function_name, funcCall.arguments),
+        isApplied: funcCall.isApplied,
+        data: funcCall.arguments,
+        appliedAt: funcCall.appliedAt,
+        onApply: createFunctionCallApplyHandler(messageId, funcCall),
+        onReject: createFunctionCallRejectHandler(messageId, funcCall)
+      }));
 
       setMessageEditCards(prev => ({
         ...prev,
-        [messageId]: prev[messageId]?.map(card =>
-          card.id === functionCall.id
-            ? {
-                ...card,
-                isApplied: true,
-                appliedAt: new Date(),
-                title: '❌ Rejected by User',
-                description: `${NovelEditorFunctionCallService.getFunctionDisplayName(functionCall.function_name)} was rejected by user`
-              }
-            : card
-        ) || []
+        [messageId]: functionCallCards
       }));
 
-      // Add rejection to pending function call results
-      setPendingFunctionCallResults(prev => [...prev, {
-        functionCallId: functionCall.id,
-        functionName: functionCall.function_name,
-        success: false,
-        resultMessage: rejectionMessage,
-        appliedAt: new Date()
-      }]);
-    };
-  };
+      setActiveFunctionCalls(prev => {
+        const updated = { ...prev };
+        delete updated[messageId];
+        return updated;
+      });
+    },
+    [
+      projectId,
+      getActiveChatId,
+      updateMessageFunctionCalls,
+      createFunctionCallApplyHandler,
+      createFunctionCallRejectHandler,
+      setMessageEditCards,
+    ]
+  );
 
-  const handleFunctionCalls = (messageId: string, functionCalls: FunctionCallMetadata[]) => {
-    console.log('useNovelEditorFunctionCallHandlers: handleFunctionCalls called', { messageId, functionCalls, projectId });
-    if (!projectId) return;
-
-    updateMessageFunctionCalls(projectId, messageId, functionCalls);
-
-    const functionCallCards = functionCalls.map(funcCall => ({
-      id: funcCall.id,
-      type: NovelEditorFunctionCallService.mapFunctionToEditType(funcCall.function_name),
-      title: NovelEditorFunctionCallService.getFunctionCallTitle(funcCall.function_name),
-      description: NovelEditorFunctionCallService.generateFunctionCallSummary(funcCall.function_name, funcCall.arguments),
-      isApplied: funcCall.isApplied,
-      data: funcCall.arguments,
-      appliedAt: funcCall.appliedAt,
-      onApply: createFunctionCallApplyHandler(messageId, funcCall),
-      onReject: createFunctionCallRejectHandler(messageId, funcCall)
-    }));
-
-    setMessageEditCards(prev => ({
-      ...prev,
-      [messageId]: functionCallCards
-    }));
-
-    setActiveFunctionCalls(prev => {
-      const updated = { ...prev };
-      delete updated[messageId];
-      return updated;
-    });
-  };
-
-  const handleFunctionCallsDetected = (messageId: string, functionCalls: any[]) => {
-    setActiveFunctionCalls(prev => ({
-      ...prev,
-      [messageId]: functionCalls
-    }));
-  };
+  const handleFunctionCallsDetected = useCallback(
+    (messageId: string, functionCalls: any[]) => {
+      setActiveFunctionCalls(prev => ({
+        ...prev,
+        [messageId]: functionCalls
+      }));
+    },
+    []
+  );
 
   return {
     messageEditCards,

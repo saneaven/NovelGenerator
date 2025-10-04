@@ -22,6 +22,7 @@ import {
   createEmptyChapter,
   ensureVersionFields,
 } from '../types/storyObject';
+import { useSettingsStore } from './settingsStore';
 
 interface StoryObjectStore {
   // Data storage by project
@@ -29,32 +30,32 @@ interface StoryObjectStore {
   
   // Basic Info Actions
   setBasicInfo: (projectId: string, basicInfo: BasicInfo) => void;
-  updateBasicInfo: (projectId: string, updates: Partial<Omit<BasicInfo, 'id' | 'createdAt'>>) => void;
+  updateBasicInfo: (projectId: string, updates: Partial<Omit<BasicInfo, 'id' | 'createdAt'>>, editLanguage?: string) => void;
   updateBasicInfoAI: (projectId: string, updates: Partial<Omit<BasicInfo, 'id' | 'createdAt'>>) => void;
   getBasicInfo: (projectId: string) => BasicInfo | null;
   
   // Character Actions
   addCharacter: (projectId: string, character?: Partial<Character>) => Character;
-  updateCharacter: (projectId: string, id: string, updates: Partial<Omit<Character, 'id' | 'createdAt'>>) => void;
+  updateCharacter: (projectId: string, id: string, updates: Partial<Omit<Character, 'id' | 'createdAt'>>, editLanguage?: string) => void;
   updateCharacterAI: (projectId: string, id: string, updates: Partial<Omit<Character, 'id' | 'createdAt'>>) => void;
   deleteCharacter: (projectId: string, id: string) => void;
   getCharacters: (projectId: string) => Character[];
-  
+
   // Organization Actions
   addOrganization: (projectId: string, organization?: Partial<Organization>) => Organization;
-  updateOrganization: (projectId: string, id: string, updates: Partial<Omit<Organization, 'id' | 'createdAt'>>) => void;
+  updateOrganization: (projectId: string, id: string, updates: Partial<Omit<Organization, 'id' | 'createdAt'>>, editLanguage?: string) => void;
   deleteOrganization: (projectId: string, id: string) => void;
   getOrganizations: (projectId: string) => Organization[];
-  
+
   // Location Actions
   addLocation: (projectId: string, location?: Partial<Location>) => Location;
-  updateLocation: (projectId: string, id: string, updates: Partial<Omit<Location, 'id' | 'createdAt'>>) => void;
+  updateLocation: (projectId: string, id: string, updates: Partial<Omit<Location, 'id' | 'createdAt'>>, editLanguage?: string) => void;
   deleteLocation: (projectId: string, id: string) => void;
   getLocations: (projectId: string) => Location[];
-  
+
   // Lorebook Actions
   addLorebookEntry: (projectId: string, entry?: Partial<LorebookEntry>) => LorebookEntry;
-  updateLorebookEntry: (projectId: string, id: string, updates: Partial<Omit<LorebookEntry, 'id' | 'createdAt'>>) => void;
+  updateLorebookEntry: (projectId: string, id: string, updates: Partial<Omit<LorebookEntry, 'id' | 'createdAt'>>, editLanguage?: string) => void;
   deleteLorebookEntry: (projectId: string, id: string) => void;
   getLorebookEntries: (projectId: string) => LorebookEntry[];
   
@@ -65,16 +66,16 @@ interface StoryObjectStore {
   
   // Act Actions
   addAct: (projectId: string, act?: Partial<Act>) => Act;
-  updateAct: (projectId: string, actId: string, updates: Partial<Omit<Act, 'id' | 'createdAt' | 'chapters'>>) => void;
+  updateAct: (projectId: string, actId: string, updates: Partial<Omit<Act, 'id' | 'createdAt' | 'chapters'>>, editLanguage?: string) => void;
   deleteAct: (projectId: string, actId: string) => void;
-  
+
   // Chapter Actions
   addChapter: (projectId: string, actId: string, chapter?: Partial<Chapter>) => Chapter;
-  updateChapter: (projectId: string, chapterId: string, updates: Partial<Omit<Chapter, 'id' | 'createdAt' | 'actId'>>) => void;
+  updateChapter: (projectId: string, chapterId: string, updates: Partial<Omit<Chapter, 'id' | 'createdAt' | 'actId'>>, editLanguage?: string) => void;
   deleteChapter: (projectId: string, chapterId: string) => void;
   
   compareVersionData: (data1: unknown, data2: unknown) => boolean;
-  createUpdateVersion: (currentData: any, userRequest?: string) => ObjectVersion | null;
+  createUpdateVersion: (currentData: any, userRequest?: string, language?: string) => ObjectVersion | null;
   addVersionToItem: (item: any, newVersion: ObjectVersion | null) => any;
 
   // Version Management Actions
@@ -91,6 +92,14 @@ interface StoryObjectStore {
   // Utility Actions
   getStoryObjects: (projectId: string) => StoryObjects;
   clearStoryObjects: (projectId: string) => void;
+
+  // Language-aware data access methods
+  getItemDataInLanguage: (projectId: string, category: StoryObjectCategory, itemId: string, language: string) => any;
+  hasItemDataInLanguage: (projectId: string, category: StoryObjectCategory, itemId: string, language: string) => boolean;
+  getAvailableLanguagesForItem: (projectId: string, category: StoryObjectCategory, itemId: string) => string[];
+  addTranslatedDataToItem: (projectId: string, category: StoryObjectCategory, itemId: string, language: string, translatedData: any) => void;
+  syncFlatFieldsWithLanguage: (projectId: string, category: StoryObjectCategory, itemId: string, language: string) => void;
+  getPreviousVersionDataInLanguage: (projectId: string, category: StoryObjectCategory, itemId: string, language: string) => any;
 }
 
 export const useStoryObjectStore = create<StoryObjectStore>()(
@@ -122,23 +131,26 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
       },
 
       // Helper function to create version for update
-      createUpdateVersion: (currentData: any, userRequest: string = 'User Edit') => {
-        // Extract only essential data
-        let versionData: any = currentData;
+      createUpdateVersion: (currentData: any, userRequest: string = 'User Edit', language?: string) => {
+        // Get the language to use for version data
+        const targetLanguage = language || 'English';
+
+        // Extract essential data from flat fields
+        let extractedData: any = null;
         if (currentData && typeof currentData === 'object') {
           if ('name' in currentData && 'description' in currentData) {
-            versionData = {
+            extractedData = {
               name: currentData.name,
               description: currentData.description,
             };
           } else if ('title' in currentData && 'logline' in currentData && 'genre' in currentData) {
-            versionData = {
+            extractedData = {
               title: currentData.title,
               logline: currentData.logline,
               genre: currentData.genre,
             };
           } else if ('acts' in currentData) {
-            versionData = {
+            extractedData = {
               acts: currentData.acts?.map((act: any) => ({
                 id: act.id,
                 name: act.name,
@@ -152,19 +164,30 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
             };
           }
         }
-        
-        // Check if there's an active version to compare with
+
+        if (!extractedData) {
+          return null; // No valid data to create version
+        }
+
+        // Build LanguageData structure
+        // ONLY store the language being edited (don't copy other languages from previous version)
+        const versionData: Record<string, any> = {
+          [targetLanguage]: extractedData
+        };
+
+        // Check if data changed compared to active version's same language
         if (currentData.versions && currentData.versions.length > 0) {
           const activeVersion = currentData.versions.find((v: ObjectVersion) => v.isActive);
-          if (activeVersion && get().compareVersionData(activeVersion.data, versionData)) {
-            // Data is identical, return null to indicate no version should be created
-            return null;
+          if (activeVersion?.data && activeVersion.data[targetLanguage]) {
+            if (get().compareVersionData(activeVersion.data[targetLanguage], extractedData)) {
+              return null; // No change in this language, don't create new version
+            }
           }
         }
-        
+
         const versionId = crypto.randomUUID();
         const now = new Date();
-        
+
         return {
           versionId,
           timestamp: now,
@@ -196,23 +219,24 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
         set((state) => {
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
           const { createUpdateVersion, addVersionToItem } = get();
-          
+          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+
           const updatedCharacters = projectObjects.characters.map((char) => {
             if (char.id === id) {
-              const updatedChar = { 
-                ...char, 
+              const updatedChar = {
+                ...char,
                 name: updates.name !== undefined ? updates.name : char.name,
                 description: updates.description !== undefined ? updates.description : char.description,
-                updatedAt: new Date() 
+                updatedAt: new Date()
               };
-              
+
               // Auto-create version for AI edit
-              const newVersion = createUpdateVersion(updatedChar, 'AI Edit');
+              const newVersion = createUpdateVersion(updatedChar, 'AI Edit', primaryLanguage);
               return addVersionToItem(updatedChar, newVersion);
             }
             return char;
           });
-          
+
           return {
             storyObjectsByProject: {
               ...state.storyObjectsByProject,
@@ -230,15 +254,16 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
           const currentBasicInfo = projectObjects.basicInfo || createEmptyBasicInfo();
           const { createUpdateVersion, addVersionToItem } = get();
-          
+          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+
           const updatedBasicInfo = {
             ...currentBasicInfo,
             ...updates,
             updatedAt: new Date(),
           };
-          
+
           // Auto-create version for AI edit
-          const newVersion = createUpdateVersion(updatedBasicInfo, 'AI Edit');
+          const newVersion = createUpdateVersion(updatedBasicInfo, 'AI Edit', primaryLanguage);
           const basicInfoWithVersion = addVersionToItem(updatedBasicInfo, newVersion);
           
           return {
@@ -269,22 +294,24 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
         });
       },
 
-      updateBasicInfo: (projectId: string, updates: Partial<Omit<BasicInfo, 'id' | 'createdAt'>>) => {
+      updateBasicInfo: (projectId: string, updates: Partial<Omit<BasicInfo, 'id' | 'createdAt'>>, editLanguage?: string) => {
         set((state) => {
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
           const currentBasicInfo = projectObjects.basicInfo || createEmptyBasicInfo();
           const { createUpdateVersion, addVersionToItem } = get();
-          
+          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+          const languageToUse = editLanguage || primaryLanguage;
+
           const updatedBasicInfo = {
             ...currentBasicInfo,
             ...updates,
             updatedAt: new Date(),
           };
-          
-          // Auto-create version for update
-          const newVersion = createUpdateVersion(updatedBasicInfo);
+
+          // Auto-create version for update with the language being edited
+          const newVersion = createUpdateVersion(updatedBasicInfo, 'User Edit', languageToUse);
           const basicInfoWithVersion = addVersionToItem(updatedBasicInfo, newVersion);
-          
+
           return {
             storyObjectsByProject: {
               ...state.storyObjectsByProject,
@@ -324,27 +351,29 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
         return newCharacter;
       },
 
-      updateCharacter: (projectId: string, id: string, updates: Partial<Omit<Character, 'id' | 'createdAt'>>) => {
+      updateCharacter: (projectId: string, id: string, updates: Partial<Omit<Character, 'id' | 'createdAt'>>, editLanguage?: string) => {
         set((state) => {
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
           const { createUpdateVersion, addVersionToItem } = get();
-          
+          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+          const languageToUse = editLanguage || primaryLanguage;
+
           const updatedCharacters = projectObjects.characters.map((char) => {
             if (char.id === id) {
-              const updatedChar = { 
-                ...char, 
+              const updatedChar = {
+                ...char,
                 name: updates.name !== undefined ? updates.name : char.name,
                 description: updates.description !== undefined ? updates.description : char.description,
-                updatedAt: new Date() 
+                updatedAt: new Date()
               };
-              
-              // Auto-create version for update
-              const newVersion = createUpdateVersion(updatedChar);
+
+              // Auto-create version for update with the language being edited
+              const newVersion = createUpdateVersion(updatedChar, 'User Edit', languageToUse);
               return addVersionToItem(updatedChar, newVersion);
             }
             return char;
           });
-          
+
           return {
             storyObjectsByProject: {
               ...state.storyObjectsByProject,
@@ -399,27 +428,29 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
         return newOrganization;
       },
 
-      updateOrganization: (projectId: string, id: string, updates: Partial<Omit<Organization, 'id' | 'createdAt'>>) => {
+      updateOrganization: (projectId: string, id: string, updates: Partial<Omit<Organization, 'id' | 'createdAt'>>, editLanguage?: string) => {
         set((state) => {
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
           const { createUpdateVersion, addVersionToItem } = get();
-          
+          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+          const languageToUse = editLanguage || primaryLanguage;
+
           const updatedOrganizations = projectObjects.organizations.map((org) => {
             if (org.id === id) {
-              const updatedOrg = { 
-                ...org, 
+              const updatedOrg = {
+                ...org,
                 name: updates.name !== undefined ? updates.name : org.name,
                 description: updates.description !== undefined ? updates.description : org.description,
-                updatedAt: new Date() 
+                updatedAt: new Date()
               };
-              
-              // Auto-create version for update
-              const newVersion = createUpdateVersion(updatedOrg);
+
+              // Auto-create version for update with the language being edited
+              const newVersion = createUpdateVersion(updatedOrg, 'User Edit', languageToUse);
               return addVersionToItem(updatedOrg, newVersion);
             }
             return org;
           });
-          
+
           return {
             storyObjectsByProject: {
               ...state.storyObjectsByProject,
@@ -474,27 +505,29 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
         return newLocation;
       },
 
-      updateLocation: (projectId: string, id: string, updates: Partial<Omit<Location, 'id' | 'createdAt'>>) => {
+      updateLocation: (projectId: string, id: string, updates: Partial<Omit<Location, 'id' | 'createdAt'>>, editLanguage?: string) => {
         set((state) => {
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
           const { createUpdateVersion, addVersionToItem } = get();
-          
+          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+          const languageToUse = editLanguage || primaryLanguage;
+
           const updatedLocations = projectObjects.locations.map((loc) => {
             if (loc.id === id) {
-              const updatedLoc = { 
-                ...loc, 
+              const updatedLoc = {
+                ...loc,
                 name: updates.name !== undefined ? updates.name : loc.name,
                 description: updates.description !== undefined ? updates.description : loc.description,
-                updatedAt: new Date() 
+                updatedAt: new Date()
               };
-              
-              // Auto-create version for update
-              const newVersion = createUpdateVersion(updatedLoc);
+
+              // Auto-create version for update with the language being edited
+              const newVersion = createUpdateVersion(updatedLoc, 'User Edit', languageToUse);
               return addVersionToItem(updatedLoc, newVersion);
             }
             return loc;
           });
-          
+
           return {
             storyObjectsByProject: {
               ...state.storyObjectsByProject,
@@ -549,27 +582,29 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
         return newEntry;
       },
 
-      updateLorebookEntry: (projectId: string, id: string, updates: Partial<Omit<LorebookEntry, 'id' | 'createdAt'>>) => {
+      updateLorebookEntry: (projectId: string, id: string, updates: Partial<Omit<LorebookEntry, 'id' | 'createdAt'>>, editLanguage?: string) => {
         set((state) => {
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
           const { createUpdateVersion, addVersionToItem } = get();
-          
+          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+          const languageToUse = editLanguage || primaryLanguage;
+
           const updatedLorebook = projectObjects.lorebook.map((entry) => {
             if (entry.id === id) {
-              const updatedEntry = { 
-                ...entry, 
+              const updatedEntry = {
+                ...entry,
                 name: updates.name !== undefined ? updates.name : entry.name,
                 description: updates.description !== undefined ? updates.description : entry.description,
-                updatedAt: new Date() 
+                updatedAt: new Date()
               };
-              
-              // Auto-create version for update
-              const newVersion = createUpdateVersion(updatedEntry);
+
+              // Auto-create version for update with the language being edited
+              const newVersion = createUpdateVersion(updatedEntry, 'User Edit', languageToUse);
               return addVersionToItem(updatedEntry, newVersion);
             }
             return entry;
           });
-          
+
           return {
             storyObjectsByProject: {
               ...state.storyObjectsByProject,
@@ -614,7 +649,8 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
           };
           
           // Auto-create version for outline updates
-          const newVersion = createUpdateVersion(updatedOutline);
+          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+          const newVersion = createUpdateVersion(updatedOutline, 'User Edit', primaryLanguage);
           const outlineWithVersion = addVersionToItem(updatedOutline, newVersion);
           
           return {
@@ -641,7 +677,8 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
           };
           
           // Auto-create version for AI edit
-          const newVersion = createUpdateVersion(updatedOutline, 'AI Edit');
+          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+          const newVersion = createUpdateVersion(updatedOutline, 'AI Edit', primaryLanguage);
           const outlineWithVersion = addVersionToItem(updatedOutline, newVersion);
           
           return {
@@ -697,25 +734,27 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
         return newAct;
       },
 
-      updateAct: (projectId: string, actId: string, updates: Partial<Omit<Act, 'id' | 'createdAt' | 'chapters'>>) => {
+      updateAct: (projectId: string, actId: string, updates: Partial<Omit<Act, 'id' | 'createdAt' | 'chapters'>>, editLanguage?: string) => {
         set((state) => {
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
           const currentOutline = projectObjects.outline;
           if (!currentOutline) return state;
-          
+
           const { createUpdateVersion, addVersionToItem } = get();
+          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+          const languageToUse = editLanguage || primaryLanguage;
 
           const updatedActs = currentOutline.acts.map((act) => {
             if (act.id === actId) {
-              const updatedAct = { 
-                ...act, 
+              const updatedAct = {
+                ...act,
                 name: updates.name !== undefined ? updates.name : act.name,
                 description: updates.description !== undefined ? updates.description : act.description,
-                updatedAt: new Date() 
+                updatedAt: new Date()
               };
-              
-              // Auto-create version for the individual act
-              const newVersion = createUpdateVersion(updatedAct);
+
+              // Auto-create version for the individual act with the language being edited
+              const newVersion = createUpdateVersion(updatedAct, 'User Edit', languageToUse);
               return addVersionToItem(updatedAct, newVersion);
             }
             return act;
@@ -801,27 +840,29 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
         return newChapter;
       },
 
-      updateChapter: (projectId: string, chapterId: string, updates: Partial<Omit<Chapter, 'id' | 'createdAt' | 'actId'>>) => {
+      updateChapter: (projectId: string, chapterId: string, updates: Partial<Omit<Chapter, 'id' | 'createdAt' | 'actId'>>, editLanguage?: string) => {
         set((state) => {
           const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
           const currentOutline = projectObjects.outline;
           if (!currentOutline) return state;
-          
+
           const { createUpdateVersion, addVersionToItem } = get();
+          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+          const languageToUse = editLanguage || primaryLanguage;
 
           const updatedActs = currentOutline.acts.map((act) => ({
             ...act,
             chapters: act.chapters.map((chapter) => {
               if (chapter.id === chapterId) {
-                const updatedChapter = { 
-                  ...chapter, 
+                const updatedChapter = {
+                  ...chapter,
                   name: updates.name !== undefined ? updates.name : chapter.name,
                   description: updates.description !== undefined ? updates.description : chapter.description,
-                  updatedAt: new Date() 
+                  updatedAt: new Date()
                 };
-                
-                // Auto-create version for individual chapter
-                const newVersion = createUpdateVersion(updatedChapter);
+
+                // Auto-create version for individual chapter with the language being edited
+                const newVersion = createUpdateVersion(updatedChapter, 'User Edit', languageToUse);
                 return addVersionToItem(updatedChapter, newVersion);
               }
               return chapter;
@@ -874,7 +915,25 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
       // Utility Actions
       getStoryObjects: (projectId: string) => {
         const storeState = get();
-        return storeState.storyObjectsByProject[projectId] || createEmptyStoryObjects();
+
+        if (!projectId) {
+          return createEmptyStoryObjects();
+        }
+
+        const existing = storeState.storyObjectsByProject[projectId];
+        if (existing) {
+          return existing;
+        }
+
+        const emptyObjects = createEmptyStoryObjects();
+        set((state) => ({
+          storyObjectsByProject: {
+            ...state.storyObjectsByProject,
+            [projectId]: emptyObjects,
+          },
+        }));
+
+        return emptyObjects;
       },
 
       clearStoryObjects: (projectId: string) => {
@@ -1140,6 +1199,201 @@ export const useStoryObjectStore = create<StoryObjectStore>()(
             },
           };
         });
+      },
+
+      // Language-aware data access methods
+      getItemDataInLanguage: (projectId: string, category: StoryObjectCategory, itemId: string, language: string) => {
+        const item = get().getItemByCategoryAndId(projectId, category, itemId);
+        if (!item?.versions || !item.activeVersionId) return null;
+
+        const activeVersion = item.versions.find((v: ObjectVersion) => v.versionId === item.activeVersionId);
+        if (!activeVersion?.data) return null;
+
+        return activeVersion.data[language] || null;
+      },
+
+      hasItemDataInLanguage: (projectId: string, category: StoryObjectCategory, itemId: string, language: string) => {
+        const item = get().getItemByCategoryAndId(projectId, category, itemId);
+        if (!item?.versions || !item.activeVersionId) return false;
+
+        const activeVersion = item.versions.find((v: ObjectVersion) => v.versionId === item.activeVersionId);
+        if (!activeVersion?.data) return false;
+
+        return language in activeVersion.data;
+      },
+
+      getAvailableLanguagesForItem: (projectId: string, category: StoryObjectCategory, itemId: string) => {
+        const item = get().getItemByCategoryAndId(projectId, category, itemId);
+        if (!item?.versions || !item.activeVersionId) return [];
+
+        const activeVersion = item.versions.find((v: ObjectVersion) => v.versionId === item.activeVersionId);
+        if (!activeVersion?.data || typeof activeVersion.data !== 'object') return [];
+
+        return Object.keys(activeVersion.data);
+      },
+
+      addTranslatedDataToItem: (projectId: string, category: StoryObjectCategory, itemId: string, language: string, translatedData: any) => {
+        set((state) => {
+          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
+
+          const updateItemTranslation = (item: any) => {
+            if (!item || item.id !== itemId) return item;
+
+            const activeVersion = item.versions.find((v: ObjectVersion) => v.versionId === item.activeVersionId);
+            if (!activeVersion) return item;
+
+            // Add translated data to active version
+            const updatedVersions = item.versions.map((v: ObjectVersion) =>
+              v.versionId === item.activeVersionId
+                ? {
+                    ...v,
+                    data: {
+                      ...v.data,
+                      [language]: translatedData,
+                    },
+                  }
+                : v
+            );
+
+            return {
+              ...item,
+              versions: updatedVersions,
+              updatedAt: new Date(),
+            };
+          };
+
+          let updatedProjectObjects = { ...projectObjects };
+
+          switch (category) {
+            case 'basicInfo':
+              if (updatedProjectObjects.basicInfo) {
+                updatedProjectObjects.basicInfo = updateItemTranslation(updatedProjectObjects.basicInfo);
+              }
+              break;
+            case 'character':
+              updatedProjectObjects.characters = updatedProjectObjects.characters.map(updateItemTranslation);
+              break;
+            case 'organization':
+              updatedProjectObjects.organizations = updatedProjectObjects.organizations.map(updateItemTranslation);
+              break;
+            case 'location':
+              updatedProjectObjects.locations = updatedProjectObjects.locations.map(updateItemTranslation);
+              break;
+            case 'lorebook':
+              updatedProjectObjects.lorebook = updatedProjectObjects.lorebook.map(updateItemTranslation);
+              break;
+            case 'outline':
+              if (updatedProjectObjects.outline) {
+                updatedProjectObjects.outline = updateItemTranslation(updatedProjectObjects.outline);
+              }
+              break;
+            case 'act':
+              if (updatedProjectObjects.outline) {
+                updatedProjectObjects.outline = {
+                  ...updatedProjectObjects.outline,
+                  acts: updatedProjectObjects.outline.acts.map(updateItemTranslation),
+                };
+              }
+              break;
+            case 'chapter':
+              if (updatedProjectObjects.outline) {
+                updatedProjectObjects.outline = {
+                  ...updatedProjectObjects.outline,
+                  acts: updatedProjectObjects.outline.acts.map((act) => ({
+                    ...act,
+                    chapters: act.chapters.map(updateItemTranslation),
+                  })),
+                };
+              }
+              break;
+          }
+
+          return {
+            storyObjectsByProject: {
+              ...state.storyObjectsByProject,
+              [projectId]: updatedProjectObjects,
+            },
+          };
+        });
+      },
+
+      syncFlatFieldsWithLanguage: (projectId: string, category: StoryObjectCategory, itemId: string, language: string) => {
+        const languageData = get().getItemDataInLanguage(projectId, category, itemId, language);
+        if (!languageData) return;
+
+        // Update the flat fields based on category
+        switch (category) {
+          case 'basicInfo':
+            if (languageData.title !== undefined && languageData.logline !== undefined && languageData.genre !== undefined) {
+              const item = get().getItemByCategoryAndId(projectId, category, itemId);
+              if (item) {
+                set((state) => ({
+                  storyObjectsByProject: {
+                    ...state.storyObjectsByProject,
+                    [projectId]: {
+                      ...state.storyObjectsByProject[projectId],
+                      basicInfo: {
+                        ...item,
+                        title: languageData.title,
+                        logline: languageData.logline,
+                        genre: languageData.genre,
+                      },
+                    },
+                  },
+                }));
+              }
+            }
+            break;
+          case 'character':
+          case 'organization':
+          case 'location':
+          case 'lorebook':
+            if (languageData.name !== undefined && languageData.description !== undefined) {
+              const item = get().getItemByCategoryAndId(projectId, category, itemId);
+              if (item) {
+                const categoryKey = category === 'character' ? 'characters' :
+                                   category === 'organization' ? 'organizations' :
+                                   category === 'location' ? 'locations' : 'lorebook';
+
+                set((state) => ({
+                  storyObjectsByProject: {
+                    ...state.storyObjectsByProject,
+                    [projectId]: {
+                      ...state.storyObjectsByProject[projectId],
+                      [categoryKey]: state.storyObjectsByProject[projectId][categoryKey].map((i: any) =>
+                        i.id === itemId ? { ...i, name: languageData.name, description: languageData.description } : i
+                      ),
+                    },
+                  },
+                }));
+              }
+            }
+            break;
+        }
+      },
+
+      getPreviousVersionDataInLanguage: (projectId: string, category: StoryObjectCategory, itemId: string, language: string) => {
+        const item = get().getItemByCategoryAndId(projectId, category, itemId);
+        if (!item?.versions || !item.activeVersionId) return null;
+
+        // Find all versions that have data in the target language, excluding the current active version
+        const versionsWithLanguage = item.versions
+          .filter((v: ObjectVersion) =>
+            v.versionId !== item.activeVersionId &&
+            v.data &&
+            typeof v.data === 'object' &&
+            language in v.data
+          )
+          .sort((a: ObjectVersion, b: ObjectVersion) =>
+            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          );
+
+        // Return the most recent version's data in the target language
+        if (versionsWithLanguage.length > 0) {
+          return versionsWithLanguage[0].data[language];
+        }
+
+        return null;
       },
     }),
     {

@@ -2,9 +2,9 @@
 .chat-panel {
   display: flex;
   flex-direction: column;
-  width: 400px;
-  background: white;
-  border-right: 1px solid #e2e8f0;
+  width: 420px;
+  background: #f9fafb;
+  border-right: 1px solid #e5e7eb;
   transition: width 0.3s ease;
   flex-shrink: 0;
   height: 100%;
@@ -41,7 +41,7 @@
 @media (min-width: 769px) {
   .chat-panel {
     position: static;
-    width: 400px;
+    width: 420px;
     height: auto;
     z-index: auto;
     transform: none;

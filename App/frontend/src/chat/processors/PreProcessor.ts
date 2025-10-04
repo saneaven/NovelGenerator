@@ -13,7 +13,7 @@ export class DefaultPreProcessor implements PreProcessor {
   process(
     messages: ChatMessage[],
     context: ChatPipelineContext,
-    outputLanguage?: string,
+    conversationLanguage?: string,
     functions?: FunctionCallSchema[]
   ): PreProcessingResult {
     const processedMessages: ProcessedChatMessage[] = [];
@@ -22,7 +22,7 @@ export class DefaultPreProcessor implements PreProcessor {
     // Add comprehensive system prompt
     conversationBlocks.push({
       role: 'system',
-      content: this.generateSystemPrompt(context, outputLanguage, functions)
+      content: this.generateSystemPrompt(context, conversationLanguage, functions)
     });
 
     // Process existing messages
@@ -62,10 +62,10 @@ export class DefaultPreProcessor implements PreProcessor {
     };
   }
 
-  private generateSystemPrompt(context: ChatPipelineContext, outputLanguage?: string, functions?: FunctionCallSchema[]): string {
+  private generateSystemPrompt(context: ChatPipelineContext, conversationLanguage?: string, functions?: FunctionCallSchema[]): string {
     const promptContext: ChatSystemPromptContext = {
       mode: context.mode,
-      outputLanguage,
+      outputLanguage: conversationLanguage,
       functions: context.systemInsertConfig.enabled && context.systemInsertConfig.includeProjectInfo ? functions : undefined
     };
 

@@ -13,19 +13,20 @@ export interface ChatManagerConfig {
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
   abortControllerRef: MutableRefObject<AbortController | null>;
-  outputLanguage?: string;
+  getActiveChatId: () => string | undefined;
+  getConversationLanguage: () => string;
   aiModel?: string;
   functions?: any[]; // Function schemas for this context
   mode: 'novel-editor' | 'workspace'; // Explicit mode distinction
 }
 
 export interface ChatManagerCallbacks {
-  onUpdateMessage: (messageId: string, content: string) => void;
-  onFunctionCalls: (messageId: string, functionCalls: FunctionCallMetadata[]) => void;
-  onAddMessage: (projectId: string, message: ChatMessage) => void;
-  onGetChatHistory: (projectId: string) => ChatMessage[];
+  onUpdateMessage: (projectId: string, chatId: string, messageId: string, content: string, language: string) => void;
+  onFunctionCalls: (projectId: string, chatId: string, messageId: string, functionCalls: FunctionCallMetadata[]) => void;
+  onAddMessage: (projectId: string, chatId: string, message: ChatMessage, language: string) => void;
+  onGetChatHistory: (projectId: string, chatId: string, language: string) => ChatMessage[];
   onError: (error: Error) => void;
-  onFunctionCallsDetected?: (messageId: string, functionCalls: any[]) => void;
+  onFunctionCallsDetected?: (projectId: string, chatId: string, messageId: string, functionCalls: any[]) => void;
 }
 
 export class ChatManager {
@@ -43,18 +44,25 @@ export class ChatManager {
   async processUserMessage(userMessage: ChatMessage): Promise<void> {
     if (this.config.isLoading) return;
 
+    const chatId = this.config.getActiveChatId();
+    if (!chatId) {
+      console.error('ChatManager: No active chat selected for project', this.config.projectId);
+      return;
+    }
+
+    const language = this.config.getConversationLanguage();
     this.config.setIsLoading(true);
 
     try {
-      // Add user message
-      this.callbacks.onAddMessage(this.config.projectId, userMessage);
+      // Add user message in the conversation language
+      this.callbacks.onAddMessage(this.config.projectId, chatId, userMessage, language);
 
       // Create new AI response message
       const assistantMessage = this.createAssistantMessage();
-      this.callbacks.onAddMessage(this.config.projectId, assistantMessage);
+      this.callbacks.onAddMessage(this.config.projectId, chatId, assistantMessage, language);
 
       // Start streaming
-      await this.startStreaming(assistantMessage.id);
+      await this.startStreaming(chatId, assistantMessage.id, language);
 
     } catch (error) {
       console.error('Chat processing error:', error);
@@ -71,15 +79,22 @@ export class ChatManager {
   async processEmptyRequest(): Promise<void> {
     if (this.config.isLoading) return;
 
+    const chatId = this.config.getActiveChatId();
+    if (!chatId) {
+      console.error('ChatManager: No active chat selected for project', this.config.projectId);
+      return;
+    }
+
+    const language = this.config.getConversationLanguage();
     this.config.setIsLoading(true);
 
     try {
       // Create new AI response message
       const assistantMessage = this.createAssistantMessage();
-      this.callbacks.onAddMessage(this.config.projectId, assistantMessage);
+      this.callbacks.onAddMessage(this.config.projectId, chatId, assistantMessage, language);
 
       // Start streaming
-      await this.startStreaming(assistantMessage.id);
+      await this.startStreaming(chatId, assistantMessage.id, language);
 
     } catch (error) {
       console.error('Chat processing error:', error);
@@ -106,34 +121,33 @@ export class ChatManager {
   /**
    * Start streaming
    */
-  private async startStreaming(assistantMessageId: string): Promise<void> {
-    // Get current chat history
-    const chatHistory = this.callbacks.onGetChatHistory(this.config.projectId);
+  private async startStreaming(chatId: string, assistantMessageId: string, language: string): Promise<void> {
+    // Get current chat history for the active chat in the target language
+    const chatHistory = this.callbacks.onGetChatHistory(this.config.projectId, chatId, language);
 
     // Create pipeline context with fresh storyObjects and novel data
-    // Function call results are now handled directly in the preprocessing pipeline
     const context = ChatPipeline.createContext(
       this.config.projectId,
-      this.config.getStoryObjects(), // Get fresh story objects at streaming time
+      this.config.getStoryObjects(),
       this.config.mode,
       this.config.systemInsertConfig,
-      this.config.getNovelData?.() // Get novel data if available
+      this.config.getNovelData?.()
     );
 
     // Pre-process messages
     const { conversationBlocks, functions } = this.config.chatPipeline.preProcess(
-      chatHistory.slice(0, -1), // Exclude the newly added empty assistant message
+      chatHistory.slice(0, -1),
       context,
-      this.config.outputLanguage,
+      language,
       this.config.functions
     );
 
     // Start streaming
     this.config.abortControllerRef.current = new AbortController();
-    
+
     let accumulatedContent = '';
     let accumulatedToolCalls: any[] = [];
-    
+
     for await (const chunk of streamCopilot(conversationBlocks, {
       signal: this.config.abortControllerRef.current.signal,
       functions: functions,
@@ -141,27 +155,25 @@ export class ChatManager {
     })) {
       if (typeof chunk === 'string') {
         accumulatedContent += chunk;
-        this.callbacks.onUpdateMessage(assistantMessageId, accumulatedContent);
+        this.callbacks.onUpdateMessage(this.config.projectId, chatId, assistantMessageId, accumulatedContent, language);
       } else {
-        // Process tool calls
         if (chunk.content) {
           accumulatedContent += chunk.content;
-          this.callbacks.onUpdateMessage(assistantMessageId, accumulatedContent);
+          this.callbacks.onUpdateMessage(this.config.projectId, chatId, assistantMessageId, accumulatedContent, language);
         }
-        
+
         if (chunk.tool_calls) {
           accumulatedToolCalls = this.accumulateToolCalls(accumulatedToolCalls, chunk.tool_calls);
-          
-          // Notify about function calls being detected during streaming
+
           if (this.callbacks.onFunctionCallsDetected) {
-            this.callbacks.onFunctionCallsDetected(assistantMessageId, accumulatedToolCalls);
+            this.callbacks.onFunctionCallsDetected(this.config.projectId, chatId, assistantMessageId, accumulatedToolCalls);
           }
         }
       }
     }
 
     // Post-processing
-    await this.finishProcessing(assistantMessageId, accumulatedContent, accumulatedToolCalls, context);
+    await this.finishProcessing(chatId, assistantMessageId, accumulatedContent, accumulatedToolCalls, context, language);
   }
 
   /**
@@ -195,18 +207,20 @@ export class ChatManager {
    * Final processing
    */
   private async finishProcessing(
+    chatId: string,
     messageId: string,
     content: string,
     toolCalls: any[],
-    context: ChatPipelineContext
+    context: ChatPipelineContext,
+    _language: string
   ): Promise<void> {
     // Post-process the final AI response
     const finalResponse = toolCalls.length > 0 
       ? { content: content, tool_calls: toolCalls }
       : content;
-    
+
     console.log('ChatManager: Processing final response', { finalResponse, toolCallsLength: toolCalls.length });
-    
+
     const { message: processedMessage } = this.config.chatPipeline.postProcess(
       finalResponse,
       context
@@ -220,11 +234,11 @@ export class ChatManager {
 
     // Process for display and generate edit cards
     this.config.chatPipeline.processForDisplay(processedMessage, context);
-    
+
     // Call callback if function calls exist
     if (processedMessage.functionCalls && processedMessage.functionCalls.length > 0) {
       console.log('ChatManager: Calling onFunctionCalls callback', { messageId, functionCalls: processedMessage.functionCalls });
-      this.callbacks.onFunctionCalls(messageId, processedMessage.functionCalls);
+      this.callbacks.onFunctionCalls(this.config.projectId, chatId, messageId, processedMessage.functionCalls);
     } else {
       console.log('ChatManager: No function calls to process');
     }

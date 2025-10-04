@@ -189,7 +189,7 @@ const OutlineManager: React.FC = () => {
             onClick={() => setShowAIModal(true)} 
             className="ai-edit-button"
           >
-            🤖 AI Edit
+            AI Edit
           </button>
           <button 
             onClick={() => setShowAddActForm(true)} 
@@ -227,13 +227,13 @@ const OutlineManager: React.FC = () => {
                     onClick={() => setShowActVersionHistory(act.id)}
                     className="version-history-button"
                   >
-                    📚 History
+                    History
                   </button>
                   <button
                     onClick={() => setShowActAIModal(act.id)}
                     className="ai-edit-button"
                   >
-                    🤖 AI Edit
+                    AI Edit
                   </button>
                   <button
                     onClick={() => setEditingAct(act)}
@@ -294,13 +294,13 @@ const OutlineManager: React.FC = () => {
                           onClick={() => setShowChapterVersionHistory(chapter.id)}
                           className="version-history-button"
                         >
-                          📚 History
+                          History
                         </button>
                         <button
                           onClick={() => setShowChapterAIModal(chapter.id)}
                           className="ai-edit-button"
                         >
-                          🤖 AI Edit
+                          AI Edit
                         </button>
                         <button
                           onClick={() => setEditingChapter(chapter)}
@@ -637,10 +637,6 @@ const ActVersionHistoryModal: React.FC<ActVersionHistoryModalProps> = ({
     if (isOpen && actId) {
       const actVersions = getActVersions(projectId, actId);
       setVersions(actVersions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
-      
-      const activeVersion = actVersions.find(v => v.isActive);
-      if (activeVersion) {
-      }
     }
   }, [isOpen, projectId, actId, getActVersions]);
 
@@ -652,8 +648,8 @@ const ActVersionHistoryModal: React.FC<ActVersionHistoryModalProps> = ({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content version-history-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>📚 Act "{act?.name || 'Unknown Act'}" Version History</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
+          <h2>Act "{act?.name || 'Unknown Act'}" Version History</h2>
+          <button className="modal-close" onClick={onClose}>Close</button>
         </div>
 
         <div className="version-history-content">
@@ -697,7 +693,7 @@ const ActVersionHistoryModal: React.FC<ActVersionHistoryModalProps> = ({
                         }}
                         className="expand-button"
                       >
-                        {expandedVersions.has(version.versionId) ? '▼' : '▶'}
+                        {expandedVersions.has(version.versionId) ? 'Hide details' : 'Show details'}
                       </button>
                       
                       {!version.isActive && (
@@ -768,23 +764,18 @@ const ChapterVersionHistoryModal: React.FC<ChapterVersionHistoryModalProps> = ({
     if (isOpen && chapterId) {
       const chapterVersions = getChapterVersions(projectId, chapterId);
       setVersions(chapterVersions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
-      
-      const activeVersion = chapterVersions.find(v => v.isActive);
-      if (activeVersion) {
-      }
     }
   }, [isOpen, projectId, chapterId, getChapterVersions]);
 
   const chapter = getChapterById(projectId, chapterId);
-
   if (!isOpen) return null;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content version-history-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>📚 Chapter "{chapter?.name || 'Unknown Chapter'}" Version History</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
+          <h2>Chapter "{chapter?.name || 'Unknown Chapter'}" Version History</h2>
+          <button className="modal-close" onClick={onClose}>Close</button>
         </div>
 
         <div className="version-history-content">
@@ -828,7 +819,7 @@ const ChapterVersionHistoryModal: React.FC<ChapterVersionHistoryModalProps> = ({
                         }}
                         className="expand-button"
                       >
-                        {expandedVersions.has(version.versionId) ? '▼' : '▶'}
+                        {expandedVersions.has(version.versionId) ? 'Hide details' : 'Show details'}
                       </button>
                       
                       {!version.isActive && (
@@ -876,3 +867,16 @@ const ChapterVersionHistoryModal: React.FC<ChapterVersionHistoryModalProps> = ({
 };
 
 export default OutlineManager;
+
+
+
+
+
+
+
+
+
+
+
+
+

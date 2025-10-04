@@ -90,27 +90,6 @@ export class FunctionCallApplicator {
     }
   }
 
-  private createVersionForItem<T>(
-    projectId: string, 
-    category: import('../../types/storyObject').StoryObjectCategory, 
-    itemId: string, 
-    data: T, 
-    editType: string, 
-    summary?: string
-  ): void {
-    const userRequest = `AI Function Call (${editType})${summary ? `: ${summary}` : ''}`;
-    
-    // Extract only essential data to match initial version format
-    let essentialData: any = data;
-    if (data && typeof data === 'object' && 'name' in data && 'description' in data) {
-      essentialData = {
-        name: (data as any).name,
-        description: (data as any).description,
-      };
-    }
-    
-    this.storeActions.addVersion(projectId, category, itemId, userRequest, essentialData);
-  }
 
   private async applyManageStoryObjects(
     projectId: string,
@@ -184,52 +163,43 @@ export class FunctionCallApplicator {
 
     switch (type) {
       case 'basic_info':
-        const basicInfoId = crypto.randomUUID();
-        const basicInfoData = {
-          id: basicInfoId,
+        // Use updateBasicInfo instead of setBasicInfo to ensure proper version creation
+        this.storeActions.updateBasicInfo(projectId, {
           title: data.title || '',
           logline: data.logline || '',
-          genre: data.genre || '',
-          description: data.description || '',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          versions: [],
-          activeVersionId: ''
-        };
-        
-        this.storeActions.setBasicInfo(projectId, basicInfoData);
-        this.createVersionForItem(projectId, 'basicInfo', basicInfoId, basicInfoData, 'create', 'Create basic info');
+          genre: data.genre || ''
+        });
         results.push(`Created basic info`);
         break;
       case 'character':
         const newCharacter = this.storeActions.addCharacter(projectId, data);
-        this.createVersionForItem(projectId, 'character', newCharacter.id, newCharacter, 'create', `Create character: ${newCharacter.name}`);
+        // Version is automatically created by addCharacter
         results.push(`Created character: ${newCharacter.name}`);
         break;
       case 'organization':
         const newOrganization = this.storeActions.addOrganization(projectId, data);
-        this.createVersionForItem(projectId, 'organization', newOrganization.id, newOrganization, 'create', `Create organization: ${newOrganization.name}`);
+        // Version is automatically created by addOrganization
         results.push(`Created organization: ${newOrganization.name}`);
         break;
       case 'location':
         const newLocation = this.storeActions.addLocation(projectId, data);
-        this.createVersionForItem(projectId, 'location', newLocation.id, newLocation, 'create', `Create location: ${newLocation.name}`);
+        // Version is automatically created by addLocation
         results.push(`Created location: ${newLocation.name}`);
         break;
       case 'lorebook':
         const newEntry = this.storeActions.addLorebookEntry(projectId, data);
-        this.createVersionForItem(projectId, 'lorebook', newEntry.id, newEntry, 'create', `Create lorebook entry: ${newEntry.name}`);
+        // Version is automatically created by addLorebookEntry
         results.push(`Created lorebook entry: ${newEntry.name}`);
         break;
       case 'act':
         const newAct = this.storeActions.addAct(projectId, data);
-        this.createVersionForItem(projectId, 'outline', newAct.id, newAct, 'create', `Create act: ${newAct.name}`);
-        
+        // Version is automatically created by addAct
+
         // Handle chapters within act if provided
         if (data.chapters && Array.isArray(data.chapters)) {
           for (const chapter of data.chapters) {
-            const newChapter = this.storeActions.addChapter(projectId, newAct.id, chapter);
-            this.createVersionForItem(projectId, 'outline', newChapter.id, newChapter, 'create', `Create chapter: ${newChapter.name}`);
+            this.storeActions.addChapter(projectId, newAct.id, chapter);
+            // Version is automatically created by addChapter
           }
         }
         results.push(`Created act: ${newAct.name}`);
@@ -240,7 +210,7 @@ export class FunctionCallApplicator {
           return;
         }
         const newChapter = this.storeActions.addChapter(projectId, data.actId, data);
-        this.createVersionForItem(projectId, 'outline', newChapter.id, newChapter, 'create', `Create chapter: ${newChapter.name}`);
+        // Version is automatically created by addChapter
         results.push(`Created chapter: ${newChapter.name}`);
         break;
       default:
@@ -260,68 +230,37 @@ export class FunctionCallApplicator {
     switch (type) {
       case 'basic_info':
         this.storeActions.updateBasicInfo(projectId, data);
-        const storyObjects = this.storeActions.getStoryObjects(projectId);
-        if (storyObjects.basicInfo) {
-          this.createVersionForItem(projectId, 'basicInfo', storyObjects.basicInfo.id, storyObjects.basicInfo, 'update', 'Update basic info');
-        }
+        // Version is automatically created by updateBasicInfo
         results.push(`Updated basic info`);
         break;
       case 'character':
         this.storeActions.updateCharacter(projectId, id, data);
-        const updatedChar = this.storeActions.getStoryObjects(projectId).characters.find(c => c.id === id);
-        if (updatedChar) {
-          this.createVersionForItem(projectId, 'character', id, updatedChar, 'update', `Update character: ${itemName}`);
-        }
+        // Version is automatically created by updateCharacter
         results.push(`Updated character: ${itemName}`);
         break;
       case 'organization':
         this.storeActions.updateOrganization(projectId, id, data);
-        const updatedOrg = this.storeActions.getStoryObjects(projectId).organizations.find(o => o.id === id);
-        if (updatedOrg) {
-          this.createVersionForItem(projectId, 'organization', id, updatedOrg, 'update', `Update organization: ${itemName}`);
-        }
+        // Version is automatically created by updateOrganization
         results.push(`Updated organization: ${itemName}`);
         break;
       case 'location':
         this.storeActions.updateLocation(projectId, id, data);
-        const updatedLoc = this.storeActions.getStoryObjects(projectId).locations.find(l => l.id === id);
-        if (updatedLoc) {
-          this.createVersionForItem(projectId, 'location', id, updatedLoc, 'update', `Update location: ${itemName}`);
-        }
+        // Version is automatically created by updateLocation
         results.push(`Updated location: ${itemName}`);
         break;
       case 'lorebook':
         this.storeActions.updateLorebookEntry(projectId, id, data);
-        const updatedEntry = this.storeActions.getStoryObjects(projectId).lorebook.find(e => e.id === id);
-        if (updatedEntry) {
-          this.createVersionForItem(projectId, 'lorebook', id, updatedEntry, 'update', `Update lorebook entry: ${itemName}`);
-        }
+        // Version is automatically created by updateLorebookEntry
         results.push(`Updated lorebook entry: ${itemName}`);
         break;
       case 'act':
         this.storeActions.updateAct(projectId, id, data);
-        const updatedAct = this.storeActions.getStoryObjects(projectId).outline?.acts.find(a => a.id === id);
-        if (updatedAct) {
-          this.createVersionForItem(projectId, 'outline', id, updatedAct, 'update', `Update act: ${itemName}`);
-        }
+        // Version is automatically created by updateAct
         results.push(`Updated act: ${itemName}`);
         break;
       case 'chapter':
         this.storeActions.updateChapter(projectId, id, data);
-        const storyObjs = this.storeActions.getStoryObjects(projectId);
-        let updatedChapter = null;
-        if (storyObjs.outline) {
-          for (const act of storyObjs.outline.acts) {
-            const chapter = act.chapters.find(c => c.id === id);
-            if (chapter) {
-              updatedChapter = chapter;
-              break;
-            }
-          }
-        }
-        if (updatedChapter) {
-          this.createVersionForItem(projectId, 'outline', id, updatedChapter, 'update', `Update chapter: ${itemName}`);
-        }
+        // Version is automatically created by updateChapter
         results.push(`Updated chapter: ${itemName}`);
         break;
       default:
@@ -345,7 +284,6 @@ export class FunctionCallApplicator {
           return;
         }
         this.storeActions.deleteCharacter(projectId, id);
-        this.createVersionForItem(projectId, 'character', id, { ...charToDelete, deleted: true }, 'delete', `Delete character: ${charToDelete.name}`);
         results.push(`Deleted character: ${charToDelete.name}`);
         break;
       case 'organization':
@@ -355,7 +293,6 @@ export class FunctionCallApplicator {
           return;
         }
         this.storeActions.deleteOrganization(projectId, id);
-        this.createVersionForItem(projectId, 'organization', id, { ...orgToDelete, deleted: true }, 'delete', `Delete organization: ${orgToDelete.name}`);
         results.push(`Deleted organization: ${orgToDelete.name}`);
         break;
       case 'location':
@@ -365,7 +302,6 @@ export class FunctionCallApplicator {
           return;
         }
         this.storeActions.deleteLocation(projectId, id);
-        this.createVersionForItem(projectId, 'location', id, { ...locToDelete, deleted: true }, 'delete', `Delete location: ${locToDelete.name}`);
         results.push(`Deleted location: ${locToDelete.name}`);
         break;
       case 'lorebook':
@@ -375,7 +311,6 @@ export class FunctionCallApplicator {
           return;
         }
         this.storeActions.deleteLorebookEntry(projectId, id);
-        this.createVersionForItem(projectId, 'lorebook', id, { ...entryToDelete, deleted: true }, 'delete', `Delete lorebook entry: ${entryToDelete.name}`);
         results.push(`Deleted lorebook entry: ${entryToDelete.name}`);
         break;
       case 'act':
@@ -385,7 +320,6 @@ export class FunctionCallApplicator {
           return;
         }
         this.storeActions.deleteAct(projectId, id);
-        this.createVersionForItem(projectId, 'outline', id, { ...actToDelete, deleted: true }, 'delete', `Delete act: ${actToDelete.name}`);
         results.push(`Deleted act: ${actToDelete.name}`);
         break;
       case 'chapter':
@@ -404,7 +338,6 @@ export class FunctionCallApplicator {
           return;
         }
         this.storeActions.deleteChapter(projectId, id);
-        this.createVersionForItem(projectId, 'outline', id, { ...chapterToDelete, deleted: true }, 'delete', `Delete chapter: ${chapterToDelete.name}`);
         results.push(`Deleted chapter: ${chapterToDelete.name}`);
         break;
       default:

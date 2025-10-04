@@ -1,5 +1,5 @@
 import type { ConversationBlock } from '../llm_request/types';
-import type { LanguageData } from '../types/storyObject';
+import type { LanguageData } from '../types/multilingual';
 
 // Translation request types
 export interface TranslationRequest {
@@ -7,6 +7,7 @@ export interface TranslationRequest {
   targetLanguage: string;
   data: any;
   dataType: 'nameDescription' | 'basicInfo' | 'chapterData' | 'chapterContent' | 'chatMessage';
+  previousVersionData?: any; // Previous version data in target language for context
 }
 
 export interface TranslationResult {
@@ -40,34 +41,55 @@ export class TranslationService {
   }
 
   // Generate system prompt for translation
-  private static generateSystemPrompt(dataType: string, sourceLanguage: string, targetLanguage: string): string {
+  private static generateSystemPrompt(
+    dataType: string,
+    sourceLanguage: string,
+    targetLanguage: string,
+    hasPreviousVersion: boolean
+  ): string {
     const basePrompt = `You are a professional translator. Translate the provided content from ${sourceLanguage} to ${targetLanguage}. `;
+
+    const contextPrompt = hasPreviousVersion
+      ? `\n\nIMPORTANT: A previous ${targetLanguage} version will be provided as context. Use it as reference to maintain consistency in terminology, style, and tone, but translate the current ${sourceLanguage} content accurately. The previous version helps you understand the original context and writing style.`
+      : '';
 
     switch (dataType) {
       case 'nameDescription':
-        return basePrompt + `You will receive a JSON object with 'name' and 'description' fields. Translate both fields while maintaining the meaning and context. Return only the JSON object with translated fields.`;
+        return basePrompt + `You will receive a JSON object with 'name' and 'description' fields. Translate both fields while maintaining the meaning and context. Return only the JSON object with translated fields.` + contextPrompt;
 
       case 'basicInfo':
-        return basePrompt + `You will receive a JSON object with 'title', 'logline', and 'genre' fields. Translate the title and logline while keeping the genre appropriate for the target language. Return only the JSON object with translated fields.`;
+        return basePrompt + `You will receive a JSON object with 'title', 'logline', and 'genre' fields. Translate the title and logline while keeping the genre appropriate for the target language. Return only the JSON object with translated fields.` + contextPrompt;
 
       case 'chapterData':
-        return basePrompt + `You will receive a JSON object with 'name' and 'description' fields representing a chapter. Translate both fields while maintaining narrative context. Return only the JSON object with translated fields.`;
+        return basePrompt + `You will receive a JSON object with 'name' and 'description' fields representing a chapter. Translate both fields while maintaining narrative context. Return only the JSON object with translated fields.` + contextPrompt;
 
       case 'chapterContent':
-        return basePrompt + `You will receive a JSON object with 'content' and 'wordCount' fields. Translate the content while maintaining literary style and narrative flow. Update the wordCount to reflect the translated content. Return only the JSON object with translated fields.`;
+        return basePrompt + `You will receive a JSON object with 'content' and 'wordCount' fields. Translate the content while maintaining literary style and narrative flow. Update the wordCount to reflect the translated content. Return only the JSON object with translated fields.` + contextPrompt;
 
       case 'chatMessage':
-        return basePrompt + `You will receive a JSON object with a 'content' field representing a chat message. Translate the content while maintaining the conversational tone and meaning. Return only the JSON object with the translated field.`;
+        return basePrompt + `You will receive a JSON object with a 'content' field representing a chat message. Translate the content while maintaining the conversational tone and meaning. Return only the JSON object with the translated field.` + contextPrompt;
 
       default:
-        return basePrompt + `Translate the provided JSON object fields to ${targetLanguage}. Return only the translated JSON object.`;
+        return basePrompt + `Translate the provided JSON object fields to ${targetLanguage}. Return only the translated JSON object.` + contextPrompt;
     }
   }
 
   // Prepare translation request (similar to aiEditService.prepareEditRequest)
   static prepareTranslationRequest(request: TranslationRequest): TranslationResult {
-    const systemPrompt = this.generateSystemPrompt(request.dataType, request.sourceLanguage, request.targetLanguage);
-    const userPrompt = JSON.stringify(request.data);
+    const hasPreviousVersion = Boolean(request.previousVersionData);
+    const systemPrompt = this.generateSystemPrompt(
+      request.dataType,
+      request.sourceLanguage,
+      request.targetLanguage,
+      hasPreviousVersion
+    );
+
+    let userPrompt: string;
+    if (hasPreviousVersion) {
+      userPrompt = `Previous ${request.targetLanguage} version (for context):\n${JSON.stringify(request.previousVersionData, null, 2)}\n\nCurrent ${request.sourceLanguage} content to translate:\n${JSON.stringify(request.data, null, 2)}`;
+    } else {
+      userPrompt = JSON.stringify(request.data);
+    }
 
     const messages: ConversationBlock[] = [
       { role: 'system', content: systemPrompt },

@@ -1,26 +1,23 @@
-
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { useProjectStore } from '../store/projectStore';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { ChatPipeline } from '../chat/ChatPipeline';
+import type { SystemInsertConfig, EditCard } from '../chat/types';
+import { ChatManager, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
+import { DefaultDisplayProcessor } from '../chat/processors/DisplayProcessor';
+import { areEditCardMapsEqual } from '../chat/utils/editCardUtils';
+import { WORKSPACE_FUNCTIONS } from '../chat/types/functionCalling';
 import { useChatStore } from '../store/chatStore';
+import { useProjectStore } from '../store/projectStore';
 import { useStoryObjectStore } from '../store/storyObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
-import { type ChatMessage } from '../llm_request/types';
-import { ChatPipeline } from '../chat/ChatPipeline';
-import type { SystemInsertConfig } from '../chat/types';
-import { DefaultDisplayProcessor } from '../chat/processors/DisplayProcessor';
-import { ChatManager, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
-import { WORKSPACE_FUNCTIONS } from '../chat/types/functionCalling';
 
-// Workspace Components
 import ChatSidebar from '../components/ChatSidebar';
 import ErrorModal from '../components/ErrorModal';
 import SettingsModal from '../components/SettingsModal';
 import ChatPanel from './workspace/components/ChatPanel';
 import StoryPanel from './workspace/components/StoryPanel';
 
-// Workspace Hooks
 import { useWorkspaceState } from './workspace/hooks/useWorkspaceState';
 import { useChatHandlers } from './workspace/hooks/useChatHandlers';
 import { useFunctionCallHandlers } from './workspace/hooks/useFunctionCallHandlers';
@@ -34,246 +31,282 @@ import './workspace/styles/ChatInput.css';
 import './workspace/styles/ChatSidebar.css';
 import './workspace/styles/MessageEditCards.css';
 
-const Workspace: React.FC = () => {
-  const { projectId } = useParams<{ projectId: string }>();
-  const { getCurrentProject } = useProjectStore();
-  const { addMessage, updateMessage, getChatHistory } = useChatStore();
-  const storyObjectStore = useStoryObjectStore();
-  const { getStoryObjects } = storyObjectStore;
-  const { settings } = useSettingsStore();
-  const { currentError, showError, hideError } = useErrorStore();
+const Workspace: React.FC = () =>
+{
+    const { projectId } = useParams<{ projectId: string }>();
 
-  // Custom hooks
-  const { state: uiState, actions: uiActions } = useWorkspaceState(projectId);
-  
-  // Chat State
-  const [systemInsertConfig, setSystemInsertConfig] = useState<SystemInsertConfig>(
-    ChatPipeline.createDefaultSystemConfig()
-  );
-  const [chatPipeline] = useState(() => new ChatPipeline());
-  const [displayProcessor] = useState(() => new DefaultDisplayProcessor());
+    const { getCurrentProject } = useProjectStore();
+    const {
+        addMessage,
+        updateMessage,
+        getMessages,
+        getSelectedChatId,
+    } = useChatStore();
+    const { getStoryObjects } = useStoryObjectStore();
+    const { settings } = useSettingsStore();
+    const { currentError, showError, hideError } = useErrorStore();
 
-  const currentProject = getCurrentProject();
-  const storyObjects = getStoryObjects(projectId || '');
+    const { state: uiState, actions: uiActions } = useWorkspaceState(projectId);
 
-  // Create a ref to store function call handlers for callbacks
-  const functionCallHandlersRef = useRef<any>(null);
+    const [systemInsertConfig, setSystemInsertConfig] = useState<SystemInsertConfig>(
+        ChatPipeline.createDefaultSystemConfig()
+    );
+    const chatPipeline = useMemo(() => new ChatPipeline(), []);
+    const displayProcessor = useMemo(() => new DefaultDisplayProcessor(), []);
+    const abortControllerRef = useRef<AbortController | null>(null);
 
-  const chatManagerCallbacks: ChatManagerCallbacks = {
-    onUpdateMessage: (messageId: string, content: string) => {
-      updateMessage(projectId || '', messageId, content);
-    },
-    onFunctionCalls: (messageId: string, functionCalls: any[]) => {
-      if (functionCallHandlersRef.current) {
-        functionCallHandlersRef.current.handleFunctionCalls(messageId, functionCalls);
-      }
-    },
-    onAddMessage: (projectId: string, message: ChatMessage) => {
-      addMessage(projectId, message);
-    },
-    onGetChatHistory: (projectId: string) => {
-      return getChatHistory(projectId);
-    },
-    onError: (error: Error) => {
-      console.error('Runtime processing error:', error);
-      showError('Chat Error', 'An error occurred during processing. Please try again.');
-    },
-    onFunctionCallsDetected: (messageId: string, functionCalls: any[]) => {
-      if (functionCallHandlersRef.current) {
-        functionCallHandlersRef.current.handleFunctionCallsDetected(messageId, functionCalls);
-      }
-    }
-  };
+    const {
+        messageEditCards,
+        activeFunctionCalls,
+        pendingFunctionCallResults,
+        setPendingFunctionCallResults,
+        setMessageEditCards,
+        handleFunctionCalls,
+        handleFunctionCallsDetected,
+        createFunctionCallApplyHandler,
+        createFunctionCallRejectHandler,
+    } = useFunctionCallHandlers(projectId);
 
-  // Update function call handlers first
-  const updatedFunctionCallHandlers = useFunctionCallHandlers(projectId);
+    const chatManagerCallbacks = useMemo<ChatManagerCallbacks>(() => ({
+        onUpdateMessage: (projId, chatId, messageId, content, language) =>
+        {
+            updateMessage(projId, chatId, messageId, content, language);
+        },
+        onFunctionCalls: (_projId, _chatId, messageId, functionCalls) =>
+        {
+            handleFunctionCalls(messageId, functionCalls);
+        },
+        onAddMessage: (projId, chatId, message, language) =>
+        {
+            addMessage(projId, chatId, message, language);
+        },
+        onGetChatHistory: (projId, chatId, language) => getMessages(projId, chatId, language),
+        onError: (error) =>
+        {
+            console.error('Runtime processing error:', error);
+            showError('Chat Error', 'An error occurred during processing. Please try again.');
+        },
+        onFunctionCallsDetected: (_projId, _chatId, messageId, functionCalls) =>
+        {
+            handleFunctionCallsDetected(messageId, functionCalls);
+        },
+    }), [updateMessage, handleFunctionCalls, addMessage, getMessages, showError, handleFunctionCallsDetected]);
 
-  const chatManager = useMemo(() => {
-    const updatedConfig = {
-      projectId: projectId || '',
-      getStoryObjects: () => getStoryObjects(projectId || ''),
-      systemInsertConfig,
-      chatPipeline,
-      isLoading: uiState.isLoading,
-      setIsLoading: uiActions.setIsLoading,
-      abortControllerRef: { current: null },
-      outputLanguage: settings.outputLanguage,
-      aiModel: settings.aiModel,
-      functions: WORKSPACE_FUNCTIONS,
-      mode: 'workspace' as const
-    };
-    return new ChatManager(updatedConfig, chatManagerCallbacks);
-  }, [projectId, systemInsertConfig, uiState.isLoading, getStoryObjects, settings]);
-  
-  // Update the ref with current handlers
-  functionCallHandlersRef.current = updatedFunctionCallHandlers;
-
-  // Chat handlers
-  const chatHandlers = useChatHandlers(
-    projectId,
-    uiActions,
-    chatManager,
-    updatedFunctionCallHandlers.pendingFunctionCallResults,
-    () => updatedFunctionCallHandlers.setPendingFunctionCallResults([])
-  );
-
-  // Restore edit cards from persisted message metadata on initial load
-  useEffect(() => {
-    if (!projectId) return;
-    
-    const chatHistory = getChatHistory(projectId);
-    const restoredEditCards: Record<string, any[]> = {};
-    
-    chatHistory.forEach(message => {
-      const processed = displayProcessor.process(message, {
+    const chatManager = useMemo(() =>
+    {
+        const activeProjectId = projectId ?? '';
+        return new ChatManager(
+            {
+                projectId: activeProjectId,
+                getStoryObjects: () => getStoryObjects(activeProjectId),
+                systemInsertConfig,
+                chatPipeline,
+                isLoading: uiState.isLoading,
+                setIsLoading: uiActions.setIsLoading,
+                abortControllerRef,
+                getActiveChatId: () =>
+                {
+                    if (uiState.selectedChatId) return uiState.selectedChatId;
+                    if (!activeProjectId) return undefined;
+                    return getSelectedChatId(activeProjectId);
+                },
+                getConversationLanguage: () => settings.primaryLanguage,
+                aiModel: settings.aiModel,
+                functions: WORKSPACE_FUNCTIONS,
+                mode: 'workspace',
+            },
+            chatManagerCallbacks
+        );
+    }, [
         projectId,
+        getStoryObjects,
+        systemInsertConfig,
+        chatPipeline,
+        uiState.isLoading,
+        uiActions.setIsLoading,
+        uiState.selectedChatId,
+        settings.primaryLanguage,
+        settings.aiModel,
+        getSelectedChatId,
+        chatManagerCallbacks,
+    ]);
+
+    const chatHandlers = useChatHandlers(
+        projectId,
+        uiActions,
+        chatManager,
+        pendingFunctionCallResults,
+        () => setPendingFunctionCallResults([])
+    );
+
+    const currentProject = getCurrentProject();
+    const storyObjects = getStoryObjects(projectId ?? '');
+
+    useEffect(() =>
+    {
+        if (!projectId) return;
+
+        const chatId = uiState.selectedChatId ?? getSelectedChatId(projectId);
+        if (!chatId) return;
+
+        const messages = getMessages(projectId, chatId, settings.primaryLanguage);
+        const restored: Record<string, EditCard[]> = {};
+
+        messages.forEach(message =>
+        {
+            const processed = displayProcessor.process(message, {
+                projectId,
+                storyObjects,
+                systemInsertConfig,
+                mode: 'workspace',
+            });
+
+            if (processed.editCards.length > 0)
+            {
+                const cards = processed.editCards.map(card =>
+                {
+                    if (message.role === 'assistant' && message.functionCalls)
+                    {
+                        const funcCall = message.functionCalls.find(fc => fc.id === card.id);
+                        if (funcCall)
+                        {
+                            return {
+                                ...card,
+                                appliedAt: funcCall.appliedAt,
+                                onApply: createFunctionCallApplyHandler(message.id, funcCall),
+                                onReject: createFunctionCallRejectHandler(message.id, funcCall),
+                            };
+                        }
+                    }
+                    return card;
+                });
+                restored[message.id] = cards;
+            }
+        });
+
+        if (!areEditCardMapsEqual(messageEditCards, restored))
+        {
+            setMessageEditCards(restored);
+        }
+    }, [
+        projectId,
+        uiState.selectedChatId,
+        getSelectedChatId,
+        getMessages,
+        settings.primaryLanguage,
+        displayProcessor,
         storyObjects,
         systemInsertConfig,
-        mode: 'workspace'
-      });
-      
-      if (processed.editCards.length > 0) {
-        const editCardsWithHandlers = processed.editCards.map((card) => {
-          if (message.role === 'assistant' && message.functionCalls) {
-            const funcCall = message.functionCalls.find(fc => fc.id === card.id);
-            if (funcCall) {
-              return {
-                ...card,
-                appliedAt: funcCall.appliedAt, // Pass the appliedAt timestamp
-                onApply: updatedFunctionCallHandlers.createFunctionCallApplyHandler(message.id, funcCall),
-                onReject: updatedFunctionCallHandlers.createFunctionCallRejectHandler(message.id, funcCall)
-              };
-            }
-          }
-          
-          return card;
-        });
-        
-        restoredEditCards[message.id] = editCardsWithHandlers;
-      }
-    });
-    
-    updatedFunctionCallHandlers.setMessageEditCards(restoredEditCards);
-  }, [projectId, getChatHistory(projectId || '').length]);
+        createFunctionCallApplyHandler,
+        createFunctionCallRejectHandler,
+        messageEditCards,
+        setMessageEditCards,
+    ]);
 
+    if (!currentProject)
+    {
+        return (
+            <div className="error-container">
+                <h2>Project Not Found</h2>
+                <Link to="/">Go back to Home</Link>
+            </div>
+        );
+    }
 
-
-
-  if (!currentProject) {
     return (
-      <div className="error-container">
-        <h2>Project Not Found</h2>
-        <Link to="/">Go back to Home</Link>
-      </div>
+        <div className="workspace-container">
+            <div className="workspace-header">
+                <div className="breadcrumb">
+                    <Link to="/" className="breadcrumb-link">Home</Link>
+                    <span className="breadcrumb-separator"> / </span>
+                    <Link to={`/project/${projectId}`} className="breadcrumb-link">{currentProject.name}</Link>
+                    <span className="breadcrumb-separator"> / </span>
+                    <span className="breadcrumb-current">Workspace</span>
+                </div>
+                <div className="workspace-title">
+                    <h1>{`${currentProject.name} - Workspace`}</h1>
+                    <div className="workspace-controls">
+                        <button
+                            className="settings-btn"
+                            onClick={() => uiActions.setIsSettingsOpen(true)}
+                            title="Settings"
+                        >
+                            ⚙
+                        </button>
+                        <button
+                            className={`chat-toggle-btn mobile-only ${uiState.isChatVisible ? 'active' : ''}`}
+                            onClick={() =>
+                            {
+                                uiActions.setIsChatVisible(!uiState.isChatVisible);
+                                uiActions.setIsMobileSidebarVisible(false);
+                            }}
+                        >
+                            Chat
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div className={`workspace-content ${uiState.isChatVisible ? 'chat-visible' : ''}`}>
+                <ChatSidebar
+                    projectId={projectId ?? ''}
+                    onSelectChat={chatHandlers.handleSelectChat}
+                    isMobileVisible={uiState.isMobileSidebarVisible}
+                    isDesktopVisible={uiState.isDesktopChatListVisible}
+                />
+
+                <ChatPanel
+                    projectId={projectId ?? ''}
+                    uiState={uiState}
+                    uiActions={uiActions}
+                    systemInsertConfig={systemInsertConfig}
+                    setSystemInsertConfig={setSystemInsertConfig}
+                    chatPipeline={chatPipeline}
+                    storyObjects={storyObjects}
+                    messageEditCards={messageEditCards}
+                    activeFunctionCalls={activeFunctionCalls}
+                    onSubmit={chatHandlers.handleSubmit}
+                    onStop={chatHandlers.handleStop}
+                    onEditMessage={chatHandlers.handleEditMessage}
+                    onEditContentChange={chatHandlers.handleEditContentChange}
+                    onSaveEdit={chatHandlers.handleSaveEdit}
+                    onCancelEdit={chatHandlers.handleCancelEdit}
+                    onDeleteMessage={chatHandlers.handleDeleteMessage}
+                    editTextareaRef={chatHandlers.editTextareaRef as React.RefObject<HTMLTextAreaElement>}
+                    mode="workspace"
+                />
+
+                <StoryPanel
+                    activeStoryTab={uiState.activeStoryTab}
+                    onTabChange={uiActions.setActiveStoryTab}
+                />
+            </div>
+
+            {uiState.isChatVisible && (
+                <div className="chat-overlay mobile-only" onClick={() => uiActions.setIsChatVisible(false)} />
+            )}
+
+            {uiState.isMobileSidebarVisible && (
+                <div className="sidebar-overlay mobile-only" onClick={() => uiActions.setIsMobileSidebarVisible(false)} />
+            )}
+
+            {uiState.isDesktopChatListVisible && (
+                <div className="desktop-chat-overlay desktop-only" onClick={() => uiActions.setIsDesktopChatListVisible(false)} />
+            )}
+
+            <ErrorModal
+                isOpen={!!currentError}
+                title={currentError?.title || ''}
+                message={currentError?.message || ''}
+                onClose={hideError}
+            />
+
+            <SettingsModal
+                isOpen={uiState.isSettingsOpen}
+                onClose={() => uiActions.setIsSettingsOpen(false)}
+            />
+        </div>
     );
-  }
-
-  return (
-    <div className="workspace-container">
-      {/* Header */}
-      <div className="workspace-header">
-        <div className="breadcrumb">
-          <Link to="/" className="breadcrumb-link">Home</Link>
-          <span className="breadcrumb-separator"> / </span>
-          <Link to={`/project/${projectId}`} className="breadcrumb-link">
-            {currentProject.name}
-          </Link>
-          <span className="breadcrumb-separator"> / </span>
-          <span className="breadcrumb-current">Workspace</span>
-        </div>
-        <div className="workspace-title">
-          <h1>{currentProject.name} - Workspace</h1>
-          <div className="workspace-controls">
-            <button 
-              className="settings-btn"
-              onClick={() => uiActions.setIsSettingsOpen(true)}
-              title="Settings"
-            >
-              ⚙️
-            </button>
-            <button 
-              className={`chat-toggle-btn mobile-only ${uiState.isChatVisible ? 'active' : ''}`}
-              onClick={() => {
-                uiActions.setIsChatVisible(!uiState.isChatVisible);
-                uiActions.setIsMobileSidebarVisible(false);
-              }}
-            >
-              💬 Chat
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className={`workspace-content ${uiState.isChatVisible ? 'chat-visible' : ''}`}>
-        {/* Chat Sidebar */}
-        <ChatSidebar 
-          projectId={projectId || ''}
-          onSelectChat={chatHandlers.handleSelectChat}
-          isMobileVisible={uiState.isMobileSidebarVisible}
-          isDesktopVisible={uiState.isDesktopChatListVisible}
-        />
-
-        {/* Chat Panel */}
-        <ChatPanel
-          projectId={projectId || ''}
-          uiState={uiState}
-          uiActions={uiActions}
-          systemInsertConfig={systemInsertConfig}
-          setSystemInsertConfig={setSystemInsertConfig}
-          chatPipeline={chatPipeline}
-          storyObjects={storyObjects}
-          messageEditCards={updatedFunctionCallHandlers.messageEditCards}
-          activeFunctionCalls={updatedFunctionCallHandlers.activeFunctionCalls}
-          onSubmit={chatHandlers.handleSubmit}
-          onStop={chatHandlers.handleStop}
-          onEditMessage={chatHandlers.handleEditMessage}
-          onEditContentChange={chatHandlers.handleEditContentChange}
-          onSaveEdit={chatHandlers.handleSaveEdit}
-          onCancelEdit={chatHandlers.handleCancelEdit}
-          onDeleteMessage={chatHandlers.handleDeleteMessage}
-          editTextareaRef={chatHandlers.editTextareaRef as React.RefObject<HTMLTextAreaElement>}
-          mode="workspace"
-        />
-
-        {/* Story Editor Panel */}
-        <StoryPanel
-          activeStoryTab={uiState.activeStoryTab}
-          onTabChange={uiActions.setActiveStoryTab}
-        />
-      </div>
-
-      {/* Mobile Chat Overlay */}
-      {uiState.isChatVisible && (
-        <div className="chat-overlay mobile-only" onClick={() => uiActions.setIsChatVisible(false)} />
-      )}
-
-      {/* Mobile Sidebar Overlay */}
-      {uiState.isMobileSidebarVisible && (
-        <div className="sidebar-overlay mobile-only" onClick={() => uiActions.setIsMobileSidebarVisible(false)} />
-      )}
-
-      {/* Desktop Chat List Overlay */}
-      {uiState.isDesktopChatListVisible && (
-        <div className="desktop-chat-overlay desktop-only" onClick={() => uiActions.setIsDesktopChatListVisible(false)} />
-      )}
-
-      {/* Error Modal */}
-      <ErrorModal
-        isOpen={!!currentError}
-        title={currentError?.title || ''}
-        message={currentError?.message || ''}
-        onClose={hideError}
-      />
-
-      {/* Settings Modal */}
-      <SettingsModal
-        isOpen={uiState.isSettingsOpen}
-        onClose={() => uiActions.setIsSettingsOpen(false)}
-      />
-
-    </div>
-  );
 };
 
 export default Workspace;

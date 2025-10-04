@@ -13,6 +13,7 @@ export interface WorkspaceUIState {
   input: string;
   isLoading: boolean;
   editingMessageId: string | null;
+  editingLanguage: string | null;
   editContent: string;
 }
 
@@ -26,12 +27,13 @@ export interface WorkspaceUIActions {
   setInput: (input: string) => void;
   setIsLoading: (loading: boolean) => void;
   setEditingMessageId: (id: string | null) => void;
+  setEditingLanguage: (language: string | null) => void;
   setEditContent: (content: string) => void;
 }
 
 export function useWorkspaceState(projectId: string | undefined) {
   const { getChats, getSelectedChatId, selectChat, createChat } = useChatStore();
-  
+
   const [state, setState] = useState<WorkspaceUIState>({
     isChatVisible: true,
     activeStoryTab: 'basicInfo',
@@ -42,50 +44,60 @@ export function useWorkspaceState(projectId: string | undefined) {
     input: '',
     isLoading: false,
     editingMessageId: null,
+    editingLanguage: null,
     editContent: '',
   });
 
   // Initialize chat selection
   useEffect(() => {
     if (!projectId) return;
-    
+
     const chats = getChats(projectId);
     const currentSelectedId = getSelectedChatId(projectId);
-    
+
+    let targetChatId: string | null = null;
+
     if (chats.length === 0) {
       // No chats exist, create the first one
       const newChatId = createChat(projectId, 'Main Chat');
-      setState(prev => ({ ...prev, selectedChatId: newChatId }));
+      targetChatId = newChatId;
     } else if (!currentSelectedId) {
       // Chats exist but none selected, select the first one
-      selectChat(projectId, chats[0].id);
-      setState(prev => ({ ...prev, selectedChatId: chats[0].id }));
+      const firstChatId = chats[0].id;
+      selectChat(projectId, firstChatId);
+      targetChatId = firstChatId;
     } else {
       // Use the currently selected chat
-      setState(prev => ({ ...prev, selectedChatId: currentSelectedId }));
+      targetChatId = currentSelectedId;
     }
+
+    setState(prev => (prev.selectedChatId === targetChatId
+      ? prev
+      : { ...prev, selectedChatId: targetChatId }));
   }, [projectId, getChats, getSelectedChatId, selectChat, createChat]);
 
   const actions: WorkspaceUIActions = {
-    setIsChatVisible: (visible: boolean) => 
+    setIsChatVisible: (visible: boolean) =>
       setState(prev => ({ ...prev, isChatVisible: visible })),
-    setActiveStoryTab: (tab: TabType) => 
+    setActiveStoryTab: (tab: TabType) =>
       setState(prev => ({ ...prev, activeStoryTab: tab })),
-    setSelectedChatId: (id: string | null) => 
+    setSelectedChatId: (id: string | null) =>
       setState(prev => ({ ...prev, selectedChatId: id })),
-    setIsMobileSidebarVisible: (visible: boolean) => 
+    setIsMobileSidebarVisible: (visible: boolean) =>
       setState(prev => ({ ...prev, isMobileSidebarVisible: visible })),
-    setIsDesktopChatListVisible: (visible: boolean) => 
+    setIsDesktopChatListVisible: (visible: boolean) =>
       setState(prev => ({ ...prev, isDesktopChatListVisible: visible })),
-    setIsSettingsOpen: (open: boolean) => 
+    setIsSettingsOpen: (open: boolean) =>
       setState(prev => ({ ...prev, isSettingsOpen: open })),
-    setInput: (input: string) => 
+    setInput: (input: string) =>
       setState(prev => ({ ...prev, input })),
-    setIsLoading: (loading: boolean) => 
+    setIsLoading: (loading: boolean) =>
       setState(prev => ({ ...prev, isLoading: loading })),
-    setEditingMessageId: (id: string | null) => 
+    setEditingMessageId: (id: string | null) =>
       setState(prev => ({ ...prev, editingMessageId: id })),
-    setEditContent: (content: string) => 
+    setEditingLanguage: (language: string | null) =>
+      setState(prev => ({ ...prev, editingLanguage: language })),
+    setEditContent: (content: string) =>
       setState(prev => ({ ...prev, editContent: content })),
   };
 

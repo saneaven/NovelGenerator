@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { LanguageData } from '../types/storyObject';
+import type { LanguageData } from '../types/multilingual';
 
 // Language-specific data for chapter content
 export interface ChapterContentData {
@@ -165,8 +165,18 @@ export const useNovelStore = create<NovelStore>()(
       },
 
       getAllChapterContents: (projectId: string) => {
+        if (!projectId) {
+          return {};
+        }
+
         const state = get();
-        return state.chapterContentsByProject[projectId] || {};
+        const existing = state.chapterContentsByProject[projectId];
+        if (existing) {
+          return existing;
+        }
+
+        state._ensureProject(projectId);
+        return get().chapterContentsByProject[projectId] || {};
       },
 
       // Language-specific content access

@@ -59,7 +59,7 @@ export interface PreProcessor {
   process(
     messages: ChatMessage[],
     context: ChatPipelineContext,
-    outputLanguage?: string,
+    conversationLanguage?: string,
     functions?: FunctionCallSchema[]
   ): PreProcessingResult;
 }

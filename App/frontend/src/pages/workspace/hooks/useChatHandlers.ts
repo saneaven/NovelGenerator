@@ -11,14 +11,15 @@ export function useChatHandlers(
   pendingFunctionCallResults?: FunctionCallResultSummary[],
   clearPendingFunctionCallResults?: () => void
 ) {
-  const { selectChat, editMessage, deleteMessage } = useChatStore();
+  const { selectChat, getSelectedChatId, updateMessage, deleteMessage } = useChatStore();
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const getActiveChatId = () => (projectId ? getSelectedChatId(projectId) : undefined);
 
   const handleSelectChat = (chatId: string) => {
     if (!projectId) return;
     selectChat(projectId, chatId);
     uiActions.setSelectedChatId(chatId);
-    // Close sidebar when chat is selected
     uiActions.setIsMobileSidebarVisible(false);
     uiActions.setIsDesktopChatListVisible(false);
   };
@@ -26,27 +27,26 @@ export function useChatHandlers(
   const handleSubmit = async (e: React.FormEvent, input: string, isLoading: boolean) => {
     e.preventDefault();
     if (!uiActions || !projectId || !chatManager) return;
-
     if (isLoading) return;
 
-    // Clear function call results - they will be processed through pipeline context
-    if (pendingFunctionCallResults && pendingFunctionCallResults.length > 0 && clearPendingFunctionCallResults) {
+    const chatId = getActiveChatId();
+    if (!chatId) return;
+
+    if (pendingFunctionCallResults?.length && clearPendingFunctionCallResults) {
       clearPendingFunctionCallResults();
     }
 
     uiActions.setInput('');
 
-    // If input is empty, send request without adding user message
     if (!input?.trim()) {
       await chatManager.processEmptyRequest();
       return;
     }
 
-    // Create raw user message - no modifications, all system processing happens in pipeline
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
-      content: input.trim(), // Raw user input only
+      content: input.trim(),
       timestamp: new Date(),
     };
 
@@ -54,25 +54,22 @@ export function useChatHandlers(
   };
 
   const handleStop = () => {
-    if (chatManager) {
-      chatManager.abort();
-    }
+    chatManager?.abort();
   };
 
   const adjustTextareaHeight = () => {
     if (editTextareaRef.current) {
       editTextareaRef.current.style.height = 'auto';
-      editTextareaRef.current.style.height = `${editTextareaRef.current.scrollHeight}px`;
+      editTextareaRef.current.style.height = `${editTextareaRef.current.scrollHeight}px`; 
     }
   };
 
-  const handleEditMessage = (messageId: string, content: string | null) => {
+  const handleEditMessage = (messageId: string, content: string | null, language: string) => {
     if (!content) return;
     uiActions.setEditingMessageId(messageId);
+    uiActions.setEditingLanguage(language);
     uiActions.setEditContent(content);
-    setTimeout(() => {
-      adjustTextareaHeight();
-    }, 0);
+    setTimeout(adjustTextareaHeight, 0);
   };
 
   const handleEditContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -80,22 +77,30 @@ export function useChatHandlers(
     adjustTextareaHeight();
   };
 
-  const handleSaveEdit = (editingMessageId: string | null, editContent: string) => {
+  const handleSaveEdit = (editingMessageId: string | null, editContent: string, language: string) => {
     if (!projectId || !editingMessageId) return;
-    editMessage(projectId, editingMessageId, editContent);
+    const chatId = getActiveChatId();
+    if (!chatId) return;
+
+    updateMessage(projectId, chatId, editingMessageId, editContent, language);
     uiActions.setEditingMessageId(null);
+    uiActions.setEditingLanguage(null);
     uiActions.setEditContent('');
   };
 
   const handleCancelEdit = () => {
     uiActions.setEditingMessageId(null);
+    uiActions.setEditingLanguage(null);
     uiActions.setEditContent('');
   };
 
   const handleDeleteMessage = (messageId: string) => {
     if (!projectId) return;
+    const chatId = getActiveChatId();
+    if (!chatId) return;
+
     if (confirm('Are you sure you want to delete this message?')) {
-      deleteMessage(projectId, messageId);
+      deleteMessage(projectId, chatId, messageId);
     }
   };
 

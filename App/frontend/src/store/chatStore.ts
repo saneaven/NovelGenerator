@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { type ChatMessage, type FunctionCallMetadata } from '../llm_request/types';
-import { type LanguageData } from '../types/storyObject';
+import { type LanguageData } from '../types/multilingual';
 
 // Language-specific content for chat messages
 export interface MessageContentData {

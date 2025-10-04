@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 
 export interface NovelEditorUIState {
   // Chat related (inherited from workspace)
@@ -6,6 +6,7 @@ export interface NovelEditorUIState {
   isLoading: boolean;
   input: string;
   editingMessageId: string | null;
+  editingLanguage: string | null;
   editContent: string;
   isMobileSidebarVisible: boolean;
   isDesktopChatListVisible: boolean;
@@ -27,6 +28,7 @@ export interface NovelEditorUIActions {
   setIsLoading: (loading: boolean) => void;
   setInput: (input: string) => void;
   setEditingMessageId: (id: string | null) => void;
+  setEditingLanguage: (language: string | null) => void;
   setEditContent: (content: string) => void;
   setIsMobileSidebarVisible: (visible: boolean) => void;
   setIsDesktopChatListVisible: (visible: boolean) => void;
@@ -48,6 +50,7 @@ const createInitialState = (): NovelEditorUIState => ({
   isLoading: false,
   input: '',
   editingMessageId: null,
+  editingLanguage: null,
   editContent: '',
   isMobileSidebarVisible: false,
   isDesktopChatListVisible: false,
@@ -81,6 +84,10 @@ export const useNovelEditorState = () => {
 
   const setEditingMessageId = useCallback((id: string | null) => {
     setState(prev => ({ ...prev, editingMessageId: id }));
+  }, []);
+
+  const setEditingLanguage = useCallback((language: string | null) => {
+    setState(prev => ({ ...prev, editingLanguage: language }));
   }, []);
 
   const setEditContent = useCallback((content: string) => {
@@ -128,12 +135,13 @@ export const useNovelEditorState = () => {
     setState(prev => ({ ...prev, activeStoryTab: tab }));
   }, []);
 
-  const actions: NovelEditorUIActions = {
+  const actions: NovelEditorUIActions = useMemo(() => ({
     // Chat related
     setIsChatVisible,
     setIsLoading,
     setInput,
     setEditingMessageId,
+    setEditingLanguage,
     setEditContent,
     setIsMobileSidebarVisible,
     setIsDesktopChatListVisible,
@@ -147,7 +155,24 @@ export const useNovelEditorState = () => {
     setEditorContent,
     setIsSaving,
     setActiveStoryTab,
-  };
+  }), [
+    setIsChatVisible,
+    setIsLoading,
+    setInput,
+    setEditingMessageId,
+    setEditingLanguage,
+    setEditContent,
+    setIsMobileSidebarVisible,
+    setIsDesktopChatListVisible,
+    setSelectedChatId,
+    setIsChapterSidebarVisible,
+    setIsAIEditModalOpen,
+    setIsVersionModalOpen,
+    setIsSettingsOpen,
+    setEditorContent,
+    setIsSaving,
+    setActiveStoryTab,
+  ]);
 
   return { state, actions };
 };

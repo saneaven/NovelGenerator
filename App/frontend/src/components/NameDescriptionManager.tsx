@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStoryObjectStore } from '../store/storyObjectStore';
+import { useSettingsStore } from '../store/settingsStore';
 import AIEditModal from './AIEditModal';
 import VersionHistoryModal from './VersionHistoryModal';
+import { translateStoryObject, getDisplayDataForItem } from '../utils/storyObjectTranslation';
 import type { NameDescriptionItem, StoryObjectCategory } from '../types/storyObject';
 
 interface NameDescriptionManagerProps {
@@ -25,12 +27,20 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 }) => {
   const { projectId } = useParams<{ projectId: string }>();
   const storeActions = useStoryObjectStore();
+  const { settings } = useSettingsStore();
   const [editingItem, setEditingItem] = useState<NameDescriptionItem | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
   const [aiEditTargetId, setAiEditTargetId] = useState<string | undefined>(undefined);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [versionHistoryTargetId, setVersionHistoryTargetId] = useState<string | undefined>(undefined);
+
+  // Language state management
+  const [itemLanguages, setItemLanguages] = useState<Record<string, string>>({});
+  const [translatingItems, setTranslatingItems] = useState<Record<string, boolean>>({});
+
+  const primaryLanguage = settings.primaryLanguage;
+  const secondaryLanguage = settings.secondaryLanguage;
 
   // Get items directly from store - this will automatically re-render when store updates
   const items = (() => {
@@ -63,20 +73,20 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     }
   };
 
-  const updateItem = (id: string, updates: Partial<Omit<NameDescriptionItem, 'id' | 'createdAt'>>) => {
+  const updateItem = (id: string, updates: Partial<Omit<NameDescriptionItem, 'id' | 'createdAt'>>, editLanguage?: string) => {
     if (!projectId) return;
     switch (category) {
       case 'character':
-        storeActions.updateCharacter(projectId, id, updates);
+        storeActions.updateCharacter(projectId, id, updates, editLanguage);
         break;
       case 'organization':
-        storeActions.updateOrganization(projectId, id, updates);
+        storeActions.updateOrganization(projectId, id, updates, editLanguage);
         break;
       case 'location':
-        storeActions.updateLocation(projectId, id, updates);
+        storeActions.updateLocation(projectId, id, updates, editLanguage);
         break;
       case 'lorebook':
-        storeActions.updateLorebookEntry(projectId, id, updates);
+        storeActions.updateLorebookEntry(projectId, id, updates, editLanguage);
         break;
     }
   };
@@ -99,6 +109,80 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     }
   };
 
+  // Initialize language preferences for each item
+  useEffect(() => {
+    if (!projectId) return;
+
+    const newLanguages: Record<string, string> = {};
+    items.forEach((item) => {
+      if (!itemLanguages[item.id]) {
+        const displayInfo = getDisplayDataForItem(
+          projectId,
+          category,
+          item.id,
+          primaryLanguage,
+          primaryLanguage,
+          secondaryLanguage
+        );
+        newLanguages[item.id] = displayInfo.displayLanguage;
+      }
+    });
+
+    if (Object.keys(newLanguages).length > 0) {
+      setItemLanguages((prev) => ({ ...prev, ...newLanguages }));
+    }
+  }, [items, projectId, category, primaryLanguage, secondaryLanguage]);
+
+  // Sync flat fields with active language on mount
+  useEffect(() => {
+    if (!projectId) return;
+
+    items.forEach((item) => {
+      const currentLang = itemLanguages[item.id] || primaryLanguage;
+      storeActions.syncFlatFieldsWithLanguage(projectId, category, item.id, currentLang);
+    });
+  }, [itemLanguages, projectId, category]);
+
+  const handleLanguageToggle = async (itemId: string) => {
+    if (!projectId || !secondaryLanguage) return;
+
+    const currentLang = itemLanguages[itemId] || primaryLanguage;
+    const targetLang = currentLang === secondaryLanguage ? primaryLanguage : secondaryLanguage;
+
+    // Check if target language data exists
+    const hasTargetLang = storeActions.hasItemDataInLanguage(projectId, category, itemId, targetLang);
+
+    if (hasTargetLang) {
+      setItemLanguages((prev) => ({ ...prev, [itemId]: targetLang }));
+      storeActions.syncFlatFieldsWithLanguage(projectId, category, itemId, targetLang);
+      return;
+    }
+
+    // Need to translate
+    const availableLanguages = storeActions.getAvailableLanguagesForItem(projectId, category, itemId);
+    if (availableLanguages.length === 0) return;
+
+    const sourceLang = availableLanguages.includes(currentLang) ? currentLang : availableLanguages[0];
+
+    try {
+      await translateStoryObject({
+        projectId,
+        category,
+        itemId,
+        sourceLanguage: sourceLang,
+        targetLanguage: targetLang,
+        aiModel: settings.aiModel,
+        onTranslating: (isTranslating) => {
+          setTranslatingItems((prev) => ({ ...prev, [itemId]: isTranslating }));
+        },
+      });
+
+      setItemLanguages((prev) => ({ ...prev, [itemId]: targetLang }));
+      storeActions.syncFlatFieldsWithLanguage(projectId, category, itemId, targetLang);
+    } catch (error) {
+      console.error('Translation failed:', error);
+    }
+  };
 
   const handleAdd = (name: string, description: string) => {
     if (name.trim()) {
@@ -111,14 +195,53 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     setEditingItem({ ...item });
   };
 
-  const handleUpdate = (name: string, description: string) => {
-    if (editingItem && name.trim()) {
-      updateItem(editingItem.id, {
-        name: name.trim(),
-        description: description.trim(),
-      });
-      setEditingItem(null);
-    }
+  const handleUpdate = async (name: string, description: string) => {
+    if (!editingItem || !name.trim() || !projectId) return;
+
+    const currentLang = itemLanguages[editingItem.id] || primaryLanguage;
+    const itemId = editingItem.id; // Capture itemId before setting editingItem to null
+
+    updateItem(itemId, {
+      name: name.trim(),
+      description: description.trim(),
+    }, currentLang);
+
+    setEditingItem(null);
+
+    // Check if primary language data exists in the new version
+    // Wait a bit for the store to update
+    setTimeout(async () => {
+      const hasPrimaryLanguage = storeActions.hasItemDataInLanguage(projectId, category, itemId, primaryLanguage);
+
+      if (!hasPrimaryLanguage && currentLang !== primaryLanguage) {
+        // Ask user if they want to translate to primary language
+        const shouldTranslate = confirm(
+          `You edited this ${singularName} in ${currentLang}. Would you like to translate it to ${primaryLanguage}?`
+        );
+
+        if (shouldTranslate) {
+          try {
+            await translateStoryObject({
+              projectId,
+              category,
+              itemId,
+              sourceLanguage: currentLang,
+              targetLanguage: primaryLanguage,
+              aiModel: settings.aiModel,
+              onTranslating: (isTranslating) => {
+                setTranslatingItems((prev) => ({ ...prev, [itemId]: isTranslating }));
+              },
+            });
+
+            // Sync flat fields with primary language after translation
+            storeActions.syncFlatFieldsWithLanguage(projectId, category, itemId, primaryLanguage);
+            setItemLanguages((prev) => ({ ...prev, [itemId]: primaryLanguage }));
+          } catch (error) {
+            console.error('Translation failed:', error);
+          }
+        }
+      }
+    }, 100);
   };
 
   const handleDelete = (id: string) => {
@@ -284,10 +407,16 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
               ) : (
                 <ItemDisplay
                   item={item}
+                  projectId={projectId!}
+                  category={category}
+                  currentLanguage={itemLanguages[item.id] || primaryLanguage}
+                  isTranslating={translatingItems[item.id] || false}
+                  showTranslateButton={Boolean(secondaryLanguage)}
                   onEdit={() => handleEdit(item)}
                   onDelete={() => handleDelete(item.id)}
                   onAIEdit={() => handleAIEdit(item.id)}
                   onVersionHistory={() => handleShowVersionHistory(item.id)}
+                  onLanguageToggle={() => handleLanguageToggle(item.id)}
                 />
               )}
             </div>
@@ -448,19 +577,60 @@ const EditItemForm: React.FC<EditItemFormProps> = ({
 // Item Display Component
 interface ItemDisplayProps {
   item: NameDescriptionItem;
+  projectId: string;
+  category: StoryObjectCategory;
+  currentLanguage: string;
+  isTranslating: boolean;
+  showTranslateButton: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onAIEdit: () => void;
   onVersionHistory: () => void;
+  onLanguageToggle: () => void;
 }
 
-const ItemDisplay: React.FC<ItemDisplayProps> = ({ item, onEdit, onDelete, onAIEdit, onVersionHistory }) => {
+const ItemDisplay: React.FC<ItemDisplayProps> = ({
+  item,
+  projectId,
+  category,
+  currentLanguage,
+  isTranslating,
+  showTranslateButton,
+  onEdit,
+  onDelete,
+  onAIEdit,
+  onVersionHistory,
+  onLanguageToggle,
+}) => {
+  const { settings } = useSettingsStore();
+
+  const displayInfo = getDisplayDataForItem(
+    projectId,
+    category,
+    item.id,
+    currentLanguage,
+    settings.primaryLanguage,
+    settings.secondaryLanguage
+  );
+
+  const showMissingLanguageWarning = !displayInfo.hasRequestedLanguage;
+
   return (
     <div className="item-display">
       <div className="item-header">
         <h4>{item.name}</h4>
         <div className="item-actions">
-          <button onClick={onVersionHistory} className="version-history-button">
+          {showTranslateButton && (
+            <button
+              onClick={onLanguageToggle}
+              className="translate-button"
+              disabled={isTranslating}
+              title={`Translate to ${currentLanguage === settings.secondaryLanguage ? settings.primaryLanguage : settings.secondaryLanguage}`}
+            >
+              {isTranslating ? '⏳' : '🌐'}
+            </button>
+          )}
+          <button onClick={onVersionHistory} className="version-history-button" title="Version History">
             📚
           </button>
           <button onClick={onAIEdit} className="ai-edit-button">
@@ -474,15 +644,28 @@ const ItemDisplay: React.FC<ItemDisplayProps> = ({ item, onEdit, onDelete, onAIE
           </button>
         </div>
       </div>
+      {showMissingLanguageWarning && (
+        <div className="missing-language-warning">
+          <p>⚠️ No {currentLanguage} version available. Displaying {displayInfo.fallbackLanguage} version.</p>
+          <button
+            onClick={onLanguageToggle}
+            className="generate-translation-button"
+            disabled={isTranslating}
+          >
+            {isTranslating ? 'Generating...' : `Generate ${currentLanguage} Version`}
+          </button>
+        </div>
+      )}
       <div className="item-content">
         <p className="item-description">
           {item.description || 'No description.'}
         </p>
       </div>
       <div className="item-metadata">
-        <p className="last-updated">
+        <span className="item-language">Language: {currentLanguage}</span>
+        <span className="last-updated">
           Last updated: {item.updatedAt.toLocaleString()}
-        </p>
+        </span>
       </div>
     </div>
   );

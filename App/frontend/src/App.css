@@ -632,25 +632,31 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.9rem;
-  transition: background-color 0.3s ease;
+  transition: all 0.3s ease;
 }
 
 .edit-button {
-  background: #667eea;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: white;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
 }
 
 .edit-button:hover {
-  background: #5a6fd8;
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
 }
 
 .save-button {
-  background: #4CAF50;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: white;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
 }
 
 .save-button:hover {
-  background: #45a049;
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
 }
 
 .cancel-button {
@@ -663,12 +669,70 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
 }
 
 .add-button {
-  background: #4CAF50;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: white;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
 }
 
 .add-button:hover {
-  background: #45a049;
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.translate-button {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.translate-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.translate-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.generate-translation-button {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.generate-translation-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.generate-translation-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .edit-buttons {
@@ -886,17 +950,21 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
 }
 
 .add-chapter-button {
-  background: #2ecc71;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: white;
   padding: 6px 12px;
   border: none;
   border-radius: 6px;
   font-size: 0.8rem;
   cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
 }
 
 .add-chapter-button:hover {
-  background: #27ae60;
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
 }
 
 .act-content {
@@ -1820,7 +1888,7 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
 }
 
 .save-button {
-  background: linear-gradient(135deg, #4caf50, #45a049);
+  background: linear-gradient(135deg, #10b981, #059669);
   color: white;
   border: none;
   padding: 12px 24px;
@@ -1829,13 +1897,13 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
   font-size: 1rem;
   font-weight: 600;
   transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
 }
 
 .save-button:hover {
-  background: linear-gradient(135deg, #45a049, #4caf50);
+  background: linear-gradient(135deg, #059669, #047857);
   transform: translateY(-1px);
-  box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
 }
 
 .settings-form .cancel-button {

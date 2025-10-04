@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useChatStore, type Chat } from '../store/chatStore';
-// CSS is now imported from Workspace.tsx
+import { useSettingsStore } from '../store/settingsStore';
+import { TranslationService } from '../services/translationService';
 
 interface ChatSidebarProps {
   projectId: string;
@@ -9,20 +10,21 @@ interface ChatSidebarProps {
   isDesktopVisible?: boolean;
 }
 
-const ChatSidebar: React.FC<ChatSidebarProps> = ({ 
-  projectId, 
-  onSelectChat, 
+const ChatSidebar: React.FC<ChatSidebarProps> = ({
+  projectId,
+  onSelectChat,
   isMobileVisible = false,
-  isDesktopVisible = false
+  isDesktopVisible = false,
 }) => {
-  const { 
-    createChat, 
-    getChats, 
+  const {
+    createChat,
+    getChats,
     getSelectedChatId,
     selectChat,
     renameChat,
-    deleteChat
+    deleteChat,
   } = useChatStore();
+  const { settings } = useSettingsStore();
 
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -43,7 +45,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
     onSelectChat(newChatId);
   };
 
-  const handleSelectChat = (chatId: string) => {
+  const handleSelectChatInternal = (chatId: string) => {
     selectChat(projectId, chatId);
     onSelectChat(chatId);
   };
@@ -73,11 +75,9 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
       alert('Cannot delete the last chat');
       return;
     }
-    
+
     if (confirm('Are you sure you want to delete this chat?')) {
       deleteChat(projectId, chatId);
-      
-      // If we deleted the selected chat, the store will automatically select the first remaining chat
       const remainingChats = getChats(projectId);
       if (remainingChats.length > 0) {
         const newSelectedId = getSelectedChatId(projectId);
@@ -96,25 +96,43 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
     }
   };
 
-  const formatChatPreview = (chat: Chat): string => {
+  const resolvePreviewContent = (chat: Chat): string => {
     if (chat.messages.length === 0) {
       return 'No messages yet';
     }
-    
+
     const lastMessage = chat.messages[chat.messages.length - 1];
-    const content = typeof lastMessage.content === 'string' ? lastMessage.content : '';
-    return content.length > 50 ? content.substring(0, 50) + '...' : content;
+    const primaryLanguage = settings.primaryLanguage;
+    const secondaryLanguage = settings.secondaryLanguage ?? undefined;
+
+    if (lastMessage.data[primaryLanguage]) {
+      const content = lastMessage.data[primaryLanguage].content;
+      return content.length > 50 ? `${content.substring(0, 50)}...` : content;
+    }
+
+    const fallback = TranslationService.getBestLanguageData(lastMessage.data, primaryLanguage, secondaryLanguage);
+    if (fallback) {
+      const content = fallback.data.content;
+      return content.length > 50 ? `${content.substring(0, 50)}...` : content;
+    }
+
+    const availableLanguages = Object.keys(lastMessage.data);
+    if (availableLanguages.length > 0) {
+      const content = lastMessage.data[availableLanguages[0]].content;
+      return content.length > 50 ? `${content.substring(0, 50)}...` : content;
+    }
+
+    return 'No messages yet';
   };
 
   const formatTime = (date: Date | string): string => {
     const now = new Date();
     const targetDate = date instanceof Date ? date : new Date(date);
-    
-    // Invalid date check
-    if (isNaN(targetDate.getTime())) {
+
+    if (Number.isNaN(targetDate.getTime())) {
       return 'Unknown';
     }
-    
+
     const diffMs = now.getTime() - targetDate.getTime();
     const diffMins = Math.floor(diffMs / (1000 * 60));
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
@@ -124,7 +142,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
-    
+
     return targetDate.toLocaleDateString();
   };
 
@@ -132,15 +150,15 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
     <div className={`chat-sidebar ${isMobileVisible ? 'mobile-visible' : ''} ${isDesktopVisible ? 'desktop-visible' : ''}`}>
       <div className="chat-sidebar-header">
         <div className="sidebar-title">
-          <h3>💬 Chats</h3>
+          <h3>Chats</h3>
         </div>
         <div className="sidebar-controls">
-          <button 
+          <button
             className="add-chat-btn"
             onClick={handleCreateChat}
             title="Create new chat"
           >
-            ➕
+            New Chat
           </button>
         </div>
       </div>
@@ -150,7 +168,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
           <div
             key={chat.id}
             className={`chat-item ${selectedChatId === chat.id ? 'selected' : ''}`}
-            onClick={() => handleSelectChat(chat.id)}
+            onClick={() => handleSelectChatInternal(chat.id)}
           >
             <div className="chat-item-main">
               {editingChatId === chat.id ? (
@@ -166,12 +184,12 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
               ) : (
                 <>
                   <div className="chat-name">{chat.name}</div>
-                  <div className="chat-preview">{formatChatPreview(chat)}</div>
+                  <div className="chat-preview">{resolvePreviewContent(chat)}</div>
                   <div className="chat-time">{formatTime(chat.updatedAt)}</div>
                 </>
               )}
             </div>
-            
+
             {editingChatId !== chat.id && (
               <div className="chat-actions">
                 <button
@@ -179,7 +197,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
                   onClick={(e) => handleStartEdit(chat, e)}
                   title="Rename chat"
                 >
-                  ✏️
+                  Rename
                 </button>
                 <button
                   className="chat-action-btn delete-btn"
@@ -187,7 +205,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
                   title="Delete chat"
                   disabled={chats.length <= 1}
                 >
-                  🗑️
+                  Delete
                 </button>
               </div>
             )}

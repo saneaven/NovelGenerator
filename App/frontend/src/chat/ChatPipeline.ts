@@ -31,10 +31,10 @@ export class ChatPipeline {
   preProcess(
     messages: ChatMessage[],
     context: ChatPipelineContext,
-    outputLanguage?: string,
+    conversationLanguage?: string,
     functions?: FunctionCallSchema[]
   ) {
-    return this.preProcessor.process(messages, context, outputLanguage, functions);
+    return this.preProcessor.process(messages, context, conversationLanguage, functions);
   }
 
   // Post-process AI response

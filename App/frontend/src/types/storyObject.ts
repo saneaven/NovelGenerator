@@ -1,7 +1,5 @@
-// Language data container
-export interface LanguageData<T = any> {
-  [languageName: string]: T; // e.g. 'English', 'Korean', etc.
-}
+import type { LanguageData } from './multilingual';
+export type { LanguageData } from './multilingual';
 
 // Version history for story objects with language support
 export interface ObjectVersion<T = any> {
@@ -102,7 +100,7 @@ export const createBaseMetadata = (): BaseMetadata => {
       versionId: initialVersionId,
       timestamp: now,
       userRequest: 'Initial creation',
-      data: null, // Will be set when actual data is available
+      data: {}, // Will be set when actual data is available
       isActive: true,
     }],
     activeVersionId: initialVersionId,
