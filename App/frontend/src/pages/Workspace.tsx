@@ -112,6 +112,8 @@ const Workspace: React.FC = () =>
                 },
                 getConversationLanguage: () => settings.primaryLanguage,
                 aiModel: settings.aiModel,
+                provider: settings.activeProvider,
+                providerConfig: settings.providers[settings.activeProvider],
                 functions: WORKSPACE_FUNCTIONS,
                 mode: 'workspace',
             },

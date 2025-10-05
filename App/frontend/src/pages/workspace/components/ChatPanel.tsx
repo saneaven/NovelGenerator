@@ -5,7 +5,7 @@ import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import type { SystemInsertConfig, EditCard } from '../../../chat/types';
 import { TranslationService } from '../../../services/translationService';
-import { streamCopilot } from '../../../llm_request/copilot';
+import { streamChat } from '../../../llm_request/llmService';
 import { ChatPipeline } from '../../../chat/ChatPipeline';
 import { EditCardComponent } from '../../../chat/processors/DisplayProcessor';
 import type { WorkspaceUIState, WorkspaceUIActions } from '../hooks/useWorkspaceState';
@@ -206,11 +206,19 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         dataType: 'chatMessage'
       });
 
+      const provider = settingsStore.settings.activeProvider;
+      const providerConfig = settingsStore.settings.providers[provider];
+
       let response = '';
-      for await (const chunk of streamCopilot(translationRequest.messages, {
-        model: aiModel,
-        temperature: 0.2,
-      })) {
+      for await (const chunk of streamChat(
+        translationRequest.messages,
+        provider,
+        providerConfig,
+        {
+          model: aiModel,
+          temperature: 0.2,
+        }
+      )) {
         if (typeof chunk === 'string') {
           response += chunk;
         } else if (chunk.content) {

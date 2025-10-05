@@ -1,7 +1,8 @@
 import { TranslationService } from '../services/translationService';
 import { useStoryObjectStore } from '../store/storyObjectStore';
 import { useErrorStore } from '../store/errorStore';
-import { streamCopilot } from '../llm_request/copilot';
+import { useSettingsStore } from '../store/settingsStore';
+import { streamChat } from '../llm_request/llmService';
 import type { StoryObjectCategory } from '../types/storyObject';
 
 export interface TranslateStoryObjectParams {
@@ -69,11 +70,21 @@ export async function translateStoryObject(params: TranslateStoryObjectParams): 
       previousVersionData: previousData,
     });
 
+    // Get provider config from settings
+    const { settings } = useSettingsStore.getState();
+    const provider = settings.activeProvider;
+    const providerConfig = settings.providers[provider];
+
     let response = '';
-    for await (const chunk of streamCopilot(translationRequest.messages, {
-      model: aiModel,
-      temperature: 0.2,
-    })) {
+    for await (const chunk of streamChat(
+      translationRequest.messages,
+      provider,
+      providerConfig,
+      {
+        model: aiModel,
+        temperature: 0.2,
+      }
+    )) {
       if (typeof chunk === 'string') {
         response += chunk;
       } else if (chunk.content) {

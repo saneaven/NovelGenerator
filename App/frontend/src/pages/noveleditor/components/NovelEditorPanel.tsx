@@ -3,7 +3,7 @@ import { useNovelStore } from '../../../store/novelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { TranslationService } from '../../../services/translationService';
-import { streamCopilot } from '../../../llm_request/copilot';
+import { streamChat } from '../../../llm_request/llmService';
 import type { Chapter } from '../../../types/storyObject';
 import type { StoryObjects } from '../../../types/storyObject';
 import type { NovelEditorUIState, NovelEditorUIActions } from '../hooks/useNovelEditorState';
@@ -281,11 +281,19 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         dataType: 'chapterContent',
       });
 
+      const provider = settingsStore.settings.activeProvider;
+      const providerConfig = settingsStore.settings.providers[provider];
+
       let response = '';
-      for await (const chunk of streamCopilot(translationRequest.messages, {
-        model: aiModel,
-        temperature: 0.2,
-      })) {
+      for await (const chunk of streamChat(
+        translationRequest.messages,
+        provider,
+        providerConfig,
+        {
+          model: aiModel,
+          temperature: 0.2,
+        }
+      )) {
         if (typeof chunk === 'string') {
           response += chunk;
         } else if (chunk.content) {

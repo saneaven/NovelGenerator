@@ -116,6 +116,8 @@ const NovelEditor: React.FC = () =>
                 },
                 getConversationLanguage: () => settings.primaryLanguage,
                 aiModel: settings.aiModel,
+                provider: settings.activeProvider,
+                providerConfig: settings.providers[settings.activeProvider],
                 functions: NOVEL_EDITOR_FUNCTIONS,
                 mode: 'novel-editor',
             },

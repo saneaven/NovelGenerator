@@ -1,8 +1,9 @@
 import type { MutableRefObject } from 'react';
 import type { ChatMessage, FunctionCallMetadata } from '../../llm_request/types';
 import type { ChatPipelineContext } from '../types';
-import { streamCopilot } from '../../llm_request/copilot';
+import { streamChat } from '../../llm_request/llmService';
 import { ChatPipeline } from '../ChatPipeline';
+import { type ProviderType, type ProviderConfig } from '../../store/settingsStore';
 
 export interface ChatManagerConfig {
   projectId: string;
@@ -16,6 +17,8 @@ export interface ChatManagerConfig {
   getActiveChatId: () => string | undefined;
   getConversationLanguage: () => string;
   aiModel?: string;
+  provider: ProviderType;
+  providerConfig: ProviderConfig;
   functions?: any[]; // Function schemas for this context
   mode: 'novel-editor' | 'workspace'; // Explicit mode distinction
 }
@@ -148,11 +151,16 @@ export class ChatManager {
     let accumulatedContent = '';
     let accumulatedToolCalls: any[] = [];
 
-    for await (const chunk of streamCopilot(conversationBlocks, {
-      signal: this.config.abortControllerRef.current.signal,
-      functions: functions,
-      model: this.config.aiModel
-    })) {
+    for await (const chunk of streamChat(
+      conversationBlocks,
+      this.config.provider,
+      this.config.providerConfig,
+      {
+        signal: this.config.abortControllerRef.current.signal,
+        functions: functions,
+        model: this.config.aiModel
+      }
+    )) {
       if (typeof chunk === 'string') {
         accumulatedContent += chunk;
         this.callbacks.onUpdateMessage(this.config.projectId, chatId, assistantMessageId, accumulatedContent, language);

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useStoryObjectStore } from '../store/storyObjectStore';
 import { useNovelStore } from '../store/novelStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { streamCopilot } from '../llm_request/copilot';
+import { streamChat } from '../llm_request/llmService';
 import type { ConversationBlock } from '../llm_request/types';
 import type { StoryObjects } from '../types/storyObject';
 import { SystemPromptManager, PromptType, type ChapterEditPromptContext } from '../chat/managers/SystemPromptManager';
@@ -198,12 +198,24 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
 
       let fullResponse = '';
 
-      for await (const chunk of streamCopilot(messages, {
-        signal: abortControllerRef.current.signal,
-        temperature: 0.7,
-        model: settingsStore.settings.aiModel,
-      })) {
-        fullResponse += chunk;
+      const provider = settingsStore.settings.activeProvider;
+      const providerConfig = settingsStore.settings.providers[provider];
+
+      for await (const chunk of streamChat(
+        messages,
+        provider,
+        providerConfig,
+        {
+          signal: abortControllerRef.current.signal,
+          temperature: 0.7,
+          model: settingsStore.settings.aiModel,
+        }
+      )) {
+        if (typeof chunk === 'string') {
+          fullResponse += chunk;
+        } else if (chunk.content) {
+          fullResponse += chunk.content;
+        }
         setStreamContent(fullResponse);
       }
 

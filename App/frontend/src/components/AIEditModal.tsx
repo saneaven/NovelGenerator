@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStoryObjectStore } from '../store/storyObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { streamCopilot } from '../llm_request/copilot';
+import { streamChat } from '../llm_request/llmService';
 import type { StoryObjectCategory } from '../types/storyObject';
 import { AIEditService, type ContextOptions } from '../services/aiEditService';
 
@@ -78,13 +78,25 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       });
 
       let fullResponse = '';
-      
-      for await (const chunk of streamCopilot(editRequest.messages, {
-        signal: abortControllerRef.current.signal,
-        temperature: 0.3,
-        model: settingsStore.settings.aiModel,
-      })) {
-        fullResponse += chunk;
+
+      const provider = settingsStore.settings.activeProvider;
+      const providerConfig = settingsStore.settings.providers[provider];
+
+      for await (const chunk of streamChat(
+        editRequest.messages,
+        provider,
+        providerConfig,
+        {
+          signal: abortControllerRef.current.signal,
+          temperature: 0.3,
+          model: settingsStore.settings.aiModel,
+        }
+      )) {
+        if (typeof chunk === 'string') {
+          fullResponse += chunk;
+        } else if (chunk.content) {
+          fullResponse += chunk.content;
+        }
         setStreamContent(fullResponse);
       }
 
