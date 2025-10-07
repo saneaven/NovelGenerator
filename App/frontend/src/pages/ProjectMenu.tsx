@@ -5,16 +5,30 @@ import { useProjectStore } from '../store/projectStore';
 const ProjectMenu: React.FC = () => {
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
-  const { getCurrentProject, setCurrentProject } = useProjectStore();
+  const { getCurrentProject, setCurrentProject, fetchProjects, projects, isLoading } = useProjectStore();
 
   React.useEffect(() => {
     if (projectId) {
       setCurrentProject(projectId);
+      // Fetch projects if not already loaded
+      if (projects.length === 0) {
+        fetchProjects();
+      }
     }
-  }, [projectId, setCurrentProject]);
+  }, [projectId, setCurrentProject, fetchProjects, projects.length]);
 
   const currentProject = getCurrentProject();
 
+  // Show loading state while fetching
+  if (isLoading && !currentProject) {
+    return (
+      <div className="error-container">
+        <p>Loading project...</p>
+      </div>
+    );
+  }
+
+  // Show error if project not found after loading
   if (!currentProject) {
     return (
       <div className="error-container">
@@ -45,8 +59,8 @@ const ProjectMenu: React.FC = () => {
           <p className="project-description">{currentProject.description}</p>
         )}
         <div className="project-meta">
-          <p>Created: {currentProject.createdAt.toLocaleDateString()}</p>
-          <p>Last updated: {currentProject.updatedAt.toLocaleDateString()}</p>
+          <p>Created: {new Date(currentProject.created_at).toLocaleDateString()}</p>
+          <p>Last updated: {new Date(currentProject.updated_at).toLocaleDateString()}</p>
         </div>
       </div>
 

@@ -1,25 +1,53 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../store/projectStore';
+import { useAuthStore } from '../store/authStore';
 import SettingsModal from '../components/SettingsModal';
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
-  const { projects, createProject, deleteProject, setCurrentProject } = useProjectStore();
+  const { projects, createProject, deleteProject, setCurrentProject, fetchProjects, isLoading, error } = useProjectStore();
+  const { logout, user } = useAuthStore();
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [projectName, setProjectName] = useState('');
   const [projectDescription, setProjectDescription] = useState('');
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
-  const handleCreateProject = (e: React.FormEvent) => {
+  // Fetch projects on mount and when returning to page
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
+
+  // Refetch when window gains focus (user returns to tab/window)
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchProjects();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [fetchProjects]);
+
+  const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (projectName.trim()) {
-      const newProject = createProject(projectName.trim(), projectDescription.trim());
-      setCurrentProject(newProject.id);
-      navigate(`/project/${newProject.id}`);
-      setProjectName('');
-      setProjectDescription('');
-      setShowCreateForm(false);
+      try {
+        const newProject = await createProject(projectName.trim(), projectDescription.trim());
+        setCurrentProject(newProject.id);
+        navigate(`/project/${newProject.id}`);
+        setProjectName('');
+        setProjectDescription('');
+        setShowCreateForm(false);
+      } catch (err) {
+        console.error('Failed to create project:', err);
+      }
+    }
+  };
+
+  const handleLogout = () => {
+    if (confirm('Are you sure you want to logout?')) {
+      logout();
+      navigate('/login');
     }
   };
 
@@ -28,12 +56,26 @@ const Home: React.FC = () => {
     navigate(`/project/${projectId}`);
   };
 
-  const handleDeleteProject = (projectId: string, e: React.MouseEvent) => {
+  const handleDeleteProject = async (projectId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm('Are you sure you want to delete this project?')) {
-      deleteProject(projectId);
+      try {
+        await deleteProject(projectId);
+      } catch (err) {
+        console.error('Failed to delete project:', err);
+      }
     }
   };
+
+  if (isLoading && projects.length === 0) {
+    return (
+      <div className="home-container">
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+          <p>Loading projects...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="home-container">
@@ -42,16 +84,39 @@ const Home: React.FC = () => {
           <div>
             <h1>Novel Generator</h1>
             <p>Write creative novels with AI</p>
+            {user && <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Welcome, {user.username}!</p>}
           </div>
-          <button 
-            className="settings-btn"
-            onClick={() => setIsSettingsModalOpen(true)}
-            title="Settings"
-          >
-            ⚙️
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              className="settings-btn"
+              onClick={() => setIsSettingsModalOpen(true)}
+              title="Settings"
+            >
+              ⚙️
+            </button>
+            <button
+              className="settings-btn"
+              onClick={handleLogout}
+              title="Logout"
+            >
+              🚪
+            </button>
+          </div>
         </div>
       </div>
+
+      {error && (
+        <div style={{
+          padding: '1rem',
+          background: 'rgba(239, 68, 68, 0.1)',
+          border: '1px solid rgba(239, 68, 68, 0.3)',
+          borderRadius: '8px',
+          color: '#fca5a5',
+          marginBottom: '1rem'
+        }}>
+          {error}
+        </div>
+      )}
 
       <div className="actions">
         <button 
@@ -120,7 +185,7 @@ const Home: React.FC = () => {
                     <p className="project-description">{project.description}</p>
                   )}
                   <p className="project-date">
-                    Created: {project.createdAt.toLocaleDateString()}
+                    Created: {new Date(project.created_at).toLocaleDateString()}
                   </p>
                 </div>
                 <button 

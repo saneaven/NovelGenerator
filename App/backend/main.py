@@ -2,19 +2,31 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, PlainTextResponse
-from models.requests import ChatCompletionRequest, ProviderConfig
-from providers.registry import ProviderRegistry
-from providers.copilot import CopilotProvider
-from providers.openrouter import OpenRouterProvider
-from providers.custom import CustomOpenAIProvider
+from .models.requests import ChatCompletionRequest, ProviderConfig
+from .providers.registry import ProviderRegistry
+from .providers.copilot import CopilotProvider
+from .providers.openrouter import OpenRouterProvider
+from .providers.custom import CustomOpenAIProvider
+
+# Import database API routes
+from .routes.auth_routes import router as auth_router
+from .routes.project_routes import router as project_router
+from .routes.story_routes import router as story_router
+from .routes.chat_routes import router as chat_router
 
 load_dotenv()
 
 app = FastAPI(
-    title="Novel Generator LLM API",
-    version="1.0.0",
-    description="Multi-provider LLM API for Novel Generator"
+    title="Novel Generator API",
+    version="2.0.0",
+    description="Multi-provider LLM API with Database-backed Story Management for Novel Generator"
 )
+
+# Include all database API routers
+app.include_router(auth_router)
+app.include_router(project_router)
+app.include_router(story_router)
+app.include_router(chat_router)
 
 app.add_middleware(
     CORSMiddleware,

@@ -36,19 +36,27 @@ const NovelEditor: React.FC = () =>
 {
     const { projectId } = useParams<{ projectId: string }>();
 
-    const { getCurrentProject } = useProjectStore();
+    const { getCurrentProject, fetchProjects, projects, isLoading: projectsLoading } = useProjectStore();
     const {
         addMessage,
         updateMessage,
         getMessages,
         getSelectedChatId,
+        fetchChats,
     } = useChatStore();
-    const { getStoryObjects, getChapterById } = useStoryObjectStore();
-    const novelStore = useNovelStore();
+    const { getStoryObjects, getChapterById, fetchStoryObjects } = useStoryObjectStore();
+    const { fetchChapterContent, ...novelStore } = useNovelStore();
     const { settings } = useSettingsStore();
     const { currentError, showError, hideError } = useErrorStore();
 
     const { state: uiState, actions: uiActions } = useNovelEditorState();
+
+    // Fetch projects if not loaded
+    useEffect(() => {
+        if (projectId && projects.length === 0) {
+            fetchProjects();
+        }
+    }, [projectId, projects.length, fetchProjects]);
 
     const [systemInsertConfig, setSystemInsertConfig] = useState<SystemInsertConfig>(
         ChatPipeline.createDefaultSystemConfig()
@@ -151,6 +159,46 @@ const NovelEditor: React.FC = () =>
     const selectedChapterId = novelStore.getSelectedChapterId(projectId ?? '');
     const selectedChapter = selectedChapterId ? getChapterById(projectId ?? '', selectedChapterId) : null;
 
+    // Fetch story objects when projectId changes
+    useEffect(() =>
+    {
+        if (!projectId) return;
+
+        fetchStoryObjects(projectId).catch(error =>
+        {
+            // Don't show error for expected 404s (outline/basicInfo not created yet)
+            console.error('Failed to fetch story objects:', error);
+            // Only show error modal if it's a real error, not missing resources
+            if (error?.status !== 404) {
+                showError('Data Error', 'Failed to load story objects. Please try again.');
+            }
+        });
+    }, [projectId, fetchStoryObjects, showError]);
+
+    // Fetch chats when projectId changes
+    useEffect(() =>
+    {
+        if (!projectId) return;
+
+        fetchChats(projectId).catch(error =>
+        {
+            console.error('Failed to fetch chats:', error);
+            showError('Data Error', 'Failed to load chats. Please try again.');
+        });
+    }, [projectId, fetchChats, showError]);
+
+    // Fetch chapter content when projectId or selectedChapterId changes
+    useEffect(() =>
+    {
+        if (!projectId || !selectedChapterId) return;
+
+        fetchChapterContent(projectId, selectedChapterId).catch(error =>
+        {
+            console.error('Failed to fetch chapter content:', error);
+            showError('Data Error', 'Failed to load chapter content. Please try again.');
+        });
+    }, [projectId, selectedChapterId, fetchChapterContent, showError]);
+
     useEffect(() =>
     {
         if (!projectId) return;
@@ -211,6 +259,16 @@ const NovelEditor: React.FC = () =>
         messageEditCards,
         setMessageEditCards,
     ]);
+
+    // Show loading state
+    if (projectsLoading && !currentProject)
+    {
+        return (
+            <div className="error-container">
+                <p>Loading project...</p>
+            </div>
+        );
+    }
 
     if (!currentProject)
     {

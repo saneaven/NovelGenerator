@@ -35,18 +35,26 @@ const Workspace: React.FC = () =>
 {
     const { projectId } = useParams<{ projectId: string }>();
 
-    const { getCurrentProject } = useProjectStore();
+    const { getCurrentProject, fetchProjects, projects, isLoading: projectsLoading } = useProjectStore();
     const {
         addMessage,
         updateMessage,
         getMessages,
         getSelectedChatId,
+        fetchChats,
     } = useChatStore();
-    const { getStoryObjects } = useStoryObjectStore();
+    const { getStoryObjects, fetchStoryObjects } = useStoryObjectStore();
     const { settings } = useSettingsStore();
     const { currentError, showError, hideError } = useErrorStore();
 
     const { state: uiState, actions: uiActions } = useWorkspaceState(projectId);
+
+    // Fetch projects if not loaded
+    useEffect(() => {
+        if (projectId && projects.length === 0) {
+            fetchProjects();
+        }
+    }, [projectId, projects.length, fetchProjects]);
 
     const [systemInsertConfig, setSystemInsertConfig] = useState<SystemInsertConfig>(
         ChatPipeline.createDefaultSystemConfig()
@@ -144,6 +152,34 @@ const Workspace: React.FC = () =>
     const currentProject = getCurrentProject();
     const storyObjects = getStoryObjects(projectId ?? '');
 
+    // Fetch story objects when projectId changes
+    useEffect(() =>
+    {
+        if (!projectId) return;
+
+        fetchStoryObjects(projectId).catch(error =>
+        {
+            // Don't show error for expected 404s (outline/basicInfo not created yet)
+            console.error('Failed to fetch story objects:', error);
+            // Only show error modal if it's a real error, not missing resources
+            if (error?.status !== 404) {
+                showError('Data Error', 'Failed to load story objects. Please try again.');
+            }
+        });
+    }, [projectId, fetchStoryObjects, showError]);
+
+    // Fetch chats when projectId changes
+    useEffect(() =>
+    {
+        if (!projectId) return;
+
+        fetchChats(projectId).catch(error =>
+        {
+            console.error('Failed to fetch chats:', error);
+            showError('Data Error', 'Failed to load chats. Please try again.');
+        });
+    }, [projectId, fetchChats, showError]);
+
     useEffect(() =>
     {
         if (!projectId) return;
@@ -204,6 +240,16 @@ const Workspace: React.FC = () =>
         messageEditCards,
         setMessageEditCards,
     ]);
+
+    // Show loading state
+    if (projectsLoading && !currentProject)
+    {
+        return (
+            <div className="error-container">
+                <p>Loading project...</p>
+            </div>
+        );
+    }
 
     if (!currentProject)
     {

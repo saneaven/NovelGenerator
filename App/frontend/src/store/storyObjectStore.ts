@@ -1,1499 +1,1029 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { storyObjectService } from '../api';
 import type {
-  StoryObjects,
-  BasicInfo,
-  Character,
-  Organization,
-  Location,
-  LorebookEntry,
-  Outline,
-  Act,
-  Chapter,
-  ObjectVersion,
-  StoryObjectCategory,
-} from '../types/storyObject';
-import {
-  createEmptyStoryObjects,
-  createEmptyBasicInfo,
-  createNameDescriptionItem,
-  createEmptyOutline,
-  createEmptyAct,
-  createEmptyChapter,
-  ensureVersionFields,
-} from '../types/storyObject';
+  BasicInfoResponse,
+  NameDescriptionResponse,
+  OutlineResponse,
+  ActResponse,
+  ChapterResponse,
+} from '../api/types';
 import { useSettingsStore } from './settingsStore';
+
+// Simplified types that match backend responses
+export interface BasicInfo {
+  id: string;
+  project_id: string;
+  title: string;
+  logline: string;
+  genre: string;
+  active_version_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NameDescriptionItem {
+  id: string;
+  project_id: string;
+  name: string;
+  description: string;
+  active_version_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type Character = NameDescriptionItem;
+export type Organization = NameDescriptionItem;
+export type Location = NameDescriptionItem;
+export type LorebookEntry = NameDescriptionItem;
+
+export interface Chapter {
+  id: string;
+  act_id: string;
+  name: string;
+  description: string;
+  order: number;
+  active_version_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Act {
+  id: string;
+  outline_id: string;
+  name: string;
+  description: string;
+  order: number;
+  active_version_id?: string;
+  created_at: string;
+  updated_at: string;
+  chapters: Chapter[];
+}
+
+export interface Outline {
+  id: string;
+  project_id: string;
+  active_version_id?: string;
+  created_at: string;
+  updated_at: string;
+  acts: Act[];
+}
+
+export interface StoryObjects {
+  basicInfo: BasicInfo | null;
+  characters: Character[];
+  organizations: Organization[];
+  locations: Location[];
+  lorebook: LorebookEntry[];
+  outline: Outline | null;
+}
 
 interface StoryObjectStore {
   // Data storage by project
   storyObjectsByProject: Record<string, StoryObjects>;
-  
+  isLoading: boolean;
+  error: string | null;
+
+  // Fetch all story objects for a project
+  fetchStoryObjects: (projectId: string) => Promise<void>;
+
   // Basic Info Actions
-  setBasicInfo: (projectId: string, basicInfo: BasicInfo) => void;
-  updateBasicInfo: (projectId: string, updates: Partial<Omit<BasicInfo, 'id' | 'createdAt'>>, editLanguage?: string) => void;
-  updateBasicInfoAI: (projectId: string, updates: Partial<Omit<BasicInfo, 'id' | 'createdAt'>>) => void;
+  fetchBasicInfo: (projectId: string) => Promise<void>;
+  createBasicInfo: (
+    projectId: string,
+    title: string,
+    logline: string,
+    genre: string
+  ) => Promise<void>;
+  updateBasicInfo: (
+    projectId: string,
+    updates: { title?: string; logline?: string; genre?: string },
+    language?: string
+  ) => Promise<void>;
   getBasicInfo: (projectId: string) => BasicInfo | null;
-  
+
   // Character Actions
-  addCharacter: (projectId: string, character?: Partial<Character>) => Character;
-  updateCharacter: (projectId: string, id: string, updates: Partial<Omit<Character, 'id' | 'createdAt'>>, editLanguage?: string) => void;
-  updateCharacterAI: (projectId: string, id: string, updates: Partial<Omit<Character, 'id' | 'createdAt'>>) => void;
-  deleteCharacter: (projectId: string, id: string) => void;
+  fetchCharacters: (projectId: string) => Promise<void>;
+  addCharacter: (projectId: string, name: string, description: string) => Promise<Character>;
+  updateCharacter: (
+    projectId: string,
+    id: string,
+    updates: { name?: string; description?: string }
+  ) => Promise<void>;
+  deleteCharacter: (projectId: string, id: string) => Promise<void>;
   getCharacters: (projectId: string) => Character[];
 
   // Organization Actions
-  addOrganization: (projectId: string, organization?: Partial<Organization>) => Organization;
-  updateOrganization: (projectId: string, id: string, updates: Partial<Omit<Organization, 'id' | 'createdAt'>>, editLanguage?: string) => void;
-  deleteOrganization: (projectId: string, id: string) => void;
+  fetchOrganizations: (projectId: string) => Promise<void>;
+  addOrganization: (
+    projectId: string,
+    name: string,
+    description: string
+  ) => Promise<Organization>;
+  updateOrganization: (
+    projectId: string,
+    id: string,
+    updates: { name?: string; description?: string }
+  ) => Promise<void>;
+  deleteOrganization: (projectId: string, id: string) => Promise<void>;
   getOrganizations: (projectId: string) => Organization[];
 
   // Location Actions
-  addLocation: (projectId: string, location?: Partial<Location>) => Location;
-  updateLocation: (projectId: string, id: string, updates: Partial<Omit<Location, 'id' | 'createdAt'>>, editLanguage?: string) => void;
-  deleteLocation: (projectId: string, id: string) => void;
+  fetchLocations: (projectId: string) => Promise<void>;
+  addLocation: (projectId: string, name: string, description: string) => Promise<Location>;
+  updateLocation: (
+    projectId: string,
+    id: string,
+    updates: { name?: string; description?: string }
+  ) => Promise<void>;
+  deleteLocation: (projectId: string, id: string) => Promise<void>;
   getLocations: (projectId: string) => Location[];
 
   // Lorebook Actions
-  addLorebookEntry: (projectId: string, entry?: Partial<LorebookEntry>) => LorebookEntry;
-  updateLorebookEntry: (projectId: string, id: string, updates: Partial<Omit<LorebookEntry, 'id' | 'createdAt'>>, editLanguage?: string) => void;
-  deleteLorebookEntry: (projectId: string, id: string) => void;
+  fetchLorebook: (projectId: string) => Promise<void>;
+  addLorebookEntry: (
+    projectId: string,
+    name: string,
+    description: string
+  ) => Promise<LorebookEntry>;
+  updateLorebookEntry: (
+    projectId: string,
+    id: string,
+    updates: { name?: string; description?: string }
+  ) => Promise<void>;
+  deleteLorebookEntry: (projectId: string, id: string) => Promise<void>;
   getLorebookEntries: (projectId: string) => LorebookEntry[];
-  
+
   // Outline Actions
-  setOutline: (projectId: string, outline: Outline) => void;
-  updateOutlineAI: (projectId: string, outline: Outline) => void;
+  fetchOutline: (projectId: string) => Promise<void>;
+  createOutline: (projectId: string) => Promise<void>;
   getOutline: (projectId: string) => Outline | null;
-  
+
   // Act Actions
-  addAct: (projectId: string, act?: Partial<Act>) => Act;
-  updateAct: (projectId: string, actId: string, updates: Partial<Omit<Act, 'id' | 'createdAt' | 'chapters'>>, editLanguage?: string) => void;
-  deleteAct: (projectId: string, actId: string) => void;
+  addAct: (projectId: string, name: string, description: string, order: number) => Promise<Act>;
+  updateAct: (
+    projectId: string,
+    actId: string,
+    updates: { name?: string; description?: string; order?: number }
+  ) => Promise<void>;
+  deleteAct: (projectId: string, actId: string) => Promise<void>;
+  getActById: (projectId: string, actId: string) => Act | null;
 
   // Chapter Actions
-  addChapter: (projectId: string, actId: string, chapter?: Partial<Chapter>) => Chapter;
-  updateChapter: (projectId: string, chapterId: string, updates: Partial<Omit<Chapter, 'id' | 'createdAt' | 'actId'>>, editLanguage?: string) => void;
-  deleteChapter: (projectId: string, chapterId: string) => void;
-  
-  compareVersionData: (data1: unknown, data2: unknown) => boolean;
-  createUpdateVersion: (currentData: any, userRequest?: string, language?: string) => ObjectVersion | null;
-  addVersionToItem: (item: any, newVersion: ObjectVersion | null) => any;
-
-  // Version Management Actions
-  addVersion: <T>(projectId: string, category: StoryObjectCategory, itemId: string, userRequest: string, data: T) => string;
-  setActiveVersion: (projectId: string, category: StoryObjectCategory, itemId: string, versionId: string) => void;
-  getVersions: (projectId: string, category: StoryObjectCategory, itemId: string) => ObjectVersion[];
-  deleteVersion: (projectId: string, category: StoryObjectCategory, itemId: string, versionId: string) => void;
-  getItemByCategoryAndId: (projectId: string, category: StoryObjectCategory, itemId: string) => any;
-  getActById: (projectId: string, actId: string) => Act | null;
+  addChapter: (
+    projectId: string,
+    actId: string,
+    name: string,
+    description: string,
+    order: number
+  ) => Promise<Chapter>;
+  updateChapter: (
+    projectId: string,
+    chapterId: string,
+    updates: { name?: string; description?: string; order?: number }
+  ) => Promise<void>;
+  deleteChapter: (projectId: string, chapterId: string) => Promise<void>;
   getChapterById: (projectId: string, chapterId: string) => Chapter | null;
-  getActVersions: (projectId: string, actId: string) => ObjectVersion[];
-  getChapterVersions: (projectId: string, chapterId: string) => ObjectVersion[];
-  
+
   // Utility Actions
   getStoryObjects: (projectId: string) => StoryObjects;
   clearStoryObjects: (projectId: string) => void;
+  clearError: () => void;
 
-  // Language-aware data access methods
-  getItemDataInLanguage: (projectId: string, category: StoryObjectCategory, itemId: string, language: string) => any;
-  hasItemDataInLanguage: (projectId: string, category: StoryObjectCategory, itemId: string, language: string) => boolean;
-  getAvailableLanguagesForItem: (projectId: string, category: StoryObjectCategory, itemId: string) => string[];
-  addTranslatedDataToItem: (projectId: string, category: StoryObjectCategory, itemId: string, language: string, translatedData: any) => void;
-  syncFlatFieldsWithLanguage: (projectId: string, category: StoryObjectCategory, itemId: string, language: string) => void;
-  getPreviousVersionDataInLanguage: (projectId: string, category: StoryObjectCategory, itemId: string, language: string) => any;
+  // Translation support (stub methods for now)
+  getItemDataInLanguage: (projectId: string, category: string, itemId: string, language: string) => any;
+  hasItemDataInLanguage: (projectId: string, category: string, itemId: string, language: string) => boolean;
+  getAvailableLanguagesForItem: (projectId: string, category: string, itemId: string) => string[];
+  addTranslatedDataToItem: (projectId: string, category: string, itemId: string, language: string, data: any) => void;
+  getPreviousVersionDataInLanguage: (projectId: string, category: string, itemId: string, language: string) => any;
+  syncFlatFieldsWithLanguage: (projectId: string, category: string, itemId: string, language: string) => void;
 }
 
-export const useStoryObjectStore = create<StoryObjectStore>()(
-  persist(
-    (set, get) => ({
-      storyObjectsByProject: {},
-
-      // Helper function to deeply compare version data
-      compareVersionData: (data1: any, data2: any): boolean => {
-        if (data1 === data2) return true;
-        if (data1 == null || data2 == null) return data1 === data2;
-        if (typeof data1 !== typeof data2) return false;
-        
-        if (typeof data1 === 'object') {
-          const keys1 = Object.keys(data1);
-          const keys2 = Object.keys(data2);
-          
-          if (keys1.length !== keys2.length) return false;
-          
-          for (const key of keys1) {
-            if (!keys2.includes(key)) return false;
-            if (!get().compareVersionData(data1[key], data2[key])) return false;
-          }
-          
-          return true;
-        }
-        
-        return false;
-      },
-
-      // Helper function to create version for update
-      createUpdateVersion: (currentData: any, userRequest: string = 'User Edit', language?: string) => {
-        // Get the language to use for version data
-        const targetLanguage = language || 'English';
-
-        // Extract essential data from flat fields
-        let extractedData: any = null;
-        if (currentData && typeof currentData === 'object') {
-          if ('name' in currentData && 'description' in currentData) {
-            extractedData = {
-              name: currentData.name,
-              description: currentData.description,
-            };
-          } else if ('title' in currentData && 'logline' in currentData && 'genre' in currentData) {
-            extractedData = {
-              title: currentData.title,
-              logline: currentData.logline,
-              genre: currentData.genre,
-            };
-          } else if ('acts' in currentData) {
-            extractedData = {
-              acts: currentData.acts?.map((act: any) => ({
-                id: act.id,
-                name: act.name,
-                description: act.description,
-                chapters: act.chapters?.map((chapter: any) => ({
-                  id: chapter.id,
-                  name: chapter.name,
-                  description: chapter.description
-                })) || []
-              })) || []
-            };
-          }
-        }
-
-        if (!extractedData) {
-          return null; // No valid data to create version
-        }
-
-        // Build LanguageData structure
-        // ONLY store the language being edited (don't copy other languages from previous version)
-        const versionData: Record<string, any> = {
-          [targetLanguage]: extractedData
-        };
-
-        // Check if data changed compared to active version's same language
-        if (currentData.versions && currentData.versions.length > 0) {
-          const activeVersion = currentData.versions.find((v: ObjectVersion) => v.isActive);
-          if (activeVersion?.data && activeVersion.data[targetLanguage]) {
-            if (get().compareVersionData(activeVersion.data[targetLanguage], extractedData)) {
-              return null; // No change in this language, don't create new version
-            }
-          }
-        }
-
-        const versionId = crypto.randomUUID();
-        const now = new Date();
-
-        return {
-          versionId,
-          timestamp: now,
-          userRequest,
-          data: versionData,
-          isActive: true,
-        };
-      },
-
-      // Helper function to add version to item
-      addVersionToItem: (item: any, newVersion: any) => {
-        // If newVersion is null, return the item unchanged
-        if (!newVersion) {
-          return item;
-        }
-        
-        const updatedVersions = item.versions.map((v: any) => ({ ...v, isActive: false }));
-        updatedVersions.push(newVersion);
-        
-        return {
-          ...item,
-          versions: updatedVersions,
-          activeVersionId: newVersion.versionId,
-        };
-      },
-
-      // AI Edit specific update functions with custom userRequest
-      updateCharacterAI: (projectId: string, id: string, updates: Partial<Omit<Character, 'id' | 'createdAt'>>) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          const { createUpdateVersion, addVersionToItem } = get();
-          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
-
-          const updatedCharacters = projectObjects.characters.map((char) => {
-            if (char.id === id) {
-              const updatedChar = {
-                ...char,
-                name: updates.name !== undefined ? updates.name : char.name,
-                description: updates.description !== undefined ? updates.description : char.description,
-                updatedAt: new Date()
-              };
-
-              // Auto-create version for AI edit
-              const newVersion = createUpdateVersion(updatedChar, 'AI Edit', primaryLanguage);
-              return addVersionToItem(updatedChar, newVersion);
-            }
-            return char;
-          });
-
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                characters: updatedCharacters,
-              },
-            },
-          };
-        });
-      },
-
-      updateBasicInfoAI: (projectId: string, updates: Partial<Omit<BasicInfo, 'id' | 'createdAt'>>) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          const currentBasicInfo = projectObjects.basicInfo || createEmptyBasicInfo();
-          const { createUpdateVersion, addVersionToItem } = get();
-          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
-
-          const updatedBasicInfo = {
-            ...currentBasicInfo,
-            ...updates,
-            updatedAt: new Date(),
-          };
-
-          // Auto-create version for AI edit
-          const newVersion = createUpdateVersion(updatedBasicInfo, 'AI Edit', primaryLanguage);
-          const basicInfoWithVersion = addVersionToItem(updatedBasicInfo, newVersion);
-          
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                basicInfo: basicInfoWithVersion,
-              },
-            },
-          };
-        });
-      },
-
-      // Basic Info Actions
-      setBasicInfo: (projectId: string, basicInfo: BasicInfo) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                basicInfo: { ...basicInfo, updatedAt: new Date() },
-              },
-            },
-          };
-        });
-      },
-
-      updateBasicInfo: (projectId: string, updates: Partial<Omit<BasicInfo, 'id' | 'createdAt'>>, editLanguage?: string) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          const currentBasicInfo = projectObjects.basicInfo || createEmptyBasicInfo();
-          const { createUpdateVersion, addVersionToItem } = get();
-          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
-          const languageToUse = editLanguage || primaryLanguage;
-
-          const updatedBasicInfo = {
-            ...currentBasicInfo,
-            ...updates,
-            updatedAt: new Date(),
-          };
-
-          // Auto-create version for update with the language being edited
-          const newVersion = createUpdateVersion(updatedBasicInfo, 'User Edit', languageToUse);
-          const basicInfoWithVersion = addVersionToItem(updatedBasicInfo, newVersion);
-
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                basicInfo: basicInfoWithVersion,
-              },
-            },
-          };
-        });
-      },
-
-      getBasicInfo: (projectId: string) => {
-        const storeState = get();
-        return storeState.storyObjectsByProject[projectId]?.basicInfo || null;
-      },
-
-      // Character Actions
-      addCharacter: (projectId: string, character?: Partial<Character>) => {
-        const newCharacter = {
-          ...createNameDescriptionItem(character?.name || '', character?.description || ''),
-        } as Character;
-
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                characters: [...projectObjects.characters, newCharacter],
-              },
-            },
-          };
-        });
-
-        return newCharacter;
-      },
-
-      updateCharacter: (projectId: string, id: string, updates: Partial<Omit<Character, 'id' | 'createdAt'>>, editLanguage?: string) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          const { createUpdateVersion, addVersionToItem } = get();
-          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
-          const languageToUse = editLanguage || primaryLanguage;
-
-          const updatedCharacters = projectObjects.characters.map((char) => {
-            if (char.id === id) {
-              const updatedChar = {
-                ...char,
-                name: updates.name !== undefined ? updates.name : char.name,
-                description: updates.description !== undefined ? updates.description : char.description,
-                updatedAt: new Date()
-              };
-
-              // Auto-create version for update with the language being edited
-              const newVersion = createUpdateVersion(updatedChar, 'User Edit', languageToUse);
-              return addVersionToItem(updatedChar, newVersion);
-            }
-            return char;
-          });
-
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                characters: updatedCharacters,
-              },
-            },
-          };
-        });
-      },
-
-      deleteCharacter: (projectId: string, id: string) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                characters: projectObjects.characters.filter((char) => char.id !== id),
-              },
-            },
-          };
-        });
-      },
-
-      getCharacters: (projectId: string) => {
-        const storeState = get();
-        return storeState.storyObjectsByProject[projectId]?.characters || [];
-      },
-
-      // Organization Actions
-      addOrganization: (projectId: string, organization?: Partial<Organization>) => {
-        const newOrganization = {
-          ...createNameDescriptionItem(organization?.name || '', organization?.description || ''),
-        } as Organization;
-
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                organizations: [...projectObjects.organizations, newOrganization],
-              },
-            },
-          };
-        });
-
-        return newOrganization;
-      },
-
-      updateOrganization: (projectId: string, id: string, updates: Partial<Omit<Organization, 'id' | 'createdAt'>>, editLanguage?: string) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          const { createUpdateVersion, addVersionToItem } = get();
-          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
-          const languageToUse = editLanguage || primaryLanguage;
-
-          const updatedOrganizations = projectObjects.organizations.map((org) => {
-            if (org.id === id) {
-              const updatedOrg = {
-                ...org,
-                name: updates.name !== undefined ? updates.name : org.name,
-                description: updates.description !== undefined ? updates.description : org.description,
-                updatedAt: new Date()
-              };
-
-              // Auto-create version for update with the language being edited
-              const newVersion = createUpdateVersion(updatedOrg, 'User Edit', languageToUse);
-              return addVersionToItem(updatedOrg, newVersion);
-            }
-            return org;
-          });
-
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                organizations: updatedOrganizations,
-              },
-            },
-          };
-        });
-      },
-
-      deleteOrganization: (projectId: string, id: string) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                organizations: projectObjects.organizations.filter((org) => org.id !== id),
-              },
-            },
-          };
-        });
-      },
-
-      getOrganizations: (projectId: string) => {
-        const storeState = get();
-        return storeState.storyObjectsByProject[projectId]?.organizations || [];
-      },
-
-      // Location Actions
-      addLocation: (projectId: string, location?: Partial<Location>) => {
-        const newLocation = {
-          ...createNameDescriptionItem(location?.name || '', location?.description || ''),
-        } as Location;
-
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                locations: [...projectObjects.locations, newLocation],
-              },
-            },
-          };
-        });
-
-        return newLocation;
-      },
-
-      updateLocation: (projectId: string, id: string, updates: Partial<Omit<Location, 'id' | 'createdAt'>>, editLanguage?: string) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          const { createUpdateVersion, addVersionToItem } = get();
-          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
-          const languageToUse = editLanguage || primaryLanguage;
-
-          const updatedLocations = projectObjects.locations.map((loc) => {
-            if (loc.id === id) {
-              const updatedLoc = {
-                ...loc,
-                name: updates.name !== undefined ? updates.name : loc.name,
-                description: updates.description !== undefined ? updates.description : loc.description,
-                updatedAt: new Date()
-              };
-
-              // Auto-create version for update with the language being edited
-              const newVersion = createUpdateVersion(updatedLoc, 'User Edit', languageToUse);
-              return addVersionToItem(updatedLoc, newVersion);
-            }
-            return loc;
-          });
-
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                locations: updatedLocations,
-              },
-            },
-          };
-        });
-      },
-
-      deleteLocation: (projectId: string, id: string) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                locations: projectObjects.locations.filter((loc) => loc.id !== id),
-              },
-            },
-          };
-        });
-      },
-
-      getLocations: (projectId: string) => {
-        const storeState = get();
-        return storeState.storyObjectsByProject[projectId]?.locations || [];
-      },
-
-      // Lorebook Actions
-      addLorebookEntry: (projectId: string, entry?: Partial<LorebookEntry>) => {
-        const newEntry = {
-          ...createNameDescriptionItem(entry?.name || '', entry?.description || ''),
-        } as LorebookEntry;
-
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                lorebook: [...projectObjects.lorebook, newEntry],
-              },
-            },
-          };
-        });
-
-        return newEntry;
-      },
-
-      updateLorebookEntry: (projectId: string, id: string, updates: Partial<Omit<LorebookEntry, 'id' | 'createdAt'>>, editLanguage?: string) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          const { createUpdateVersion, addVersionToItem } = get();
-          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
-          const languageToUse = editLanguage || primaryLanguage;
-
-          const updatedLorebook = projectObjects.lorebook.map((entry) => {
-            if (entry.id === id) {
-              const updatedEntry = {
-                ...entry,
-                name: updates.name !== undefined ? updates.name : entry.name,
-                description: updates.description !== undefined ? updates.description : entry.description,
-                updatedAt: new Date()
-              };
-
-              // Auto-create version for update with the language being edited
-              const newVersion = createUpdateVersion(updatedEntry, 'User Edit', languageToUse);
-              return addVersionToItem(updatedEntry, newVersion);
-            }
-            return entry;
-          });
-
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                lorebook: updatedLorebook,
-              },
-            },
-          };
-        });
-      },
-
-      deleteLorebookEntry: (projectId: string, id: string) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                lorebook: projectObjects.lorebook.filter((entry) => entry.id !== id),
-              },
-            },
-          };
-        });
-      },
-
-      getLorebookEntries: (projectId: string) => {
-        const storeState = get();
-        return storeState.storyObjectsByProject[projectId]?.lorebook || [];
-      },
-
-      // Outline Actions
-      setOutline: (projectId: string, outline: Outline) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          const { createUpdateVersion, addVersionToItem } = get();
-          
-          const updatedOutline = { 
-            ...outline, 
-            updatedAt: new Date() 
-          };
-          
-          // Auto-create version for outline updates
-          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
-          const newVersion = createUpdateVersion(updatedOutline, 'User Edit', primaryLanguage);
-          const outlineWithVersion = addVersionToItem(updatedOutline, newVersion);
-          
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                outline: outlineWithVersion,
-              },
-            },
-          };
-        });
-      },
-
-      // AI Edit for outline
-      updateOutlineAI: (projectId: string, outline: Outline) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          const { createUpdateVersion, addVersionToItem } = get();
-          
-          const updatedOutline = { 
-            ...outline, 
-            updatedAt: new Date() 
-          };
-          
-          // Auto-create version for AI edit
-          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
-          const newVersion = createUpdateVersion(updatedOutline, 'AI Edit', primaryLanguage);
-          const outlineWithVersion = addVersionToItem(updatedOutline, newVersion);
-          
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                outline: outlineWithVersion,
-              },
-            },
-          };
-        });
-      },
-
-      getOutline: (projectId: string) => {
-        const storeState = get();
-        return storeState.storyObjectsByProject[projectId]?.outline || null;
-      },
-
-      // Act Actions
-      addAct: (projectId: string, act?: Partial<Act>) => {
-        const newAct = {
-          ...createEmptyAct(),
-          name: act?.name || '',
-          description: act?.description || '',
-        } as Act;
-
-        // Update the initial version data with actual values
-        newAct.versions[0].data = {
-          name: newAct.name,
-          description: newAct.description,
-        };
-
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          const currentOutline = projectObjects.outline || createEmptyOutline();
-          
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                outline: {
-                  ...currentOutline,
-                  acts: [...currentOutline.acts, newAct],
-                  updatedAt: new Date(),
-                },
-              },
-            },
-          };
-        });
-
-        return newAct;
-      },
-
-      updateAct: (projectId: string, actId: string, updates: Partial<Omit<Act, 'id' | 'createdAt' | 'chapters'>>, editLanguage?: string) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          const currentOutline = projectObjects.outline;
-          if (!currentOutline) return state;
-
-          const { createUpdateVersion, addVersionToItem } = get();
-          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
-          const languageToUse = editLanguage || primaryLanguage;
-
-          const updatedActs = currentOutline.acts.map((act) => {
-            if (act.id === actId) {
-              const updatedAct = {
-                ...act,
-                name: updates.name !== undefined ? updates.name : act.name,
-                description: updates.description !== undefined ? updates.description : act.description,
-                updatedAt: new Date()
-              };
-
-              // Auto-create version for the individual act with the language being edited
-              const newVersion = createUpdateVersion(updatedAct, 'User Edit', languageToUse);
-              return addVersionToItem(updatedAct, newVersion);
-            }
-            return act;
-          });
-
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                outline: {
-                  ...currentOutline,
-                  acts: updatedActs,
-                  updatedAt: new Date(),
-                },
-              },
-            },
-          };
-        });
-      },
-
-      deleteAct: (projectId: string, actId: string) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          const currentOutline = projectObjects.outline;
-          if (!currentOutline) return state;
-          
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                outline: {
-                  ...currentOutline,
-                  acts: currentOutline.acts.filter((act) => act.id !== actId),
-                  updatedAt: new Date(),
-                },
-              },
-            },
-          };
-        });
-      },
-
-      // Chapter Actions
-      addChapter: (projectId: string, actId: string, chapter?: Partial<Chapter>) => {
-        const newChapter = {
-          ...createEmptyChapter(actId),
-          name: chapter?.name || '',
-          description: chapter?.description || '',
-          actId,
-        } as Chapter;
-
-        // Update the initial version data with actual values
-        newChapter.versions[0].data = {
-          name: newChapter.name,
-          description: newChapter.description,
-        };
-
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          const currentOutline = projectObjects.outline;
-          if (!currentOutline) return state;
-          
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                outline: {
-                  ...currentOutline,
-                  acts: currentOutline.acts.map((act) =>
-                    act.id === actId
-                      ? { ...act, chapters: [...act.chapters, newChapter], updatedAt: new Date() }
-                      : act
-                  ),
-                  updatedAt: new Date(),
-                },
-              },
-            },
-          };
-        });
-
-        return newChapter;
-      },
-
-      updateChapter: (projectId: string, chapterId: string, updates: Partial<Omit<Chapter, 'id' | 'createdAt' | 'actId'>>, editLanguage?: string) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          const currentOutline = projectObjects.outline;
-          if (!currentOutline) return state;
-
-          const { createUpdateVersion, addVersionToItem } = get();
-          const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
-          const languageToUse = editLanguage || primaryLanguage;
-
-          const updatedActs = currentOutline.acts.map((act) => ({
-            ...act,
-            chapters: act.chapters.map((chapter) => {
-              if (chapter.id === chapterId) {
-                const updatedChapter = {
-                  ...chapter,
-                  name: updates.name !== undefined ? updates.name : chapter.name,
-                  description: updates.description !== undefined ? updates.description : chapter.description,
-                  updatedAt: new Date()
-                };
-
-                // Auto-create version for individual chapter with the language being edited
-                const newVersion = createUpdateVersion(updatedChapter, 'User Edit', languageToUse);
-                return addVersionToItem(updatedChapter, newVersion);
-              }
-              return chapter;
-            }),
-            updatedAt: new Date(),
-          }));
-
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                outline: {
-                  ...currentOutline,
-                  acts: updatedActs,
-                  updatedAt: new Date(),
-                },
-              },
-            },
-          };
-        });
-      },
-
-      deleteChapter: (projectId: string, chapterId: string) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          const currentOutline = projectObjects.outline;
-          if (!currentOutline) return state;
-          
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: {
-                ...projectObjects,
-                outline: {
-                  ...currentOutline,
-                  acts: currentOutline.acts.map((act) => ({
-                    ...act,
-                    chapters: act.chapters.filter((chapter) => chapter.id !== chapterId),
-                    updatedAt: new Date(),
-                  })),
-                  updatedAt: new Date(),
-                },
-              },
-            },
-          };
-        });
-      },
-
-      // Utility Actions
-      getStoryObjects: (projectId: string) => {
-        const storeState = get();
-
-        if (!projectId) {
-          return createEmptyStoryObjects();
-        }
-
-        const existing = storeState.storyObjectsByProject[projectId];
-        if (existing) {
-          return existing;
-        }
-
-        const emptyObjects = createEmptyStoryObjects();
-        set((state) => ({
-          storyObjectsByProject: {
-            ...state.storyObjectsByProject,
-            [projectId]: emptyObjects,
-          },
-        }));
-
-        return emptyObjects;
-      },
-
-      clearStoryObjects: (projectId: string) => {
-        set((state) => ({
-          storyObjectsByProject: {
-            ...state.storyObjectsByProject,
-            [projectId]: createEmptyStoryObjects(),
-          },
-        }));
-      },
-
-      // Helper function to get item by category and id
-      getItemByCategoryAndId: (projectId: string, category: StoryObjectCategory, itemId: string) => {
-        const projectObjects = get().storyObjectsByProject[projectId];
-        if (!projectObjects) return null;
-
-        switch (category) {
-          case 'basicInfo':
-            return projectObjects.basicInfo?.id === itemId ? projectObjects.basicInfo : null;
-          case 'character':
-            return projectObjects.characters.find(c => c.id === itemId) || null;
-          case 'organization':
-            return projectObjects.organizations.find(o => o.id === itemId) || null;
-          case 'location':
-            return projectObjects.locations.find(l => l.id === itemId) || null;
-          case 'lorebook':
-            return projectObjects.lorebook.find(e => e.id === itemId) || null;
-          case 'outline':
-            return projectObjects.outline?.id === itemId ? projectObjects.outline : null;
-          default:
-            return null;
-        }
-      },
-
-      // Helper functions for acts and chapters
-      getActById: (projectId: string, actId: string) => {
-        const projectObjects = get().storyObjectsByProject[projectId];
-        if (!projectObjects?.outline) return null;
-        
-        return projectObjects.outline.acts.find(act => act.id === actId) || null;
-      },
-
-      getChapterById: (projectId: string, chapterId: string) => {
-        const projectObjects = get().storyObjectsByProject[projectId];
-        if (!projectObjects?.outline) return null;
-        
-        for (const act of projectObjects.outline.acts) {
-          const chapter = act.chapters.find(ch => ch.id === chapterId);
-          if (chapter) return chapter;
-        }
-        return null;
-      },
-
-      getActVersions: (projectId: string, actId: string) => {
-        const act = get().getActById(projectId, actId);
-        return act?.versions || [];
-      },
-
-      getChapterVersions: (projectId: string, chapterId: string) => {
-        const chapter = get().getChapterById(projectId, chapterId);
-        return chapter?.versions || [];
-      },
-
-      // Version Management Actions
-      addVersion: <T>(projectId: string, category: StoryObjectCategory, itemId: string, userRequest: string, data: T) => {
-        const versionId = crypto.randomUUID();
-        const now = new Date();
-
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          
-          const updateItemVersions = (item: any) => {
-            if (!item || item.id !== itemId) return item;
-            
-            // Mark all existing versions as inactive
-            const updatedVersions = item.versions.map((v: ObjectVersion) => ({
-              ...v,
-              isActive: false,
-            }));
-
-            // Add new version as active
-            updatedVersions.push({
-              versionId,
-              timestamp: now,
-              userRequest,
-              data,
-              isActive: true,
-            });
-
-            return {
-              ...item,
-              versions: updatedVersions,
-              activeVersionId: versionId,
-              updatedAt: now,
-            };
-          };
-
-          let updatedProjectObjects = { ...projectObjects };
-
-          switch (category) {
-            case 'basicInfo':
-              if (updatedProjectObjects.basicInfo) {
-                updatedProjectObjects.basicInfo = updateItemVersions(updatedProjectObjects.basicInfo);
-              }
-              break;
-            case 'character':
-              updatedProjectObjects.characters = updatedProjectObjects.characters.map(updateItemVersions);
-              break;
-            case 'organization':
-              updatedProjectObjects.organizations = updatedProjectObjects.organizations.map(updateItemVersions);
-              break;
-            case 'location':
-              updatedProjectObjects.locations = updatedProjectObjects.locations.map(updateItemVersions);
-              break;
-            case 'lorebook':
-              updatedProjectObjects.lorebook = updatedProjectObjects.lorebook.map(updateItemVersions);
-              break;
-            case 'outline':
-              if (updatedProjectObjects.outline) {
-                updatedProjectObjects.outline = updateItemVersions(updatedProjectObjects.outline);
-              }
-              break;
-          }
-
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: updatedProjectObjects,
-            },
-          };
-        });
-
-        return versionId;
-      },
-
-      setActiveVersion: (projectId: string, category: StoryObjectCategory, itemId: string, versionId: string) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          
-          const updateItemActiveVersion = (item: any) => {
-            if (!item || item.id !== itemId) return item;
-            
-            const targetVersion = item.versions.find((v: ObjectVersion) => v.versionId === versionId);
-            if (!targetVersion) return item;
-
-            // Update active version
-            const updatedVersions = item.versions.map((v: ObjectVersion) => ({
-              ...v,
-              isActive: v.versionId === versionId,
-            }));
-
-            return {
-              ...item,
-              versions: updatedVersions,
-              activeVersionId: versionId,
-              updatedAt: new Date(),
-            };
-          };
-
-          let updatedProjectObjects = { ...projectObjects };
-
-          switch (category) {
-            case 'basicInfo':
-              if (updatedProjectObjects.basicInfo) {
-                updatedProjectObjects.basicInfo = updateItemActiveVersion(updatedProjectObjects.basicInfo);
-              }
-              break;
-            case 'character':
-              updatedProjectObjects.characters = updatedProjectObjects.characters.map(updateItemActiveVersion);
-              break;
-            case 'organization':
-              updatedProjectObjects.organizations = updatedProjectObjects.organizations.map(updateItemActiveVersion);
-              break;
-            case 'location':
-              updatedProjectObjects.locations = updatedProjectObjects.locations.map(updateItemActiveVersion);
-              break;
-            case 'lorebook':
-              updatedProjectObjects.lorebook = updatedProjectObjects.lorebook.map(updateItemActiveVersion);
-              break;
-            case 'outline':
-              if (updatedProjectObjects.outline) {
-                updatedProjectObjects.outline = updateItemActiveVersion(updatedProjectObjects.outline);
-              }
-              break;
-          }
-
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: updatedProjectObjects,
-            },
-          };
-        });
-      },
-
-      getVersions: (projectId: string, category: StoryObjectCategory, itemId: string) => {
-        const item = get().getItemByCategoryAndId(projectId, category, itemId);
-        return item?.versions || [];
-      },
-
-      deleteVersion: (projectId: string, category: StoryObjectCategory, itemId: string, versionId: string) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-          
-          const updateItemVersions = (item: any) => {
-            if (!item || item.id !== itemId) return item;
-            
-            const filteredVersions = item.versions.filter((v: ObjectVersion) => v.versionId !== versionId);
-            
-            // If we deleted the active version, make the most recent remaining version active
-            let newActiveVersionId = item.activeVersionId;
-            if (item.activeVersionId === versionId && filteredVersions.length > 0) {
-              const mostRecent = filteredVersions.reduce((latest: ObjectVersion, current: ObjectVersion) =>
-                new Date(current.timestamp) > new Date(latest.timestamp) ? current : latest
-              );
-              newActiveVersionId = mostRecent.versionId;
-              
-              // Update the active flag
-              filteredVersions.forEach((v: ObjectVersion) => {
-                v.isActive = v.versionId === newActiveVersionId;
-              });
-            }
-
-            return {
-              ...item,
-              versions: filteredVersions,
-              activeVersionId: newActiveVersionId,
-              updatedAt: new Date(),
-            };
-          };
-
-          let updatedProjectObjects = { ...projectObjects };
-
-          switch (category) {
-            case 'basicInfo':
-              if (updatedProjectObjects.basicInfo) {
-                updatedProjectObjects.basicInfo = updateItemVersions(updatedProjectObjects.basicInfo);
-              }
-              break;
-            case 'character':
-              updatedProjectObjects.characters = updatedProjectObjects.characters.map(updateItemVersions);
-              break;
-            case 'organization':
-              updatedProjectObjects.organizations = updatedProjectObjects.organizations.map(updateItemVersions);
-              break;
-            case 'location':
-              updatedProjectObjects.locations = updatedProjectObjects.locations.map(updateItemVersions);
-              break;
-            case 'lorebook':
-              updatedProjectObjects.lorebook = updatedProjectObjects.lorebook.map(updateItemVersions);
-              break;
-            case 'outline':
-              if (updatedProjectObjects.outline) {
-                updatedProjectObjects.outline = updateItemVersions(updatedProjectObjects.outline);
-              }
-              break;
-          }
-
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: updatedProjectObjects,
-            },
-          };
-        });
-      },
-
-      // Language-aware data access methods
-      getItemDataInLanguage: (projectId: string, category: StoryObjectCategory, itemId: string, language: string) => {
-        const item = get().getItemByCategoryAndId(projectId, category, itemId);
-        if (!item?.versions || !item.activeVersionId) return null;
-
-        const activeVersion = item.versions.find((v: ObjectVersion) => v.versionId === item.activeVersionId);
-        if (!activeVersion?.data) return null;
-
-        return activeVersion.data[language] || null;
-      },
-
-      hasItemDataInLanguage: (projectId: string, category: StoryObjectCategory, itemId: string, language: string) => {
-        const item = get().getItemByCategoryAndId(projectId, category, itemId);
-        if (!item?.versions || !item.activeVersionId) return false;
-
-        const activeVersion = item.versions.find((v: ObjectVersion) => v.versionId === item.activeVersionId);
-        if (!activeVersion?.data) return false;
-
-        return language in activeVersion.data;
-      },
-
-      getAvailableLanguagesForItem: (projectId: string, category: StoryObjectCategory, itemId: string) => {
-        const item = get().getItemByCategoryAndId(projectId, category, itemId);
-        if (!item?.versions || !item.activeVersionId) return [];
-
-        const activeVersion = item.versions.find((v: ObjectVersion) => v.versionId === item.activeVersionId);
-        if (!activeVersion?.data || typeof activeVersion.data !== 'object') return [];
-
-        return Object.keys(activeVersion.data);
-      },
-
-      addTranslatedDataToItem: (projectId: string, category: StoryObjectCategory, itemId: string, language: string, translatedData: any) => {
-        set((state) => {
-          const projectObjects = state.storyObjectsByProject[projectId] || createEmptyStoryObjects();
-
-          const updateItemTranslation = (item: any) => {
-            if (!item || item.id !== itemId) return item;
-
-            const activeVersion = item.versions.find((v: ObjectVersion) => v.versionId === item.activeVersionId);
-            if (!activeVersion) return item;
-
-            // Add translated data to active version
-            const updatedVersions = item.versions.map((v: ObjectVersion) =>
-              v.versionId === item.activeVersionId
-                ? {
-                    ...v,
-                    data: {
-                      ...v.data,
-                      [language]: translatedData,
-                    },
-                  }
-                : v
-            );
-
-            return {
-              ...item,
-              versions: updatedVersions,
-              updatedAt: new Date(),
-            };
-          };
-
-          let updatedProjectObjects = { ...projectObjects };
-
-          switch (category) {
-            case 'basicInfo':
-              if (updatedProjectObjects.basicInfo) {
-                updatedProjectObjects.basicInfo = updateItemTranslation(updatedProjectObjects.basicInfo);
-              }
-              break;
-            case 'character':
-              updatedProjectObjects.characters = updatedProjectObjects.characters.map(updateItemTranslation);
-              break;
-            case 'organization':
-              updatedProjectObjects.organizations = updatedProjectObjects.organizations.map(updateItemTranslation);
-              break;
-            case 'location':
-              updatedProjectObjects.locations = updatedProjectObjects.locations.map(updateItemTranslation);
-              break;
-            case 'lorebook':
-              updatedProjectObjects.lorebook = updatedProjectObjects.lorebook.map(updateItemTranslation);
-              break;
-            case 'outline':
-              if (updatedProjectObjects.outline) {
-                updatedProjectObjects.outline = updateItemTranslation(updatedProjectObjects.outline);
-              }
-              break;
-            case 'act':
-              if (updatedProjectObjects.outline) {
-                updatedProjectObjects.outline = {
-                  ...updatedProjectObjects.outline,
-                  acts: updatedProjectObjects.outline.acts.map(updateItemTranslation),
-                };
-              }
-              break;
-            case 'chapter':
-              if (updatedProjectObjects.outline) {
-                updatedProjectObjects.outline = {
-                  ...updatedProjectObjects.outline,
-                  acts: updatedProjectObjects.outline.acts.map((act) => ({
-                    ...act,
-                    chapters: act.chapters.map(updateItemTranslation),
-                  })),
-                };
-              }
-              break;
-          }
-
-          return {
-            storyObjectsByProject: {
-              ...state.storyObjectsByProject,
-              [projectId]: updatedProjectObjects,
-            },
-          };
-        });
-      },
-
-      syncFlatFieldsWithLanguage: (projectId: string, category: StoryObjectCategory, itemId: string, language: string) => {
-        const languageData = get().getItemDataInLanguage(projectId, category, itemId, language);
-        if (!languageData) return;
-
-        // Update the flat fields based on category
-        switch (category) {
-          case 'basicInfo':
-            if (languageData.title !== undefined && languageData.logline !== undefined && languageData.genre !== undefined) {
-              const item = get().getItemByCategoryAndId(projectId, category, itemId);
-              if (item) {
-                set((state) => ({
-                  storyObjectsByProject: {
-                    ...state.storyObjectsByProject,
-                    [projectId]: {
-                      ...state.storyObjectsByProject[projectId],
-                      basicInfo: {
-                        ...item,
-                        title: languageData.title,
-                        logline: languageData.logline,
-                        genre: languageData.genre,
-                      },
-                    },
-                  },
-                }));
-              }
-            }
-            break;
-          case 'character':
-          case 'organization':
-          case 'location':
-          case 'lorebook':
-            if (languageData.name !== undefined && languageData.description !== undefined) {
-              const item = get().getItemByCategoryAndId(projectId, category, itemId);
-              if (item) {
-                const categoryKey = category === 'character' ? 'characters' :
-                                   category === 'organization' ? 'organizations' :
-                                   category === 'location' ? 'locations' : 'lorebook';
-
-                set((state) => ({
-                  storyObjectsByProject: {
-                    ...state.storyObjectsByProject,
-                    [projectId]: {
-                      ...state.storyObjectsByProject[projectId],
-                      [categoryKey]: state.storyObjectsByProject[projectId][categoryKey].map((i: any) =>
-                        i.id === itemId ? { ...i, name: languageData.name, description: languageData.description } : i
-                      ),
-                    },
-                  },
-                }));
-              }
-            }
-            break;
-        }
-      },
-
-      getPreviousVersionDataInLanguage: (projectId: string, category: StoryObjectCategory, itemId: string, language: string) => {
-        const item = get().getItemByCategoryAndId(projectId, category, itemId);
-        if (!item?.versions || !item.activeVersionId) return null;
-
-        // Find all versions that have data in the target language, excluding the current active version
-        const versionsWithLanguage = item.versions
-          .filter((v: ObjectVersion) =>
-            v.versionId !== item.activeVersionId &&
-            v.data &&
-            typeof v.data === 'object' &&
-            language in v.data
-          )
-          .sort((a: ObjectVersion, b: ObjectVersion) =>
-            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-          );
-
-        // Return the most recent version's data in the target language
-        if (versionsWithLanguage.length > 0) {
-          return versionsWithLanguage[0].data[language];
-        }
-
-        return null;
-      },
-    }),
-    {
-      name: 'story-object-storage',
-      storage: {
-        getItem: (name) => {
-          const str = localStorage.getItem(name);
-          if (!str) return null;
-          try {
-            const parsed = JSON.parse(str);
-            // Convert date strings back to Date objects for all story objects
-            if (parsed.state?.storyObjectsByProject) {
-              Object.keys(parsed.state.storyObjectsByProject).forEach((projectId) => {
-                const projectObjects = parsed.state.storyObjectsByProject[projectId];
-                
-                // Convert BasicInfo dates and ensure version fields
-                if (projectObjects.basicInfo) {
-                  projectObjects.basicInfo.createdAt = new Date(projectObjects.basicInfo.createdAt);
-                  projectObjects.basicInfo.updatedAt = new Date(projectObjects.basicInfo.updatedAt);
-                  if (projectObjects.basicInfo.versions) {
-                    projectObjects.basicInfo.versions = projectObjects.basicInfo.versions.map((v: any) => ({
-                      ...v,
-                      timestamp: new Date(v.timestamp),
-                    }));
-                  }
-                  projectObjects.basicInfo = ensureVersionFields(projectObjects.basicInfo);
-                }
-                
-                // Convert array items dates and ensure version fields
-                ['characters', 'organizations', 'locations', 'lorebook'].forEach((category) => {
-                  if (projectObjects[category]) {
-                    projectObjects[category] = projectObjects[category].map((item: any) => {
-                      const processedItem = {
-                        ...item,
-                        createdAt: new Date(item.createdAt),
-                        updatedAt: new Date(item.updatedAt),
-                        versions: item.versions ? item.versions.map((v: any) => ({
-                          ...v,
-                          timestamp: new Date(v.timestamp),
-                        })) : [],
-                      };
-                      return ensureVersionFields(processedItem);
-                    });
-                  }
-                });
-                
-                // Convert Outline dates (acts and chapters) and ensure version fields
-                if (projectObjects.outline) {
-                  projectObjects.outline.createdAt = new Date(projectObjects.outline.createdAt);
-                  projectObjects.outline.updatedAt = new Date(projectObjects.outline.updatedAt);
-                  if (projectObjects.outline.versions) {
-                    projectObjects.outline.versions = projectObjects.outline.versions.map((v: any) => ({
-                      ...v,
-                      timestamp: new Date(v.timestamp),
-                    }));
-                  }
-                  
-                  if (projectObjects.outline.acts) {
-                    projectObjects.outline.acts = projectObjects.outline.acts.map((act: any) => {
-                      const processedAct = {
-                        ...act,
-                        createdAt: new Date(act.createdAt),
-                        updatedAt: new Date(act.updatedAt),
-                        versions: act.versions ? act.versions.map((v: any) => ({
-                          ...v,
-                          timestamp: new Date(v.timestamp),
-                        })) : [],
-                        chapters: act.chapters?.map((chapter: any) => {
-                          const processedChapter = {
-                            ...chapter,
-                            createdAt: new Date(chapter.createdAt),
-                            updatedAt: new Date(chapter.updatedAt),
-                            versions: chapter.versions ? chapter.versions.map((v: any) => ({
-                              ...v,
-                              timestamp: new Date(v.timestamp),
-                            })) : [],
-                          };
-                          return ensureVersionFields(processedChapter);
-                        }) || [],
-                      };
-                      return ensureVersionFields(processedAct);
-                    });
-                  }
-                  
-                  projectObjects.outline = ensureVersionFields(projectObjects.outline);
-                }
-              });
-            }
-            return parsed;
-          } catch {
-            return null;
-          }
-        },
-        setItem: (name, value) => {
-          localStorage.setItem(name, JSON.stringify(value));
-        },
-        removeItem: (name) => {
-          localStorage.removeItem(name);
-        },
-      },
+const createEmptyStoryObjects = (): StoryObjects => ({
+  basicInfo: null,
+  characters: [],
+  organizations: [],
+  locations: [],
+  lorebook: [],
+  outline: null,
+});
+
+// Helper to convert backend response to frontend type
+const convertBasicInfo = (response: BasicInfoResponse): BasicInfo => response as BasicInfo;
+const convertNameDescription = (response: NameDescriptionResponse): NameDescriptionItem =>
+  response as NameDescriptionItem;
+const convertChapter = (response: ChapterResponse): Chapter => response as Chapter;
+const convertAct = (response: ActResponse): Act => ({
+  ...response,
+  chapters: response.chapters || [],
+});
+const convertOutline = (response: OutlineResponse): Outline => ({
+  ...response,
+  acts: response.acts?.map(convertAct) || [],
+});
+
+export const useStoryObjectStore = create<StoryObjectStore>()((set, get) => ({
+  storyObjectsByProject: {},
+  isLoading: false,
+  error: null,
+
+  // Fetch all story objects for a project
+  fetchStoryObjects: async (projectId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      // Fetch all story objects in parallel
+      // Note: 404 errors for outline and basicInfo are expected and handled silently
+      await Promise.all([
+        get().fetchBasicInfo(projectId),
+        get().fetchCharacters(projectId),
+        get().fetchOrganizations(projectId),
+        get().fetchLocations(projectId),
+        get().fetchLorebook(projectId),
+        get().fetchOutline(projectId),
+      ]);
+      set({ isLoading: false });
+    } catch (error) {
+      // Only set error for non-404 errors (404s are handled in individual fetch methods)
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch story objects',
+      });
     }
-  )
-);
+  },
+
+  // Basic Info Actions
+  fetchBasicInfo: async (projectId: string) => {
+    try {
+      const response = await storyObjectService.basicInfo.get(projectId);
+      const basicInfo = convertBasicInfo(response);
+
+      set((state) => ({
+        storyObjectsByProject: {
+          ...state.storyObjectsByProject,
+          [projectId]: {
+            ...(state.storyObjectsByProject[projectId] || createEmptyStoryObjects()),
+            basicInfo,
+          },
+        },
+      }));
+    } catch (error: any) {
+      // 404 is expected if basic info doesn't exist yet
+      if (error?.status !== 404) {
+        throw error;
+      }
+    }
+  },
+
+  createBasicInfo: async (projectId: string, title: string, logline: string, genre: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+      const response = await storyObjectService.basicInfo.create(projectId, {
+        title,
+        logline,
+        genre,
+        language: primaryLanguage,
+      });
+      const basicInfo = convertBasicInfo(response);
+
+      set((state) => ({
+        storyObjectsByProject: {
+          ...state.storyObjectsByProject,
+          [projectId]: {
+            ...(state.storyObjectsByProject[projectId] || createEmptyStoryObjects()),
+            basicInfo,
+          },
+        },
+        isLoading: false,
+      }));
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to create basic info',
+      });
+      throw error;
+    }
+  },
+
+  updateBasicInfo: async (
+    projectId: string,
+    updates: { title?: string; logline?: string; genre?: string },
+    language?: string
+  ) => {
+    set({ isLoading: true, error: null });
+    try {
+      const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+      const response = await storyObjectService.basicInfo.update(projectId, {
+        ...updates,
+        language: language || primaryLanguage,
+      });
+      const basicInfo = convertBasicInfo(response);
+
+      set((state) => ({
+        storyObjectsByProject: {
+          ...state.storyObjectsByProject,
+          [projectId]: {
+            ...(state.storyObjectsByProject[projectId] || createEmptyStoryObjects()),
+            basicInfo,
+          },
+        },
+        isLoading: false,
+      }));
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to update basic info',
+      });
+      throw error;
+    }
+  },
+
+  getBasicInfo: (projectId: string) => {
+    return get().storyObjectsByProject[projectId]?.basicInfo || null;
+  },
+
+  // Character Actions
+  fetchCharacters: async (projectId: string) => {
+    try {
+      const response = await storyObjectService.characters.list(projectId);
+      const characters = Array.isArray(response) ? response.map(convertNameDescription) : [];
+
+      set((state) => ({
+        storyObjectsByProject: {
+          ...state.storyObjectsByProject,
+          [projectId]: {
+            ...(state.storyObjectsByProject[projectId] || createEmptyStoryObjects()),
+            characters,
+          },
+        },
+      }));
+    } catch (error) {
+      console.error('Failed to fetch characters:', error);
+    }
+  },
+
+  addCharacter: async (projectId: string, name: string, description: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+      const response = await storyObjectService.characters.create(projectId, {
+        name,
+        description,
+        language: primaryLanguage,
+      });
+      const character = convertNameDescription(response);
+
+      set((state) => ({
+        storyObjectsByProject: {
+          ...state.storyObjectsByProject,
+          [projectId]: {
+            ...(state.storyObjectsByProject[projectId] || createEmptyStoryObjects()),
+            characters: [
+              ...(state.storyObjectsByProject[projectId]?.characters || []),
+              character,
+            ],
+          },
+        },
+        isLoading: false,
+      }));
+
+      return character;
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to add character',
+      });
+      throw error;
+    }
+  },
+
+  updateCharacter: async (
+    projectId: string,
+    id: string,
+    updates: { name?: string; description?: string }
+  ) => {
+    set({ isLoading: true, error: null });
+    try {
+      const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+      const response = await storyObjectService.characters.update(projectId, id, {
+        ...updates,
+        language: primaryLanguage,
+      });
+      const character = convertNameDescription(response);
+
+      set((state) => ({
+        storyObjectsByProject: {
+          ...state.storyObjectsByProject,
+          [projectId]: {
+            ...(state.storyObjectsByProject[projectId] || createEmptyStoryObjects()),
+            characters:
+              state.storyObjectsByProject[projectId]?.characters.map((c) =>
+                c.id === id ? character : c
+              ) || [],
+          },
+        },
+        isLoading: false,
+      }));
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to update character',
+      });
+      throw error;
+    }
+  },
+
+  deleteCharacter: async (projectId: string, id: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      await storyObjectService.characters.delete(projectId, id);
+
+      set((state) => ({
+        storyObjectsByProject: {
+          ...state.storyObjectsByProject,
+          [projectId]: {
+            ...(state.storyObjectsByProject[projectId] || createEmptyStoryObjects()),
+            characters:
+              state.storyObjectsByProject[projectId]?.characters.filter((c) => c.id !== id) ||
+              [],
+          },
+        },
+        isLoading: false,
+      }));
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to delete character',
+      });
+      throw error;
+    }
+  },
+
+  getCharacters: (projectId: string) => {
+    return get().storyObjectsByProject[projectId]?.characters || [];
+  },
+
+  // Organization Actions
+  fetchOrganizations: async (projectId: string) => {
+    try {
+      const response = await storyObjectService.organizations.list(projectId);
+      const organizations = Array.isArray(response) ? response.map(convertNameDescription) : [];
+
+      set((state) => ({
+        storyObjectsByProject: {
+          ...state.storyObjectsByProject,
+          [projectId]: {
+            ...(state.storyObjectsByProject[projectId] || createEmptyStoryObjects()),
+            organizations,
+          },
+        },
+      }));
+    } catch (error) {
+      console.error('Failed to fetch organizations:', error);
+    }
+  },
+
+  addOrganization: async (projectId: string, name: string, description: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+      const response = await storyObjectService.organizations.create(projectId, {
+        name,
+        description,
+        language: primaryLanguage,
+      });
+      const organization = convertNameDescription(response);
+
+      set((state) => ({
+        storyObjectsByProject: {
+          ...state.storyObjectsByProject,
+          [projectId]: {
+            ...(state.storyObjectsByProject[projectId] || createEmptyStoryObjects()),
+            organizations: [
+              ...(state.storyObjectsByProject[projectId]?.organizations || []),
+              organization,
+            ],
+          },
+        },
+        isLoading: false,
+      }));
+
+      return organization;
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to add organization',
+      });
+      throw error;
+    }
+  },
+
+  updateOrganization: async (
+    projectId: string,
+    id: string,
+    updates: { name?: string; description?: string }
+  ) => {
+    set({ isLoading: true, error: null });
+    try {
+      const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+      // Note: Backend doesn't have update for organizations yet, would need to add
+      // For now, throw error
+      throw new Error('Update organization not implemented in backend');
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to update organization',
+      });
+      throw error;
+    }
+  },
+
+  deleteOrganization: async (projectId: string, id: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      // Note: Backend doesn't have delete for organizations yet
+      throw new Error('Delete organization not implemented in backend');
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to delete organization',
+      });
+      throw error;
+    }
+  },
+
+  getOrganizations: (projectId: string) => {
+    return get().storyObjectsByProject[projectId]?.organizations || [];
+  },
+
+  // Location Actions
+  fetchLocations: async (projectId: string) => {
+    try {
+      const response = await storyObjectService.locations.list(projectId);
+      const locations = Array.isArray(response) ? response.map(convertNameDescription) : [];
+
+      set((state) => ({
+        storyObjectsByProject: {
+          ...state.storyObjectsByProject,
+          [projectId]: {
+            ...(state.storyObjectsByProject[projectId] || createEmptyStoryObjects()),
+            locations,
+          },
+        },
+      }));
+    } catch (error) {
+      console.error('Failed to fetch locations:', error);
+    }
+  },
+
+  addLocation: async (projectId: string, name: string, description: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+      const response = await storyObjectService.locations.create(projectId, {
+        name,
+        description,
+        language: primaryLanguage,
+      });
+      const location = convertNameDescription(response);
+
+      set((state) => ({
+        storyObjectsByProject: {
+          ...state.storyObjectsByProject,
+          [projectId]: {
+            ...(state.storyObjectsByProject[projectId] || createEmptyStoryObjects()),
+            locations: [
+              ...(state.storyObjectsByProject[projectId]?.locations || []),
+              location,
+            ],
+          },
+        },
+        isLoading: false,
+      }));
+
+      return location;
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to add location',
+      });
+      throw error;
+    }
+  },
+
+  updateLocation: async (
+    projectId: string,
+    id: string,
+    updates: { name?: string; description?: string }
+  ) => {
+    set({ isLoading: true, error: null });
+    try {
+      // Note: Backend doesn't have update for locations yet
+      throw new Error('Update location not implemented in backend');
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to update location',
+      });
+      throw error;
+    }
+  },
+
+  deleteLocation: async (projectId: string, id: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      // Note: Backend doesn't have delete for locations yet
+      throw new Error('Delete location not implemented in backend');
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to delete location',
+      });
+      throw error;
+    }
+  },
+
+  getLocations: (projectId: string) => {
+    return get().storyObjectsByProject[projectId]?.locations || [];
+  },
+
+  // Lorebook Actions
+  fetchLorebook: async (projectId: string) => {
+    try {
+      const response = await storyObjectService.lorebook.list(projectId);
+      const lorebook = Array.isArray(response) ? response.map(convertNameDescription) : [];
+
+      set((state) => ({
+        storyObjectsByProject: {
+          ...state.storyObjectsByProject,
+          [projectId]: {
+            ...(state.storyObjectsByProject[projectId] || createEmptyStoryObjects()),
+            lorebook,
+          },
+        },
+      }));
+    } catch (error) {
+      console.error('Failed to fetch lorebook:', error);
+    }
+  },
+
+  addLorebookEntry: async (projectId: string, name: string, description: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+      const response = await storyObjectService.lorebook.create(projectId, {
+        name,
+        description,
+        language: primaryLanguage,
+      });
+      const entry = convertNameDescription(response);
+
+      set((state) => ({
+        storyObjectsByProject: {
+          ...state.storyObjectsByProject,
+          [projectId]: {
+            ...(state.storyObjectsByProject[projectId] || createEmptyStoryObjects()),
+            lorebook: [...(state.storyObjectsByProject[projectId]?.lorebook || []), entry],
+          },
+        },
+        isLoading: false,
+      }));
+
+      return entry;
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to add lorebook entry',
+      });
+      throw error;
+    }
+  },
+
+  updateLorebookEntry: async (
+    projectId: string,
+    id: string,
+    updates: { name?: string; description?: string }
+  ) => {
+    set({ isLoading: true, error: null });
+    try {
+      // Note: Backend doesn't have update for lorebook yet
+      throw new Error('Update lorebook entry not implemented in backend');
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to update lorebook entry',
+      });
+      throw error;
+    }
+  },
+
+  deleteLorebookEntry: async (projectId: string, id: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      // Note: Backend doesn't have delete for lorebook yet
+      throw new Error('Delete lorebook entry not implemented in backend');
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to delete lorebook entry',
+      });
+      throw error;
+    }
+  },
+
+  getLorebookEntries: (projectId: string) => {
+    return get().storyObjectsByProject[projectId]?.lorebook || [];
+  },
+
+  // Outline Actions
+  fetchOutline: async (projectId: string) => {
+    try {
+      const response = await storyObjectService.outline.get(projectId);
+      const outline = convertOutline(response);
+
+      set((state) => ({
+        storyObjectsByProject: {
+          ...state.storyObjectsByProject,
+          [projectId]: {
+            ...(state.storyObjectsByProject[projectId] || createEmptyStoryObjects()),
+            outline,
+          },
+        },
+      }));
+    } catch (error: any) {
+      // 404 is expected if outline doesn't exist yet
+      if (error?.status !== 404) {
+        console.error('Failed to fetch outline:', error);
+      }
+    }
+  },
+
+  createOutline: async (projectId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await storyObjectService.outline.create(projectId);
+      const outline = convertOutline(response);
+
+      set((state) => ({
+        storyObjectsByProject: {
+          ...state.storyObjectsByProject,
+          [projectId]: {
+            ...(state.storyObjectsByProject[projectId] || createEmptyStoryObjects()),
+            outline,
+          },
+        },
+        isLoading: false,
+      }));
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to create outline',
+      });
+      throw error;
+    }
+  },
+
+  getOutline: (projectId: string) => {
+    return get().storyObjectsByProject[projectId]?.outline || null;
+  },
+
+  // Act Actions
+  addAct: async (projectId: string, name: string, description: string, order: number) => {
+    set({ isLoading: true, error: null });
+    try {
+      const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+      const response = await storyObjectService.acts.create(projectId, {
+        name,
+        description,
+        order,
+        language: primaryLanguage,
+      });
+      const act = convertAct(response);
+
+      // Refetch outline to get updated acts
+      await get().fetchOutline(projectId);
+
+      set({ isLoading: false });
+      return act;
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to add act',
+      });
+      throw error;
+    }
+  },
+
+  updateAct: async (
+    projectId: string,
+    actId: string,
+    updates: { name?: string; description?: string; order?: number }
+  ) => {
+    set({ isLoading: true, error: null });
+    try {
+      const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+      await storyObjectService.acts.update(projectId, actId, {
+        ...updates,
+        language: primaryLanguage,
+      });
+
+      // Refetch outline to get updated acts
+      await get().fetchOutline(projectId);
+
+      set({ isLoading: false });
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to update act',
+      });
+      throw error;
+    }
+  },
+
+  deleteAct: async (projectId: string, actId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      await storyObjectService.acts.delete(projectId, actId);
+
+      // Refetch outline to get updated acts
+      await get().fetchOutline(projectId);
+
+      set({ isLoading: false });
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to delete act',
+      });
+      throw error;
+    }
+  },
+
+  getActById: (projectId: string, actId: string) => {
+    const outline = get().storyObjectsByProject[projectId]?.outline;
+    return outline?.acts.find((act) => act.id === actId) || null;
+  },
+
+  // Chapter Actions
+  addChapter: async (
+    projectId: string,
+    actId: string,
+    name: string,
+    description: string,
+    order: number
+  ) => {
+    set({ isLoading: true, error: null });
+    try {
+      const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+      const response = await storyObjectService.chapters.create(projectId, actId, {
+        name,
+        description,
+        order,
+        language: primaryLanguage,
+      });
+      const chapter = convertChapter(response);
+
+      // Refetch outline to get updated chapters
+      await get().fetchOutline(projectId);
+
+      set({ isLoading: false });
+      return chapter;
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to add chapter',
+      });
+      throw error;
+    }
+  },
+
+  updateChapter: async (
+    projectId: string,
+    chapterId: string,
+    updates: { name?: string; description?: string; order?: number }
+  ) => {
+    set({ isLoading: true, error: null });
+    try {
+      const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
+      await storyObjectService.chapters.update(projectId, chapterId, {
+        ...updates,
+        language: primaryLanguage,
+      });
+
+      // Refetch outline to get updated chapters
+      await get().fetchOutline(projectId);
+
+      set({ isLoading: false });
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to update chapter',
+      });
+      throw error;
+    }
+  },
+
+  deleteChapter: async (projectId: string, chapterId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      await storyObjectService.chapters.delete(projectId, chapterId);
+
+      // Refetch outline to get updated chapters
+      await get().fetchOutline(projectId);
+
+      set({ isLoading: false });
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to delete chapter',
+      });
+      throw error;
+    }
+  },
+
+  getChapterById: (projectId: string, chapterId: string) => {
+    const outline = get().storyObjectsByProject[projectId]?.outline;
+    if (!outline) return null;
+
+    for (const act of outline.acts) {
+      const chapter = act.chapters.find((ch) => ch.id === chapterId);
+      if (chapter) return chapter;
+    }
+    return null;
+  },
+
+  // Utility Actions
+  getStoryObjects: (projectId: string) => {
+    return get().storyObjectsByProject[projectId] || createEmptyStoryObjects();
+  },
+
+  clearStoryObjects: (projectId: string) => {
+    set((state) => ({
+      storyObjectsByProject: {
+        ...state.storyObjectsByProject,
+        [projectId]: createEmptyStoryObjects(),
+      },
+    }));
+  },
+
+  clearError: () => {
+    set({ error: null });
+  },
+
+  // Translation support (stub implementations - currently story objects use flat structure)
+  getItemDataInLanguage: (projectId: string, category: string, itemId: string, language: string) => {
+    const storyObjects = get().storyObjectsByProject[projectId];
+    if (!storyObjects) return null;
+
+    // Get the item based on category
+    let item: any = null;
+    if (category === 'basicInfo') {
+      item = storyObjects.basicInfo;
+    } else if (category === 'character') {
+      item = storyObjects.characters.find((c) => c.id === itemId);
+    } else if (category === 'organization') {
+      item = storyObjects.organizations.find((o) => o.id === itemId);
+    } else if (category === 'location') {
+      item = storyObjects.locations.find((l) => l.id === itemId);
+    } else if (category === 'lorebook') {
+      item = storyObjects.lorebook.find((l) => l.id === itemId);
+    }
+
+    if (!item) return null;
+
+    // Return flat structure as language data (stub)
+    if (category === 'basicInfo') {
+      return { title: item.title, logline: item.logline, genre: item.genre };
+    } else {
+      return { name: item.name, description: item.description };
+    }
+  },
+
+  hasItemDataInLanguage: (projectId: string, category: string, itemId: string, language: string) => {
+    const data = get().getItemDataInLanguage(projectId, category, itemId, language);
+    return data !== null;
+  },
+
+  getAvailableLanguagesForItem: (projectId: string, category: string, itemId: string) => {
+    const { settings } = useSettingsStore.getState();
+    // For now, return primary language as the only available language
+    // In future, this should query version data for actual available languages
+    return [settings.primaryLanguage];
+  },
+
+  addTranslatedDataToItem: (projectId: string, category: string, itemId: string, language: string, data: any) => {
+    // Stub: In current flat structure, we don't store translations separately
+    // This would need full version support to work properly
+    console.warn('Translation storage not yet implemented for story objects');
+  },
+
+  getPreviousVersionDataInLanguage: (projectId: string, category: string, itemId: string, language: string) => {
+    // Stub: No version history in current implementation
+    return null;
+  },
+
+  syncFlatFieldsWithLanguage: (projectId: string, category: string, itemId: string, language: string) => {
+    // Stub: In the current flat structure, fields are already in sync
+    // This would be used to sync flat fields (e.g., title, logline) with version data
+    // when full multilingual version support is implemented
+    // For now, this is a no-op since we store directly in flat fields
+  },
+}));

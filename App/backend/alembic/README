@@ -1,0 +1,26 @@
+Generic single-database configuration for Alembic migrations.
+
+This directory contains database migration scripts for the Novel Generator application.
+
+## Common Commands
+
+# Create a new migration (auto-generate from model changes)
+alembic revision --autogenerate -m "description of changes"
+
+# Create a blank migration
+alembic revision -m "description"
+
+# Apply all pending migrations
+alembic upgrade head
+
+# Downgrade one revision
+alembic downgrade -1
+
+# Show current revision
+alembic current
+
+# Show migration history
+alembic history
+
+# Downgrade to a specific revision
+alembic downgrade <revision_id>
