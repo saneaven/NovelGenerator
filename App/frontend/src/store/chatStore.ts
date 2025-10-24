@@ -43,6 +43,7 @@ interface ChatStore {
   fetchMessages: (projectId: string, chatId: string) => Promise<void>;
   addMessage: (projectId: string, chatId: string, message: ChatMessage, language: string) => Promise<string>;
   updateMessage: (projectId: string, chatId: string, messageId: string, content: string, language: string) => Promise<void>;
+  updateMessageContentLocal: (projectId: string, chatId: string, messageId: string, content: string, language: string) => void;
   getMessages: (projectId: string, chatId: string, language: string) => ChatMessage[];
   deleteMessage: (projectId: string, chatId: string, messageId: string) => Promise<void>;
 
@@ -332,6 +333,33 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       });
       throw error;
     }
+  },
+
+  updateMessageContentLocal: (projectId: string, chatId: string, messageId: string, content: string, language: string) => {
+    set((state) => ({
+      chatsByProject: {
+        ...state.chatsByProject,
+        [projectId]:
+          state.chatsByProject[projectId]?.map((chat) =>
+            chat.id === chatId
+              ? {
+                  ...chat,
+                  messages: chat.messages.map((msg) =>
+                    msg.id === messageId
+                      ? {
+                          ...msg,
+                          data: {
+                            ...msg.data,
+                            [language]: { content }
+                          }
+                        }
+                      : msg
+                  ),
+                }
+              : chat
+          ) || [],
+      },
+    }));
   },
 
   getMessages: (projectId: string, chatId: string, language: string) => {

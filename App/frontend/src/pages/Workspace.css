@@ -168,6 +168,7 @@
 
 /* ===== Story Tabs ===== */
 .story-tabs-container {
+    padding-top: var(--spacing-sm);
     position: relative;
     background: var(--color-surface-subtle);
     border-bottom: 2px solid var(--color-border-default);
@@ -569,15 +570,15 @@
 
 .add-button,
 .save-button {
-    background: var(--color-accent-500);
+    background: var(--color-secondary-main);
     color: var(--color-text-inverse);
-    border-color: var(--color-accent-500);
+    border-color: var(--color-secondary-main);
 }
 
 .add-button:hover:not(:disabled),
 .save-button:hover:not(:disabled) {
-    background: var(--color-accent-600);
-    border-color: var(--color-accent-600);
+    background: var(--color-secondary-500);
+    border-color: var(--color-secondary-500);
     transform: translateY(-2px);
     box-shadow: var(--shadow-md);
 }

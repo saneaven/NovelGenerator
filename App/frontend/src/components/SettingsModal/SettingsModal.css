@@ -262,7 +262,7 @@
 }
 
 .function-tab.active {
-    background: var(--gradient-primary);
+    background: var(--gradient-accent);
     border-color: var(--color-primary-main);
     color: var(--color-text-inverse);
     box-shadow: var(--shadow-lg);
@@ -532,7 +532,7 @@
     top: 0;
     bottom: 0;
     width: 4px;
-    background: var(--gradient-primary);
+    background: var(--gradient-accent);
     opacity: 0;
     transition: opacity var(--transition-base);
 }
@@ -596,7 +596,7 @@
 }
 
 .checkbox-label input[type="checkbox"]:checked {
-    background: var(--gradient-primary);
+    background: var(--gradient-accent);
     border-color: var(--color-primary-main);
     box-shadow: var(--shadow-focus-primary);
 }
@@ -1371,7 +1371,7 @@
 
 .btn-primary {
     padding: 12px 28px;
-    background: var(--gradient-primary);
+    background: var(--gradient-accent);
     color: var(--color-text-inverse);
     border: none;
     border-radius: 8px;
@@ -1383,7 +1383,7 @@
 }
 
 .btn-primary:hover {
-    background: var(--gradient-primary);
+    background: var(--gradient-accent);
     box-shadow: var(--shadow-lg);
     transform: translateY(-1px);
     filter: brightness(0.95);

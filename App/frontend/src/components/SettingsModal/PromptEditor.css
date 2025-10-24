@@ -431,7 +431,7 @@
 
 /* Button Overrides for Prompt Editors */
 .prompt-editor .btn-primary {
-    background: var(--gradient-primary);
+    background: var(--gradient-accent);
     color: var(--color-text-inverse);
     border: none;
     padding: 8px 16px;

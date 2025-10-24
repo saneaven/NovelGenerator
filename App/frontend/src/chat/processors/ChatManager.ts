@@ -144,7 +144,7 @@ export class ChatManager {
     );
 
     // Pre-process messages
-    const { conversationBlocks, functions } = this.config.chatPipeline.preProcess(
+    const { conversationBlocks, functions } = await this.config.chatPipeline.preProcess(
       chatHistory.slice(0, -1),
       context,
       language,

@@ -14,7 +14,8 @@
 
 /* ===== Root & Body ===== */
 html {
-  font-size: 16px;
+  /* Fluid scaling: 12px at 1920px viewport, 16px at 3840px viewport, 14px at 1440px */
+  font-size: clamp(12px, calc(8px + 0.2083vw), 16px);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;

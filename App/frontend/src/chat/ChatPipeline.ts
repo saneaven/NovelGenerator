@@ -28,13 +28,13 @@ export class ChatPipeline {
   }
 
   // Pre-process messages before sending to AI
-  preProcess(
+  async preProcess(
     messages: ChatMessage[],
     context: ChatPipelineContext,
     conversationLanguage?: string,
     functions?: FunctionCallSchema[]
   ) {
-    return this.preProcessor.process(messages, context, conversationLanguage, functions);
+    return await this.preProcessor.process(messages, context, conversationLanguage, functions);
   }
 
   // Post-process AI response

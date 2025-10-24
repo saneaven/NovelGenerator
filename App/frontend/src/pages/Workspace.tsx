@@ -39,6 +39,7 @@ const Workspace: React.FC = () =>
     const {
         addMessage,
         updateMessage,
+        updateMessageContentLocal,
         getMessages,
         getSelectedChatId,
         fetchChats,
@@ -78,7 +79,7 @@ const Workspace: React.FC = () =>
     const chatManagerCallbacks = useMemo<ChatManagerCallbacks>(() => ({
         onUpdateMessage: (projId, chatId, messageId, content, language) =>
         {
-            updateMessage(projId, chatId, messageId, content, language);
+            updateMessageContentLocal(projId, chatId, messageId, content, language);
         },
         onFunctionCalls: (_projId, _chatId, messageId, functionCalls) =>
         {
@@ -98,7 +99,7 @@ const Workspace: React.FC = () =>
         {
             handleFunctionCallsDetected(messageId, functionCalls);
         },
-    }), [updateMessage, handleFunctionCalls, addMessage, getMessages, showError, handleFunctionCallsDetected]);
+    }), [updateMessageContentLocal, handleFunctionCalls, addMessage, getMessages, showError, handleFunctionCallsDetected]);
 
     const chatManager = useMemo(() =>
     {

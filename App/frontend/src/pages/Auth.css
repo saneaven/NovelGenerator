@@ -39,7 +39,7 @@
 .auth-shape.shape-1 {
     width: 500px;
     height: 500px;
-    background: var(--gradient-primary);
+    background: var(--gradient-accent);
     top: -250px;
     left: -250px;
     animation-delay: 0s;
@@ -128,7 +128,7 @@
     width: 64px;
     height: 64px;
     margin: 0 auto var(--spacing-xl);
-    background: var(--gradient-primary);
+    background: var(--gradient-accent);
     border-radius: var(--radius-lg);
     display: flex;
     align-items: center;
@@ -328,7 +328,7 @@
 .auth-submit {
     margin-top: var(--spacing-sm);
     padding: var(--spacing-lg);
-    background: var(--gradient-primary);
+    background: var(--gradient-accent);
     border: none;
     border-radius: var(--radius-md);
     color: var(--color-text-inverse);

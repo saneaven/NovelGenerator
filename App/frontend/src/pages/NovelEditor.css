@@ -976,7 +976,7 @@
 }
 
 .toolbar-btn.ai-edit-btn {
-    background: var(--gradient-primary);
+    background: var(--gradient-accent);
     color: var(--color-text-inverse);
     border-color: var(--color-primary-main);
     box-shadow: 0 2px 4px rgba(106, 90, 205, 0.2);

@@ -44,7 +44,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: var(--gradient-primary);
+    background: var(--gradient-accent);
     opacity: 0;
     transition: opacity var(--transition-base);
     pointer-events: none;

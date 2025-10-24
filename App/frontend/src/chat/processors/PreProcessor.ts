@@ -11,19 +11,19 @@ import { SystemPromptManager, PromptType, type ChatSystemPromptContext } from '.
 import { PrefillManager, PrefillType, type ChatAssistantPrefillContext } from '../managers/PrefillManager';
 
 export class DefaultPreProcessor implements PreProcessor {
-  process(
+  async process(
     messages: ChatMessage[],
     context: ChatPipelineContext,
     conversationLanguage?: string,
     functions?: FunctionCallSchema[]
-  ): PreProcessingResult {
+  ): Promise<PreProcessingResult> {
     const processedMessages: ProcessedChatMessage[] = [];
     const conversationBlocks: ConversationBlock[] = [];
 
     // Add comprehensive system prompt
     conversationBlocks.push({
       role: 'system',
-      content: this.generateSystemPrompt(context, conversationLanguage, functions)
+      content: await this.generateSystemPrompt(context, conversationLanguage, functions)
     });
 
     // Process existing messages
@@ -74,7 +74,7 @@ export class DefaultPreProcessor implements PreProcessor {
     };
   }
 
-  private generateSystemPrompt(context: ChatPipelineContext, conversationLanguage?: string, functions?: FunctionCallSchema[]): string {
+  private async generateSystemPrompt(context: ChatPipelineContext, conversationLanguage?: string, functions?: FunctionCallSchema[]): Promise<string> {
     const promptContext: ChatSystemPromptContext = {
       mode: context.mode,
       outputLanguage: conversationLanguage,
@@ -83,7 +83,7 @@ export class DefaultPreProcessor implements PreProcessor {
       enableThinking: context.enableThinking,
     };
 
-    return SystemPromptManager.generatePrompt(PromptType.CHAT_SYSTEM, promptContext);
+    return await SystemPromptManager.generatePrompt(PromptType.CHAT_SYSTEM, promptContext);
   }
 
   private generatePrefill(context: ChatPipelineContext, conversationLanguage?: string, functions?: FunctionCallSchema[]): string {

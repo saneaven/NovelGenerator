@@ -63,7 +63,7 @@ export interface PreProcessor {
     context: ChatPipelineContext,
     conversationLanguage?: string,
     functions?: FunctionCallSchema[]
-  ): PreProcessingResult;
+  ): Promise<PreProcessingResult>;
 }
 
 export interface PostProcessor {

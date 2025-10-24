@@ -227,7 +227,7 @@
 }
 
 .form-actions button[type="submit"] {
-    background: var(--gradient-primary);
+    background: var(--gradient-accent);
     color: var(--color-text-inverse);
 }
 
@@ -542,7 +542,7 @@
 }
 
 .tab-button.active {
-    background: var(--gradient-primary);
+    background: var(--gradient-accent);
     color: var(--color-text-inverse);
     box-shadow: var(--shadow-lg);
 }

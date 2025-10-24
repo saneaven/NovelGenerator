@@ -110,7 +110,7 @@
     --color-border-focus: #3b82f6;
 
     /* ===== Gradient Definitions ===== */
-    --gradient-primary: linear-gradient(in oklch 135deg, var(--color-primary-200) 0%, var(--color-primary-300) 100%);
+    --gradient-accent: linear-gradient(in oklch 135deg, var(--color-primary-200) 0%, var(--color-primary-300) 100%);
     --gradient-secondary: linear-gradient(in oklch 135deg, var(--color-secondary-100) 0%, var(--color-secondary-100) 0%, var(--color-secondary-200) 100%);
     --gradient-accent: linear-gradient(in oklch 135deg, var(--color-accent-300) 0%, var(--color-accent-400) 100%);
     --gradient-surface: linear-gradient(in oklch 135deg, var(--color-neutral-50) 0%, var(--color-neutral-100) 100%);
@@ -294,7 +294,7 @@
     --color-primary-900: oklch(0.820 0.050 240.3);
     --color-primary-950: oklch(0.900 0.027 240.3);
 
-    --color-primary-main: var(--color-primary-500);
+    --color-primary-main: var(--color-primary-800);
 
     /* Secondary (inverted) */
     --color-secondary-50: oklch(0.330 0.020 117.0);
@@ -309,7 +309,7 @@
     --color-secondary-900: oklch(0.888 0.055 117.0);
     --color-secondary-950: oklch(0.950 0.055 117.0);
 
-    --color-secondary-main: var(--color-secondary-700);
+    --color-secondary-main: var(--color-secondary-800);
 
     /* Accent - Green (inverted) */
     --color-accent-50: oklch(0.330 0.045 23.0);
@@ -384,8 +384,8 @@
 
     /* ===== Gradients - Adjusted for Dark Mode ===== */
     --gradient-primary: linear-gradient(in oklch 135deg, var(--color-primary-200) 0%, var(--color-primary-300) 100%);
-    --gradient-secondary: linear-gradient(in oklch 135deg, var(--color-secondary-700) 0%, var(--color-secondary-700) 100%);
-    --gradient-accent: linear-gradient(in oklch 135deg, var(--color-accent-500) 0%, var(--color-accent-700) 100%);
+    --gradient-secondary: linear-gradient(in oklch 135deg, var(--color-secondary-700) 0%, var(--color-secondary-800) 100%);
+    --gradient-accent: linear-gradient(in oklch 135deg, var(--color-accent-700) 0%, var(--color-primary-900) 100%);
     --gradient-surface: linear-gradient(in oklch 135deg, var(--color-neutral-100) 0%, var(--color-neutral-200) 100%);
     --gradient-overlay: linear-gradient(in oklch 180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.3) 100%);
 
