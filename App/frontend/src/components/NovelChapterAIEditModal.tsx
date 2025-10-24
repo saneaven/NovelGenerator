@@ -6,6 +6,7 @@ import { streamChat } from '../llm_request/llmService';
 import type { ConversationBlock } from '../llm_request/types';
 import type { StoryObjects } from '../types/storyObject';
 import { SystemPromptManager, PromptType, type ChapterEditPromptContext } from '../chat/managers/SystemPromptManager';
+import { PrefillManager, PrefillType, type ChapterEditPrefillContext } from '../chat/managers/PrefillManager';
 
 interface NovelContextOptions {
   basicInfo: boolean;
@@ -153,14 +154,18 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
     currentContent: string,
     chapterName: string,
     userRequest: string,
-    outputLanguage?: string
+    outputLanguage?: string,
+    enablePrefill?: boolean,
+    enableThinking?: boolean
   ): string => {
     const promptContext: ChapterEditPromptContext = {
       chapterName,
       currentContent,
       userRequest,
       contextData: context,
-      outputLanguage
+      outputLanguage,
+      enablePrefill,
+      enableThinking
     };
 
     return SystemPromptManager.generatePrompt(PromptType.CHAPTER_EDIT, promptContext);
@@ -180,6 +185,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
       const storyObjects = storyObjectStore.getStoryObjects(projectId);
       const currentChapterContent = novelStore.getChapterContent(projectId, chapterId);
       const currentContent = currentChapterContent?.content || '';
+      const chapterGenConfig = settingsStore.getFunctionConfig('chapterGen');
 
       // Generate context and system prompt
       const context = generateNovelContext(storyObjects);
@@ -188,7 +194,9 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         currentContent,
         chapterName,
         userRequest,
-        settingsStore.settings.outputLanguage
+        settingsStore.settings.outputLanguage,
+        chapterGenConfig.advanced.enablePrefill,
+        chapterGenConfig.advanced.enableThinking
       );
 
       const messages: ConversationBlock[] = [
@@ -196,19 +204,30 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         { role: 'user', content: userRequest },
       ];
 
-      let fullResponse = '';
+      // Add prefill if enabled
+      if (chapterGenConfig.advanced.enablePrefill) {
+        const prefillContext: ChapterEditPrefillContext = {
+          chapterName,
+          outputLanguage: settingsStore.settings.primaryLanguage
+        };
+        const prefill = PrefillManager.generatePrefill(PrefillType.CHAPTER_EDIT_ASSISTANT, prefillContext);
+        if (prefill && prefill.trim().length > 0) {
+          messages.push({ role: 'assistant', content: prefill });
+        }
+      }
 
-      const provider = settingsStore.settings.activeProvider;
-      const providerConfig = settingsStore.settings.providers[provider];
+      let fullResponse = '';
+      const providerConfig = settingsStore.getProviderConfig(chapterGenConfig.provider);
 
       for await (const chunk of streamChat(
         messages,
-        provider,
+        chapterGenConfig.provider,
         providerConfig,
         {
           signal: abortControllerRef.current.signal,
-          temperature: 0.7,
-          model: settingsStore.settings.aiModel,
+          temperature: chapterGenConfig.temperature,
+          model: chapterGenConfig.model,
+          providerPreference: chapterGenConfig.providerPreference,
         }
       )) {
         if (typeof chunk === 'string') {

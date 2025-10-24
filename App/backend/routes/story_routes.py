@@ -3,7 +3,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 import uuid
-from datetime import datetime
 
 from ..database import get_db
 from ..models.db_models import (
@@ -985,6 +984,10 @@ async def create_chapter_content(
     db.add(version)
     db.commit()
     db.refresh(chapter_content)
+    db.refresh(version)
+
+    # Force load versions relationship
+    chapter_content.versions  # type: ignore
 
     return chapter_content
 
@@ -997,6 +1000,8 @@ async def get_chapter_content(
     db: Session = Depends(get_db)
 ):
     """Get chapter content with all versions"""
+    print(f"[Backend] get_chapter_content called: project_id={project_id}, chapter_id={chapter_id}")
+
     project = await verify_project_access(project_id, current_user, db)
 
     chapter = db.query(Chapter).join(Act).join(Outline).filter(
@@ -1012,10 +1017,18 @@ async def get_chapter_content(
 
     content = db.query(ChapterContent).filter(ChapterContent.chapter_id == chapter_id).first()
     if not content:
+        print(f"[Backend] No chapter content found for chapter_id={chapter_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Chapter content not found"
         )
+
+    # Explicitly load the versions relationship to ensure it's in the response
+    _ = content.versions  # Trigger lazy load
+
+    print(f"[Backend] Returning content: id={content.id}, versions_count={len(content.versions)}, active_version_id={content.active_version_id}")
+    for v in content.versions:
+        print(f"[Backend]   Version: id={v.id}, isActive={v.is_active}, languages={list(v.data.keys())}")
 
     return content
 
@@ -1028,7 +1041,9 @@ async def update_chapter_content(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Update chapter content"""
+    """Update chapter content (creates if doesn't exist)"""
+    print(f"[Backend] update_chapter_content called: project_id={project_id}, chapter_id={chapter_id}, language={data.language}, content_length={len(data.content)}")
+
     project = await verify_project_access(project_id, current_user, db)
 
     chapter = db.query(Chapter).join(Act).join(Outline).filter(
@@ -1043,37 +1058,418 @@ async def update_chapter_content(
         )
 
     content = db.query(ChapterContent).filter(ChapterContent.chapter_id == chapter_id).first()
+    print(f"[Backend] Chapter content found: {content is not None}")
+
+    # If content doesn't exist, create it (PUT should be idempotent)
+    if not content:
+        print("[Backend] Creating new chapter content...")
+        version_id = uuid.uuid4()
+        word_count = len(data.content.split())
+
+        content = ChapterContent(
+            id=uuid.uuid4(),
+            chapter_id=chapter_id,
+            active_version_id=version_id
+        )
+
+        db.add(content)
+        db.flush()
+
+        # Create initial version
+        version = ChapterContentVersion(
+            id=version_id,
+            chapter_content_id=content.id,
+            user_request=data.userRequest,
+            is_active=True,
+            data={
+                data.language: {
+                    'content': data.content,
+                    'wordCount': word_count
+                }
+            }
+        )
+
+        db.add(version)
+        db.commit()
+        db.refresh(content)
+        db.refresh(version)
+
+        # Force load versions relationship
+        content.versions  # type: ignore
+
+        print(f"[Backend] New chapter content created successfully: content_id={content.id}, version_id={version_id}")
+        return content
+
+    # Get the current active version to preserve existing language data
+    print(f"[Backend] Updating existing chapter content... create_new_version={data.create_new_version}")
+    current_version = db.query(ChapterContentVersion).filter(
+        ChapterContentVersion.chapter_content_id == content.id,
+        ChapterContentVersion.is_active == True  # type: ignore
+    ).first()
+
+    # Start with existing language data or empty dict
+    version_data: dict = {}
+    if current_version:
+        # JSONB field returns dict at runtime
+        existing_data = current_version.data  # type: ignore
+        if existing_data:  # type: ignore
+            version_data = dict(existing_data)  # type: ignore
+
+    print(f"[Backend] Current version data languages: {list(version_data.keys())}")
+
+    word_count = len(data.content.split())
+
+    # Update the specific language while preserving others
+    version_data[data.language] = {
+        'content': data.content,
+        'wordCount': word_count
+    }
+
+    if data.create_new_version:
+        # Create new version
+        print("[Backend] Creating new version...")
+        version_id = uuid.uuid4()
+
+        # Deactivate old versions using bulk update
+        db.query(ChapterContentVersion).filter(
+            ChapterContentVersion.chapter_content_id == content.id
+        ).update({'is_active': False}, synchronize_session=False)
+
+        # Flush to execute the bulk update before creating new version
+        db.flush()
+
+        # Expire the content object to ensure versions are reloaded
+        db.expire(content, ['versions'])
+
+        # Create new version
+        version = ChapterContentVersion(
+            id=version_id,
+            chapter_content_id=content.id,
+            user_request=data.userRequest,
+            is_active=True,
+            data=version_data
+        )
+
+        # Update active_version_id
+        content.active_version_id = version_id  # type: ignore
+
+        db.add(version)
+        db.flush()
+
+        # Commit the transaction
+        db.commit()
+
+        # Refresh to get the latest state and explicitly load versions
+        db.refresh(content)
+        db.refresh(version)
+
+        # Force reload versions to ensure we get the updated list
+        content.versions  # type: ignore
+
+        print(f"[Backend] New version created: content_id={content.id}, version_id={version_id}, languages={list(version_data.keys())}")
+    else:
+        # Update existing active version in place
+        print("[Backend] Updating existing active version in place...")
+        if not current_version:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active version found to update"
+            )
+
+        # Update the version data and user request
+        current_version.data = version_data  # type: ignore
+        current_version.user_request = data.userRequest  # type: ignore
+
+        db.commit()
+        db.refresh(content)
+
+        # Force reload versions
+        content.versions  # type: ignore
+
+        print(f"[Backend] Active version updated in place: version_id={current_version.id}, languages={list(version_data.keys())}")
+
+    return content
+
+
+@router.patch("/chapters/{chapter_id}/content/versions/{version_id}/activate", response_model=ChapterContentResponse)
+async def set_active_chapter_version(
+    project_id: uuid.UUID,
+    chapter_id: uuid.UUID,
+    version_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Set a specific version as the active version for chapter content"""
+    print(f"[Backend] set_active_chapter_version called: project_id={project_id}, chapter_id={chapter_id}, version_id={version_id}")
+
+    project = await verify_project_access(project_id, current_user, db)
+
+    # Verify chapter exists and belongs to project
+    chapter = db.query(Chapter).join(Act).join(Outline).filter(
+        Chapter.id == chapter_id,
+        Outline.project_id == project_id
+    ).first()
+
+    if not chapter:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chapter not found"
+        )
+
+    # Get chapter content
+    content = db.query(ChapterContent).filter(ChapterContent.chapter_id == chapter_id).first()
     if not content:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Chapter content not found"
         )
 
-    # Create new version
-    version_id = uuid.uuid4()
-    word_count = len(data.content.split())
+    # Verify version exists and belongs to this content
+    version = db.query(ChapterContentVersion).filter(
+        ChapterContentVersion.id == version_id,
+        ChapterContentVersion.chapter_content_id == content.id
+    ).first()
 
-    # Deactivate old versions
+    if not version:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Version not found"
+        )
+
+    # Deactivate all versions for this content
     db.query(ChapterContentVersion).filter(
         ChapterContentVersion.chapter_content_id == content.id
-    ).update({'is_active': False})
+    ).update({'is_active': False}, synchronize_session=False)
 
-    version = ChapterContentVersion(
-        id=version_id,
-        chapter_content_id=content.id,
-        user_request=data.userRequest,
-        is_active=True,
-        data={
-            data.language: {
-                'content': data.content,
-                'wordCount': word_count
-            }
-        }
-    )
+    # Activate the selected version
+    version.is_active = True  # type: ignore
+    content.active_version_id = version_id  # type: ignore
 
-    content.active_version_id = version_id
-    db.add(version)
     db.commit()
     db.refresh(content)
 
+    # Force reload versions
+    _ = content.versions
+
+    print(f"[Backend] Version activated successfully: version_id={version_id}")
     return content
+
+
+# ============================================================================
+# VERSION MANAGEMENT FOR STORY OBJECTS
+# ============================================================================
+
+@router.get("/story-objects/{object_type}/{object_id}/versions", response_model=VersionListResponse)
+async def get_story_object_versions(
+    project_id: uuid.UUID,
+    object_type: str,
+    object_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all versions for a story object"""
+    project = await verify_project_access(project_id, current_user, db)
+
+    # Validate object_type
+    valid_types = ['basic_info', 'character', 'organization', 'location', 'lorebook', 'outline', 'act', 'chapter']
+    if object_type not in valid_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid object type. Must be one of: {', '.join(valid_types)}"
+        )
+
+    # Verify object exists and belongs to project
+    type_to_model = {
+        'basic_info': BasicInfo,
+        'character': Character,
+        'organization': Organization,
+        'location': Location,
+        'lorebook': LorebookEntry,
+        'outline': Outline,
+        'act': Act,
+        'chapter': Chapter
+    }
+
+    model_class = type_to_model[object_type]
+
+    # Query object based on type
+    if object_type == 'basic_info':
+        obj = db.query(model_class).filter(
+            model_class.id == object_id,
+            model_class.project_id == project_id
+        ).first()
+    elif object_type == 'outline':
+        obj = db.query(model_class).filter(
+            model_class.id == object_id,
+            model_class.project_id == project_id
+        ).first()
+    elif object_type in ['character', 'organization', 'location', 'lorebook']:
+        obj = db.query(model_class).filter(
+            model_class.id == object_id,
+            model_class.project_id == project_id
+        ).first()
+    elif object_type == 'act':
+        obj = db.query(model_class).join(Outline).filter(
+            model_class.id == object_id,
+            Outline.project_id == project_id
+        ).first()
+    elif object_type == 'chapter':
+        obj = db.query(model_class).join(Act).join(Outline).filter(
+            model_class.id == object_id,
+            Outline.project_id == project_id
+        ).first()
+
+    if not obj:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"{object_type.replace('_', ' ').title()} not found"
+        )
+
+    # Get all versions for this object
+    versions = db.query(StoryObjectVersion).filter(
+        StoryObjectVersion.object_id == object_id,
+        StoryObjectVersion.object_type == object_type
+    ).order_by(StoryObjectVersion.timestamp.desc()).all()
+
+    return VersionListResponse(
+        versions=versions,
+        total=len(versions)
+    )
+
+
+@router.patch("/story-objects/{object_type}/{object_id}/versions/{version_id}/activate", response_model=VersionResponse)
+async def activate_story_object_version(
+    project_id: uuid.UUID,
+    object_type: str,
+    object_id: uuid.UUID,
+    version_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Set a specific version as the active version for a story object"""
+    project = await verify_project_access(project_id, current_user, db)
+
+    # Validate object_type
+    valid_types = ['basic_info', 'character', 'organization', 'location', 'lorebook', 'outline', 'act', 'chapter']
+    if object_type not in valid_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid object type. Must be one of: {', '.join(valid_types)}"
+        )
+
+    # Verify version exists and belongs to this object
+    version = db.query(StoryObjectVersion).filter(
+        StoryObjectVersion.id == version_id,
+        StoryObjectVersion.object_id == object_id,
+        StoryObjectVersion.object_type == object_type
+    ).first()
+
+    if not version:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Version not found"
+        )
+
+    # Deactivate all versions for this object
+    db.query(StoryObjectVersion).filter(
+        StoryObjectVersion.object_id == object_id,
+        StoryObjectVersion.object_type == object_type
+    ).update({'is_active': False}, synchronize_session=False)
+
+    # Activate the selected version
+    version.is_active = True
+
+    # Update the active_version_id on the parent object
+    type_to_model = {
+        'basic_info': BasicInfo,
+        'character': Character,
+        'organization': Organization,
+        'location': Location,
+        'lorebook': LorebookEntry,
+        'outline': Outline,
+        'act': Act,
+        'chapter': Chapter
+    }
+
+    model_class = type_to_model[object_type]
+    obj = db.query(model_class).filter(model_class.id == object_id).first()
+    if obj:
+        obj.active_version_id = version_id
+
+        # Also update the flat fields with the version data
+        # Get the first available language data from the version
+        version_data = version.data  # type: ignore
+        if version_data:
+            # Get first language's data
+            first_lang_data = next(iter(version_data.values()), {})
+
+            if object_type == 'basic_info':
+                obj.title = first_lang_data.get('title')
+                obj.logline = first_lang_data.get('logline')
+                obj.genre = first_lang_data.get('genre')
+            elif object_type in ['character', 'organization', 'location', 'lorebook', 'act', 'chapter']:
+                obj.name = first_lang_data.get('name')
+                obj.description = first_lang_data.get('description')
+
+    db.commit()
+    db.refresh(version)
+
+    return version
+
+
+@router.delete("/story-objects/{object_type}/{object_id}/versions/{version_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_story_object_version(
+    project_id: uuid.UUID,
+    object_type: str,
+    object_id: uuid.UUID,
+    version_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a specific version of a story object"""
+    project = await verify_project_access(project_id, current_user, db)
+
+    # Validate object_type
+    valid_types = ['basic_info', 'character', 'organization', 'location', 'lorebook', 'outline', 'act', 'chapter']
+    if object_type not in valid_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid object type. Must be one of: {', '.join(valid_types)}"
+        )
+
+    # Verify version exists and belongs to this object
+    version = db.query(StoryObjectVersion).filter(
+        StoryObjectVersion.id == version_id,
+        StoryObjectVersion.object_id == object_id,
+        StoryObjectVersion.object_type == object_type
+    ).first()
+
+    if not version:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Version not found"
+        )
+
+    # Prevent deletion of active version
+    if version.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete the active version. Please activate another version first."
+        )
+
+    # Check if this is the last version
+    version_count = db.query(StoryObjectVersion).filter(
+        StoryObjectVersion.object_id == object_id,
+        StoryObjectVersion.object_type == object_type
+    ).count()
+
+    if version_count <= 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete the last remaining version"
+        )
+
+    db.delete(version)
+    db.commit()
+
+    return None

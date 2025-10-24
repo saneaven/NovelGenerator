@@ -4,7 +4,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--overlay-dark-heavy);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -12,9 +12,9 @@
 }
 
 .error-modal {
-  background: white;
+  background: var(--color-surface-elevated);
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-md);
   width: 90%;
   max-width: 500px;
   min-width: 300px;

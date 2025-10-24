@@ -15,7 +15,7 @@ import { useErrorStore } from '../store/errorStore';
 
 import ChatSidebar from '../components/ChatSidebar';
 import ErrorModal from '../components/ErrorModal';
-import SettingsModal from '../components/SettingsModal';
+import SettingsModal from '../components/SettingsModal/SettingsModal';
 import ChatPanel from './workspace/components/ChatPanel';
 import NovelEditorPanel from './noveleditor/components/NovelEditorPanel';
 
@@ -49,7 +49,7 @@ const NovelEditor: React.FC = () =>
     const { settings } = useSettingsStore();
     const { currentError, showError, hideError } = useErrorStore();
 
-    const { state: uiState, actions: uiActions } = useNovelEditorState();
+    const { state: uiState, actions: uiActions } = useNovelEditorState(projectId);
 
     // Fetch projects if not loaded
     useEffect(() => {
@@ -87,9 +87,9 @@ const NovelEditor: React.FC = () =>
         {
             handleFunctionCalls(messageId, functionCalls);
         },
-        onAddMessage: (projId, chatId, message, language) =>
+        onAddMessage: async (projId, chatId, message, language) =>
         {
-            addMessage(projId, chatId, message, language);
+            return await addMessage(projId, chatId, message, language);
         },
         onGetChatHistory: (projId, chatId, language) => getMessages(projId, chatId, language),
         onError: (error) =>
@@ -106,6 +106,7 @@ const NovelEditor: React.FC = () =>
     const chatManager = useMemo(() =>
     {
         const activeProjectId = projectId ?? '';
+        const chatConfig = settings.functionConfigs.chat;
         return new ChatManager(
             {
                 projectId: activeProjectId,
@@ -123,11 +124,15 @@ const NovelEditor: React.FC = () =>
                     return getSelectedChatId(activeProjectId);
                 },
                 getConversationLanguage: () => settings.primaryLanguage,
-                aiModel: settings.aiModel,
-                provider: settings.activeProvider,
-                providerConfig: settings.providers[settings.activeProvider],
+                aiModel: chatConfig.model,
+                temperature: chatConfig.temperature,
+                provider: chatConfig.provider,
+                providerConfig: settings.providerCredentials[chatConfig.provider],
+                providerPreference: chatConfig.providerPreference,
                 functions: NOVEL_EDITOR_FUNCTIONS,
                 mode: 'novel-editor',
+                enablePrefill: chatConfig.advanced.enablePrefill,
+                enableThinking: chatConfig.advanced.enableThinking,
             },
             chatManagerCallbacks
         );
@@ -141,7 +146,8 @@ const NovelEditor: React.FC = () =>
         uiActions.setIsLoading,
         uiState.selectedChatId,
         settings.primaryLanguage,
-        settings.aiModel,
+        settings.functionConfigs.chat,
+        settings.providerCredentials,
         getSelectedChatId,
         chatManagerCallbacks,
     ]);

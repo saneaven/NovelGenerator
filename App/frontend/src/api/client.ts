@@ -83,8 +83,25 @@ class ApiClient {
       const responseData = await response.json().catch(() => null);
 
       if (!response.ok) {
+        let errorMessage = responseData?.detail || response.statusText || 'Request failed';
+
+        // Format validation errors (422)
+        if (Array.isArray(errorMessage)) {
+          errorMessage = errorMessage.map(err =>
+            typeof err === 'object' ? `${err.loc?.join('.')}: ${err.msg}` : String(err)
+          ).join(', ');
+        }
+
+        console.error('API Error:', {
+          url,
+          method,
+          status: response.status,
+          message: errorMessage,
+          requestData: data,
+          responseData: responseData
+        });
         throw new ApiError(
-          responseData?.detail || response.statusText || 'Request failed',
+          errorMessage,
           response.status,
           responseData
         );

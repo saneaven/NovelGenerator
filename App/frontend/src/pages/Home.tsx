@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../store/projectStore';
 import { useAuthStore } from '../store/authStore';
-import SettingsModal from '../components/SettingsModal';
+import SettingsModal from '../components/SettingsModal/SettingsModal';
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
@@ -188,8 +188,8 @@ const Home: React.FC = () => {
                     Created: {new Date(project.created_at).toLocaleDateString()}
                   </p>
                 </div>
-                <button 
-                  className="delete-button"
+                <button
+                  className="project-delete-button"
                   onClick={(e) => handleDeleteProject(project.id, e)}
                   title="Delete project"
                 >

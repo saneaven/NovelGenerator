@@ -1,0 +1,448 @@
+/* ========================================
+   THEME SYSTEM - CSS CUSTOM PROPERTIES
+   Light & Dark Mode Support
+   ======================================== */
+
+/* ========================================
+   LIGHT THEME (Default)
+   ======================================== */
+
+:root {
+    /* ===== Color Palette ===== */
+
+    /* Primary */
+    --color-primary-950: oklch(0.457 0.064 56.7);
+    --color-primary-900: oklch(0.506 0.071 56.7);
+    --color-primary-800: oklch(0.556 0.078 56.7);
+    --color-primary-700: oklch(0.605 0.085 56.7);
+    --color-primary-600: oklch(0.654 0.092 56.7);
+    --color-primary-500: oklch(0.704 0.099 56.7);
+    --color-primary-400: oklch(0.753 0.100 56.7);
+    --color-primary-300: oklch(0.802 0.077 56.7);
+    --color-primary-200: oklch(0.851 0.055 56.7);
+    --color-primary-100: oklch(0.901 0.036 56.7);
+    --color-primary-50: oklch(0.950 0.017 56.7);
+
+    --color-primary-main: var(--color-primary-500);
+
+    /* Secondary - Blue (inverted from dark mode) */
+    --color-secondary-50: oklch(0.950 0.018 180.8);
+    --color-secondary-100: oklch(0.904 0.037 180.8);
+    --color-secondary-200: oklch(0.857 0.039 180.8);
+    --color-secondary-300: oklch(0.811 0.037 180.8);
+    --color-secondary-400: oklch(0.765 0.035 180.8);
+    --color-secondary-500: oklch(0.719 0.033 180.8);
+    --color-secondary-600: oklch(0.672 0.030 180.8);
+    --color-secondary-700: oklch(0.626 0.028 180.8);
+    --color-secondary-800: oklch(0.580 0.026 180.8);
+    --color-secondary-900: oklch(0.533 0.024 180.8);
+
+    --color-secondary-main: var(--color-secondary-700);
+
+    /* Accent - Green (inverted from dark mode) */
+    --color-accent-50: oklch(0.950 0.012 30.2);
+    --color-accent-100: oklch(0.882 0.031 30.2);
+    --color-accent-200: oklch(0.813 0.052 30.2);
+    --color-accent-300: oklch(0.745 0.076 30.2);
+    --color-accent-400: oklch(0.676 0.104 30.2);
+    --color-accent-500: oklch(0.608 0.119 30.2);
+    --color-accent-600: oklch(0.539 0.105 30.2);
+    --color-accent-700: oklch(0.471 0.092 30.2);
+    --color-accent-800: oklch(0.402 0.079 30.2);
+    --color-accent-900: oklch(0.334 0.065 30.2);
+    --color-accent-950: oklch(0.265 0.052 30.2);
+
+    /* Neutral Scale - Inverted from dark mode */
+    --color-neutral-0: oklch(0.98 0.005 271.4);
+    --color-neutral-50: oklch(0.873 0.007 271.4);
+    --color-neutral-100: oklch(0.793 0.011 271.4);
+    --color-neutral-200: oklch(0.713 0.016 271.4);
+    --color-neutral-300: oklch(0.633 0.021 271.4);
+    --color-neutral-400: oklch(0.553 0.026 271.4);
+    --color-neutral-500: oklch(0.473 0.032 271.4);
+    --color-neutral-600: oklch(0.393 0.027 271.4);
+    --color-neutral-700: oklch(0.313 0.021 271.4);
+    --color-neutral-800: oklch(0.233 0.016 271.4);
+    --color-neutral-900: oklch(0.153 0.010 271.4);
+    --color-neutral-950: oklch(0.073 0.004 271.4);
+    --color-neutral-1000: oklch(0.030 0.002 271.4);
+
+    /* Semantic Colors */
+    --color-success-light: #d1fae5;
+    --color-success: #10b981;
+    --color-success-dark: #047857;
+
+    --color-warning-light: #fef3c7;
+    --color-warning: #f59e0b;
+    --color-warning-dark: #d97706;
+
+    --color-error-light: #fee2e2;
+    --color-error: #ef4444;
+    --color-error-dark: #dc2626;
+
+    --color-info-light: #dbeafe;
+    --color-info: #3b82f6;
+    --color-info-dark: #1d4ed8;
+
+    /* ===== Surface Colors ===== */
+    --color-surface-base: var(--color-neutral-0);
+    --color-surface-elevated: var(--color-neutral-0);
+    --color-surface-overlay: var(--color-neutral-0);
+    --color-surface-subtle: var(--color-neutral-50);
+    --color-surface-muted: var(--color-neutral-100);
+    --color-surface-hover: var(--color-neutral-50);
+
+    /* ===== Text Colors ===== */
+    --color-text-primary: var(--color-neutral-900);
+    --color-text-secondary: var(--color-neutral-700);
+    --color-text-tertiary: var(--color-neutral-500);
+    --color-text-muted: var(--color-neutral-400);
+    --color-text-disabled: var(--color-neutral-300);
+    --color-text-inverse: var(--color-neutral-0);
+    --color-text-link: #3b82f6;
+    --color-text-link-hover: #2563eb;
+
+    /* ===== Border Colors ===== */
+    --color-border-subtle: #f1f5f9;
+    --color-border-default: #e2e8f0;
+    --color-border-medium: #cbd5e1;
+    --color-border-strong: #94a3b8;
+    --color-border-focus: #3b82f6;
+
+    /* ===== Gradient Definitions ===== */
+    --gradient-primary: linear-gradient(in oklch 135deg, var(--color-primary-200) 0%, var(--color-primary-300) 100%);
+    --gradient-secondary: linear-gradient(in oklch 135deg, var(--color-secondary-100) 0%, var(--color-secondary-100) 0%, var(--color-secondary-200) 100%);
+    --gradient-accent: linear-gradient(in oklch 135deg, var(--color-accent-300) 0%, var(--color-accent-400) 100%);
+    --gradient-surface: linear-gradient(in oklch 135deg, var(--color-neutral-50) 0%, var(--color-neutral-100) 100%);
+    --gradient-overlay: linear-gradient(in oklch 180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.05) 100%);
+
+    /* ===== Shadow System ===== */
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1),
+        0 1px 2px rgba(0, 0, 0, 0.06);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07),
+        0 2px 4px rgba(0, 0, 0, 0.05);
+    --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1),
+        0 4px 6px rgba(0, 0, 0, 0.05);
+    --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.1),
+        0 8px 10px rgba(0, 0, 0, 0.04);
+    --shadow-2xl: 0 25px 50px rgba(0, 0, 0, 0.15);
+    --shadow-inner: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+    --shadow-focus: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    --shadow-focus-primary: 0 0 0 3px rgba(139, 92, 246, 0.15);
+
+    /* ===== Spacing Scale ===== */
+    --spacing-xs: 0.25rem;
+    /* 4px */
+    --spacing-sm: 0.5rem;
+    /* 8px */
+    --spacing-md: 0.75rem;
+    /* 12px */
+    --spacing-lg: 1rem;
+    /* 16px */
+    --spacing-xl: 1.5rem;
+    /* 24px */
+    --spacing-2xl: 2rem;
+    /* 32px */
+    --spacing-3xl: 3rem;
+    /* 48px */
+    --spacing-4xl: 4rem;
+    /* 64px */
+    --spacing-5xl: 6rem;
+    /* 96px */
+
+    /* ===== Typography Scale ===== */
+    --font-family-base: system-ui,
+        -apple-system,
+        'Segoe UI',
+        Roboto,
+        'Helvetica Neue',
+        Arial,
+        sans-serif;
+    --font-family-heading: system-ui,
+        -apple-system,
+        'Segoe UI',
+        Roboto,
+        'Helvetica Neue',
+        Arial,
+        sans-serif;
+    --font-family-mono: 'SF Mono',
+        'Monaco',
+        'Cascadia Code',
+        'Courier New',
+        monospace;
+    --font-family-content: 'Georgia',
+        'Times New Roman',
+        serif;
+
+    --font-size-xs: 0.75rem;
+    /* 12px */
+    --font-size-sm: 0.875rem;
+    /* 14px */
+    --font-size-base: 1rem;
+    /* 16px */
+    --font-size-lg: 1.125rem;
+    /* 18px */
+    --font-size-xl: 1.25rem;
+    /* 20px */
+    --font-size-2xl: 1.5rem;
+    /* 24px */
+    --font-size-3xl: 1.875rem;
+    /* 30px */
+    --font-size-4xl: 2.25rem;
+    /* 36px */
+    --font-size-5xl: 3rem;
+    /* 48px */
+
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+    --font-weight-extrabold: 800;
+
+    --line-height-tight: 1.25;
+    --line-height-normal: 1.5;
+    --line-height-relaxed: 1.75;
+    --line-height-loose: 2;
+
+    /* ===== Border Radius ===== */
+    --radius-sm: 0.375rem;
+    /* 6px */
+    --radius-md: 0.5rem;
+    /* 8px */
+    --radius-lg: 0.75rem;
+    /* 12px */
+    --radius-xl: 1rem;
+    /* 16px */
+    --radius-2xl: 1.5rem;
+    /* 24px */
+    --radius-full: 9999px;
+
+    /* ===== Transitions ===== */
+    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slower: 500ms cubic-bezier(0.4, 0, 0.2, 1);
+
+    --ease-in: cubic-bezier(0.4, 0, 1, 1);
+    --ease-out: cubic-bezier(0, 0, 0.2, 1);
+    --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* ===== Z-Index Layers ===== */
+    --z-base: 0;
+    --z-dropdown: 1000;
+    --z-sticky: 1010;
+    --z-fixed: 1020;
+    --z-overlay: 1030;
+    --z-modal: 1040;
+    --z-popover: 1050;
+    --z-tooltip: 1060;
+
+    /* ===== Breakpoints (for reference in JS) ===== */
+    --breakpoint-sm: 640px;
+    --breakpoint-md: 768px;
+    --breakpoint-lg: 1024px;
+    --breakpoint-xl: 1280px;
+    --breakpoint-2xl: 1536px;
+
+    /* ===== Container Widths ===== */
+    --container-sm: 640px;
+    --container-md: 768px;
+    --container-lg: 1024px;
+    --container-xl: 1280px;
+    --container-2xl: 1536px;
+
+    /* ===== Opacity Values ===== */
+    --opacity-disabled: 0.4;
+    --opacity-hover: 0.8;
+    --opacity-muted: 0.6;
+
+    /* ===== Overlay & Background Colors with Opacity ===== */
+    --overlay-dark-heavy: rgba(0, 0, 0, 0.5);
+    --overlay-dark-medium: rgba(0, 0, 0, 0.3);
+    --overlay-dark-light: rgba(0, 0, 0, 0.2);
+    --overlay-dark-subtle: rgba(0, 0, 0, 0.1);
+    --overlay-dark-faint: rgba(0, 0, 0, 0.05);
+    --overlay-dark-ghost: rgba(0, 0, 0, 0.04);
+
+    --overlay-light-heavy: rgba(255, 255, 255, 0.9);
+    --overlay-light-medium: rgba(255, 255, 255, 0.5);
+    --overlay-light-light: rgba(255, 255, 255, 0.3);
+    --overlay-light-subtle: rgba(255, 255, 255, 0.2);
+    --overlay-light-faint: rgba(255, 255, 255, 0.1);
+    --overlay-light-ghost: rgba(255, 255, 255, 0.05);
+}
+
+
+/* ========================================
+   DARK THEME
+   ======================================== */
+
+[data-theme="dark"] {
+    /* ===== Inverted Color Palette ===== */
+
+    /* Primary - Inverted */
+    --color-primary-50: oklch(0.100 0.012 240.3);
+    --color-primary-100: oklch(0.180 0.021 240.3);
+    --color-primary-200: oklch(0.260 0.030 240.3);
+    --color-primary-300: oklch(0.340 0.039 240.3);
+    --color-primary-400: oklch(0.420 0.048 240.3);
+    --color-primary-500: oklch(0.500 0.058 240.3);
+    --color-primary-600: oklch(0.580 0.067 240.3);
+    --color-primary-700: oklch(0.660 0.076 240.3);
+    --color-primary-800: oklch(0.740 0.075 240.3);
+    --color-primary-900: oklch(0.820 0.050 240.3);
+    --color-primary-950: oklch(0.900 0.027 240.3);
+
+    --color-primary-main: var(--color-primary-500);
+
+    /* Secondary (inverted) */
+    --color-secondary-50: oklch(0.330 0.020 117.0);
+    --color-secondary-100: oklch(0.392 0.024 117.0);
+    --color-secondary-200: oklch(0.454 0.028 117.0);
+    --color-secondary-300: oklch(0.516 0.032 117.0);
+    --color-secondary-400: oklch(0.578 0.036 117.0);
+    --color-secondary-500: oklch(0.640 0.040 117.0);
+    --color-secondary-600: oklch(0.702 0.043 117.0);
+    --color-secondary-700: oklch(0.764 0.047 117.0);
+    --color-secondary-800: oklch(0.826 0.051 117.0);
+    --color-secondary-900: oklch(0.888 0.055 117.0);
+    --color-secondary-950: oklch(0.950 0.055 117.0);
+
+    --color-secondary-main: var(--color-secondary-700);
+
+    /* Accent - Green (inverted) */
+    --color-accent-50: oklch(0.330 0.045 23.0);
+    --color-accent-100: oklch(0.392 0.054 23.0);
+    --color-accent-200: oklch(0.454 0.062 23.0);
+    --color-accent-300: oklch(0.516 0.071 23.0);
+    --color-accent-400: oklch(0.578 0.079 23.0);
+    --color-accent-500: oklch(0.640 0.084 23.0);
+    --color-accent-600: oklch(0.702 0.064 23.0);
+    --color-accent-700: oklch(0.764 0.048 23.0);
+    --color-accent-800: oklch(0.826 0.033 23.0);
+    --color-accent-900: oklch(0.888 0.020 23.0);
+    --color-accent-950: oklch(0.950 0.008 23.0);
+
+
+    /* Neutral Scale - Inverted for dark */
+    --color-neutral-00: oklch(0.050 0.001 55.0);
+    --color-neutral-50: oklch(0.100 0.003 55.0);
+    --color-neutral-100: oklch(0.180 0.006 55.0);
+    --color-neutral-200: oklch(0.260 0.009 55.0);
+    --color-neutral-300: oklch(0.340 0.011 55.0);
+    --color-neutral-400: oklch(0.420 0.014 55.0);
+    --color-neutral-500: oklch(0.500 0.017 55.0);
+    --color-neutral-600: oklch(0.580 0.020 55.0);
+    --color-neutral-700: oklch(0.660 0.022 55.0);
+    --color-neutral-800: oklch(0.740 0.025 55.0);
+    --color-neutral-900: oklch(0.820 0.016 55.0);
+    --color-neutral-950: oklch(0.900 0.008 55.0);
+    --color-neutral-1000: oklch(0.950 0.001 55.0);
+
+    /* Semantic Colors - dark mode */
+    --color-success-light: #065f46;
+    --color-success: #10b981;
+    --color-success-dark: #6ee7b7;
+
+    --color-warning-light: #92400e;
+    --color-warning: #f59e0b;
+    --color-warning-dark: #fbbf24;
+
+    --color-error-light: #991b1b;
+    --color-error: #ef4444;
+    --color-error-dark: #fca5a5;
+
+    --color-info-light: #1e40af;
+    --color-info: #3b82f6;
+    --color-info-dark: #93c5fd;
+
+    /* ===== Surface Colors - Dark Backgrounds ===== */
+    --color-surface-base: var(--color-neutral-200);
+    --color-surface-elevated: var(--color-neutral-300);
+    --color-surface-overlay: var(--color-neutral-400);
+    --color-surface-subtle: var(--color-neutral-500);
+    --color-surface-muted: var(--color-neutral-100);
+    --color-surface-hover: var(--color-neutral-700);
+
+    /* ===== Text Colors - Light on Dark ===== */
+    --color-text-primary: #f1f5f9;
+    --color-text-secondary: #cbd5e1;
+    --color-text-tertiary: #94a3b8;
+    --color-text-muted: #64748b;
+    --color-text-disabled: #475569;
+    --color-text-inverse: #0f172a;
+    --color-text-link: #60a5fa;
+    --color-text-link-hover: #93c5fd;
+
+    /* ===== Border Colors - Subtle on Dark ===== */
+    --color-border-subtle: #1e293b;
+    --color-border-default: #334155;
+    --color-border-medium: #475569;
+    --color-border-strong: #64748b;
+    --color-border-focus: #60a5fa;
+
+    /* ===== Gradients - Adjusted for Dark Mode ===== */
+    --gradient-primary: linear-gradient(in oklch 135deg, var(--color-primary-200) 0%, var(--color-primary-300) 100%);
+    --gradient-secondary: linear-gradient(in oklch 135deg, var(--color-secondary-700) 0%, var(--color-secondary-700) 100%);
+    --gradient-accent: linear-gradient(in oklch 135deg, var(--color-accent-500) 0%, var(--color-accent-700) 100%);
+    --gradient-surface: linear-gradient(in oklch 135deg, var(--color-neutral-100) 0%, var(--color-neutral-200) 100%);
+    --gradient-overlay: linear-gradient(in oklch 180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.3) 100%);
+
+    /* ===== Shadows - Subtle for dark mode ===== */
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.15);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2),
+        0 1px 2px rgba(0, 0, 0, 0.15);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.25),
+        0 2px 4px rgba(0, 0, 0, 0.15);
+    --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.3),
+        0 4px 6px rgba(0, 0, 0, 0.2);
+    --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.35),
+        0 8px 10px rgba(0, 0, 0, 0.25);
+    --shadow-2xl: 0 25px 50px rgba(0, 0, 0, 0.4);
+    --shadow-inner: inset 0 2px 4px rgba(0, 0, 0, 0.25);
+    --shadow-focus: 0 0 0 3px rgba(96, 165, 250, 0.15);
+    --shadow-focus-primary: 0 0 0 3px rgba(167, 139, 250, 0.2);
+
+    /* ===== Overlay & Background Colors with Opacity ===== */
+    --overlay-dark-heavy: rgba(0, 0, 0, 0.7);
+    --overlay-dark-medium: rgba(0, 0, 0, 0.5);
+    --overlay-dark-light: rgba(0, 0, 0, 0.3);
+    --overlay-dark-subtle: rgba(0, 0, 0, 0.2);
+    --overlay-dark-faint: rgba(0, 0, 0, 0.1);
+    --overlay-dark-ghost: rgba(0, 0, 0, 0.08);
+
+    --overlay-light-heavy: rgba(255, 255, 255, 0.2);
+    --overlay-light-medium: rgba(255, 255, 255, 0.15);
+    --overlay-light-light: rgba(255, 255, 255, 0.1);
+    --overlay-light-subtle: rgba(255, 255, 255, 0.08);
+    --overlay-light-faint: rgba(255, 255, 255, 0.05);
+    --overlay-light-ghost: rgba(255, 255, 255, 0.03);
+}
+
+
+/* ========================================
+   THEME TRANSITION
+   Smooth transition when switching themes
+   ======================================== */
+
+:root,
+[data-theme="dark"] {
+    color-scheme: light dark;
+}
+
+/* Apply smooth transitions to theme-dependent properties */
+*,
+*::before,
+*::after {
+    transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+    transition-duration: var(--transition-base);
+    transition-timing-function: var(--ease-in-out);
+}
+
+/* Disable transitions on page load to prevent flash */
+.no-transitions *,
+.no-transitions *::before,
+.no-transitions *::after {
+    transition: none !important;
+}

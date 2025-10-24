@@ -49,6 +49,20 @@ export const novelService = {
       data
     );
   },
+
+  /**
+   * Set active version for chapter content
+   */
+  async setActiveChapterVersion(
+    projectId: string,
+    chapterId: string,
+    versionId: string
+  ): Promise<ChapterContentResponse> {
+    return apiClient.patch<ChapterContentResponse>(
+      `/api/v1/projects/${projectId}/chapters/${chapterId}/content/versions/${versionId}/activate`,
+      {}
+    );
+  },
 };
 
 export default novelService;

@@ -1,6 +1,7 @@
 import type { StoryObjects, StoryObjectCategory } from '../types/storyObject';
 import type { ConversationBlock } from '../llm_request/types';
 import { SystemPromptManager, PromptType, type StoryObjectEditPromptContext } from '../chat/managers/SystemPromptManager';
+import { PrefillManager, PrefillType, type StoryObjectEditPrefillContext } from '../chat/managers/PrefillManager';
 
 export interface ContextOptions {
   basicInfo: boolean;
@@ -18,6 +19,8 @@ export interface AIEditRequest {
   contextOptions: ContextOptions;
   storyObjects: StoryObjects;
   outputLanguage?: string;
+  enablePrefill?: boolean;
+  enableThinking?: boolean;
 }
 
 export interface AIEditResult {
@@ -258,7 +261,9 @@ export class AIEditService {
     context: Record<string, any>,
     currentData: any,
     jsonSchema: any,
-    outputLanguage?: string
+    outputLanguage?: string,
+    enablePrefill?: boolean,
+    enableThinking?: boolean
   ): string {
     const promptContext: StoryObjectEditPromptContext = {
       category,
@@ -266,7 +271,9 @@ export class AIEditService {
       contextData: context,
       currentData,
       jsonSchema,
-      outputLanguage
+      outputLanguage,
+      enablePrefill,
+      enableThinking
     };
 
     return SystemPromptManager.generatePrompt(PromptType.STORY_OBJECT_EDIT, promptContext);
@@ -279,20 +286,35 @@ export class AIEditService {
     const context = this.generateContext(request.storyObjects, request.contextOptions);
     const currentData = this.getCurrentData(request.storyObjects, request.category, request.targetId);
     const jsonSchema = this.generateJSONSchema(request.category, request.targetId);
-    
+
     const systemPrompt = this.generateSystemPrompt(
       request.category,
       request.targetId,
       context,
       currentData,
       jsonSchema,
-      request.outputLanguage
+      request.outputLanguage,
+      request.enablePrefill,
+      request.enableThinking
     );
 
     const messages: ConversationBlock[] = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: request.userRequest },
     ];
+
+    // Add prefill if enabled
+    if (request.enablePrefill) {
+      const prefillContext: StoryObjectEditPrefillContext = {
+        category: request.category,
+        editScope: request.targetId ? 'a specific item' : 'the entire category',
+        outputLanguage: request.outputLanguage
+      };
+      const prefill = PrefillManager.generatePrefill(PrefillType.STORY_OBJECT_EDIT_ASSISTANT, prefillContext);
+      if (prefill && prefill.trim().length > 0) {
+        messages.push({ role: 'assistant', content: prefill });
+      }
+    }
 
     return {
       messages,

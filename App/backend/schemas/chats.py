@@ -22,6 +22,7 @@ class ChatResponse(BaseModel):
     name: str
     created_at: datetime
     updated_at: datetime
+    messages: Optional[List['MessageResponse']] = None
 
     class Config:
         from_attributes = True
@@ -39,6 +40,7 @@ class MessageUpdate(BaseModel):
     """Update message request"""
     content: str
     language: str = "English"
+    function_calls: Optional[List[Dict[str, Any]]] = None
 
 
 class MessageResponse(BaseModel):
@@ -58,3 +60,7 @@ class ChatWithMessagesResponse(BaseModel):
     """Chat with messages response"""
     chat: ChatResponse
     messages: List[MessageResponse]
+
+
+# Update forward references for ChatResponse
+ChatResponse.model_rebuild()

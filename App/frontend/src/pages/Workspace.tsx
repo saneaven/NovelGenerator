@@ -14,7 +14,7 @@ import { useErrorStore } from '../store/errorStore';
 
 import ChatSidebar from '../components/ChatSidebar';
 import ErrorModal from '../components/ErrorModal';
-import SettingsModal from '../components/SettingsModal';
+import SettingsModal from '../components/SettingsModal/SettingsModal';
 import ChatPanel from './workspace/components/ChatPanel';
 import StoryPanel from './workspace/components/StoryPanel';
 
@@ -84,9 +84,9 @@ const Workspace: React.FC = () =>
         {
             handleFunctionCalls(messageId, functionCalls);
         },
-        onAddMessage: (projId, chatId, message, language) =>
+        onAddMessage: async (projId, chatId, message, language) =>
         {
-            addMessage(projId, chatId, message, language);
+            return await addMessage(projId, chatId, message, language);
         },
         onGetChatHistory: (projId, chatId, language) => getMessages(projId, chatId, language),
         onError: (error) =>
@@ -103,6 +103,7 @@ const Workspace: React.FC = () =>
     const chatManager = useMemo(() =>
     {
         const activeProjectId = projectId ?? '';
+        const chatConfig = settings.functionConfigs.chat;
         return new ChatManager(
             {
                 projectId: activeProjectId,
@@ -119,11 +120,15 @@ const Workspace: React.FC = () =>
                     return getSelectedChatId(activeProjectId);
                 },
                 getConversationLanguage: () => settings.primaryLanguage,
-                aiModel: settings.aiModel,
-                provider: settings.activeProvider,
-                providerConfig: settings.providers[settings.activeProvider],
+                aiModel: chatConfig.model,
+                temperature: chatConfig.temperature,
+                provider: chatConfig.provider,
+                providerConfig: settings.providerCredentials[chatConfig.provider],
+                providerPreference: chatConfig.providerPreference,
                 functions: WORKSPACE_FUNCTIONS,
                 mode: 'workspace',
+                enablePrefill: chatConfig.advanced.enablePrefill,
+                enableThinking: chatConfig.advanced.enableThinking,
             },
             chatManagerCallbacks
         );
@@ -136,7 +141,8 @@ const Workspace: React.FC = () =>
         uiActions.setIsLoading,
         uiState.selectedChatId,
         settings.primaryLanguage,
-        settings.aiModel,
+        settings.functionConfigs.chat,
+        settings.providerCredentials,
         getSelectedChatId,
         chatManagerCallbacks,
     ]);

@@ -1,8 +1,12 @@
-/* Message Edit Styles */
+/* ========================================
+   MESSAGE EDIT STYLES
+   Clean, Focused Edit Interface
+   ======================================== */
+
 .message-edit-form {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--spacing-md);
   width: 100%;
 }
 
@@ -14,89 +18,111 @@
 .message-edit-textarea {
   width: 100%;
   max-width: 100%;
-  min-height: 80px;
-  max-height: 300px;
-  padding: 0.875rem;
-  border: 2px solid #e2e8f0;
-  border-radius: 8px;
+  min-height: 100px;
+  max-height: 400px;
+  padding: var(--spacing-lg);
+  border: 2px solid var(--color-border-default);
+  border-radius: var(--radius-md);
   font-family: inherit;
-  font-size: 0.875rem;
-  line-height: 1.5;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
   resize: vertical;
   outline: none;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
   box-sizing: border-box;
-  background: white;
-  color: #1e293b;
+  background: var(--color-surface-base);
+  color: var(--color-text-primary);
 }
 
 .message-edit-textarea:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: var(--color-accent-500);
+  box-shadow: var(--shadow-focus);
+  background: var(--color-surface-base);
 }
 
 .message-edit-textarea::placeholder {
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 
 .message-edit-buttons {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--spacing-md);
   justify-content: flex-end;
 }
 
 .save-edit-button,
 .cancel-edit-button {
-  padding: 0.5rem 1rem;
-  border: 1px solid;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 500;
+  padding: var(--spacing-md) var(--spacing-xl);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-sm);
 }
 
 .save-edit-button {
-  background: #10b981;
-  color: white;
-  border-color: #10b981;
+  background: var(--gradient-accent);
+  color: var(--color-text-inverse);
 }
 
 .save-edit-button:hover {
-  background: #059669;
-  border-color: #059669;
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.save-edit-button:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
 }
 
 .cancel-edit-button {
-  background: white;
-  color: #64748b;
-  border-color: #cbd5e1;
+  background: var(--color-surface-muted);
+  color: var(--color-text-tertiary);
+  border: 1px solid var(--color-border-default);
 }
 
 .cancel-edit-button:hover {
-  background: #f8fafc;
-  border-color: #94a3b8;
-  transform: translateY(-1px);
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-medium);
+  color: var(--color-text-secondary);
 }
 
-/* Mobile adjustments */
+/* ===== Mobile Responsive ===== */
 @media (max-width: 768px) {
   .message-edit-textarea {
-    min-height: 60px;
-    max-height: 200px;
-    padding: 0.75rem;
-    font-size: 0.875rem;
+    min-height: 80px;
+    max-height: 300px;
+    padding: var(--spacing-md);
+    font-size: var(--font-size-sm);
   }
-  
+
   .message-edit-buttons {
     flex-direction: column;
-    gap: 0.5rem;
+    gap: var(--spacing-sm);
   }
-  
+
   .save-edit-button,
   .cancel-edit-button {
     width: 100%;
     justify-content: center;
+    padding: var(--spacing-sm) var(--spacing-lg);
+  }
+}
+
+/* ===== Large Desktop ===== */
+@media (min-width: 1440px) {
+  .message-edit-textarea {
+    min-height: 120px;
+    max-height: 500px;
+    padding: var(--spacing-xl);
+    font-size: var(--font-size-lg);
+  }
+
+  .save-edit-button,
+  .cancel-edit-button {
+    padding: var(--spacing-lg) var(--spacing-2xl);
+    font-size: var(--font-size-base);
   }
 }

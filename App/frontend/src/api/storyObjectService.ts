@@ -17,6 +17,8 @@ import type {
   ChapterCreate,
   ChapterUpdate,
   ChapterResponse,
+  VersionResponse,
+  VersionListResponse,
 } from './types';
 
 export const storyObjectService = {
@@ -228,6 +230,54 @@ export const storyObjectService = {
     async delete(projectId: string, chapterId: string): Promise<void> {
       return apiClient.delete<void>(
         `/api/v1/projects/${projectId}/outline/chapters/${chapterId}`
+      );
+    },
+  },
+
+  // ============================================================================
+  // VERSION MANAGEMENT
+  // ============================================================================
+
+  versions: {
+    /**
+     * Get all versions for a story object
+     */
+    async list(
+      projectId: string,
+      objectType: string,
+      objectId: string
+    ): Promise<VersionListResponse> {
+      return apiClient.get<VersionListResponse>(
+        `/api/v1/projects/${projectId}/story-objects/${objectType}/${objectId}/versions`
+      );
+    },
+
+    /**
+     * Activate a specific version
+     */
+    async activate(
+      projectId: string,
+      objectType: string,
+      objectId: string,
+      versionId: string
+    ): Promise<VersionResponse> {
+      return apiClient.patch<VersionResponse>(
+        `/api/v1/projects/${projectId}/story-objects/${objectType}/${objectId}/versions/${versionId}/activate`,
+        {}
+      );
+    },
+
+    /**
+     * Delete a specific version
+     */
+    async delete(
+      projectId: string,
+      objectType: string,
+      objectId: string,
+      versionId: string
+    ): Promise<void> {
+      return apiClient.delete<void>(
+        `/api/v1/projects/${projectId}/story-objects/${objectType}/${objectId}/versions/${versionId}`
       );
     },
   },

@@ -1,0 +1,78 @@
+/* Syntax Highlighted Textarea Container */
+.syntax-highlighted-textarea-container {
+    position: relative;
+    width: 100%;
+    min-height: 200px;
+    border: 1px solid var(--color-border-default);
+    border-radius: 6px;
+    background: var(--color-surface-base);
+    overflow: hidden;
+    /* Clip border-radius */
+}
+
+/* Textarea - positioned below */
+.syntax-textarea {
+    position: relative;
+    width: 100%;
+    min-height: 200px;
+    padding: 12px;
+    border: none;
+    outline: none;
+    resize: vertical;
+    font-family: ui-monospace, SFMono-Regular, SF Mono, Consolas, Liberation Mono, Menlo, monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    background: transparent;
+    color: transparent;
+    caret-color: var(--color-text-primary);
+    z-index: 1;
+    -webkit-text-fill-color: transparent;
+}
+
+/* Syntax highlighter overlay - positioned above textarea */
+.syntax-highlighter-wrapper {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 12px;
+    overflow: auto;
+    pointer-events: none;
+    font-family: ui-monospace, SFMono-Regular, SF Mono, Consolas, Liberation Mono, Menlo, monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    background: transparent;
+    z-index: 2;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* Hide scrollbars on the overlay */
+.syntax-highlighter-wrapper::-webkit-scrollbar {
+    display: none;
+}
+
+.syntax-textarea::selection {
+    background: var(--color-primary-200);
+    opacity: 0.3;
+}
+
+.syntax-textarea::-moz-selection {
+    background: var(--color-primary-200);
+    opacity: 0.3;
+}
+
+.syntax-textarea::placeholder {
+    color: var(--color-text-muted);
+}
+
+/* Focus state */
+.syntax-highlighted-textarea-container:focus-within {
+    border-color: var(--color-primary-main);
+    box-shadow: var(--shadow-focus);
+}

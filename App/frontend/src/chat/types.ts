@@ -52,6 +52,8 @@ export interface ChatPipelineContext {
   systemInsertConfig: SystemInsertConfig;
   novelData?: any; // Novel content data
   mode: 'novel-editor' | 'workspace'; // Explicit mode distinction
+  enablePrefill?: boolean; // Enable assistant prefill at the end
+  enableThinking?: boolean; // Enable extended thinking in prompts
 }
 
 // Pipeline processor interfaces

@@ -1,0 +1,153 @@
+/* Syntax Highlighter */
+.syntax-highlighter {
+  font-family: ui-monospace, SFMono-Regular, SF Mono, Consolas, Liberation Mono, Menlo, monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.syntax-line {
+  min-height: 21px; /* Preserve empty lines */
+}
+
+/* Token Colors */
+
+/* Template Syntax */
+.token-variable {
+  color: #0969da; /* Blue - {{var::name}} */
+  font-weight: 500;
+}
+
+.token-context {
+  color: #8250df; /* Purple - {{context::name}} */
+  font-weight: 500;
+}
+
+.token-if-open {
+  color: #cf222e; /* Red - {{#if::condition}} */
+  font-weight: 600;
+}
+
+.token-if-close {
+  color: #cf222e; /* Red - {{/if}} */
+  font-weight: 600;
+}
+
+.token-template-error {
+  color: #ffffff;
+  background: #cf222e;
+  font-weight: 600;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+/* XML Tags */
+.token-xml-tag-open {
+  color: #116329; /* Green - <tag> */
+  font-weight: 500;
+}
+
+.token-xml-tag-close {
+  color: #116329; /* Green - </tag> */
+  font-weight: 500;
+}
+
+.token-xml-tag-self {
+  color: #116329; /* Green - <tag/> */
+  font-weight: 500;
+}
+
+.token-xml-error {
+  color: #ffffff;
+  background: #cf222e;
+  font-weight: 600;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+/* Markdown */
+.token-md-header {
+  color: #0969da; /* Blue */
+  font-weight: 700;
+}
+
+.token-md-code {
+  color: var(--color-text-secondary);
+  background: var(--color-surface-subtle);
+  font-family: ui-monospace, monospace;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.token-md-inline-code {
+  color: var(--color-text-primary);
+  background: var(--color-surface-muted);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 13px;
+}
+
+.token-md-bold {
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.token-md-italic {
+  font-style: italic;
+  color: var(--color-text-primary);
+}
+
+.token-md-list {
+  color: #0969da;
+  font-weight: 600;
+}
+
+/* Plain Text */
+.token-text {
+  color: var(--color-text-primary);
+}
+
+/* Dark mode support */
+[data-theme="dark"] .token-variable {
+  color: #58a6ff;
+}
+
+[data-theme="dark"] .token-context {
+  color: #bc8cff;
+}
+
+[data-theme="dark"] .token-if-open,
+[data-theme="dark"] .token-if-close {
+  color: #ff7b72;
+}
+
+[data-theme="dark"] .token-xml-tag-open,
+[data-theme="dark"] .token-xml-tag-close,
+[data-theme="dark"] .token-xml-tag-self {
+  color: #7ee787;
+}
+
+[data-theme="dark"] .token-md-header {
+  color: #58a6ff;
+}
+
+[data-theme="dark"] .token-md-code {
+  color: #8b949e;
+  background: #161b22;
+}
+
+[data-theme="dark"] .token-md-inline-code {
+  color: #e6edf3;
+  background: #343942;
+}
+
+[data-theme="dark"] .token-md-bold,
+[data-theme="dark"] .token-md-italic,
+[data-theme="dark"] .token-text {
+  color: #e6edf3;
+}
+
+[data-theme="dark"] .token-md-list {
+  color: #58a6ff;
+}

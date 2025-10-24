@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useChatStore } from '../../../store/chatStore';
 
 type TabType = 'basicInfo' | 'characters' | 'organizations' | 'locations' | 'lorebook' | 'outline';
@@ -32,7 +32,10 @@ export interface WorkspaceUIActions {
 }
 
 export function useWorkspaceState(projectId: string | undefined) {
-  const { getChats, getSelectedChatId, selectChat, createChat } = useChatStore();
+  const chatStore = useChatStore();
+  const { getChats, getSelectedChatId, selectChat, createChat } = chatStore;
+  const initializedProjectRef = useRef<string | null>(null);
+  const chats = projectId ? getChats(projectId) : [];
 
   const [state, setState] = useState<WorkspaceUIState>({
     isChatVisible: true,
@@ -48,33 +51,61 @@ export function useWorkspaceState(projectId: string | undefined) {
     editContent: '',
   });
 
-  // Initialize chat selection
+  // Initialize chat selection AFTER chats are loaded
   useEffect(() => {
     if (!projectId) return;
 
-    const chats = getChats(projectId);
-    const currentSelectedId = getSelectedChatId(projectId);
+    // Prevent re-initialization for the same project
+    if (initializedProjectRef.current === projectId) return;
 
-    let targetChatId: string | null = null;
+    // Get fresh chat data from store
+    const projectChats = getChats(projectId);
 
-    if (chats.length === 0) {
-      // No chats exist, create the first one
-      const newChatId = createChat(projectId, 'Main Chat');
-      targetChatId = newChatId;
-    } else if (!currentSelectedId) {
-      // Chats exist but none selected, select the first one
-      const firstChatId = chats[0].id;
-      selectChat(projectId, firstChatId);
-      targetChatId = firstChatId;
-    } else {
-      // Use the currently selected chat
-      targetChatId = currentSelectedId;
+    // Check if chats have been loaded for this project
+    // If chats array is populated OR if we've confirmed fetch completed (chats.length check handles both empty and populated cases)
+    // We need to distinguish between "not yet fetched" vs "fetched but empty"
+    // The store initializes chatsByProject[projectId] to [] after successful fetch
+    const hasLoadedChats = chatStore.chatsByProject[projectId] !== undefined;
+
+    if (!hasLoadedChats) {
+      return;
     }
 
-    setState(prev => (prev.selectedChatId === targetChatId
-      ? prev
-      : { ...prev, selectedChatId: targetChatId }));
-  }, [projectId, getChats, getSelectedChatId, selectChat, createChat]);
+    // Also wait if still loading
+    if (chatStore.isLoading) {
+      return;
+    }
+
+    // Mark as initialized IMMEDIATELY to prevent race conditions
+    initializedProjectRef.current = projectId;
+
+    const initializeChat = async () => {
+      const currentSelectedId = getSelectedChatId(projectId);
+      let targetChatId: string | null = null;
+
+      if (projectChats.length === 0) {
+        // No chats exist, create the first one
+        const newChatId = await createChat(projectId, 'Main Chat');
+        targetChatId = newChatId;
+      } else if (!currentSelectedId) {
+        // Chats exist but none selected, select the first one
+        const firstChatId = projectChats[0].id;
+        selectChat(projectId, firstChatId);
+        targetChatId = firstChatId;
+      } else {
+        // Use the currently selected chat
+        targetChatId = currentSelectedId;
+      }
+
+      setState(prev => (prev.selectedChatId === targetChatId
+        ? prev
+        : { ...prev, selectedChatId: targetChatId }));
+    };
+
+    initializeChat();
+    // Only re-run when projectId or chats.length changes, or loading state changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, chats.length, chatStore.isLoading]);
 
   const actions: WorkspaceUIActions = {
     setIsChatVisible: (visible: boolean) =>

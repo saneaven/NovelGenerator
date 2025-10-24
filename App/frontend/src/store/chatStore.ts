@@ -41,7 +41,7 @@ interface ChatStore {
 
   // Message management
   fetchMessages: (projectId: string, chatId: string) => Promise<void>;
-  addMessage: (projectId: string, chatId: string, message: ChatMessage, language: string) => Promise<void>;
+  addMessage: (projectId: string, chatId: string, message: ChatMessage, language: string) => Promise<string>;
   updateMessage: (projectId: string, chatId: string, messageId: string, content: string, language: string) => Promise<void>;
   getMessages: (projectId: string, chatId: string, language: string) => ChatMessage[];
   deleteMessage: (projectId: string, chatId: string, messageId: string) => Promise<void>;
@@ -118,7 +118,6 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       }));
     } catch (error) {
       set({
-        chatsByProject: {},
         isLoading: false,
         error: error instanceof Error ? error.message : 'Failed to fetch chats',
       });
@@ -261,14 +260,20 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     }
   },
 
-  addMessage: async (projectId: string, chatId: string, message: ChatMessage, language: string) => {
+  addMessage: async (projectId: string, chatId: string, message: ChatMessage, language: string): Promise<string> => {
     set({ isLoading: true, error: null });
     try {
-      const backendMessage = await chatService.addMessage(projectId, chatId, {
+      const payload: any = {
         role: message.role,
-        data: { [language]: { content: message.content || '' } },
-        function_calls: message.functionCalls,
-      });
+        content: message.content || '',
+        language: language,
+      };
+
+      if (message.functionCalls) {
+        payload.function_calls = message.functionCalls;
+      }
+
+      const backendMessage = await chatService.addMessage(projectId, chatId, payload);
       const storedMessage = convertBackendMessage(backendMessage);
 
       set((state) => ({
@@ -283,6 +288,8 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         },
         isLoading: false,
       }));
+
+      return storedMessage.id;
     } catch (error) {
       set({
         isLoading: false,
@@ -295,16 +302,9 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   updateMessage: async (projectId: string, chatId: string, messageId: string, content: string, language: string) => {
     set({ isLoading: true, error: null });
     try {
-      // Get current message to preserve other language data
-      const chat = get().getChat(projectId, chatId);
-      const currentMessage = chat?.messages.find((msg) => msg.id === messageId);
-      if (!currentMessage) throw new Error('Message not found');
-
       const backendMessage = await chatService.updateMessage(projectId, chatId, messageId, {
-        data: {
-          ...currentMessage.data,
-          [language]: { content },
-        },
+        content: content,
+        language: language,
       });
       const storedMessage = convertBackendMessage(backendMessage);
 
@@ -370,8 +370,9 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     }
   },
 
-  // Function call management (local only for now - would need backend support)
-  updateMessageFunctionCalls: (projectId: string, chatId: string, messageId: string, functionCalls: FunctionCallMetadata[]) => {
+  // Function call management - syncs to backend
+  updateMessageFunctionCalls: async (projectId: string, chatId: string, messageId: string, functionCalls: FunctionCallMetadata[]) => {
+    // Update local state first for immediate UI response
     set((state) => ({
       chatsByProject: {
         ...state.chatsByProject,
@@ -388,9 +389,29 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
           ) || [],
       },
     }));
+
+    // Sync to backend
+    try {
+      const chat = get().getChat(projectId, chatId);
+      const message = chat?.messages.find((msg) => msg.id === messageId);
+      if (!message) return;
+
+      // Get the primary language content for this message
+      const primaryLanguage = Object.keys(message.data)[0] || 'English';
+      const content = message.data[primaryLanguage]?.content || '';
+
+      await chatService.updateMessage(projectId, chatId, messageId, {
+        content,
+        language: primaryLanguage,
+        function_calls: functionCalls,
+      });
+    } catch (error) {
+      console.error('Failed to sync function calls to backend:', error);
+    }
   },
 
-  updateFunctionCallStatus: (projectId: string, chatId: string, messageId: string, functionCallId: string, isApplied: boolean, result?: any, error?: string, resultMessage?: string) => {
+  updateFunctionCallStatus: async (projectId: string, chatId: string, messageId: string, functionCallId: string, isApplied: boolean, result?: any, error?: string, resultMessage?: string) => {
+    // Update local state first for immediate UI response
     set((state) => ({
       chatsByProject: {
         ...state.chatsByProject,
@@ -427,6 +448,25 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
           ) || [],
       },
     }));
+
+    // Sync to backend
+    try {
+      const chat = get().getChat(projectId, chatId);
+      const message = chat?.messages.find((msg) => msg.id === messageId);
+      if (!message || !message.functionCalls) return;
+
+      // Get the primary language content for this message
+      const primaryLanguage = Object.keys(message.data)[0] || 'English';
+      const content = message.data[primaryLanguage]?.content || '';
+
+      await chatService.updateMessage(projectId, chatId, messageId, {
+        content,
+        language: primaryLanguage,
+        function_calls: message.functionCalls,
+      });
+    } catch (error) {
+      console.error('Failed to sync function call status to backend:', error);
+    }
   },
 
   // Translation support (local updates - would sync to backend on next message update)

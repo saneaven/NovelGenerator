@@ -62,27 +62,30 @@ export async function translateStoryObject(params: TranslateStoryObjectParams): 
       ? previousVersionData
       : getPreviousVersionDataInLanguage(projectId, category, itemId, targetLanguage);
 
+    // Get provider config from settings
+    const settingsStore = useSettingsStore.getState();
+    const translationConfig = settingsStore.getFunctionConfig('translation');
+    const providerConfig = settingsStore.getProviderConfig(translationConfig.provider);
+
     const translationRequest = TranslationService.prepareTranslationRequest({
       sourceLanguage,
       targetLanguage,
       data: sourceData,
       dataType,
       previousVersionData: previousData,
+      enablePrefill: translationConfig.advanced.enablePrefill,
+      enableThinking: translationConfig.advanced.enableThinking,
     });
-
-    // Get provider config from settings
-    const { settings } = useSettingsStore.getState();
-    const provider = settings.activeProvider;
-    const providerConfig = settings.providers[provider];
 
     let response = '';
     for await (const chunk of streamChat(
       translationRequest.messages,
-      provider,
+      translationConfig.provider,
       providerConfig,
       {
-        model: aiModel,
-        temperature: 0.2,
+        model: aiModel || translationConfig.model,
+        temperature: translationConfig.temperature,
+        providerPreference: translationConfig.providerPreference,
       }
     )) {
       if (typeof chunk === 'string') {

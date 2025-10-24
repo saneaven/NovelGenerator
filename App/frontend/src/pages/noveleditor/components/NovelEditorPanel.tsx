@@ -77,8 +77,22 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const isUserEditingRef = useRef(false);
 
   const activeVersion = useMemo(() => {
+    console.log('[NovelEditor] Computing activeVersion:', {
+      hasStoreContent: !!storeChapterContent,
+      versionsCount: storeChapterContent?.versions?.length ?? 0,
+      versions: storeChapterContent?.versions
+    });
+
     if (!storeChapterContent) return null;
-    return storeChapterContent.versions.find(version => version.isActive) ?? null;
+    const active = storeChapterContent.versions.find(version => version.is_active) ?? null;
+
+    console.log('[NovelEditor] Active version found:', {
+      found: !!active,
+      versionId: active?.id,
+      languages: active ? Object.keys(active.data) : []
+    });
+
+    return active;
   }, [storeChapterContent]);
 
   const activeLanguageEntry = useMemo(() => {
@@ -115,17 +129,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const hasUnsavedChanges = content !== lastSavedContent;
 
   useEffect(() => {
-    if (!selectedChapter || !projectId) {
-      return;
-    }
-
-    const existing = getChapterContent(projectId, selectedChapter.id);
-    if (!existing) {
-      createChapterContent(projectId, selectedChapter.id, '', primaryLanguage);
-    }
-  }, [createChapterContent, getChapterContent, primaryLanguage, projectId, selectedChapter]);
-
-  useEffect(() => {
     setCustomLanguage('');
     setTranslationError(null);
     isUserEditingRef.current = false;
@@ -159,7 +162,15 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   }, [activeLanguage, availableLanguages, primaryLanguage, secondaryLanguage, selectedChapterId]);
 
   useEffect(() => {
+    console.log('[NovelEditor] Content loading effect triggered:', {
+      hasSelectedChapter: !!selectedChapter,
+      hasActiveVersion: !!activeVersion,
+      activeLanguage,
+      isUserEditing: isUserEditingRef.current
+    });
+
     if (!selectedChapter) {
+      console.log('[NovelEditor] No selected chapter, clearing content');
       setContent('');
       setLastSavedContent('');
       uiActions.setEditorContent('');
@@ -167,7 +178,9 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     }
 
     if (!activeVersion) {
+      console.log('[NovelEditor] No active version');
       if (!isUserEditingRef.current) {
+        console.log('[NovelEditor] User not editing, clearing content');
         setContent('');
         setLastSavedContent('');
         uiActions.setEditorContent('');
@@ -176,19 +189,27 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     }
 
     const entry = activeVersion.data[activeLanguage];
-    if (entry && (!isUserEditingRef.current || entry.content !== content)) {
+    console.log('[NovelEditor] Language entry:', {
+      hasEntry: !!entry,
+      language: activeLanguage,
+      contentLength: entry?.content?.length ?? 0
+    });
+
+    // Only load if not currently editing
+    if (entry && !isUserEditingRef.current) {
+      console.log('[NovelEditor] Loading content from store:', entry.content.substring(0, 50));
       setContent(entry.content);
       setLastSavedContent(entry.content);
       uiActions.setEditorContent(entry.content);
-      isUserEditingRef.current = false;
     }
 
-    if (!entry && !isUserEditingRef.current && content !== '') {
+    if (!entry && !isUserEditingRef.current) {
+      console.log('[NovelEditor] No entry for language, clearing content');
       setContent('');
       setLastSavedContent('');
       uiActions.setEditorContent('');
     }
-  }, [activeLanguage, activeVersion, content, selectedChapter, uiActions]);
+  }, [activeLanguage, activeVersion, selectedChapter, uiActions]);
 
   const handleContentChange = useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = event.target.value;
@@ -198,17 +219,36 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     setTranslationError(null);
   }, [uiActions]);
 
-  const saveContent = useCallback(async (reason: string) => {
-    if (!selectedChapter) return;
-    if (!hasUnsavedChanges) return;
+  const saveContent = useCallback(async (reason: string, createNewVersion = false) => {
+    console.log('[NovelEditor] saveContent called:', { reason, createNewVersion, selectedChapter: selectedChapter?.id, hasUnsavedChanges, contentLength: content.length });
+
+    if (!selectedChapter) {
+      console.log('[NovelEditor] No selected chapter, aborting save');
+      return;
+    }
+
+    if (!hasUnsavedChanges) {
+      console.log('[NovelEditor] No unsaved changes, aborting save');
+      return;
+    }
 
     uiActions.setIsSaving(true);
     try {
-      updateChapterContentForLanguage(projectId, selectedChapter.id, content, activeLanguage, reason);
+      console.log('[NovelEditor] Calling updateChapterContentForLanguage:', {
+        projectId,
+        chapterId: selectedChapter.id,
+        language: activeLanguage,
+        contentPreview: content.substring(0, 50) + '...',
+        createNewVersion
+      });
+
+      await updateChapterContentForLanguage(projectId, selectedChapter.id, content, activeLanguage, reason, createNewVersion);
+
+      console.log('[NovelEditor] Save successful, updating lastSavedContent');
       setLastSavedContent(content);
       isUserEditingRef.current = false;
     } catch (error) {
-      console.error('Error saving chapter content:', error);
+      console.error('[NovelEditor] Error saving chapter content:', error);
       const message = error instanceof Error ? error.message : 'Unknown error during save.';
       showError('Save Failed', message);
     } finally {
@@ -227,7 +267,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     }
 
     saveTimeoutRef.current = window.setTimeout(() => {
-      void saveContent('Auto-save');
+      void saveContent('Auto-save', false);  // Auto-save updates existing version
     }, 2000);
 
     return () => {
@@ -244,7 +284,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       saveTimeoutRef.current = null;
     }
 
-    void saveContent('Manual save');
+    void saveContent('Manual save', true);  // Manual save creates new version
   }, [saveContent]);
 
   const translateChapter = useCallback(async (targetLanguage: string) => {
@@ -281,8 +321,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         dataType: 'chapterContent',
       });
 
-      const provider = settingsStore.settings.activeProvider;
-      const providerConfig = settingsStore.settings.providers[provider];
+      const provider = settings.activeProvider;
+      const providerConfig = settings.providers[provider];
 
       let response = '';
       for await (const chunk of streamChat(
@@ -308,7 +348,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       }
 
       const translatedContent = parsed.content;
-      addTranslatedContent(projectId, selectedChapter.id, activeVersion.versionId, translatedContent, normalizedTarget);
+      addTranslatedContent(projectId, selectedChapter.id, activeVersion.id, translatedContent, normalizedTarget);
 
       setActiveLanguage(normalizedTarget);
       setContent(translatedContent);
@@ -358,7 +398,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     }
 
     try {
-      updateChapterContentForLanguage(projectId, selectedChapter.id, newContent, activeLanguage, 'AI Edit');
+      updateChapterContentForLanguage(projectId, selectedChapter.id, newContent, activeLanguage, 'AI Edit', true);  // AI edits create new version
       setContent(newContent);
       setLastSavedContent(newContent);
       uiActions.setEditorContent(newContent);

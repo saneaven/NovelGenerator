@@ -1,0 +1,274 @@
+.prompts-templates-panel {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    height: 100%;
+    gap: 0;
+    overflow: hidden;
+    transition: grid-template-columns 0.3s ease;
+}
+
+/* Collapsed state */
+.prompts-templates-panel.sidebar-collapsed {
+    grid-template-columns: 50px 1fr;
+}
+
+/* Sidebar */
+.prompts-sidebar {
+    height: 100%;
+    overflow: hidden;
+    position: relative;
+    transition: width 0.3s ease;
+}
+
+.prompts-templates-panel.sidebar-collapsed .prompts-sidebar {
+    overflow: visible;
+}
+
+/* Hide tree navigation when collapsed */
+.prompts-templates-panel.sidebar-collapsed .prompt-tree-nav {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+.prompt-tree-nav {
+    opacity: 1;
+    transition: opacity 0.3s ease 0.1s;
+}
+
+/* Sidebar Toggle Button */
+.sidebar-toggle-btn {
+    position: absolute;
+    top: 50%;
+    right: -12px;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 48px;
+    background: var(--color-primary-main, #007bff);
+    color: white;
+    border: none;
+    border-radius: 0 8px 8px 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+    transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+    z-index: 1000;
+}
+
+.sidebar-toggle-btn:hover {
+    background: var(--color-primary-700, #0056b3);
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.25);
+    transform: translateY(-50%) scale(1.15);
+}
+
+.sidebar-toggle-btn:active {
+    transform: translateY(-50%) scale(0.95);
+}
+
+/* Toggle icon visibility - Desktop shows horizontal arrows, Mobile shows vertical arrows */
+.toggle-icon-desktop {
+    display: inline;
+}
+
+.toggle-icon-mobile {
+    display: none;
+}
+
+/* Adjust toggle button position when collapsed */
+.prompts-templates-panel.sidebar-collapsed .sidebar-toggle-btn {
+    right: -12px;
+}
+
+/* Content area */
+.prompts-content {
+    height: 100%;
+    overflow-y: auto;
+    background: var(--bg-primary, #ffffff);
+    padding: 24px;
+}
+
+/* Editor container */
+.prompts-editor-container {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+/* Editor header */
+.prompts-editor-header {
+    margin-bottom: 24px;
+}
+
+.prompts-editor-header h3 {
+    margin: 0 0 8px 0;
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--text-primary, #212529);
+}
+
+.prompts-editor-description {
+    margin: 0;
+    font-size: 14px;
+    color: var(--text-secondary, #6c757d);
+    line-height: 1.5;
+}
+
+/* Editor wrapper */
+.prompts-editor-wrapper {
+    /* The PromptEditor component has its own styling */
+}
+
+/* Empty state */
+.prompts-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    text-align: center;
+    color: var(--text-secondary, #6c757d);
+}
+
+.empty-state-icon {
+    font-size: 64px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.prompts-empty-state h3 {
+    margin: 0 0 8px 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary, #212529);
+}
+
+.prompts-empty-state p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--text-secondary, #6c757d);
+}
+
+/* Scrollbar styling for content area */
+.prompts-content::-webkit-scrollbar {
+    width: 10px;
+}
+
+.prompts-content::-webkit-scrollbar-track {
+    background: var(--bg-secondary, #f8f9fa);
+}
+
+.prompts-content::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb, #cbd5e0);
+    border-radius: 5px;
+}
+
+.prompts-content::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover, #a0aec0);
+}
+
+/* Responsive layout */
+@media (max-width: 1024px) {
+    .prompts-templates-panel {
+        grid-template-columns: 240px 1fr;
+    }
+
+    .prompts-templates-panel.sidebar-collapsed {
+        grid-template-columns: 50px 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .prompts-templates-panel {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+    }
+
+    .prompts-templates-panel.sidebar-collapsed {
+        grid-template-columns: 1fr;
+        grid-template-rows: 50px 1fr;
+    }
+
+    .prompts-sidebar {
+        height: auto;
+        max-height: 300px;
+    }
+
+    .prompts-templates-panel.sidebar-collapsed .prompts-sidebar {
+        max-height: 50px;
+    }
+
+    .prompts-content {
+        padding: 16px;
+    }
+
+    /* Toggle button repositioned for mobile (vertical layout) */
+    .sidebar-toggle-btn {
+        top: auto;
+        bottom: -12px;
+        right: 50%;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 48px;
+        height: 24px;
+        border-radius: 0 0 8px 8px;
+        z-index: 1000;
+    }
+
+    .sidebar-toggle-btn:hover {
+        transform: translateX(-50%) scale(1.15);
+    }
+
+    .sidebar-toggle-btn:active {
+        transform: translateX(-50%) scale(0.95);
+    }
+
+    .prompts-templates-panel.sidebar-collapsed .sidebar-toggle-btn {
+        bottom: -12px;
+    }
+
+    /* Show vertical arrows on mobile, hide horizontal arrows */
+    .toggle-icon-desktop {
+        display: none;
+    }
+
+    .toggle-icon-mobile {
+        display: inline;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .prompts-content {
+        background: var(--bg-primary, #1a202c);
+    }
+
+    .prompts-editor-header h3 {
+        color: var(--text-primary, #e2e8f0);
+    }
+
+    .prompts-editor-description {
+        color: var(--text-secondary, #a0aec0);
+    }
+
+    .prompts-empty-state h3 {
+        color: var(--text-primary, #e2e8f0);
+    }
+
+    .prompts-empty-state p {
+        color: var(--text-secondary, #a0aec0);
+    }
+
+    .prompts-content::-webkit-scrollbar-track {
+        background: var(--bg-secondary, #2d3748);
+    }
+
+    .sidebar-toggle-btn {
+        background: var(--color-primary-main, #4299e1);
+    }
+
+    .sidebar-toggle-btn:hover {
+        background: var(--color-primary-700, #3182ce);
+    }
+}

@@ -1,4 +1,5 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useChatStore } from '../../../store/chatStore';
 
 export interface NovelEditorUIState {
   // Chat related (inherited from workspace)
@@ -66,8 +67,65 @@ const createInitialState = (): NovelEditorUIState => ({
   activeStoryTab: 'basicInfo', // For compatibility with Workspace
 });
 
-export const useNovelEditorState = () => {
+export const useNovelEditorState = (projectId?: string) => {
+  const chatStore = useChatStore();
+  const { getChats, getSelectedChatId, selectChat, createChat } = chatStore;
+  const initializedProjectRef = useRef<string | null>(null);
+  const chats = projectId ? getChats(projectId) : [];
+
   const [state, setState] = useState<NovelEditorUIState>(createInitialState);
+
+  // Initialize chat selection AFTER chats are loaded
+  useEffect(() => {
+    if (!projectId) return;
+
+    // Prevent re-initialization for the same project
+    if (initializedProjectRef.current === projectId) return;
+
+    // Get fresh chat data from store
+    const projectChats = getChats(projectId);
+
+    // Check if chats have been loaded for this project
+    const hasLoadedChats = chatStore.chatsByProject[projectId] !== undefined;
+
+    if (!hasLoadedChats) {
+      return;
+    }
+
+    // Also wait if still loading
+    if (chatStore.isLoading) {
+      return;
+    }
+
+    // Mark as initialized IMMEDIATELY to prevent race conditions
+    initializedProjectRef.current = projectId;
+
+    const initializeChat = async () => {
+      const currentSelectedId = getSelectedChatId(projectId);
+      let targetChatId: string | null = null;
+
+      if (projectChats.length === 0) {
+        // No chats exist, create the first one
+        const newChatId = await createChat(projectId, 'Main Chat');
+        targetChatId = newChatId;
+      } else if (!currentSelectedId) {
+        // Chats exist but none selected, select the first one
+        const firstChatId = projectChats[0].id;
+        selectChat(projectId, firstChatId);
+        targetChatId = firstChatId;
+      } else {
+        // Use the currently selected chat
+        targetChatId = currentSelectedId;
+      }
+
+      setState(prev => (prev.selectedChatId === targetChatId
+        ? prev
+        : { ...prev, selectedChatId: targetChatId }));
+    };
+
+    initializeChat();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, chats.length, chatStore.isLoading]);
 
   // Chat related actions (inherited from workspace)
   const setIsChatVisible = useCallback((visible: boolean) => {

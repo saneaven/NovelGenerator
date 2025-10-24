@@ -77,9 +77,17 @@ export interface StoryObjects {
   outline: Outline | null;
 }
 
+// Version cache structure
+export interface VersionCache {
+  versions: any[];
+  timestamp: number;
+}
+
 interface StoryObjectStore {
   // Data storage by project
   storyObjectsByProject: Record<string, StoryObjects>;
+  // Version cache: projectId -> category -> itemId -> versions
+  versionCache: Record<string, Record<string, Record<string, VersionCache>>>;
   isLoading: boolean;
   error: string | null;
 
@@ -103,7 +111,7 @@ interface StoryObjectStore {
 
   // Character Actions
   fetchCharacters: (projectId: string) => Promise<void>;
-  addCharacter: (projectId: string, name: string, description: string) => Promise<Character>;
+  addCharacter: (projectId: string, data: { name?: string; description?: string }) => Promise<Character>;
   updateCharacter: (
     projectId: string,
     id: string,
@@ -116,8 +124,7 @@ interface StoryObjectStore {
   fetchOrganizations: (projectId: string) => Promise<void>;
   addOrganization: (
     projectId: string,
-    name: string,
-    description: string
+    data: { name?: string; description?: string }
   ) => Promise<Organization>;
   updateOrganization: (
     projectId: string,
@@ -129,7 +136,7 @@ interface StoryObjectStore {
 
   // Location Actions
   fetchLocations: (projectId: string) => Promise<void>;
-  addLocation: (projectId: string, name: string, description: string) => Promise<Location>;
+  addLocation: (projectId: string, data: { name?: string; description?: string }) => Promise<Location>;
   updateLocation: (
     projectId: string,
     id: string,
@@ -142,8 +149,7 @@ interface StoryObjectStore {
   fetchLorebook: (projectId: string) => Promise<void>;
   addLorebookEntry: (
     projectId: string,
-    name: string,
-    description: string
+    data: { name?: string; description?: string }
   ) => Promise<LorebookEntry>;
   updateLorebookEntry: (
     projectId: string,
@@ -189,6 +195,12 @@ interface StoryObjectStore {
   clearStoryObjects: (projectId: string) => void;
   clearError: () => void;
 
+  // Version History Actions
+  fetchVersions: (projectId: string, category: string, itemId: string) => Promise<any[]>;
+  getVersions: (projectId: string, category: string, itemId: string) => any[];
+  setActiveVersion: (projectId: string, category: string, itemId: string, versionId: string) => Promise<void>;
+  deleteVersion: (projectId: string, category: string, itemId: string, versionId: string) => Promise<void>;
+
   // Translation support (stub methods for now)
   getItemDataInLanguage: (projectId: string, category: string, itemId: string, language: string) => any;
   hasItemDataInLanguage: (projectId: string, category: string, itemId: string, language: string) => boolean;
@@ -208,12 +220,36 @@ const createEmptyStoryObjects = (): StoryObjects => ({
 });
 
 // Helper to convert backend response to frontend type
-const convertBasicInfo = (response: BasicInfoResponse): BasicInfo => response as BasicInfo;
-const convertNameDescription = (response: NameDescriptionResponse): NameDescriptionItem =>
-  response as NameDescriptionItem;
-const convertChapter = (response: ChapterResponse): Chapter => response as Chapter;
+const convertBasicInfo = (response: BasicInfoResponse): BasicInfo => ({
+  ...response,
+  createdAt: new Date(response.created_at),
+  updatedAt: new Date(response.updated_at),
+  versions: [],
+  activeVersionId: response.active_version_id || '',
+});
+
+const convertNameDescription = (response: NameDescriptionResponse): NameDescriptionItem => ({
+  ...response,
+  createdAt: new Date(response.created_at),
+  updatedAt: new Date(response.updated_at),
+  versions: [],
+  activeVersionId: response.active_version_id || '',
+});
+
+const convertChapter = (response: ChapterResponse): Chapter => ({
+  ...response,
+  createdAt: new Date(response.created_at),
+  updatedAt: new Date(response.updated_at),
+  versions: [],
+  activeVersionId: response.active_version_id || '',
+});
+
 const convertAct = (response: ActResponse): Act => ({
   ...response,
+  createdAt: new Date(response.created_at),
+  updatedAt: new Date(response.updated_at),
+  versions: [],
+  activeVersionId: response.active_version_id || '',
   chapters: response.chapters || [],
 });
 const convertOutline = (response: OutlineResponse): Outline => ({
@@ -223,6 +259,7 @@ const convertOutline = (response: OutlineResponse): Outline => ({
 
 export const useStoryObjectStore = create<StoryObjectStore>()((set, get) => ({
   storyObjectsByProject: {},
+  versionCache: {},
   isLoading: false,
   error: null,
 
@@ -312,10 +349,29 @@ export const useStoryObjectStore = create<StoryObjectStore>()((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
-      const response = await storyObjectService.basicInfo.update(projectId, {
-        ...updates,
-        language: language || primaryLanguage,
-      });
+      const lang = language || primaryLanguage;
+
+      let response;
+      try {
+        // Try to update first
+        response = await storyObjectService.basicInfo.update(projectId, {
+          ...updates,
+          language: lang,
+        });
+      } catch (updateError: any) {
+        // If 404, create instead
+        if (updateError?.status === 404) {
+          response = await storyObjectService.basicInfo.create(projectId, {
+            title: updates.title || '',
+            logline: updates.logline || '',
+            genre: updates.genre || '',
+            language: lang,
+          });
+        } else {
+          throw updateError;
+        }
+      }
+
       const basicInfo = convertBasicInfo(response);
 
       set((state) => ({
@@ -361,13 +417,13 @@ export const useStoryObjectStore = create<StoryObjectStore>()((set, get) => ({
     }
   },
 
-  addCharacter: async (projectId: string, name: string, description: string) => {
+  addCharacter: async (projectId: string, data: { name?: string; description?: string }) => {
     set({ isLoading: true, error: null });
     try {
       const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
       const response = await storyObjectService.characters.create(projectId, {
-        name,
-        description,
+        name: data.name || '',
+        description: data.description || '',
         language: primaryLanguage,
       });
       const character = convertNameDescription(response);
@@ -482,13 +538,13 @@ export const useStoryObjectStore = create<StoryObjectStore>()((set, get) => ({
     }
   },
 
-  addOrganization: async (projectId: string, name: string, description: string) => {
+  addOrganization: async (projectId: string, data: { name?: string; description?: string }) => {
     set({ isLoading: true, error: null });
     try {
       const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
       const response = await storyObjectService.organizations.create(projectId, {
-        name,
-        description,
+        name: data.name || '',
+        description: data.description || '',
         language: primaryLanguage,
       });
       const organization = convertNameDescription(response);
@@ -575,13 +631,13 @@ export const useStoryObjectStore = create<StoryObjectStore>()((set, get) => ({
     }
   },
 
-  addLocation: async (projectId: string, name: string, description: string) => {
+  addLocation: async (projectId: string, data: { name?: string; description?: string }) => {
     set({ isLoading: true, error: null });
     try {
       const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
       const response = await storyObjectService.locations.create(projectId, {
-        name,
-        description,
+        name: data.name || '',
+        description: data.description || '',
         language: primaryLanguage,
       });
       const location = convertNameDescription(response);
@@ -666,13 +722,13 @@ export const useStoryObjectStore = create<StoryObjectStore>()((set, get) => ({
     }
   },
 
-  addLorebookEntry: async (projectId: string, name: string, description: string) => {
+  addLorebookEntry: async (projectId: string, data: { name?: string; description?: string }) => {
     set({ isLoading: true, error: null });
     try {
       const primaryLanguage = useSettingsStore.getState().settings.primaryLanguage;
       const response = await storyObjectService.lorebook.create(projectId, {
-        name,
-        description,
+        name: data.name || '',
+        description: data.description || '',
         language: primaryLanguage,
       });
       const entry = convertNameDescription(response);
@@ -966,6 +1022,139 @@ export const useStoryObjectStore = create<StoryObjectStore>()((set, get) => ({
 
   clearError: () => {
     set({ error: null });
+  },
+
+  // Version History Actions
+  fetchVersions: async (projectId: string, category: string, itemId: string) => {
+    try {
+      const categoryToObjectType: Record<string, string> = {
+        basicInfo: 'basic_info',
+        character: 'character',
+        organization: 'organization',
+        location: 'location',
+        lorebook: 'lorebook',
+        outline: 'outline',
+        act: 'act',
+        chapter: 'chapter',
+      };
+
+      const objectType = categoryToObjectType[category];
+      if (!objectType) {
+        console.error(`Unknown category: ${category}`);
+        return [];
+      }
+
+      const response = await storyObjectService.versions.list(projectId, objectType, itemId);
+
+      // Store in cache
+      set((state) => ({
+        versionCache: {
+          ...state.versionCache,
+          [projectId]: {
+            ...state.versionCache[projectId],
+            [category]: {
+              ...state.versionCache[projectId]?.[category],
+              [itemId]: {
+                versions: response.versions,
+                timestamp: Date.now(),
+              },
+            },
+          },
+        },
+      }));
+
+      return response.versions;
+    } catch (error) {
+      console.error('Error fetching versions:', error);
+      return [];
+    }
+  },
+
+  getVersions: (projectId: string, category: string, itemId: string) => {
+    const cache = get().versionCache[projectId]?.[category]?.[itemId];
+    return cache?.versions || [];
+  },
+
+  setActiveVersion: async (projectId: string, category: string, itemId: string, versionId: string) => {
+    try {
+      const categoryToObjectType: Record<string, string> = {
+        basicInfo: 'basic_info',
+        character: 'character',
+        organization: 'organization',
+        location: 'location',
+        lorebook: 'lorebook',
+        outline: 'outline',
+        act: 'act',
+        chapter: 'chapter',
+      };
+
+      const objectType = categoryToObjectType[category];
+      if (!objectType) {
+        console.error(`Unknown category: ${category}`);
+        return;
+      }
+
+      await storyObjectService.versions.activate(projectId, objectType, itemId, versionId);
+
+      // Refresh the specific object after version change
+      switch (category) {
+        case 'basicInfo':
+          await get().fetchBasicInfo(projectId);
+          break;
+        case 'character':
+          await get().fetchCharacters(projectId);
+          break;
+        case 'organization':
+          await get().fetchOrganizations(projectId);
+          break;
+        case 'location':
+          await get().fetchLocations(projectId);
+          break;
+        case 'lorebook':
+          await get().fetchLorebook(projectId);
+          break;
+        case 'outline':
+        case 'act':
+        case 'chapter':
+          await get().fetchOutline(projectId);
+          break;
+      }
+
+      // Refresh version cache
+      await get().fetchVersions(projectId, category, itemId);
+    } catch (error) {
+      console.error('Error setting active version:', error);
+      throw error;
+    }
+  },
+
+  deleteVersion: async (projectId: string, category: string, itemId: string, versionId: string) => {
+    try {
+      const categoryToObjectType: Record<string, string> = {
+        basicInfo: 'basic_info',
+        character: 'character',
+        organization: 'organization',
+        location: 'location',
+        lorebook: 'lorebook',
+        outline: 'outline',
+        act: 'act',
+        chapter: 'chapter',
+      };
+
+      const objectType = categoryToObjectType[category];
+      if (!objectType) {
+        console.error(`Unknown category: ${category}`);
+        return;
+      }
+
+      await storyObjectService.versions.delete(projectId, objectType, itemId, versionId);
+
+      // Refresh version cache
+      await get().fetchVersions(projectId, category, itemId);
+    } catch (error) {
+      console.error('Error deleting version:', error);
+      throw error;
+    }
   },
 
   // Translation support (stub implementations - currently story objects use flat structure)

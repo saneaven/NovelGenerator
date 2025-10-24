@@ -1,5 +1,5 @@
 """Common schemas shared across different entities"""
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 from uuid import UUID
 from typing import Dict, Any, Optional
@@ -25,9 +25,10 @@ class VersionBase(BaseModel):
 class BaseMetadata(BaseModel):
     """Base metadata for all story objects"""
     id: UUID
-    createdAt: datetime
-    updatedAt: datetime
-    activeVersionId: Optional[UUID] = None
+    createdAt: datetime = Field(alias='created_at')
+    updatedAt: datetime = Field(alias='updated_at')
+    activeVersionId: Optional[UUID] = Field(None, alias='active_version_id')
 
     class Config:
         from_attributes = True
+        populate_by_name = True

@@ -164,7 +164,7 @@ export class FunctionCallApplicator {
     switch (type) {
       case 'basic_info':
         // Use updateBasicInfo instead of setBasicInfo to ensure proper version creation
-        this.storeActions.updateBasicInfo(projectId, {
+        await this.storeActions.updateBasicInfo(projectId, {
           title: data.title || '',
           logline: data.logline || '',
           genre: data.genre || ''
@@ -172,33 +172,40 @@ export class FunctionCallApplicator {
         results.push(`Created basic info`);
         break;
       case 'character':
-        const newCharacter = this.storeActions.addCharacter(projectId, data);
-        // Version is automatically created by addCharacter
-        results.push(`Created character: ${newCharacter.name}`);
+        await this.storeActions.addCharacter(projectId, { name: data.name || '', description: data.description || '' });
+        results.push(`Created character: ${data.name}`);
         break;
       case 'organization':
-        const newOrganization = this.storeActions.addOrganization(projectId, data);
-        // Version is automatically created by addOrganization
-        results.push(`Created organization: ${newOrganization.name}`);
+        await this.storeActions.addOrganization(projectId, { name: data.name || '', description: data.description || '' });
+        results.push(`Created organization: ${data.name}`);
         break;
       case 'location':
-        const newLocation = this.storeActions.addLocation(projectId, data);
-        // Version is automatically created by addLocation
-        results.push(`Created location: ${newLocation.name}`);
+        await this.storeActions.addLocation(projectId, { name: data.name || '', description: data.description || '' });
+        results.push(`Created location: ${data.name}`);
         break;
       case 'lorebook':
-        const newEntry = this.storeActions.addLorebookEntry(projectId, data);
-        // Version is automatically created by addLorebookEntry
-        results.push(`Created lorebook entry: ${newEntry.name}`);
+        await this.storeActions.addLorebookEntry(projectId, { name: data.name || '', description: data.description || '' });
+        results.push(`Created lorebook entry: ${data.name}`);
         break;
       case 'act':
-        const newAct = this.storeActions.addAct(projectId, data);
+        const newAct = await this.storeActions.addAct(
+          projectId,
+          data.name || '',
+          data.description || '',
+          data.order ?? 0
+        );
         // Version is automatically created by addAct
 
         // Handle chapters within act if provided
         if (data.chapters && Array.isArray(data.chapters)) {
           for (const chapter of data.chapters) {
-            this.storeActions.addChapter(projectId, newAct.id, chapter);
+            await this.storeActions.addChapter(
+              projectId,
+              newAct.id,
+              chapter.name || '',
+              chapter.description || '',
+              chapter.order ?? 0
+            );
             // Version is automatically created by addChapter
           }
         }
@@ -209,7 +216,13 @@ export class FunctionCallApplicator {
           results.push(`Skipped create chapter: missing actId`);
           return;
         }
-        const newChapter = this.storeActions.addChapter(projectId, data.actId, data);
+        const newChapter = await this.storeActions.addChapter(
+          projectId,
+          data.actId,
+          data.name || '',
+          data.description || '',
+          data.order ?? 0
+        );
         // Version is automatically created by addChapter
         results.push(`Created chapter: ${newChapter.name}`);
         break;

@@ -66,7 +66,8 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       abortControllerRef.current = new AbortController();
       
       const storyObjects = storyObjectStore.getStoryObjects(projectId);
-      
+      const storyEditConfig = settingsStore.getFunctionConfig('storyEdit');
+
       // Prepare AI edit request using the service
       const editRequest = AIEditService.prepareEditRequest({
         category,
@@ -74,22 +75,23 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         userRequest,
         contextOptions,
         storyObjects,
-        outputLanguage: settingsStore.settings.outputLanguage,
+        outputLanguage: settingsStore.settings.primaryLanguage,
+        enablePrefill: storyEditConfig.advanced.enablePrefill,
+        enableThinking: storyEditConfig.advanced.enableThinking,
       });
 
       let fullResponse = '';
-
-      const provider = settingsStore.settings.activeProvider;
-      const providerConfig = settingsStore.settings.providers[provider];
+      const providerConfig = settingsStore.getProviderConfig(storyEditConfig.provider);
 
       for await (const chunk of streamChat(
         editRequest.messages,
-        provider,
+        storyEditConfig.provider,
         providerConfig,
         {
           signal: abortControllerRef.current.signal,
-          temperature: 0.3,
-          model: settingsStore.settings.aiModel,
+          temperature: storyEditConfig.temperature,
+          model: storyEditConfig.model,
+          providerPreference: storyEditConfig.providerPreference,
         }
       )) {
         if (typeof chunk === 'string') {

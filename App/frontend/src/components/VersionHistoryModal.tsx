@@ -26,14 +26,16 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
 
   useEffect(() => {
     if (isOpen && targetId) {
-      const itemVersions = storyObjectStore.getVersions(projectId, category, targetId);
-      setVersions(itemVersions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
-      
-      // Set active version as selected by default
-      const activeVersion = itemVersions.find(v => v.isActive);
-      if (activeVersion) {
-        setSelectedVersionId(activeVersion.versionId);
-      }
+      // Fetch versions from API
+      storyObjectStore.fetchVersions(projectId, category, targetId).then((itemVersions) => {
+        setVersions(itemVersions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+
+        // Set active version as selected by default
+        const activeVersion = itemVersions.find(v => v.is_active);
+        if (activeVersion) {
+          setSelectedVersionId(activeVersion.id);
+        }
+      });
     }
   }, [isOpen, projectId, category, targetId, storyObjectStore]);
 
@@ -51,20 +53,32 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     return names[cat] || cat;
   };
 
-  const handleSetActiveVersion = (versionId: string) => {
-    storyObjectStore.setActiveVersion(projectId, category, targetId, versionId);
-    const version = versions.find(v => v.versionId === versionId);
-    if (version) {
-      onRestoreVersion(version.data);
+  const handleSetActiveVersion = async (versionId: string) => {
+    try {
+      await storyObjectStore.setActiveVersion(projectId, category, targetId, versionId);
+      const version = versions.find(v => v.id === versionId);
+      if (version) {
+        // Get the first language's data from the version
+        const firstLangData = Object.values(version.data)[0];
+        onRestoreVersion(firstLangData);
+      }
+      onClose();
+    } catch (error) {
+      console.error('Failed to set active version:', error);
+      alert('Failed to restore version. Please try again.');
     }
-    onClose();
   };
 
-  const handleDeleteVersion = (versionId: string) => {
+  const handleDeleteVersion = async (versionId: string) => {
     if (confirm('Are you sure you want to delete this version?')) {
-      storyObjectStore.deleteVersion(projectId, category, targetId, versionId);
-      const updatedVersions = storyObjectStore.getVersions(projectId, category, targetId);
-      setVersions(updatedVersions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+      try {
+        await storyObjectStore.deleteVersion(projectId, category, targetId, versionId);
+        const updatedVersions = await storyObjectStore.fetchVersions(projectId, category, targetId);
+        setVersions(updatedVersions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+      } catch (error) {
+        console.error('Failed to delete version:', error);
+        alert('Failed to delete version. Please try again.');
+      }
     }
   };
 
@@ -183,50 +197,50 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
           ) : (
             <div className="versions-list">
               {versions.map((version, index) => (
-                <div 
-                  key={version.versionId} 
-                  className={`version-item ${version.isActive ? 'active' : ''} ${
-                    selectedVersionId === version.versionId ? 'selected' : ''
+                <div
+                  key={version.id}
+                  className={`version-item ${version.is_active ? 'active' : ''} ${
+                    selectedVersionId === version.id ? 'selected' : ''
                   }`}
                 >
                   <div className="version-header">
                     <div className="version-info">
                       <div className="version-title">
                         <span className="version-number">Version #{versions.length - index}</span>
-                        {version.isActive && <span className="active-badge">Currently Active</span>}
+                        {version.is_active && <span className="active-badge">Currently Active</span>}
                       </div>
                       <div className="version-metadata">
                         <span className="version-timestamp">
-                          {version.timestamp.toLocaleString()}
+                          {new Date(version.timestamp).toLocaleString()}
                         </span>
                         <span className="version-request">
-                          Request: {version.userRequest}
+                          Request: {version.user_request || 'No description'}
                         </span>
                       </div>
                     </div>
 
                     <div className="version-actions">
                       <button
-                        onClick={() => toggleExpandVersion(version.versionId)}
+                        onClick={() => toggleExpandVersion(version.id)}
                         className="expand-button"
                       >
-                        {expandedVersions.has(version.versionId) ? '▼' : '▶'}
+                        {expandedVersions.has(version.id) ? '▼' : '▶'}
                       </button>
-                      
-                      {!version.isActive && (
+
+                      {!version.is_active && (
                         <button
-                          onClick={() => handleSetActiveVersion(version.versionId)}
+                          onClick={() => handleSetActiveVersion(version.id)}
                           className="restore-button"
                         >
                           Restore
                         </button>
                       )}
-                      
+
                       {versions.length > 1 && (
                         <button
-                          onClick={() => handleDeleteVersion(version.versionId)}
+                          onClick={() => handleDeleteVersion(version.id)}
                           className="delete-version-button"
-                          disabled={version.isActive}
+                          disabled={version.is_active}
                         >
                           Delete
                         </button>
@@ -234,11 +248,11 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                     </div>
                   </div>
 
-                  {expandedVersions.has(version.versionId) && (
+                  {expandedVersions.has(version.id) && (
                     <div className="version-content">
                       <h4>Version Data:</h4>
                       <div className="version-data">
-                        {renderVersionData(version.data, category)}
+                        {renderVersionData(Object.values(version.data)[0], category)}
                       </div>
                     </div>
                   )}

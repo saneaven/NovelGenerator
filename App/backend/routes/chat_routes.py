@@ -1,6 +1,7 @@
 """Chat and message routes"""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from typing import List
 import uuid
 
@@ -70,10 +71,13 @@ async def list_chats(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """List all chats for a project"""
+    """List all chats for a project with their messages"""
     project = await verify_project_access(project_id, current_user, db)
 
     chats = db.query(Chat).filter(Chat.project_id == project_id).all()
+
+    # Eagerly load messages for each chat
+    # SQLAlchemy relationship already handles this via the relationship definition
     return chats
 
 
@@ -264,10 +268,12 @@ async def update_message(
         message.data[data.language] = {}
 
     message.data[data.language]['content'] = data.content
-
-    # Mark as modified for SQLAlchemy to detect the change
-    from sqlalchemy.orm.attributes import flag_modified
     flag_modified(message, "data")
+
+    # Update function calls if provided
+    if data.function_calls is not None:
+        message.function_calls = data.function_calls  # type: ignore
+        flag_modified(message, "function_calls")
 
     db.commit()
     db.refresh(message)

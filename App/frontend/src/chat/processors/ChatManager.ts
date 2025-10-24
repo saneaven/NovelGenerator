@@ -17,16 +17,20 @@ export interface ChatManagerConfig {
   getActiveChatId: () => string | undefined;
   getConversationLanguage: () => string;
   aiModel?: string;
+  temperature?: number;
   provider: ProviderType;
   providerConfig: ProviderConfig;
+  providerPreference?: any; // OpenRouter provider preference
   functions?: any[]; // Function schemas for this context
   mode: 'novel-editor' | 'workspace'; // Explicit mode distinction
+  enablePrefill?: boolean; // Enable assistant prefill
+  enableThinking?: boolean; // Enable extended thinking in prompts
 }
 
 export interface ChatManagerCallbacks {
   onUpdateMessage: (projectId: string, chatId: string, messageId: string, content: string, language: string) => void;
   onFunctionCalls: (projectId: string, chatId: string, messageId: string, functionCalls: FunctionCallMetadata[]) => void;
-  onAddMessage: (projectId: string, chatId: string, message: ChatMessage, language: string) => void;
+  onAddMessage: (projectId: string, chatId: string, message: ChatMessage, language: string) => Promise<string>;
   onGetChatHistory: (projectId: string, chatId: string, language: string) => ChatMessage[];
   onError: (error: Error) => void;
   onFunctionCallsDetected?: (projectId: string, chatId: string, messageId: string, functionCalls: any[]) => void;
@@ -58,14 +62,14 @@ export class ChatManager {
 
     try {
       // Add user message in the conversation language
-      this.callbacks.onAddMessage(this.config.projectId, chatId, userMessage, language);
+      await this.callbacks.onAddMessage(this.config.projectId, chatId, userMessage, language);
 
       // Create new AI response message
       const assistantMessage = this.createAssistantMessage();
-      this.callbacks.onAddMessage(this.config.projectId, chatId, assistantMessage, language);
+      const assistantMessageId = await this.callbacks.onAddMessage(this.config.projectId, chatId, assistantMessage, language);
 
-      // Start streaming
-      await this.startStreaming(chatId, assistantMessage.id, language);
+      // Start streaming with the backend-generated message ID
+      await this.startStreaming(chatId, assistantMessageId, language);
 
     } catch (error) {
       console.error('Chat processing error:', error);
@@ -94,10 +98,10 @@ export class ChatManager {
     try {
       // Create new AI response message
       const assistantMessage = this.createAssistantMessage();
-      this.callbacks.onAddMessage(this.config.projectId, chatId, assistantMessage, language);
+      const assistantMessageId = await this.callbacks.onAddMessage(this.config.projectId, chatId, assistantMessage, language);
 
-      // Start streaming
-      await this.startStreaming(chatId, assistantMessage.id, language);
+      // Start streaming with the backend-generated message ID
+      await this.startStreaming(chatId, assistantMessageId, language);
 
     } catch (error) {
       console.error('Chat processing error:', error);
@@ -134,7 +138,9 @@ export class ChatManager {
       this.config.getStoryObjects(),
       this.config.mode,
       this.config.systemInsertConfig,
-      this.config.getNovelData?.()
+      this.config.getNovelData?.(),
+      this.config.enablePrefill,
+      this.config.enableThinking
     );
 
     // Pre-process messages
@@ -158,7 +164,9 @@ export class ChatManager {
       {
         signal: this.config.abortControllerRef.current.signal,
         functions: functions,
-        model: this.config.aiModel
+        model: this.config.aiModel,
+        temperature: this.config.temperature,
+        providerPreference: this.config.providerPreference,
       }
     )) {
       if (typeof chunk === 'string') {

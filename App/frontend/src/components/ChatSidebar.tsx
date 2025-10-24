@@ -40,8 +40,8 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
     }
   }, [editingChatId]);
 
-  const handleCreateChat = () => {
-    const newChatId = createChat(projectId);
+  const handleCreateChat = async () => {
+    const newChatId = await createChat(projectId);
     onSelectChat(newChatId);
   };
 

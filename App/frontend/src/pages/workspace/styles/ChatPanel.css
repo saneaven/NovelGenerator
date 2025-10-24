@@ -1,21 +1,32 @@
-/* Chat Panel Container */
+/* ========================================
+   CHAT PANEL CONTAINER
+   Modern, Responsive Design
+   ======================================== */
+
 .chat-panel {
   display: flex;
   flex-direction: column;
-  width: 420px;
-  background: #f9fafb;
-  border-right: 1px solid #e5e7eb;
-  transition: width 0.3s ease;
-  flex-shrink: 0;
+  flex: 0 0 30%;
+  min-width: 350px;
+  max-width: 600px;
+  background: var(--color-surface-base);
+  border-right: 1px solid var(--color-border-default);
+  transition: flex var(--transition-base), transform var(--transition-base);
   height: 100%;
+  position: relative;
+  box-shadow: var(--shadow-sm);
+  z-index: 1;
 }
 
 .chat-panel.hidden {
-  width: 0;
+  flex: 0 0 0;
+  min-width: 0;
+  max-width: 0;
   overflow: hidden;
+  border-right: none;
 }
 
-/* Mobile chat panel */
+/* ===== Mobile Responsive ===== */
 @media (max-width: 768px) {
   .chat-panel {
     position: fixed;
@@ -23,9 +34,10 @@
     left: 0;
     width: 100%;
     height: 100vh;
-    z-index: 1000;
+    z-index: var(--z-modal);
     transform: translateX(-100%);
-    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-xl);
+    border-right: none;
   }
 
   .chat-panel.visible {
@@ -34,25 +46,54 @@
 
   .chat-panel.hidden {
     transform: translateX(-100%);
+    width: 100%;
   }
 }
 
-/* Desktop styles */
-@media (min-width: 769px) {
+/* ===== Tablet Styles ===== */
+@media (min-width: 769px) and (max-width: 1024px) {
   .chat-panel {
-    position: static;
-    width: 420px;
-    height: auto;
-    z-index: auto;
-    transform: none;
-    transition: width 0.3s ease;
-    box-shadow: none;
-    display: flex;
-    flex-direction: column;
+    flex: 0 0 30%;
+    min-width: 300px;
+    max-width: 500px;
   }
 
   .chat-panel.hidden {
-    width: 0;
+    flex: 0 0 0;
+    min-width: 0;
+  }
+}
+
+/* ===== Desktop Styles ===== */
+@media (min-width: 769px) {
+  .chat-panel {
+    position: static;
+    height: auto;
+    z-index: auto;
+    transform: none;
+  }
+
+  .chat-panel.visible {
+    transform: none;
+  }
+
+  .chat-panel.hidden {
+    flex: 0 0 0;
+    min-width: 0;
     overflow: hidden;
+  }
+}
+
+/* ===== Large Desktop ===== */
+@media (min-width: 1440px) {
+  .chat-panel {
+    flex: 0 0 30%;
+    min-width: 400px;
+    max-width: 700px;
+  }
+
+  .chat-panel.hidden {
+    flex: 0 0 0;
+    min-width: 0;
   }
 }

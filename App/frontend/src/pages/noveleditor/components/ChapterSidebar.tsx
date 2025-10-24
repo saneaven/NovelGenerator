@@ -51,9 +51,13 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
     );
   }
 
-  const handleVersionSelect = (versionId: string) => {
+  const handleVersionSelect = async (versionId: string) => {
     if (selectedChapterId) {
-      setActiveVersion(projectId, selectedChapterId, versionId);
+      try {
+        await setActiveVersion(projectId, selectedChapterId, versionId);
+      } catch (error) {
+        console.error('Failed to set active version:', error);
+      }
     }
   };
 
@@ -183,33 +187,38 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
             <div className="versions-list">
               {selectedChapterVersions
                 .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-                .map((version, index) => (
-                  <div
-                    key={version.versionId}
-                    className={`version-item ${version.isActive ? 'active' : ''}`}
-                    onClick={() => handleVersionSelect(version.versionId)}
-                  >
-                    <div className="version-header">
-                      <div className="version-info">
-                        <div className="version-label">
-                          {index === 0 ? '🟢 Latest' : `Version ${selectedChapterVersions.length - index}`}
-                          {version.isActive && ' (Current)'}
+                .map((version, index) => {
+                  // Calculate total word count from all languages
+                  const totalWordCount = Object.values(version.data).reduce((sum, langData) => sum + (langData.wordCount || 0), 0);
+
+                  return (
+                    <div
+                      key={version.id}
+                      className={`version-item ${version.is_active ? 'active' : ''}`}
+                      onClick={() => handleVersionSelect(version.id)}
+                    >
+                      <div className="version-header">
+                        <div className="version-info">
+                          <div className="version-label">
+                            {index === 0 ? '🟢 Latest' : `Version ${selectedChapterVersions.length - index}`}
+                            {version.is_active && ' (Current)'}
+                          </div>
+                          <div className="version-date">
+                            {formatDate(new Date(version.timestamp))}
+                          </div>
                         </div>
-                        <div className="version-date">
-                          {formatDate(new Date(version.timestamp))}
+                        <div className="version-meta">
+                          <span className="word-count">
+                            {totalWordCount} words
+                          </span>
                         </div>
                       </div>
-                      <div className="version-meta">
-                        <span className="word-count">
-                          {version.wordCount} words
-                        </span>
+                      <div className="version-description">
+                        {version.userRequest}
                       </div>
                     </div>
-                    <div className="version-description">
-                      {version.userRequest}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
 
               {selectedChapterVersions.length === 0 && (
                 <div className="no-versions">

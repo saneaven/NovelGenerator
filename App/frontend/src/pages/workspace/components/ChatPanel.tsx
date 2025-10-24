@@ -11,6 +11,7 @@ import { EditCardComponent } from '../../../chat/processors/DisplayProcessor';
 import type { WorkspaceUIState, WorkspaceUIActions } from '../hooks/useWorkspaceState';
 import type { StoryObjects } from '../../../types/storyObject';
 import type { ChatMessage } from '../../../llm_request/types';
+import ToggleSwitch from '../../../components/ToggleSwitch';
 
 interface ChatPanelProps {
   projectId: string;
@@ -206,17 +207,18 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         dataType: 'chatMessage'
       });
 
-      const provider = settingsStore.settings.activeProvider;
-      const providerConfig = settingsStore.settings.providers[provider];
+      const translationConfig = settingsStore.getFunctionConfig('translation');
+      const providerConfig = settingsStore.getProviderConfig(translationConfig.provider);
 
       let response = '';
       for await (const chunk of streamChat(
         translationRequest.messages,
-        provider,
+        translationConfig.provider,
         providerConfig,
         {
-          model: aiModel,
-          temperature: 0.2,
+          model: translationConfig.model,
+          temperature: translationConfig.temperature,
+          providerPreference: translationConfig.providerPreference,
         }
       )) {
         if (typeof chunk === 'string') {
@@ -488,28 +490,24 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
       <div className="chat-input-container">
         <div className="chat-controls">
-          <label className="system-insert-toggle">
-            <input
-              type="checkbox"
-              checked={systemInsertConfig.enabled}
-              onChange={(e) => setSystemInsertConfig(prev => ({
-                ...prev,
-                enabled: e.target.checked
-              }))}
-            />
-            <span className="toggle-label">Include story context in messages</span>
-          </label>
-          <label className="system-insert-toggle">
-            <input
-              type="checkbox"
-              checked={systemInsertConfig.includeNovelContent}
-              onChange={(e) => setSystemInsertConfig(prev => ({
-                ...prev,
-                includeNovelContent: e.target.checked
-              }))}
-            />
-            <span className="toggle-label">Include novel content in messages</span>
-          </label>
+          <ToggleSwitch
+            checked={systemInsertConfig.enabled}
+            onChange={(checked) => setSystemInsertConfig(prev => ({
+              ...prev,
+              enabled: checked
+            }))}
+            label="Include story context in messages"
+            icon="📚"
+          />
+          <ToggleSwitch
+            checked={systemInsertConfig.includeNovelContent}
+            onChange={(checked) => setSystemInsertConfig(prev => ({
+              ...prev,
+              includeNovelContent: checked
+            }))}
+            label="Include novel content in messages"
+            icon="📖"
+          />
         </div>
 
         <form onSubmit={(e) => onSubmit(e, uiState.input, uiState.isLoading)} className="chat-form">

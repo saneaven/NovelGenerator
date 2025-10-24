@@ -66,14 +66,18 @@ export class ChatPipeline {
     storyObjects: any,
     mode: 'novel-editor' | 'workspace',
     systemConfig?: SystemInsertConfig,
-    novelData?: any
+    novelData?: any,
+    enablePrefill?: boolean,
+    enableThinking?: boolean
   ): ChatPipelineContext {
     return {
       projectId,
       storyObjects,
       systemInsertConfig: systemConfig || this.createDefaultSystemConfig(),
       novelData,
-      mode
+      mode,
+      enablePrefill,
+      enableThinking
     };
   }
 }

@@ -10,6 +10,7 @@ export interface BaseMetadata {
   id: string;
   created_at: string;
   updated_at: string;
+  active_version_id?: string;
 }
 
 export interface LanguageData<T = any> {
@@ -88,7 +89,6 @@ export interface BasicInfoResponse extends BaseMetadata {
   title?: string;
   logline?: string;
   genre?: string;
-  active_version_id?: string;
 }
 
 // ============================================================================
@@ -111,7 +111,6 @@ export interface NameDescriptionResponse extends BaseMetadata {
   project_id: string;
   name?: string;
   description?: string;
-  active_version_id?: string;
 }
 
 // ============================================================================
@@ -143,7 +142,6 @@ export interface ActResponse extends BaseMetadata {
   name?: string;
   description?: string;
   order: number;
-  active_version_id?: string;
   chapters: ChapterResponse[];
 }
 
@@ -166,7 +164,6 @@ export interface ChapterResponse extends BaseMetadata {
   name?: string;
   description?: string;
   order: number;
-  active_version_id?: string;
 }
 
 // ============================================================================
@@ -183,13 +180,14 @@ export interface ChapterContentUpdate {
   content: string;
   language?: string;
   userRequest?: string;
+  create_new_version?: boolean;  // If false, updates existing active version instead of creating new one
 }
 
 export interface ChapterContentVersionResponse {
   id: string;
   chapter_content_id: string;
   userRequest: string;
-  isActive: boolean;
+  is_active: boolean;  // Use snake_case to match backend
   data: LanguageData<{ content: string; wordCount: number }>;
   timestamp: string;
 }
@@ -242,13 +240,14 @@ export interface ChatResponse extends BaseMetadata {
 
 export interface ChatMessageCreate {
   role: string;
-  data: LanguageData<{ content: string }>;
+  content: string;
+  language?: string;
   function_calls?: any;
 }
 
 export interface ChatMessageUpdate {
-  role?: string;
-  data?: LanguageData<{ content: string }>;
+  content: string;
+  language?: string;
   function_calls?: any;
 }
 

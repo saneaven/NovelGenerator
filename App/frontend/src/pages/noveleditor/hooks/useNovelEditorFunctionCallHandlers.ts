@@ -20,7 +20,8 @@ export function useNovelEditorFunctionCallHandlers(
 
   const functionCallApplicator = useMemo(() => new NovelEditorFunctionCallApplicator({
     updateChapterContent: (projectId: string, chapterId: string, content: string, userRequest?: string) => {
-      updateChapterContentForLanguage(projectId, chapterId, content, settings.primaryLanguage, userRequest);
+      // AI-generated content should create new versions
+      updateChapterContentForLanguage(projectId, chapterId, content, settings.primaryLanguage, userRequest, true);
     }
   }), [updateChapterContentForLanguage, settings.primaryLanguage]);
   const [activeFunctionCalls, setActiveFunctionCalls] = useState<Record<string, any[]>>({});

@@ -48,25 +48,69 @@ class UserSettings(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, unique=True)
 
-    # Active provider
-    active_provider = Column(String(50), default='copilot', nullable=False)
-    ai_model = Column(String(100), default='gpt-5-mini', nullable=False)
-
-    # Provider configurations (stored as JSONB)
-    providers_config = Column(JSONB, nullable=False, server_default='{}')
-
-    # Provider preferences for OpenRouter models
+    # DEPRECATED: Keep for backward compatibility during migration
+    active_provider = Column(String(50), default='copilot')
+    ai_model = Column(String(100), default='gpt-5-mini')
+    providers_config = Column(JSONB, server_default='{}')
     provider_preferences = Column(JSONB, server_default='{}')
+
+    # NEW: Function-based configuration (provider, model, temperature, advanced settings per function)
+    function_configs = Column(JSONB, nullable=False, server_default="""{
+        "chat": {"provider": "copilot", "model": "gpt-4o-mini", "temperature": 0.7, "advanced": {"enablePrefill": false, "enableThinking": false}},
+        "translation": {"provider": "copilot", "model": "gpt-4o", "temperature": 0.2, "advanced": {"enablePrefill": false, "enableThinking": false}},
+        "storyEdit": {"provider": "copilot", "model": "gpt-4o", "temperature": 0.3, "advanced": {"enablePrefill": false, "enableThinking": false}},
+        "chapterGen": {"provider": "copilot", "model": "gpt-4o", "temperature": 0.7, "advanced": {"enablePrefill": true, "enableThinking": false}}
+    }""")
+
+    # NEW: Provider credentials (shared across functions)
+    provider_credentials = Column(JSONB, nullable=False, server_default="""{
+        "copilot": {},
+        "openrouter": {"apiKey": ""},
+        "custom": {"baseUrl": "", "apiKey": ""}
+    }""")
 
     # Language settings
     primary_language = Column(String(50), default='English', nullable=False)
     secondary_language = Column(String(50))
+
+    # Theme settings
+    theme = Column(String(20), default='system', nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
     user = relationship("User", back_populates="settings")
+
+
+# ============================================================================
+# PROMPT VERSIONS
+# ============================================================================
+
+class PromptVersion(Base):
+    """Version-controlled user-editable prompts"""
+    __tablename__ = 'prompt_versions'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    # Prompt identification
+    function_type = Column(String(50), nullable=False)  # 'chat', 'translation', 'storyEdit', 'chapterGen', 'global'
+    prompt_category = Column(String(50), nullable=False)  # 'systemPrompt', 'functionInstructions', 'prefill', 'userMessageTag'
+    prompt_name = Column(String(50), nullable=True)  # 'workspace', 'novelEditor', etc (nullable for single prompts)
+
+    # Version data
+    content = Column(Text, nullable=False)
+    version_number = Column(Integer, nullable=False)
+    is_active = Column(Boolean, default=False, nullable=False)
+    is_default = Column(Boolean, default=False, nullable=False)
+
+    # Metadata
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    note = Column(Text)
+
+    # Relationships
+    user = relationship("User")
 
 
 # ============================================================================
