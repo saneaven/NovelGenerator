@@ -2,7 +2,13 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
 from uuid import UUID
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Literal
+
+
+class ContentPart(BaseModel):
+    """A part of message content (content, thinking, or reasoning)"""
+    type: Literal["content", "thinking", "reasoning"]
+    text: str
 
 
 class ChatCreate(BaseModel):
@@ -22,25 +28,25 @@ class ChatResponse(BaseModel):
     name: str
     created_at: datetime
     updated_at: datetime
-    messages: Optional[List['MessageResponse']] = None
+    messages: List['MessageResponse'] = []
 
     class Config:
         from_attributes = True
 
 
 class MessageCreate(BaseModel):
-    """Create message request"""
     role: str = Field(..., pattern="^(user|assistant|system)$")
-    content: str
+    content_parts: Optional[List[ContentPart]] = None
     language: str = "English"
     function_calls: Optional[List[Dict[str, Any]]] = None
+    reasoning_details: Optional[List[Dict[str, Any]]] = None
 
 
 class MessageUpdate(BaseModel):
-    """Update message request"""
-    content: str
+    content_parts: Optional[List[ContentPart]] = None
     language: str = "English"
     function_calls: Optional[List[Dict[str, Any]]] = None
+    reasoning_details: Optional[List[Dict[str, Any]]] = None
 
 
 class MessageResponse(BaseModel):

@@ -12,6 +12,7 @@ import type { WorkspaceUIState, WorkspaceUIActions } from '../hooks/useWorkspace
 import type { StoryObjects } from '../../../types/storyObject';
 import type { ChatMessage } from '../../../llm_request/types';
 import ToggleSwitch from '../../../components/ToggleSwitch';
+import ReasoningDisplay from '../../../components/ReasoningDisplay';
 
 interface ChatPanelProps
 {
@@ -213,7 +214,13 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             return;
         }
 
-        const sourceContent = message.data[sourceLanguage]?.content ?? '';
+        const sourceData = message.data[sourceLanguage];
+        const contentParts = sourceData?.contentParts ?? [];
+        const sourceContent = contentParts
+            .filter((p: any) => p.type === 'content')
+            .map((p: any) => p.text)
+            .join('');
+
         if (!sourceContent.trim())
         {
             showError('Translation Failed', `No ${sourceLanguage} content available to translate.`);
@@ -225,10 +232,22 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             setTranslatingMessages(prev => ({ ...prev, [message.id]: true }));
             TranslationService.setTranslationStatus(message.id, { objectId: message.id, isTranslating: true });
 
+            // Extract thinking/reasoning text for translation
+            const thinkingText = contentParts
+                .filter((p: any) => p.type === 'thinking' || p.type === 'reasoning')
+                .map((p: any) => p.text)
+                .join('\n\n');
+
+            // Prepare data for translation
+            const dataToTranslate: any = { content: sourceContent };
+            if (thinkingText) {
+                dataToTranslate.thinking = thinkingText;
+            }
+
             const translationRequest = TranslationService.prepareTranslationRequest({
                 sourceLanguage,
                 targetLanguage,
-                data: { content: sourceContent },
+                data: dataToTranslate,
                 dataType: 'chatMessage'
             });
 
@@ -263,7 +282,22 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 throw new Error(validation.errors.join(', '));
             }
 
-            addTranslatedMessage(projectId, selectedChatId, message.id, parsed.content, targetLanguage);
+            // Reconstruct contentParts with translated text
+            const translatedContentParts = contentParts.map((part: any) => {
+                if (part.type === 'content') {
+                    return { ...part, text: parsed.content };
+                } else if ((part.type === 'thinking' || part.type === 'reasoning') && parsed.thinking) {
+                    return { ...part, text: parsed.thinking };
+                }
+                return part;
+            });
+
+            const translatedData: any = {
+                contentParts: translatedContentParts,
+                reasoning_details: sourceData.reasoning_details, // Keep original (not translated)
+            };
+
+            addTranslatedMessage(projectId, selectedChatId, message.id, translatedData, targetLanguage);
             setMessageLanguage(message.id, targetLanguage);
         } catch (error)
         {
@@ -419,6 +453,15 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                             key={message.chatMessage.id}
                             className={`chat-message ${message.chatMessage.role}${isEditing ? ' editing' : ''}`}
                         >
+                            {/* Show reasoning/thinking above the message bubble */}
+                            {message.chatMessage.role === 'assistant' && (
+                                <ReasoningDisplay
+                                    contentParts={message.chatMessage.contentParts}
+                                    displayMode="separate"
+                                    isStreaming={uiState.isLoading && message.chatMessage.id === storedMessages[storedMessages.length - 1]?.id}
+                                />
+                            )}
+
                             <div className="message-wrapper">
                                 <div className="message-header">
                                     <span className="message-role">{isUser ? 'You' : 'AI'}</span>

@@ -36,12 +36,38 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
     onChange({ ...config, temperature });
   };
 
-  const handleAdvancedChange = (key: 'enablePrefill' | 'enableThinking', value: boolean) => {
+  const handleAdvancedChange = (key: 'enablePrefill', value: boolean) => {
     onChange({
       ...config,
       advanced: {
         ...config.advanced,
         [key]: value,
+      },
+    });
+  };
+
+  const handleThinkingModeChange = (mode: 'off' | 'model' | 'custom') => {
+    onChange({
+      ...config,
+      advanced: {
+        ...config.advanced,
+        thinkingMode: mode,
+      },
+    });
+  };
+
+  const handleReasoningConfigChange = (
+    key: 'effort' | 'maxTokens',
+    value: any
+  ) => {
+    onChange({
+      ...config,
+      advanced: {
+        ...config.advanced,
+        reasoningConfig: {
+          ...config.advanced.reasoningConfig,
+          [key]: value,
+        },
       },
     });
   };
@@ -129,20 +155,101 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
             </label>
           </div>
 
-          <div className="checkbox-field">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={config.advanced.enableThinking}
-                onChange={(e) => handleAdvancedChange('enableThinking', e.target.checked)}
-              />
-              <div className="checkbox-content">
-                <span className="checkbox-title">Enable Extended Thinking</span>
-                <span className="checkbox-description">
-                  Allow the model to show internal reasoning process before responding
-                </span>
+          <div className="thinking-mode-field">
+            <label className="field-label">Thinking & Reasoning Mode</label>
+            <div className="radio-group">
+              <label className="radio-option">
+                <input
+                  type="radio"
+                  name={`thinking-mode-${functionType}`}
+                  value="off"
+                  checked={config.advanced.thinkingMode === 'off'}
+                  onChange={() => handleThinkingModeChange('off')}
+                />
+                <div className="radio-content">
+                  <span className="radio-title">Off</span>
+                  <span className="radio-description">No thinking or reasoning shown</span>
+                </div>
+              </label>
+
+              <label className="radio-option">
+                <input
+                  type="radio"
+                  name={`thinking-mode-${functionType}`}
+                  value="model"
+                  checked={config.advanced.thinkingMode === 'model'}
+                  onChange={() => handleThinkingModeChange('model')}
+                />
+                <div className="radio-content">
+                  <span className="radio-title">Model Reasoning</span>
+                  <span className="radio-description">
+                    Use model's native reasoning tokens (OpenRouter only)
+                  </span>
+                </div>
+              </label>
+
+              <label className="radio-option">
+                <input
+                  type="radio"
+                  name={`thinking-mode-${functionType}`}
+                  value="custom"
+                  checked={config.advanced.thinkingMode === 'custom'}
+                  onChange={() => handleThinkingModeChange('custom')}
+                />
+                <div className="radio-content">
+                  <span className="radio-title">Custom Thinking</span>
+                  <span className="radio-description">
+                    Prompt-based Chain-of-Thought with &lt;thinking&gt; tags
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            {/* Reasoning Config (only shown for model mode) */}
+            {config.advanced.thinkingMode === 'model' && (
+              <div className="reasoning-config">
+                <h5 className="subsection-title">Reasoning Configuration</h5>
+
+                <div className="form-field">
+                  <label>Effort Level</label>
+                  <select
+                    value={config.advanced.reasoningConfig?.effort || 'medium'}
+                    onChange={(e) =>
+                      handleReasoningConfigChange('effort', e.target.value)
+                    }
+                    className="config-select"
+                  >
+                    <option value="low">Low (~20% of max tokens)</option>
+                    <option value="medium">Medium (~50% of max tokens)</option>
+                    <option value="high">High (~80% of max tokens)</option>
+                  </select>
+                  <p className="field-hint">
+                    Controls how much reasoning the model performs internally
+                  </p>
+                </div>
+
+                <div className="form-field">
+                  <label>Max Reasoning Tokens (optional)</label>
+                  <input
+                    type="number"
+                    min="1024"
+                    max="32000"
+                    value={config.advanced.reasoningConfig?.maxTokens || ''}
+                    onChange={(e) =>
+                      handleReasoningConfigChange(
+                        'maxTokens',
+                        e.target.value ? parseInt(e.target.value) : undefined
+                      )
+                    }
+                    placeholder="Auto (based on effort)"
+                    className="config-input"
+                  />
+                  <p className="field-hint">
+                    Directly specify reasoning token budget (1024-32000). Leave empty to use effort-based allocation.
+                  </p>
+                </div>
               </div>
-            </label>
+            )}
           </div>
         </div>
       </div>

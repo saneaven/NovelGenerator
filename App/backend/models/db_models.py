@@ -56,10 +56,10 @@ class UserSettings(Base):
 
     # NEW: Function-based configuration (provider, model, temperature, advanced settings per function)
     function_configs = Column(JSONB, nullable=False, server_default="""{
-        "chat": {"provider": "copilot", "model": "gpt-4o-mini", "temperature": 0.7, "advanced": {"enablePrefill": false, "enableThinking": false}},
-        "translation": {"provider": "copilot", "model": "gpt-4o", "temperature": 0.2, "advanced": {"enablePrefill": false, "enableThinking": false}},
-        "storyEdit": {"provider": "copilot", "model": "gpt-4o", "temperature": 0.3, "advanced": {"enablePrefill": false, "enableThinking": false}},
-        "chapterGen": {"provider": "copilot", "model": "gpt-4o", "temperature": 0.7, "advanced": {"enablePrefill": true, "enableThinking": false}}
+        "chat": {"provider": "copilot", "model": "gpt-4o-mini", "temperature": 0.7, "advanced": {"enablePrefill": false, "thinkingMode": "off", "reasoningConfig": {"effort": "medium"}}},
+        "translation": {"provider": "copilot", "model": "gpt-4o", "temperature": 0.2, "advanced": {"enablePrefill": false, "thinkingMode": "off", "reasoningConfig": {"effort": "medium"}}},
+        "storyEdit": {"provider": "copilot", "model": "gpt-4o", "temperature": 0.3, "advanced": {"enablePrefill": false, "thinkingMode": "off", "reasoningConfig": {"effort": "medium"}}},
+        "chapterGen": {"provider": "copilot", "model": "gpt-4o", "temperature": 0.7, "advanced": {"enablePrefill": true, "thinkingMode": "off", "reasoningConfig": {"effort": "medium"}}}
     }""")
 
     # NEW: Provider credentials (shared across functions)

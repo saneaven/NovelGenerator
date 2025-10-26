@@ -35,10 +35,17 @@ export interface ProviderPreference {
     ignore?: string[];
 }
 
+// Reasoning configuration for model-native reasoning (OpenRouter)
+export interface ReasoningConfig {
+    effort?: 'low' | 'medium' | 'high';
+    maxTokens?: number;
+}
+
 // Advanced settings for AI functions
 export interface AdvancedFunctionSettings {
     enablePrefill: boolean;
-    enableThinking: boolean;
+    thinkingMode: 'off' | 'model' | 'custom';
+    reasoningConfig?: ReasoningConfig;
 }
 
 // Complete configuration for a single AI function
@@ -89,7 +96,10 @@ const defaultSettings: Settings = {
             temperature: 0.7,
             advanced: {
                 enablePrefill: false,
-                enableThinking: false,
+                thinkingMode: 'off',
+                reasoningConfig: {
+                    effort: 'medium',
+                },
             },
         },
 
@@ -100,7 +110,10 @@ const defaultSettings: Settings = {
             temperature: 0.2,
             advanced: {
                 enablePrefill: false,
-                enableThinking: false,
+                thinkingMode: 'off',
+                reasoningConfig: {
+                    effort: 'medium',
+                },
             },
         },
 
@@ -111,7 +124,10 @@ const defaultSettings: Settings = {
             temperature: 0.3,
             advanced: {
                 enablePrefill: false,
-                enableThinking: false,
+                thinkingMode: 'off',
+                reasoningConfig: {
+                    effort: 'medium',
+                },
             },
         },
 
@@ -122,7 +138,10 @@ const defaultSettings: Settings = {
             temperature: 0.7,
             advanced: {
                 enablePrefill: true,
-                enableThinking: false,
+                thinkingMode: 'off',
+                reasoningConfig: {
+                    effort: 'medium',
+                },
             },
         },
     },
@@ -179,10 +198,44 @@ interface SettingsStore {
     resetToDefaults: () => void;
 }
 
+// Helper to migrate old settings format
+const migrateAdvancedSettings = (advanced: any): AdvancedFunctionSettings => {
+    // Handle old enableThinking boolean -> new thinkingMode
+    if ('enableThinking' in advanced && !('thinkingMode' in advanced)) {
+        return {
+            enablePrefill: advanced.enablePrefill ?? false,
+            thinkingMode: advanced.enableThinking ? 'custom' : 'off',
+            reasoningConfig: advanced.reasoningConfig ?? {
+                effort: 'medium',
+            },
+        };
+    }
+
+    // Ensure reasoningConfig exists
+    return {
+        ...advanced,
+        reasoningConfig: advanced.reasoningConfig ?? {
+            effort: 'medium',
+        },
+    };
+};
+
 // Helper to merge stored settings with defaults (for backward compatibility)
 const mergeWithDefaults = (stored: any): Settings => {
     if (!stored || typeof stored !== 'object') {
         return defaultSettings;
+    }
+
+    // Migrate function configs
+    const migratedFunctionConfigs: any = {};
+    if (stored.functionConfigs) {
+        for (const [key, config] of Object.entries(stored.functionConfigs) as [string, any][]) {
+            migratedFunctionConfigs[key] = {
+                ...defaultSettings.functionConfigs[key as AIFunctionType],
+                ...config,
+                advanced: migrateAdvancedSettings(config.advanced || {}),
+            };
+        }
     }
 
     return {
@@ -192,7 +245,7 @@ const mergeWithDefaults = (stored: any): Settings => {
         },
         functionConfigs: {
             ...defaultSettings.functionConfigs,
-            ...stored.functionConfigs,
+            ...migratedFunctionConfigs,
         },
         primaryLanguage: stored.primaryLanguage ?? defaultSettings.primaryLanguage,
         secondaryLanguage: stored.secondaryLanguage ?? defaultSettings.secondaryLanguage,

@@ -1,6 +1,6 @@
 """Chat and message routes"""
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.orm.attributes import flag_modified
 from typing import List
 import uuid
@@ -62,6 +62,9 @@ async def create_chat(
     db.commit()
     db.refresh(chat)
 
+    # Eagerly load messages (will be empty for new chat) to ensure consistent serialization
+    chat = db.query(Chat).filter(Chat.id == chat.id).options(joinedload(Chat.messages)).first()
+
     return chat
 
 
@@ -74,10 +77,13 @@ async def list_chats(
     """List all chats for a project with their messages"""
     project = await verify_project_access(project_id, current_user, db)
 
-    chats = db.query(Chat).filter(Chat.project_id == project_id).all()
+    # Eagerly load messages to avoid lazy-loading issues during serialization
+    chats = db.query(Chat).filter(
+        Chat.project_id == project_id
+    ).options(
+        joinedload(Chat.messages)
+    ).all()
 
-    # Eagerly load messages for each chat
-    # SQLAlchemy relationship already handles this via the relationship definition
     return chats
 
 
@@ -134,6 +140,9 @@ async def update_chat(
     chat.name = data.name
     db.commit()
     db.refresh(chat)
+
+    # Eagerly load messages to ensure consistent serialization
+    db.query(Chat).filter(Chat.id == chat_id).options(joinedload(Chat.messages)).first()
 
     return chat
 
@@ -192,15 +201,23 @@ async def create_message(
             detail="Chat not found"
         )
 
+    message_data = {
+        data.language: {}
+    }
+
+    if data.content_parts:
+        message_data[data.language]['contentParts'] = [
+            part.model_dump() for part in data.content_parts
+        ]
+
+    if data.reasoning_details:
+        message_data[data.language]['reasoning_details'] = data.reasoning_details
+
     message = ChatMessage(
         id=uuid.uuid4(),
         chat_id=chat_id,
         role=data.role,
-        data={
-            data.language: {
-                'content': data.content
-            }
-        },
+        data=message_data,
         function_calls=data.function_calls
     )
 
@@ -264,10 +281,21 @@ async def update_message(
         )
 
     # Update message data for the specified language
-    if data.language not in message.data:
-        message.data[data.language] = {}
+    # Must copy data dict to trigger SQLAlchemy change detection
+    message_data = dict(message.data)  # type: ignore
 
-    message.data[data.language]['content'] = data.content
+    if data.language not in message_data:
+        message_data[data.language] = {}
+
+    if data.content_parts:
+        message_data[data.language]['contentParts'] = [
+            part.model_dump() for part in data.content_parts
+        ]
+
+    if data.reasoning_details is not None:
+        message_data[data.language]['reasoning_details'] = data.reasoning_details
+
+    message.data = message_data  # type: ignore
     flag_modified(message, "data")
 
     # Update function calls if provided

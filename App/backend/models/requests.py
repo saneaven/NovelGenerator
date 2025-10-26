@@ -12,6 +12,11 @@ class ProviderPreference(BaseModel):
     only: Optional[List[str]] = None
     ignore: Optional[List[str]] = None
 
+class ReasoningConfig(BaseModel):
+    """Reasoning configuration for OpenRouter (model-native reasoning)"""
+    effort: Optional[Literal["low", "medium", "high"]] = None
+    max_tokens: Optional[int] = None
+
 class Message(BaseModel):
     role: Literal["system", "user", "assistant"]
     content: str
@@ -24,3 +29,5 @@ class ChatCompletionRequest(BaseModel):
     max_tokens: Optional[int] = None
     config: ProviderConfig = Field(default_factory=ProviderConfig)
     provider_preference: Optional[ProviderPreference] = None
+    reasoning_config: Optional[ReasoningConfig] = None
+    thinking_mode: Optional[Literal["off", "custom", "model"]] = "off"

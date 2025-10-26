@@ -1,5 +1,5 @@
 import type { MutableRefObject } from 'react';
-import type { ChatMessage, FunctionCallMetadata } from '../../llm_request/types';
+import type { ChatMessage, FunctionCallMetadata, ContentPart } from '../../llm_request/types';
 import type { ChatPipelineContext } from '../types';
 import { streamChat } from '../../llm_request/llmService';
 import { ChatPipeline } from '../ChatPipeline';
@@ -11,7 +11,7 @@ export interface ChatManagerConfig {
   getNovelData?: () => any; // Novel content access function
   systemInsertConfig: any;
   chatPipeline: ChatPipeline;
-  isLoading: boolean;
+  getIsLoading: () => boolean; // Changed to getter to prevent recreating ChatManager on loading state changes
   setIsLoading: (loading: boolean) => void;
   abortControllerRef: MutableRefObject<AbortController | null>;
   getActiveChatId: () => string | undefined;
@@ -24,11 +24,16 @@ export interface ChatManagerConfig {
   functions?: any[]; // Function schemas for this context
   mode: 'novel-editor' | 'workspace'; // Explicit mode distinction
   enablePrefill?: boolean; // Enable assistant prefill
-  enableThinking?: boolean; // Enable extended thinking in prompts
+  thinkingMode?: 'off' | 'model' | 'custom'; // Thinking mode: off, model-native reasoning, or custom prompt-based
+  reasoningConfig?: {
+    effort?: 'low' | 'medium' | 'high';
+    maxTokens?: number;
+  };
 }
 
 export interface ChatManagerCallbacks {
-  onUpdateMessage: (projectId: string, chatId: string, messageId: string, content: string, language: string) => void;
+  onUpdateMessage: (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, reasoning_details?: any[]) => void;
+  onSyncMessageToBackend: (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, reasoning_details?: any[]) => Promise<void>;
   onFunctionCalls: (projectId: string, chatId: string, messageId: string, functionCalls: FunctionCallMetadata[]) => void;
   onAddMessage: (projectId: string, chatId: string, message: ChatMessage, language: string) => Promise<string>;
   onGetChatHistory: (projectId: string, chatId: string, language: string) => ChatMessage[];
@@ -39,6 +44,7 @@ export interface ChatManagerCallbacks {
 export class ChatManager {
   private config: ChatManagerConfig;
   private callbacks: ChatManagerCallbacks;
+  private isStreaming: boolean = false;
 
   constructor(config: ChatManagerConfig, callbacks: ChatManagerCallbacks) {
     this.config = config;
@@ -49,7 +55,13 @@ export class ChatManager {
    * Process initial user message and start streaming
    */
   async processUserMessage(userMessage: ChatMessage): Promise<void> {
-    if (this.config.isLoading) return;
+    if (this.config.getIsLoading()) return;
+
+    // Defensive check: prevent concurrent streams
+    if (this.isStreaming) {
+      console.warn('ChatManager: Attempted to start new stream while one is already in progress');
+      return;
+    }
 
     const chatId = this.config.getActiveChatId();
     if (!chatId) {
@@ -59,6 +71,7 @@ export class ChatManager {
 
     const language = this.config.getConversationLanguage();
     this.config.setIsLoading(true);
+    this.isStreaming = true;
 
     try {
       // Add user message in the conversation language
@@ -76,6 +89,7 @@ export class ChatManager {
       this.callbacks.onError(error instanceof Error ? error : new Error(String(error)));
     } finally {
       this.config.setIsLoading(false);
+      this.isStreaming = false;
       this.config.abortControllerRef.current = null;
     }
   }
@@ -84,7 +98,13 @@ export class ChatManager {
    * Process empty request without adding user message
    */
   async processEmptyRequest(): Promise<void> {
-    if (this.config.isLoading) return;
+    if (this.config.getIsLoading()) return;
+
+    // Defensive check: prevent concurrent streams
+    if (this.isStreaming) {
+      console.warn('ChatManager: Attempted to start new stream while one is already in progress');
+      return;
+    }
 
     const chatId = this.config.getActiveChatId();
     if (!chatId) {
@@ -94,6 +114,7 @@ export class ChatManager {
 
     const language = this.config.getConversationLanguage();
     this.config.setIsLoading(true);
+    this.isStreaming = true;
 
     try {
       // Create new AI response message
@@ -108,6 +129,7 @@ export class ChatManager {
       this.callbacks.onError(error instanceof Error ? error : new Error(String(error)));
     } finally {
       this.config.setIsLoading(false);
+      this.isStreaming = false;
       this.config.abortControllerRef.current = null;
     }
   }
@@ -140,7 +162,8 @@ export class ChatManager {
       this.config.systemInsertConfig,
       this.config.getNovelData?.(),
       this.config.enablePrefill,
-      this.config.enableThinking
+      this.config.thinkingMode,
+      this.config.reasoningConfig
     );
 
     // Pre-process messages
@@ -154,42 +177,133 @@ export class ChatManager {
     // Start streaming
     this.config.abortControllerRef.current = new AbortController();
 
-    let accumulatedContent = '';
+    // NEW: Accumulate interleaved content parts
+    let accumulatedContentParts: ContentPart[] = [];
+    let currentContentChunk = '';  // Buffer for incomplete content
+    let currentReasoningChunk = '';  // Buffer for incomplete reasoning/thinking
     let accumulatedToolCalls: any[] = [];
+    let accumulatedReasoningDetails: any[] | undefined;
 
-    for await (const chunk of streamChat(
-      conversationBlocks,
-      this.config.provider,
-      this.config.providerConfig,
-      {
-        signal: this.config.abortControllerRef.current.signal,
-        functions: functions,
-        model: this.config.aiModel,
-        temperature: this.config.temperature,
-        providerPreference: this.config.providerPreference,
+    // Throttle mechanism to prevent excessive store updates
+    let pendingUpdate: ContentPart[] | null = null;
+    let rafId: number | null = null;
+
+    const scheduleUpdate = (contentParts: ContentPart[]) => {
+      pendingUpdate = contentParts;
+
+      if (rafId === null) {
+        rafId = requestAnimationFrame(() => {
+          if (pendingUpdate !== null) {
+            this.callbacks.onUpdateMessage(this.config.projectId, chatId, assistantMessageId, pendingUpdate, language);
+            pendingUpdate = null;
+          }
+          rafId = null;
+        });
       }
-    )) {
-      if (typeof chunk === 'string') {
-        accumulatedContent += chunk;
-        this.callbacks.onUpdateMessage(this.config.projectId, chatId, assistantMessageId, accumulatedContent, language);
-      } else {
-        if (chunk.content) {
-          accumulatedContent += chunk.content;
-          this.callbacks.onUpdateMessage(this.config.projectId, chatId, assistantMessageId, accumulatedContent, language);
+    };
+
+    const flushPendingUpdate = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      if (pendingUpdate !== null) {
+        this.callbacks.onUpdateMessage(this.config.projectId, chatId, assistantMessageId, pendingUpdate, language);
+        pendingUpdate = null;
+      }
+    };
+
+    // Prepare reasoning config for model mode
+    const reasoningConfig = this.config.thinkingMode === 'model' ? this.config.reasoningConfig : undefined;
+
+    try {
+      for await (const chunk of streamChat(
+        conversationBlocks,
+        this.config.provider,
+        this.config.providerConfig,
+        {
+          signal: this.config.abortControllerRef.current.signal,
+          functions: functions,
+          model: this.config.aiModel,
+          temperature: this.config.temperature,
+          providerPreference: this.config.providerPreference,
+          reasoningConfig,
+          thinkingMode: this.config.thinkingMode,
         }
+      )) {
+        if (typeof chunk === 'string') {
+          // Pure content chunk
+          currentContentChunk += chunk;
 
-        if (chunk.tool_calls) {
-          accumulatedToolCalls = this.accumulateToolCalls(accumulatedToolCalls, chunk.tool_calls);
+          // Show content in progress
+          const displayParts = [
+            ...accumulatedContentParts,
+            ...(currentContentChunk ? [{type: 'content' as const, text: currentContentChunk}] : [])
+          ];
+          scheduleUpdate(displayParts);
+        } else {
+          // Structured chunk
+          if (chunk.content) {
+            currentContentChunk += chunk.content;
+          }
 
-          if (this.callbacks.onFunctionCallsDetected) {
-            this.callbacks.onFunctionCallsDetected(this.config.projectId, chatId, assistantMessageId, accumulatedToolCalls);
+          // NEW: Handle reasoning_text (thinking/reasoning chunks from backend)
+          if (chunk.reasoning_text) {
+            // Reasoning chunk arrived - finalize current content chunk
+            if (currentContentChunk) {
+              accumulatedContentParts.push({type: 'content', text: currentContentChunk});
+              currentContentChunk = '';
+            }
+
+            // Add reasoning chunk
+            const reasoningType = this.config.thinkingMode === 'custom' ? 'thinking' : 'reasoning';
+            accumulatedContentParts.push({type: reasoningType, text: chunk.reasoning_text});
+
+            // Update display
+            scheduleUpdate([...accumulatedContentParts]);
+          }
+
+          if (chunk.tool_calls) {
+            accumulatedToolCalls = this.accumulateToolCalls(accumulatedToolCalls, chunk.tool_calls);
+
+            if (this.callbacks.onFunctionCallsDetected) {
+              this.callbacks.onFunctionCallsDetected(this.config.projectId, chatId, assistantMessageId, accumulatedToolCalls);
+            }
+          }
+
+          // Store reasoning_details metadata
+          if (chunk.reasoning_details) {
+            if (!accumulatedReasoningDetails) {
+              accumulatedReasoningDetails = [];
+            }
+            accumulatedReasoningDetails.push(...chunk.reasoning_details);
           }
         }
       }
+
+      // Flush any remaining content chunk
+      if (currentContentChunk) {
+        accumulatedContentParts.push({type: 'content', text: currentContentChunk});
+      }
+
+      // Ensure final update is sent
+      flushPendingUpdate();
+    } catch (error) {
+      // Clean up RAF on error
+      flushPendingUpdate();
+      throw error;
     }
 
     // Post-processing
-    await this.finishProcessing(chatId, assistantMessageId, accumulatedContent, accumulatedToolCalls, context, language);
+    await this.finishProcessing(
+      chatId,
+      assistantMessageId,
+      accumulatedContentParts,
+      accumulatedToolCalls,
+      accumulatedReasoningDetails,
+      context,
+      language
+    );
   }
 
   /**
@@ -225,28 +339,65 @@ export class ChatManager {
   private async finishProcessing(
     chatId: string,
     messageId: string,
-    content: string,
+    contentParts: ContentPart[],
     toolCalls: any[],
+    reasoningDetails: any[] | undefined,
     context: ChatPipelineContext,
     _language: string
   ): Promise<void> {
-    // Post-process the final AI response
-    const finalResponse = toolCalls.length > 0 
-      ? { content: content, tool_calls: toolCalls }
-      : content;
+    // Post-process the final AI response with contentParts
+    const finalResponse = (toolCalls.length > 0 || reasoningDetails)
+      ? {
+          contentParts,
+          tool_calls: toolCalls,
+          reasoning_details: reasoningDetails
+        }
+      : { contentParts };
 
-    console.log('ChatManager: Processing final response', { finalResponse, toolCallsLength: toolCalls.length });
+    console.log('ChatManager: Processing final response', {
+      finalResponse,
+      contentPartsLength: contentParts.length,
+      toolCallsLength: toolCalls.length,
+      hasReasoningDetails: !!reasoningDetails
+    });
 
     const { message: processedMessage } = this.config.chatPipeline.postProcess(
       finalResponse,
       context
     );
 
-    console.log('ChatManager: Processed message', { 
-      messageId, 
+    console.log('ChatManager: Processed message', {
+      messageId,
+      contentPartsLength: processedMessage.contentParts?.length || 0,
       functionCallsLength: processedMessage.functionCalls?.length || 0,
-      functionCalls: processedMessage.functionCalls 
+      hasReasoningDetails: !!(processedMessage as any).reasoning_details
     });
+
+    // Save the final processed message (local update first)
+    this.callbacks.onUpdateMessage(
+      this.config.projectId,
+      chatId,
+      messageId,
+      processedMessage.contentParts || [],
+      _language,
+      (processedMessage as any).reasoning_details
+    );
+
+    // Sync to backend to persist data
+    try {
+      await this.callbacks.onSyncMessageToBackend(
+        this.config.projectId,
+        chatId,
+        messageId,
+        processedMessage.contentParts || [],
+        _language,
+        (processedMessage as any).reasoning_details
+      );
+      console.log('ChatManager: Successfully synced message to backend');
+    } catch (error) {
+      console.error('ChatManager: Failed to sync message to backend:', error);
+      // Don't throw - local state is already updated
+    }
 
     // Process for display and generate edit cards
     this.config.chatPipeline.processForDisplay(processedMessage, context);
@@ -267,6 +418,7 @@ export class ChatManager {
     if (this.config.abortControllerRef.current) {
       this.config.abortControllerRef.current.abort();
       this.config.setIsLoading(false);
+      this.isStreaming = false;
     }
   }
 }

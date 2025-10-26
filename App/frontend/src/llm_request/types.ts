@@ -1,6 +1,13 @@
 
 export type Role = "system" | "user" | "assistant" | "function";
 
+export type ContentPartType = "content" | "thinking" | "reasoning";
+
+export interface ContentPart {
+  type: ContentPartType;
+  text: string;
+}
+
 export interface FunctionCall {
   name: string;
   arguments: string;
@@ -13,6 +20,13 @@ export interface ConversationBlock {
   name?: string; // for function role messages
 }
 
+// Reasoning detail from OpenRouter (model-native reasoning)
+export interface ReasoningDetail {
+  type: 'summary' | 'text' | 'encrypted';
+  summary?: string;
+  text?: string;
+  signature?: string;
+}
 
 export interface FunctionCallMetadata {
   id: string;
@@ -37,7 +51,9 @@ export interface FunctionCallResultSummary {
 export interface ChatMessage extends ConversationBlock {
   id: string;
   timestamp: Date;
-  functionCalls?: FunctionCallMetadata[]; // Function calling support
+  contentParts?: ContentPart[];
+  functionCalls?: FunctionCallMetadata[];
+  reasoning_details?: ReasoningDetail[];
 }
 
 

@@ -1,10 +1,11 @@
-import type { ConversationBlock, ChatMessage } from '../llm_request/types';
+import type { ConversationBlock, ChatMessage, ContentPart } from '../llm_request/types';
 import type { StoryObjects } from '../types/storyObject';
 import type { FunctionCallSchema } from './types/functionCalling';
 
 // Extend existing ChatMessage for pipeline processing
 export interface ProcessedChatMessage extends ChatMessage {
   originalContent?: string;
+  originalContentParts?: ContentPart[];
 }
 
 // System insertion mode for AI context
@@ -53,7 +54,11 @@ export interface ChatPipelineContext {
   novelData?: any; // Novel content data
   mode: 'novel-editor' | 'workspace'; // Explicit mode distinction
   enablePrefill?: boolean; // Enable assistant prefill at the end
-  enableThinking?: boolean; // Enable extended thinking in prompts
+  thinkingMode?: 'off' | 'model' | 'custom'; // Thinking mode: off, model-native reasoning, or custom prompt-based
+  reasoningConfig?: {
+    effort?: 'low' | 'medium' | 'high';
+    maxTokens?: number;
+  };
 }
 
 // Pipeline processor interfaces

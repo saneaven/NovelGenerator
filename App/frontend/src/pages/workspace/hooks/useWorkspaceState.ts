@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useChatStore } from '../../../store/chatStore';
 
 type TabType = 'basicInfo' | 'characters' | 'organizations' | 'locations' | 'lorebook' | 'outline';
@@ -107,30 +107,77 @@ export function useWorkspaceState(projectId: string | undefined) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, chats.length, chatStore.isLoading]);
 
-  const actions: WorkspaceUIActions = {
-    setIsChatVisible: (visible: boolean) =>
-      setState(prev => ({ ...prev, isChatVisible: visible })),
-    setActiveStoryTab: (tab: TabType) =>
-      setState(prev => ({ ...prev, activeStoryTab: tab })),
-    setSelectedChatId: (id: string | null) =>
-      setState(prev => ({ ...prev, selectedChatId: id })),
-    setIsMobileSidebarVisible: (visible: boolean) =>
-      setState(prev => ({ ...prev, isMobileSidebarVisible: visible })),
-    setIsDesktopChatListVisible: (visible: boolean) =>
-      setState(prev => ({ ...prev, isDesktopChatListVisible: visible })),
-    setIsSettingsOpen: (open: boolean) =>
-      setState(prev => ({ ...prev, isSettingsOpen: open })),
-    setInput: (input: string) =>
-      setState(prev => ({ ...prev, input })),
-    setIsLoading: (loading: boolean) =>
-      setState(prev => ({ ...prev, isLoading: loading })),
-    setEditingMessageId: (id: string | null) =>
-      setState(prev => ({ ...prev, editingMessageId: id })),
-    setEditingLanguage: (language: string | null) =>
-      setState(prev => ({ ...prev, editingLanguage: language })),
-    setEditContent: (content: string) =>
-      setState(prev => ({ ...prev, editContent: content })),
-  };
+  // Memoize each action to ensure stable references
+  const setIsChatVisible = useCallback((visible: boolean) => {
+    setState(prev => ({ ...prev, isChatVisible: visible }));
+  }, []);
+
+  const setActiveStoryTab = useCallback((tab: TabType) => {
+    setState(prev => ({ ...prev, activeStoryTab: tab }));
+  }, []);
+
+  const setSelectedChatId = useCallback((id: string | null) => {
+    setState(prev => ({ ...prev, selectedChatId: id }));
+  }, []);
+
+  const setIsMobileSidebarVisible = useCallback((visible: boolean) => {
+    setState(prev => ({ ...prev, isMobileSidebarVisible: visible }));
+  }, []);
+
+  const setIsDesktopChatListVisible = useCallback((visible: boolean) => {
+    setState(prev => ({ ...prev, isDesktopChatListVisible: visible }));
+  }, []);
+
+  const setIsSettingsOpen = useCallback((open: boolean) => {
+    setState(prev => ({ ...prev, isSettingsOpen: open }));
+  }, []);
+
+  const setInput = useCallback((input: string) => {
+    setState(prev => ({ ...prev, input }));
+  }, []);
+
+  const setIsLoading = useCallback((loading: boolean) => {
+    setState(prev => ({ ...prev, isLoading: loading }));
+  }, []);
+
+  const setEditingMessageId = useCallback((id: string | null) => {
+    setState(prev => ({ ...prev, editingMessageId: id }));
+  }, []);
+
+  const setEditingLanguage = useCallback((language: string | null) => {
+    setState(prev => ({ ...prev, editingLanguage: language }));
+  }, []);
+
+  const setEditContent = useCallback((content: string) => {
+    setState(prev => ({ ...prev, editContent: content }));
+  }, []);
+
+  // Memoize the actions object to prevent recreating it on every render
+  const actions: WorkspaceUIActions = useMemo(() => ({
+    setIsChatVisible,
+    setActiveStoryTab,
+    setSelectedChatId,
+    setIsMobileSidebarVisible,
+    setIsDesktopChatListVisible,
+    setIsSettingsOpen,
+    setInput,
+    setIsLoading,
+    setEditingMessageId,
+    setEditingLanguage,
+    setEditContent,
+  }), [
+    setIsChatVisible,
+    setActiveStoryTab,
+    setSelectedChatId,
+    setIsMobileSidebarVisible,
+    setIsDesktopChatListVisible,
+    setIsSettingsOpen,
+    setInput,
+    setIsLoading,
+    setEditingMessageId,
+    setEditingLanguage,
+    setEditContent,
+  ]);
 
   return { state, actions };
 }

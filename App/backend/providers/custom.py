@@ -3,6 +3,7 @@ import httpx
 from typing import AsyncGenerator, List, Dict, Optional
 from .base import BaseProvider
 from .registry import ProviderRegistry
+from .thinking_parser import ThinkingStreamParser
 
 @ProviderRegistry.register
 class CustomOpenAIProvider(BaseProvider):
@@ -33,7 +34,9 @@ class CustomOpenAIProvider(BaseProvider):
         temperature: float = 0.7,
         functions: Optional[List[Dict]] = None,
         max_tokens: Optional[int] = None,
-        provider_preference: Optional[Dict] = None
+        provider_preference: Optional[Dict] = None,
+        reasoning_config: Optional[Dict] = None,
+        thinking_mode: Optional[str] = None
     ) -> AsyncGenerator[bytes, None]:
         """Stream chat completions from custom OpenAI-compatible API"""
 
@@ -93,9 +96,82 @@ class CustomOpenAIProvider(BaseProvider):
                                 return
 
                         # Stream successful response
+                        parser = ThinkingStreamParser() if thinking_mode == 'custom' else None
+
                         async for chunk in response.aiter_bytes():
                             if chunk:
-                                yield chunk
+                                if parser:
+                                    try:
+                                        chunk_str = chunk.decode('utf-8')
+                                        lines = chunk_str.strip().split('\n')
+
+                                        for line in lines:
+                                            if line.startswith('data: '):
+                                                data_str = line[6:]
+                                                if data_str and data_str != '[DONE]':
+                                                    try:
+                                                        data = json.loads(data_str)
+                                                        delta = data.get('choices', [{}])[0].get('delta', {})
+                                                        content = delta.get('content', '')
+
+                                                        if content:
+                                                            # Process through thinking parser
+                                                            clean_content, thinking_block = parser.process_chunk(content)
+
+                                                            # Emit cleaned content
+                                                            if clean_content:
+                                                                content_chunk = {
+                                                                    "choices": [{
+                                                                        "delta": {"content": clean_content}
+                                                                    }]
+                                                                }
+                                                                yield f"data: {json.dumps(content_chunk)}\n\n".encode()
+
+                                                            # Emit complete thinking block
+                                                            if thinking_block:
+                                                                thinking_chunk = {
+                                                                    "choices": [{
+                                                                        "delta": {
+                                                                            "reasoning": {"text": thinking_block}
+                                                                        }
+                                                                    }]
+                                                                }
+                                                                yield f"data: {json.dumps(thinking_chunk)}\n\n".encode()
+                                                        else:
+                                                            # Pass through non-content chunks (tool_calls, etc.)
+                                                            yield chunk.encode() if isinstance(chunk, str) else chunk
+                                                            break
+                                                    except json.JSONDecodeError:
+                                                        # Pass through non-JSON lines
+                                                        yield chunk
+                                                        break
+                                            else:
+                                                # Pass through non-data lines
+                                                yield chunk
+                                                break
+                                    except:
+                                        # Parse error - pass through
+                                        yield chunk
+                                else:
+                                    # No thinking mode - pass through
+                                    yield chunk
+
+                        # Finalize parser on stream end
+                        if parser:
+                            final_content, final_thinking = parser.finalize()
+                            if final_content:
+                                final_content_chunk = {
+                                    "choices": [{"delta": {"content": final_content}}]
+                                }
+                                yield f"data: {json.dumps(final_content_chunk)}\n\n".encode()
+                            if final_thinking:
+                                final_thinking_chunk = {
+                                    "choices": [{
+                                        "delta": {"reasoning": {"text": final_thinking}}
+                                    }]
+                                }
+                                yield f"data: {json.dumps(final_thinking_chunk)}\n\n".encode()
+
                         return
 
             except httpx.RequestError as e:

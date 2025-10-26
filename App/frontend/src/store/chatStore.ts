@@ -1,11 +1,12 @@
 import { create } from 'zustand';
 import { chatService, type ChatResponse, type ChatMessageResponse } from '../api';
-import { type ChatMessage, type FunctionCallMetadata } from '../llm_request/types';
+import { type ChatMessage, type FunctionCallMetadata, type ContentPart } from '../llm_request/types';
 import { type LanguageData } from '../types/multilingual';
 
 // Language-specific content for chat messages
 export interface MessageContentData {
-  content: string;
+  contentParts: ContentPart[];
+  reasoning_details?: any[];
 }
 
 // Extended chat message with language support (for storage)
@@ -42,8 +43,8 @@ interface ChatStore {
   // Message management
   fetchMessages: (projectId: string, chatId: string) => Promise<void>;
   addMessage: (projectId: string, chatId: string, message: ChatMessage, language: string) => Promise<string>;
-  updateMessage: (projectId: string, chatId: string, messageId: string, content: string, language: string) => Promise<void>;
-  updateMessageContentLocal: (projectId: string, chatId: string, messageId: string, content: string, language: string) => void;
+  updateMessage: (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, reasoning_details?: any[]) => Promise<void>;
+  updateMessageContentLocal: (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, reasoning_details?: any[]) => void;
   getMessages: (projectId: string, chatId: string, language: string) => ChatMessage[];
   deleteMessage: (projectId: string, chatId: string, messageId: string) => Promise<void>;
 
@@ -52,7 +53,16 @@ interface ChatStore {
   updateFunctionCallStatus: (projectId: string, chatId: string, messageId: string, functionCallId: string, isApplied: boolean, result?: any, error?: string, resultMessage?: string) => void;
 
   // Translation support
-  addTranslatedMessage: (projectId: string, chatId: string, messageId: string, translatedContent: string, targetLanguage: string) => void;
+  addTranslatedMessage: (
+    projectId: string,
+    chatId: string,
+    messageId: string,
+    translatedData: {
+      contentParts?: ContentPart[];
+      reasoning_details?: any[];
+    },
+    targetLanguage: string
+  ) => void;
   getMessageForLanguage: (projectId: string, chatId: string, messageId: string, language: string) => ChatMessage | null;
   hasMessageInLanguage: (projectId: string, chatId: string, messageId: string, language: string) => boolean;
 
@@ -62,15 +72,23 @@ interface ChatStore {
   clearError: () => void;
 }
 
-// Helper function to convert stored message to display message
 const convertToDisplayMessage = (storedMessage: StoredChatMessage, language: string): ChatMessage => {
   const languageData = storedMessage.data[language];
-  const content = languageData ? languageData.content : (storedMessage as any).content || '';
+
+  const contentParts = languageData?.contentParts || [];
+  const reasoning_details = languageData?.reasoning_details;
+
+  const content = contentParts
+    .filter(p => p.type === 'content')
+    .map(p => p.text)
+    .join('');
 
   return {
     ...storedMessage,
     content,
-    data: undefined, // Remove language data from display
+    contentParts,
+    reasoning_details,
+    data: undefined,
   };
 };
 
@@ -93,7 +111,7 @@ const convertBackendChat = (chat: ChatResponse): Chat => {
     project_id: chat.project_id,
     created_at: chat.created_at,
     updated_at: chat.updated_at,
-    messages: chat.messages?.map(convertBackendMessage) || [],
+    messages: chat.messages.map(convertBackendMessage),
   };
 };
 
@@ -266,12 +284,21 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     try {
       const payload: any = {
         role: message.role,
-        content: message.content || '',
         language: language,
       };
 
+      if (message.contentParts) {
+        payload.content_parts = message.contentParts;
+      } else if (message.content) {
+        payload.content_parts = [{type: 'content', text: message.content}];
+      }
+
       if (message.functionCalls) {
         payload.function_calls = message.functionCalls;
+      }
+
+      if (message.reasoning_details) {
+        payload.reasoning_details = message.reasoning_details;
       }
 
       const backendMessage = await chatService.addMessage(projectId, chatId, payload);
@@ -300,13 +327,24 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     }
   },
 
-  updateMessage: async (projectId: string, chatId: string, messageId: string, content: string, language: string) => {
+  updateMessage: async (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, reasoning_details?: any[]) => {
     set({ isLoading: true, error: null });
     try {
-      const backendMessage = await chatService.updateMessage(projectId, chatId, messageId, {
-        content: content,
+      const payload: any = {
         language: language,
-      });
+      };
+
+      // NEW: Send contentParts
+      if (contentParts && contentParts.length > 0) {
+        payload.content_parts = contentParts;
+      }
+
+      // Include reasoning_details metadata if provided
+      if (reasoning_details !== undefined) {
+        payload.reasoning_details = reasoning_details;
+      }
+
+      const backendMessage = await chatService.updateMessage(projectId, chatId, messageId, payload);
       const storedMessage = convertBackendMessage(backendMessage);
 
       set((state) => ({
@@ -335,7 +373,14 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     }
   },
 
-  updateMessageContentLocal: (projectId: string, chatId: string, messageId: string, content: string, language: string) => {
+  updateMessageContentLocal: (
+    projectId: string,
+    chatId: string,
+    messageId: string,
+    contentParts: ContentPart[],
+    language: string,
+    reasoning_details?: any[]
+  ) => {
     set((state) => ({
       chatsByProject: {
         ...state.chatsByProject,
@@ -350,7 +395,10 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
                           ...msg,
                           data: {
                             ...msg.data,
-                            [language]: { content }
+                            [language]: {
+                              contentParts,
+                              reasoning_details
+                            }
                           }
                         }
                       : msg
@@ -426,10 +474,10 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
 
       // Get the primary language content for this message
       const primaryLanguage = Object.keys(message.data)[0] || 'English';
-      const content = message.data[primaryLanguage]?.content || '';
+      const contentParts = message.data[primaryLanguage]?.contentParts;
 
       await chatService.updateMessage(projectId, chatId, messageId, {
-        content,
+        content_parts: contentParts,
         language: primaryLanguage,
         function_calls: functionCalls,
       });
@@ -485,10 +533,10 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
 
       // Get the primary language content for this message
       const primaryLanguage = Object.keys(message.data)[0] || 'English';
-      const content = message.data[primaryLanguage]?.content || '';
+      const contentParts = message.data[primaryLanguage]?.contentParts;
 
       await chatService.updateMessage(projectId, chatId, messageId, {
-        content,
+        content_parts: contentParts,
         language: primaryLanguage,
         function_calls: message.functionCalls,
       });
@@ -498,7 +546,16 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   },
 
   // Translation support (local updates - would sync to backend on next message update)
-  addTranslatedMessage: (projectId: string, chatId: string, messageId: string, translatedContent: string, targetLanguage: string) => {
+  addTranslatedMessage: (
+    projectId: string,
+    chatId: string,
+    messageId: string,
+    translatedData: {
+      contentParts?: ContentPart[];
+      reasoning_details?: any[];
+    },
+    targetLanguage: string
+  ) => {
     set((state) => ({
       chatsByProject: {
         ...state.chatsByProject,
@@ -513,7 +570,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
                           ...msg,
                           data: {
                             ...msg.data,
-                            [targetLanguage]: { content: translatedContent },
+                            [targetLanguage]: translatedData,
                           },
                         }
                       : msg

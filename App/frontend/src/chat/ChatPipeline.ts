@@ -68,7 +68,11 @@ export class ChatPipeline {
     systemConfig?: SystemInsertConfig,
     novelData?: any,
     enablePrefill?: boolean,
-    enableThinking?: boolean
+    thinkingMode?: 'off' | 'model' | 'custom',
+    reasoningConfig?: {
+      effort?: 'low' | 'medium' | 'high';
+      maxTokens?: number;
+    }
   ): ChatPipelineContext {
     return {
       projectId,
@@ -77,7 +81,8 @@ export class ChatPipeline {
       novelData,
       mode,
       enablePrefill,
-      enableThinking
+      thinkingMode,
+      reasoningConfig
     };
   }
 }

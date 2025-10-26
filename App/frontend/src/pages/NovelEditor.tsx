@@ -47,7 +47,9 @@ const NovelEditor: React.FC = () =>
     } = useChatStore();
     const { getStoryObjects, getChapterById, fetchStoryObjects } = useStoryObjectStore();
     const { fetchChapterContent, ...novelStore } = useNovelStore();
-    const { settings } = useSettingsStore();
+    const primaryLanguage = useSettingsStore(state => state.settings.primaryLanguage);
+    const chatFunctionConfig = useSettingsStore(state => state.settings.functionConfigs.chat);
+    const providerCredentials = useSettingsStore(state => state.settings.providerCredentials);
     const { currentError, showError, hideError } = useErrorStore();
 
     const { state: uiState, actions: uiActions } = useNovelEditorState(projectId);
@@ -80,9 +82,13 @@ const NovelEditor: React.FC = () =>
     } = functionCallHandlers;
 
     const chatManagerCallbacks = useMemo<ChatManagerCallbacks>(() => ({
-        onUpdateMessage: (projId, chatId, messageId, content, language) =>
+        onUpdateMessage: (projId, chatId, messageId, content, language, customThinking, reasoning, reasoning_details) =>
         {
-            updateMessageContentLocal(projId, chatId, messageId, content, language);
+            updateMessageContentLocal(projId, chatId, messageId, content, language, customThinking, reasoning, reasoning_details);
+        },
+        onSyncMessageToBackend: async (projId, chatId, messageId, content, language, customThinking, reasoning, reasoning_details) =>
+        {
+            await updateMessage(projId, chatId, messageId, content, language, customThinking, reasoning, reasoning_details);
         },
         onFunctionCalls: (_projId, _chatId, messageId, functionCalls) =>
         {
@@ -102,12 +108,11 @@ const NovelEditor: React.FC = () =>
         {
             handleFunctionCallsDetected(messageId, functionCalls);
         },
-    }), [updateMessageContentLocal, handleFunctionCalls, addMessage, getMessages, showError, handleFunctionCallsDetected]);
+    }), [updateMessageContentLocal, updateMessage, handleFunctionCalls, addMessage, getMessages, showError, handleFunctionCallsDetected]);
 
     const chatManager = useMemo(() =>
     {
         const activeProjectId = projectId ?? '';
-        const chatConfig = settings.functionConfigs.chat;
         return new ChatManager(
             {
                 projectId: activeProjectId,
@@ -115,7 +120,7 @@ const NovelEditor: React.FC = () =>
                 getNovelData: () => novelStore.getAllChapterContents(activeProjectId),
                 systemInsertConfig,
                 chatPipeline,
-                isLoading: uiState.isLoading,
+                getIsLoading: () => uiState.isLoading, // Use getter to prevent ChatManager recreation
                 setIsLoading: uiActions.setIsLoading,
                 abortControllerRef,
                 getActiveChatId: () =>
@@ -124,16 +129,17 @@ const NovelEditor: React.FC = () =>
                     if (!activeProjectId) return undefined;
                     return getSelectedChatId(activeProjectId);
                 },
-                getConversationLanguage: () => settings.primaryLanguage,
-                aiModel: chatConfig.model,
-                temperature: chatConfig.temperature,
-                provider: chatConfig.provider,
-                providerConfig: settings.providerCredentials[chatConfig.provider],
-                providerPreference: chatConfig.providerPreference,
+                getConversationLanguage: () => primaryLanguage,
+                aiModel: chatFunctionConfig.model,
+                temperature: chatFunctionConfig.temperature,
+                provider: chatFunctionConfig.provider,
+                providerConfig: providerCredentials[chatFunctionConfig.provider],
+                providerPreference: chatFunctionConfig.providerPreference,
                 functions: NOVEL_EDITOR_FUNCTIONS,
                 mode: 'novel-editor',
-                enablePrefill: chatConfig.advanced.enablePrefill,
-                enableThinking: chatConfig.advanced.enableThinking,
+                enablePrefill: chatFunctionConfig.advanced.enablePrefill,
+                thinkingMode: chatFunctionConfig.advanced.thinkingMode,
+                reasoningConfig: chatFunctionConfig.advanced.reasoningConfig,
             },
             chatManagerCallbacks
         );
@@ -143,12 +149,11 @@ const NovelEditor: React.FC = () =>
         novelStore,
         systemInsertConfig,
         chatPipeline,
-        uiState.isLoading,
         uiActions.setIsLoading,
         uiState.selectedChatId,
-        settings.primaryLanguage,
-        settings.functionConfigs.chat,
-        settings.providerCredentials,
+        primaryLanguage,
+        chatFunctionConfig,
+        providerCredentials,
         getSelectedChatId,
         chatManagerCallbacks,
     ]);
@@ -213,7 +218,7 @@ const NovelEditor: React.FC = () =>
         const chatId = uiState.selectedChatId ?? getSelectedChatId(projectId);
         if (!chatId) return;
 
-        const messages = getMessages(projectId, chatId, settings.primaryLanguage);
+        const messages = getMessages(projectId, chatId, primaryLanguage);
         const restored: Record<string, EditCard[]> = {};
 
         messages.forEach(message =>
@@ -252,19 +257,20 @@ const NovelEditor: React.FC = () =>
         {
             setMessageEditCards(restored);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
         projectId,
         uiState.selectedChatId,
         getSelectedChatId,
         getMessages,
-        settings.primaryLanguage,
+        primaryLanguage,
         displayProcessor,
         storyObjects,
         systemInsertConfig,
         createFunctionCallApplyHandler,
         createFunctionCallRejectHandler,
-        messageEditCards,
-        setMessageEditCards,
+        // Note: messageEditCards and setMessageEditCards intentionally omitted to prevent render loops
+        // messageEditCards is only used for comparison, not as a trigger
     ]);
 
     // Show loading state

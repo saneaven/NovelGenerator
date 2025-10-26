@@ -8,14 +8,16 @@ class BaseProvider(ABC):
         self.config = config
 
     @abstractmethod
-    async def stream_chat(
+    def stream_chat(
         self,
         messages: List[Dict],
         model: str,
         temperature: float = 0.7,
         functions: Optional[List[Dict]] = None,
         max_tokens: Optional[int] = None,
-        provider_preference: Optional[Dict] = None
+        provider_preference: Optional[Dict] = None,
+        reasoning_config: Optional[Dict] = None,
+        thinking_mode: Optional[str] = None
     ) -> AsyncGenerator[bytes, None]:
         """
         Stream chat completions from the provider
@@ -27,6 +29,8 @@ class BaseProvider(ABC):
             functions: Optional function calling schemas
             max_tokens: Maximum tokens to generate
             provider_preference: Provider-specific preferences (e.g., OpenRouter only/ignore)
+            reasoning_config: Reasoning configuration for model-native reasoning (e.g., OpenRouter)
+            thinking_mode: Thinking mode ('off', 'custom', 'model')
 
         Yields:
             SSE-formatted bytes

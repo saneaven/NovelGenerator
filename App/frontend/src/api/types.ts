@@ -235,27 +235,37 @@ export interface ChatUpdate {
 export interface ChatResponse extends BaseMetadata {
   project_id: string;
   name: string;
-  messages?: ChatMessageResponse[];
+  messages: ChatMessageResponse[];
+}
+
+export interface ContentPart {
+  type: 'content' | 'thinking' | 'reasoning';
+  text: string;
 }
 
 export interface ChatMessageCreate {
   role: string;
-  content: string;
+  content_parts?: ContentPart[];
   language?: string;
   function_calls?: any;
+  reasoning_details?: any[];
 }
 
 export interface ChatMessageUpdate {
-  content: string;
+  content_parts?: ContentPart[];
   language?: string;
   function_calls?: any;
+  reasoning_details?: any[];
 }
 
 export interface ChatMessageResponse {
   id: string;
   chat_id: string;
   role: string;
-  data: LanguageData<{ content: string }>;
+  data: LanguageData<{
+    contentParts: ContentPart[];
+    reasoning_details?: any[];
+  }>;
   function_calls?: any;
   created_at: string;
 }

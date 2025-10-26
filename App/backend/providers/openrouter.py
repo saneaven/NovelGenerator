@@ -32,7 +32,9 @@ class OpenRouterProvider(BaseProvider):
         temperature: float = 0.7,
         functions: Optional[List[Dict]] = None,
         max_tokens: Optional[int] = None,
-        provider_preference: Optional[Dict] = None
+        provider_preference: Optional[Dict] = None,
+        reasoning_config: Optional[Dict] = None,
+        thinking_mode: Optional[str] = None
     ) -> AsyncGenerator[bytes, None]:
         """Stream chat completions from OpenRouter API"""
 
@@ -75,6 +77,17 @@ class OpenRouterProvider(BaseProvider):
             if provider_obj:
                 body["provider"] = provider_obj
 
+        # Add reasoning configuration for model-native reasoning
+        if reasoning_config:
+            reasoning_obj = {}
+            if reasoning_config.get("effort"):
+                reasoning_obj["effort"] = reasoning_config["effort"]
+            if reasoning_config.get("max_tokens"):
+                reasoning_obj["max_tokens"] = reasoning_config["max_tokens"]
+
+            if reasoning_obj:
+                body["reasoning"] = reasoning_obj
+
         MAX_RETRIES = 3
         retry_count = 0
 
@@ -103,6 +116,39 @@ class OpenRouterProvider(BaseProvider):
                         # Stream successful response
                         async for chunk in response.aiter_bytes():
                             if chunk:
+                                # Extract reasoning_details.text for real-time streaming (model mode)
+                                if thinking_mode == 'model':
+                                    try:
+                                        chunk_str = chunk.decode('utf-8')
+                                        lines = chunk_str.strip().split('\n')
+
+                                        for line in lines:
+                                            if line.startswith('data: '):
+                                                data_str = line[6:]
+                                                if data_str and data_str != '[DONE]':
+                                                    try:
+                                                        data = json.loads(data_str)
+                                                        delta = data.get('choices', [{}])[0].get('delta', {})
+
+                                                        # Extract reasoning.text from reasoning_details
+                                                        if 'reasoning_details' in delta:
+                                                            for detail in delta['reasoning_details']:
+                                                                if detail.get('type') == 'text' and detail.get('text'):
+                                                                    # Emit as separate reasoning chunk
+                                                                    reasoning_chunk = {
+                                                                        "choices": [{
+                                                                            "delta": {
+                                                                                "reasoning": {"text": detail['text']}
+                                                                            }
+                                                                        }]
+                                                                    }
+                                                                    yield f"data: {json.dumps(reasoning_chunk)}\n\n".encode()
+                                                    except json.JSONDecodeError:
+                                                        pass  # Skip malformed JSON
+                                    except:
+                                        pass  # Ignore decode errors
+
+                                # Always pass through original chunk
                                 yield chunk
                         return
 

@@ -1,0 +1,205 @@
+/* ===================================
+   INLINE MODE - Thinking appears where it occurred
+   =================================== */
+.message-content-interleaved {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.content-part {
+  line-height: 1.6;
+}
+
+.content-part-content .content-text {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.content-part-thinking,
+.content-part-reasoning {
+  background: rgba(100, 150, 255, 0.05);
+  border-left: 3px solid rgba(100, 150, 255, 0.3);
+  padding: 12px;
+  border-radius: 4px;
+}
+
+.thinking-indicator {
+  font-size: 0.85em;
+  font-weight: 600;
+  color: rgba(100, 150, 255, 0.8);
+  margin-bottom: 8px;
+}
+
+.thinking-block .thinking-text {
+  color: #666;
+  font-style: italic;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* ===================================
+   SEPARATE MODE - Collapsible panel + clean content
+   =================================== */
+.message-with-reasoning {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reasoning-panel {
+  background: rgba(100, 150, 255, 0.03);
+  border: 1px solid rgba(100, 150, 255, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.reasoning-toggle {
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.9em;
+  color: #555;
+  transition: background 0.2s;
+  font-family: inherit;
+  text-align: left;
+}
+
+.reasoning-toggle:hover {
+  background: rgba(100, 150, 255, 0.05);
+}
+
+.toggle-icon {
+  font-size: 0.8em;
+  color: #999;
+}
+
+.toggle-label {
+  font-weight: 600;
+  color: rgba(100, 150, 255, 0.9);
+}
+
+.streaming-indicator {
+  margin-left: auto;
+  color: rgba(100, 150, 255, 0.8);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.reasoning-content {
+  padding: 14px;
+  border-top: 1px solid rgba(100, 150, 255, 0.1);
+  animation: fadeIn 0.2s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.reasoning-block {
+  margin-bottom: 16px;
+}
+
+.reasoning-block:last-child {
+  margin-bottom: 0;
+}
+
+.reasoning-block-header {
+  font-size: 0.8em;
+  font-weight: 600;
+  color: #999;
+  margin-bottom: 6px;
+}
+
+.reasoning-block-text {
+  color: #666;
+  font-style: italic;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.reasoning-separator {
+  margin: 16px 0;
+  border: none;
+  border-top: 1px dashed rgba(100, 150, 255, 0.2);
+}
+
+.message-content-clean {
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* ===================================
+   DARK MODE SUPPORT
+   =================================== */
+@media (prefers-color-scheme: dark) {
+  .content-part-thinking,
+  .content-part-reasoning {
+    background: rgba(100, 150, 255, 0.08);
+    border-left-color: rgba(100, 150, 255, 0.4);
+  }
+
+  .thinking-indicator {
+    color: rgba(130, 180, 255, 0.9);
+  }
+
+  .thinking-block .thinking-text {
+    color: #bbb;
+  }
+
+  .reasoning-panel {
+    background: rgba(100, 150, 255, 0.05);
+    border-color: rgba(100, 150, 255, 0.15);
+  }
+
+  .reasoning-toggle {
+    color: #ccc;
+  }
+
+  .reasoning-toggle:hover {
+    background: rgba(100, 150, 255, 0.08);
+  }
+
+  .toggle-label {
+    color: rgba(130, 180, 255, 0.9);
+  }
+
+  .streaming-indicator {
+    color: rgba(130, 180, 255, 0.9);
+  }
+
+  .reasoning-content {
+    border-top-color: rgba(100, 150, 255, 0.15);
+  }
+
+  .reasoning-block-header {
+    color: #888;
+  }
+
+  .reasoning-block-text {
+    color: #bbb;
+  }
+
+  .reasoning-separator {
+    border-top-color: rgba(100, 150, 255, 0.25);
+  }
+}

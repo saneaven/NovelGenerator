@@ -97,7 +97,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
   };
 
   const resolvePreviewContent = (chat: Chat): string => {
-    if (chat.messages.length === 0) {
+    if (!chat.messages || chat.messages.length === 0) {
       return 'No messages yet';
     }
 
@@ -105,21 +105,29 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
     const primaryLanguage = settings.primaryLanguage;
     const secondaryLanguage = settings.secondaryLanguage ?? undefined;
 
+    const extractText = (messageData: any): string => {
+      const parts = messageData.contentParts || [];
+      return parts
+        .filter((p: any) => p.type === 'content')
+        .map((p: any) => p.text)
+        .join(' ');
+    };
+
     if (lastMessage.data[primaryLanguage]) {
-      const content = lastMessage.data[primaryLanguage].content;
-      return content.length > 50 ? `${content.substring(0, 50)}...` : content;
+      const content = extractText(lastMessage.data[primaryLanguage]);
+      return content.length > 50 ? `${content.substring(0, 50)}...` : content || 'No content';
     }
 
     const fallback = TranslationService.getBestLanguageData(lastMessage.data, primaryLanguage, secondaryLanguage);
     if (fallback) {
-      const content = fallback.data.content;
-      return content.length > 50 ? `${content.substring(0, 50)}...` : content;
+      const content = extractText(fallback.data);
+      return content.length > 50 ? `${content.substring(0, 50)}...` : content || 'No content';
     }
 
     const availableLanguages = Object.keys(lastMessage.data);
     if (availableLanguages.length > 0) {
-      const content = lastMessage.data[availableLanguages[0]].content;
-      return content.length > 50 ? `${content.substring(0, 50)}...` : content;
+      const content = extractText(lastMessage.data[availableLanguages[0]]);
+      return content.length > 50 ? `${content.substring(0, 50)}...` : content || 'No content';
     }
 
     return 'No messages yet';

@@ -1,40 +1,56 @@
-import type { 
-  PostProcessor, 
-  PostProcessingResult, 
-  ProcessedChatMessage, 
-  ChatPipelineContext 
+import type {
+  PostProcessor,
+  PostProcessingResult,
+  ProcessedChatMessage,
+  ChatPipelineContext
 } from '../types';
+import type { ReasoningDetail, ContentPart } from '../../llm_request/types';
 
 export class DefaultPostProcessor implements PostProcessor {
   process(
-    aiResponse: string | { content: string | null; tool_calls?: any[] },
-    _context: ChatPipelineContext
+    aiResponse: any,
+    context: ChatPipelineContext
   ): PostProcessingResult {
-    let content: string | null;
+    let contentParts: ContentPart[];
     let tool_calls: any[] | undefined;
+    let reasoning_details: ReasoningDetail[] | undefined;
 
     // Handle different response formats
     if (typeof aiResponse === 'string') {
-      content = aiResponse;
-    } else {
-      content = aiResponse.content;
+      // Legacy: plain string content
+      contentParts = [{type: 'content', text: aiResponse}];
+    } else if (aiResponse.contentParts) {
+      // NEW: Already structured contentParts from ChatManager
+      contentParts = aiResponse.contentParts;
       tool_calls = aiResponse.tool_calls;
+      reasoning_details = aiResponse.reasoning_details;
+    } else if (aiResponse.content) {
+      // Fallback: old format with plain content
+      contentParts = [{type: 'content', text: aiResponse.content}];
+      tool_calls = aiResponse.tool_calls;
+      reasoning_details = aiResponse.reasoning_details;
+    } else {
+      // No content at all
+      contentParts = [];
+      tool_calls = aiResponse.tool_calls;
+      reasoning_details = aiResponse.reasoning_details;
     }
 
-    // Create basic processed message
+    // Create processed message
     const message: ProcessedChatMessage = {
       id: crypto.randomUUID(),
       role: 'assistant',
-      content: content,
+      content: null,  // Deprecated - use contentParts instead
+      contentParts,
       timestamp: new Date(),
-      originalContent: content ?? undefined
+      reasoning_details
     };
 
     // Process tool calls if present
     if (tool_calls && tool_calls.length > 0) {
       const functionCallsMetadata = tool_calls.map(toolCall => {
         let parsedArguments = {};
-        
+
         try {
           // Check if arguments is valid JSON
           if (toolCall.function?.arguments && toolCall.function.arguments.trim()) {
@@ -44,7 +60,7 @@ export class DefaultPostProcessor implements PostProcessor {
           console.error('Failed to parse tool call arguments:', error, 'Raw arguments:', toolCall.function?.arguments);
           // Continue processing even if JSON parsing fails
         }
-        
+
         return {
           id: toolCall.id || crypto.randomUUID(),
           function_name: toolCall.function?.name || 'unknown',
@@ -52,7 +68,7 @@ export class DefaultPostProcessor implements PostProcessor {
           isApplied: false
         };
       });
-      
+
       message.functionCalls = functionCallsMetadata;
     }
 

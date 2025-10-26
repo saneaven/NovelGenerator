@@ -119,13 +119,20 @@ async def stream_chat(provider: str, request: ChatCompletionRequest):
             if provider == "openrouter" and request.provider_preference:
                 provider_pref = request.provider_preference.model_dump(exclude_none=True)
 
+            # Prepare reasoning config for OpenRouter
+            reasoning_cfg = None
+            if provider == "openrouter" and request.reasoning_config:
+                reasoning_cfg = request.reasoning_config.model_dump(exclude_none=True)
+
             async for chunk in provider_instance.stream_chat(
                 messages=messages,
                 model=request.model,
                 temperature=request.temperature,
                 functions=request.functions,
                 max_tokens=request.max_tokens,
-                provider_preference=provider_pref
+                provider_preference=provider_pref,
+                reasoning_config=reasoning_cfg,
+                thinking_mode=request.thinking_mode
             ):
                 yield chunk
 

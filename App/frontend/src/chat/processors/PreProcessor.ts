@@ -80,7 +80,7 @@ export class DefaultPreProcessor implements PreProcessor {
       outputLanguage: conversationLanguage,
       functions: context.systemInsertConfig.enabled && context.systemInsertConfig.includeProjectInfo ? functions : undefined,
       enablePrefill: context.enablePrefill,
-      enableThinking: context.enableThinking,
+      enableThinking: context.thinkingMode === 'custom', // Only enable thinking in prompt for custom mode
     };
 
     return await SystemPromptManager.generatePrompt(PromptType.CHAT_SYSTEM, promptContext);
