@@ -149,7 +149,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
     return context;
   };
 
-  const generateSystemPrompt = (
+  const generateSystemPrompt = async (
     context: Record<string, any>,
     currentContent: string,
     chapterName: string,
@@ -157,7 +157,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
     outputLanguage?: string,
     enablePrefill?: boolean,
     enableThinking?: boolean
-  ): string => {
+  ): Promise<string> => {
     const promptContext: ChapterEditPromptContext = {
       chapterName,
       currentContent,
@@ -168,7 +168,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
       enableThinking
     };
 
-    return SystemPromptManager.generatePrompt(PromptType.CHAPTER_EDIT, promptContext);
+    return await SystemPromptManager.generatePrompt(PromptType.CHAPTER_EDIT, promptContext);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -189,7 +189,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
 
       // Generate context and system prompt
       const context = generateNovelContext(storyObjects);
-      const systemPrompt = generateSystemPrompt(
+      const systemPrompt = await generateSystemPrompt(
         context,
         currentContent,
         chapterName,

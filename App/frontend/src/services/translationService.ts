@@ -45,7 +45,7 @@ export class TranslationService {
   }
 
   // Prepare translation request using SystemPromptManager
-  static prepareTranslationRequest(request: TranslationRequest): TranslationResult {
+  static async prepareTranslationRequest(request: TranslationRequest): Promise<TranslationResult> {
     const promptContext: TranslationPromptContext = {
       sourceLanguage: request.sourceLanguage,
       targetLanguage: request.targetLanguage,
@@ -56,7 +56,7 @@ export class TranslationService {
       enableThinking: request.enableThinking,
     };
 
-    const systemPrompt = SystemPromptManager.generatePrompt(PromptType.TRANSLATION, promptContext);
+    const systemPrompt = await SystemPromptManager.generatePrompt(PromptType.TRANSLATION, promptContext);
 
     // The user message is just the source data - the system prompt handles everything
     const userPrompt = `Please translate the following data:\n\n${JSON.stringify(request.data, null, 2)}`;

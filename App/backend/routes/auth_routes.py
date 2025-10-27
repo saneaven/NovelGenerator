@@ -13,6 +13,8 @@ from ..auth import (
     create_access_token,
     get_current_user
 )
+from ..services.prompt_service import prompt_service
+from ..prompts import get_default_prompts
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 
@@ -72,6 +74,19 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     )
 
     db.add(default_settings)
+
+    # Initialize default prompts for new user
+    try:
+        default_prompts = get_default_prompts()
+        prompt_service.initialize_default_prompts(
+            db=db,
+            user_id=new_user.id,
+            default_prompts=default_prompts
+        )
+    except Exception as e:
+        # Log error but don't fail registration - prompts can be initialized later
+        print(f"Warning: Failed to initialize default prompts for user {new_user.id}: {e}")
+
     db.commit()
     db.refresh(new_user)
 

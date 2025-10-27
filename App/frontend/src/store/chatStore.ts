@@ -73,19 +73,27 @@ interface ChatStore {
 }
 
 const convertToDisplayMessage = (storedMessage: StoredChatMessage, language: string): ChatMessage => {
-  const languageData = storedMessage.data[language];
+  const languageData = storedMessage.data?.[language];
 
-  const contentParts = languageData?.contentParts || [];
+  // Defensive: Ensure contentParts is always an array
+  const contentParts = Array.isArray(languageData?.contentParts) ? languageData.contentParts : [];
   const reasoning_details = languageData?.reasoning_details;
 
-  const content = contentParts
-    .filter(p => p.type === 'content')
-    .map(p => p.text)
-    .join('');
+  // Ensure content is always a string, never undefined or object
+  let content = '';
+  try {
+    content = contentParts
+      .filter(p => p && p.type === 'content' && typeof p.text === 'string')
+      .map(p => p.text)
+      .join('');
+  } catch (error) {
+    console.error('Error extracting content from contentParts:', error);
+    content = '';
+  }
 
   return {
     ...storedMessage,
-    content,
+    content: content, // Explicitly set to ensure it's a string
     contentParts,
     reasoning_details,
     data: undefined,
@@ -289,7 +297,8 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
 
       if (message.contentParts) {
         payload.content_parts = message.contentParts;
-      } else if (message.content) {
+      } else if (message.content !== undefined && message.content !== null) {
+        // Always send content_parts even if content is empty string
         payload.content_parts = [{type: 'content', text: message.content}];
       }
 

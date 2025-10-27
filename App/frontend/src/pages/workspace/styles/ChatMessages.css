@@ -164,7 +164,7 @@
 
 .chat-message.assistant .message-wrapper {
     width: 100%;
-    max-width: 90%;
+    max-width: 100%;
 }
 
 .chat-message.assistant.editing .message-wrapper {
@@ -181,13 +181,13 @@
 }
 
 .chat-message.assistant .message-content {
-    background: var(--color-surface-elevated);
+    background: transparent;
     color: var(--color-text-primary);
-    border-radius: var(--radius-xl) var(--radius-xl) var(--radius-xl) var(--radius-sm);
-    padding: var(--spacing-lg) var(--spacing-xl);
-    border: 1px solid var(--color-border-default);
+    border-radius: 0;
+    padding: var(--spacing-md) 0;
+    border: none;
     word-wrap: break-word;
-    box-shadow: var(--shadow-sm);
+    box-shadow: none;
     line-height: var(--line-height-relaxed);
     font-size: var(--font-size-base);
 }

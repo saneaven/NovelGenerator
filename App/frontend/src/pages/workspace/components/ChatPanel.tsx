@@ -244,7 +244,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 dataToTranslate.thinking = thinkingText;
             }
 
-            const translationRequest = TranslationService.prepareTranslationRequest({
+            const translationRequest = await TranslationService.prepareTranslationRequest({
                 sourceLanguage,
                 targetLanguage,
                 data: dataToTranslate,

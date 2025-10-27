@@ -67,7 +67,7 @@ export async function translateStoryObject(params: TranslateStoryObjectParams): 
     const translationConfig = settingsStore.getFunctionConfig('translation');
     const providerConfig = settingsStore.getProviderConfig(translationConfig.provider);
 
-    const translationRequest = TranslationService.prepareTranslationRequest({
+    const translationRequest = await TranslationService.prepareTranslationRequest({
       sourceLanguage,
       targetLanguage,
       data: sourceData,

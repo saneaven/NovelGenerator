@@ -13,7 +13,8 @@ const ReasoningDisplay: React.FC<ReasoningDisplayProps> = ({
   displayMode = 'separate',
   isStreaming = false
 }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  // Track expanded state for each thinking block individually
+  const [expandedStates, setExpandedStates] = useState<Record<number, boolean>>({});
 
   if (!contentParts || contentParts.length === 0) {
     return null;
@@ -22,6 +23,13 @@ const ReasoningDisplay: React.FC<ReasoningDisplayProps> = ({
   // Extract thinking/reasoning parts
   const thinkingParts = contentParts.filter(p => p.type === 'thinking' || p.type === 'reasoning');
   const contentOnlyParts = contentParts.filter(p => p.type === 'content');
+
+  const toggleExpanded = (index: number) => {
+    setExpandedStates(prev => ({
+      ...prev,
+      [index]: !prev[index]
+    }));
+  };
 
   if (thinkingParts.length === 0) {
     // No reasoning to display - just show content
@@ -56,46 +64,36 @@ const ReasoningDisplay: React.FC<ReasoningDisplayProps> = ({
     );
   }
 
-  // Separate mode: Collapsible panel + clean content
+  // Separate mode: Individual minimal cards for each thinking block
   return (
     <div className="message-with-reasoning">
-      {/* Collapsible thinking panel */}
-      <div className="reasoning-panel">
-        <button
-          className="reasoning-toggle"
-          onClick={() => setIsExpanded(!isExpanded)}
-        >
-          <span className="toggle-icon">{isExpanded ? '▼' : '▶'}</span>
-          <span className="toggle-label">
-            {thinkingParts[0].type === 'thinking' ? '💭 Thinking' : '🧠 Reasoning'}
-            {' '}({thinkingParts.length} {thinkingParts.length === 1 ? 'block' : 'blocks'})
-          </span>
-          {isStreaming && <span className="streaming-indicator">●</span>}
-        </button>
+      {/* Individual thinking cards */}
+      {thinkingParts.map((part, index) => {
+        const isExpanded = expandedStates[index] || false;
+        const isLastBlock = index === thinkingParts.length - 1;
+        const isStreamingThisBlock = isStreaming && isLastBlock;
 
-        {isExpanded && (
-          <div className="reasoning-content">
-            {thinkingParts.map((part, index) => (
-              <div key={index} className="reasoning-block">
-                <div className="reasoning-block-header">
-                  Block #{index + 1}
-                </div>
-                <div className="reasoning-block-text">{part.text}</div>
-                {index < thinkingParts.length - 1 && <hr className="reasoning-separator" />}
+        return (
+          <div key={index} className="thinking-card-minimal">
+            <button
+              className="thinking-card-toggle"
+              onClick={() => toggleExpanded(index)}
+            >
+              <span className="toggle-icon">{isExpanded ? '▼' : '▶'}</span>
+              <span className="toggle-label">
+                💭 {part.type === 'thinking' ? 'Thinking' : 'Reasoning'}
+              </span>
+              {isStreamingThisBlock && <span className="streaming-indicator">●</span>}
+            </button>
+
+            {isExpanded && (
+              <div className="thinking-card-content">
+                {part.text}
               </div>
-            ))}
+            )}
           </div>
-        )}
-      </div>
-
-      {/* Clean content only */}
-      {contentOnlyParts.length > 0 && (
-        <div className="message-content-clean">
-          {contentOnlyParts.map((part, index) => (
-            <span key={index}>{part.text}</span>
-          ))}
-        </div>
-      )}
+        );
+      })}
     </div>
   );
 };

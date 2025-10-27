@@ -311,7 +311,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       setTranslationError(null);
       TranslationService.setTranslationStatus(translationKey, { objectId: translationKey, isTranslating: true });
 
-      const translationRequest = TranslationService.prepareTranslationRequest({
+      const translationRequest = await TranslationService.prepareTranslationRequest({
         sourceLanguage: fallback.language,
         targetLanguage: normalizedTarget,
         data: {

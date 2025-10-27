@@ -43,7 +43,7 @@ export class DefaultPreProcessor implements PreProcessor {
         processedMessages.push(processed);
         conversationBlocks.push({
           role: processed.role,
-          content: processed.content,
+          content: typeof processed.content === 'string' ? processed.content : (processed.content ?? ''),
           function_call: processed.function_call,
           name: processed.name
         });
@@ -62,9 +62,15 @@ export class DefaultPreProcessor implements PreProcessor {
 
     const availableFunctions = context.systemInsertConfig.enabled ? functions : undefined;
 
-    // Debug: Log function preparation
+    // Debug: Log function preparation and validate content types
     console.log("Chat to be sent to backend:", {
-      conversationBlocks,
+      conversationBlocks: conversationBlocks.map((block, idx) => ({
+        index: idx,
+        role: block.role,
+        contentType: typeof block.content,
+        contentValue: block.content,
+        isString: typeof block.content === 'string'
+      })),
       functions: availableFunctions
     });
     return {
@@ -100,9 +106,14 @@ export class DefaultPreProcessor implements PreProcessor {
 
   private processAssistantMessage(_context: ChatPipelineContext, messageIndex: number, allMessages: ChatMessage[]): ProcessedChatMessage {
     const message = allMessages[messageIndex];
+
+    // Ensure content is a string before processing
+    const messageContent = typeof message.content === 'string' ? message.content : '';
+
     const processed: ProcessedChatMessage = {
       ...message,
-      originalContent: message.content ?? undefined
+      content: messageContent,
+      originalContent: messageContent
     };
 
     processed.content = this.summarizeEditTags(processed.content || '');
@@ -111,9 +122,14 @@ export class DefaultPreProcessor implements PreProcessor {
   }
   private processUserMessage(context: ChatPipelineContext, messageIndex: number, allMessages: ChatMessage[]): ProcessedChatMessage {
     const message = allMessages[messageIndex];
+
+    // Ensure content is a string before processing
+    const messageContent = typeof message.content === 'string' ? message.content : '';
+
     const processed: ProcessedChatMessage = {
       ...message,
-      originalContent: message.content ?? undefined
+      content: messageContent,
+      originalContent: messageContent
     };
 
     processed.content = this.addSystemInfo(processed.content || '', context, messageIndex, allMessages);

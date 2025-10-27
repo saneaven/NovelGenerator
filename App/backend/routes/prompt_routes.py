@@ -21,6 +21,8 @@ from ..services.template_validator import validator
 router = APIRouter(prefix="/api/v1/prompts", tags=["prompts"])
 
 
+# Routes without prompt_name (must come before routes with {prompt_name} to avoid conflicts)
+
 @router.get(
     "/{function_type}/{prompt_category}",
     response_model=PromptContentResponse
@@ -45,36 +47,6 @@ async def get_prompt_without_name(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Prompt not found: {function_type}/{prompt_category}"
-        )
-
-    return result
-
-
-@router.get(
-    "/{function_type}/{prompt_category}/{prompt_name}",
-    response_model=PromptContentResponse
-)
-async def get_prompt_with_name(
-    function_type: str = Path(..., description="Function type"),
-    prompt_category: str = Path(..., description="Prompt category"),
-    prompt_name: str = Path(..., description="Prompt name (workspace, novelEditor, etc.)"),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get active prompt for prompts with a name (e.g., chat/systemPrompt/workspace)"""
-
-    result = prompt_service.get_active_prompt(
-        db=db,
-        user_id=current_user.id,
-        function_type=function_type,
-        prompt_category=prompt_category,
-        prompt_name=prompt_name
-    )
-
-    if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Prompt not found: {function_type}/{prompt_category}/{prompt_name}"
         )
 
     return result
@@ -110,6 +82,92 @@ async def save_prompt_without_name(
         note=data.note,
         prompt_name=None
     )
+
+    return result
+
+
+@router.get(
+    "/{function_type}/{prompt_category}/versions",
+    response_model=List[VersionHistoryItem]
+)
+async def get_version_history_without_name(
+    function_type: str,
+    prompt_category: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get version history for a prompt without a name"""
+
+    versions = prompt_service.get_version_history(
+        db=db,
+        user_id=current_user.id,
+        function_type=function_type,
+        prompt_category=prompt_category,
+        prompt_name=None
+    )
+
+    return versions
+
+
+@router.post(
+    "/{function_type}/{prompt_category}/restore",
+    status_code=status.HTTP_200_OK
+)
+async def restore_version_without_name(
+    function_type: str,
+    prompt_category: str,
+    data: PromptRestoreRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Restore a specific version for a prompt without a name"""
+
+    success = prompt_service.restore_version(
+        db=db,
+        user_id=current_user.id,
+        function_type=function_type,
+        prompt_category=prompt_category,
+        version_number=data.version_number,
+        prompt_name=None
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Version {data.version_number} not found"
+        )
+
+    return {"success": True, "restored_version": data.version_number}
+
+
+# Routes with prompt_name (must come after literal path segments like /save, /versions, /restore)
+
+@router.get(
+    "/{function_type}/{prompt_category}/{prompt_name}",
+    response_model=PromptContentResponse
+)
+async def get_prompt_with_name(
+    function_type: str = Path(..., description="Function type"),
+    prompt_category: str = Path(..., description="Prompt category"),
+    prompt_name: str = Path(..., description="Prompt name (workspace, novelEditor, etc.)"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get active prompt for prompts with a name (e.g., chat/systemPrompt/workspace)"""
+
+    result = prompt_service.get_active_prompt(
+        db=db,
+        user_id=current_user.id,
+        function_type=function_type,
+        prompt_category=prompt_category,
+        prompt_name=prompt_name
+    )
+
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Prompt not found: {function_type}/{prompt_category}/{prompt_name}"
+        )
 
     return result
 
@@ -150,29 +208,6 @@ async def save_prompt_with_name(
 
 
 @router.get(
-    "/{function_type}/{prompt_category}/versions",
-    response_model=List[VersionHistoryItem]
-)
-async def get_version_history_without_name(
-    function_type: str,
-    prompt_category: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get version history for a prompt without a name"""
-
-    versions = prompt_service.get_version_history(
-        db=db,
-        user_id=current_user.id,
-        function_type=function_type,
-        prompt_category=prompt_category,
-        prompt_name=None
-    )
-
-    return versions
-
-
-@router.get(
     "/{function_type}/{prompt_category}/{prompt_name}/versions",
     response_model=List[VersionHistoryItem]
 )
@@ -194,37 +229,6 @@ async def get_version_history_with_name(
     )
 
     return versions
-
-
-@router.post(
-    "/{function_type}/{prompt_category}/restore",
-    status_code=status.HTTP_200_OK
-)
-async def restore_version_without_name(
-    function_type: str,
-    prompt_category: str,
-    data: PromptRestoreRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Restore a specific version for a prompt without a name"""
-
-    success = prompt_service.restore_version(
-        db=db,
-        user_id=current_user.id,
-        function_type=function_type,
-        prompt_category=prompt_category,
-        version_number=data.version_number,
-        prompt_name=None
-    )
-
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Version {data.version_number} not found"
-        )
-
-    return {"success": True, "restored_version": data.version_number}
 
 
 @router.post(
@@ -258,6 +262,8 @@ async def restore_version_with_name(
 
     return {"success": True, "restored_version": data.version_number}
 
+
+# Validation endpoint (doesn't use function_type/category pattern)
 
 @router.post(
     "/validate",

@@ -84,12 +84,16 @@ class ThinkingStreamParser:
                     for partial in reversed(partial_tags):
                         if self.buffer.endswith(partial):
                             # Hold back the partial tag, accumulate the rest
-                            self.thinking_accumulator += self.buffer[:-len(partial)]
+                            chunk_to_accumulate = self.buffer[:-len(partial)]
+                            if chunk_to_accumulate:
+                                self.thinking_accumulator += chunk_to_accumulate
+                                thinking_output = self.thinking_accumulator  # Stream incremental update
                             self.buffer = self.buffer[-len(partial):]
                             return clean_output, thinking_output
 
-                    # No closing tag yet - accumulate all in thinking buffer
+                    # No closing tag yet - accumulate all in thinking buffer and stream it
                     self.thinking_accumulator += self.buffer
+                    thinking_output = self.thinking_accumulator  # Stream incremental update
                     self.buffer = ""
                     return clean_output, thinking_output
 

@@ -40,49 +40,51 @@
 }
 
 /* ===================================
-   SEPARATE MODE - Collapsible panel + clean content
+   SEPARATE MODE - Individual minimal thinking cards
    =================================== */
 .message-with-reasoning {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
-.reasoning-panel {
-  background: rgba(100, 150, 255, 0.03);
-  border: 1px solid rgba(100, 150, 255, 0.1);
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.reasoning-toggle {
-  width: 100%;
-  padding: 10px 14px;
+/* Individual minimal thinking card */
+.thinking-card-minimal {
+  border: 1px solid var(--color-border-default, rgba(0, 0, 0, 0.1));
+  border-radius: 4px;
+  padding: 8px 12px;
   background: transparent;
+  margin-bottom: 8px;
+}
+
+.thinking-card-toggle {
+  width: 100%;
+  background: none;
   border: none;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   cursor: pointer;
-  font-size: 0.9em;
-  color: #555;
-  transition: background 0.2s;
+  font-size: 0.85em;
+  color: var(--color-text-tertiary, #888);
+  padding: 4px 0;
   font-family: inherit;
   text-align: left;
+  transition: color 0.2s;
 }
 
-.reasoning-toggle:hover {
-  background: rgba(100, 150, 255, 0.05);
+.thinking-card-toggle:hover {
+  color: var(--color-text-secondary, #555);
 }
 
 .toggle-icon {
-  font-size: 0.8em;
-  color: #999;
+  font-size: 0.75em;
+  color: var(--color-text-muted, #999);
 }
 
 .toggle-label {
-  font-weight: 600;
-  color: rgba(100, 150, 255, 0.9);
+  font-weight: 500;
+  color: var(--color-text-tertiary, #888);
 }
 
 .streaming-indicator {
@@ -96,9 +98,14 @@
   50% { opacity: 0.3; }
 }
 
-.reasoning-content {
-  padding: 14px;
-  border-top: 1px solid rgba(100, 150, 255, 0.1);
+.thinking-card-content {
+  padding-top: 8px;
+  font-size: 0.9em;
+  color: var(--color-text-secondary, #666);
+  font-style: italic;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
   animation: fadeIn 0.2s ease-in;
 }
 
@@ -111,35 +118,6 @@
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-.reasoning-block {
-  margin-bottom: 16px;
-}
-
-.reasoning-block:last-child {
-  margin-bottom: 0;
-}
-
-.reasoning-block-header {
-  font-size: 0.8em;
-  font-weight: 600;
-  color: #999;
-  margin-bottom: 6px;
-}
-
-.reasoning-block-text {
-  color: #666;
-  font-style: italic;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-
-.reasoning-separator {
-  margin: 16px 0;
-  border: none;
-  border-top: 1px dashed rgba(100, 150, 255, 0.2);
 }
 
 .message-content-clean {
@@ -166,40 +144,27 @@
     color: #bbb;
   }
 
-  .reasoning-panel {
-    background: rgba(100, 150, 255, 0.05);
-    border-color: rgba(100, 150, 255, 0.15);
+  .thinking-card-minimal {
+    border-color: rgba(255, 255, 255, 0.1);
   }
 
-  .reasoning-toggle {
+  .thinking-card-toggle {
+    color: #aaa;
+  }
+
+  .thinking-card-toggle:hover {
     color: #ccc;
   }
 
-  .reasoning-toggle:hover {
-    background: rgba(100, 150, 255, 0.08);
-  }
-
   .toggle-label {
-    color: rgba(130, 180, 255, 0.9);
+    color: #aaa;
   }
 
   .streaming-indicator {
     color: rgba(130, 180, 255, 0.9);
   }
 
-  .reasoning-content {
-    border-top-color: rgba(100, 150, 255, 0.15);
-  }
-
-  .reasoning-block-header {
-    color: #888;
-  }
-
-  .reasoning-block-text {
+  .thinking-card-content {
     color: #bbb;
-  }
-
-  .reasoning-separator {
-    border-top-color: rgba(100, 150, 255, 0.25);
   }
 }

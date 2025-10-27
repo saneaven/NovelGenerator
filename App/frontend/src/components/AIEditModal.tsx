@@ -69,7 +69,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       const storyEditConfig = settingsStore.getFunctionConfig('storyEdit');
 
       // Prepare AI edit request using the service
-      const editRequest = AIEditService.prepareEditRequest({
+      const editRequest = await AIEditService.prepareEditRequest({
         category,
         targetId,
         userRequest,

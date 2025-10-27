@@ -180,7 +180,7 @@ export class ChatManager {
     // NEW: Accumulate interleaved content parts
     let accumulatedContentParts: ContentPart[] = [];
     let currentContentChunk = '';  // Buffer for incomplete content
-    let currentReasoningChunk = '';  // Buffer for incomplete reasoning/thinking
+    let currentThinkingChunk = '';  // Buffer for incomplete thinking (streaming)
     let accumulatedToolCalls: any[] = [];
     let accumulatedReasoningDetails: any[] | undefined;
 
@@ -249,18 +249,34 @@ export class ChatManager {
 
           // NEW: Handle reasoning_text (thinking/reasoning chunks from backend)
           if (chunk.reasoning_text) {
-            // Reasoning chunk arrived - finalize current content chunk
-            if (currentContentChunk) {
-              accumulatedContentParts.push({type: 'content', text: currentContentChunk});
-              currentContentChunk = '';
+            const reasoningType = this.config.thinkingMode === 'custom' ? 'thinking' : 'reasoning';
+
+            // Check if this is incremental update (same thinking block growing)
+            if (currentThinkingChunk && chunk.reasoning_text.startsWith(currentThinkingChunk)) {
+              // This is an incremental update to the same thinking block - just update buffer
+              currentThinkingChunk = chunk.reasoning_text;
+            } else {
+              // New thinking block started - finalize current content chunk
+              if (currentContentChunk) {
+                accumulatedContentParts.push({type: 'content', text: currentContentChunk});
+                currentContentChunk = '';
+              }
+
+              // Finalize previous thinking chunk if exists
+              if (currentThinkingChunk) {
+                accumulatedContentParts.push({type: reasoningType, text: currentThinkingChunk});
+              }
+
+              // Start new thinking chunk
+              currentThinkingChunk = chunk.reasoning_text;
             }
 
-            // Add reasoning chunk
-            const reasoningType = this.config.thinkingMode === 'custom' ? 'thinking' : 'reasoning';
-            accumulatedContentParts.push({type: reasoningType, text: chunk.reasoning_text});
-
-            // Update display
-            scheduleUpdate([...accumulatedContentParts]);
+            // Show thinking in progress (similar to content streaming)
+            const displayParts = [
+              ...accumulatedContentParts,
+              ...(currentThinkingChunk ? [{type: reasoningType, text: currentThinkingChunk}] : [])
+            ];
+            scheduleUpdate(displayParts);
           }
 
           if (chunk.tool_calls) {
@@ -284,6 +300,12 @@ export class ChatManager {
       // Flush any remaining content chunk
       if (currentContentChunk) {
         accumulatedContentParts.push({type: 'content', text: currentContentChunk});
+      }
+
+      // Flush any remaining thinking chunk
+      if (currentThinkingChunk) {
+        const reasoningType = this.config.thinkingMode === 'custom' ? 'thinking' : 'reasoning';
+        accumulatedContentParts.push({type: reasoningType, text: currentThinkingChunk});
       }
 
       // Ensure final update is sent

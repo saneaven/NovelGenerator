@@ -255,7 +255,7 @@ export class AIEditService {
   /**
    * Generate system prompt for AI editing
    */
-  static generateSystemPrompt(
+  static async generateSystemPrompt(
     category: StoryObjectCategory,
     targetId: string | undefined,
     context: Record<string, any>,
@@ -264,7 +264,7 @@ export class AIEditService {
     outputLanguage?: string,
     enablePrefill?: boolean,
     enableThinking?: boolean
-  ): string {
+  ): Promise<string> {
     const promptContext: StoryObjectEditPromptContext = {
       category,
       targetId,
@@ -276,18 +276,18 @@ export class AIEditService {
       enableThinking
     };
 
-    return SystemPromptManager.generatePrompt(PromptType.STORY_OBJECT_EDIT, promptContext);
+    return await SystemPromptManager.generatePrompt(PromptType.STORY_OBJECT_EDIT, promptContext);
   }
 
   /**
    * Prepare AI edit request data
    */
-  static prepareEditRequest(request: AIEditRequest): AIEditResult {
+  static async prepareEditRequest(request: AIEditRequest): Promise<AIEditResult> {
     const context = this.generateContext(request.storyObjects, request.contextOptions);
     const currentData = this.getCurrentData(request.storyObjects, request.category, request.targetId);
     const jsonSchema = this.generateJSONSchema(request.category, request.targetId);
 
-    const systemPrompt = this.generateSystemPrompt(
+    const systemPrompt = await this.generateSystemPrompt(
       request.category,
       request.targetId,
       context,
