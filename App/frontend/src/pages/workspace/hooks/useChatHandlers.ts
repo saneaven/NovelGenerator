@@ -3,6 +3,7 @@ import { useChatStore } from '../../../store/chatStore';
 import type { ChatMessage, FunctionCallResultSummary } from '../../../llm_request/types';
 import type { ChatManager } from '../../../chat/processors/ChatManager';
 import type { WorkspaceUIActions } from './useWorkspaceState';
+import type { ContentPart } from '../../../api/types';
 
 export function useChatHandlers(
   projectId: string | undefined,
@@ -82,7 +83,10 @@ export function useChatHandlers(
     const chatId = getActiveChatId();
     if (!chatId) return;
 
-    updateMessage(projectId, chatId, editingMessageId, editContent, language);
+    // Convert the string content to ContentPart array
+    const contentParts: ContentPart[] = [{ type: 'content', text: editContent }];
+
+    updateMessage(projectId, chatId, editingMessageId, contentParts, language);
     uiActions.setEditingMessageId(null);
     uiActions.setEditingLanguage(null);
     uiActions.setEditContent('');

@@ -31,7 +31,7 @@ export interface BasePrefillContext {
  * Context for chat assistant prefills
  */
 export interface ChatAssistantPrefillContext extends BasePrefillContext {
-  mode?: 'novel-editor' | 'workspace';
+  mode?: 'novelEditor' | 'workspace';
   hasFunctions?: boolean;
 }
 

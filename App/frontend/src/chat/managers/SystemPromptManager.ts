@@ -29,7 +29,7 @@ export interface BasePromptContext {
  * Context for chat system prompts
  */
 export interface ChatSystemPromptContext extends BasePromptContext {
-  mode?: 'novel-editor' | 'workspace';
+  mode?: 'novelEditor' | 'workspace';
   functions?: FunctionCallSchema[];
   enablePrefill?: boolean;
   enableThinking?: boolean;
@@ -43,7 +43,6 @@ export interface StoryObjectEditPromptContext extends BasePromptContext {
   targetId?: string;
   contextData?: Record<string, unknown>;
   currentData: unknown;
-  jsonSchema: unknown;
   enablePrefill?: boolean;
   enableThinking?: boolean;
 }
@@ -80,6 +79,8 @@ export interface TranslationPromptContext extends BasePromptContext {
   dataType: TranslationDataType;
   sourceData: unknown;
   previousVersionData?: unknown;
+  previousTranslation?: string;
+  userInstructions?: string;
   enablePrefill?: boolean;
   enableThinking?: boolean;
 }
@@ -229,7 +230,7 @@ export class SystemPromptManager {
   }
 
   private static async generateStoryObjectEditPrompt(context: StoryObjectEditPromptContext): Promise<string> {
-    const { category, targetId, contextData, currentData, jsonSchema, outputLanguage } = context;
+    const { category, targetId, contextData, currentData, outputLanguage } = context;
 
     const systemTemplate = await this.getTemplate('storyEdit', 'systemPrompt');
     const categoryName = this.getCategoryDisplayName(category);
@@ -245,7 +246,6 @@ export class SystemPromptManager {
       context: {
         contextData: this.formatContextData(contextData),
         currentData: this.formatJsonBlock(currentData),
-        jsonSchema: this.formatJsonBlock(jsonSchema),
       },
       conditionals: {
         thinking: context.enableThinking ?? false,
@@ -282,7 +282,7 @@ export class SystemPromptManager {
   }
 
   private static async generateTranslationPrompt(context: TranslationPromptContext): Promise<string> {
-    const { sourceLanguage, targetLanguage, dataType, sourceData, previousVersionData } = context;
+    const { sourceLanguage, targetLanguage, dataType, sourceData, previousVersionData, previousTranslation, userInstructions } = context;
 
     const systemTemplate = await this.getTemplate('translation', 'systemPrompt');
     const dataTypeName = this.getDataTypeDisplayName(dataType);
@@ -290,7 +290,9 @@ export class SystemPromptManager {
       ? `## Previous Version Context\n\nA previous ${targetLanguage} version is provided below for reference. Use it to maintain consistency in terminology, style, and tone:\n\n${this.formatJsonBlock(previousVersionData)}`
       : '';
 
-    const outputSchemaHint = this.getTranslationOutputSchemaHint(dataType);
+    const previousTranslationReference = previousTranslation
+      ? `## Previous Translation Reference\n\nHere is the previous translation to ${targetLanguage}:\n\n${this.formatTextBlock(previousTranslation)}\n\nUse this as a reference to maintain consistency in style, tone, and terminology.`
+      : '';
 
     const renderContext: RenderContext = {
       variables: {
@@ -300,12 +302,15 @@ export class SystemPromptManager {
       },
       context: {
         previousVersionContext,
+        previousTranslationReference,
+        userInstructions: userInstructions || '',
         sourceData: this.formatJsonBlock(sourceData),
-        outputSchemaHint,
       },
       conditionals: {
         thinking: context.enableThinking ?? false,
         prefill: context.enablePrefill ?? false,
+        previousTranslationReference: !!previousTranslation,
+        userInstructions: !!userInstructions,
       },
     };
 
@@ -402,19 +407,4 @@ export class SystemPromptManager {
     return names[dataType] || dataType;
   }
 
-  /**
-   * Get output schema hint for translation data type
-   */
-  private static getTranslationOutputSchemaHint(dataType: TranslationDataType): string {
-    const hints = {
-      nameDescription: '```json\n{\n  "name": "translated name",\n  "description": "translated description"\n}\n```',
-      basicInfo: '```json\n{\n  "title": "translated title",\n  "logline": "translated logline",\n  "genre": "translated genre"\n}\n```',
-      chapterData: '```json\n{\n  "name": "translated chapter name",\n  "description": "translated chapter description"\n}\n```',
-      chapterContent: '```json\n{\n  "content": "translated chapter content",\n  "wordCount": updated_word_count_number\n}\n```',
-      chatMessage: '```json\n{\n  "content": "translated message content"\n}\n```',
-      general: 'Match the structure of the input JSON with all translatable fields translated.',
-    } as const;
-
-    return hints[dataType] || hints.general;
-  }
 }

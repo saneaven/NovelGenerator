@@ -7,7 +7,14 @@ import type {
 } from '../types';
 import type { FunctionCallSchema } from '../types/functionCalling';
 import { UserMessageTagManager } from '../managers/UserMessageTagManager';
-import { SystemPromptManager, PromptType, type ChatSystemPromptContext } from '../managers/SystemPromptManager';
+import {
+  SystemPromptManager,
+  PromptType,
+  type ChatSystemPromptContext,
+  type TranslationPromptContext,
+  type StoryObjectEditPromptContext,
+  type ChapterEditPromptContext
+} from '../managers/SystemPromptManager';
 import { PrefillManager, PrefillType, type ChatAssistantPrefillContext } from '../managers/PrefillManager';
 
 export class DefaultPreProcessor implements PreProcessor {
@@ -60,7 +67,17 @@ export class DefaultPreProcessor implements PreProcessor {
       }
     }
 
-    const availableFunctions = context.systemInsertConfig.enabled ? functions : undefined;
+    // Determine function availability based on prompt type
+    const promptType = context.systemInsertConfig.promptType || 'chat';
+    let availableFunctions: FunctionCallSchema[] | undefined;
+
+    if (promptType === 'chat') {
+      // For chat type, respect the enabled flag
+      availableFunctions = context.systemInsertConfig.enabled ? functions : undefined;
+    } else {
+      // For all other prompt types (translation, editing, etc.), always provide functions
+      availableFunctions = functions;
+    }
 
     // Debug: Log function preparation and validate content types
     console.log("Chat to be sent to backend:", {
@@ -81,15 +98,64 @@ export class DefaultPreProcessor implements PreProcessor {
   }
 
   private async generateSystemPrompt(context: ChatPipelineContext, conversationLanguage?: string, functions?: FunctionCallSchema[]): Promise<string> {
-    const promptContext: ChatSystemPromptContext = {
-      mode: context.mode,
-      outputLanguage: conversationLanguage,
-      functions: context.systemInsertConfig.enabled && context.systemInsertConfig.includeProjectInfo ? functions : undefined,
-      enablePrefill: context.enablePrefill,
-      enableThinking: context.thinkingMode === 'custom', // Only enable thinking in prompt for custom mode
-    };
+    // Get prompt type from config, default to 'chat' if not specified
+    const promptType = context.systemInsertConfig.promptType || 'chat';
+    const promptContext = context.systemInsertConfig.promptContext;
 
-    return await SystemPromptManager.generatePrompt(PromptType.CHAT_SYSTEM, promptContext);
+    // Handle all prompt types uniformly
+    switch (promptType) {
+      case 'chat':
+        // Build chat prompt context
+        const chatPromptContext: ChatSystemPromptContext = promptContext
+          ? (promptContext as ChatSystemPromptContext)
+          : {
+              mode: context.mode,
+              outputLanguage: conversationLanguage,
+              functions: context.systemInsertConfig.enabled && context.systemInsertConfig.includeProjectInfo ? functions : undefined,
+              enablePrefill: context.enablePrefill,
+              enableThinking: context.thinkingMode === 'custom',
+            };
+        return await SystemPromptManager.generatePrompt(PromptType.CHAT_SYSTEM, chatPromptContext);
+
+      case 'translation':
+        if (!promptContext) {
+          throw new Error('Translation prompt requires promptContext to be set');
+        }
+        return await SystemPromptManager.generatePrompt(
+          PromptType.TRANSLATION,
+          promptContext as TranslationPromptContext
+        );
+
+      case 'story_object_edit':
+        if (!promptContext) {
+          throw new Error('Story object edit prompt requires promptContext to be set');
+        }
+        return await SystemPromptManager.generatePrompt(
+          PromptType.STORY_OBJECT_EDIT,
+          promptContext as StoryObjectEditPromptContext
+        );
+
+      case 'chapter_edit':
+        if (!promptContext) {
+          throw new Error('Chapter edit prompt requires promptContext to be set');
+        }
+        return await SystemPromptManager.generatePrompt(
+          PromptType.CHAPTER_EDIT,
+          promptContext as ChapterEditPromptContext
+        );
+
+      default:
+        console.warn(`Unknown prompt type: ${promptType}, falling back to chat`);
+        // Fallback to chat
+        const fallbackContext: ChatSystemPromptContext = {
+          mode: context.mode,
+          outputLanguage: conversationLanguage,
+          functions: context.systemInsertConfig.enabled && context.systemInsertConfig.includeProjectInfo ? functions : undefined,
+          enablePrefill: context.enablePrefill,
+          enableThinking: context.thinkingMode === 'custom',
+        };
+        return await SystemPromptManager.generatePrompt(PromptType.CHAT_SYSTEM, fallbackContext);
+    }
   }
 
   private generatePrefill(context: ChatPipelineContext, conversationLanguage?: string, functions?: FunctionCallSchema[]): string {

@@ -116,11 +116,12 @@ class OpenRouterProvider(BaseProvider):
                         # Stream successful response
                         async for chunk in response.aiter_bytes():
                             if chunk:
-                                # Extract reasoning_details.text for real-time streaming (model mode)
+                                # Extract reasoning_details.text and inject into original chunk (model mode)
                                 if thinking_mode == 'model':
                                     try:
                                         chunk_str = chunk.decode('utf-8')
                                         lines = chunk_str.strip().split('\n')
+                                        modified_lines = []
 
                                         for line in lines:
                                             if line.startswith('data: '):
@@ -130,26 +131,35 @@ class OpenRouterProvider(BaseProvider):
                                                         data = json.loads(data_str)
                                                         delta = data.get('choices', [{}])[0].get('delta', {})
 
-                                                        # Extract reasoning.text from reasoning_details
+                                                        # Inject reasoning.text from reasoning_details into the same chunk
                                                         if 'reasoning_details' in delta:
                                                             for detail in delta['reasoning_details']:
                                                                 if detail.get('type') == 'text' and detail.get('text'):
-                                                                    # Emit as separate reasoning chunk
-                                                                    reasoning_chunk = {
-                                                                        "choices": [{
-                                                                            "delta": {
-                                                                                "reasoning": {"text": detail['text']}
-                                                                            }
-                                                                        }]
-                                                                    }
-                                                                    yield f"data: {json.dumps(reasoning_chunk)}\n\n".encode()
-                                                    except json.JSONDecodeError:
-                                                        pass  # Skip malformed JSON
-                                    except:
-                                        pass  # Ignore decode errors
+                                                                    # Add reasoning.text to delta (don't emit separate chunk)
+                                                                    if 'reasoning' not in delta:
+                                                                        delta['reasoning'] = {}
+                                                                    delta['reasoning']['text'] = detail['text']
+                                                                    break  # Use first text detail
 
-                                # Always pass through original chunk
-                                yield chunk
+                                                        # Re-serialize modified data
+                                                        modified_lines.append(f"data: {json.dumps(data)}")
+                                                    except json.JSONDecodeError:
+                                                        # Keep original line if JSON parsing fails
+                                                        modified_lines.append(line)
+                                                else:
+                                                    modified_lines.append(line)
+                                            else:
+                                                modified_lines.append(line)
+
+                                        # Yield modified chunk
+                                        modified_chunk_str = '\n'.join(modified_lines) + '\n'
+                                        yield modified_chunk_str.encode('utf-8')
+                                    except:
+                                        # On any error, pass through original chunk
+                                        yield chunk
+                                else:
+                                    # Pass through original chunk for non-model thinking modes
+                                    yield chunk
                         return
 
             except httpx.RequestError as e:

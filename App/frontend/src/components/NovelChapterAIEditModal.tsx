@@ -2,11 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useStoryObjectStore } from '../store/storyObjectStore';
 import { useNovelStore } from '../store/novelStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { streamChat } from '../llm_request/llmService';
-import type { ConversationBlock } from '../llm_request/types';
+import { useChatStore } from '../store/chatStore';
 import type { StoryObjects } from '../types/storyObject';
-import { SystemPromptManager, PromptType, type ChapterEditPromptContext } from '../chat/managers/SystemPromptManager';
-import { PrefillManager, PrefillType, type ChapterEditPrefillContext } from '../chat/managers/PrefillManager';
+import type { FunctionCallMetadata, ContentPart } from '../llm_request/types';
+import { ChatManager, type ChatManagerConfig, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
+import { ChatPipeline } from '../chat/ChatPipeline';
+import { NOVEL_EDITOR_FUNCTIONS } from '../chat/types/functionCalling';
 
 interface NovelContextOptions {
   basicInfo: boolean;
@@ -24,7 +25,7 @@ interface NovelChapterAIEditModalProps {
   projectId: string;
   chapterId: string;
   chapterName: string;
-  onResult: (newContent: string) => void;
+  onResult?: () => void;
 }
 
 const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
@@ -52,7 +53,10 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
   const storyObjectStore = useStoryObjectStore();
   const novelStore = useNovelStore();
   const settingsStore = useSettingsStore();
+  const chatStore = useChatStore();
   const abortControllerRef = useRef<AbortController | null>(null);
+  const chatManagerRef = useRef<ChatManager | null>(null);
+  const tempChatIdRef = useRef<string>('');
 
   useEffect(() => {
     if (!isOpen) {
@@ -64,8 +68,13 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
+      // Clean up temporary chat
+      if (tempChatIdRef.current) {
+        chatStore.deleteChat(projectId, tempChatIdRef.current);
+        tempChatIdRef.current = '';
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, projectId, chatStore]);
 
   const generateNovelContext = (storyObjects: StoryObjects): Record<string, any> => {
     const context: Record<string, any> = {};
@@ -149,28 +158,6 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
     return context;
   };
 
-  const generateSystemPrompt = async (
-    context: Record<string, any>,
-    currentContent: string,
-    chapterName: string,
-    userRequest: string,
-    outputLanguage?: string,
-    enablePrefill?: boolean,
-    enableThinking?: boolean
-  ): Promise<string> => {
-    const promptContext: ChapterEditPromptContext = {
-      chapterName,
-      currentContent,
-      userRequest,
-      contextData: context,
-      outputLanguage,
-      enablePrefill,
-      enableThinking
-    };
-
-    return await SystemPromptManager.generatePrompt(PromptType.CHAPTER_EDIT, promptContext);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userRequest.trim() || isProcessing) return;
@@ -180,72 +167,120 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
     setError(null);
 
     try {
-      abortControllerRef.current = new AbortController();
+      const chapterGenConfig = settingsStore.getFunctionConfig('chapterGen');
+      const providerConfig = settingsStore.getProviderConfig(chapterGenConfig.provider);
 
+      // Create temporary chat for this edit session
+      const tempChatId = `temp-chapter-edit-${Date.now()}`;
+      tempChatIdRef.current = tempChatId;
+
+      // Get current chapter content and story objects
       const storyObjects = storyObjectStore.getStoryObjects(projectId);
       const currentChapterContent = novelStore.getChapterContent(projectId, chapterId);
       const currentContent = currentChapterContent?.content || '';
-      const chapterGenConfig = settingsStore.getFunctionConfig('chapterGen');
 
-      // Generate context and system prompt
-      const context = generateNovelContext(storyObjects);
-      const systemPrompt = await generateSystemPrompt(
-        context,
-        currentContent,
-        chapterName,
-        userRequest,
-        settingsStore.settings.outputLanguage,
-        chapterGenConfig.advanced.enablePrefill,
-        chapterGenConfig.advanced.enableThinking
-      );
+      // Generate context
+      const contextData = generateNovelContext(storyObjects);
 
-      const messages: ConversationBlock[] = [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userRequest },
-      ];
+      // Setup ChatManager callbacks
+      const callbacks: ChatManagerCallbacks = {
+        onUpdateMessage: (projId, chatId, messageId, contentParts: ContentPart[]) => {
+          // Update stream content display
+          const textContent = contentParts
+            .filter(p => p.type === 'content')
+            .map(p => p.text)
+            .join('');
+          setStreamContent(textContent);
+        },
+        onSyncMessageToBackend: async () => {
+          // No-op for temporary edit session
+        },
+        onFunctionCalls: async (projId, chatId, messageId, functionCalls: FunctionCallMetadata[]) => {
+          // Handle update_chapter_content function call
+          try {
+            const updateCall = functionCalls.find(fc => fc.name === 'update_chapter_content');
+            if (!updateCall) {
+              setError('AI did not call update_chapter_content function');
+              return;
+            }
 
-      // Add prefill if enabled
-      if (chapterGenConfig.advanced.enablePrefill) {
-        const prefillContext: ChapterEditPrefillContext = {
-          chapterName,
-          outputLanguage: settingsStore.settings.primaryLanguage
-        };
-        const prefill = PrefillManager.generatePrefill(PrefillType.CHAPTER_EDIT_ASSISTANT, prefillContext);
-        if (prefill && prefill.trim().length > 0) {
-          messages.push({ role: 'assistant', content: prefill });
-        }
-      }
+            const args = typeof updateCall.arguments === 'string'
+              ? JSON.parse(updateCall.arguments)
+              : updateCall.arguments;
 
-      let fullResponse = '';
-      const providerConfig = settingsStore.getProviderConfig(chapterGenConfig.provider);
+            // Apply the chapter content update
+            await novelStore.updateChapterContent(projectId, args.chapterId, args.content);
 
-      for await (const chunk of streamChat(
-        messages,
-        chapterGenConfig.provider,
+            // Success! Close modal
+            if (onResult) {
+              onResult();
+            }
+            onClose();
+          } catch (err) {
+            console.error('Function application error:', err);
+            setError(err instanceof Error ? err.message : 'Failed to apply chapter content update');
+          }
+        },
+        onAddMessage: async (projId, chatId, message, language) => {
+          return `msg-${Date.now()}`;
+        },
+        onGetChatHistory: () => {
+          return [];
+        },
+        onError: (err) => {
+          setError(err.message);
+        },
+      };
+
+      // Create ChatManager config
+      const chatManagerConfig: ChatManagerConfig = {
+        projectId,
+        getStoryObjects: () => storyObjectStore.getStoryObjects(projectId),
+        getNovelData: () => novelStore.getAllChapterContents(projectId),
+        systemInsertConfig: {
+          promptContext: {
+            chapterName,
+            currentContent,
+            contextData,
+            enablePrefill: chapterGenConfig.advanced.enablePrefill,
+            enableThinking: chapterGenConfig.advanced.thinkingMode !== 'off',
+            userRequest,
+          },
+          promptType: 'chapter_edit',
+        },
+        chatPipeline: new ChatPipeline(),
+        getIsLoading: () => isProcessing,
+        setIsLoading: (loading) => setIsProcessing(loading),
+        abortControllerRef,
+        getActiveChatId: () => tempChatId,
+        getConversationLanguage: () => settingsStore.settings.primaryLanguage,
+        provider: chapterGenConfig.provider,
         providerConfig,
-        {
-          signal: abortControllerRef.current.signal,
-          temperature: chapterGenConfig.temperature,
-          model: chapterGenConfig.model,
-          providerPreference: chapterGenConfig.providerPreference,
-        }
-      )) {
-        if (typeof chunk === 'string') {
-          fullResponse += chunk;
-        } else if (chunk.content) {
-          fullResponse += chunk.content;
-        }
-        setStreamContent(fullResponse);
-      }
+        aiModel: chapterGenConfig.model,
+        temperature: chapterGenConfig.temperature,
+        providerPreference: chapterGenConfig.providerPreference,
+        functions: NOVEL_EDITOR_FUNCTIONS,
+        mode: 'novelEditor',
+        enablePrefill: chapterGenConfig.advanced.enablePrefill,
+        thinkingMode: chapterGenConfig.advanced.thinkingMode as any,
+        reasoningConfig: chapterGenConfig.advanced.reasoningConfig,
+      };
 
-      // Apply the result directly as the new chapter content
-      onResult(fullResponse.trim());
-      onClose();
+      // Create ChatManager
+      chatManagerRef.current = new ChatManager(chatManagerConfig, callbacks);
+
+      // Process user message
+      await chatManagerRef.current.processUserMessage({
+        id: `msg-user-${Date.now()}`,
+        role: 'user',
+        content: userRequest,
+        timestamp: new Date(),
+      });
 
     } catch (err) {
       if (err instanceof Error) {
         if (err.name === 'AbortError') {
-          return; // User cancelled, don't show error
+          return;
         }
         setError(err.message);
       } else {

@@ -28,7 +28,7 @@ router = APIRouter(prefix="/api/v1/prompts", tags=["prompts"])
     response_model=PromptContentResponse
 )
 async def get_prompt_without_name(
-    function_type: str = Path(..., description="Function type (chat, translation, storyEdit, chapterGen, global)"),
+    function_type: str = Path(..., description="Function type (chat, translation, storyEdit, chapterGen)"),
     prompt_category: str = Path(..., description="Prompt category (systemPrompt, prefill, functionInstructions, userMessageTag)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)

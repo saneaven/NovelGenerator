@@ -16,17 +16,28 @@ You are translating **{{var::dataTypeName}}** data.
 2. **Style Preservation**: Maintain the original writing style, tone, and emotional nuance.
 3. **Context Awareness**: Consider the narrative context and literary conventions of the target language.
 4. **Natural Language**: Ensure the translation sounds natural and fluent in the target language, not mechanical.
-5. **JSON Format**: Return only a valid JSON object that matches the structure of the input data.
-6. **No Commentary**: Do not include explanations, notes, or any text outside the JSON response.
+5. **Consistency**: Maintain consistent terminology, especially for character names, locations, and key concepts.
 
 {{context::previousVersionContext}}
+
+{{#if::previousTranslationReference}}
+{{context::previousTranslationReference}}
+{{/if}}
+
+{{#if::userInstructions}}
+## Special Instructions
+
+{{context::userInstructions}}
+{{/if}}
 
 ## Source Data to Translate
 
 {{context::sourceData}}
 
-## Expected Output Format
+## Instructions
 
-Return a JSON object with the same structure as the input, with all translatable text fields translated to {{var::targetLanguage}}.
+1. Use the appropriate translation function to provide the translated content.
+2. Make sure all translatable fields are translated accurately.
+3. For chapter content, ensure you calculate and provide the correct word count for the translated text.
+4. After calling the translation function, provide a brief confirmation in your text response.
 
-{{context::outputSchemaHint}}

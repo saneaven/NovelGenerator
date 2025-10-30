@@ -65,6 +65,10 @@ DEFAULT_PROMPTS = {
             'novelEditor': _NOVEL_EDITOR_FUNCTION_INSTRUCTIONS,
         },
         'prefill': _CHAT_PREFILL,
+        'userMessageTag': {
+            'lastMessage': _LAST_USER_MESSAGE_TAG,
+            'nonLastMessage': _NON_LAST_USER_MESSAGE_TAG,
+        },
     },
     'translation': {
         'systemPrompt': _TRANSLATION_SYSTEM_PROMPT,
@@ -77,12 +81,6 @@ DEFAULT_PROMPTS = {
     'chapterGen': {
         'systemPrompt': _CHAPTER_EDIT_SYSTEM_PROMPT,
         'prefill': _CHAPTER_EDIT_PREFILL,
-    },
-    'global': {
-        'userMessageTag': {
-            'lastMessage': _LAST_USER_MESSAGE_TAG,
-            'nonLastMessage': _NON_LAST_USER_MESSAGE_TAG,
-        },
     },
 }
 

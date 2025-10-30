@@ -95,7 +95,7 @@ class PromptVersion(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
 
     # Prompt identification
-    function_type = Column(String(50), nullable=False)  # 'chat', 'translation', 'storyEdit', 'chapterGen', 'global'
+    function_type = Column(String(50), nullable=False)  # 'chat', 'translation', 'storyEdit', 'chapterGen'
     prompt_category = Column(String(50), nullable=False)  # 'systemPrompt', 'functionInstructions', 'prefill', 'userMessageTag'
     prompt_name = Column(String(50), nullable=True)  # 'workspace', 'novelEditor', etc (nullable for single prompts)
 

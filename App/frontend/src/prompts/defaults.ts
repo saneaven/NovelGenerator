@@ -28,7 +28,7 @@ import nonLastUserMessageTag from '../chat/managers/prompts/userMessageSystemPro
 /**
  * Prompt type definitions
  */
-export type FunctionType = 'chat' | 'translation' | 'storyEdit' | 'chapterGen' | 'global';
+export type FunctionType = 'chat' | 'translation' | 'storyEdit' | 'chapterGen';
 export type PromptCategory = 'systemPrompt' | 'functionInstructions' | 'prefill' | 'userMessageTag';
 
 export interface PromptDefaults {
@@ -42,6 +42,10 @@ export interface PromptDefaults {
       novelEditor: string;
     };
     prefill: string;
+    userMessageTag: {
+      lastMessage: string;
+      nonLastMessage: string;
+    };
   };
   translation: {
     systemPrompt: string;
@@ -54,12 +58,6 @@ export interface PromptDefaults {
   chapterGen: {
     systemPrompt: string;
     prefill: string;
-  };
-  global: {
-    userMessageTag: {
-      lastMessage: string;
-      nonLastMessage: string;
-    };
   };
 }
 
@@ -77,6 +75,10 @@ export const DEFAULT_PROMPTS: PromptDefaults = {
       novelEditor: novelEditorFunctionInstructions,
     },
     prefill: chatPrefill,
+    userMessageTag: {
+      lastMessage: lastUserMessageTag,
+      nonLastMessage: nonLastUserMessageTag,
+    },
   },
   translation: {
     systemPrompt: translationPrompt,
@@ -89,12 +91,6 @@ export const DEFAULT_PROMPTS: PromptDefaults = {
   chapterGen: {
     systemPrompt: chapterEditPrompt,
     prefill: chapterEditPrefill,
-  },
-  global: {
-    userMessageTag: {
-      lastMessage: lastUserMessageTag,
-      nonLastMessage: nonLastUserMessageTag,
-    },
   },
 };
 

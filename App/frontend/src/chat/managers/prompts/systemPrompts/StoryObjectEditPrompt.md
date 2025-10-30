@@ -14,15 +14,19 @@ Respond in {{var::language}}.
 
 {{context::currentData}}
 
-## Expected JSON Schema
+## Instructions
 
-{{context::jsonSchema}}
+1. Use the available functions to make the requested modifications to the story objects.
+2. **IMPORTANT**: Preserve existing `id` values when modifying items. For new items, set `id` to `null`.
+3. Consider the provided context to maintain story coherence and structure.
+4. Make all necessary changes through function calls - do not return data in your text response.
+5. After calling functions, provide a brief summary of the changes you made in your text response.
 
-### Response Requirements
+## Function Call Guidelines
 
-1. Return only JSON that matches the provided schema exactly.
-2. Preserve existing `id` values when modifying items.
-3. Set the `id` to `null` for any brand new items you create.
-4. Follow the supplied context to maintain story coherence and structure.
-5. Do not include commentary or explanations outside the JSON payload.
+- For single item edits: Use the appropriate single-item edit function
+- For batch operations: Use batch edit functions when modifying multiple items
+- Always include all required fields in your function calls
+- Use `null` for the `id` field when creating new items
+- Keep existing IDs when updating items
 

@@ -136,7 +136,7 @@ const NovelEditor: React.FC = () =>
                 providerConfig: providerCredentials[chatFunctionConfig.provider],
                 providerPreference: chatFunctionConfig.providerPreference,
                 functions: NOVEL_EDITOR_FUNCTIONS,
-                mode: 'novel-editor',
+                mode: 'novelEditor',
                 enablePrefill: chatFunctionConfig.advanced.enablePrefill,
                 thinkingMode: chatFunctionConfig.advanced.thinkingMode,
                 reasoningConfig: chatFunctionConfig.advanced.reasoningConfig,
@@ -227,7 +227,7 @@ const NovelEditor: React.FC = () =>
                 projectId,
                 storyObjects,
                 systemInsertConfig,
-                mode: 'novel-editor',
+                mode: 'novelEditor',
             });
 
             if (processed.editCards.length > 0)
@@ -356,7 +356,7 @@ const NovelEditor: React.FC = () =>
                     onCancelEdit={chatHandlers.handleCancelEdit}
                     onDeleteMessage={chatHandlers.handleDeleteMessage}
                     editTextareaRef={chatHandlers.editTextareaRef as React.RefObject<HTMLTextAreaElement>}
-                    mode="novel-editor"
+                    mode="novelEditor"
                 />
 
                 <NovelEditorPanel

@@ -1,6 +1,12 @@
 import type { ConversationBlock, ChatMessage, ContentPart } from '../llm_request/types';
 import type { StoryObjects } from '../types/storyObject';
 import type { FunctionCallSchema } from './types/functionCalling';
+import type {
+  ChatSystemPromptContext,
+  TranslationPromptContext,
+  StoryObjectEditPromptContext,
+  ChapterEditPromptContext,
+} from './managers/SystemPromptManager';
 
 // Extend existing ChatMessage for pipeline processing
 export interface ProcessedChatMessage extends ChatMessage {
@@ -14,6 +20,9 @@ export interface SystemInsertConfig {
   includeProjectInfo: boolean;
   includeStoryObjects: boolean;
   includeNovelContent: boolean;
+  // Prompt type category - all prompts are treated uniformly as categories
+  promptType?: 'chat' | 'translation' | 'story_object_edit' | 'chapter_edit';
+  promptContext?: ChatSystemPromptContext | TranslationPromptContext | StoryObjectEditPromptContext | ChapterEditPromptContext;
 }
 
 // Pipeline processing interfaces
@@ -52,7 +61,7 @@ export interface ChatPipelineContext {
   storyObjects: StoryObjects;
   systemInsertConfig: SystemInsertConfig;
   novelData?: any; // Novel content data
-  mode: 'novel-editor' | 'workspace'; // Explicit mode distinction
+  mode: 'novelEditor' | 'workspace'; // Explicit mode distinction
   enablePrefill?: boolean; // Enable assistant prefill at the end
   thinkingMode?: 'off' | 'model' | 'custom'; // Thinking mode: off, model-native reasoning, or custom prompt-based
   reasoningConfig?: {

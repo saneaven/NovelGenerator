@@ -1,16 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useChatStore, type StoredChatMessage } from '../../../store/chatStore';
+import { useStoryObjectStore } from '../../../store/storyObjectStore';
 import { useProjectStore } from '../../../store/projectStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import type { SystemInsertConfig, EditCard } from '../../../chat/types';
 import { TranslationService } from '../../../services/translationService';
-import { streamChat } from '../../../llm_request/llmService';
 import { ChatPipeline } from '../../../chat/ChatPipeline';
 import { EditCardComponent } from '../../../chat/processors/DisplayProcessor';
 import type { WorkspaceUIState, WorkspaceUIActions } from '../hooks/useWorkspaceState';
 import type { StoryObjects } from '../../../types/storyObject';
-import type { ChatMessage } from '../../../llm_request/types';
+import type { ChatMessage, FunctionCallMetadata } from '../../../llm_request/types';
+import { ChatManager, type ChatManagerConfig, type ChatManagerCallbacks } from '../../../chat/processors/ChatManager';
+import { getTranslationFunctionSchema } from '../../../chat/types/translationFunctionSchemas';
+import { applyTranslationFunctionCalls, type TranslationContext } from '../../../chat/utils/translationFunctionApplicator';
 import ToggleSwitch from '../../../components/ToggleSwitch';
 import ReasoningDisplay from '../../../components/ReasoningDisplay';
 
@@ -34,7 +37,7 @@ interface ChatPanelProps
     onCancelEdit: () => void;
     onDeleteMessage: (messageId: string) => void;
     editTextareaRef: React.RefObject<HTMLTextAreaElement>;
-    mode: 'novel-editor' | 'workspace';
+    mode: 'novelEditor' | 'workspace';
 }
 
 interface DisplayMessageInfo
@@ -244,50 +247,118 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 dataToTranslate.thinking = thinkingText;
             }
 
-            const translationRequest = await TranslationService.prepareTranslationRequest({
-                sourceLanguage,
-                targetLanguage,
-                data: dataToTranslate,
-                dataType: 'chatMessage'
-            });
+            // Get translation function schema
+            const translationFunctionSchema = getTranslationFunctionSchema('chatMessage');
 
+            // Get provider config from settings
+            const storyObjectStore = useStoryObjectStore.getState();
             const translationConfig = settingsStore.getFunctionConfig('translation');
             const providerConfig = settingsStore.getProviderConfig(translationConfig.provider);
 
-            let response = '';
-            for await (const chunk of streamChat(
-                translationRequest.messages,
-                translationConfig.provider,
-                providerConfig,
-                {
-                    model: translationConfig.model,
-                    temperature: translationConfig.temperature,
-                    providerPreference: translationConfig.providerPreference,
-                }
-            ))
-            {
-                if (typeof chunk === 'string')
-                {
-                    response += chunk;
-                } else if (chunk.content)
-                {
-                    response += chunk.content;
-                }
-            }
+            // Create temporary abort controller
+            const abortController = new AbortController();
+            const abortControllerRef = { current: abortController };
 
-            const parsed = TranslationService.parseTranslationResponse(response);
-            const validation = TranslationService.validateTranslationResult(parsed, 'chatMessage');
-            if (!validation.isValid)
-            {
-                throw new Error(validation.errors.join(', '));
-            }
+            // Promise to wait for translation result
+            let resolveTranslation: (value: any) => void;
+            let rejectTranslation: (error: Error) => void;
+            const translationPromise = new Promise<any>((resolve, reject) => {
+                resolveTranslation = resolve;
+                rejectTranslation = reject;
+            });
+
+            // Setup ChatManager callbacks
+            const callbacks: ChatManagerCallbacks = {
+                onUpdateMessage: () => {},
+                onSyncMessageToBackend: async () => {},
+                onFunctionCalls: async (projId, chatId, messageId, functionCalls: FunctionCallMetadata[]) => {
+                    try {
+                        // Create translation context (chat messages don't use store updates)
+                        const translationContext: TranslationContext = {
+                            projectId,
+                            targetLanguage,
+                        };
+
+                        // Apply translation function calls
+                        const results = await applyTranslationFunctionCalls(functionCalls, translationContext);
+
+                        const failedResults = results.filter(r => !r.success);
+                        if (failedResults.length > 0) {
+                            rejectTranslation(new Error(`Translation failed: ${failedResults.map(r => r.error).join(', ')}`));
+                        } else {
+                            // Get translated content from result
+                            const result = results[0];
+                            resolveTranslation(result.data);
+                        }
+                    } catch (err) {
+                        console.error('Translation function application error:', err);
+                        rejectTranslation(err instanceof Error ? err : new Error('Failed to apply translation'));
+                    }
+                },
+                onAddMessage: async () => `msg-${Date.now()}`,
+                onGetChatHistory: () => [],
+                onError: (err) => {
+                    rejectTranslation(err);
+                },
+            };
+
+            // Create ChatManager config
+            const tempChatId = `temp-message-translation-${Date.now()}`;
+            const chatManagerConfig: ChatManagerConfig = {
+                projectId,
+                getStoryObjects: () => storyObjectStore.getStoryObjects(projectId),
+                systemInsertConfig: {
+                    promptContext: {
+                        sourceLanguage,
+                        targetLanguage,
+                        dataType: 'chatMessage',
+                        sourceData: dataToTranslate,
+                        enablePrefill: translationConfig.advanced.enablePrefill,
+                        enableThinking: translationConfig.advanced.thinkingMode !== 'off',
+                    },
+                    promptType: 'translation',
+                },
+                chatPipeline: new ChatPipeline(),
+                getIsLoading: () => false,
+                setIsLoading: () => {},
+                abortControllerRef,
+                getActiveChatId: () => tempChatId,
+                getConversationLanguage: () => targetLanguage,
+                provider: translationConfig.provider,
+                providerConfig,
+                aiModel: translationConfig.model,
+                temperature: translationConfig.temperature,
+                providerPreference: translationConfig.providerPreference,
+                functions: [translationFunctionSchema],
+                mode: 'workspace',
+                enablePrefill: translationConfig.advanced.enablePrefill,
+                thinkingMode: translationConfig.advanced.thinkingMode as any,
+                reasoningConfig: translationConfig.advanced.reasoningConfig,
+            };
+
+            // Create ChatManager
+            const chatManager = new ChatManager(chatManagerConfig, callbacks);
+
+            // Process translation request
+            const userMessage: ChatMessage = {
+                id: `msg-user-${Date.now()}`,
+                role: 'user',
+                content: `Please translate this chat message from ${sourceLanguage} to ${targetLanguage}`,
+                timestamp: new Date(),
+            };
+
+            await chatManager.processUserMessage(userMessage);
+
+            // Wait for translation result
+            const translationResult = await translationPromise;
+            const translatedContent = translationResult.translatedContent || translationResult.content;
 
             // Reconstruct contentParts with translated text
             const translatedContentParts = contentParts.map((part: any) => {
                 if (part.type === 'content') {
-                    return { ...part, text: parsed.content };
-                } else if ((part.type === 'thinking' || part.type === 'reasoning') && parsed.thinking) {
-                    return { ...part, text: parsed.thinking };
+                    return { ...part, text: translatedContent };
+                } else if ((part.type === 'thinking' || part.type === 'reasoning') && translationResult.thinking) {
+                    return { ...part, text: translationResult.thinking };
                 }
                 return part;
             });

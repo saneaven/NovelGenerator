@@ -56,7 +56,8 @@ export class ChatPipeline {
       enabled: true,
       includeProjectInfo: true,
       includeStoryObjects: true,
-      includeNovelContent: false
+      includeNovelContent: false,
+      promptType: 'chat' // Default to chat prompt type
     };
   }
 
@@ -64,7 +65,7 @@ export class ChatPipeline {
   static createContext(
     projectId: string,
     storyObjects: any,
-    mode: 'novel-editor' | 'workspace',
+    mode: 'novelEditor' | 'workspace',
     systemConfig?: SystemInsertConfig,
     novelData?: any,
     enablePrefill?: boolean,

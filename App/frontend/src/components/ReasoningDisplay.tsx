@@ -13,8 +13,8 @@ const ReasoningDisplay: React.FC<ReasoningDisplayProps> = ({
   displayMode = 'separate',
   isStreaming = false
 }) => {
-  // Track expanded state for each thinking block individually
-  const [expandedStates, setExpandedStates] = useState<Record<number, boolean>>({});
+  // Track expanded state for each thinking block individually using stable keys
+  const [expandedStates, setExpandedStates] = useState<Record<string, boolean>>({});
 
   if (!contentParts || contentParts.length === 0) {
     return null;
@@ -24,10 +24,19 @@ const ReasoningDisplay: React.FC<ReasoningDisplayProps> = ({
   const thinkingParts = contentParts.filter(p => p.type === 'thinking' || p.type === 'reasoning');
   const contentOnlyParts = contentParts.filter(p => p.type === 'content');
 
-  const toggleExpanded = (index: number) => {
+  // Generate stable key for a content part based on text hash and position
+  const generateStableKey = (text: string, index: number): string => {
+    // Simple hash function for creating stable keys
+    const hash = text.split('').reduce((acc, char, i) => {
+      return ((acc << 5) - acc) + char.charCodeAt(0) + i;
+    }, 0);
+    return `${index}-${Math.abs(hash)}`;
+  };
+
+  const toggleExpanded = (key: string) => {
     setExpandedStates(prev => ({
       ...prev,
-      [index]: !prev[index]
+      [key]: !prev[key]
     }));
   };
 
@@ -36,7 +45,7 @@ const ReasoningDisplay: React.FC<ReasoningDisplayProps> = ({
     return (
       <div className="message-content-clean">
         {contentOnlyParts.map((part, index) => (
-          <span key={index}>{part.text}</span>
+          <span key={generateStableKey(part.text, index)}>{part.text}</span>
         ))}
       </div>
     );
@@ -47,7 +56,7 @@ const ReasoningDisplay: React.FC<ReasoningDisplayProps> = ({
     return (
       <div className="message-content-interleaved">
         {contentParts.map((part, index) => (
-          <div key={index} className={`content-part content-part-${part.type}`}>
+          <div key={generateStableKey(part.text, index)} className={`content-part content-part-${part.type}`}>
             {part.type === 'content' ? (
               <div className="content-text">{part.text}</div>
             ) : (
@@ -69,15 +78,16 @@ const ReasoningDisplay: React.FC<ReasoningDisplayProps> = ({
     <div className="message-with-reasoning">
       {/* Individual thinking cards */}
       {thinkingParts.map((part, index) => {
-        const isExpanded = expandedStates[index] || false;
+        const stableKey = generateStableKey(part.text, index);
+        const isExpanded = expandedStates[stableKey] || false;
         const isLastBlock = index === thinkingParts.length - 1;
         const isStreamingThisBlock = isStreaming && isLastBlock;
 
         return (
-          <div key={index} className="thinking-card-minimal">
+          <div key={stableKey} className="thinking-card-minimal">
             <button
               className="thinking-card-toggle"
-              onClick={() => toggleExpanded(index)}
+              onClick={() => toggleExpanded(stableKey)}
             >
               <span className="toggle-icon">{isExpanded ? '▼' : '▶'}</span>
               <span className="toggle-label">

@@ -1,27 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNovelStore } from '../../../store/novelStore';
+import { useStoryObjectStore } from '../../../store/storyObjectStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { TranslationService } from '../../../services/translationService';
-import { streamChat } from '../../../llm_request/llmService';
 import type { Chapter } from '../../../types/storyObject';
 import type { StoryObjects } from '../../../types/storyObject';
 import type { NovelEditorUIState, NovelEditorUIActions } from '../hooks/useNovelEditorState';
+import type { FunctionCallMetadata, ChatMessage } from '../../../llm_request/types';
+import { ChatManager, type ChatManagerConfig, type ChatManagerCallbacks } from '../../../chat/processors/ChatManager';
+import { ChatPipeline } from '../../../chat/ChatPipeline';
+import { getTranslationFunctionSchema } from '../../../chat/types/translationFunctionSchemas';
+import { applyTranslationFunctionCalls, type TranslationContext } from '../../../chat/utils/translationFunctionApplicator';
 import ChapterSidebar from './ChapterSidebar';
 import NovelChapterAIEditModal from '../../../components/NovelChapterAIEditModal';
-
-const COMMON_LANGUAGES = [
-  'English',
-  'Korean',
-  'Japanese',
-  'Chinese',
-  'Spanish',
-  'French',
-  'German',
-  'Italian',
-  'Portuguese',
-  'Hindi',
-];
+import RetranslateModal from '../../../components/RetranslateModal';
 
 interface NovelEditorPanelProps {
   projectId: string;
@@ -47,7 +40,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const getChapterContent = useNovelStore(state => state.getChapterContent);
   const createChapterContent = useNovelStore(state => state.createChapterContent);
   const updateChapterContentForLanguage = useNovelStore(state => state.updateChapterContentForLanguage);
-  const addTranslatedContent = useNovelStore(state => state.addTranslatedContent);
   const getWordCount = useNovelStore(state => state.getWordCount);
 
   const chapterContentSelector = useCallback(
@@ -71,6 +63,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const [translationError, setTranslationError] = useState<string | null>(null);
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
   const [customLanguage, setCustomLanguage] = useState('');
+  const [isRetranslateModalOpen, setIsRetranslateModalOpen] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const saveTimeoutRef = useRef<number | null>(null);
@@ -104,26 +97,21 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     return activeVersion ? TranslationService.getAvailableLanguages(activeVersion.data) : [];
   }, [activeVersion]);
 
-  const suggestedLanguages = useMemo(() => {
-    const suggestions = new Set<string>();
+  const isTranslatedLanguage = useMemo(() => {
+    if (!activeLanguage) return false;
+    // Show retranslate for any language that isn't the primary language
+    return activeLanguage !== primaryLanguage && availableLanguages.includes(activeLanguage);
+  }, [activeLanguage, primaryLanguage, availableLanguages]);
 
-    if (secondaryLanguage) {
-      suggestions.add(secondaryLanguage);
-    }
+  const translationTimestamp = useMemo(() => {
+    if (!activeVersion || !isTranslatedLanguage) return null;
+    return activeVersion.timestamp;
+  }, [activeVersion, isTranslatedLanguage]);
 
-    for (const language of COMMON_LANGUAGES) {
-      suggestions.add(language);
-    }
-
-    for (const existing of availableLanguages) {
-      suggestions.delete(existing);
-    }
-
-    suggestions.delete(activeLanguage);
-    suggestions.delete(primaryLanguage);
-
-    return Array.from(suggestions);
-  }, [availableLanguages, activeLanguage, primaryLanguage, secondaryLanguage]);
+  const sourceLanguage = useMemo(() => {
+    // Source language is always the primary language
+    return primaryLanguage;
+  }, [primaryLanguage]);
 
   const wordCount = useMemo(() => getWordCount(content), [content, getWordCount]);
   const hasUnsavedChanges = content !== lastSavedContent;
@@ -311,44 +299,120 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       setTranslationError(null);
       TranslationService.setTranslationStatus(translationKey, { objectId: translationKey, isTranslating: true });
 
-      const translationRequest = await TranslationService.prepareTranslationRequest({
-        sourceLanguage: fallback.language,
-        targetLanguage: normalizedTarget,
-        data: {
-          content: fallback.data.content,
-          wordCount: fallback.data.wordCount ?? getWordCount(fallback.data.content),
-        },
-        dataType: 'chapterContent',
+      // Get translation function schema
+      const translationFunctionSchema = getTranslationFunctionSchema('chapterContent');
+
+      // Get provider config from settings
+      const settingsStore = useSettingsStore.getState();
+      const storyObjectStore = useStoryObjectStore.getState();
+      const translationConfig = settingsStore.getFunctionConfig('translation');
+      const providerConfig = settingsStore.getProviderConfig(translationConfig.provider);
+
+      // Create temporary abort controller
+      const abortController = new AbortController();
+      const abortControllerRef = { current: abortController };
+
+      // Promise to wait for translation result
+      let resolveTranslation: (value: string) => void;
+      let rejectTranslation: (error: Error) => void;
+      const translationPromise = new Promise<string>((resolve, reject) => {
+        resolveTranslation = resolve;
+        rejectTranslation = reject;
       });
 
-      const provider = settings.activeProvider;
-      const providerConfig = settings.providers[provider];
+      // Setup ChatManager callbacks
+      const callbacks: ChatManagerCallbacks = {
+        onUpdateMessage: () => {},
+        onSyncMessageToBackend: async () => {},
+        onFunctionCalls: async (projId, chatId, messageId, functionCalls: FunctionCallMetadata[]) => {
+          try {
+            // Create translation context
+            const translationContext: TranslationContext = {
+              projectId,
+              targetLanguage: normalizedTarget,
+              chapterId: selectedChapter.id,
+              versionId: activeVersion.id,
+            };
 
-      let response = '';
-      for await (const chunk of streamChat(
-        translationRequest.messages,
-        provider,
+            // Apply translation function calls
+            const results = await applyTranslationFunctionCalls(functionCalls, translationContext);
+
+            const failedResults = results.filter(r => !r.success);
+            if (failedResults.length > 0) {
+              rejectTranslation(new Error(`Translation failed: ${failedResults.map(r => r.error).join(', ')}`));
+            } else {
+              // Get translated content from result
+              const result = results[0];
+              const translatedContent = result.data?.translatedText || result.data?.content;
+              resolveTranslation(translatedContent);
+            }
+          } catch (err) {
+            console.error('Translation function application error:', err);
+            rejectTranslation(err instanceof Error ? err : new Error('Failed to apply translation'));
+          }
+        },
+        onAddMessage: async () => `msg-${Date.now()}`,
+        onGetChatHistory: () => [],
+        onError: (err) => {
+          rejectTranslation(err);
+        },
+      };
+
+      // Create ChatManager config
+      const tempChatId = `temp-chapter-translation-${Date.now()}`;
+      const chatManagerConfig: ChatManagerConfig = {
+        projectId,
+        getStoryObjects: () => storyObjectStore.getStoryObjects(projectId),
+        systemInsertConfig: {
+          promptContext: {
+            sourceLanguage: fallback.language,
+            targetLanguage: normalizedTarget,
+            dataType: 'chapterContent',
+            sourceData: {
+              content: fallback.data.content,
+              wordCount: fallback.data.wordCount ?? getWordCount(fallback.data.content),
+            },
+            enablePrefill: translationConfig.advanced.enablePrefill,
+            enableThinking: translationConfig.advanced.thinkingMode !== 'off',
+          },
+          promptType: 'translation',
+        },
+        chatPipeline: new ChatPipeline(),
+        getIsLoading: () => false,
+        setIsLoading: () => {},
+        abortControllerRef,
+        getActiveChatId: () => tempChatId,
+        getConversationLanguage: () => normalizedTarget,
+        provider: translationConfig.provider,
         providerConfig,
-        {
-          model: aiModel,
-          temperature: 0.2,
-        }
-      )) {
-        if (typeof chunk === 'string') {
-          response += chunk;
-        } else if (chunk.content) {
-          response += chunk.content;
-        }
-      }
+        aiModel: translationConfig.model,
+        temperature: translationConfig.temperature,
+        providerPreference: translationConfig.providerPreference,
+        functions: [translationFunctionSchema],
+        mode: 'novelEditor',
+        enablePrefill: translationConfig.advanced.enablePrefill,
+        thinkingMode: translationConfig.advanced.thinkingMode as any,
+        reasoningConfig: translationConfig.advanced.reasoningConfig,
+      };
 
-      const parsed = TranslationService.parseTranslationResponse(response);
-      const validation = TranslationService.validateTranslationResult(parsed, 'chapterContent');
-      if (!validation.isValid) {
-        throw new Error(validation.errors.join(', '));
-      }
+      // Create ChatManager
+      const chatManager = new ChatManager(chatManagerConfig, callbacks);
 
-      const translatedContent = parsed.content;
-      addTranslatedContent(projectId, selectedChapter.id, activeVersion.id, translatedContent, normalizedTarget);
+      // Process translation request
+      const userMessage: ChatMessage = {
+        id: `msg-user-${Date.now()}`,
+        role: 'user',
+        content: `Please translate this chapter content from ${fallback.language} to ${normalizedTarget}`,
+        timestamp: new Date(),
+      };
+
+      await chatManager.processUserMessage(userMessage);
+
+      // Wait for translation result
+      const translatedContent = await translationPromise;
+
+      // Update chapter content with translation
+      await updateChapterContentForLanguage(projectId, selectedChapter.id, translatedContent, normalizedTarget, 'Translation', true);
 
       setActiveLanguage(normalizedTarget);
       setContent(translatedContent);
@@ -363,7 +427,169 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       setIsTranslating(false);
       TranslationService.clearTranslationStatus(translationKey);
     }
-  }, [activeLanguage, activeVersion, addTranslatedContent, aiModel, availableLanguages, getWordCount, primaryLanguage, projectId, selectedChapter, showError, uiActions]);
+  }, [activeLanguage, activeVersion, updateChapterContentForLanguage, availableLanguages, getWordCount, primaryLanguage, projectId, selectedChapter, showError, uiActions]);
+
+  const retranslateChapter = useCallback(async (includePrevious: boolean, userInstructions: string) => {
+    if (!selectedChapter || !activeVersion) return;
+
+    const normalizedTarget = activeLanguage.trim();
+    if (!normalizedTarget) return;
+
+    // Get source data
+    const fallback = TranslationService.getBestLanguageData(activeVersion.data, activeLanguage, primaryLanguage);
+    if (!fallback) {
+      showError('Retranslation Failed', 'No source content is available to retranslate from.');
+      return;
+    }
+
+    // Get previous translation if requested
+    const previousTranslation = includePrevious && activeLanguageEntry
+      ? activeLanguageEntry.content
+      : undefined;
+
+    const translationKey = `${selectedChapter.id}:${normalizedTarget}:retranslate`;
+
+    try {
+      setIsTranslating(true);
+      setTranslationError(null);
+      setIsRetranslateModalOpen(false);
+      TranslationService.setTranslationStatus(translationKey, { objectId: translationKey, isTranslating: true });
+
+      // Get translation function schema
+      const translationFunctionSchema = getTranslationFunctionSchema('chapterContent');
+
+      // Get provider config from settings
+      const settingsStore = useSettingsStore.getState();
+      const storyObjectStore = useStoryObjectStore.getState();
+      const translationConfig = settingsStore.getFunctionConfig('translation');
+      const providerConfig = settingsStore.getProviderConfig(translationConfig.provider);
+
+      // Create temporary abort controller
+      const abortController = new AbortController();
+      const abortControllerRef = { current: abortController };
+
+      // Promise to wait for translation result
+      let resolveTranslation: (value: string) => void;
+      let rejectTranslation: (error: Error) => void;
+      const translationPromise = new Promise<string>((resolve, reject) => {
+        resolveTranslation = resolve;
+        rejectTranslation = reject;
+      });
+
+      // Setup ChatManager callbacks
+      const callbacks: ChatManagerCallbacks = {
+        onUpdateMessage: () => {},
+        onSyncMessageToBackend: async () => {},
+        onFunctionCalls: async (projId, chatId, messageId, functionCalls: FunctionCallMetadata[]) => {
+          try {
+            // Create translation context
+            const translationContext: TranslationContext = {
+              projectId,
+              targetLanguage: normalizedTarget,
+              chapterId: selectedChapter.id,
+              versionId: activeVersion.id,
+            };
+
+            // Apply translation function calls
+            const results = await applyTranslationFunctionCalls(functionCalls, translationContext);
+
+            const failedResults = results.filter(r => !r.success);
+            if (failedResults.length > 0) {
+              rejectTranslation(new Error(`Retranslation failed: ${failedResults.map(r => r.error).join(', ')}`));
+            } else {
+              // Get translated content from result
+              const result = results[0];
+              const translatedContent = result.data?.translatedText || result.data?.content;
+              resolveTranslation(translatedContent);
+            }
+          } catch (err) {
+            console.error('Retranslation function application error:', err);
+            rejectTranslation(err instanceof Error ? err : new Error('Failed to apply retranslation'));
+          }
+        },
+        onAddMessage: async () => `msg-${Date.now()}`,
+        onGetChatHistory: () => [],
+        onError: (err) => {
+          rejectTranslation(err);
+        },
+      };
+
+      // Create ChatManager config with retranslation-specific context
+      const tempChatId = `temp-chapter-retranslation-${Date.now()}`;
+      const chatManagerConfig: ChatManagerConfig = {
+        projectId,
+        getStoryObjects: () => storyObjectStore.getStoryObjects(projectId),
+        systemInsertConfig: {
+          promptContext: {
+            sourceLanguage: fallback.language,
+            targetLanguage: normalizedTarget,
+            dataType: 'chapterContent',
+            sourceData: {
+              content: fallback.data.content,
+              wordCount: fallback.data.wordCount ?? getWordCount(fallback.data.content),
+            },
+            previousTranslation,
+            userInstructions: userInstructions || undefined,
+            enablePrefill: translationConfig.advanced.enablePrefill,
+            enableThinking: translationConfig.advanced.thinkingMode !== 'off',
+          },
+          promptType: 'translation',
+        },
+        chatPipeline: new ChatPipeline(),
+        getIsLoading: () => false,
+        setIsLoading: () => {},
+        abortControllerRef,
+        getActiveChatId: () => tempChatId,
+        getConversationLanguage: () => normalizedTarget,
+        provider: translationConfig.provider,
+        providerConfig,
+        aiModel: translationConfig.model,
+        temperature: translationConfig.temperature,
+        providerPreference: translationConfig.providerPreference,
+        functions: [translationFunctionSchema],
+        mode: 'novelEditor',
+        enablePrefill: translationConfig.advanced.enablePrefill,
+        thinkingMode: translationConfig.advanced.thinkingMode as any,
+        reasoningConfig: translationConfig.advanced.reasoningConfig,
+      };
+
+      // Create ChatManager
+      const chatManager = new ChatManager(chatManagerConfig, callbacks);
+
+      // Process retranslation request
+      const userMessageContent = userInstructions
+        ? `Please retranslate this chapter content from ${fallback.language} to ${normalizedTarget} with the following instructions: ${userInstructions}`
+        : `Please retranslate this chapter content from ${fallback.language} to ${normalizedTarget}`;
+
+      const userMessage: ChatMessage = {
+        id: `msg-user-${Date.now()}`,
+        role: 'user',
+        content: userMessageContent,
+        timestamp: new Date(),
+      };
+
+      await chatManager.processUserMessage(userMessage);
+
+      // Wait for translation result
+      const translatedContent = await translationPromise;
+
+      // Update chapter content with retranslation
+      const updateReason = userInstructions ? `Retranslation: ${userInstructions}` : 'Retranslation';
+      await updateChapterContentForLanguage(projectId, selectedChapter.id, translatedContent, normalizedTarget, updateReason, true);
+
+      setContent(translatedContent);
+      setLastSavedContent(translatedContent);
+      uiActions.setEditorContent(translatedContent);
+      isUserEditingRef.current = false;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown retranslation error.';
+      setTranslationError(message);
+      showError('Retranslation Failed', message);
+    } finally {
+      setIsTranslating(false);
+      TranslationService.clearTranslationStatus(translationKey);
+    }
+  }, [activeLanguage, activeLanguageEntry, activeVersion, getWordCount, primaryLanguage, projectId, selectedChapter, showError, uiActions, updateChapterContentForLanguage]);
 
   const handleLanguageChange = useCallback((language: string) => {
     const target = language.trim();
@@ -389,7 +615,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     setCustomLanguage('');
   }, [customLanguage, handleLanguageChange]);
 
-  const handleAIEditResult = useCallback((newContent: string) => {
+  const handleAIEditResult = useCallback(() => {
     if (!selectedChapter) return;
 
     if (saveTimeoutRef.current) {
@@ -398,17 +624,26 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     }
 
     try {
-      updateChapterContentForLanguage(projectId, selectedChapter.id, newContent, activeLanguage, 'AI Edit', true);  // AI edits create new version
-      setContent(newContent);
-      setLastSavedContent(newContent);
-      uiActions.setEditorContent(newContent);
-      isUserEditingRef.current = false;
+      // The modal already updated the content, so we just need to reload it
+      const chapterContent = getChapterContent(projectId, selectedChapter.id);
+      if (chapterContent) {
+        const activeVersionData = chapterContent.versions.find(v => v.is_active);
+        if (activeVersionData) {
+          const languageEntry = activeVersionData.data[activeLanguage];
+          if (languageEntry) {
+            setContent(languageEntry.content);
+            setLastSavedContent(languageEntry.content);
+            uiActions.setEditorContent(languageEntry.content);
+            isUserEditingRef.current = false;
+          }
+        }
+      }
     } catch (error) {
-      console.error('Error applying AI edit:', error);
-      const message = error instanceof Error ? error.message : 'Unknown error while applying AI edit.';
-      showError('AI Edit Failed', message);
+      console.error('Error reloading after AI edit:', error);
+      const message = error instanceof Error ? error.message : 'Unknown error while reloading content.';
+      showError('Reload Failed', message);
     }
-  }, [activeLanguage, projectId, selectedChapter, showError, uiActions, updateChapterContentForLanguage]);
+  }, [activeLanguage, getChapterContent, projectId, selectedChapter, showError, uiActions]);
 
   const renderLanguageMenu = () => {
     if (!isLanguageMenuOpen) return null;
@@ -446,22 +681,14 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
         <div className="language-menu-section" style={{ marginTop: '12px' }}>
           <div className="language-menu-title">Translate to</div>
-          {suggestedLanguages.slice(0, 6).map(language => (
-            <button
-              key={language}
-              className="language-menu-item"
-              onClick={() => handleLanguageChange(language)}
-              disabled={isTranslating}
-            >
-              {`Translate to ${language}`}
-            </button>
-          ))}
+
+          {/* Custom Language Input */}
           <form className="custom-language-form" onSubmit={handleCustomLanguageSubmit} style={{ marginTop: '8px' }}>
             <input
               type="text"
               value={customLanguage}
               onChange={(event) => setCustomLanguage(event.target.value)}
-              placeholder="Custom language"
+              placeholder="Other language (e.g., Spanish)"
               className="language-input"
             />
             <button type="submit" className="language-submit" disabled={isTranslating}>
@@ -571,6 +798,16 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
               </button>
               {renderLanguageMenu()}
             </div>
+            {isTranslatedLanguage && (
+              <button
+                className="toolbar-btn retranslate-btn"
+                onClick={() => setIsRetranslateModalOpen(true)}
+                disabled={isTranslating}
+                title="Retranslate this chapter with new instructions"
+              >
+                🔄 Retranslate
+              </button>
+            )}
             <div className="toolbar-separator" />
             <button
               className="toolbar-btn ai-edit-btn"
@@ -633,6 +870,16 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
           onResult={handleAIEditResult}
         />
       )}
+
+      <RetranslateModal
+        isOpen={isRetranslateModalOpen}
+        onClose={() => setIsRetranslateModalOpen(false)}
+        sourceLanguage={sourceLanguage}
+        targetLanguage={activeLanguage}
+        translationTimestamp={translationTimestamp}
+        onRetranslate={retranslateChapter}
+        isTranslating={isTranslating}
+      />
     </div>
   );
 };

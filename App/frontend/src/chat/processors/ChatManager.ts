@@ -22,7 +22,7 @@ export interface ChatManagerConfig {
   providerConfig: ProviderConfig;
   providerPreference?: any; // OpenRouter provider preference
   functions?: any[]; // Function schemas for this context
-  mode: 'novel-editor' | 'workspace'; // Explicit mode distinction
+  mode: 'novelEditor' | 'workspace'; // Explicit mode distinction
   enablePrefill?: boolean; // Enable assistant prefill
   thinkingMode?: 'off' | 'model' | 'custom'; // Thinking mode: off, model-native reasoning, or custom prompt-based
   reasoningConfig?: {
@@ -177,12 +177,21 @@ export class ChatManager {
     // Start streaming
     this.config.abortControllerRef.current = new AbortController();
 
-    // NEW: Accumulate interleaved content parts
+    // Accumulate interleaved content parts with simplified single-buffer approach
     let accumulatedContentParts: ContentPart[] = [];
-    let currentContentChunk = '';  // Buffer for incomplete content
-    let currentThinkingChunk = '';  // Buffer for incomplete thinking (streaming)
+    let currentPartType: 'thinking' | 'reasoning' | 'content' | null = null;
+    let currentBuffer = '';
     let accumulatedToolCalls: any[] = [];
     let accumulatedReasoningDetails: any[] | undefined;
+
+    // Helper to finalize current buffer into accumulated parts
+    const finalizeCurrentBuffer = () => {
+      if (currentPartType && currentBuffer) {
+        accumulatedContentParts.push({type: currentPartType, text: currentBuffer});
+        currentBuffer = '';
+        currentPartType = null;
+      }
+    };
 
     // Throttle mechanism to prevent excessive store updates
     let pendingUpdate: ContentPart[] | null = null;
@@ -232,53 +241,84 @@ export class ChatManager {
         }
       )) {
         if (typeof chunk === 'string') {
-          // Pure content chunk
-          currentContentChunk += chunk;
+          // Pure content string
+          if (currentPartType !== 'content') {
+            finalizeCurrentBuffer(); // Type changed - finalize previous buffer
+
+            // Check if the last accumulated part is content that we should continue
+            const lastPart = accumulatedContentParts[accumulatedContentParts.length - 1];
+            if (lastPart && lastPart.type === 'content') {
+              // Remove and prepend to continue the content block
+              const previousContent = accumulatedContentParts.pop()!;
+              currentBuffer = previousContent.text;
+            }
+
+            currentPartType = 'content';
+          }
+          currentBuffer += chunk;
 
           // Show content in progress
-          const displayParts = [
+          scheduleUpdate([
             ...accumulatedContentParts,
-            ...(currentContentChunk ? [{type: 'content' as const, text: currentContentChunk}] : [])
-          ];
-          scheduleUpdate(displayParts);
+            {type: 'content', text: currentBuffer}
+          ]);
         } else {
           // Structured chunk
-          if (chunk.content) {
-            currentContentChunk += chunk.content;
-          }
 
-          // NEW: Handle reasoning_text (thinking/reasoning chunks from backend)
+          // Handle reasoning_text (thinking/reasoning chunks from backend)
           if (chunk.reasoning_text) {
             const reasoningType = this.config.thinkingMode === 'custom' ? 'thinking' : 'reasoning';
 
-            // Check if this is incremental update (same thinking block growing)
-            if (currentThinkingChunk && chunk.reasoning_text.startsWith(currentThinkingChunk)) {
-              // This is an incremental update to the same thinking block - just update buffer
-              currentThinkingChunk = chunk.reasoning_text;
-            } else {
-              // New thinking block started - finalize current content chunk
-              if (currentContentChunk) {
-                accumulatedContentParts.push({type: 'content', text: currentContentChunk});
-                currentContentChunk = '';
+            if (currentPartType !== reasoningType) {
+              finalizeCurrentBuffer(); // Type changed - finalize previous buffer
+
+              // Check if the last accumulated part is a reasoning/thinking block
+              // If yes, remove it to continue updating (backend sends full text each time)
+              const lastPart = accumulatedContentParts[accumulatedContentParts.length - 1];
+              if (lastPart && (lastPart.type === 'reasoning' || lastPart.type === 'thinking')) {
+                accumulatedContentParts.pop();
               }
 
-              // Finalize previous thinking chunk if exists
-              if (currentThinkingChunk) {
-                accumulatedContentParts.push({type: reasoningType, text: currentThinkingChunk});
-              }
-
-              // Start new thinking chunk
-              currentThinkingChunk = chunk.reasoning_text;
+              currentPartType = reasoningType;
             }
 
-            // Show thinking in progress (similar to content streaming)
-            const displayParts = [
+            // Backend sends full text each time (not incremental), so replace the buffer
+            currentBuffer = chunk.reasoning_text;
+
+            // Show thinking in progress
+            scheduleUpdate([
               ...accumulatedContentParts,
-              ...(currentThinkingChunk ? [{type: reasoningType, text: currentThinkingChunk}] : [])
-            ];
-            scheduleUpdate(displayParts);
+              {type: reasoningType, text: currentBuffer}
+            ]);
           }
 
+          // Handle content
+          if (chunk.content) {
+            if (currentPartType !== 'content') {
+              finalizeCurrentBuffer(); // Type changed - finalize previous buffer
+
+              // Check if the last accumulated part is content that we should continue
+              const lastPart = accumulatedContentParts[accumulatedContentParts.length - 1];
+              if (lastPart && lastPart.type === 'content') {
+                // Remove and prepend to continue the content block
+                const previousContent = accumulatedContentParts.pop()!;
+                currentBuffer = previousContent.text;
+              }
+
+              currentPartType = 'content';
+            }
+
+            // Content is incremental (append)
+            currentBuffer += chunk.content;
+
+            // Show content in progress
+            scheduleUpdate([
+              ...accumulatedContentParts,
+              {type: 'content', text: currentBuffer}
+            ]);
+          }
+
+          // Handle tool calls
           if (chunk.tool_calls) {
             accumulatedToolCalls = this.accumulateToolCalls(accumulatedToolCalls, chunk.tool_calls);
 
@@ -297,16 +337,8 @@ export class ChatManager {
         }
       }
 
-      // Flush any remaining content chunk
-      if (currentContentChunk) {
-        accumulatedContentParts.push({type: 'content', text: currentContentChunk});
-      }
-
-      // Flush any remaining thinking chunk
-      if (currentThinkingChunk) {
-        const reasoningType = this.config.thinkingMode === 'custom' ? 'thinking' : 'reasoning';
-        accumulatedContentParts.push({type: reasoningType, text: currentThinkingChunk});
-      }
+      // Finalize any remaining buffer
+      finalizeCurrentBuffer();
 
       // Ensure final update is sent
       flushPendingUpdate();

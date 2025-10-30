@@ -133,18 +133,28 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
 
 
   private processMessageContent(message: ProcessedChatMessage): React.ReactNode {
-    let content = message.originalContent || message.content || '';
+    let content = '';
+
+    // Extract content from contentParts if available
+    if (message.contentParts && message.contentParts.length > 0) {
+      // Only extract content type parts (not thinking/reasoning)
+      const contentParts = message.contentParts.filter(part => part.type === 'content');
+      content = contentParts.map(part => part.text).join('');
+    } else {
+      // Fall back to legacy content fields
+      content = message.originalContent || message.content || '';
+    }
 
     // Only remove system tags for user messages, not assistant messages
     if (message.role === 'user') {
       content = this.removeSystemTags(content);
     }
-    
+
     // Render markdown content with full syntax support
     content = this.processMarkdown(content);
 
     return (
-      <div 
+      <div
         className="message-text"
         dangerouslySetInnerHTML={{ __html: content }}
       />

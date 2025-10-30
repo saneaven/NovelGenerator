@@ -1,19 +1,31 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStoryObjectStore } from '../store/storyObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { streamChat } from '../llm_request/llmService';
+import { useChatStore } from '../store/chatStore';
 import type { StoryObjectCategory } from '../types/storyObject';
-import { AIEditService, type ContextOptions } from '../services/aiEditService';
+import type { FunctionCallMetadata, ContentPart } from '../llm_request/types';
+import { ChatManager, type ChatManagerConfig, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
+import { ChatPipeline } from '../chat/ChatPipeline';
+import { getEditFunctionSchema } from '../chat/types/editFunctionSchemas';
+import { applyEditFunctionCalls } from '../chat/utils/editFunctionApplicator';
+
+interface ContextOptions {
+  basicInfo: boolean;
+  characters: boolean;
+  organizations: boolean;
+  locations: boolean;
+  lorebook: boolean;
+  outline: boolean;
+}
 
 interface AIEditModalProps {
   isOpen: boolean;
   onClose: () => void;
   category: StoryObjectCategory;
   projectId: string;
-  targetId?: string; // null for category-wide editing
-  onResult: (result: any) => void;
+  targetId?: string;
+  onResult?: () => void;
 }
-
 
 const AIEditModal: React.FC<AIEditModalProps> = ({
   isOpen,
@@ -35,10 +47,13 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [streamContent, setStreamContent] = useState('');
   const [error, setError] = useState<string | null>(null);
-  
+
   const storyObjectStore = useStoryObjectStore();
   const settingsStore = useSettingsStore();
+  const chatStore = useChatStore();
   const abortControllerRef = useRef<AbortController | null>(null);
+  const chatManagerRef = useRef<ChatManager | null>(null);
+  const tempChatIdRef = useRef<string>('');
 
   useEffect(() => {
     if (!isOpen) {
@@ -50,9 +65,133 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
+      // Clean up temporary chat
+      if (tempChatIdRef.current) {
+        chatStore.deleteChat(projectId, tempChatIdRef.current);
+        tempChatIdRef.current = '';
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, projectId, chatStore]);
 
+  const generateContext = () => {
+    const storyObjects = storyObjectStore.getStoryObjects(projectId);
+    const context: Record<string, any> = {};
+
+    if (contextOptions.basicInfo && storyObjects.basicInfo) {
+      context.basicInfo = {
+        title: storyObjects.basicInfo.title,
+        logline: storyObjects.basicInfo.logline,
+        genre: storyObjects.basicInfo.genre,
+      };
+    }
+
+    if (contextOptions.characters && storyObjects.characters.length > 0) {
+      context.characters = storyObjects.characters.map(char => ({
+        id: char.id,
+        name: char.name,
+        description: char.description,
+      }));
+    }
+
+    if (contextOptions.organizations && storyObjects.organizations.length > 0) {
+      context.organizations = storyObjects.organizations.map(org => ({
+        id: org.id,
+        name: org.name,
+        description: org.description,
+      }));
+    }
+
+    if (contextOptions.locations && storyObjects.locations.length > 0) {
+      context.locations = storyObjects.locations.map(loc => ({
+        id: loc.id,
+        name: loc.name,
+        description: loc.description,
+      }));
+    }
+
+    if (contextOptions.lorebook && storyObjects.lorebook.length > 0) {
+      context.lorebook = storyObjects.lorebook.map(entry => ({
+        id: entry.id,
+        name: entry.name,
+        description: entry.description,
+      }));
+    }
+
+    if (contextOptions.outline && storyObjects.outline) {
+      context.outline = {
+        acts: storyObjects.outline.acts.map(act => ({
+          id: act.id,
+          name: act.name,
+          description: act.description,
+          chapters: act.chapters.map(chapter => ({
+            id: chapter.id,
+            name: chapter.name,
+            description: chapter.description,
+          })),
+        })),
+      };
+    }
+
+    return context;
+  };
+
+  const getCurrentData = () => {
+    const storyObjects = storyObjectStore.getStoryObjects(projectId);
+
+    if (targetId) {
+      // Get specific item
+      switch (category) {
+        case 'character':
+          return storyObjects.characters.find(c => c.id === targetId);
+        case 'organization':
+          return storyObjects.organizations.find(o => o.id === targetId);
+        case 'location':
+          return storyObjects.locations.find(l => l.id === targetId);
+        case 'lorebook':
+          return storyObjects.lorebook.find(e => e.id === targetId);
+        case 'basicInfo':
+          return storyObjects.basicInfo;
+        case 'outline':
+          return storyObjects.outline;
+        case 'act':
+          return storyObjects.outline?.acts.find(a => a.id === targetId);
+        case 'chapter':
+          for (const act of storyObjects.outline?.acts || []) {
+            const chapter = act.chapters.find(c => c.id === targetId);
+            if (chapter) return chapter;
+          }
+          return null;
+        default:
+          return null;
+      }
+    } else {
+      // Get entire category
+      switch (category) {
+        case 'character':
+          return storyObjects.characters;
+        case 'organization':
+          return storyObjects.organizations;
+        case 'location':
+          return storyObjects.locations;
+        case 'lorebook':
+          return storyObjects.lorebook;
+        case 'basicInfo':
+          return storyObjects.basicInfo;
+        case 'outline':
+          return storyObjects.outline;
+        case 'act':
+          return storyObjects.outline?.acts || [];
+        case 'chapter':
+          const allChapters = [];
+          for (const act of storyObjects.outline?.acts || []) {
+            allChapters.push(...act.chapters);
+          }
+          return allChapters;
+        default:
+          return null;
+      }
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,68 +202,112 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     setError(null);
 
     try {
-      abortControllerRef.current = new AbortController();
-      
-      const storyObjects = storyObjectStore.getStoryObjects(projectId);
       const storyEditConfig = settingsStore.getFunctionConfig('storyEdit');
-
-      // Prepare AI edit request using the service
-      const editRequest = await AIEditService.prepareEditRequest({
-        category,
-        targetId,
-        userRequest,
-        contextOptions,
-        storyObjects,
-        outputLanguage: settingsStore.settings.primaryLanguage,
-        enablePrefill: storyEditConfig.advanced.enablePrefill,
-        enableThinking: storyEditConfig.advanced.enableThinking,
-      });
-
-      let fullResponse = '';
       const providerConfig = settingsStore.getProviderConfig(storyEditConfig.provider);
 
-      for await (const chunk of streamChat(
-        editRequest.messages,
-        storyEditConfig.provider,
-        providerConfig,
-        {
-          signal: abortControllerRef.current.signal,
-          temperature: storyEditConfig.temperature,
-          model: storyEditConfig.model,
-          providerPreference: storyEditConfig.providerPreference,
-        }
-      )) {
-        if (typeof chunk === 'string') {
-          fullResponse += chunk;
-        } else if (chunk.content) {
-          fullResponse += chunk.content;
-        }
-        setStreamContent(fullResponse);
-      }
+      // Create temporary chat for this edit session
+      const tempChatId = `temp-edit-${Date.now()}`;
+      tempChatIdRef.current = tempChatId;
 
-      // Parse and validate JSON response using the service
-      try {
-        const parsedResult = AIEditService.parseAIResponse(fullResponse);
-        
-        // Validate the result
-        const validation = AIEditService.validateResult(parsedResult, category, targetId);
-        if (!validation.isValid) {
-          setError(`Invalid AI response: ${validation.errors.join(', ')}`);
-          return;
-        }
-        
-        // Apply the result
-        onResult(parsedResult);
-        onClose();
-      } catch (parseError) {
-        console.error('JSON parsing error:', parseError);
-        setError(`Could not parse AI response as JSON: ${parseError}`);
-      }
+      // Get function schema for this edit operation
+      const functionSchema = getEditFunctionSchema(category, !!targetId);
+
+      // Generate context
+      const contextData = generateContext();
+      const currentData = getCurrentData();
+
+      // Setup ChatManager callbacks
+      const callbacks: ChatManagerCallbacks = {
+        onUpdateMessage: (projId, chatId, messageId, contentParts: ContentPart[]) => {
+          // Update stream content display
+          const textContent = contentParts
+            .filter(p => p.type === 'content')
+            .map(p => p.text)
+            .join('');
+          setStreamContent(textContent);
+        },
+        onSyncMessageToBackend: async () => {
+          // No-op for temporary edit session
+        },
+        onFunctionCalls: async (projId, chatId, messageId, functionCalls: FunctionCallMetadata[]) => {
+          // Apply function calls
+          try {
+            const results = await applyEditFunctionCalls(projectId, functionCalls);
+
+            const failedResults = results.filter(r => !r.success);
+            if (failedResults.length > 0) {
+              setError(`Failed to apply some edits: ${failedResults.map(r => r.error).join(', ')}`);
+            } else {
+              // Success! Close modal
+              if (onResult) {
+                onResult();
+              }
+              onClose();
+            }
+          } catch (err) {
+            console.error('Function application error:', err);
+            setError(err instanceof Error ? err.message : 'Failed to apply edits');
+          }
+        },
+        onAddMessage: async (projId, chatId, message, language) => {
+          return `msg-${Date.now()}`;
+        },
+        onGetChatHistory: () => {
+          return [];
+        },
+        onError: (err) => {
+          setError(err.message);
+        },
+      };
+
+      // Create ChatManager config
+      const chatManagerConfig: ChatManagerConfig = {
+        projectId,
+        getStoryObjects: () => storyObjectStore.getStoryObjects(projectId),
+        systemInsertConfig: {
+          promptContext: {
+            category,
+            targetId,
+            contextData,
+            currentData,
+            enablePrefill: storyEditConfig.advanced.enablePrefill,
+            enableThinking: storyEditConfig.advanced.thinkingMode !== 'off',
+          },
+          promptType: 'story_object_edit',
+        },
+        chatPipeline: new ChatPipeline(),
+        getIsLoading: () => isProcessing,
+        setIsLoading: (loading) => setIsProcessing(loading),
+        abortControllerRef,
+        getActiveChatId: () => tempChatId,
+        getConversationLanguage: () => settingsStore.settings.primaryLanguage,
+        provider: storyEditConfig.provider,
+        providerConfig,
+        aiModel: storyEditConfig.model,
+        temperature: storyEditConfig.temperature,
+        providerPreference: storyEditConfig.providerPreference,
+        functions: [functionSchema],
+        mode: 'workspace',
+        enablePrefill: storyEditConfig.advanced.enablePrefill,
+        thinkingMode: storyEditConfig.advanced.thinkingMode as any,
+        reasoningConfig: storyEditConfig.advanced.reasoningConfig,
+      };
+
+      // Create ChatManager
+      chatManagerRef.current = new ChatManager(chatManagerConfig, callbacks);
+
+      // Process user message
+      await chatManagerRef.current.processUserMessage({
+        id: `msg-user-${Date.now()}`,
+        role: 'user',
+        content: userRequest,
+        timestamp: new Date(),
+      });
 
     } catch (err) {
       if (err instanceof Error) {
         if (err.name === 'AbortError') {
-          return; // User cancelled, don't show error
+          return;
         }
         setError(err.message);
       } else {
@@ -150,9 +333,23 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     }));
   };
 
+  const getCategoryDisplayName = (cat: string): string => {
+    const names: Record<string, string> = {
+      basicInfo: 'Basic Info',
+      character: 'Character',
+      organization: 'Organization',
+      location: 'Location',
+      lorebook: 'Lorebook',
+      outline: 'Outline',
+      act: 'Act',
+      chapter: 'Chapter',
+    };
+    return names[cat] || cat;
+  };
+
   if (!isOpen) return null;
 
-  const categoryDisplayName = AIEditService.getCategoryDisplayName(category);
+  const categoryDisplayName = getCategoryDisplayName(category);
   const editTypeText = targetId ? 'Item' : 'All';
 
   return (
@@ -190,7 +387,7 @@ e.g., "Make the main character's personality more proactive", "Make the atmosphe
                     disabled={isProcessing}
                   />
                   <span className="checkbox-text">
-                    {AIEditService.getCategoryDisplayName(key as StoryObjectCategory)}
+                    {getCategoryDisplayName(key)}
                   </span>
                 </label>
               ))}
@@ -214,16 +411,16 @@ e.g., "Make the main character's personality more proactive", "Make the atmosphe
           )}
 
           <div className="form-actions">
-            <button 
-              type="button" 
-              onClick={handleCancel} 
+            <button
+              type="button"
+              onClick={handleCancel}
               className="cancel-button"
               disabled={isProcessing}
             >
               Cancel
             </button>
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               className="submit-button"
               disabled={!userRequest.trim() || isProcessing}
             >

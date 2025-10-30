@@ -18,7 +18,7 @@ Let me analyze this chapter edit request:
 </thinking>
 ```
 
-After your thinking, provide the edited chapter content.
+After your thinking, use the `update_chapter_content` function to provide the edited content.
 {{/if}}
 
 ## Language
@@ -37,11 +37,11 @@ Respond in {{var::language}}.
 
 {{var::userRequest}}
 
-### Response Requirements
+## Instructions
 
-1. Return only the edited chapter content as plain text with no additional formatting.
+1. Use the `update_chapter_content` function to provide the edited chapter content.
 2. Maintain consistency with established story elements, characters, and world-building from the context.
 3. Preserve the existing narrative voice and writing style unless the user specifies otherwise.
 4. Ensure the revision flows with the broader story structure and pacing principles.
-5. Avoid commentary or explanations in the response; provide only the final content.
+5. After calling the function, provide a brief summary of the key changes you made in your text response.
 

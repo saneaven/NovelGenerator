@@ -38,25 +38,41 @@ async def get_user_settings(
                     'provider': 'copilot',
                     'model': 'gpt-4o-mini',
                     'temperature': 0.7,
-                    'advanced': {'enablePrefill': False, 'enableThinking': False}
+                    'advanced': {
+                        'enablePrefill': False,
+                        'thinkingMode': 'off',
+                        'reasoningConfig': {'effort': 'medium'}
+                    }
                 },
                 'translation': {
                     'provider': 'copilot',
                     'model': 'gpt-4o',
                     'temperature': 0.2,
-                    'advanced': {'enablePrefill': False, 'enableThinking': False}
+                    'advanced': {
+                        'enablePrefill': False,
+                        'thinkingMode': 'off',
+                        'reasoningConfig': {'effort': 'medium'}
+                    }
                 },
                 'storyEdit': {
                     'provider': 'copilot',
                     'model': 'gpt-4o',
                     'temperature': 0.3,
-                    'advanced': {'enablePrefill': False, 'enableThinking': False}
+                    'advanced': {
+                        'enablePrefill': False,
+                        'thinkingMode': 'off',
+                        'reasoningConfig': {'effort': 'medium'}
+                    }
                 },
                 'chapterGen': {
                     'provider': 'copilot',
                     'model': 'gpt-4o',
                     'temperature': 0.7,
-                    'advanced': {'enablePrefill': True, 'enableThinking': False}
+                    'advanced': {
+                        'enablePrefill': True,
+                        'thinkingMode': 'off',
+                        'reasoningConfig': {'effort': 'medium'}
+                    }
                 }
             },
             provider_credentials={

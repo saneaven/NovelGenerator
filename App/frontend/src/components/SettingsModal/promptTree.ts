@@ -91,6 +91,31 @@ export const PROMPT_TREE: PromptNode[] = [
         functionType: 'chat',
         category: 'prefill',
         description: 'AI response starter template'
+      },
+      {
+        id: 'chat-user-system',
+        label: 'User System Message',
+        type: 'category',
+        children: [
+          {
+            id: 'chat-user-system-lastmessage',
+            label: 'Last User Message Tag',
+            type: 'prompt',
+            functionType: 'chat',
+            category: 'userMessageTag',
+            name: 'lastMessage',
+            description: 'Wrapping format for the most recent user message in chat history'
+          },
+          {
+            id: 'chat-user-system-nonlastmessage',
+            label: 'Other Messages Tag',
+            type: 'prompt',
+            functionType: 'chat',
+            category: 'userMessageTag',
+            name: 'nonLastMessage',
+            description: 'Wrapping format for previous user messages in chat history'
+          }
+        ]
       }
     ]
   },
@@ -163,32 +188,6 @@ export const PROMPT_TREE: PromptNode[] = [
         functionType: 'chapterGen',
         category: 'prefill',
         description: 'Template for chapter generation responses'
-      }
-    ]
-  },
-  {
-    id: 'global',
-    label: 'Global',
-    icon: '🌍',
-    type: 'category',
-    children: [
-      {
-        id: 'global-lastmessage',
-        label: 'Last User Message Tag',
-        type: 'prompt',
-        functionType: 'global',
-        category: 'userMessageTag',
-        name: 'lastMessage',
-        description: 'Wrapping format for the most recent user message in chat history'
-      },
-      {
-        id: 'global-nonlastmessage',
-        label: 'Other Messages Tag',
-        type: 'prompt',
-        functionType: 'global',
-        category: 'userMessageTag',
-        name: 'nonLastMessage',
-        description: 'Wrapping format for previous user messages in chat history'
       }
     ]
   }
