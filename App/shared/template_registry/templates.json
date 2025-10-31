@@ -1,0 +1,564 @@
+{
+  "version": "0.1.0",
+  "catalog": {
+    "variables": {
+      "language": {
+        "description": "Human readable language label the assistant should use in its reply.",
+        "type": "string",
+        "source": "Derived from requested output language or defaults applied by context builders.",
+        "example": "English"
+      },
+      "functionInstructions": {
+        "description": "Rendered markdown describing available function calls for the current chat mode.",
+        "type": "string",
+        "source": "Chat function instruction templates resolved per mode.",
+        "example": "## Available Functions\\n- `manage_story_objects` …"
+      },
+      "categoryName": {
+        "description": "Display name for the story object category being edited.",
+        "type": "string",
+        "source": "Story object edit context (e.g., Character, Location).",
+        "example": "Character"
+      },
+      "editScope": {
+        "description": "Short description of the scope of story object edits.",
+        "type": "string",
+        "source": "Story object edit context (entire category vs targeted item).",
+        "example": "a specific item"
+      },
+      "chapterName": {
+        "description": "Name of the chapter the assistant is editing or generating.",
+        "type": "string",
+        "source": "Chapter edit prompt context.",
+        "example": "Chapter 12 – The Storm"
+      },
+      "sourceLanguage": {
+        "description": "Language of the source material that should be translated.",
+        "type": "string",
+        "source": "Translation prompt context.",
+        "example": "Japanese"
+      },
+      "targetLanguage": {
+        "description": "Target language for translation output.",
+        "type": "string",
+        "source": "Translation prompt context.",
+        "example": "English"
+      },
+      "dataTypeName": {
+        "description": "Human readable label for the translation payload type.",
+        "type": "string",
+        "source": "Translation prompt data-type mapping.",
+        "example": "Chapter Content"
+      },
+      "mode": {
+        "description": "Workspace mode label communicated to the assistant.",
+        "type": "string",
+        "source": "Chat assistant prefill context (workspace or novelEditor).",
+        "example": "workspace"
+      },
+      "hasFunctions": {
+        "description": "Whether the assistant can invoke tool functions in the current chat.",
+        "type": "string",
+        "source": "Chat assistant prefill context, rendered as yes/no.",
+        "example": "yes"
+      },
+      "targetId": {
+        "description": "Identifier for a specific story object being edited.",
+        "type": "string",
+        "source": "Story object edit context (optional).",
+        "example": "character-102"
+      }
+    },
+    "contexts": {
+      "contextData": {
+        "description": "Formatted markdown describing additional context for edits.",
+        "type": "string",
+        "source": "Story or chapter edit context data, pre-rendered."
+      },
+      "currentData": {
+        "description": "JSON block representing the current story object data.",
+        "type": "string",
+        "source": "Story object edit context."
+      },
+      "userRequest": {
+        "description": "User provided request or instructions for the edit.",
+        "type": "string",
+        "source": "Story/chapter edit contexts."
+      },
+      "currentContent": {
+        "description": "Text block with the current chapter content.",
+        "type": "string",
+        "source": "Chapter edit context."
+      },
+      "previousVersionContext": {
+        "description": "JSON block of the previous data version for comparison.",
+        "type": "string",
+        "source": "Translation prompt context (optional)."
+      },
+      "previousTranslationReference": {
+        "description": "Text block holding the previous translation.",
+        "type": "string",
+        "source": "Translation prompt context (optional)."
+      },
+      "userInstructions": {
+        "description": "Additional user guidance for the translation task.",
+        "type": "string",
+        "source": "Translation prompt context (optional)."
+      },
+      "sourceData": {
+        "description": "JSON block of the source payload to translate.",
+        "type": "string",
+        "source": "Translation prompt context."
+      },
+      "functionResults": {
+        "description": "Summary of recent function call results appended to user messages.",
+        "type": "string",
+        "source": "User message tag context."
+      },
+      "storyContext": {
+        "description": "Markdown section describing relevant story objects.",
+        "type": "string",
+        "source": "User message tag context when story data is requested."
+      },
+      "novelContent": {
+        "description": "Markdown section with aggregated novel content.",
+        "type": "string",
+        "source": "User message tag context when novel content is injected."
+      },
+      "customSections": {
+        "description": "Optional markdown sections provided by the UI for the user tag.",
+        "type": "string",
+        "source": "User message tag context custom sections."
+      }
+    },
+    "conditionals": {
+      "thinking": {
+        "description": "Whether the assistant should include an explicit thinking block.",
+        "type": "boolean",
+        "source": "Chat prompt configuration (custom thinking mode).",
+        "supportsNegation": true,
+        "default": false
+      },
+      "targetId": {
+        "description": "True when a specific story object target is available.",
+        "type": "boolean",
+        "source": "Story object edit context.",
+        "supportsNegation": true,
+        "default": false
+      },
+      "contextData": {
+        "description": "True when supplementary context data was provided and rendered.",
+        "type": "boolean",
+        "source": "Story/chapter edit contexts.",
+        "supportsNegation": true,
+        "default": false
+      },
+      "userRequest": {
+        "description": "True when the user supplied explicit edit instructions.",
+        "type": "boolean",
+        "source": "Story/chapter edit contexts.",
+        "supportsNegation": true,
+        "default": false
+      },
+      "previousVersionContext": {
+        "description": "True when previous version data exists for translation.",
+        "type": "boolean",
+        "source": "Translation prompt context.",
+        "supportsNegation": true,
+        "default": false
+      },
+      "previousTranslationReference": {
+        "description": "True when an earlier translation is provided for reference.",
+        "type": "boolean",
+        "source": "Translation prompt context.",
+        "supportsNegation": true,
+        "default": false
+      },
+      "userInstructions": {
+        "description": "True when the translation request includes supplemental instructions.",
+        "type": "boolean",
+        "source": "Translation prompt context.",
+        "supportsNegation": true,
+        "default": false
+      }
+    }
+  },
+  "templates": [
+    {
+      "id": "chat/systemPrompt/workspace",
+      "functionType": "chat",
+      "category": "systemPrompt",
+      "variant": "workspace",
+      "description": "Workspace system prompt injected at the start of chat conversations.",
+      "placeholders": {
+        "variables": {
+          "functionInstructions": {
+            "required": false
+          },
+          "language": {
+            "required": true
+          }
+        },
+        "contexts": {},
+        "conditionals": {
+          "thinking": {
+            "required": false
+          }
+        }
+      }
+    },
+    {
+      "id": "chat/systemPrompt/novelEditor",
+      "functionType": "chat",
+      "category": "systemPrompt",
+      "variant": "novelEditor",
+      "description": "Novel editor system prompt for the dedicated editor workspace.",
+      "placeholders": {
+        "variables": {
+          "functionInstructions": {
+            "required": false
+          },
+          "language": {
+            "required": true
+          }
+        },
+        "contexts": {},
+        "conditionals": {
+          "thinking": {
+            "required": false
+          }
+        }
+      }
+    },
+    {
+      "id": "storyEdit/systemPrompt/default",
+      "functionType": "storyEdit",
+      "category": "systemPrompt",
+      "variant": "default",
+      "description": "System prompt guiding story object edits.",
+      "placeholders": {
+        "variables": {
+          "categoryName": {
+            "required": true
+          },
+          "editScope": {
+            "required": true
+          },
+          "language": {
+            "required": true
+          }
+        },
+        "contexts": {},
+        "conditionals": {}
+      }
+    },
+    {
+      "id": "chapterGen/systemPrompt/default",
+      "functionType": "chapterGen",
+      "category": "systemPrompt",
+      "variant": "default",
+      "description": "System prompt for chapter editing or regeneration tasks.",
+      "placeholders": {
+        "variables": {
+          "chapterName": {
+            "required": true
+          },
+          "language": {
+            "required": true
+          }
+        },
+        "contexts": {},
+        "conditionals": {
+          "thinking": {
+            "required": false
+          }
+        }
+      }
+    },
+    {
+      "id": "translation/systemPrompt/default",
+      "functionType": "translation",
+      "category": "systemPrompt",
+      "variant": "default",
+      "description": "Translation system prompt describing source and target languages.",
+      "placeholders": {
+        "variables": {
+          "sourceLanguage": {
+            "required": true
+          },
+          "targetLanguage": {
+            "required": true
+          },
+          "dataTypeName": {
+            "required": true
+          }
+        },
+        "contexts": {},
+        "conditionals": {
+          "thinking": {
+            "required": false
+          }
+        }
+      }
+    },
+    {
+      "id": "storyEdit/userPrompt/default",
+      "functionType": "storyEdit",
+      "category": "userPrompt",
+      "variant": "default",
+      "description": "User-facing prompt that delivers story object context to the model.",
+      "placeholders": {
+        "variables": {
+          "categoryName": {
+            "required": true
+          },
+          "targetId": {
+            "required": false
+          }
+        },
+        "contexts": {
+          "contextData": {
+            "required": false
+          },
+          "currentData": {
+            "required": true
+          },
+          "userRequest": {
+            "required": false
+          }
+        },
+        "conditionals": {
+          "targetId": {
+            "required": false
+          },
+          "contextData": {
+            "required": false
+          },
+          "userRequest": {
+            "required": false
+          }
+        }
+      }
+    },
+    {
+      "id": "chapterGen/userPrompt/default",
+      "functionType": "chapterGen",
+      "category": "userPrompt",
+      "variant": "default",
+      "description": "Chapter edit prompt containing current chapter data and optional requests.",
+      "placeholders": {
+        "variables": {
+          "chapterName": {
+            "required": true
+          }
+        },
+        "contexts": {
+          "contextData": {
+            "required": false
+          },
+          "currentContent": {
+            "required": true
+          },
+          "userRequest": {
+            "required": false
+          }
+        },
+        "conditionals": {
+          "contextData": {
+            "required": false
+          },
+          "userRequest": {
+            "required": false
+          }
+        }
+      }
+    },
+    {
+      "id": "translation/userPrompt/default",
+      "functionType": "translation",
+      "category": "userPrompt",
+      "variant": "default",
+      "description": "Detailed translation prompt listing payloads and optional references.",
+      "placeholders": {
+        "variables": {
+          "sourceLanguage": {
+            "required": true
+          },
+          "targetLanguage": {
+            "required": true
+          },
+          "dataTypeName": {
+            "required": true
+          }
+        },
+        "contexts": {
+          "previousVersionContext": {
+            "required": false
+          },
+          "previousTranslationReference": {
+            "required": false
+          },
+          "userInstructions": {
+            "required": false
+          },
+          "sourceData": {
+            "required": true
+          }
+        },
+        "conditionals": {
+          "previousVersionContext": {
+            "required": false
+          },
+          "previousTranslationReference": {
+            "required": false
+          },
+          "userInstructions": {
+            "required": false
+          }
+        }
+      }
+    },
+    {
+      "id": "chat/prefill/assistant",
+      "functionType": "chat",
+      "category": "prefill",
+      "variant": "assistant",
+      "description": "Assistant prefill message providing mode and capabilities.",
+      "placeholders": {
+        "variables": {
+          "mode": {
+            "required": true
+          },
+          "language": {
+            "required": true
+          },
+          "hasFunctions": {
+            "required": true
+          }
+        },
+        "contexts": {},
+        "conditionals": {
+          "thinking": {
+            "required": false
+          }
+        }
+      }
+    },
+    {
+      "id": "storyEdit/prefill/assistant",
+      "functionType": "storyEdit",
+      "category": "prefill",
+      "variant": "assistant",
+      "description": "Assistant prefill for story object edit flows.",
+      "placeholders": {
+        "variables": {
+          "categoryName": {
+            "required": true
+          },
+          "editScope": {
+            "required": true
+          },
+          "language": {
+            "required": true
+          }
+        },
+        "contexts": {},
+        "conditionals": {
+          "thinking": {
+            "required": false
+          }
+        }
+      }
+    },
+    {
+      "id": "chapterGen/prefill/assistant",
+      "functionType": "chapterGen",
+      "category": "prefill",
+      "variant": "assistant",
+      "description": "Assistant prefill for chapter editing.",
+      "placeholders": {
+        "variables": {
+          "chapterName": {
+            "required": true
+          },
+          "language": {
+            "required": true
+          }
+        },
+        "contexts": {},
+        "conditionals": {
+          "thinking": {
+            "required": false
+          }
+        }
+      }
+    },
+    {
+      "id": "translation/prefill/assistant",
+      "functionType": "translation",
+      "category": "prefill",
+      "variant": "assistant",
+      "description": "Assistant prefill describing translation objective.",
+      "placeholders": {
+        "variables": {
+          "sourceLanguage": {
+            "required": true
+          },
+          "targetLanguage": {
+            "required": true
+          },
+          "dataTypeName": {
+            "required": true
+          }
+        },
+        "contexts": {},
+        "conditionals": {
+          "thinking": {
+            "required": false
+          }
+        }
+      }
+    },
+    {
+      "id": "chat/userMessageTag/lastMessage",
+      "functionType": "chat",
+      "category": "userMessageTag",
+      "variant": "lastMessage",
+      "description": "System tag appended to the last user message.",
+      "placeholders": {
+        "variables": {},
+        "contexts": {
+          "functionResults": {
+            "required": false
+          },
+          "storyContext": {
+            "required": false
+          },
+          "novelContent": {
+            "required": false
+          },
+          "customSections": {
+            "required": false
+          }
+        },
+        "conditionals": {}
+      }
+    },
+    {
+      "id": "chat/userMessageTag/nonLastMessage",
+      "functionType": "chat",
+      "category": "userMessageTag",
+      "variant": "nonLastMessage",
+      "description": "System tag appended to non-last user messages.",
+      "placeholders": {
+        "variables": {},
+        "contexts": {
+          "functionResults": {
+            "required": false
+          }
+        },
+        "conditionals": {}
+      }
+    }
+  ]
+}

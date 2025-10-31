@@ -10,6 +10,7 @@ import { UserMessageTagManager } from '../managers/UserMessageTagManager';
 import {
   SystemPromptManager,
   PromptType,
+  type PromptBundle,
   type ChatSystemPromptContext,
   type TranslationPromptContext,
   type StoryObjectEditPromptContext,
@@ -27,11 +28,19 @@ export class DefaultPreProcessor implements PreProcessor {
     const processedMessages: ProcessedChatMessage[] = [];
     const conversationBlocks: ConversationBlock[] = [];
 
-    // Add comprehensive system prompt
+    // Add comprehensive system prompt and auto-generated user prompts
+    const promptBundle = await this.generatePromptBundle(context, conversationLanguage, functions);
     conversationBlocks.push({
       role: 'system',
-      content: await this.generateSystemPrompt(context, conversationLanguage, functions)
+      content: promptBundle.systemPrompt
     });
+
+    for (const autoUserContent of promptBundle.userPrompts) {
+      conversationBlocks.push({
+        role: 'user',
+        content: autoUserContent
+      });
+    }
 
     // Process existing messages
     for (let i = 0; i < messages.length; i++)
@@ -97,7 +106,11 @@ export class DefaultPreProcessor implements PreProcessor {
     };
   }
 
-  private async generateSystemPrompt(context: ChatPipelineContext, conversationLanguage?: string, functions?: FunctionCallSchema[]): Promise<string> {
+  private async generatePromptBundle(
+    context: ChatPipelineContext,
+    conversationLanguage?: string,
+    functions?: FunctionCallSchema[]
+  ): Promise<PromptBundle> {
     // Get prompt type from config, default to 'chat' if not specified
     const promptType = context.systemInsertConfig.promptType || 'chat';
     const promptContext = context.systemInsertConfig.promptContext;
@@ -115,13 +128,13 @@ export class DefaultPreProcessor implements PreProcessor {
               enablePrefill: context.enablePrefill,
               enableThinking: context.thinkingMode === 'custom',
             };
-        return await SystemPromptManager.generatePrompt(PromptType.CHAT_SYSTEM, chatPromptContext);
+        return await SystemPromptManager.generatePromptBundle(PromptType.CHAT_SYSTEM, chatPromptContext);
 
       case 'translation':
         if (!promptContext) {
           throw new Error('Translation prompt requires promptContext to be set');
         }
-        return await SystemPromptManager.generatePrompt(
+        return await SystemPromptManager.generatePromptBundle(
           PromptType.TRANSLATION,
           promptContext as TranslationPromptContext
         );
@@ -130,7 +143,7 @@ export class DefaultPreProcessor implements PreProcessor {
         if (!promptContext) {
           throw new Error('Story object edit prompt requires promptContext to be set');
         }
-        return await SystemPromptManager.generatePrompt(
+        return await SystemPromptManager.generatePromptBundle(
           PromptType.STORY_OBJECT_EDIT,
           promptContext as StoryObjectEditPromptContext
         );
@@ -139,7 +152,7 @@ export class DefaultPreProcessor implements PreProcessor {
         if (!promptContext) {
           throw new Error('Chapter edit prompt requires promptContext to be set');
         }
-        return await SystemPromptManager.generatePrompt(
+        return await SystemPromptManager.generatePromptBundle(
           PromptType.CHAPTER_EDIT,
           promptContext as ChapterEditPromptContext
         );
@@ -154,7 +167,7 @@ export class DefaultPreProcessor implements PreProcessor {
           enablePrefill: context.enablePrefill,
           enableThinking: context.thinkingMode === 'custom',
         };
-        return await SystemPromptManager.generatePrompt(PromptType.CHAT_SYSTEM, fallbackContext);
+        return await SystemPromptManager.generatePromptBundle(PromptType.CHAT_SYSTEM, fallbackContext);
     }
   }
 

@@ -134,6 +134,14 @@ export const PROMPT_TREE: PromptNode[] = [
         description: 'Instructions for translation behavior and quality standards'
       },
       {
+        id: 'translation-user',
+        label: 'User Prompt',
+        type: 'prompt',
+        functionType: 'translation',
+        category: 'userPrompt',
+        description: 'Auto-generated user message that contains translation payload'
+      },
+      {
         id: 'translation-prefill',
         label: 'Prefill Template',
         type: 'prompt',
@@ -158,6 +166,14 @@ export const PROMPT_TREE: PromptNode[] = [
         description: 'Instructions for story object editing behavior'
       },
       {
+        id: 'storyedit-user',
+        label: 'User Prompt',
+        type: 'prompt',
+        functionType: 'storyEdit',
+        category: 'userPrompt',
+        description: 'Auto-generated user message that delivers object context and current data'
+      },
+      {
         id: 'storyedit-prefill',
         label: 'Prefill Template',
         type: 'prompt',
@@ -180,6 +196,14 @@ export const PROMPT_TREE: PromptNode[] = [
         functionType: 'chapterGen',
         category: 'systemPrompt',
         description: 'Instructions for chapter content generation'
+      },
+      {
+        id: 'chaptergen-user',
+        label: 'User Prompt',
+        type: 'prompt',
+        functionType: 'chapterGen',
+        category: 'userPrompt',
+        description: 'Auto-generated user message that conveys chapter content and requests'
       },
       {
         id: 'chaptergen-prefill',

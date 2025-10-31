@@ -25,17 +25,9 @@ After your thinking, use the `update_chapter_content` function to provide the ed
 
 Respond in {{var::language}}.
 
-## Context
+## Task Overview
 
-{{context::contextData}}
-
-## Current Chapter Content
-
-{{context::currentContent}}
-
-## User Request
-
-{{var::userRequest}}
+A user message will supply the chapter's current content, the broader project context, and the requested edits.
 
 ## Instructions
 
@@ -44,4 +36,3 @@ Respond in {{var::language}}.
 3. Preserve the existing narrative voice and writing style unless the user specifies otherwise.
 4. Ensure the revision flows with the broader story structure and pacing principles.
 5. After calling the function, provide a brief summary of the key changes you made in your text response.
-

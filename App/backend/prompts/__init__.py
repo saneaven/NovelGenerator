@@ -44,10 +44,13 @@ _WORKSPACE_FUNCTION_INSTRUCTIONS = _load_prompt_file('systemPrompts/functionInst
 _NOVEL_EDITOR_FUNCTION_INSTRUCTIONS = _load_prompt_file('systemPrompts/functionInstructions/novelEditor.md')
 _CHAT_PREFILL = _load_prompt_file('prefills/ChatPrefill.md')
 _TRANSLATION_SYSTEM_PROMPT = _load_prompt_file('systemPrompts/TranslationPrompt.md')
+_TRANSLATION_USER_PROMPT = _load_prompt_file('userPrompts/TranslationUserPrompt.md')
 _TRANSLATION_PREFILL = _load_prompt_file('prefills/TranslationPrefill.md')
 _STORY_EDIT_SYSTEM_PROMPT = _load_prompt_file('systemPrompts/StoryObjectEditPrompt.md')
+_STORY_EDIT_USER_PROMPT = _load_prompt_file('userPrompts/StoryObjectEditUserPrompt.md')
 _STORY_EDIT_PREFILL = _load_prompt_file('prefills/StoryObjectEditPrefill.md')
 _CHAPTER_EDIT_SYSTEM_PROMPT = _load_prompt_file('systemPrompts/ChapterEditPrompt.md')
+_CHAPTER_EDIT_USER_PROMPT = _load_prompt_file('userPrompts/ChapterEditUserPrompt.md')
 _CHAPTER_EDIT_PREFILL = _load_prompt_file('prefills/ChapterEditPrefill.md')
 _LAST_USER_MESSAGE_TAG = _load_prompt_file('userMessageSystemPrompts/LastUserMessageTag.md')
 _NON_LAST_USER_MESSAGE_TAG = _load_prompt_file('userMessageSystemPrompts/NonLastUserMessageTag.md')
@@ -72,14 +75,17 @@ DEFAULT_PROMPTS = {
     },
     'translation': {
         'systemPrompt': _TRANSLATION_SYSTEM_PROMPT,
+        'userPrompt': _TRANSLATION_USER_PROMPT,
         'prefill': _TRANSLATION_PREFILL,
     },
     'storyEdit': {
         'systemPrompt': _STORY_EDIT_SYSTEM_PROMPT,
+        'userPrompt': _STORY_EDIT_USER_PROMPT,
         'prefill': _STORY_EDIT_PREFILL,
     },
     'chapterGen': {
         'systemPrompt': _CHAPTER_EDIT_SYSTEM_PROMPT,
+        'userPrompt': _CHAPTER_EDIT_USER_PROMPT,
         'prefill': _CHAPTER_EDIT_PREFILL,
     },
 }

@@ -1,153 +1,119 @@
+import {
+  renderTemplate,
+  type RenderOptions as EngineRenderOptions,
+  type RenderResult as EngineRenderResult,
+  type RuntimeContext,
+  type TemplateDiagnostic,
+} from '../../templateEngine';
+
 /**
- * Context for rendering templates with conditionals and variables
+ * Context for rendering templates with conditionals and variables.
  */
 export interface RenderContext {
   /**
-   * Variables that can be referenced with {{var::key}} syntax
+   * Variables that can be referenced with {{var::key}} syntax.
    */
   variables?: Record<string, string | undefined>;
 
   /**
-   * Context data that can be referenced with {{context::key}} syntax
+   * Context data that can be referenced with {{context::key}} syntax.
    */
   context?: Record<string, string | undefined>;
 
   /**
-   * Boolean flags for conditional blocks using {{#if::flag}}...{{/if}} syntax
-   * Supports negation with ! prefix: {{#if::!flag}}...{{/if}}
+   * Boolean flags for conditional blocks using {{#if::flag}}...{{/if}} syntax.
+   * Supports negation with ! prefix: {{#if::!flag}}...{{/if}}.
    */
-  conditionals?: Record<string, boolean>;
+  conditionals?: Record<string, boolean | undefined>;
+}
+
+export interface RenderOptions {
+  /**
+   * Template identifier used to look up placeholder metadata in the registry.
+   */
+  templateId?: string;
+
+  /**
+   * When true, collect structured diagnostics from the render pass.
+   */
+  collectDiagnostics?: boolean;
+}
+
+export interface RenderOutput {
+  output: string;
+  diagnostics: TemplateDiagnostic[];
+}
+
+function toRuntimeContext(renderContext: RenderContext = {}): RuntimeContext {
+  return {
+    variables: renderContext.variables ?? {},
+    contexts: renderContext.context ?? {},
+    conditionals: renderContext.conditionals ?? {},
+  };
+}
+
+function toEngineOptions(options?: RenderOptions): EngineRenderOptions {
+  if (!options) {
+    return {};
+  }
+
+  const engineOptions: EngineRenderOptions = {};
+
+  if (options.templateId) {
+    engineOptions.templateId = options.templateId;
+  }
+
+  if (options.collectDiagnostics) {
+    engineOptions.collectDiagnostics = true;
+  }
+
+  return engineOptions;
 }
 
 /**
- * Template rendering utility that processes Handlebars-style conditionals and variable placeholders
- *
- * Supports:
- * - Conditional blocks: {{#if::condition}}content{{/if}}
- * - Negated conditionals: {{#if::!condition}}content{{/if}}
- * - Variable replacement: {{var::key}}
- * - Context replacement: {{context::key}}
- *
- * Processing order:
- * 1. Conditionals are evaluated first (content is kept or removed)
- * 2. Variables are replaced second (remaining placeholders are filled)
+ * Render template with diagnostics.
+ */
+export function renderWithDiagnostics(
+  template: string,
+  renderContext: RenderContext = {},
+  options?: RenderOptions
+): RenderOutput {
+  const runtimeContext = toRuntimeContext(renderContext);
+  const engineResult: EngineRenderResult = renderTemplate(template, runtimeContext, toEngineOptions(options));
+
+  return {
+    output: engineResult.output,
+    diagnostics: engineResult.diagnostics,
+  };
+}
+
+/**
+ * Render template with provided context.
+ * Falls back to legacy behaviour of returning only the rendered string.
  */
 export class TemplateRenderer {
-  /**
-   * Process conditional blocks in template
-   * Removes or keeps content based on boolean flags
-   *
-   * @param template - Template string with conditional blocks
-   * @param conditionals - Object mapping condition names to boolean values
-   * @returns Template with conditionals processed
-   */
-  static processConditionals(template: string, conditionals: Record<string, boolean> = {}): string {
-    // Match {{#if::condition}}content{{/if}} blocks
-    // Also supports negation with ! prefix: {{#if::!condition}}content{{/if}}
-    // Uses non-greedy matching ([\s\S]*?) to handle nested content correctly
-    const conditionalRegex = /\{\{#if::(!?)([a-zA-Z0-9_-]+)\}\}([\s\S]*?)\{\{\/if\}\}/g;
+  static render(template: string, renderContext: RenderContext = {}, options?: RenderOptions): string {
+    const result = renderWithDiagnostics(template, renderContext, options);
 
-    return template.replace(conditionalRegex, (match, negation: string, conditionName: string, content: string) => {
-      // Get the raw boolean value (default to false if undefined)
-      const rawValue = conditionals[conditionName] ?? false;
+    if (options?.collectDiagnostics && result.diagnostics.length > 0) {
+      console.debug('[TemplateRenderer] diagnostics', result.diagnostics);
+    }
 
-      // Apply negation if ! prefix is present
-      const shouldInclude = negation === '!' ? !rawValue : rawValue;
-
-      return shouldInclude ? content : '';
-    });
+    return result.output;
   }
 
-  /**
-   * Process variable placeholders in template
-   * Replaces {{type::key}} with corresponding values
-   *
-   * @param template - Template string with variable placeholders
-   * @param variables - Object mapping variable names to values
-   * @param context - Object mapping context names to values
-   * @returns Template with variables replaced
-   */
-  static processVariables(
+  static validate(
     template: string,
-    variables: Record<string, string | undefined> = {},
-    context: Record<string, string | undefined> = {}
-  ): string {
-    // Match {{type::key}} patterns
-    const placeholderRegex = /\{\{([a-zA-Z0-9_-]+)::([a-zA-Z0-9_.-]+)\}\}/g;
+    options?: RenderOptions
+  ): { isValid: boolean; errors: string[]; diagnostics: TemplateDiagnostic[] } {
+    const result = renderWithDiagnostics(template, { variables: {}, context: {}, conditionals: {} }, options);
 
-    return template.replace(placeholderRegex, (match, type: string, key: string) => {
-      // Determine which group to use based on type
-      let group: Record<string, string | undefined> | undefined;
-
-      if (type === 'var') {
-        group = variables;
-      } else if (type === 'context') {
-        group = context;
-      }
-
-      // Return the value if found, otherwise empty string
-      if (!group) {
-        return '';
-      }
-
-      const value = group[key];
-      return value ?? '';
-    });
-  }
-
-  /**
-   * Render template with full context (conditionals + variables)
-   *
-   * Processing order:
-   * 1. Process conditionals first
-   * 2. Process variables second
-   *
-   * @param template - Template string to render
-   * @param renderContext - Context containing conditionals, variables, and context data
-   * @returns Fully rendered template string
-   */
-  static render(template: string, renderContext: RenderContext = {}): string {
-    const { conditionals = {}, variables = {}, context = {} } = renderContext;
-
-    // Step 1: Process conditionals
-    let result = this.processConditionals(template, conditionals);
-
-    // Step 2: Process variables
-    result = this.processVariables(result, variables, context);
-
-    return result;
-  }
-
-  /**
-   * Validate template syntax without rendering
-   * Checks for common errors like mismatched tags
-   *
-   * @param template - Template string to validate
-   * @returns Validation result with any errors found
-   */
-  static validate(template: string): { isValid: boolean; errors: string[] } {
-    const errors: string[] = [];
-
-    // Check for unclosed if blocks
-    const openIfCount = (template.match(/\{\{#if::/g) || []).length;
-    const closeIfCount = (template.match(/\{\{\/if\}\}/g) || []).length;
-
-    if (openIfCount > closeIfCount) {
-      errors.push(`Unclosed conditional blocks: ${openIfCount - closeIfCount} {{#if::...}} without {{/if}}`);
-    } else if (closeIfCount > openIfCount) {
-      errors.push(`Extra closing tags: ${closeIfCount - openIfCount} {{/if}} without {{#if::...}}`);
-    }
-
-    // Check for malformed variable placeholders
-    // Allow #if:: with optional ! prefix, /if}}, var::, and context::
-    const malformedVars = template.match(/\{\{(?!#if::!?|\/if\}\}|var::|context::)[^}]*\}\}/g);
-    if (malformedVars && malformedVars.length > 0) {
-      errors.push(`Malformed placeholders: ${malformedVars.join(', ')}`);
-    }
+    const errors = result.diagnostics.filter((diag) => diag.level === 'error').map((diag) => diag.message);
 
     return {
       isValid: errors.length === 0,
       errors,
+      diagnostics: result.diagnostics,
     };
   }
 }

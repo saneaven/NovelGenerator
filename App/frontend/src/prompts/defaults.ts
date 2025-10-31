@@ -11,6 +11,11 @@ import translationPrompt from '../chat/managers/prompts/systemPrompts/Translatio
 import storyObjectEditPrompt from '../chat/managers/prompts/systemPrompts/StoryObjectEditPrompt.md?raw';
 import chapterEditPrompt from '../chat/managers/prompts/systemPrompts/ChapterEditPrompt.md?raw';
 
+// User Prompts
+import translationUserPrompt from '../chat/managers/prompts/userPrompts/TranslationUserPrompt.md?raw';
+import storyObjectEditUserPrompt from '../chat/managers/prompts/userPrompts/StoryObjectEditUserPrompt.md?raw';
+import chapterEditUserPrompt from '../chat/managers/prompts/userPrompts/ChapterEditUserPrompt.md?raw';
+
 // Function Instructions
 import workspaceFunctionInstructions from '../chat/managers/prompts/systemPrompts/functionInstructions/workspace.md?raw';
 import novelEditorFunctionInstructions from '../chat/managers/prompts/systemPrompts/functionInstructions/novelEditor.md?raw';
@@ -29,7 +34,7 @@ import nonLastUserMessageTag from '../chat/managers/prompts/userMessageSystemPro
  * Prompt type definitions
  */
 export type FunctionType = 'chat' | 'translation' | 'storyEdit' | 'chapterGen';
-export type PromptCategory = 'systemPrompt' | 'functionInstructions' | 'prefill' | 'userMessageTag';
+export type PromptCategory = 'systemPrompt' | 'functionInstructions' | 'prefill' | 'userMessageTag' | 'userPrompt';
 
 export interface PromptDefaults {
   chat: {
@@ -49,14 +54,17 @@ export interface PromptDefaults {
   };
   translation: {
     systemPrompt: string;
+    userPrompt: string;
     prefill: string;
   };
   storyEdit: {
     systemPrompt: string;
+    userPrompt: string;
     prefill: string;
   };
   chapterGen: {
     systemPrompt: string;
+    userPrompt: string;
     prefill: string;
   };
 }
@@ -82,14 +90,17 @@ export const DEFAULT_PROMPTS: PromptDefaults = {
   },
   translation: {
     systemPrompt: translationPrompt,
+    userPrompt: translationUserPrompt,
     prefill: translationPrefill,
   },
   storyEdit: {
     systemPrompt: storyObjectEditPrompt,
+    userPrompt: storyObjectEditUserPrompt,
     prefill: storyObjectEditPrefill,
   },
   chapterGen: {
     systemPrompt: chapterEditPrompt,
+    userPrompt: chapterEditUserPrompt,
     prefill: chapterEditPrefill,
   },
 };

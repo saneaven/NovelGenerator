@@ -189,7 +189,9 @@ export class PrefillManager {
       },
     };
 
-    return TemplateRenderer.render(chatPrefillTemplate, renderContext);
+    return TemplateRenderer.render(chatPrefillTemplate, renderContext, {
+      templateId: this.templateId('chat'),
+    });
   }
 
   private static generateStoryObjectEditPrefill(context: StoryObjectEditPrefillContext): string {
@@ -214,7 +216,9 @@ export class PrefillManager {
       },
     };
 
-    return TemplateRenderer.render(storyObjectEditPrefillTemplate, renderContext);
+    return TemplateRenderer.render(storyObjectEditPrefillTemplate, renderContext, {
+      templateId: this.templateId('storyEdit'),
+    });
   }
 
   private static generateChapterEditPrefill(context: ChapterEditPrefillContext): string {
@@ -236,7 +240,9 @@ export class PrefillManager {
       },
     };
 
-    return TemplateRenderer.render(chapterEditPrefillTemplate, renderContext);
+    return TemplateRenderer.render(chapterEditPrefillTemplate, renderContext, {
+      templateId: this.templateId('chapterGen'),
+    });
   }
 
   private static generateTranslationPrefill(context: TranslationPrefillContext): string {
@@ -259,12 +265,18 @@ export class PrefillManager {
       },
     };
 
-    return TemplateRenderer.render(translationPrefillTemplate, renderContext);
+    return TemplateRenderer.render(translationPrefillTemplate, renderContext, {
+      templateId: this.templateId('translation'),
+    });
   }
 
   private static resolveLanguage(language?: string): string {
     const trimmed = language ? language.trim() : '';
     return trimmed.length > 0 ? trimmed : 'the language used by the user';
+  }
+
+  private static templateId(functionType: 'chat' | 'storyEdit' | 'chapterGen' | 'translation'): string {
+    return `${functionType}/prefill/assistant`;
   }
 
   /**

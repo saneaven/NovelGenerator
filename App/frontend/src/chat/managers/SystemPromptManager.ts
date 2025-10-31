@@ -85,6 +85,11 @@ export interface TranslationPromptContext extends BasePromptContext {
   enableThinking?: boolean;
 }
 
+export interface PromptBundle {
+  systemPrompt: string;
+  userPrompts: string[];
+}
+
 /**
  * Centralized system prompt manager that renders markdown templates with placeholders
  * Now loads prompts dynamically from settings store with fallback to bundled defaults
@@ -95,7 +100,7 @@ export class SystemPromptManager {
    */
   private static async getTemplate(
     functionType: 'chat' | 'translation' | 'storyEdit' | 'chapterGen',
-    category: 'systemPrompt' | 'functionInstructions' | 'prefill',
+    category: 'systemPrompt' | 'functionInstructions' | 'prefill' | 'userPrompt',
     name?: 'workspace' | 'novelEditor'
   ): Promise<string> {
     const store = useSettingsStore.getState();
@@ -129,15 +134,24 @@ export class SystemPromptManager {
   static generatePrompt(type: typeof PromptType.CHAPTER_EDIT, context: ChapterEditPromptContext): Promise<string>;
   static generatePrompt(type: typeof PromptType.TRANSLATION, context: TranslationPromptContext): Promise<string>;
   static async generatePrompt(type: PromptType, context?: unknown): Promise<string> {
+    const bundle = await this.generatePromptBundle(type as any, context as any);
+    return bundle.systemPrompt;
+  }
+
+  static generatePromptBundle(type: typeof PromptType.CHAT_SYSTEM, context?: ChatSystemPromptContext): Promise<PromptBundle>;
+  static generatePromptBundle(type: typeof PromptType.STORY_OBJECT_EDIT, context: StoryObjectEditPromptContext): Promise<PromptBundle>;
+  static generatePromptBundle(type: typeof PromptType.CHAPTER_EDIT, context: ChapterEditPromptContext): Promise<PromptBundle>;
+  static generatePromptBundle(type: typeof PromptType.TRANSLATION, context: TranslationPromptContext): Promise<PromptBundle>;
+  static async generatePromptBundle(type: PromptType, context?: unknown): Promise<PromptBundle> {
     switch (type) {
       case PromptType.CHAT_SYSTEM:
-        return this.generateChatSystemPrompt(context as ChatSystemPromptContext | undefined);
+        return this.generateChatBundle(context as ChatSystemPromptContext | undefined);
       case PromptType.STORY_OBJECT_EDIT:
-        return this.generateStoryObjectEditPrompt(context as StoryObjectEditPromptContext);
+        return this.generateStoryObjectEditBundle(context as StoryObjectEditPromptContext);
       case PromptType.CHAPTER_EDIT:
-        return this.generateChapterEditPrompt(context as ChapterEditPromptContext);
+        return this.generateChapterEditBundle(context as ChapterEditPromptContext);
       case PromptType.TRANSLATION:
-        return this.generateTranslationPrompt(context as TranslationPromptContext);
+        return this.generateTranslationBundle(context as TranslationPromptContext);
       default:
         throw new Error(`Unknown prompt type: ${type}`);
     }
@@ -209,7 +223,7 @@ export class SystemPromptManager {
     return Object.values(PromptType);
   }
 
-  private static async generateChatSystemPrompt(context: ChatSystemPromptContext = {}): Promise<string> {
+  private static async generateChatBundle(context: ChatSystemPromptContext = {}): Promise<PromptBundle> {
     const mode = context.mode || 'workspace';
     const systemTemplate = await this.getTemplate('chat', 'systemPrompt', mode);
     const functionInstructions = await this.buildFunctionInstructions(context);
@@ -226,51 +240,88 @@ export class SystemPromptManager {
       },
     };
 
-    return TemplateRenderer.render(systemTemplate, renderContext);
+    const templateId = this.templateId('chat', 'systemPrompt', mode);
+    const systemPrompt = TemplateRenderer.render(systemTemplate, renderContext, {
+      templateId,
+    });
+
+    return {
+      systemPrompt,
+      userPrompts: [],
+    };
   }
 
-  private static async generateStoryObjectEditPrompt(context: StoryObjectEditPromptContext): Promise<string> {
+  private static async generateStoryObjectEditBundle(context: StoryObjectEditPromptContext): Promise<PromptBundle> {
     const { category, targetId, contextData, currentData, outputLanguage } = context;
 
-    const systemTemplate = await this.getTemplate('storyEdit', 'systemPrompt');
+    const [systemTemplate, userTemplate] = await Promise.all([
+      this.getTemplate('storyEdit', 'systemPrompt'),
+      this.getTemplate('storyEdit', 'userPrompt'),
+    ]);
+
     const categoryName = this.getCategoryDisplayName(category);
     const editScope = targetId ? 'a specific item' : 'the entire category';
     const language = this.resolveLanguage(outputLanguage);
+    const formattedContextData = this.formatContextData(contextData);
+    const hasContextData = !!contextData && Object.keys(contextData).length > 0;
 
-    const renderContext: RenderContext = {
+    const systemRenderContext: RenderContext = {
       variables: {
         categoryName,
         editScope,
         language,
       },
-      context: {
-        contextData: this.formatContextData(contextData),
-        currentData: this.formatJsonBlock(currentData),
-      },
       conditionals: {
         thinking: context.enableThinking ?? false,
         prefill: context.enablePrefill ?? false,
       },
     };
 
-    return TemplateRenderer.render(systemTemplate, renderContext);
+    const userRenderContext: RenderContext = {
+      variables: {
+        categoryName,
+        targetId: targetId ?? '',
+      },
+      context: {
+        contextData: formattedContextData,
+        currentData: this.formatJsonBlock(currentData),
+        userRequest: '',
+      },
+      conditionals: {
+        targetId: !!targetId,
+        contextData: hasContextData,
+        userRequest: false,
+      },
+    };
+
+    return {
+      systemPrompt: TemplateRenderer.render(systemTemplate, systemRenderContext, {
+        templateId: this.templateId('storyEdit', 'systemPrompt'),
+      }),
+      userPrompts: [
+        TemplateRenderer.render(userTemplate, userRenderContext, {
+          templateId: this.templateId('storyEdit', 'userPrompt'),
+        }),
+      ],
+    };
   }
 
-  private static async generateChapterEditPrompt(context: ChapterEditPromptContext): Promise<string> {
+  private static async generateChapterEditBundle(context: ChapterEditPromptContext): Promise<PromptBundle> {
     const { chapterName, currentContent, contextData, outputLanguage, userRequest } = context;
 
-    const systemTemplate = await this.getTemplate('chapterGen', 'systemPrompt');
-    const language = this.resolveLanguage(outputLanguage);
+    const [systemTemplate, userTemplate] = await Promise.all([
+      this.getTemplate('chapterGen', 'systemPrompt'),
+      this.getTemplate('chapterGen', 'userPrompt'),
+    ]);
 
-    const renderContext: RenderContext = {
+    const language = this.resolveLanguage(outputLanguage);
+    const formattedContextData = this.formatContextData(contextData);
+    const hasContextData = !!contextData && Object.keys(contextData).length > 0;
+
+    const systemRenderContext: RenderContext = {
       variables: {
         chapterName,
         language,
-        userRequest: userRequest || 'Please improve the chapter content.',
-      },
-      context: {
-        contextData: this.formatContextData(contextData),
-        currentContent: this.formatTextBlock(currentContent),
       },
       conditionals: {
         thinking: context.enableThinking ?? false,
@@ -278,23 +329,66 @@ export class SystemPromptManager {
       },
     };
 
-    return TemplateRenderer.render(systemTemplate, renderContext);
+    const userRenderContext: RenderContext = {
+      variables: {
+        chapterName,
+      },
+      context: {
+        contextData: formattedContextData,
+        currentContent: this.formatTextBlock(currentContent),
+        userRequest: userRequest || '',
+      },
+      conditionals: {
+        contextData: hasContextData,
+        userRequest: !!userRequest,
+      },
+    };
+
+    return {
+      systemPrompt: TemplateRenderer.render(systemTemplate, systemRenderContext, {
+        templateId: this.templateId('chapterGen', 'systemPrompt'),
+      }),
+      userPrompts: [
+        TemplateRenderer.render(userTemplate, userRenderContext, {
+          templateId: this.templateId('chapterGen', 'userPrompt'),
+        }),
+      ],
+    };
   }
 
-  private static async generateTranslationPrompt(context: TranslationPromptContext): Promise<string> {
-    const { sourceLanguage, targetLanguage, dataType, sourceData, previousVersionData, previousTranslation, userInstructions } = context;
+  private static async generateTranslationBundle(context: TranslationPromptContext): Promise<PromptBundle> {
+    const {
+      sourceLanguage,
+      targetLanguage,
+      dataType,
+      sourceData,
+      previousVersionData,
+      previousTranslation,
+      userInstructions,
+    } = context;
 
-    const systemTemplate = await this.getTemplate('translation', 'systemPrompt');
+    const [systemTemplate, userTemplate] = await Promise.all([
+      this.getTemplate('translation', 'systemPrompt'),
+      this.getTemplate('translation', 'userPrompt'),
+    ]);
+
     const dataTypeName = this.getDataTypeDisplayName(dataType);
-    const previousVersionContext = previousVersionData
-      ? `## Previous Version Context\n\nA previous ${targetLanguage} version is provided below for reference. Use it to maintain consistency in terminology, style, and tone:\n\n${this.formatJsonBlock(previousVersionData)}`
-      : '';
+    const previousVersionContext = previousVersionData ? this.formatJsonBlock(previousVersionData) : '';
+    const previousTranslationReference = previousTranslation ? this.formatTextBlock(previousTranslation) : '';
 
-    const previousTranslationReference = previousTranslation
-      ? `## Previous Translation Reference\n\nHere is the previous translation to ${targetLanguage}:\n\n${this.formatTextBlock(previousTranslation)}\n\nUse this as a reference to maintain consistency in style, tone, and terminology.`
-      : '';
+    const systemRenderContext: RenderContext = {
+      variables: {
+        sourceLanguage,
+        targetLanguage,
+        dataTypeName,
+      },
+      conditionals: {
+        thinking: context.enableThinking ?? false,
+        prefill: context.enablePrefill ?? false,
+      },
+    };
 
-    const renderContext: RenderContext = {
+    const userRenderContext: RenderContext = {
       variables: {
         sourceLanguage,
         targetLanguage,
@@ -307,14 +401,22 @@ export class SystemPromptManager {
         sourceData: this.formatJsonBlock(sourceData),
       },
       conditionals: {
-        thinking: context.enableThinking ?? false,
-        prefill: context.enablePrefill ?? false,
+        previousVersionContext: !!previousVersionData,
         previousTranslationReference: !!previousTranslation,
         userInstructions: !!userInstructions,
       },
     };
 
-    return TemplateRenderer.render(systemTemplate, renderContext);
+    return {
+      systemPrompt: TemplateRenderer.render(systemTemplate, systemRenderContext, {
+        templateId: this.templateId('translation', 'systemPrompt'),
+      }),
+      userPrompts: [
+        TemplateRenderer.render(userTemplate, userRenderContext, {
+          templateId: this.templateId('translation', 'userPrompt'),
+        }),
+      ],
+    };
   }
 
   private static async buildFunctionInstructions(context: ChatSystemPromptContext): Promise<string> {
@@ -328,6 +430,14 @@ export class SystemPromptManager {
   private static resolveLanguage(language?: string): string {
     const trimmed = language ? language.trim() : '';
     return trimmed.length > 0 ? trimmed : 'the language used by the user';
+  }
+
+  private static templateId(
+    functionType: 'chat' | 'translation' | 'storyEdit' | 'chapterGen',
+    category: 'systemPrompt' | 'userPrompt',
+    variant: string = 'default'
+  ): string {
+    return `${functionType}/${category}/${variant}`;
   }
 
   private static formatContextData(contextData?: Record<string, unknown>): string {

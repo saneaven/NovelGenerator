@@ -1,6 +1,7 @@
 import type { ChatMessage, FunctionCallResultSummary } from '../../llm_request/types';
 import type { ChatPipelineContext } from '../types';
 import { findLastUserMessageIdx } from '../processors/ChatManager';
+import { TemplateRenderer, type RenderContext } from '../utils/TemplateRenderer';
 
 import lastUserMessageTemplate from './prompts/userMessageSystemPrompts/LastUserMessageTag.md?raw';
 import nonLastUserMessageTemplate from './prompts/userMessageSystemPrompts/NonLastUserMessageTag.md?raw';
@@ -60,10 +61,6 @@ interface NovelContentChapter {
 interface NovelContentAct {
   name: string;
   chapters: NovelContentChapter[];
-}
-
-interface TemplatePlaceholders {
-  context?: Record<string, string | undefined>;
 }
 
 /**
@@ -155,44 +152,45 @@ export class UserMessageTagManager {
    * Generate tag for last user message (includes everything)
    */
   private static generateLastUserMessageTag(context: LastUserMessageTagContext): string {
-    return this.renderTemplate(lastUserMessageTemplate, {
+    const renderContext: RenderContext = {
       context: {
         functionResults: this.formatFunctionResults(context.functionCallResults),
         storyContext: this.formatStoryContext(context),
         novelContent: this.formatNovelContent(context),
         customSections: this.formatCustomSections(context.customSections),
       },
-    });
+    };
+
+    return this.renderUserMessageTemplate(
+      'chat/userMessageTag/lastMessage',
+      lastUserMessageTemplate,
+      renderContext
+    );
   }
 
   /**
    * Generate tag for non-last user message (only function results)
    */
   private static generateNonLastUserMessageTag(context: NonLastUserMessageTagContext): string {
-    return this.renderTemplate(nonLastUserMessageTemplate, {
+    const renderContext: RenderContext = {
       context: {
         functionResults: this.formatFunctionResults(context.functionCallResults),
       },
-    });
+    };
+
+    return this.renderUserMessageTemplate(
+      'chat/userMessageTag/nonLastMessage',
+      nonLastUserMessageTemplate,
+      renderContext
+    );
   }
 
-  /**
-   * Render template with placeholders
-   */
-  private static renderTemplate(template: string, placeholders: TemplatePlaceholders = {}): string {
-    const placeholderRegex = /\{\{([a-zA-Z0-9_-]+)::([a-zA-Z0-9_.-]+)\}\}/g;
-
-    const rendered = template.replace(placeholderRegex, (_, type: string, key: string) => {
-      const group = placeholders[type as keyof TemplatePlaceholders];
-      if (!group) {
-        return '';
-      }
-
-      const value = group[key];
-      return value ?? '';
-    });
-
-    // Clean up: remove empty lines that result from empty placeholders
+  private static renderUserMessageTemplate(
+    templateId: string,
+    template: string,
+    renderContext: RenderContext
+  ): string {
+    const rendered = TemplateRenderer.render(template, renderContext, { templateId });
     return rendered.replace(/\n{3,}/g, '\n\n').trim();
   }
 
