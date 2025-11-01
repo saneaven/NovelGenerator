@@ -1,20 +1,19 @@
 # Template Registry
 
 Centralised metadata describing every double-bracket prompt template used by the
-NovelGenerator application. The registry enables both the frontend and backend
-to share a single source of truth for:
+NovelGenerator application. The registry provides a single source of truth for:
 
 - Which templates exist (function type, category, variant).
 - Which placeholders each template consumes (variables, contexts, conditionals).
-- Rich descriptions of every placeholder so editor tooling can surface inline
-  help and validators can produce actionable diagnostics.
+- Rich descriptions of every placeholder so editors and validators can surface
+  actionable diagnostics.
 
 ## File Layout
 
 ```
-App/shared/template_registry/
-├─ README.md               # this file
-└─ templates.json          # structured template metadata
+App/backend/data/template_registry/
+- README.md        # this file
+- templates.json   # structured template metadata
 ```
 
 `templates.json` contains:
@@ -26,6 +25,6 @@ App/shared/template_registry/
   consumes, indicating whether each placeholder is required for successful
   rendering.
 
-Both the backend (Python) and frontend (TypeScript) engines will load this file
-so that parsing, rendering, validation, syntax highlighting, and context
-builders use the exact same definitions.
+The backend loads this file and serves the metadata through the
+`/api/v1/prompts/syntax/metadata` endpoint so that every runtime client consumes
+consistent definitions.

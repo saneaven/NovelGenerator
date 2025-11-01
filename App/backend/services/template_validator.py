@@ -1,37 +1,10 @@
 """Template validation service for prompt templates"""
 import re
-from typing import List, Tuple
+from typing import List, Set, Tuple
 from ..schemas.prompts import ValidationError, ValidationResult
 
 
-# Known valid template variables
-KNOWN_VARIABLES = {
-    'language',
-    'functionInstructions',
-    'categoryName',
-    'editScope',
-    'chapterName',
-    'userRequest',
-    'sourceLanguage',
-    'targetLanguage',
-    'dataTypeName',
-    'mode',
-    'hasFunctions',
-}
-
-# Known valid conditionals
-KNOWN_CONDITIONALS = {
-    'thinking',
-    'prefill',
-}
-
-# Known valid context keys
-KNOWN_CONTEXT_KEYS = {
-    'functionResults',
-    'storyContext',
-    'novelContent',
-    'customSections',
-}
+from . import template_registry
 
 
 class TemplateValidator:
@@ -54,6 +27,10 @@ class TemplateValidator:
         # Split content into lines for line-based error reporting
         lines = content.split('\n')
 
+        known_variables = template_registry.get_known_variables()
+        known_conditionals = template_registry.get_known_conditionals()
+        known_context_keys = template_registry.get_known_contexts()
+
         # Check for unclosed conditional blocks
         unclosed = TemplateValidator._check_unclosed_conditionals(content, lines)
         errors.extend(unclosed)
@@ -63,15 +40,15 @@ class TemplateValidator:
         errors.extend(malformed)
 
         # Check for unknown variables (warnings)
-        unknown_vars = TemplateValidator._check_unknown_variables(content, lines)
+        unknown_vars = TemplateValidator._check_unknown_variables(content, lines, known_variables)
         warnings.extend(unknown_vars)
 
         # Check for unknown conditionals (warnings)
-        unknown_conds = TemplateValidator._check_unknown_conditionals(content, lines)
+        unknown_conds = TemplateValidator._check_unknown_conditionals(content, lines, known_conditionals)
         warnings.extend(unknown_conds)
 
         # Check for unknown context keys (warnings)
-        unknown_context = TemplateValidator._check_unknown_context_keys(content, lines)
+        unknown_context = TemplateValidator._check_unknown_context_keys(content, lines, known_context_keys)
         warnings.extend(unknown_context)
 
         return ValidationResult(
@@ -205,7 +182,7 @@ class TemplateValidator:
         return errors
 
     @staticmethod
-    def _check_unknown_variables(content: str, lines: List[str]) -> List[ValidationError]:
+    def _check_unknown_variables(content: str, lines: List[str], known_variables: Set[str]) -> List[ValidationError]:
         """Check for unknown variable names (warnings only)"""
         warnings = []
 
@@ -216,7 +193,7 @@ class TemplateValidator:
 
             for match in var_pattern.finditer(line):
                 var_name = match.group(1)
-                if var_name not in KNOWN_VARIABLES:
+                if var_name not in known_variables:
                     warnings.append(ValidationError(
                         line=line_num,
                         column=match.start(),
@@ -227,7 +204,7 @@ class TemplateValidator:
         return warnings
 
     @staticmethod
-    def _check_unknown_conditionals(content: str, lines: List[str]) -> List[ValidationError]:
+    def _check_unknown_conditionals(content: str, lines: List[str], known_conditionals: Set[str]) -> List[ValidationError]:
         """Check for unknown conditional names (warnings only)"""
         warnings = []
 
@@ -240,7 +217,7 @@ class TemplateValidator:
             for match in cond_pattern.finditer(line):
                 negation = match.group(1)
                 cond_name = match.group(2)
-                if cond_name not in KNOWN_CONDITIONALS:
+                if cond_name not in known_conditionals:
                     full_cond = f"{negation}{cond_name}"
                     warnings.append(ValidationError(
                         line=line_num,
@@ -252,7 +229,7 @@ class TemplateValidator:
         return warnings
 
     @staticmethod
-    def _check_unknown_context_keys(content: str, lines: List[str]) -> List[ValidationError]:
+    def _check_unknown_context_keys(content: str, lines: List[str], known_context_keys: Set[str]) -> List[ValidationError]:
         """Check for unknown context keys (warnings only)"""
         warnings = []
 
@@ -263,7 +240,7 @@ class TemplateValidator:
 
             for match in context_pattern.finditer(line):
                 context_key = match.group(1)
-                if context_key not in KNOWN_CONTEXT_KEYS:
+                if context_key not in known_context_keys:
                     warnings.append(ValidationError(
                         line=line_num,
                         column=match.start(),

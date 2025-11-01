@@ -13,12 +13,26 @@ from ..schemas.prompts import (
     VersionHistoryItem,
     PromptValidationRequest,
     ValidationResult,
-    PromptRestoreRequest
+    PromptRestoreRequest,
+    PromptSyntaxMetadata
 )
 from ..services.prompt_service import prompt_service
 from ..services.template_validator import validator
+from ..services import template_registry
 
 router = APIRouter(prefix="/api/v1/prompts", tags=["prompts"])
+
+
+@router.get(
+    "/syntax/metadata",
+    response_model=PromptSyntaxMetadata
+)
+async def get_prompt_syntax_metadata(
+    current_user: User = Depends(get_current_user)
+) -> PromptSyntaxMetadata:
+    """Return template syntax metadata describing allowed placeholders."""
+    data = template_registry.build_syntax_metadata()
+    return PromptSyntaxMetadata(**data)
 
 
 # Routes without prompt_name (must come before routes with {prompt_name} to avoid conflicts)

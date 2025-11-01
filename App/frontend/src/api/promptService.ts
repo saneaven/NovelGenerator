@@ -43,6 +43,45 @@ export interface ValidationResult {
   warnings: ValidationError[];
 }
 
+export interface SyntaxCatalogEntry {
+  name: string;
+  description?: string;
+  type?: string;
+  source?: string;
+  example?: string;
+  default?: any;
+  supports_negation?: boolean;
+}
+
+export interface TemplatePlaceholderInfo extends SyntaxCatalogEntry {
+  required: boolean;
+}
+
+export interface TemplatePlaceholderGroup {
+  variables: TemplatePlaceholderInfo[];
+  contexts: TemplatePlaceholderInfo[];
+  conditionals: TemplatePlaceholderInfo[];
+}
+
+export interface TemplateSyntaxInfo {
+  id?: string;
+  function_type?: string;
+  category?: string;
+  variant?: string;
+  description?: string;
+  placeholders: TemplatePlaceholderGroup;
+}
+
+export interface PromptSyntaxMetadata {
+  version?: string;
+  catalog: {
+    variables: SyntaxCatalogEntry[];
+    contexts: SyntaxCatalogEntry[];
+    conditionals: SyntaxCatalogEntry[];
+  };
+  templates: TemplateSyntaxInfo[];
+}
+
 /**
  * Build API path for prompt
  */
@@ -119,5 +158,12 @@ export const promptService = {
     return await apiClient.post<ValidationResult>('/api/v1/prompts/validate', {
       content,
     });
+  },
+
+  /**
+   * Fetch syntax metadata describing available placeholders and templates.
+   */
+  async getSyntaxMetadata(): Promise<PromptSyntaxMetadata> {
+    return await apiClient.get<PromptSyntaxMetadata>('/api/v1/prompts/syntax/metadata');
   },
 };
