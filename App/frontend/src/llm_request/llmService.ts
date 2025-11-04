@@ -136,17 +136,15 @@ export async function* streamChat(
                     const delta = chunk?.choices?.[0]?.delta;
                     const content: string | undefined = delta?.content;
                     const tool_calls = delta?.tool_calls;
-                    const reasoning: string | undefined = delta?.reasoning;
                     const reasoning_details = delta?.reasoning_details;
                     const reasoning_text: string | undefined = delta?.reasoning?.text;
 
                     // Yield tool calls or reasoning as object
-                    if (tool_calls || reasoning || reasoning_details || reasoning_text)
+                    if (tool_calls || reasoning_details || reasoning_text)
                     {
                         yield {
-                            content: content || null,
+                            content: null,  // Don't send content with reasoning to prevent interruption
                             tool_calls,
-                            reasoning,
                             reasoning_details,
                             reasoning_text
                         };

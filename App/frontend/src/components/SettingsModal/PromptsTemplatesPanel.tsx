@@ -3,6 +3,7 @@ import PromptTreeNav from './PromptTreeNav';
 import PromptEditor from './PromptEditor';
 import { PROMPT_TREE, getFirstPromptNode, type PromptNode } from './promptTree';
 import './PromptsTemplatesPanel.css';
+import TemplateSyntaxHint from './TemplateSyntaxHint';
 
 const PromptsTemplatesPanel: React.FC = () => {
   // Select the first prompt by default
@@ -59,12 +60,15 @@ const PromptsTemplatesPanel: React.FC = () => {
           <div className="prompts-editor-container">
             {/* Header with description */}
             <div className="prompts-editor-header">
-              <h3>{selectedNode.label}</h3>
-              {selectedNode.description && (
-                <p className="prompts-editor-description">
-                  {selectedNode.description}
-                </p>
-              )}
+              <div className="prompts-editor-header-text">
+                <h3>{selectedNode.label}</h3>
+                {selectedNode.description && (
+                  <p className="prompts-editor-description">
+                    {selectedNode.description}
+                  </p>
+                )}
+              </div>
+              <TemplateSyntaxHint selectedNode={selectedNode} />
             </div>
 
             {/* Prompt editor */}

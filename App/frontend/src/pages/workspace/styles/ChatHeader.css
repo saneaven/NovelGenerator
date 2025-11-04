@@ -129,7 +129,7 @@
 }
 
 /* ===== Large Desktop ===== */
-@media (min-width: 1440px) {
+/* @media (min-width: 1440px) {
     .chat-header {
         padding: var(--spacing-xl) var(--spacing-2xl);
     }
@@ -142,4 +142,4 @@
         padding: var(--spacing-md) var(--spacing-xl);
         font-size: var(--font-size-base);
     }
-}
+} */

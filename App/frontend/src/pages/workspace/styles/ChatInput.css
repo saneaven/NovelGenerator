@@ -328,7 +328,7 @@
 }
 
 /* ===== Large Desktop ===== */
-@media (min-width: 1440px) {
+/* @media (min-width: 1440px) {
   .chat-input-container {
     padding: var(--spacing-lg) var(--spacing-2xl) var(--spacing-2xl) var(--spacing-2xl);
   }
@@ -379,7 +379,7 @@
     height: 4rem;
     font-size: var(--font-size-base);
   }
-}
+} */
 
 /* ===== Focus State Animation ===== */
 @keyframes focusPulse {

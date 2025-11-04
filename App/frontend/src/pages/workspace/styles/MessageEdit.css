@@ -112,7 +112,7 @@
 }
 
 /* ===== Large Desktop ===== */
-@media (min-width: 1440px) {
+/* @media (min-width: 1440px) {
   .message-edit-textarea {
     min-height: 120px;
     max-height: 500px;
@@ -125,4 +125,4 @@
     padding: var(--spacing-lg) var(--spacing-2xl);
     font-size: var(--font-size-base);
   }
-}
+} */

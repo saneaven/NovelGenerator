@@ -467,7 +467,7 @@
 }
 
 /* Large Desktop Styles */
-@media (min-width: 1440px) {
+/* @media (min-width: 1440px) {
     .workspace-header {
         padding: var(--spacing-xl) var(--spacing-2xl);
     }
@@ -479,7 +479,7 @@
     .story-content {
         padding: var(--spacing-2xl);
     }
-}
+} */
 
 /* ===== Animations ===== */
 @keyframes fadeIn {

@@ -190,19 +190,19 @@
     gap: var(--spacing-xl);
 }
 
-.form-group {
+.auth-form-group {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-sm);
 }
 
-.form-group label {
+.auth-form-group label {
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-medium);
     color: var(--color-text-secondary);
 }
 
-[data-theme="dark"] .form-group label {
+[data-theme="dark"] .auth-form-group label {
     color: var(--color-text-secondary);
 }
 
@@ -241,7 +241,7 @@
 [data-theme="dark"] .input-wrapper input {
     background: var(--color-surface-subtle);
     border: 1px solid var(--color-border-default);
-    color: var(--color-text-inverse);
+    color: var(--color-text);
 }
 
 .input-wrapper input::placeholder {

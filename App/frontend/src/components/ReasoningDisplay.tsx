@@ -41,14 +41,8 @@ const ReasoningDisplay: React.FC<ReasoningDisplayProps> = ({
   };
 
   if (thinkingParts.length === 0) {
-    // No reasoning to display - just show content
-    return (
-      <div className="message-content-clean">
-        {contentOnlyParts.map((part, index) => (
-          <span key={generateStableKey(part.text, index)}>{part.text}</span>
-        ))}
-      </div>
-    );
+    // No thinking/reasoning to display
+    return null;
   }
 
   // Inline mode: Show thinking where it occurred

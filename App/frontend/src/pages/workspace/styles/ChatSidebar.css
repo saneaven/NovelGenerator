@@ -315,7 +315,7 @@
 }
 
 /* ===== Large Desktop ===== */
-@media (min-width: 1440px) {
+/* @media (min-width: 1440px) {
     .chat-sidebar {
         width: 340px;
     }
@@ -335,7 +335,7 @@
     .chat-item {
         padding: var(--spacing-lg) var(--spacing-xl);
     }
-}
+} */
 
 /* ===== Animations ===== */
 @keyframes slideInFromLeft {

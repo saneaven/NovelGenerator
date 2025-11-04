@@ -124,7 +124,7 @@ const Register: React.FC = () => {
             </div>
           )}
 
-          <div className="form-group">
+          <div className="auth-form-group">
             <label htmlFor="email">Email</label>
             <div className="input-wrapper">
               <svg className="input-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -147,7 +147,7 @@ const Register: React.FC = () => {
             </div>
           </div>
 
-          <div className="form-group">
+          <div className="auth-form-group">
             <label htmlFor="username">Username</label>
             <div className="input-wrapper">
               <svg className="input-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -171,7 +171,7 @@ const Register: React.FC = () => {
             <small className="input-hint">3-20 characters, letters, numbers, and underscores only</small>
           </div>
 
-          <div className="form-group">
+          <div className="auth-form-group">
             <label htmlFor="password">Password</label>
             <div className="input-wrapper">
               <svg className="input-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -214,7 +214,7 @@ const Register: React.FC = () => {
             <small className="input-hint">At least 6 characters</small>
           </div>
 
-          <div className="form-group">
+          <div className="auth-form-group">
             <label htmlFor="confirmPassword">Confirm Password</label>
             <div className="input-wrapper">
               <svg className="input-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

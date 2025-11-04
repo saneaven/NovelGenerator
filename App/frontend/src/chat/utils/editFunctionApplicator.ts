@@ -13,6 +13,24 @@ export interface FunctionApplicationResult {
   data?: any;
 }
 
+interface EditChapterPayload {
+  id: string | null;
+  name: string;
+  description: string;
+  order?: number;
+  actId?: string | null;
+}
+
+interface EditActPayload {
+  id: string;
+  name: string;
+  description: string;
+  order?: number;
+  chapters?: EditChapterPayload[];
+}
+
+type BatchActPayload = Omit<EditActPayload, 'id'> & { id: string | null };
+
 /**
  * Apply edit function calls to the store
  */
@@ -23,6 +41,7 @@ export async function applyEditFunctionCalls(
   const results: FunctionApplicationResult[] = [];
 
   for (const functionCall of functionCalls) {
+    const functionName = functionCall.function_name || (functionCall as any).name || 'unknown';
     try {
       const result = await applyEditFunctionCall(projectId, functionCall);
       results.push(result);
@@ -30,7 +49,7 @@ export async function applyEditFunctionCalls(
       console.error('Function application error:', error);
       results.push({
         success: false,
-        message: `Failed to apply ${functionCall.name}`,
+        message: `Failed to apply ${functionName}`,
         error: error instanceof Error ? error.message : String(error)
       });
     }
@@ -46,24 +65,26 @@ async function applyEditFunctionCall(
   projectId: string,
   functionCall: FunctionCallMetadata
 ): Promise<FunctionApplicationResult> {
+  const functionName = functionCall.function_name || (functionCall as any).name || 'unknown';
   const store = useStoryObjectStore.getState();
   let args: any;
 
   // Parse arguments
   try {
-    args = typeof functionCall.arguments === 'string'
-      ? JSON.parse(functionCall.arguments)
-      : functionCall.arguments;
+    const rawArgs = functionCall.arguments ?? (functionCall as any).function_arguments;
+    args = typeof rawArgs === 'string'
+      ? JSON.parse(rawArgs)
+      : rawArgs;
   } catch (error) {
     return {
       success: false,
-      message: `Invalid ${functionCall.name} arguments`,
+      message: `Invalid ${functionName ?? 'unknown'} arguments`,
       error: 'Failed to parse function arguments'
     };
   }
 
   // Route to appropriate handler
-  switch (functionCall.name) {
+  switch (functionName) {
     case 'edit_basic_info':
       return await handleEditBasicInfo(projectId, args, store);
 
@@ -109,8 +130,8 @@ async function applyEditFunctionCall(
     default:
       return {
         success: false,
-        message: `Unknown function: ${functionCall.name}`,
-        error: `Function ${functionCall.name} is not supported`
+        message: `Unknown function: ${functionName}`,
+        error: `Function ${functionName} is not supported`
       };
   }
 }
@@ -207,26 +228,62 @@ async function handleEditLorebookEntry(
 
 async function handleEditAct(
   projectId: string,
-  args: { id: string; name: string; description: string; chapters: any[] },
+  args: EditActPayload,
   store: any
 ): Promise<FunctionApplicationResult> {
-  // Update act metadata
-  await store.updateAct(projectId, args.id, {
-    name: args.name,
-    description: args.description
-  });
+  const existingAct =
+    typeof store.getActById === 'function' ? store.getActById(projectId, args.id) : null;
 
-  // Update chapters within the act
-  for (const chapter of args.chapters) {
+  const actOrder =
+    typeof args.order === 'number' && Number.isFinite(args.order)
+      ? args.order
+      : typeof existingAct?.order === 'number'
+        ? existingAct.order
+        : 0;
+
+  args.order = actOrder;
+
+  const actUpdates: { name?: string; description?: string; order?: number } = {
+    name: args.name,
+    description: args.description,
+    order: actOrder
+  };
+
+  await store.updateAct(projectId, args.id, actUpdates);
+
+  const chapters = Array.isArray(args.chapters) ? args.chapters : [];
+
+  for (let index = 0; index < chapters.length; index += 1) {
+    const chapter = chapters[index];
+    if (!chapter) {
+      continue;
+    }
+
+    const chapterOrder =
+      typeof chapter.order === 'number' && Number.isFinite(chapter.order)
+        ? chapter.order
+        : index;
+
+    chapter.order = chapterOrder;
+
     if (chapter.id && chapter.id !== 'null' && chapter.id !== null) {
       // Update existing chapter
       await store.updateChapter(projectId, chapter.id, {
         name: chapter.name,
-        description: chapter.description
+        description: chapter.description,
+        order: chapterOrder
       });
     } else {
       // Create new chapter
-      await store.addChapter(projectId, args.id, chapter.name, chapter.description);
+      const targetActId =
+        chapter.actId && chapter.actId !== 'null' && chapter.actId !== null ? chapter.actId : args.id;
+
+      if (!targetActId) {
+        continue;
+      }
+
+      chapter.actId = targetActId;
+      await store.addChapter(projectId, targetActId, chapter.name, chapter.description, chapterOrder);
     }
   }
 
@@ -256,37 +313,94 @@ async function handleEditChapterMetadata(
 
 async function handleEditOutline(
   projectId: string,
-  args: { acts: any[] },
+  args: { acts: BatchActPayload[] },
   store: any
 ): Promise<FunctionApplicationResult> {
   // This is complex - we need to handle creates, updates, and implicit deletes
-  // For now, we'll just update existing acts and create new ones
-  // A full implementation would need to compare with existing outline
+  // For now, we'll update or create items that are provided
 
-  for (const act of args.acts) {
+  const acts = Array.isArray(args.acts) ? args.acts : [];
+
+  for (let actIndex = 0; actIndex < acts.length; actIndex += 1) {
+    const act = acts[actIndex];
+    if (!act) {
+      continue;
+    }
+
+    const actOrder =
+      typeof act.order === 'number' && Number.isFinite(act.order) ? act.order : actIndex;
+    act.order = actOrder;
+
     if (act.id && act.id !== 'null' && act.id !== null) {
       // Update existing act
       await store.updateAct(projectId, act.id, {
         name: act.name,
-        description: act.description
+        description: act.description,
+        order: actOrder
       });
 
+      const chapters = Array.isArray(act.chapters) ? act.chapters : [];
+
       // Update chapters
-      for (const chapter of act.chapters || []) {
+      for (let chapterIndex = 0; chapterIndex < chapters.length; chapterIndex += 1) {
+        const chapter = chapters[chapterIndex];
+        if (!chapter) {
+          continue;
+        }
+
+        const chapterOrder =
+          typeof chapter.order === 'number' && Number.isFinite(chapter.order)
+            ? chapter.order
+            : chapterIndex;
+
+        chapter.order = chapterOrder;
+
         if (chapter.id && chapter.id !== 'null' && chapter.id !== null) {
           await store.updateChapter(projectId, chapter.id, {
             name: chapter.name,
-            description: chapter.description
+            description: chapter.description,
+            order: chapterOrder
           });
         } else {
-          await store.addChapter(projectId, act.id, chapter.name, chapter.description);
+          const targetActId =
+            chapter.actId && chapter.actId !== 'null' && chapter.actId !== null ? chapter.actId : act.id;
+
+          if (!targetActId) {
+            continue;
+          }
+
+          chapter.actId = targetActId;
+          await store.addChapter(projectId, targetActId, chapter.name, chapter.description, chapterOrder);
         }
       }
     } else {
       // Create new act with chapters
-      const response = await store.addAct(projectId, act.name, act.description, args.acts.indexOf(act));
-      // Note: The addAct method would need to be updated to handle creating chapters at the same time
-      // For now, this is a simplified implementation
+      const newAct = await store.addAct(projectId, act.name, act.description, actOrder);
+      const chapters = Array.isArray(act.chapters) ? act.chapters : [];
+
+      for (let chapterIndex = 0; chapterIndex < chapters.length; chapterIndex += 1) {
+        const chapter = chapters[chapterIndex];
+        if (!chapter) {
+          continue;
+        }
+
+        const chapterOrder =
+          typeof chapter.order === 'number' && Number.isFinite(chapter.order)
+            ? chapter.order
+            : chapterIndex;
+
+        chapter.order = chapterOrder;
+
+        const targetActId =
+          chapter.actId && chapter.actId !== 'null' && chapter.actId !== null ? chapter.actId : newAct.id;
+
+        if (!targetActId) {
+          continue;
+        }
+
+        chapter.actId = targetActId;
+        await store.addChapter(projectId, targetActId, chapter.name, chapter.description, chapterOrder);
+      }
     }
   }
 
@@ -425,36 +539,95 @@ async function handleEditLorebookBatch(
 
 async function handleEditActsBatch(
   projectId: string,
-  args: { acts: Array<{ id: string | null; name: string; description: string; chapters: any[] }> },
+  args: { acts: BatchActPayload[] },
   store: any
 ): Promise<FunctionApplicationResult> {
   const results = { updated: 0, created: 0 };
+  const acts = Array.isArray(args.acts) ? args.acts : [];
 
-  for (const act of args.acts) {
+  for (let actIndex = 0; actIndex < acts.length; actIndex += 1) {
+    const act = acts[actIndex];
+    if (!act) {
+      continue;
+    }
+
+    const actOrder =
+      typeof act.order === 'number' && Number.isFinite(act.order) ? act.order : actIndex;
+    act.order = actOrder;
+
     if (act.id && act.id !== 'null') {
       // Update existing act
       await store.updateAct(projectId, act.id, {
         name: act.name,
-        description: act.description
+        description: act.description,
+        order: actOrder
       });
       results.updated++;
 
+      const chapters = Array.isArray(act.chapters) ? act.chapters : [];
+
       // Update chapters
-      for (const chapter of act.chapters || []) {
+      for (let chapterIndex = 0; chapterIndex < chapters.length; chapterIndex += 1) {
+        const chapter = chapters[chapterIndex];
+        if (!chapter) {
+          continue;
+        }
+
+        const chapterOrder =
+          typeof chapter.order === 'number' && Number.isFinite(chapter.order)
+            ? chapter.order
+            : chapterIndex;
+
+        chapter.order = chapterOrder;
+
         if (chapter.id && chapter.id !== 'null') {
           await store.updateChapter(projectId, chapter.id, {
             name: chapter.name,
-            description: chapter.description
+            description: chapter.description,
+            order: chapterOrder
           });
         } else {
-          await store.addChapter(projectId, act.id, chapter.name, chapter.description);
+          const targetActId =
+            chapter.actId && chapter.actId !== 'null' && chapter.actId !== null ? chapter.actId : act.id;
+
+          if (!targetActId) {
+            continue;
+          }
+
+          chapter.actId = targetActId;
+          await store.addChapter(projectId, targetActId, chapter.name, chapter.description, chapterOrder);
         }
       }
     } else {
       // Create new act
-      await store.addAct(projectId, act.name, act.description, args.acts.indexOf(act));
+      const newAct = await store.addAct(projectId, act.name, act.description, actOrder);
       results.created++;
-      // Note: Creating chapters for new acts would require knowing the new act ID
+
+      const chapters = Array.isArray(act.chapters) ? act.chapters : [];
+
+      for (let chapterIndex = 0; chapterIndex < chapters.length; chapterIndex += 1) {
+        const chapter = chapters[chapterIndex];
+        if (!chapter) {
+          continue;
+        }
+
+        const chapterOrder =
+          typeof chapter.order === 'number' && Number.isFinite(chapter.order)
+            ? chapter.order
+            : chapterIndex;
+
+        chapter.order = chapterOrder;
+
+        const targetActId =
+          chapter.actId && chapter.actId !== 'null' && chapter.actId !== null ? chapter.actId : newAct.id;
+
+        if (!targetActId) {
+          continue;
+        }
+
+        chapter.actId = targetActId;
+        await store.addChapter(projectId, targetActId, chapter.name, chapter.description, chapterOrder);
+      }
     }
   }
 
@@ -467,22 +640,41 @@ async function handleEditActsBatch(
 
 async function handleEditChaptersBatch(
   projectId: string,
-  args: { chapters: Array<{ id: string | null; actId?: string; name: string; description: string }> },
+  args: { chapters: Array<{ id: string | null; actId?: string | null; name: string; description: string; order?: number }> },
   store: any
 ): Promise<FunctionApplicationResult> {
   const results = { updated: 0, created: 0 };
+  const chapters = Array.isArray(args.chapters) ? args.chapters : [];
 
-  for (const chapter of args.chapters) {
+  for (let index = 0; index < chapters.length; index += 1) {
+    const chapter = chapters[index];
+    if (!chapter) {
+      continue;
+    }
+
+    const chapterOrder =
+      typeof chapter.order === 'number' && Number.isFinite(chapter.order) ? chapter.order : index;
+
+    chapter.order = chapterOrder;
+
     if (chapter.id && chapter.id !== 'null') {
       // Update existing chapter
       await store.updateChapter(projectId, chapter.id, {
         name: chapter.name,
-        description: chapter.description
+        description: chapter.description,
+        order: chapterOrder
       });
       results.updated++;
-    } else if (chapter.actId) {
+    } else {
+      const targetActId =
+        chapter.actId && chapter.actId !== 'null' && chapter.actId !== null ? chapter.actId : null;
+      if (!targetActId) {
+        continue;
+      }
+
       // Create new chapter (requires actId)
-      await store.addChapter(projectId, chapter.actId, chapter.name, chapter.description);
+      chapter.actId = targetActId;
+      await store.addChapter(projectId, targetActId, chapter.name, chapter.description, chapterOrder);
       results.created++;
     }
   }

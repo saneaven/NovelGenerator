@@ -272,18 +272,19 @@ export class ChatManager {
             if (currentPartType !== reasoningType) {
               finalizeCurrentBuffer(); // Type changed - finalize previous buffer
 
-              // Check if the last accumulated part is a reasoning/thinking block
-              // If yes, remove it to continue updating (backend sends full text each time)
+              // Check if the last accumulated part is reasoning/thinking to continue it
               const lastPart = accumulatedContentParts[accumulatedContentParts.length - 1];
               if (lastPart && (lastPart.type === 'reasoning' || lastPart.type === 'thinking')) {
-                accumulatedContentParts.pop();
+                // Remove and prepend to continue the reasoning block
+                const previousReasoning = accumulatedContentParts.pop()!;
+                currentBuffer = previousReasoning.text;
               }
 
               currentPartType = reasoningType;
             }
 
-            // Backend sends full text each time (not incremental), so replace the buffer
-            currentBuffer = chunk.reasoning_text;
+            // Backend sends incremental delta, so append to buffer
+            currentBuffer += chunk.reasoning_text;
 
             // Show thinking in progress
             scheduleUpdate([

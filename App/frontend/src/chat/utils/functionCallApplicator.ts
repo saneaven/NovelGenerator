@@ -187,45 +187,77 @@ export class FunctionCallApplicator {
         await this.storeActions.addLorebookEntry(projectId, { name: data.name || '', description: data.description || '' });
         results.push(`Created lorebook entry: ${data.name}`);
         break;
-      case 'act':
+      case 'act': {
+        const storyObjects = this.storeActions.getStoryObjects(projectId);
+        const existingActs = storyObjects.outline?.acts ?? [];
+        const actOrder =
+          typeof data.order === 'number' && Number.isFinite(data.order)
+            ? data.order
+            : existingActs.length;
+        data.order = actOrder;
+
         const newAct = await this.storeActions.addAct(
           projectId,
           data.name || '',
           data.description || '',
-          data.order ?? 0
+          actOrder
         );
         // Version is automatically created by addAct
 
         // Handle chapters within act if provided
         if (data.chapters && Array.isArray(data.chapters)) {
-          for (const chapter of data.chapters) {
+          for (let index = 0; index < data.chapters.length; index += 1) {
+            const chapter = data.chapters[index];
+            if (!chapter) {
+              continue;
+            }
+
+            const chapterOrder =
+              typeof chapter.order === 'number' && Number.isFinite(chapter.order)
+                ? chapter.order
+                : index;
+            chapter.order = chapterOrder;
+            chapter.actId = chapter.actId ?? newAct.id;
+
             await this.storeActions.addChapter(
               projectId,
               newAct.id,
               chapter.name || '',
               chapter.description || '',
-              chapter.order ?? 0
+              chapterOrder
             );
             // Version is automatically created by addChapter
           }
         }
         results.push(`Created act: ${newAct.name}`);
         break;
-      case 'chapter':
+      }
+      case 'chapter': {
         if (!data.actId) {
           results.push(`Skipped create chapter: missing actId`);
           return;
         }
+
+        const storyObjects = this.storeActions.getStoryObjects(projectId);
+        const parentAct = storyObjects.outline?.acts.find((act) => act.id === data.actId);
+        const existingChapters = parentAct?.chapters ?? [];
+        const chapterOrder =
+          typeof data.order === 'number' && Number.isFinite(data.order)
+            ? data.order
+            : existingChapters.length;
+        data.order = chapterOrder;
+
         const newChapter = await this.storeActions.addChapter(
           projectId,
           data.actId,
           data.name || '',
           data.description || '',
-          data.order ?? 0
+          chapterOrder
         );
         // Version is automatically created by addChapter
         results.push(`Created chapter: ${newChapter.name}`);
         break;
+      }
       default:
         results.push(`Unknown create type: ${type}`);
     }
@@ -266,16 +298,37 @@ export class FunctionCallApplicator {
         // Version is automatically created by updateLorebookEntry
         results.push(`Updated lorebook entry: ${itemName}`);
         break;
-      case 'act':
+      case 'act': {
+        if (typeof data.order !== 'number' || !Number.isFinite(data.order)) {
+          const outlineActs = this.storeActions.getStoryObjects(projectId).outline?.acts ?? [];
+          const existingAct = outlineActs.find((act) => act.id === id);
+          if (existingAct) {
+            data.order = existingAct.order;
+          }
+        }
         this.storeActions.updateAct(projectId, id, data);
         // Version is automatically created by updateAct
         results.push(`Updated act: ${itemName}`);
         break;
-      case 'chapter':
+      }
+      case 'chapter': {
+        if (typeof data.order !== 'number' || !Number.isFinite(data.order)) {
+          const storyObjects = this.storeActions.getStoryObjects(projectId);
+          const outlineActs = storyObjects.outline?.acts ?? [];
+          for (const act of outlineActs) {
+            const existingChapter = act.chapters.find((chapter) => chapter.id === id);
+            if (existingChapter) {
+              data.order = existingChapter.order;
+              data.actId = data.actId ?? act.id;
+              break;
+            }
+          }
+        }
         this.storeActions.updateChapter(projectId, id, data);
         // Version is automatically created by updateChapter
         results.push(`Updated chapter: ${itemName}`);
         break;
+      }
       default:
         results.push(`Unknown update type: ${type}`);
     }

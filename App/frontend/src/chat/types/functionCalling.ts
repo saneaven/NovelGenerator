@@ -58,7 +58,11 @@ export const WORKSPACE_FUNCTIONS: FunctionCallSchema[] = [
                   title: { type: "string", description: "Only for basic_info type" },
                   logline: { type: "string", description: "Only for basic_info type" },
                   genre: { type: "string", description: "Only for basic_info type" },
-                  actId: { type: "string", description: "Only for chapter type" },
+                  actId: { type: "string", description: "The act this chapter belongs to (required for new chapters)" },
+                  order: {
+                    type: "integer",
+                    description: "0-based order within its parent collection (acts: outline order, chapters: act order)"
+                  },
                   chapters: {
                     type: "array",
                     description: "Only for act type",
@@ -66,9 +70,17 @@ export const WORKSPACE_FUNCTIONS: FunctionCallSchema[] = [
                       type: "object",
                       properties: {
                         name: { type: "string" },
-                        description: { type: "string" }
+                        description: { type: "string" },
+                        order: {
+                          type: "integer",
+                          description: "0-based order within the act"
+                        },
+                        actId: {
+                          type: "string",
+                          description: "Optional override actId for new chapters; defaults to the parent act"
+                        }
                       },
-                      required: ["name", "description"]
+                      required: ["name", "description", "order"]
                     }
                   }
                 }
@@ -125,7 +137,7 @@ export const WORKSPACE_FUNCTIONS: FunctionCallSchema[] = [
                 then: {
                   properties: {
                     data: {
-                      required: ["name", "description", "actId"]
+                      required: ["name", "description", "actId", "order"]
                     }
                   }
                 }
@@ -140,7 +152,14 @@ export const WORKSPACE_FUNCTIONS: FunctionCallSchema[] = [
                 then: {
                   properties: {
                     data: {
-                      required: ["name", "description"]
+                      required: ["name", "description", "order"],
+                      properties: {
+                        chapters: {
+                          items: {
+                            required: ["name", "description", "order"]
+                          }
+                        }
+                      }
                     }
                   }
                 }

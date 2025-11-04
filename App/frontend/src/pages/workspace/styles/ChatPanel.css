@@ -85,7 +85,7 @@
 }
 
 /* ===== Large Desktop ===== */
-@media (min-width: 1440px) {
+/* @media (min-width: 1440px) {
   .chat-panel {
     flex: 0 0 30%;
     min-width: 400px;
@@ -96,4 +96,4 @@
     flex: 0 0 0;
     min-width: 0;
   }
-}
+} */

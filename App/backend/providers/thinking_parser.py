@@ -14,7 +14,7 @@ class ThinkingStreamParser:
     def __init__(self):
         self.buffer = ""
         self.inside_thinking = False
-        self.thinking_accumulator = ""  # Accumulates current thinking block
+        self.thinking_accumulator = ""  # Accumulate to find </thinking> tag
 
     def process_chunk(self, content_chunk: str) -> tuple[str, str]:
         """
@@ -42,7 +42,7 @@ class ThinkingStreamParser:
                     clean_output += self.buffer[:start_idx]
                     self.buffer = self.buffer[start_idx + 10:]  # Skip '<thinking>'
                     self.inside_thinking = True
-                    self.thinking_accumulator = ""  # Reset accumulator
+                    self.thinking_accumulator = ""
                     continue
 
                 else:
@@ -66,16 +66,15 @@ class ThinkingStreamParser:
                 end_idx = self.buffer.find('</thinking>')
 
                 if end_idx >= 0:
-                    # Found closing tag - emit complete thinking block
-                    self.thinking_accumulator += self.buffer[:end_idx]
-                    thinking_output = self.thinking_accumulator
+                    # Found closing tag - emit remaining delta only
+                    thinking_delta = self.buffer[:end_idx]
+                    self.thinking_accumulator += thinking_delta
                     self.buffer = self.buffer[end_idx + 11:]  # Skip '</thinking>'
                     self.inside_thinking = False
                     self.thinking_accumulator = ""
 
-                    # Return immediately with complete block
-                    # This preserves order: previous content, then this thinking block
-                    return clean_output, thinking_output
+                    # Return only the delta from this chunk
+                    return clean_output, thinking_delta
 
                 else:
                     # Check if buffer ends with partial closing tag
@@ -84,18 +83,18 @@ class ThinkingStreamParser:
                     for partial in reversed(partial_tags):
                         if self.buffer.endswith(partial):
                             # Hold back the partial tag, accumulate the rest
-                            chunk_to_accumulate = self.buffer[:-len(partial)]
-                            if chunk_to_accumulate:
-                                self.thinking_accumulator += chunk_to_accumulate
-                                thinking_output = self.thinking_accumulator  # Stream incremental update
+                            thinking_delta = self.buffer[:-len(partial)]
+                            if thinking_delta:
+                                self.thinking_accumulator += thinking_delta
                             self.buffer = self.buffer[-len(partial):]
-                            return clean_output, thinking_output
+                            # Return only the delta extracted from this chunk
+                            return clean_output, thinking_delta
 
-                    # No closing tag yet - accumulate all in thinking buffer and stream it
-                    self.thinking_accumulator += self.buffer
-                    thinking_output = self.thinking_accumulator  # Stream incremental update
+                    # No closing tag yet - send all buffer content as delta
+                    thinking_delta = self.buffer
+                    self.thinking_accumulator += thinking_delta
                     self.buffer = ""
-                    return clean_output, thinking_output
+                    return clean_output, thinking_delta
 
     def finalize(self) -> tuple[str, str]:
         """
@@ -105,12 +104,12 @@ class ThinkingStreamParser:
             (remaining_clean_content, remaining_thinking_content)
         """
         if self.inside_thinking:
-            # Unclosed thinking tag - return accumulated thinking + buffer as thinking
-            thinking = self.thinking_accumulator + self.buffer
+            # Unclosed thinking tag - return remaining buffer delta only
+            thinking_delta = self.buffer
             self.buffer = ""
             self.thinking_accumulator = ""
             self.inside_thinking = False
-            return "", thinking
+            return "", thinking_delta
         else:
             # Return remaining buffer as clean content
             content = self.buffer

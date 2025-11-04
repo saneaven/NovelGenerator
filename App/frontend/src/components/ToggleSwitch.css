@@ -226,7 +226,7 @@
 }
 
 /* ===== Large Desktop ===== */
-@media (min-width: 1440px) {
+/* @media (min-width: 1440px) {
   .toggle-switch {
     padding: var(--spacing-lg) var(--spacing-xl);
   }
@@ -256,4 +256,4 @@
   .toggle-switch.checked:active:not(.disabled) .toggle-switch-thumb {
     left: calc(100% - 1.875rem);
   }
-}
+} */

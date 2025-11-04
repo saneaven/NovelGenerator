@@ -82,13 +82,13 @@ const NovelEditor: React.FC = () =>
     } = functionCallHandlers;
 
     const chatManagerCallbacks = useMemo<ChatManagerCallbacks>(() => ({
-        onUpdateMessage: (projId, chatId, messageId, content, language, customThinking, reasoning, reasoning_details) =>
+        onUpdateMessage: (projId, chatId, messageId, contentParts, language, reasoning_details) =>
         {
-            updateMessageContentLocal(projId, chatId, messageId, content, language, customThinking, reasoning, reasoning_details);
+            updateMessageContentLocal(projId, chatId, messageId, contentParts, language, reasoning_details);
         },
-        onSyncMessageToBackend: async (projId, chatId, messageId, content, language, customThinking, reasoning, reasoning_details) =>
+        onSyncMessageToBackend: async (projId, chatId, messageId, contentParts, language, reasoning_details) =>
         {
-            await updateMessage(projId, chatId, messageId, content, language, customThinking, reasoning, reasoning_details);
+            await updateMessage(projId, chatId, messageId, contentParts, language, reasoning_details);
         },
         onFunctionCalls: (_projId, _chatId, messageId, functionCalls) =>
         {

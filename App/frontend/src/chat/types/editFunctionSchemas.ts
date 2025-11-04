@@ -147,6 +147,10 @@ export const EDIT_ACT_FUNCTION: FunctionCallSchema = {
         type: "string",
         description: "The act's description"
       },
+      order: {
+        type: "integer",
+        description: "The act's position within the outline (0-based). Optional; defaults to the existing order."
+      },
       chapters: {
         type: "array",
         description: "The chapters within this act",
@@ -164,13 +168,17 @@ export const EDIT_ACT_FUNCTION: FunctionCallSchema = {
             description: {
               type: "string",
               description: "The chapter's description"
+            },
+            order: {
+              type: "integer",
+              description: "The chapter's position within the act (0-based). Optional; defaults to the order implied by this list."
             }
           },
-          required: ["id", "name", "description"]
+          required: ["id", "name", "description", "order"]
         }
       }
     },
-    required: ["id", "name", "description", "chapters"]
+    required: ["id", "name", "description", "order", "chapters"]
   }
 };
 
@@ -221,6 +229,10 @@ export const EDIT_OUTLINE_FUNCTION: FunctionCallSchema = {
               type: "string",
               description: "The act's description"
             },
+            order: {
+              type: "integer",
+              description: "The act's position within the outline (0-based). Optional; defaults to the existing order."
+            },
             chapters: {
               type: "array",
               description: "The chapters within this act",
@@ -238,13 +250,17 @@ export const EDIT_OUTLINE_FUNCTION: FunctionCallSchema = {
                   description: {
                     type: "string",
                     description: "The chapter's description"
+                  },
+                  order: {
+                    type: "integer",
+                    description: "The chapter's position within the act (0-based). Optional; defaults to the order implied by this list."
                   }
                 },
-                required: ["id", "name", "description"]
+                required: ["id", "name", "description", "order"]
               }
             }
           },
-          required: ["id", "name", "description", "chapters"]
+          required: ["id", "name", "description", "order", "chapters"]
         }
       }
     },
@@ -412,6 +428,10 @@ export const EDIT_ACTS_BATCH_FUNCTION: FunctionCallSchema = {
               type: "string",
               description: "The act's description"
             },
+            order: {
+              type: "integer",
+              description: "The act's position within the outline (0-based). Optional; defaults to the existing order."
+            },
             chapters: {
               type: "array",
               description: "The chapters within this act",
@@ -429,13 +449,17 @@ export const EDIT_ACTS_BATCH_FUNCTION: FunctionCallSchema = {
                   description: {
                     type: "string",
                     description: "The chapter's description"
+                  },
+                  order: {
+                    type: "integer",
+                    description: "The chapter's position within the act (0-based). Optional; defaults to the order implied by this list."
                   }
                 },
-                required: ["id", "name", "description"]
+                required: ["id", "name", "description", "order"]
               }
             }
           },
-          required: ["id", "name", "description", "chapters"]
+          required: ["id", "name", "description", "order", "chapters"]
         }
       }
     },
@@ -470,9 +494,13 @@ export const EDIT_CHAPTERS_BATCH_FUNCTION: FunctionCallSchema = {
             description: {
               type: "string",
               description: "The chapter's description"
+            },
+            order: {
+              type: "integer",
+              description: "The chapter's position within its act (0-based). Optional; defaults to the existing order or the order of this list."
             }
           },
-          required: ["id", "name", "description"]
+          required: ["id", "name", "description", "order"]
         }
       }
     },
