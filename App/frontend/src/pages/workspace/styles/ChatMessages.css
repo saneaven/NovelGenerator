@@ -181,15 +181,17 @@
 }
 
 .chat-message.assistant .message-content {
-    background: transparent;
+    background: var(--color-surface-elevated);
+    border-left: 3px solid var(--color-secondary-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg) var(--spacing-xl);
+    margin: var(--spacing-sm) 0;
+    width: 100%;
     color: var(--color-text-primary);
-    border-radius: 0;
-    padding: var(--spacing-md) 0;
-    border: none;
-    word-wrap: break-word;
-    box-shadow: none;
     line-height: var(--line-height-relaxed);
     font-size: var(--font-size-base);
+    word-wrap: break-word;
+    box-shadow: var(--shadow-sm);
 }
 
 /* ===== Language Fallback Badge ===== */

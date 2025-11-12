@@ -106,8 +106,8 @@ export const EDIT_LOCATION_FUNCTION: FunctionCallSchema = {
   }
 };
 
-export const EDIT_LOREBOOK_ENTRY_FUNCTION: FunctionCallSchema = {
-  name: "edit_lorebook_entry",
+export const EDIT_LOREBOOK_FUNCTION: FunctionCallSchema = {
+  name: "edit_lorebook",
   description: "Edit a single lorebook entry",
   parameters: {
     type: "object",
@@ -530,7 +530,7 @@ export function getEditFunctionSchema(
       case 'location':
         return EDIT_LOCATION_FUNCTION;
       case 'lorebook':
-        return EDIT_LOREBOOK_ENTRY_FUNCTION;
+        return EDIT_LOREBOOK_FUNCTION;
       case 'act':
         return EDIT_ACT_FUNCTION;
       case 'chapter':
@@ -574,7 +574,7 @@ export function getAllEditFunctionSchemas(): FunctionCallSchema[] {
     EDIT_CHARACTER_FUNCTION,
     EDIT_ORGANIZATION_FUNCTION,
     EDIT_LOCATION_FUNCTION,
-    EDIT_LOREBOOK_ENTRY_FUNCTION,
+    EDIT_LOREBOOK_FUNCTION,
     EDIT_ACT_FUNCTION,
     EDIT_CHAPTER_METADATA_FUNCTION,
     EDIT_OUTLINE_FUNCTION,

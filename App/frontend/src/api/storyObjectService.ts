@@ -111,6 +111,29 @@ export const storyObjectService = {
         `/api/v1/projects/${projectId}/organizations`
       );
     },
+
+    async get(projectId: string, organizationId: string): Promise<NameDescriptionResponse> {
+      return apiClient.get<NameDescriptionResponse>(
+        `/api/v1/projects/${projectId}/organizations/${organizationId}`
+      );
+    },
+
+    async update(
+      projectId: string,
+      organizationId: string,
+      data: NameDescriptionUpdate
+    ): Promise<NameDescriptionResponse> {
+      return apiClient.put<NameDescriptionResponse>(
+        `/api/v1/projects/${projectId}/organizations/${organizationId}`,
+        data
+      );
+    },
+
+    async delete(projectId: string, organizationId: string): Promise<void> {
+      return apiClient.delete<void>(
+        `/api/v1/projects/${projectId}/organizations/${organizationId}`
+      );
+    },
   },
 
   // ============================================================================
@@ -133,6 +156,29 @@ export const storyObjectService = {
         `/api/v1/projects/${projectId}/locations`
       );
     },
+
+    async get(projectId: string, locationId: string): Promise<NameDescriptionResponse> {
+      return apiClient.get<NameDescriptionResponse>(
+        `/api/v1/projects/${projectId}/locations/${locationId}`
+      );
+    },
+
+    async update(
+      projectId: string,
+      locationId: string,
+      data: NameDescriptionUpdate
+    ): Promise<NameDescriptionResponse> {
+      return apiClient.put<NameDescriptionResponse>(
+        `/api/v1/projects/${projectId}/locations/${locationId}`,
+        data
+      );
+    },
+
+    async delete(projectId: string, locationId: string): Promise<void> {
+      return apiClient.delete<void>(
+        `/api/v1/projects/${projectId}/locations/${locationId}`
+      );
+    },
   },
 
   // ============================================================================
@@ -152,6 +198,29 @@ export const storyObjectService = {
 
     async list(projectId: string): Promise<NameDescriptionResponse[]> {
       return apiClient.get<NameDescriptionResponse[]>(`/api/v1/projects/${projectId}/lorebook`);
+    },
+
+    async get(projectId: string, lorebookId: string): Promise<NameDescriptionResponse> {
+      return apiClient.get<NameDescriptionResponse>(
+        `/api/v1/projects/${projectId}/lorebook/${lorebookId}`
+      );
+    },
+
+    async update(
+      projectId: string,
+      lorebookId: string,
+      data: NameDescriptionUpdate
+    ): Promise<NameDescriptionResponse> {
+      return apiClient.put<NameDescriptionResponse>(
+        `/api/v1/projects/${projectId}/lorebook/${lorebookId}`,
+        data
+      );
+    },
+
+    async delete(projectId: string, lorebookId: string): Promise<void> {
+      return apiClient.delete<void>(
+        `/api/v1/projects/${projectId}/lorebook/${lorebookId}`
+      );
     },
   },
 

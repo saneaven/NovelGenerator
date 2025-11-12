@@ -16,6 +16,10 @@ from .routes.chat_routes import router as chat_router
 from .routes.settings_routes import router as settings_router
 from .routes.prompt_routes import router as prompt_router
 
+# New unified translation system routes
+from .routes.unified_object_routes import router as unified_object_router
+from .routes.translation_routes import router as translation_router
+
 load_dotenv()
 
 app = FastAPI(
@@ -31,6 +35,10 @@ app.include_router(story_router)
 app.include_router(chat_router)
 app.include_router(settings_router)
 app.include_router(prompt_router)
+
+# Include new unified translation system routers
+app.include_router(unified_object_router, prefix="/api/v1", tags=["objects"])
+app.include_router(translation_router, prefix="/api/v1", tags=["translations"])
 
 app.add_middleware(
     CORSMiddleware,

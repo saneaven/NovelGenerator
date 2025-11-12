@@ -1,14 +1,33 @@
+/**
+ * NameDescriptionManager - Migrated to New Unified Translation System
+ *
+ * Manages collections of name/description objects (Character, Organization, Location, Lorebook)
+ *
+ * Features:
+ * - List, create, update, delete objects
+ * - Multi-language support with translations
+ * - Version history and rollback
+ * - AI-powered editing
+ */
+
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { useStoryObjectStore } from '../store/storyObjectStore';
+import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { LanguageSwitcher } from './LanguageSwitcher';
 import AIEditModal from './AIEditModal';
 import VersionHistoryModal from './VersionHistoryModal';
-import { translateStoryObject, getDisplayDataForItem } from '../utils/storyObjectTranslation';
-import type { NameDescriptionItem, StoryObjectCategory } from '../types/storyObject';
+import type { UnifiedObject, ObjectType } from '../types/unifiedObject';
+
+interface NameDescriptionData {
+  name: string;
+  description: string;
+}
+
+type NameDescriptionObject = UnifiedObject<NameDescriptionData>;
 
 interface NameDescriptionManagerProps {
-  category: Extract<StoryObjectCategory, 'character' | 'organization' | 'location' | 'lorebook'>;
+  category: Extract<ObjectType, 'character' | 'organization' | 'location' | 'lorebook'>;
   title: string;
   singularName: string;
   pluralName: string;
@@ -26,308 +45,208 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   placeholder = { name: 'Enter name', description: 'Enter description' },
 }) => {
   const { projectId } = useParams<{ projectId: string }>();
-  const storeActions = useStoryObjectStore();
+  const store = useUnifiedObjectStore();
   const { settings } = useSettingsStore();
-  const [editingItem, setEditingItem] = useState<NameDescriptionItem | null>(null);
+
+  // State for items
+  const [itemIds, setItemIds] = useState<string[]>([]);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
   const [aiEditTargetId, setAiEditTargetId] = useState<string | undefined>(undefined);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [versionHistoryTargetId, setVersionHistoryTargetId] = useState<string | undefined>(undefined);
 
-  // Language state management
-  const [itemLanguages, setItemLanguages] = useState<Record<string, string>>({});
-  const [translatingItems, setTranslatingItems] = useState<Record<string, boolean>>({});
-
-  const primaryLanguage = settings.primaryLanguage;
-  const secondaryLanguage = settings.secondaryLanguage;
-
-  // Get items directly from store - this will automatically re-render when store updates
-  const items = (() => {
-    if (!projectId) return [];
-    switch (category) {
-      case 'character':
-        return storeActions.getCharacters(projectId);
-      case 'organization':
-        return storeActions.getOrganizations(projectId);
-      case 'location':
-        return storeActions.getLocations(projectId);
-      case 'lorebook':
-        return storeActions.getLorebookEntries(projectId);
-      default:
-        return [];
-    }
-  })();
-
-  const addItem = (item: Partial<NameDescriptionItem>) => {
-    if (!projectId) return;
-    switch (category) {
-      case 'character':
-        return storeActions.addCharacter(projectId, item);
-      case 'organization':
-        return storeActions.addOrganization(projectId, item);
-      case 'location':
-        return storeActions.addLocation(projectId, item);
-      case 'lorebook':
-        return storeActions.addLorebookEntry(projectId, item);
-    }
-  };
-
-  const updateItem = (id: string, updates: Partial<Omit<NameDescriptionItem, 'id' | 'createdAt'>>, editLanguage?: string) => {
-    if (!projectId) return;
-    switch (category) {
-      case 'character':
-        storeActions.updateCharacter(projectId, id, updates, editLanguage);
-        break;
-      case 'organization':
-        storeActions.updateOrganization(projectId, id, updates, editLanguage);
-        break;
-      case 'location':
-        storeActions.updateLocation(projectId, id, updates, editLanguage);
-        break;
-      case 'lorebook':
-        storeActions.updateLorebookEntry(projectId, id, updates, editLanguage);
-        break;
-    }
-  };
-
-  const deleteItem = (id: string) => {
-    if (!projectId) return;
-    switch (category) {
-      case 'character':
-        storeActions.deleteCharacter(projectId, id);
-        break;
-      case 'organization':
-        storeActions.deleteOrganization(projectId, id);
-        break;
-      case 'location':
-        storeActions.deleteLocation(projectId, id);
-        break;
-      case 'lorebook':
-        storeActions.deleteLorebookEntry(projectId, id);
-        break;
-    }
-  };
-
-  // Initialize language preferences for each item
+  // Fetch list of items from backend
   useEffect(() => {
     if (!projectId) return;
 
-    const newLanguages: Record<string, string> = {};
-    items.forEach((item) => {
-      if (!itemLanguages[item.id]) {
-        const displayInfo = getDisplayDataForItem(
-          projectId,
-          category,
-          item.id,
-          primaryLanguage,
-          primaryLanguage,
-          secondaryLanguage
-        );
-        newLanguages[item.id] = displayInfo.displayLanguage;
+    const fetchItems = async () => {
+      try {
+        const objects = await store.listObjects(category, projectId);
+        setItemIds(objects.map(obj => obj.id));
+      } catch (error) {
+        console.error(`Failed to fetch ${category} list:`, error);
       }
-    });
+    };
 
-    if (Object.keys(newLanguages).length > 0) {
-      setItemLanguages((prev) => ({ ...prev, ...newLanguages }));
+    fetchItems();
+  }, [projectId, category, store]);
+
+  // Get items from store
+  const items = itemIds
+    .map(id => store.objects[id] as NameDescriptionObject)
+    .filter(Boolean);
+
+  // ============================================================================
+  // CRUD OPERATIONS
+  // ============================================================================
+
+  const handleAdd = async (name: string, description: string) => {
+    if (!projectId || !name.trim()) return;
+
+    try {
+      const newObject = await store.createObject(
+        category,
+        projectId,
+        { name: name.trim(), description: description.trim() },
+        settings.primaryLanguage
+      );
+      setItemIds(prev => [...prev, newObject.id]);
+      setShowAddForm(false);
+    } catch (error) {
+      console.error('Failed to add item:', error);
+      alert('Failed to add item. Please try again.');
     }
-  }, [items, projectId, category, primaryLanguage, secondaryLanguage]);
+  };
 
-  // Sync flat fields with active language on mount
-  useEffect(() => {
-    if (!projectId) return;
+  const handleUpdate = async (itemId: string, name: string, description: string) => {
+    if (!name.trim()) return;
 
-    items.forEach((item) => {
-      const currentLang = itemLanguages[item.id] || primaryLanguage;
-      storeActions.syncFlatFieldsWithLanguage(projectId, category, item.id, currentLang);
-    });
-  }, [itemLanguages, projectId, category]);
+    const item = store.objects[itemId] as NameDescriptionObject;
+    if (!item) return;
 
-  const handleLanguageToggle = async (itemId: string) => {
-    if (!projectId || !secondaryLanguage) return;
+    try {
+      await store.updateObject(category, itemId, {
+        data: {
+          name: name.trim(),
+          description: description.trim(),
+        },
+        language: item.languages.active,
+        user_request: 'User Edit',
+        create_new_version: true,
+      });
 
-    const currentLang = itemLanguages[itemId] || primaryLanguage;
-    const targetLang = currentLang === secondaryLanguage ? primaryLanguage : secondaryLanguage;
+      setEditingItemId(null);
+    } catch (error) {
+      console.error('Failed to update item:', error);
+      alert('Failed to update. Please try again.');
+    }
+  };
 
-    // Check if target language data exists
-    const hasTargetLang = storeActions.hasItemDataInLanguage(projectId, category, itemId, targetLang);
-
-    if (hasTargetLang) {
-      setItemLanguages((prev) => ({ ...prev, [itemId]: targetLang }));
-      storeActions.syncFlatFieldsWithLanguage(projectId, category, itemId, targetLang);
+  const handleDelete = async (itemId: string) => {
+    if (!confirm(`Are you sure you want to delete this ${singularName}?`)) {
       return;
     }
 
-    // Need to translate
-    const availableLanguages = storeActions.getAvailableLanguagesForItem(projectId, category, itemId);
-    if (availableLanguages.length === 0) return;
+    try {
+      await store.deleteObject(category, itemId);
+      setItemIds(prev => prev.filter(id => id !== itemId));
+    } catch (error) {
+      console.error('Failed to delete item:', error);
+      alert('Failed to delete. Please try again.');
+    }
+  };
 
-    const sourceLang = availableLanguages.includes(currentLang) ? currentLang : availableLanguages[0];
+  // ============================================================================
+  // LANGUAGE & TRANSLATION
+  // ============================================================================
+
+  const handleLanguageChange = async (itemId: string, newLanguage: string) => {
+    const item = store.objects[itemId] as NameDescriptionObject;
+    if (!item) return;
 
     try {
-      await translateStoryObject({
-        projectId,
-        category,
-        itemId,
-        sourceLanguage: sourceLang,
-        targetLanguage: targetLang,
-        aiModel: settings.aiModel,
-        onTranslating: (isTranslating) => {
-          setTranslatingItems((prev) => ({ ...prev, [itemId]: isTranslating }));
+      await store.switchLanguage(category, itemId, newLanguage);
+    } catch (error) {
+      console.error('Failed to switch language:', error);
+      alert('Failed to switch language. Please try again.');
+    }
+  };
+
+  const handleAddTranslation = async (itemId: string) => {
+    const item = store.objects[itemId] as NameDescriptionObject;
+    if (!item) return;
+
+    const targetLanguage = settings.secondaryLanguage;
+    if (!targetLanguage) {
+      alert('Please set a secondary language in settings first.');
+      return;
+    }
+
+    if (item.languages.available.includes(targetLanguage)) {
+      // Just switch to it
+      await handleLanguageChange(itemId, targetLanguage);
+      return;
+    }
+
+    try {
+      // TODO: Use AI translation service here
+      // For now, creating a placeholder translation
+      await store.addTranslation(category, itemId, {
+        language: targetLanguage,
+        data: {
+          name: `[${targetLanguage}] ${item.data.name}`,
+          description: `[${targetLanguage}] ${item.data.description}`,
         },
+        user_request: 'Manual Translation',
       });
 
-      setItemLanguages((prev) => ({ ...prev, [itemId]: targetLang }));
-      storeActions.syncFlatFieldsWithLanguage(projectId, category, itemId, targetLang);
+      console.log(`✓ Added ${targetLanguage} translation`);
     } catch (error) {
-      console.error('Translation failed:', error);
+      console.error('Failed to add translation:', error);
+      alert('Failed to add translation. Please try again.');
     }
   };
 
-  const handleAdd = (name: string, description: string) => {
-    if (name.trim()) {
-      addItem({ name: name.trim(), description: description.trim() });
-      setShowAddForm(false);
-    }
-  };
-
-  const handleEdit = (item: NameDescriptionItem) => {
-    setEditingItem({ ...item });
-  };
-
-  const handleUpdate = async (name: string, description: string) => {
-    if (!editingItem || !name.trim() || !projectId) return;
-
-    const currentLang = itemLanguages[editingItem.id] || primaryLanguage;
-    const itemId = editingItem.id; // Capture itemId before setting editingItem to null
-
-    updateItem(itemId, {
-      name: name.trim(),
-      description: description.trim(),
-    }, currentLang);
-
-    setEditingItem(null);
-
-    // Check if primary language data exists in the new version
-    // Wait a bit for the store to update
-    setTimeout(async () => {
-      const hasPrimaryLanguage = storeActions.hasItemDataInLanguage(projectId, category, itemId, primaryLanguage);
-
-      if (!hasPrimaryLanguage && currentLang !== primaryLanguage) {
-        // Ask user if they want to translate to primary language
-        const shouldTranslate = confirm(
-          `You edited this ${singularName} in ${currentLang}. Would you like to translate it to ${primaryLanguage}?`
-        );
-
-        if (shouldTranslate) {
-          try {
-            await translateStoryObject({
-              projectId,
-              category,
-              itemId,
-              sourceLanguage: currentLang,
-              targetLanguage: primaryLanguage,
-              aiModel: settings.aiModel,
-              onTranslating: (isTranslating) => {
-                setTranslatingItems((prev) => ({ ...prev, [itemId]: isTranslating }));
-              },
-            });
-
-            // Sync flat fields with primary language after translation
-            storeActions.syncFlatFieldsWithLanguage(projectId, category, itemId, primaryLanguage);
-            setItemLanguages((prev) => ({ ...prev, [itemId]: primaryLanguage }));
-          } catch (error) {
-            console.error('Translation failed:', error);
-          }
-        }
-      }
-    }, 100);
-  };
-
-  const handleDelete = (id: string) => {
-    if (confirm(`Are you sure you want to delete this ${singularName}?`)) {
-      deleteItem(id);
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setEditingItem(null);
-  };
+  // ============================================================================
+  // AI & VERSION MANAGEMENT
+  // ============================================================================
 
   const handleAIEdit = (itemId?: string) => {
     setAiEditTargetId(itemId);
     setShowAIModal(true);
   };
 
-  const handleAIResult = (result: any) => {
+  const handleAIResult = async (result: any) => {
     if (!projectId) return;
 
     if (aiEditTargetId) {
-      // Editing specific item - should always be an update
+      // Editing specific item
       if (result && result.name !== undefined && result.description !== undefined) {
-        // Use AI-specific update function that automatically creates version
-        switch (category) {
-          case 'character':
-            storeActions.updateCharacterAI(projectId, result.id || aiEditTargetId, {
+        const item = store.objects[aiEditTargetId] as NameDescriptionObject;
+        if (!item) return;
+
+        try {
+          await store.updateObject(category, aiEditTargetId, {
+            data: {
               name: result.name,
               description: result.description,
-            });
-            break;
-          case 'organization':
-            updateItem(result.id || aiEditTargetId, {
-              name: result.name,
-              description: result.description,
-            });
-            // Manual version creation for now - TODO: add AI update function
-            storeActions.addVersion(projectId, category, result.id || aiEditTargetId, 'AI Edit', {
-              name: result.name,
-              description: result.description,
-            });
-            break;
-          case 'location':
-            updateItem(result.id || aiEditTargetId, {
-              name: result.name,
-              description: result.description,
-            });
-            // Manual version creation for now - TODO: add AI update function
-            storeActions.addVersion(projectId, category, result.id || aiEditTargetId, 'AI Edit', {
-              name: result.name,
-              description: result.description,
-            });
-            break;
-          case 'lorebook':
-            updateItem(result.id || aiEditTargetId, {
-              name: result.name,
-              description: result.description,
-            });
-            // Manual version creation for now - TODO: add AI update function
-            storeActions.addVersion(projectId, category, result.id || aiEditTargetId, 'AI Edit', {
-              name: result.name,
-              description: result.description,
-            });
-            break;
+            },
+            language: item.languages.active,
+            user_request: 'AI Edit',
+            create_new_version: true,
+          });
+        } catch (error) {
+          console.error('Failed to apply AI edit:', error);
+          alert('Failed to apply AI edit. Please try again.');
         }
       }
     } else {
-      // Editing entire category - handle based on ID (null = add, existing ID = update)
+      // Batch editing - handle array of results
       if (Array.isArray(result)) {
-        result.forEach((item: any) => {
-          if (item.name !== undefined && item.description !== undefined) {
-            if (item.id === null || item.id === undefined) {
-              // Add new item
-              addItem({
-                name: item.name,
-                description: item.description,
-              });
+        for (const itemResult of result) {
+          if (itemResult.name !== undefined && itemResult.description !== undefined) {
+            if (itemResult.id) {
+              // Update existing
+              const item = store.objects[itemResult.id] as NameDescriptionObject;
+              if (item) {
+                await store.updateObject(category, itemResult.id, {
+                  data: {
+                    name: itemResult.name,
+                    description: itemResult.description,
+                  },
+                  language: item.languages.active,
+                  user_request: 'AI Edit',
+                  create_new_version: true,
+                });
+              }
             } else {
-              // Update existing item using regular update function (versions auto-created)
-              updateItem(item.id, {
-                name: item.name,
-                description: item.description,
-              });
+              // Create new
+              await handleAdd(itemResult.name, itemResult.description);
             }
           }
-        });
+        }
       }
     }
   };
@@ -337,17 +256,21 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     setShowVersionHistory(true);
   };
 
-  const handleRestoreVersion = (versionData: any) => {
-    if (!projectId || !versionHistoryTargetId) return;
-    
-    // Individual item restoration only
-    if (versionData && versionData.name !== undefined && versionData.description !== undefined) {
-      updateItem(versionHistoryTargetId, {
-        name: versionData.name,
-        description: versionData.description,
-      });
+  const handleRestoreVersion = async (versionId: string) => {
+    if (!versionHistoryTargetId) return;
+
+    try {
+      await store.activateVersion(category, versionHistoryTargetId, versionId);
+      console.log('✓ Version restored');
+    } catch (error) {
+      console.error('Failed to restore version:', error);
+      alert('Failed to restore version. Please try again.');
     }
   };
+
+  // ============================================================================
+  // RENDER
+  // ============================================================================
 
   if (!projectId) {
     return (
@@ -362,15 +285,15 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
       <div className="section-header">
         <h2>{title}</h2>
         <div className="header-buttons">
-          <button 
-            onClick={() => handleAIEdit()} 
+          <button
+            onClick={() => handleAIEdit()}
             className="ai-edit-button"
             disabled={showAddForm}
           >
             🤖 AI Edit All
           </button>
-          <button 
-            onClick={() => setShowAddForm(true)} 
+          <button
+            onClick={() => setShowAddForm(true)}
             className="add-button"
             disabled={showAddForm}
           >
@@ -395,32 +318,38 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
             <p>Try adding a new {singularName}!</p>
           </div>
         ) : (
-          items.map((item) => (
-            <div key={item.id} className="item-card">
-              {editingItem?.id === item.id ? (
-                <EditItemForm
-                  item={editingItem}
-                  placeholder={placeholder}
-                  onUpdate={handleUpdate}
-                  onCancel={handleCancelEdit}
-                />
-              ) : (
-                <ItemDisplay
-                  item={item}
-                  projectId={projectId!}
-                  category={category}
-                  currentLanguage={itemLanguages[item.id] || primaryLanguage}
-                  isTranslating={translatingItems[item.id] || false}
-                  showTranslateButton={Boolean(secondaryLanguage)}
-                  onEdit={() => handleEdit(item)}
-                  onDelete={() => handleDelete(item.id)}
-                  onAIEdit={() => handleAIEdit(item.id)}
-                  onVersionHistory={() => handleShowVersionHistory(item.id)}
-                  onLanguageToggle={() => handleLanguageToggle(item.id)}
-                />
-              )}
-            </div>
-          ))
+          items.map((item) => {
+            const isEditing = editingItemId === item.id;
+            const loading = store.loading[item.id] || false;
+
+            return (
+              <div key={item.id} className="item-card">
+                {isEditing ? (
+                  <EditItemForm
+                    item={item}
+                    placeholder={placeholder}
+                    onUpdate={(name, desc) => handleUpdate(item.id, name, desc)}
+                    onCancel={() => setEditingItemId(null)}
+                    disabled={loading}
+                  />
+                ) : (
+                  <ItemDisplay
+                    item={item}
+                    category={category}
+                    loading={loading}
+                    showSecondaryLanguage={Boolean(settings.secondaryLanguage)}
+                    secondaryLanguage={settings.secondaryLanguage}
+                    onEdit={() => setEditingItemId(item.id)}
+                    onDelete={() => handleDelete(item.id)}
+                    onAIEdit={() => handleAIEdit(item.id)}
+                    onVersionHistory={() => handleShowVersionHistory(item.id)}
+                    onLanguageChange={(lang) => handleLanguageChange(item.id, lang)}
+                    onAddTranslation={() => handleAddTranslation(item.id)}
+                  />
+                )}
+              </div>
+            );
+          })
         )}
       </div>
 
@@ -443,15 +372,18 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
             setShowVersionHistory(false);
             setVersionHistoryTargetId(undefined);
           }}
-          projectId={projectId || ''}
-          category={category}
-          targetId={versionHistoryTargetId}
+          objectType={category}
+          objectId={versionHistoryTargetId!}
           onRestoreVersion={handleRestoreVersion}
         />
       )}
     </div>
   );
 };
+
+// ============================================================================
+// SUB-COMPONENTS
+// ============================================================================
 
 // Add Item Form Component
 interface AddItemFormProps {
@@ -517,10 +449,11 @@ const AddItemForm: React.FC<AddItemFormProps> = ({
 
 // Edit Item Form Component
 interface EditItemFormProps {
-  item: NameDescriptionItem;
+  item: NameDescriptionObject;
   placeholder: { name: string; description: string };
   onUpdate: (name: string, description: string) => void;
   onCancel: () => void;
+  disabled?: boolean;
 }
 
 const EditItemForm: React.FC<EditItemFormProps> = ({
@@ -528,9 +461,10 @@ const EditItemForm: React.FC<EditItemFormProps> = ({
   placeholder,
   onUpdate,
   onCancel,
+  disabled,
 }) => {
-  const [name, setName] = useState(item.name);
-  const [description, setDescription] = useState(item.description);
+  const [name, setName] = useState(item.data.name);
+  const [description, setDescription] = useState(item.data.description);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -549,6 +483,7 @@ const EditItemForm: React.FC<EditItemFormProps> = ({
             onChange={(e) => setName(e.target.value)}
             placeholder={placeholder.name}
             required
+            disabled={disabled}
           />
         </div>
         <div className="form-group">
@@ -559,14 +494,15 @@ const EditItemForm: React.FC<EditItemFormProps> = ({
             onChange={(e) => setDescription(e.target.value)}
             placeholder={placeholder.description}
             rows={4}
+            disabled={disabled}
           />
         </div>
         <div className="form-actions">
-          <button type="button" onClick={onCancel} className="cancel-button">
+          <button type="button" onClick={onCancel} className="cancel-button" disabled={disabled}>
             Cancel
           </button>
-          <button type="submit" className="save-button">
-            Save
+          <button type="submit" className="save-button" disabled={disabled}>
+            {disabled ? 'Saving...' : 'Save'}
           </button>
         </div>
       </form>
@@ -576,96 +512,80 @@ const EditItemForm: React.FC<EditItemFormProps> = ({
 
 // Item Display Component
 interface ItemDisplayProps {
-  item: NameDescriptionItem;
-  projectId: string;
-  category: StoryObjectCategory;
-  currentLanguage: string;
-  isTranslating: boolean;
-  showTranslateButton: boolean;
+  item: NameDescriptionObject;
+  category: ObjectType;
+  loading: boolean;
+  showSecondaryLanguage: boolean;
+  secondaryLanguage?: string;
   onEdit: () => void;
   onDelete: () => void;
   onAIEdit: () => void;
   onVersionHistory: () => void;
-  onLanguageToggle: () => void;
+  onLanguageChange: (language: string) => void;
+  onAddTranslation: () => void;
 }
 
 const ItemDisplay: React.FC<ItemDisplayProps> = ({
   item,
-  projectId,
   category,
-  currentLanguage,
-  isTranslating,
-  showTranslateButton,
+  loading,
+  showSecondaryLanguage,
+  secondaryLanguage,
   onEdit,
   onDelete,
   onAIEdit,
   onVersionHistory,
-  onLanguageToggle,
+  onLanguageChange,
+  onAddTranslation,
 }) => {
-  const { settings } = useSettingsStore();
-
-  const displayInfo = getDisplayDataForItem(
-    projectId,
-    category,
-    item.id,
-    currentLanguage,
-    settings.primaryLanguage,
-    settings.secondaryLanguage
-  );
-
-  const showMissingLanguageWarning = !displayInfo.hasRequestedLanguage;
-
   return (
     <div className="item-display">
       <div className="item-header">
-        <h4>{item.name}</h4>
+        <h4>{item.data.name}</h4>
         <div className="item-actions">
-          {showTranslateButton && (
-            <button
-              onClick={onLanguageToggle}
-              className="translate-button"
-              disabled={isTranslating}
-              title={`Translate to ${currentLanguage === settings.secondaryLanguage ? settings.primaryLanguage : settings.secondaryLanguage}`}
-            >
-              {isTranslating ? '⏳' : '🌐'}
-            </button>
-          )}
-          <button onClick={onVersionHistory} className="version-history-button" title="Version History">
+          <LanguageSwitcher
+            object={item}
+            onLanguageChange={onLanguageChange}
+            disabled={loading}
+            showLabel={false}
+          />
+          {showSecondaryLanguage &&
+            secondaryLanguage &&
+            !item.languages.available.includes(secondaryLanguage) && (
+              <button
+                onClick={onAddTranslation}
+                className="translate-button"
+                disabled={loading}
+                title={`Add ${secondaryLanguage} translation`}
+              >
+                🌐 Add {secondaryLanguage}
+              </button>
+            )}
+          <button onClick={onVersionHistory} className="version-history-button" title="Version History" disabled={loading}>
             📚
           </button>
-          <button onClick={onAIEdit} className="ai-edit-button">
+          <button onClick={onAIEdit} className="ai-edit-button" disabled={loading}>
             🤖 AI Edit
           </button>
-          <button onClick={onEdit} className="edit-button">
+          <button onClick={onEdit} className="edit-button" disabled={loading}>
             Edit
           </button>
-          <button onClick={onDelete} className="delete-button">
+          <button onClick={onDelete} className="delete-button" disabled={loading}>
             Delete
           </button>
         </div>
       </div>
-      {showMissingLanguageWarning && (
-        <div className="missing-language-warning">
-          <p>⚠️ No {currentLanguage} version available. Displaying {displayInfo.fallbackLanguage} version.</p>
-          <button
-            onClick={onLanguageToggle}
-            className="generate-translation-button"
-            disabled={isTranslating}
-          >
-            {isTranslating ? 'Generating...' : `Generate ${currentLanguage} Version`}
-          </button>
-        </div>
-      )}
       <div className="item-content">
-        <p className="item-description">
-          {item.description || 'No description.'}
-        </p>
+        <p className="item-description">{item.data.description || 'No description.'}</p>
       </div>
       <div className="item-metadata">
-        <span className="item-language">Language: {currentLanguage}</span>
-        <span className="last-updated">
-          Last updated: {item.updatedAt.toLocaleString()}
-        </span>
+        <span className="item-language">Language: {item.languages.active}</span>
+        <span className="version-info">Version: {item.version.number}</span>
+        {item.metadata.updated_at && (
+          <span className="last-updated">
+            Last updated: {new Date(item.metadata.updated_at).toLocaleString()}
+          </span>
+        )}
       </div>
     </div>
   );

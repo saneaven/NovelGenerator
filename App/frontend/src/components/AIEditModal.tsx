@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useStoryObjectStore } from '../store/storyObjectStore';
+import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useChatStore } from '../store/chatStore';
-import type { StoryObjectCategory } from '../types/storyObject';
+import type { ObjectType } from '../types/unifiedObject';
 import type { FunctionCallMetadata, ContentPart } from '../llm_request/types';
 import { ChatManager, type ChatManagerConfig, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
 import { ChatPipeline } from '../chat/ChatPipeline';
@@ -21,7 +21,7 @@ interface ContextOptions {
 interface AIEditModalProps {
   isOpen: boolean;
   onClose: () => void;
-  category: StoryObjectCategory;
+  category: ObjectType;
   projectId: string;
   targetId?: string;
   onResult?: () => void;
@@ -48,7 +48,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   const [streamContent, setStreamContent] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const storyObjectStore = useStoryObjectStore();
+  const unifiedStore = useUnifiedObjectStore();
   const settingsStore = useSettingsStore();
   const chatStore = useChatStore();
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -73,122 +73,126 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     }
   }, [isOpen, projectId, chatStore]);
 
-  const generateContext = () => {
-    const storyObjects = storyObjectStore.getStoryObjects(projectId);
+  const generateContext = async () => {
     const context: Record<string, any> = {};
 
-    if (contextOptions.basicInfo && storyObjects.basicInfo) {
-      context.basicInfo = {
-        title: storyObjects.basicInfo.title,
-        logline: storyObjects.basicInfo.logline,
-        genre: storyObjects.basicInfo.genre,
-      };
-    }
+    try {
+      // Basic Info
+      if (contextOptions.basicInfo) {
+        const basicInfoList = await unifiedStore.listObjects('basic_info', projectId);
+        if (basicInfoList.length > 0) {
+          const basicInfo = basicInfoList[0];
+          context.basicInfo = {
+            title: basicInfo.data.title || '',
+            logline: basicInfo.data.logline || '',
+            genre: basicInfo.data.genre || '',
+          };
+        }
+      }
 
-    if (contextOptions.characters && storyObjects.characters.length > 0) {
-      context.characters = storyObjects.characters.map(char => ({
-        id: char.id,
-        name: char.name,
-        description: char.description,
-      }));
-    }
+      // Characters
+      if (contextOptions.characters) {
+        const characters = await unifiedStore.listObjects('character', projectId);
+        if (characters.length > 0) {
+          context.characters = characters.map(char => ({
+            id: char.id,
+            name: char.data.name || '',
+            description: char.data.description || '',
+          }));
+        }
+      }
 
-    if (contextOptions.organizations && storyObjects.organizations.length > 0) {
-      context.organizations = storyObjects.organizations.map(org => ({
-        id: org.id,
-        name: org.name,
-        description: org.description,
-      }));
-    }
+      // Organizations
+      if (contextOptions.organizations) {
+        const organizations = await unifiedStore.listObjects('organization', projectId);
+        if (organizations.length > 0) {
+          context.organizations = organizations.map(org => ({
+            id: org.id,
+            name: org.data.name || '',
+            description: org.data.description || '',
+          }));
+        }
+      }
 
-    if (contextOptions.locations && storyObjects.locations.length > 0) {
-      context.locations = storyObjects.locations.map(loc => ({
-        id: loc.id,
-        name: loc.name,
-        description: loc.description,
-      }));
-    }
+      // Locations
+      if (contextOptions.locations) {
+        const locations = await unifiedStore.listObjects('location', projectId);
+        if (locations.length > 0) {
+          context.locations = locations.map(loc => ({
+            id: loc.id,
+            name: loc.data.name || '',
+            description: loc.data.description || '',
+          }));
+        }
+      }
 
-    if (contextOptions.lorebook && storyObjects.lorebook.length > 0) {
-      context.lorebook = storyObjects.lorebook.map(entry => ({
-        id: entry.id,
-        name: entry.name,
-        description: entry.description,
-      }));
-    }
+      // Lorebook
+      if (contextOptions.lorebook) {
+        const lorebook = await unifiedStore.listObjects('lorebook', projectId);
+        if (lorebook.length > 0) {
+          context.lorebook = lorebook.map(entry => ({
+            id: entry.id,
+            name: entry.data.name || '',
+            description: entry.data.description || '',
+          }));
+        }
+      }
 
-    if (contextOptions.outline && storyObjects.outline) {
-      context.outline = {
-        acts: storyObjects.outline.acts.map(act => ({
-          id: act.id,
-          name: act.name,
-          description: act.description,
-          chapters: act.chapters.map(chapter => ({
-            id: chapter.id,
-            name: chapter.name,
-            description: chapter.description,
-          })),
-        })),
-      };
+      // Outline
+      if (contextOptions.outline) {
+        const acts = await unifiedStore.listObjects('act', projectId);
+        const chapters = await unifiedStore.listObjects('chapter', projectId);
+
+        if (acts.length > 0) {
+          context.outline = {
+            acts: acts
+              .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+              .map(act => ({
+                id: act.id,
+                name: act.data.name || '',
+                description: act.data.description || '',
+                chapters: chapters
+                  .filter(ch => ch.metadata.act_id === act.id)
+                  .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+                  .map(chapter => ({
+                    id: chapter.id,
+                    name: chapter.data.name || '',
+                    description: chapter.data.description || '',
+                  })),
+              })),
+          };
+        }
+      }
+    } catch (err) {
+      console.error('Error generating context:', err);
     }
 
     return context;
   };
 
-  const getCurrentData = () => {
-    const storyObjects = storyObjectStore.getStoryObjects(projectId);
-
+  const getCurrentData = async () => {
     if (targetId) {
       // Get specific item
-      switch (category) {
-        case 'character':
-          return storyObjects.characters.find(c => c.id === targetId);
-        case 'organization':
-          return storyObjects.organizations.find(o => o.id === targetId);
-        case 'location':
-          return storyObjects.locations.find(l => l.id === targetId);
-        case 'lorebook':
-          return storyObjects.lorebook.find(e => e.id === targetId);
-        case 'basicInfo':
-          return storyObjects.basicInfo;
-        case 'outline':
-          return storyObjects.outline;
-        case 'act':
-          return storyObjects.outline?.acts.find(a => a.id === targetId);
-        case 'chapter':
-          for (const act of storyObjects.outline?.acts || []) {
-            const chapter = act.chapters.find(c => c.id === targetId);
-            if (chapter) return chapter;
-          }
+      const object = unifiedStore.objects[targetId];
+      if (!object) {
+        // Try to fetch it
+        try {
+          await unifiedStore.fetchObject(category, targetId);
+          return unifiedStore.objects[targetId];
+        } catch (err) {
+          console.error('Failed to fetch target object:', err);
           return null;
-        default:
-          return null;
+        }
       }
+      return object;
     } else {
       // Get entire category
-      switch (category) {
-        case 'character':
-          return storyObjects.characters;
-        case 'organization':
-          return storyObjects.organizations;
-        case 'location':
-          return storyObjects.locations;
-        case 'lorebook':
-          return storyObjects.lorebook;
-        case 'basicInfo':
-          return storyObjects.basicInfo;
-        case 'outline':
-          return storyObjects.outline;
-        case 'act':
-          return storyObjects.outline?.acts || [];
-        case 'chapter':
-          const allChapters = [];
-          for (const act of storyObjects.outline?.acts || []) {
-            allChapters.push(...act.chapters);
-          }
-          return allChapters;
-        default:
-          return null;
+      try {
+        const objects = await unifiedStore.listObjects(category, projectId);
+        return objects;
+      } catch (err) {
+        console.error('Failed to list objects:', err);
+        return [];
       }
     }
   };
@@ -213,8 +217,8 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       const functionSchema = getEditFunctionSchema(category, !!targetId);
 
       // Generate context
-      const contextData = generateContext();
-      const currentData = getCurrentData();
+      const contextData = await generateContext();
+      const currentData = await getCurrentData();
 
       // Setup ChatManager callbacks
       const callbacks: ChatManagerCallbacks = {
@@ -260,10 +264,24 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         },
       };
 
+      // Create a mock getStoryObjects function for ChatManager
+      // ChatManager still expects this for system prompt generation
+      const getStoryObjects = () => {
+        // Return empty structure - ChatManager will use what we provide in promptContext
+        return {
+          basicInfo: null,
+          characters: [],
+          organizations: [],
+          locations: [],
+          lorebook: [],
+          outline: { acts: [] },
+        };
+      };
+
       // Create ChatManager config
       const chatManagerConfig: ChatManagerConfig = {
         projectId,
-        getStoryObjects: () => storyObjectStore.getStoryObjects(projectId),
+        getStoryObjects,
         systemInsertConfig: {
           promptContext: {
             category,
@@ -335,7 +353,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
 
   const getCategoryDisplayName = (cat: string): string => {
     const names: Record<string, string> = {
-      basicInfo: 'Basic Info',
+      basic_info: 'Basic Info',
       character: 'Character',
       organization: 'Organization',
       location: 'Location',

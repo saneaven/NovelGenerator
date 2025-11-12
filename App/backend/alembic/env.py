@@ -18,6 +18,8 @@ from models import db_models
 # access to the values within the .ini file in use.
 config = context.config
 
+print("Alembic using:", DATABASE_URL)
+
 # Override sqlalchemy.url with the one from database.py
 config.set_main_option('sqlalchemy.url', DATABASE_URL)
 

@@ -146,30 +146,17 @@ class Project(Base):
 # ============================================================================
 
 class BasicInfo(Base):
-    """Basic story information (title, logline, genre)"""
+    """Basic story information - structure only (content in object_translations)"""
     __tablename__ = 'basic_info'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, unique=True)
-
-    # Current active data (flat fields for quick access)
-    title = Column(String(500))
-    logline = Column(Text)
-    genre = Column(String(100))
-
-    # Version tracking
-    active_version_id = Column(UUID(as_uuid=True))
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
     project = relationship("Project", back_populates="basic_info")
-    versions = relationship("StoryObjectVersion",
-                          foreign_keys="[StoryObjectVersion.object_id]",
-                          primaryjoin="and_(BasicInfo.id==StoryObjectVersion.object_id, StoryObjectVersion.object_type=='basic_info')",
-                          cascade="all, delete-orphan",
-                          viewonly=True)
 
 
 # ============================================================================
@@ -177,99 +164,59 @@ class BasicInfo(Base):
 # ============================================================================
 
 class Character(Base):
-    """Character entities"""
+    """Character entities - structure only (content in object_translations)"""
     __tablename__ = 'characters'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
-
-    name = Column(String(255))
-    description = Column(Text)
-
-    active_version_id = Column(UUID(as_uuid=True))
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
     project = relationship("Project", back_populates="characters")
-    versions = relationship("StoryObjectVersion",
-                          foreign_keys="[StoryObjectVersion.object_id]",
-                          primaryjoin="and_(Character.id==StoryObjectVersion.object_id, StoryObjectVersion.object_type=='character')",
-                          cascade="all, delete-orphan",
-                          viewonly=True)
 
 
 class Organization(Base):
-    """Organization entities"""
+    """Organization entities - structure only (content in object_translations)"""
     __tablename__ = 'organizations'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
-
-    name = Column(String(255))
-    description = Column(Text)
-
-    active_version_id = Column(UUID(as_uuid=True))
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
     project = relationship("Project", back_populates="organizations")
-    versions = relationship("StoryObjectVersion",
-                          foreign_keys="[StoryObjectVersion.object_id]",
-                          primaryjoin="and_(Organization.id==StoryObjectVersion.object_id, StoryObjectVersion.object_type=='organization')",
-                          cascade="all, delete-orphan",
-                          viewonly=True)
 
 
 class Location(Base):
-    """Location entities"""
+    """Location entities - structure only (content in object_translations)"""
     __tablename__ = 'locations'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
-
-    name = Column(String(255))
-    description = Column(Text)
-
-    active_version_id = Column(UUID(as_uuid=True))
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
     project = relationship("Project", back_populates="locations")
-    versions = relationship("StoryObjectVersion",
-                          foreign_keys="[StoryObjectVersion.object_id]",
-                          primaryjoin="and_(Location.id==StoryObjectVersion.object_id, StoryObjectVersion.object_type=='location')",
-                          cascade="all, delete-orphan",
-                          viewonly=True)
 
 
 class LorebookEntry(Base):
-    """Lorebook entries"""
+    """Lorebook entries - structure only (content in object_translations)"""
     __tablename__ = 'lorebook_entries'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
-
-    name = Column(String(255))
-    description = Column(Text)
-
-    active_version_id = Column(UUID(as_uuid=True))
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
     project = relationship("Project", back_populates="lorebook_entries")
-    versions = relationship("StoryObjectVersion",
-                          foreign_keys="[StoryObjectVersion.object_id]",
-                          primaryjoin="and_(LorebookEntry.id==StoryObjectVersion.object_id, StoryObjectVersion.object_type=='lorebook')",
-                          cascade="all, delete-orphan",
-                          viewonly=True)
 
 
 # ============================================================================
@@ -277,13 +224,11 @@ class LorebookEntry(Base):
 # ============================================================================
 
 class Outline(Base):
-    """Story outline"""
+    """Story outline - structure only"""
     __tablename__ = 'outlines'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, unique=True)
-
-    active_version_id = Column(UUID(as_uuid=True))
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -291,25 +236,16 @@ class Outline(Base):
     # Relationships
     project = relationship("Project", back_populates="outline")
     acts = relationship("Act", back_populates="outline", cascade="all, delete-orphan", order_by="Act.order")
-    versions = relationship("StoryObjectVersion",
-                          foreign_keys="[StoryObjectVersion.object_id]",
-                          primaryjoin="and_(Outline.id==StoryObjectVersion.object_id, StoryObjectVersion.object_type=='outline')",
-                          cascade="all, delete-orphan",
-                          viewonly=True)
 
 
 class Act(Base):
-    """Acts within an outline"""
+    """Acts within an outline - structure only (content in object_translations)"""
     __tablename__ = 'acts'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     outline_id = Column(UUID(as_uuid=True), ForeignKey('outlines.id', ondelete='CASCADE'), nullable=False, index=True)
 
-    name = Column(String(255))
-    description = Column(Text)
-    order = Column(Integer, nullable=False)
-
-    active_version_id = Column(UUID(as_uuid=True))
+    order = Column(Integer, nullable=False)  # Structural data, not translatable
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -317,25 +253,16 @@ class Act(Base):
     # Relationships
     outline = relationship("Outline", back_populates="acts")
     chapters = relationship("Chapter", back_populates="act", cascade="all, delete-orphan", order_by="Chapter.order")
-    versions = relationship("StoryObjectVersion",
-                          foreign_keys="[StoryObjectVersion.object_id]",
-                          primaryjoin="and_(Act.id==StoryObjectVersion.object_id, StoryObjectVersion.object_type=='act')",
-                          cascade="all, delete-orphan",
-                          viewonly=True)
 
 
 class Chapter(Base):
-    """Chapters within an act"""
+    """Chapters within an act - structure only (content in object_translations)"""
     __tablename__ = 'chapters'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     act_id = Column(UUID(as_uuid=True), ForeignKey('acts.id', ondelete='CASCADE'), nullable=False, index=True)
 
-    name = Column(String(255))
-    description = Column(Text)
-    order = Column(Integer, nullable=False)
-
-    active_version_id = Column(UUID(as_uuid=True))
+    order = Column(Integer, nullable=False)  # Structural data, not translatable
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -343,11 +270,6 @@ class Chapter(Base):
     # Relationships
     act = relationship("Act", back_populates="chapters")
     content = relationship("ChapterContent", back_populates="chapter", uselist=False, cascade="all, delete-orphan")
-    versions = relationship("StoryObjectVersion",
-                          foreign_keys="[StoryObjectVersion.object_id]",
-                          primaryjoin="and_(Chapter.id==StoryObjectVersion.object_id, StoryObjectVersion.object_type=='chapter')",
-                          cascade="all, delete-orphan",
-                          viewonly=True)
 
 
 # ============================================================================
@@ -381,19 +303,18 @@ class StoryObjectVersion(Base):
 # ============================================================================
 
 class ChapterContent(Base):
-    """Content for each chapter with version history"""
+    """Content for each chapter - structure only (content in object_translations)"""
     __tablename__ = 'chapter_contents'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     chapter_id = Column(UUID(as_uuid=True), ForeignKey('chapters.id', ondelete='CASCADE'), nullable=False, unique=True)
-
-    active_version_id = Column(UUID(as_uuid=True))
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
     chapter = relationship("Chapter", back_populates="content")
+    # Note: ChapterContentVersion kept for backward compatibility during migration
     versions = relationship("ChapterContentVersion", back_populates="chapter_content", cascade="all, delete-orphan")
 
 

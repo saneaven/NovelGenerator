@@ -1,9 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useStoryObjectStore } from '../store/storyObjectStore';
+import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useNovelStore } from '../store/novelStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useChatStore } from '../store/chatStore';
-import type { StoryObjects } from '../types/storyObject';
 import type { FunctionCallMetadata, ContentPart } from '../llm_request/types';
 import { ChatManager, type ChatManagerConfig, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
 import { ChatPipeline } from '../chat/ChatPipeline';
@@ -50,7 +49,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
   const [streamContent, setStreamContent] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const storyObjectStore = useStoryObjectStore();
+  const unifiedStore = useUnifiedObjectStore();
   const novelStore = useNovelStore();
   const settingsStore = useSettingsStore();
   const chatStore = useChatStore();
@@ -76,83 +75,124 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
     }
   }, [isOpen, projectId, chatStore]);
 
-  const generateNovelContext = (storyObjects: StoryObjects): Record<string, any> => {
+  const generateNovelContext = async (): Promise<Record<string, any>> => {
     const context: Record<string, any> = {};
 
-    if (contextOptions.basicInfo && storyObjects.basicInfo) {
-      context.basicInfo = {
-        title: storyObjects.basicInfo.title,
-        logline: storyObjects.basicInfo.logline,
-        genre: storyObjects.basicInfo.genre,
-      };
-    }
-
-    if (contextOptions.characters && storyObjects.characters.length > 0) {
-      context.characters = storyObjects.characters.map(char => ({
-        id: char.id,
-        name: char.name,
-        description: char.description,
-      }));
-    }
-
-    if (contextOptions.organizations && storyObjects.organizations.length > 0) {
-      context.organizations = storyObjects.organizations.map(org => ({
-        id: org.id,
-        name: org.name,
-        description: org.description,
-      }));
-    }
-
-    if (contextOptions.locations && storyObjects.locations.length > 0) {
-      context.locations = storyObjects.locations.map(loc => ({
-        id: loc.id,
-        name: loc.name,
-        description: loc.description,
-      }));
-    }
-
-    if (contextOptions.lorebook && storyObjects.lorebook.length > 0) {
-      context.lorebook = storyObjects.lorebook.map(entry => ({
-        id: entry.id,
-        name: entry.name,
-        description: entry.description,
-      }));
-    }
-
-    if (contextOptions.outline && storyObjects.outline) {
-      context.outline = {
-        acts: storyObjects.outline.acts.map(act => ({
-          id: act.id,
-          name: act.name,
-          description: act.description,
-          chapters: act.chapters.map(chapter => ({
-            id: chapter.id,
-            name: chapter.name,
-            description: chapter.description,
-          })),
-        })),
-      };
-    }
-
-    if (contextOptions.allNovelContent) {
-      const allChapterContents = novelStore.getAllChapterContents(projectId);
-      const novelContent: Record<string, any> = {};
-
-      Object.entries(allChapterContents).forEach(([id, content]) => {
-        const chapterInfo = storyObjectStore.getChapterById(projectId, id);
-        if (chapterInfo) {
-          novelContent[id] = {
-            chapterName: chapterInfo.name,
-            chapterDescription: chapterInfo.description,
-            content: content.content,
-            wordCount: content.wordCount,
+    try {
+      // Basic Info
+      if (contextOptions.basicInfo) {
+        const basicInfoList = await unifiedStore.listObjects('basic_info', projectId);
+        if (basicInfoList.length > 0) {
+          const basicInfo = basicInfoList[0];
+          context.basicInfo = {
+            title: basicInfo.data.title || '',
+            logline: basicInfo.data.logline || '',
+            genre: basicInfo.data.genre || '',
           };
         }
-      });
-
-      if (Object.keys(novelContent).length > 0) {
-        context.existingNovelContent = novelContent;
       }
+
+      // Characters
+      if (contextOptions.characters) {
+        const characters = await unifiedStore.listObjects('character', projectId);
+        if (characters.length > 0) {
+          context.characters = characters.map(char => ({
+            id: char.id,
+            name: char.data.name || '',
+            description: char.data.description || '',
+          }));
+        }
+      }
+
+      // Organizations
+      if (contextOptions.organizations) {
+        const organizations = await unifiedStore.listObjects('organization', projectId);
+        if (organizations.length > 0) {
+          context.organizations = organizations.map(org => ({
+            id: org.id,
+            name: org.data.name || '',
+            description: org.data.description || '',
+          }));
+        }
+      }
+
+      // Locations
+      if (contextOptions.locations) {
+        const locations = await unifiedStore.listObjects('location', projectId);
+        if (locations.length > 0) {
+          context.locations = locations.map(loc => ({
+            id: loc.id,
+            name: loc.data.name || '',
+            description: loc.data.description || '',
+          }));
+        }
+      }
+
+      // Lorebook
+      if (contextOptions.lorebook) {
+        const lorebook = await unifiedStore.listObjects('lorebook', projectId);
+        if (lorebook.length > 0) {
+          context.lorebook = lorebook.map(entry => ({
+            id: entry.id,
+            name: entry.data.name || '',
+            description: entry.data.description || '',
+          }));
+        }
+      }
+
+      // Outline
+      if (contextOptions.outline) {
+        const acts = await unifiedStore.listObjects('act', projectId);
+        const chapters = await unifiedStore.listObjects('chapter', projectId);
+
+        if (acts.length > 0) {
+          context.outline = {
+            acts: acts
+              .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+              .map(act => ({
+                id: act.id,
+                name: act.data.name || '',
+                description: act.data.description || '',
+                chapters: chapters
+                  .filter(ch => ch.metadata.act_id === act.id)
+                  .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+                  .map(chapter => ({
+                    id: chapter.id,
+                    name: chapter.data.name || '',
+                    description: chapter.data.description || '',
+                  })),
+              })),
+          };
+        }
+      }
+
+      // All novel content
+      if (contextOptions.allNovelContent) {
+        const allChapterContents = novelStore.getAllChapterContents(projectId);
+        const novelContent: Record<string, any> = {};
+
+        // Get all chapters from unified store for metadata
+        const allChapters = await unifiedStore.listObjects('chapter', projectId);
+        const chapterMap = new Map(allChapters.map(ch => [ch.id, ch]));
+
+        Object.entries(allChapterContents).forEach(([id, content]) => {
+          const chapterInfo = chapterMap.get(id);
+          if (chapterInfo) {
+            novelContent[id] = {
+              chapterName: chapterInfo.data.name || '',
+              chapterDescription: chapterInfo.data.description || '',
+              content: content.content,
+              wordCount: content.wordCount,
+            };
+          }
+        });
+
+        if (Object.keys(novelContent).length > 0) {
+          context.existingNovelContent = novelContent;
+        }
+      }
+    } catch (err) {
+      console.error('Error generating novel context:', err);
     }
 
     return context;
@@ -174,13 +214,12 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
       const tempChatId = `temp-chapter-edit-${Date.now()}`;
       tempChatIdRef.current = tempChatId;
 
-      // Get current chapter content and story objects
-      const storyObjects = storyObjectStore.getStoryObjects(projectId);
+      // Get current chapter content
       const currentChapterContent = novelStore.getChapterContent(projectId, chapterId);
       const currentContent = currentChapterContent?.content || '';
 
       // Generate context
-      const contextData = generateNovelContext(storyObjects);
+      const contextData = await generateNovelContext();
 
       // Setup ChatManager callbacks
       const callbacks: ChatManagerCallbacks = {
@@ -232,10 +271,23 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         },
       };
 
+      // Create a mock getStoryObjects function for ChatManager
+      const getStoryObjects = () => {
+        // Return empty structure - ChatManager will use what we provide in promptContext
+        return {
+          basicInfo: null,
+          characters: [],
+          organizations: [],
+          locations: [],
+          lorebook: [],
+          outline: { acts: [] },
+        };
+      };
+
       // Create ChatManager config
       const chatManagerConfig: ChatManagerConfig = {
         projectId,
-        getStoryObjects: () => storyObjectStore.getStoryObjects(projectId),
+        getStoryObjects,
         getNovelData: () => novelStore.getAllChapterContents(projectId),
         systemInsertConfig: {
           promptContext: {

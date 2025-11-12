@@ -1,10 +1,12 @@
 /**
- * Edit Function Applicator
- * Handles applying edit function call results to the story object store
+ * Edit Function Applicator - Unified System
+ * Handles applying edit function call results to the unified object store
  */
 
-import { useStoryObjectStore } from '../../store/storyObjectStore';
+import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import type { FunctionCallMetadata } from '../../llm_request/types';
+import type { ObjectType } from '../../types/unifiedObject';
 
 export interface FunctionApplicationResult {
   success: boolean;
@@ -32,7 +34,7 @@ interface EditActPayload {
 type BatchActPayload = Omit<EditActPayload, 'id'> & { id: string | null };
 
 /**
- * Apply edit function calls to the store
+ * Apply edit function calls to the unified store
  */
 export async function applyEditFunctionCalls(
   projectId: string,
@@ -66,7 +68,8 @@ async function applyEditFunctionCall(
   functionCall: FunctionCallMetadata
 ): Promise<FunctionApplicationResult> {
   const functionName = functionCall.function_name || (functionCall as any).name || 'unknown';
-  const store = useStoryObjectStore.getState();
+  const store = useUnifiedObjectStore.getState();
+  const settings = useSettingsStore.getState();
   let args: any;
 
   // Parse arguments
@@ -86,7 +89,7 @@ async function applyEditFunctionCall(
   // Route to appropriate handler
   switch (functionName) {
     case 'edit_basic_info':
-      return await handleEditBasicInfo(projectId, args, store);
+      return await handleEditBasicInfo(projectId, args, store, settings);
 
     case 'edit_character':
       return await handleEditCharacter(projectId, args, store);
@@ -97,35 +100,35 @@ async function applyEditFunctionCall(
     case 'edit_location':
       return await handleEditLocation(projectId, args, store);
 
-    case 'edit_lorebook_entry':
+    case 'edit_lorebook':
       return await handleEditLorebookEntry(projectId, args, store);
 
     case 'edit_act':
-      return await handleEditAct(projectId, args, store);
+      return await handleEditAct(projectId, args, store, settings);
 
     case 'edit_chapter_metadata':
       return await handleEditChapterMetadata(projectId, args, store);
 
     case 'edit_outline':
-      return await handleEditOutline(projectId, args, store);
+      return await handleEditOutline(projectId, args, store, settings);
 
     case 'edit_characters_batch':
-      return await handleEditCharactersBatch(projectId, args, store);
+      return await handleEditCharactersBatch(projectId, args, store, settings);
 
     case 'edit_organizations_batch':
-      return await handleEditOrganizationsBatch(projectId, args, store);
+      return await handleEditOrganizationsBatch(projectId, args, store, settings);
 
     case 'edit_locations_batch':
-      return await handleEditLocationsBatch(projectId, args, store);
+      return await handleEditLocationsBatch(projectId, args, store, settings);
 
     case 'edit_lorebook_batch':
-      return await handleEditLorebookBatch(projectId, args, store);
+      return await handleEditLorebookBatch(projectId, args, store, settings);
 
     case 'edit_acts_batch':
-      return await handleEditActsBatch(projectId, args, store);
+      return await handleEditActsBatch(projectId, args, store, settings);
 
     case 'edit_chapters_batch':
-      return await handleEditChaptersBatch(projectId, args, store);
+      return await handleEditChaptersBatch(projectId, args, store, settings);
 
     default:
       return {
@@ -143,13 +146,43 @@ async function applyEditFunctionCall(
 async function handleEditBasicInfo(
   projectId: string,
   args: { title: string; logline: string; genre: string },
-  store: any
+  store: any,
+  settings: any
 ): Promise<FunctionApplicationResult> {
-  await store.updateBasicInfo(projectId, {
-    title: args.title,
-    logline: args.logline,
-    genre: args.genre
-  });
+  // Get basic info object for this project
+  const basicInfoList = await store.listObjects('basic_info', projectId);
+
+  let basicInfoId: string;
+  if (basicInfoList.length > 0) {
+    basicInfoId = basicInfoList[0].id;
+    const basicInfo = store.objects[basicInfoId];
+    const language = basicInfo?.languages.active || settings.settings.primaryLanguage;
+
+    // Update existing basic info
+    await store.updateObject('basic_info', basicInfoId, {
+      data: {
+        title: args.title,
+        logline: args.logline,
+        genre: args.genre
+      },
+      language,
+      create_new_version: true,
+      user_request: 'AI Edit',
+    });
+  } else {
+    // Create new basic info
+    const newBasicInfo = await store.createObject(
+      'basic_info',
+      projectId,
+      {
+        title: args.title,
+        logline: args.logline,
+        genre: args.genre
+      },
+      settings.settings.primaryLanguage
+    );
+    basicInfoId = newBasicInfo.id;
+  }
 
   return {
     success: true,
@@ -163,9 +196,20 @@ async function handleEditCharacter(
   args: { id: string; name: string; description: string },
   store: any
 ): Promise<FunctionApplicationResult> {
-  await store.updateCharacter(projectId, args.id, {
-    name: args.name,
-    description: args.description
+  const character = store.objects[args.id];
+  if (!character) {
+    return {
+      success: false,
+      message: 'Character not found',
+      error: `Character with id ${args.id} not found`
+    };
+  }
+
+  await store.updateObject('character', args.id, {
+    data: { name: args.name, description: args.description },
+    language: character.languages.active,
+    create_new_version: true,
+    user_request: 'AI Edit',
   });
 
   return {
@@ -180,9 +224,20 @@ async function handleEditOrganization(
   args: { id: string; name: string; description: string },
   store: any
 ): Promise<FunctionApplicationResult> {
-  await store.updateOrganization(projectId, args.id, {
-    name: args.name,
-    description: args.description
+  const organization = store.objects[args.id];
+  if (!organization) {
+    return {
+      success: false,
+      message: 'Organization not found',
+      error: `Organization with id ${args.id} not found`
+    };
+  }
+
+  await store.updateObject('organization', args.id, {
+    data: { name: args.name, description: args.description },
+    language: organization.languages.active,
+    create_new_version: true,
+    user_request: 'AI Edit',
   });
 
   return {
@@ -197,9 +252,20 @@ async function handleEditLocation(
   args: { id: string; name: string; description: string },
   store: any
 ): Promise<FunctionApplicationResult> {
-  await store.updateLocation(projectId, args.id, {
-    name: args.name,
-    description: args.description
+  const location = store.objects[args.id];
+  if (!location) {
+    return {
+      success: false,
+      message: 'Location not found',
+      error: `Location with id ${args.id} not found`
+    };
+  }
+
+  await store.updateObject('location', args.id, {
+    data: { name: args.name, description: args.description },
+    language: location.languages.active,
+    create_new_version: true,
+    user_request: 'AI Edit',
   });
 
   return {
@@ -214,9 +280,20 @@ async function handleEditLorebookEntry(
   args: { id: string; name: string; description: string },
   store: any
 ): Promise<FunctionApplicationResult> {
-  await store.updateLorebookEntry(projectId, args.id, {
-    name: args.name,
-    description: args.description
+  const entry = store.objects[args.id];
+  if (!entry) {
+    return {
+      success: false,
+      message: 'Lorebook entry not found',
+      error: `Lorebook entry with id ${args.id} not found`
+    };
+  }
+
+  await store.updateObject('lorebook', args.id, {
+    data: { name: args.name, description: args.description },
+    language: entry.languages.active,
+    create_new_version: true,
+    user_request: 'AI Edit',
   });
 
   return {
@@ -229,28 +306,34 @@ async function handleEditLorebookEntry(
 async function handleEditAct(
   projectId: string,
   args: EditActPayload,
-  store: any
+  store: any,
+  settings: any
 ): Promise<FunctionApplicationResult> {
-  const existingAct =
-    typeof store.getActById === 'function' ? store.getActById(projectId, args.id) : null;
+  const existingAct = store.objects[args.id];
+  if (!existingAct) {
+    return {
+      success: false,
+      message: 'Act not found',
+      error: `Act with id ${args.id} not found`
+    };
+  }
 
-  const actOrder =
-    typeof args.order === 'number' && Number.isFinite(args.order)
-      ? args.order
-      : typeof existingAct?.order === 'number'
-        ? existingAct.order
-        : 0;
+  const actOrder = typeof args.order === 'number' && Number.isFinite(args.order)
+    ? args.order
+    : existingAct.metadata.order || 0;
 
-  args.order = actOrder;
+  // Update act metadata
+  await store.updateObject('act', args.id, {
+    data: {
+      name: args.name,
+      description: args.description
+    },
+    language: existingAct.languages.active,
+    create_new_version: true,
+    user_request: 'AI Edit',
+  });
 
-  const actUpdates: { name?: string; description?: string; order?: number } = {
-    name: args.name,
-    description: args.description,
-    order: actOrder
-  };
-
-  await store.updateAct(projectId, args.id, actUpdates);
-
+  // Handle chapters if provided
   const chapters = Array.isArray(args.chapters) ? args.chapters : [];
 
   for (let index = 0; index < chapters.length; index += 1) {
@@ -259,31 +342,47 @@ async function handleEditAct(
       continue;
     }
 
-    const chapterOrder =
-      typeof chapter.order === 'number' && Number.isFinite(chapter.order)
-        ? chapter.order
-        : index;
-
-    chapter.order = chapterOrder;
+    const chapterOrder = typeof chapter.order === 'number' && Number.isFinite(chapter.order)
+      ? chapter.order
+      : index;
 
     if (chapter.id && chapter.id !== 'null' && chapter.id !== null) {
       // Update existing chapter
-      await store.updateChapter(projectId, chapter.id, {
-        name: chapter.name,
-        description: chapter.description,
-        order: chapterOrder
-      });
+      const existingChapter = store.objects[chapter.id];
+      if (existingChapter) {
+        await store.updateObject('chapter', chapter.id, {
+          data: {
+            name: chapter.name,
+            description: chapter.description
+          },
+          language: existingChapter.languages.active,
+          create_new_version: true,
+          user_request: 'AI Edit',
+        });
+      }
     } else {
       // Create new chapter
-      const targetActId =
-        chapter.actId && chapter.actId !== 'null' && chapter.actId !== null ? chapter.actId : args.id;
+      const targetActId = chapter.actId && chapter.actId !== 'null' && chapter.actId !== null
+        ? chapter.actId
+        : args.id;
 
       if (!targetActId) {
         continue;
       }
 
-      chapter.actId = targetActId;
-      await store.addChapter(projectId, targetActId, chapter.name, chapter.description, chapterOrder);
+      await store.createObject(
+        'chapter',
+        projectId,
+        {
+          name: chapter.name,
+          description: chapter.description
+        },
+        settings.settings.primaryLanguage,
+        {
+          act_id: targetActId,
+          order: chapterOrder
+        }
+      );
     }
   }
 
@@ -299,9 +398,23 @@ async function handleEditChapterMetadata(
   args: { id: string; name: string; description: string },
   store: any
 ): Promise<FunctionApplicationResult> {
-  await store.updateChapter(projectId, args.id, {
-    name: args.name,
-    description: args.description
+  const chapter = store.objects[args.id];
+  if (!chapter) {
+    return {
+      success: false,
+      message: 'Chapter not found',
+      error: `Chapter with id ${args.id} not found`
+    };
+  }
+
+  await store.updateObject('chapter', args.id, {
+    data: {
+      name: args.name,
+      description: args.description
+    },
+    language: chapter.languages.active,
+    create_new_version: true,
+    user_request: 'AI Edit',
   });
 
   return {
@@ -314,11 +427,9 @@ async function handleEditChapterMetadata(
 async function handleEditOutline(
   projectId: string,
   args: { acts: BatchActPayload[] },
-  store: any
+  store: any,
+  settings: any
 ): Promise<FunctionApplicationResult> {
-  // This is complex - we need to handle creates, updates, and implicit deletes
-  // For now, we'll update or create items that are provided
-
   const acts = Array.isArray(args.acts) ? args.acts : [];
 
   for (let actIndex = 0; actIndex < acts.length; actIndex += 1) {
@@ -327,55 +438,90 @@ async function handleEditOutline(
       continue;
     }
 
-    const actOrder =
-      typeof act.order === 'number' && Number.isFinite(act.order) ? act.order : actIndex;
-    act.order = actOrder;
+    const actOrder = typeof act.order === 'number' && Number.isFinite(act.order)
+      ? act.order
+      : actIndex;
 
     if (act.id && act.id !== 'null' && act.id !== null) {
       // Update existing act
-      await store.updateAct(projectId, act.id, {
-        name: act.name,
-        description: act.description,
-        order: actOrder
-      });
+      const existingAct = store.objects[act.id];
+      if (existingAct) {
+        await store.updateObject('act', act.id, {
+          data: {
+            name: act.name,
+            description: act.description
+          },
+          language: existingAct.languages.active,
+          create_new_version: true,
+          user_request: 'AI Edit',
+        });
 
-      const chapters = Array.isArray(act.chapters) ? act.chapters : [];
+        // Update chapters
+        const chapters = Array.isArray(act.chapters) ? act.chapters : [];
 
-      // Update chapters
-      for (let chapterIndex = 0; chapterIndex < chapters.length; chapterIndex += 1) {
-        const chapter = chapters[chapterIndex];
-        if (!chapter) {
-          continue;
-        }
-
-        const chapterOrder =
-          typeof chapter.order === 'number' && Number.isFinite(chapter.order)
-            ? chapter.order
-            : chapterIndex;
-
-        chapter.order = chapterOrder;
-
-        if (chapter.id && chapter.id !== 'null' && chapter.id !== null) {
-          await store.updateChapter(projectId, chapter.id, {
-            name: chapter.name,
-            description: chapter.description,
-            order: chapterOrder
-          });
-        } else {
-          const targetActId =
-            chapter.actId && chapter.actId !== 'null' && chapter.actId !== null ? chapter.actId : act.id;
-
-          if (!targetActId) {
+        for (let chapterIndex = 0; chapterIndex < chapters.length; chapterIndex += 1) {
+          const chapter = chapters[chapterIndex];
+          if (!chapter) {
             continue;
           }
 
-          chapter.actId = targetActId;
-          await store.addChapter(projectId, targetActId, chapter.name, chapter.description, chapterOrder);
+          const chapterOrder = typeof chapter.order === 'number' && Number.isFinite(chapter.order)
+            ? chapter.order
+            : chapterIndex;
+
+          if (chapter.id && chapter.id !== 'null' && chapter.id !== null) {
+            const existingChapter = store.objects[chapter.id];
+            if (existingChapter) {
+              await store.updateObject('chapter', chapter.id, {
+                data: {
+                  name: chapter.name,
+                  description: chapter.description
+                },
+                language: existingChapter.languages.active,
+                create_new_version: true,
+                user_request: 'AI Edit',
+              });
+            }
+          } else {
+            const targetActId = chapter.actId && chapter.actId !== 'null' && chapter.actId !== null
+              ? chapter.actId
+              : act.id;
+
+            if (!targetActId) {
+              continue;
+            }
+
+            await store.createObject(
+              'chapter',
+              projectId,
+              {
+                name: chapter.name,
+                description: chapter.description
+              },
+              settings.settings.primaryLanguage,
+              {
+                act_id: targetActId,
+                order: chapterOrder
+              }
+            );
+          }
         }
       }
     } else {
       // Create new act with chapters
-      const newAct = await store.addAct(projectId, act.name, act.description, actOrder);
+      const newAct = await store.createObject(
+        'act',
+        projectId,
+        {
+          name: act.name,
+          description: act.description
+        },
+        settings.settings.primaryLanguage,
+        {
+          order: actOrder
+        }
+      );
+
       const chapters = Array.isArray(act.chapters) ? act.chapters : [];
 
       for (let chapterIndex = 0; chapterIndex < chapters.length; chapterIndex += 1) {
@@ -384,22 +530,31 @@ async function handleEditOutline(
           continue;
         }
 
-        const chapterOrder =
-          typeof chapter.order === 'number' && Number.isFinite(chapter.order)
-            ? chapter.order
-            : chapterIndex;
+        const chapterOrder = typeof chapter.order === 'number' && Number.isFinite(chapter.order)
+          ? chapter.order
+          : chapterIndex;
 
-        chapter.order = chapterOrder;
-
-        const targetActId =
-          chapter.actId && chapter.actId !== 'null' && chapter.actId !== null ? chapter.actId : newAct.id;
+        const targetActId = chapter.actId && chapter.actId !== 'null' && chapter.actId !== null
+          ? chapter.actId
+          : newAct.id;
 
         if (!targetActId) {
           continue;
         }
 
-        chapter.actId = targetActId;
-        await store.addChapter(projectId, targetActId, chapter.name, chapter.description, chapterOrder);
+        await store.createObject(
+          'chapter',
+          projectId,
+          {
+            name: chapter.name,
+            description: chapter.description
+          },
+          settings.settings.primaryLanguage,
+          {
+            act_id: targetActId,
+            order: chapterOrder
+          }
+        );
       }
     }
   }
@@ -418,24 +573,38 @@ async function handleEditOutline(
 async function handleEditCharactersBatch(
   projectId: string,
   args: { characters: Array<{ id: string | null; name: string; description: string }> },
-  store: any
+  store: any,
+  settings: any
 ): Promise<FunctionApplicationResult> {
   const results = { updated: 0, created: 0 };
 
   for (const character of args.characters) {
     if (character.id && character.id !== 'null') {
       // Update existing
-      await store.updateCharacter(projectId, character.id, {
-        name: character.name,
-        description: character.description
-      });
-      results.updated++;
+      const existingChar = store.objects[character.id];
+      if (existingChar) {
+        await store.updateObject('character', character.id, {
+          data: {
+            name: character.name,
+            description: character.description
+          },
+          language: existingChar.languages.active,
+          create_new_version: true,
+          user_request: 'AI Edit',
+        });
+        results.updated++;
+      }
     } else {
       // Create new
-      await store.addCharacter(projectId, {
-        name: character.name,
-        description: character.description
-      });
+      await store.createObject(
+        'character',
+        projectId,
+        {
+          name: character.name,
+          description: character.description
+        },
+        settings.settings.primaryLanguage
+      );
       results.created++;
     }
   }
@@ -450,22 +619,36 @@ async function handleEditCharactersBatch(
 async function handleEditOrganizationsBatch(
   projectId: string,
   args: { organizations: Array<{ id: string | null; name: string; description: string }> },
-  store: any
+  store: any,
+  settings: any
 ): Promise<FunctionApplicationResult> {
   const results = { updated: 0, created: 0 };
 
   for (const org of args.organizations) {
     if (org.id && org.id !== 'null') {
-      await store.updateOrganization(projectId, org.id, {
-        name: org.name,
-        description: org.description
-      });
-      results.updated++;
+      const existingOrg = store.objects[org.id];
+      if (existingOrg) {
+        await store.updateObject('organization', org.id, {
+          data: {
+            name: org.name,
+            description: org.description
+          },
+          language: existingOrg.languages.active,
+          create_new_version: true,
+          user_request: 'AI Edit',
+        });
+        results.updated++;
+      }
     } else {
-      await store.addOrganization(projectId, {
-        name: org.name,
-        description: org.description
-      });
+      await store.createObject(
+        'organization',
+        projectId,
+        {
+          name: org.name,
+          description: org.description
+        },
+        settings.settings.primaryLanguage
+      );
       results.created++;
     }
   }
@@ -480,22 +663,36 @@ async function handleEditOrganizationsBatch(
 async function handleEditLocationsBatch(
   projectId: string,
   args: { locations: Array<{ id: string | null; name: string; description: string }> },
-  store: any
+  store: any,
+  settings: any
 ): Promise<FunctionApplicationResult> {
   const results = { updated: 0, created: 0 };
 
   for (const location of args.locations) {
     if (location.id && location.id !== 'null') {
-      await store.updateLocation(projectId, location.id, {
-        name: location.name,
-        description: location.description
-      });
-      results.updated++;
+      const existingLoc = store.objects[location.id];
+      if (existingLoc) {
+        await store.updateObject('location', location.id, {
+          data: {
+            name: location.name,
+            description: location.description
+          },
+          language: existingLoc.languages.active,
+          create_new_version: true,
+          user_request: 'AI Edit',
+        });
+        results.updated++;
+      }
     } else {
-      await store.addLocation(projectId, {
-        name: location.name,
-        description: location.description
-      });
+      await store.createObject(
+        'location',
+        projectId,
+        {
+          name: location.name,
+          description: location.description
+        },
+        settings.settings.primaryLanguage
+      );
       results.created++;
     }
   }
@@ -510,22 +707,36 @@ async function handleEditLocationsBatch(
 async function handleEditLorebookBatch(
   projectId: string,
   args: { entries: Array<{ id: string | null; name: string; description: string }> },
-  store: any
+  store: any,
+  settings: any
 ): Promise<FunctionApplicationResult> {
   const results = { updated: 0, created: 0 };
 
   for (const entry of args.entries) {
     if (entry.id && entry.id !== 'null') {
-      await store.updateLorebookEntry(projectId, entry.id, {
-        name: entry.name,
-        description: entry.description
-      });
-      results.updated++;
+      const existingEntry = store.objects[entry.id];
+      if (existingEntry) {
+        await store.updateObject('lorebook', entry.id, {
+          data: {
+            name: entry.name,
+            description: entry.description
+          },
+          language: existingEntry.languages.active,
+          create_new_version: true,
+          user_request: 'AI Edit',
+        });
+        results.updated++;
+      }
     } else {
-      await store.addLorebookEntry(projectId, {
-        name: entry.name,
-        description: entry.description
-      });
+      await store.createObject(
+        'lorebook',
+        projectId,
+        {
+          name: entry.name,
+          description: entry.description
+        },
+        settings.settings.primaryLanguage
+      );
       results.created++;
     }
   }
@@ -540,7 +751,8 @@ async function handleEditLorebookBatch(
 async function handleEditActsBatch(
   projectId: string,
   args: { acts: BatchActPayload[] },
-  store: any
+  store: any,
+  settings: any
 ): Promise<FunctionApplicationResult> {
   const results = { updated: 0, created: 0 };
   const acts = Array.isArray(args.acts) ? args.acts : [];
@@ -551,56 +763,90 @@ async function handleEditActsBatch(
       continue;
     }
 
-    const actOrder =
-      typeof act.order === 'number' && Number.isFinite(act.order) ? act.order : actIndex;
-    act.order = actOrder;
+    const actOrder = typeof act.order === 'number' && Number.isFinite(act.order)
+      ? act.order
+      : actIndex;
 
     if (act.id && act.id !== 'null') {
       // Update existing act
-      await store.updateAct(projectId, act.id, {
-        name: act.name,
-        description: act.description,
-        order: actOrder
-      });
-      results.updated++;
+      const existingAct = store.objects[act.id];
+      if (existingAct) {
+        await store.updateObject('act', act.id, {
+          data: {
+            name: act.name,
+            description: act.description
+          },
+          language: existingAct.languages.active,
+          create_new_version: true,
+          user_request: 'AI Edit',
+        });
+        results.updated++;
 
-      const chapters = Array.isArray(act.chapters) ? act.chapters : [];
+        // Update chapters
+        const chapters = Array.isArray(act.chapters) ? act.chapters : [];
 
-      // Update chapters
-      for (let chapterIndex = 0; chapterIndex < chapters.length; chapterIndex += 1) {
-        const chapter = chapters[chapterIndex];
-        if (!chapter) {
-          continue;
-        }
-
-        const chapterOrder =
-          typeof chapter.order === 'number' && Number.isFinite(chapter.order)
-            ? chapter.order
-            : chapterIndex;
-
-        chapter.order = chapterOrder;
-
-        if (chapter.id && chapter.id !== 'null') {
-          await store.updateChapter(projectId, chapter.id, {
-            name: chapter.name,
-            description: chapter.description,
-            order: chapterOrder
-          });
-        } else {
-          const targetActId =
-            chapter.actId && chapter.actId !== 'null' && chapter.actId !== null ? chapter.actId : act.id;
-
-          if (!targetActId) {
+        for (let chapterIndex = 0; chapterIndex < chapters.length; chapterIndex += 1) {
+          const chapter = chapters[chapterIndex];
+          if (!chapter) {
             continue;
           }
 
-          chapter.actId = targetActId;
-          await store.addChapter(projectId, targetActId, chapter.name, chapter.description, chapterOrder);
+          const chapterOrder = typeof chapter.order === 'number' && Number.isFinite(chapter.order)
+            ? chapter.order
+            : chapterIndex;
+
+          if (chapter.id && chapter.id !== 'null') {
+            const existingChapter = store.objects[chapter.id];
+            if (existingChapter) {
+              await store.updateObject('chapter', chapter.id, {
+                data: {
+                  name: chapter.name,
+                  description: chapter.description
+                },
+                language: existingChapter.languages.active,
+                create_new_version: true,
+                user_request: 'AI Edit',
+              });
+            }
+          } else {
+            const targetActId = chapter.actId && chapter.actId !== 'null' && chapter.actId !== null
+              ? chapter.actId
+              : act.id;
+
+            if (!targetActId) {
+              continue;
+            }
+
+            await store.createObject(
+              'chapter',
+              projectId,
+              {
+                name: chapter.name,
+                description: chapter.description
+              },
+              settings.settings.primaryLanguage,
+              {
+                act_id: targetActId,
+                order: chapterOrder
+              }
+            );
+          }
         }
       }
     } else {
       // Create new act
-      const newAct = await store.addAct(projectId, act.name, act.description, actOrder);
+      const newAct = await store.createObject(
+        'act',
+        projectId,
+        {
+          name: act.name,
+          description: act.description
+        },
+        settings.settings.primaryLanguage,
+        {
+          order: actOrder
+        }
+      );
       results.created++;
 
       const chapters = Array.isArray(act.chapters) ? act.chapters : [];
@@ -611,22 +857,31 @@ async function handleEditActsBatch(
           continue;
         }
 
-        const chapterOrder =
-          typeof chapter.order === 'number' && Number.isFinite(chapter.order)
-            ? chapter.order
-            : chapterIndex;
+        const chapterOrder = typeof chapter.order === 'number' && Number.isFinite(chapter.order)
+          ? chapter.order
+          : chapterIndex;
 
-        chapter.order = chapterOrder;
-
-        const targetActId =
-          chapter.actId && chapter.actId !== 'null' && chapter.actId !== null ? chapter.actId : newAct.id;
+        const targetActId = chapter.actId && chapter.actId !== 'null' && chapter.actId !== null
+          ? chapter.actId
+          : newAct.id;
 
         if (!targetActId) {
           continue;
         }
 
-        chapter.actId = targetActId;
-        await store.addChapter(projectId, targetActId, chapter.name, chapter.description, chapterOrder);
+        await store.createObject(
+          'chapter',
+          projectId,
+          {
+            name: chapter.name,
+            description: chapter.description
+          },
+          settings.settings.primaryLanguage,
+          {
+            act_id: targetActId,
+            order: chapterOrder
+          }
+        );
       }
     }
   }
@@ -641,7 +896,8 @@ async function handleEditActsBatch(
 async function handleEditChaptersBatch(
   projectId: string,
   args: { chapters: Array<{ id: string | null; actId?: string | null; name: string; description: string; order?: number }> },
-  store: any
+  store: any,
+  settings: any
 ): Promise<FunctionApplicationResult> {
   const results = { updated: 0, created: 0 };
   const chapters = Array.isArray(args.chapters) ? args.chapters : [];
@@ -652,29 +908,47 @@ async function handleEditChaptersBatch(
       continue;
     }
 
-    const chapterOrder =
-      typeof chapter.order === 'number' && Number.isFinite(chapter.order) ? chapter.order : index;
-
-    chapter.order = chapterOrder;
+    const chapterOrder = typeof chapter.order === 'number' && Number.isFinite(chapter.order)
+      ? chapter.order
+      : index;
 
     if (chapter.id && chapter.id !== 'null') {
       // Update existing chapter
-      await store.updateChapter(projectId, chapter.id, {
-        name: chapter.name,
-        description: chapter.description,
-        order: chapterOrder
-      });
-      results.updated++;
+      const existingChapter = store.objects[chapter.id];
+      if (existingChapter) {
+        await store.updateObject('chapter', chapter.id, {
+          data: {
+            name: chapter.name,
+            description: chapter.description
+          },
+          language: existingChapter.languages.active,
+          create_new_version: true,
+          user_request: 'AI Edit',
+        });
+        results.updated++;
+      }
     } else {
-      const targetActId =
-        chapter.actId && chapter.actId !== 'null' && chapter.actId !== null ? chapter.actId : null;
+      const targetActId = chapter.actId && chapter.actId !== 'null' && chapter.actId !== null
+        ? chapter.actId
+        : null;
       if (!targetActId) {
         continue;
       }
 
       // Create new chapter (requires actId)
-      chapter.actId = targetActId;
-      await store.addChapter(projectId, targetActId, chapter.name, chapter.description, chapterOrder);
+      await store.createObject(
+        'chapter',
+        projectId,
+        {
+          name: chapter.name,
+          description: chapter.description
+        },
+        settings.settings.primaryLanguage,
+        {
+          act_id: targetActId,
+          order: chapterOrder
+        }
+      );
       results.created++;
     }
   }

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useChatStore } from '../../../store/chatStore';
-import { useStoryObjectStore } from '../../../store/storyObjectStore';
+import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { FunctionCallApplicator } from '../../../chat/utils/functionCallApplicator';
 import { FunctionCallService } from '../services/FunctionCallService';
@@ -11,11 +11,11 @@ export function useFunctionCallHandlers(
   projectId: string | undefined
 ) {
   const { updateMessageFunctionCalls, updateFunctionCallStatus, getSelectedChatId } = useChatStore();
-  const storyObjectStore = useStoryObjectStore();
+  const unifiedStore = useUnifiedObjectStore();
   const { showError } = useErrorStore();
 
   const [messageEditCards, setMessageEditCards] = useState<Record<string, EditCard[]>>({});
-  const [functionCallApplicator] = useState(() => new FunctionCallApplicator(storyObjectStore));
+  const [functionCallApplicator] = useState(() => new FunctionCallApplicator(unifiedStore));
   const [activeFunctionCalls, setActiveFunctionCalls] = useState<Record<string, any[]>>({});
   const [pendingFunctionCallResults, setPendingFunctionCallResults] = useState<FunctionCallResultSummary[]>([]);
 
