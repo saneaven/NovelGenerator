@@ -1,14 +1,7 @@
 import type { FunctionCallMetadata } from '../../llm_request/types';
-import type { 
-  StoryObjects,
-  BasicInfo,
-  Character,
-  Organization,
-  Location,
-  LorebookEntry,
-  Act,
-  Chapter
-} from '../../types/storyObject';
+import type { UnifiedObjectStore } from '../../store/unifiedObjectStore';
+import type { ObjectType } from '../../types/unifiedObject';
+import { useSettingsStore } from '../../store/settingsStore';
 
 export interface EditTagApplicationResult {
   success: boolean;
@@ -16,58 +9,15 @@ export interface EditTagApplicationResult {
   error?: string;
 }
 
-export interface StoryObjectStoreActions {
-  // Basic Info
-  setBasicInfo: (projectId: string, basicInfo: BasicInfo) => void;
-  updateBasicInfo: (projectId: string, updates: Partial<BasicInfo>) => void;
-  
-  // Characters
-  addCharacter: (projectId: string, character?: Partial<Character>) => Character;
-  updateCharacter: (projectId: string, id: string, updates: Partial<Character>) => void;
-  deleteCharacter: (projectId: string, id: string) => void;
-  
-  // Organizations
-  addOrganization: (projectId: string, organization?: Partial<Organization>) => Organization;
-  updateOrganization: (projectId: string, id: string, updates: Partial<Organization>) => void;
-  deleteOrganization: (projectId: string, id: string) => void;
-  
-  // Locations
-  addLocation: (projectId: string, location?: Partial<Location>) => Location;
-  updateLocation: (projectId: string, id: string, updates: Partial<Location>) => void;
-  deleteLocation: (projectId: string, id: string) => void;
-  
-  // Lorebook
-  addLorebookEntry: (projectId: string, entry?: Partial<LorebookEntry>) => LorebookEntry;
-  updateLorebookEntry: (projectId: string, id: string, updates: Partial<LorebookEntry>) => void;
-  deleteLorebookEntry: (projectId: string, id: string) => void;
-  
-  // Acts
-  addAct: (projectId: string, act?: Partial<Act>) => Act;
-  updateAct: (projectId: string, actId: string, updates: Partial<Act>) => void;
-  deleteAct: (projectId: string, actId: string) => void;
-  
-  // Chapters
-  addChapter: (projectId: string, actId: string, chapter?: Partial<Chapter>) => Chapter;
-  updateChapter: (projectId: string, chapterId: string, updates: Partial<Chapter>) => void;
-  deleteChapter: (projectId: string, chapterId: string) => void;
-  
-  // Version Management
-  addVersion: <T>(projectId: string, category: import('../../types/storyObject').StoryObjectCategory, itemId: string, userRequest: string, data: T) => string;
-  
-  // Utility
-  getStoryObjects: (projectId: string) => StoryObjects;
-  clearStoryObjects: (projectId: string) => void;
-}
-
 export class FunctionCallApplicator {
-  private storeActions: StoryObjectStoreActions;
+  private store: UnifiedObjectStore;
 
-  constructor(storeActions: StoryObjectStoreActions) {
-    this.storeActions = storeActions;
+  constructor(store: UnifiedObjectStore) {
+    this.store = store;
   }
 
   async applyFunctionCall(
-    projectId: string, 
+    projectId: string,
     functionCall: FunctionCallMetadata
   ): Promise<EditTagApplicationResult> {
     try {
@@ -161,48 +111,107 @@ export class FunctionCallApplicator {
       return;
     }
 
+    const settings = useSettingsStore.getState();
+    const language = settings.settings.primaryLanguage;
+
+    // Map old type names to ObjectType
+    let objectType: ObjectType;
     switch (type) {
       case 'basic_info':
-        // Use updateBasicInfo instead of setBasicInfo to ensure proper version creation
-        await this.storeActions.updateBasicInfo(projectId, {
-          title: data.title || '',
-          logline: data.logline || '',
-          genre: data.genre || ''
-        });
-        results.push(`Created basic info`);
+        objectType = 'basic_info';
         break;
       case 'character':
-        await this.storeActions.addCharacter(projectId, { name: data.name || '', description: data.description || '' });
+        objectType = 'character';
+        break;
+      case 'organization':
+        objectType = 'organization';
+        break;
+      case 'location':
+        objectType = 'location';
+        break;
+      case 'lorebook':
+        objectType = 'lorebook';
+        break;
+      case 'act':
+        objectType = 'act';
+        break;
+      case 'chapter':
+        objectType = 'chapter';
+        break;
+      default:
+        results.push(`Unknown create type: ${type}`);
+        return;
+    }
+
+    switch (objectType) {
+      case 'basic_info': {
+        // Get basic info for this project
+        const basicInfoList = await this.store.listObjects('basic_info', projectId);
+
+        if (basicInfoList.length > 0) {
+          // Update existing
+          const basicInfo = basicInfoList[0];
+          await this.store.updateObject('basic_info', basicInfo.id, {
+            data: {
+              title: data.title || '',
+              logline: data.logline || '',
+              genre: data.genre || ''
+            },
+            language: basicInfo.languages.active,
+            create_new_version: true,
+            user_request: 'AI Edit',
+          });
+        } else {
+          // Create new
+          await this.store.createObject('basic_info', projectId, {
+            title: data.title || '',
+            logline: data.logline || '',
+            genre: data.genre || ''
+          }, language);
+        }
+        results.push(`Created/updated basic info`);
+        break;
+      }
+      case 'character':
+        await this.store.createObject('character', projectId, {
+          name: data.name || '',
+          description: data.description || ''
+        }, language);
         results.push(`Created character: ${data.name}`);
         break;
       case 'organization':
-        await this.storeActions.addOrganization(projectId, { name: data.name || '', description: data.description || '' });
+        await this.store.createObject('organization', projectId, {
+          name: data.name || '',
+          description: data.description || ''
+        }, language);
         results.push(`Created organization: ${data.name}`);
         break;
       case 'location':
-        await this.storeActions.addLocation(projectId, { name: data.name || '', description: data.description || '' });
+        await this.store.createObject('location', projectId, {
+          name: data.name || '',
+          description: data.description || ''
+        }, language);
         results.push(`Created location: ${data.name}`);
         break;
       case 'lorebook':
-        await this.storeActions.addLorebookEntry(projectId, { name: data.name || '', description: data.description || '' });
+        await this.store.createObject('lorebook', projectId, {
+          name: data.name || '',
+          description: data.description || ''
+        }, language);
         results.push(`Created lorebook entry: ${data.name}`);
         break;
       case 'act': {
-        const storyObjects = this.storeActions.getStoryObjects(projectId);
-        const existingActs = storyObjects.outline?.acts ?? [];
-        const actOrder =
-          typeof data.order === 'number' && Number.isFinite(data.order)
-            ? data.order
-            : existingActs.length;
-        data.order = actOrder;
+        const acts = await this.store.listObjects('act', projectId);
+        const actOrder = typeof data.order === 'number' && Number.isFinite(data.order)
+          ? data.order
+          : acts.length;
 
-        const newAct = await this.storeActions.addAct(
-          projectId,
-          data.name || '',
-          data.description || '',
-          actOrder
-        );
-        // Version is automatically created by addAct
+        const newAct = await this.store.createObject('act', projectId, {
+          name: data.name || '',
+          description: data.description || ''
+        }, language, {
+          order: actOrder
+        });
 
         // Handle chapters within act if provided
         if (data.chapters && Array.isArray(data.chapters)) {
@@ -212,24 +221,20 @@ export class FunctionCallApplicator {
               continue;
             }
 
-            const chapterOrder =
-              typeof chapter.order === 'number' && Number.isFinite(chapter.order)
-                ? chapter.order
-                : index;
-            chapter.order = chapterOrder;
-            chapter.actId = chapter.actId ?? newAct.id;
+            const chapterOrder = typeof chapter.order === 'number' && Number.isFinite(chapter.order)
+              ? chapter.order
+              : index;
 
-            await this.storeActions.addChapter(
-              projectId,
-              newAct.id,
-              chapter.name || '',
-              chapter.description || '',
-              chapterOrder
-            );
-            // Version is automatically created by addChapter
+            await this.store.createObject('chapter', projectId, {
+              name: chapter.name || '',
+              description: chapter.description || ''
+            }, language, {
+              act_id: newAct.id,
+              order: chapterOrder
+            });
           }
         }
-        results.push(`Created act: ${newAct.name}`);
+        results.push(`Created act: ${data.name}`);
         break;
       }
       case 'chapter': {
@@ -238,24 +243,20 @@ export class FunctionCallApplicator {
           return;
         }
 
-        const storyObjects = this.storeActions.getStoryObjects(projectId);
-        const parentAct = storyObjects.outline?.acts.find((act) => act.id === data.actId);
-        const existingChapters = parentAct?.chapters ?? [];
-        const chapterOrder =
-          typeof data.order === 'number' && Number.isFinite(data.order)
-            ? data.order
-            : existingChapters.length;
-        data.order = chapterOrder;
+        const chapters = await this.store.listObjects('chapter', projectId);
+        const existingChapters = chapters.filter(ch => ch.metadata.act_id === data.actId);
+        const chapterOrder = typeof data.order === 'number' && Number.isFinite(data.order)
+          ? data.order
+          : existingChapters.length;
 
-        const newChapter = await this.storeActions.addChapter(
-          projectId,
-          data.actId,
-          data.name || '',
-          data.description || '',
-          chapterOrder
-        );
-        // Version is automatically created by addChapter
-        results.push(`Created chapter: ${newChapter.name}`);
+        await this.store.createObject('chapter', projectId, {
+          name: data.name || '',
+          description: data.description || ''
+        }, language, {
+          act_id: data.actId,
+          order: chapterOrder
+        });
+        results.push(`Created chapter: ${data.name}`);
         break;
       }
       default:
@@ -272,66 +273,72 @@ export class FunctionCallApplicator {
   ): Promise<void> {
     const itemName = data.name || 'Unknown';
 
+    // Map old type names to ObjectType
+    let objectType: ObjectType;
     switch (type) {
       case 'basic_info':
-        this.storeActions.updateBasicInfo(projectId, data);
-        // Version is automatically created by updateBasicInfo
-        results.push(`Updated basic info`);
+        objectType = 'basic_info';
         break;
       case 'character':
-        this.storeActions.updateCharacter(projectId, id, data);
-        // Version is automatically created by updateCharacter
-        results.push(`Updated character: ${itemName}`);
+        objectType = 'character';
         break;
       case 'organization':
-        this.storeActions.updateOrganization(projectId, id, data);
-        // Version is automatically created by updateOrganization
-        results.push(`Updated organization: ${itemName}`);
+        objectType = 'organization';
         break;
       case 'location':
-        this.storeActions.updateLocation(projectId, id, data);
-        // Version is automatically created by updateLocation
-        results.push(`Updated location: ${itemName}`);
+        objectType = 'location';
         break;
       case 'lorebook':
-        this.storeActions.updateLorebookEntry(projectId, id, data);
-        // Version is automatically created by updateLorebookEntry
-        results.push(`Updated lorebook entry: ${itemName}`);
+        objectType = 'lorebook';
         break;
-      case 'act': {
-        if (typeof data.order !== 'number' || !Number.isFinite(data.order)) {
-          const outlineActs = this.storeActions.getStoryObjects(projectId).outline?.acts ?? [];
-          const existingAct = outlineActs.find((act) => act.id === id);
-          if (existingAct) {
-            data.order = existingAct.order;
-          }
-        }
-        this.storeActions.updateAct(projectId, id, data);
-        // Version is automatically created by updateAct
-        results.push(`Updated act: ${itemName}`);
+      case 'act':
+        objectType = 'act';
         break;
-      }
-      case 'chapter': {
-        if (typeof data.order !== 'number' || !Number.isFinite(data.order)) {
-          const storyObjects = this.storeActions.getStoryObjects(projectId);
-          const outlineActs = storyObjects.outline?.acts ?? [];
-          for (const act of outlineActs) {
-            const existingChapter = act.chapters.find((chapter) => chapter.id === id);
-            if (existingChapter) {
-              data.order = existingChapter.order;
-              data.actId = data.actId ?? act.id;
-              break;
-            }
-          }
-        }
-        this.storeActions.updateChapter(projectId, id, data);
-        // Version is automatically created by updateChapter
-        results.push(`Updated chapter: ${itemName}`);
+      case 'chapter':
+        objectType = 'chapter';
         break;
-      }
       default:
         results.push(`Unknown update type: ${type}`);
+        return;
     }
+
+    // Get the object
+    const object = this.store.objects[id];
+    if (!object) {
+      results.push(`${type} with id ${id} not found`);
+      return;
+    }
+
+    // Handle order for acts and chapters
+    if (objectType === 'act' && (typeof data.order !== 'number' || !Number.isFinite(data.order))) {
+      data.order = object.metadata.order;
+    } else if (objectType === 'chapter' && (typeof data.order !== 'number' || !Number.isFinite(data.order))) {
+      data.order = object.metadata.order;
+      if (!data.actId) {
+        data.actId = object.metadata.act_id;
+      }
+    }
+
+    // Update the object
+    const updateData: any = {};
+    if (objectType === 'basic_info') {
+      updateData.title = data.title !== undefined ? data.title : object.data.title;
+      updateData.logline = data.logline !== undefined ? data.logline : object.data.logline;
+      updateData.genre = data.genre !== undefined ? data.genre : object.data.genre;
+    } else {
+      updateData.name = data.name !== undefined ? data.name : object.data.name;
+      updateData.description = data.description !== undefined ? data.description : object.data.description;
+    }
+
+    await this.store.updateObject(objectType, id, {
+      data: updateData,
+      language: object.languages.active,
+      create_new_version: true,
+      user_request: 'AI Edit',
+    });
+
+    const displayName = objectType === 'basic_info' ? 'basic info' : itemName;
+    results.push(`Updated ${objectType}: ${displayName}`);
   }
 
   private async handleDeleteOperation(
@@ -340,75 +347,45 @@ export class FunctionCallApplicator {
     id: string,
     results: string[]
   ): Promise<void> {
-    const storyObjects = this.storeActions.getStoryObjects(projectId);
-
+    // Map old type names to ObjectType
+    let objectType: ObjectType;
     switch (type) {
       case 'character':
-        const charToDelete = storyObjects.characters.find(c => c.id === id);
-        if (!charToDelete) {
-          results.push(`Character with id ${id} not found`);
-          return;
-        }
-        this.storeActions.deleteCharacter(projectId, id);
-        results.push(`Deleted character: ${charToDelete.name}`);
+        objectType = 'character';
         break;
       case 'organization':
-        const orgToDelete = storyObjects.organizations.find(o => o.id === id);
-        if (!orgToDelete) {
-          results.push(`Organization with id ${id} not found`);
-          return;
-        }
-        this.storeActions.deleteOrganization(projectId, id);
-        results.push(`Deleted organization: ${orgToDelete.name}`);
+        objectType = 'organization';
         break;
       case 'location':
-        const locToDelete = storyObjects.locations.find(l => l.id === id);
-        if (!locToDelete) {
-          results.push(`Location with id ${id} not found`);
-          return;
-        }
-        this.storeActions.deleteLocation(projectId, id);
-        results.push(`Deleted location: ${locToDelete.name}`);
+        objectType = 'location';
         break;
       case 'lorebook':
-        const entryToDelete = storyObjects.lorebook.find(e => e.id === id);
-        if (!entryToDelete) {
-          results.push(`Lorebook entry with id ${id} not found`);
-          return;
-        }
-        this.storeActions.deleteLorebookEntry(projectId, id);
-        results.push(`Deleted lorebook entry: ${entryToDelete.name}`);
+        objectType = 'lorebook';
         break;
       case 'act':
-        const actToDelete = storyObjects.outline?.acts.find(a => a.id === id);
-        if (!actToDelete) {
-          results.push(`Act with id ${id} not found`);
-          return;
-        }
-        this.storeActions.deleteAct(projectId, id);
-        results.push(`Deleted act: ${actToDelete.name}`);
+        objectType = 'act';
         break;
       case 'chapter':
-        let chapterToDelete = null;
-        if (storyObjects.outline) {
-          for (const act of storyObjects.outline.acts) {
-            const chapter = act.chapters.find(c => c.id === id);
-            if (chapter) {
-              chapterToDelete = chapter;
-              break;
-            }
-          }
-        }
-        if (!chapterToDelete) {
-          results.push(`Chapter with id ${id} not found`);
-          return;
-        }
-        this.storeActions.deleteChapter(projectId, id);
-        results.push(`Deleted chapter: ${chapterToDelete.name}`);
+        objectType = 'chapter';
         break;
       default:
         results.push(`Unknown delete type: ${type}`);
+        return;
     }
+
+    // Get the object to get its name
+    const object = this.store.objects[id];
+    if (!object) {
+      results.push(`${type} with id ${id} not found`);
+      return;
+    }
+
+    const objectName = object.data.name || 'Unknown';
+
+    // Delete the object
+    await this.store.deleteObject(objectType, id);
+
+    results.push(`Deleted ${objectType}: ${objectName}`);
   }
 
 }

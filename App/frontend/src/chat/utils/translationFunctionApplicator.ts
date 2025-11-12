@@ -3,9 +3,10 @@
  * Handles applying translation function call results to the stores
  */
 
-import { useStoryObjectStore } from '../../store/storyObjectStore';
+import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useNovelStore } from '../../store/novelStore';
 import type { FunctionCallMetadata } from '../../llm_request/types';
+import type { ObjectType } from '../../types/unifiedObject';
 
 export interface FunctionApplicationResult {
   success: boolean;
@@ -20,7 +21,7 @@ export interface FunctionApplicationResult {
 export interface TranslationContext {
   projectId: string;
   targetLanguage: string;
-  category?: string;
+  category?: ObjectType;
   itemId?: string;
   chapterId?: string;
   versionId?: string;
@@ -111,18 +112,32 @@ async function handleTranslateBasicInfo(
   context: TranslationContext,
   args: { title: string; logline: string; genre: string }
 ): Promise<FunctionApplicationResult> {
-  const store = useStoryObjectStore.getState();
+  const store = useUnifiedObjectStore.getState();
+
+  // Get basic info for this project
+  const basicInfoList = await store.listObjects('basic_info', context.projectId);
+
+  if (basicInfoList.length === 0) {
+    return {
+      success: false,
+      message: 'Basic info not found',
+      error: 'No basic info exists for this project'
+    };
+  }
+
+  const basicInfo = basicInfoList[0];
 
   // Update basic info in target language
-  await store.updateBasicInfo(
-    context.projectId,
-    {
+  await store.updateObject('basic_info', basicInfo.id, {
+    data: {
       title: args.title,
       logline: args.logline,
       genre: args.genre
     },
-    context.targetLanguage
-  );
+    language: context.targetLanguage,
+    create_new_version: false,
+    user_request: 'Translation',
+  });
 
   return {
     success: true,
@@ -135,7 +150,7 @@ async function handleTranslateStoryItem(
   context: TranslationContext,
   args: { name: string; description: string }
 ): Promise<FunctionApplicationResult> {
-  const store = useStoryObjectStore.getState();
+  const store = useUnifiedObjectStore.getState();
 
   if (!context.category || !context.itemId) {
     return {
@@ -145,25 +160,20 @@ async function handleTranslateStoryItem(
     };
   }
 
-  // Update the item in the target language
-  // Note: Current implementation updates directly, not via language versions
-  const updateData = {
-    name: args.name,
-    description: args.description
-  };
-
+  // Map old category names to ObjectType
+  let objectType: ObjectType;
   switch (context.category) {
     case 'character':
-      await store.updateCharacter(context.projectId, context.itemId, updateData);
+      objectType = 'character';
       break;
     case 'organization':
-      await store.updateOrganization(context.projectId, context.itemId, updateData);
+      objectType = 'organization';
       break;
     case 'location':
-      await store.updateLocation(context.projectId, context.itemId, updateData);
+      objectType = 'location';
       break;
     case 'lorebook':
-      await store.updateLorebookEntry(context.projectId, context.itemId, updateData);
+      objectType = 'lorebook';
       break;
     default:
       return {
@@ -172,6 +182,27 @@ async function handleTranslateStoryItem(
         error: 'Invalid category'
       };
   }
+
+  // Check if item exists
+  const item = store.objects[context.itemId];
+  if (!item) {
+    return {
+      success: false,
+      message: `${context.category} not found`,
+      error: `Item with id ${context.itemId} not found`
+    };
+  }
+
+  // Update the item in the target language
+  await store.updateObject(objectType, context.itemId, {
+    data: {
+      name: args.name,
+      description: args.description
+    },
+    language: context.targetLanguage,
+    create_new_version: false,
+    user_request: 'Translation',
+  });
 
   return {
     success: true,
@@ -184,7 +215,7 @@ async function handleTranslateChapterMetadata(
   context: TranslationContext,
   args: { name: string; description: string }
 ): Promise<FunctionApplicationResult> {
-  const store = useStoryObjectStore.getState();
+  const store = useUnifiedObjectStore.getState();
 
   if (!context.chapterId) {
     return {
@@ -194,10 +225,25 @@ async function handleTranslateChapterMetadata(
     };
   }
 
+  // Check if chapter exists
+  const chapter = store.objects[context.chapterId];
+  if (!chapter) {
+    return {
+      success: false,
+      message: 'Chapter not found',
+      error: `Chapter with id ${context.chapterId} not found`
+    };
+  }
+
   // Update chapter metadata in target language
-  await store.updateChapter(context.projectId, context.chapterId, {
-    name: args.name,
-    description: args.description
+  await store.updateObject('chapter', context.chapterId, {
+    data: {
+      name: args.name,
+      description: args.description
+    },
+    language: context.targetLanguage,
+    create_new_version: false,
+    user_request: 'Translation',
   });
 
   return {

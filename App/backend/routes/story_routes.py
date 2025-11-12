@@ -148,28 +148,39 @@ async def update_basic_info(
     if data.genre is not None:
         basic_info.genre = data.genre
 
-    # Create new version
+    # Create new version with merged language data
     language = data.language or 'English'
     version_id = uuid.uuid4()
+
+    # Get current active version to preserve other languages
+    current_version = db.query(StoryObjectVersion).filter(
+        StoryObjectVersion.object_id == basic_info.id,
+        StoryObjectVersion.is_active == True
+    ).first()
+
+    # Start with existing language data or empty dict
+    merged_data = current_version.data.copy() if current_version and current_version.data else {}
+
+    # Add/update the current language
+    merged_data[language] = {
+        'title': basic_info.title,
+        'logline': basic_info.logline,
+        'genre': basic_info.genre
+    }
 
     # Deactivate old versions
     db.query(StoryObjectVersion).filter(
         StoryObjectVersion.object_id == basic_info.id
     ).update({'is_active': False})
 
+    # Create new version with merged data
     version = StoryObjectVersion(
         id=version_id,
         object_id=basic_info.id,
         object_type='basic_info',
         user_request='User Edit',
         is_active=True,
-        data={
-            language: {
-                'title': basic_info.title,
-                'logline': basic_info.logline,
-                'genre': basic_info.genre
-            }
-        }
+        data=merged_data
     )
 
     basic_info.active_version_id = version_id
@@ -293,26 +304,38 @@ async def update_character(
     if data.description is not None:
         character.description = data.description
 
-    # Create new version
+    # Create new version with merged language data
     language = data.language or 'English'
     version_id = uuid.uuid4()
 
+    # Get current active version to preserve other languages
+    current_version = db.query(StoryObjectVersion).filter(
+        StoryObjectVersion.object_id == character.id,
+        StoryObjectVersion.is_active == True
+    ).first()
+
+    # Start with existing language data or empty dict
+    merged_data = current_version.data.copy() if current_version and current_version.data else {}
+
+    # Add/update the current language
+    merged_data[language] = {
+        'name': character.name,
+        'description': character.description
+    }
+
+    # Deactivate old versions
     db.query(StoryObjectVersion).filter(
         StoryObjectVersion.object_id == character.id
     ).update({'is_active': False})
 
+    # Create new version with merged data
     version = StoryObjectVersion(
         id=version_id,
         object_id=character.id,
         object_type='character',
         user_request='User Edit',
         is_active=True,
-        data={
-            language: {
-                'name': character.name,
-                'description': character.description
-            }
-        }
+        data=merged_data
     )
 
     character.active_version_id = version_id
@@ -404,6 +427,125 @@ async def list_organizations(
     return orgs
 
 
+@router.get("/organizations/{organization_id}", response_model=NameDescriptionResponse)
+async def get_organization(
+    project_id: uuid.UUID,
+    organization_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get a single organization"""
+    project = await verify_project_access(project_id, current_user, db)
+
+    org = db.query(Organization).filter(
+        Organization.id == organization_id,
+        Organization.project_id == project_id
+    ).first()
+
+    if not org:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found"
+        )
+
+    return org
+
+
+@router.put("/organizations/{organization_id}", response_model=NameDescriptionResponse)
+async def update_organization(
+    project_id: uuid.UUID,
+    organization_id: uuid.UUID,
+    data: NameDescriptionUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update an organization"""
+    project = await verify_project_access(project_id, current_user, db)
+
+    org = db.query(Organization).filter(
+        Organization.id == organization_id,
+        Organization.project_id == project_id
+    ).first()
+
+    if not org:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found"
+        )
+
+    # Update fields
+    if data.name is not None:
+        org.name = data.name
+    if data.description is not None:
+        org.description = data.description
+
+    # Create new version with merged language data
+    language = data.language or 'English'
+    version_id = uuid.uuid4()
+
+    # Get current active version to preserve other languages
+    current_version = db.query(StoryObjectVersion).filter(
+        StoryObjectVersion.object_id == org.id,
+        StoryObjectVersion.is_active == True
+    ).first()
+
+    # Start with existing language data or empty dict
+    merged_data = current_version.data.copy() if current_version and current_version.data else {}
+
+    # Add/update the current language
+    merged_data[language] = {
+        'name': org.name,
+        'description': org.description
+    }
+
+    # Deactivate old versions
+    db.query(StoryObjectVersion).filter(
+        StoryObjectVersion.object_id == org.id
+    ).update({'is_active': False})
+
+    # Create new version with merged data
+    version = StoryObjectVersion(
+        id=version_id,
+        object_id=org.id,
+        object_type='organization',
+        user_request='User Edit',
+        is_active=True,
+        data=merged_data
+    )
+
+    org.active_version_id = version_id
+    db.add(version)
+    db.commit()
+    db.refresh(org)
+
+    return org
+
+
+@router.delete("/organizations/{organization_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_organization(
+    project_id: uuid.UUID,
+    organization_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete an organization"""
+    project = await verify_project_access(project_id, current_user, db)
+
+    org = db.query(Organization).filter(
+        Organization.id == organization_id,
+        Organization.project_id == project_id
+    ).first()
+
+    if not org:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found"
+        )
+
+    db.delete(org)
+    db.commit()
+
+
 # ============================================================================
 # LOCATIONS
 # ============================================================================
@@ -458,6 +600,125 @@ async def list_locations(
     return locations
 
 
+@router.get("/locations/{location_id}", response_model=NameDescriptionResponse)
+async def get_location(
+    project_id: uuid.UUID,
+    location_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get a single location"""
+    project = await verify_project_access(project_id, current_user, db)
+
+    location = db.query(Location).filter(
+        Location.id == location_id,
+        Location.project_id == project_id
+    ).first()
+
+    if not location:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Location not found"
+        )
+
+    return location
+
+
+@router.put("/locations/{location_id}", response_model=NameDescriptionResponse)
+async def update_location(
+    project_id: uuid.UUID,
+    location_id: uuid.UUID,
+    data: NameDescriptionUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update a location"""
+    project = await verify_project_access(project_id, current_user, db)
+
+    location = db.query(Location).filter(
+        Location.id == location_id,
+        Location.project_id == project_id
+    ).first()
+
+    if not location:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Location not found"
+        )
+
+    # Update fields
+    if data.name is not None:
+        location.name = data.name
+    if data.description is not None:
+        location.description = data.description
+
+    # Create new version with merged language data
+    language = data.language or 'English'
+    version_id = uuid.uuid4()
+
+    # Get current active version to preserve other languages
+    current_version = db.query(StoryObjectVersion).filter(
+        StoryObjectVersion.object_id == location.id,
+        StoryObjectVersion.is_active == True
+    ).first()
+
+    # Start with existing language data or empty dict
+    merged_data = current_version.data.copy() if current_version and current_version.data else {}
+
+    # Add/update the current language
+    merged_data[language] = {
+        'name': location.name,
+        'description': location.description
+    }
+
+    # Deactivate old versions
+    db.query(StoryObjectVersion).filter(
+        StoryObjectVersion.object_id == location.id
+    ).update({'is_active': False})
+
+    # Create new version with merged data
+    version = StoryObjectVersion(
+        id=version_id,
+        object_id=location.id,
+        object_type='location',
+        user_request='User Edit',
+        is_active=True,
+        data=merged_data
+    )
+
+    location.active_version_id = version_id
+    db.add(version)
+    db.commit()
+    db.refresh(location)
+
+    return location
+
+
+@router.delete("/locations/{location_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_location(
+    project_id: uuid.UUID,
+    location_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a location"""
+    project = await verify_project_access(project_id, current_user, db)
+
+    location = db.query(Location).filter(
+        Location.id == location_id,
+        Location.project_id == project_id
+    ).first()
+
+    if not location:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Location not found"
+        )
+
+    db.delete(location)
+    db.commit()
+
+
 # ============================================================================
 # LOREBOOK
 # ============================================================================
@@ -510,6 +771,125 @@ async def list_lorebook(
     project = await verify_project_access(project_id, current_user, db)
     entries = db.query(LorebookEntry).filter(LorebookEntry.project_id == project_id).all()
     return entries
+
+
+@router.get("/lorebook/{lorebook_id}", response_model=NameDescriptionResponse)
+async def get_lorebook_entry(
+    project_id: uuid.UUID,
+    lorebook_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get a single lorebook entry"""
+    project = await verify_project_access(project_id, current_user, db)
+
+    entry = db.query(LorebookEntry).filter(
+        LorebookEntry.id == lorebook_id,
+        LorebookEntry.project_id == project_id
+    ).first()
+
+    if not entry:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lorebook entry not found"
+        )
+
+    return entry
+
+
+@router.put("/lorebook/{lorebook_id}", response_model=NameDescriptionResponse)
+async def update_lorebook_entry(
+    project_id: uuid.UUID,
+    lorebook_id: uuid.UUID,
+    data: NameDescriptionUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update a lorebook entry"""
+    project = await verify_project_access(project_id, current_user, db)
+
+    entry = db.query(LorebookEntry).filter(
+        LorebookEntry.id == lorebook_id,
+        LorebookEntry.project_id == project_id
+    ).first()
+
+    if not entry:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lorebook entry not found"
+        )
+
+    # Update fields
+    if data.name is not None:
+        entry.name = data.name
+    if data.description is not None:
+        entry.description = data.description
+
+    # Create new version with merged language data
+    language = data.language or 'English'
+    version_id = uuid.uuid4()
+
+    # Get current active version to preserve other languages
+    current_version = db.query(StoryObjectVersion).filter(
+        StoryObjectVersion.object_id == entry.id,
+        StoryObjectVersion.is_active == True
+    ).first()
+
+    # Start with existing language data or empty dict
+    merged_data = current_version.data.copy() if current_version and current_version.data else {}
+
+    # Add/update the current language
+    merged_data[language] = {
+        'name': entry.name,
+        'description': entry.description
+    }
+
+    # Deactivate old versions
+    db.query(StoryObjectVersion).filter(
+        StoryObjectVersion.object_id == entry.id
+    ).update({'is_active': False})
+
+    # Create new version with merged data
+    version = StoryObjectVersion(
+        id=version_id,
+        object_id=entry.id,
+        object_type='lorebook',
+        user_request='User Edit',
+        is_active=True,
+        data=merged_data
+    )
+
+    entry.active_version_id = version_id
+    db.add(version)
+    db.commit()
+    db.refresh(entry)
+
+    return entry
+
+
+@router.delete("/lorebook/{lorebook_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_lorebook_entry(
+    project_id: uuid.UUID,
+    lorebook_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a lorebook entry"""
+    project = await verify_project_access(project_id, current_user, db)
+
+    entry = db.query(LorebookEntry).filter(
+        LorebookEntry.id == lorebook_id,
+        LorebookEntry.project_id == project_id
+    ).first()
+
+    if not entry:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lorebook entry not found"
+        )
+
+    db.delete(entry)
+    db.commit()
 
 
 # ============================================================================

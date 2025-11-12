@@ -62,8 +62,6 @@ def upgrade() -> None:
                 {'configs': json.dumps(function_configs), 'id': user_settings_id}
             )
 
-    conn.commit()
-
 
 def downgrade() -> None:
     """
@@ -109,4 +107,3 @@ def downgrade() -> None:
                 {'configs': json.dumps(function_configs), 'id': user_settings_id}
             )
 
-    conn.commit()

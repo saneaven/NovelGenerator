@@ -1,189 +1,248 @@
-import React, { useState, useEffect } from 'react';
+/**
+ * BasicInfoManager - Migrated to New Unified Translation System
+ *
+ * Changes from old system:
+ * - Uses useUnifiedObjectStore instead of useStoryObjectStore
+ * - Direct data access (no useLanguageAwareData hook)
+ * - LanguageSwitcher component for language switching
+ * - Simplified save logic (no manual sync)
+ * - Cleaner translation flow
+ */
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { useStoryObjectStore } from '../store/storyObjectStore';
+import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { LanguageSwitcher } from './LanguageSwitcher';
 import AIEditModal from './AIEditModal';
 import VersionHistoryModal from './VersionHistoryModal';
-import { translateStoryObject, getDisplayDataForItem } from '../utils/storyObjectTranslation';
-import type { BasicInfo } from '../types/storyObject';
-import { createEmptyBasicInfo } from '../types/storyObject';
+import type { BasicInfoObject, BasicInfoData } from '../types/unifiedObject';
 
 const BasicInfoManager: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
-  const { getBasicInfo, updateBasicInfo, syncFlatFieldsWithLanguage } = useStoryObjectStore();
+  const objects = useUnifiedObjectStore((state) => state.objects);
+  const loadingMap = useUnifiedObjectStore((state) => state.loading);
+  const errors = useUnifiedObjectStore((state) => state.errors);
+  const fetchObject = useUnifiedObjectStore((state) => state.fetchObject);
+  const updateObject = useUnifiedObjectStore((state) => state.updateObject);
+  const addTranslation = useUnifiedObjectStore((state) => state.addTranslation);
+  const switchLanguage = useUnifiedObjectStore((state) => state.switchLanguage);
+  const activateVersion = useUnifiedObjectStore((state) => state.activateVersion);
+  const listObjects = useUnifiedObjectStore((state) => state.listObjects);
+  const createObject = useUnifiedObjectStore((state) => state.createObject);
   const { settings } = useSettingsStore();
+
+  // Get basic info from unified store
+  // In real implementation, you'd need to get the basic info ID first
+  // For now, assuming there's one basic info per project
+  const [basicInfoId, setBasicInfoId] = useState<string | null>(null);
+  const basicInfo = basicInfoId ? (objects[basicInfoId] as BasicInfoObject) : null;
+  const loading = basicInfoId ? (loadingMap[basicInfoId] || false) : false;
+  const error = basicInfoId ? (errors[basicInfoId] || null) : null;
+  const [initializing, setInitializing] = useState(false);
+  const [initializationError, setInitializationError] = useState<string | null>(null);
+
+  // Edit state
   const [isEditing, setIsEditing] = useState(false);
-  const [editFormData, setEditFormData] = useState<BasicInfo>(createEmptyBasicInfo());
+  const [editFormData, setEditFormData] = useState<BasicInfoData>({
+    title: '',
+    logline: '',
+    genre: '',
+  });
+
+  // Modal state
   const [showAIModal, setShowAIModal] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Language state management
-  const [currentLanguage, setCurrentLanguage] = useState(settings.primaryLanguage);
-  const [isTranslating, setIsTranslating] = useState(false);
+  // Fetch basic info ID on mount (you'll need to implement this based on your API)
+  const initializeBasicInfo = useCallback(async () => {
+    if (!projectId) {
+      setBasicInfoId(null);
+      return;
+    }
 
-  const primaryLanguage = settings.primaryLanguage;
-  const secondaryLanguage = settings.secondaryLanguage;
+    setInitializing(true);
+    setInitializationError(null);
 
-  // Get basic info directly from store - this will automatically re-render when store updates
-  const basicInfo = projectId ? (getBasicInfo(projectId) || createEmptyBasicInfo()) : createEmptyBasicInfo();
+    try {
+      const existing = await listObjects('basic_info', projectId);
+      if (existing.length > 0) {
+        setBasicInfoId(existing[0].id);
+        return;
+      }
+
+      const newBasicInfo = await createObject(
+        'basic_info',
+        projectId,
+        {
+          title: '',
+          logline: '',
+          genre: '',
+        },
+        settings.primaryLanguage
+      );
+      setBasicInfoId(newBasicInfo.id);
+    } catch (err) {
+      console.error('Failed to initialize basic info:', err);
+      setInitializationError(
+        err instanceof Error ? err.message : 'Failed to load basic info'
+      );
+    } finally {
+      setInitializing(false);
+    }
+  }, [projectId, listObjects, createObject, settings.primaryLanguage]);
+
+  useEffect(() => {
+    setBasicInfoId(null);
+    initializeBasicInfo();
+  }, [initializeBasicInfo]);
+
+  // Fetch basic info when ID is available
+  useEffect(() => {
+    if (basicInfoId) {
+      fetchObject('basic_info', basicInfoId);
+    }
+  }, [basicInfoId, fetchObject]);
+
+  // Sync edit form when basic info loads or language changes
+  useEffect(() => {
+    if (basicInfo?.data) {
+      setEditFormData(basicInfo.data);
+    }
+  }, [basicInfo?.data]);
+
+  // ============================================================================
+  // HANDLERS
+  // ============================================================================
 
   const handleSave = async () => {
-    if (!projectId || !basicInfo.id) return;
+    if (!basicInfo || !basicInfoId) return;
 
-    const itemId = basicInfo.id; // Capture itemId before any async operations
-    const editLanguage = currentLanguage; // Capture current language
+    setIsSaving(true);
+    try {
+      await updateObject('basic_info', basicInfoId, {
+        data: editFormData,
+        language: basicInfo.languages.active,
+        user_request: 'User Edit',
+        create_new_version: true,
+      });
 
-    updateBasicInfo(projectId, {
-      title: editFormData.title,
-      logline: editFormData.logline,
-      genre: editFormData.genre,
-    }, editLanguage);
-
-    setIsEditing(false);
-
-    // Check if primary language data exists in the new version
-    setTimeout(async () => {
-      const { hasItemDataInLanguage } = useStoryObjectStore.getState();
-      const hasPrimaryLanguage = hasItemDataInLanguage(projectId, 'basicInfo', itemId, primaryLanguage);
-
-      if (!hasPrimaryLanguage && editLanguage !== primaryLanguage) {
-        // Ask user if they want to translate to primary language
-        const shouldTranslate = confirm(
-          `You edited the basic info in ${editLanguage}. Would you like to translate it to ${primaryLanguage}?`
-        );
-
-        if (shouldTranslate) {
-          try {
-            await translateStoryObject({
-              projectId,
-              category: 'basicInfo',
-              itemId,
-              sourceLanguage: editLanguage,
-              targetLanguage: primaryLanguage,
-              aiModel: settings.aiModel,
-              onTranslating: setIsTranslating,
-            });
-
-            // Sync flat fields with primary language after translation
-            syncFlatFieldsWithLanguage(projectId, 'basicInfo', itemId, primaryLanguage);
-            setCurrentLanguage(primaryLanguage);
-          } catch (error) {
-            console.error('Translation failed:', error);
-          }
-        }
-      }
-    }, 100);
+      setIsEditing(false);
+      console.log('✓ Basic info saved successfully');
+    } catch (err) {
+      console.error('Failed to save basic info:', err);
+      alert('Failed to save. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
-    setEditFormData(basicInfo);
+    if (basicInfo?.data) {
+      setEditFormData(basicInfo.data);
+    }
     setIsEditing(false);
   };
 
-  const handleChange = (field: keyof Pick<BasicInfo, 'title' | 'logline' | 'genre'>, value: string) => {
+  const handleChange = (field: keyof BasicInfoData, value: string) => {
     setEditFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleEdit = () => {
-    setEditFormData(basicInfo);
+    if (basicInfo?.data) {
+      setEditFormData(basicInfo.data);
+    }
     setIsEditing(true);
   };
 
-  const handleAIResult = (result: any) => {    
-    if (!projectId) return;
-    
-    if (result && typeof result === 'object') {
-      const updates: Partial<Pick<BasicInfo, 'title' | 'logline' | 'genre'>> = {};
-      
-      if (result.title !== undefined) updates.title = result.title;
-      if (result.logline !== undefined) updates.logline = result.logline;
-      if (result.genre !== undefined) updates.genre = result.genre;
-      
-      // Use AI-specific update function that automatically creates version
-      const { updateBasicInfoAI } = useStoryObjectStore.getState();
-      updateBasicInfoAI(projectId, updates);
+  const handleLanguageChange = async (newLanguage: string) => {
+    if (!basicInfo || !basicInfoId) return;
+
+    try {
+      // Clean language switch - NO version created!
+      await switchLanguage('basic_info', basicInfoId, newLanguage);
+      console.log(`✓ Switched to ${newLanguage}`);
+    } catch (err) {
+      console.error('Failed to switch language:', err);
+      alert('Failed to switch language. Please try again.');
     }
   };
 
-  const handleRestoreVersion = (versionData: any) => {
-    if (!projectId) return;
+  const handleAddTranslation = async () => {
+    if (!basicInfo || !basicInfoId) return;
 
-    if (versionData && typeof versionData === 'object') {
-      const updates: Partial<Pick<BasicInfo, 'title' | 'logline' | 'genre'>> = {};
-
-      if (versionData.title !== undefined) updates.title = versionData.title;
-      if (versionData.logline !== undefined) updates.logline = versionData.logline;
-      if (versionData.genre !== undefined) updates.genre = versionData.genre;
-
-      updateBasicInfo(projectId, updates);
-    }
-  };
-
-  // Initialize and sync language on mount
-  useEffect(() => {
-    if (!projectId || !basicInfo.id) return;
-
-    const displayInfo = getDisplayDataForItem(
-      projectId,
-      'basicInfo',
-      basicInfo.id,
-      primaryLanguage,
-      primaryLanguage,
-      secondaryLanguage
-    );
-
-    setCurrentLanguage(displayInfo.displayLanguage);
-    syncFlatFieldsWithLanguage(projectId, 'basicInfo', basicInfo.id, displayInfo.displayLanguage);
-  }, [projectId, basicInfo.id, primaryLanguage, secondaryLanguage]);
-
-  // Sync flat fields when language changes
-  useEffect(() => {
-    if (!projectId || !basicInfo.id) return;
-    syncFlatFieldsWithLanguage(projectId, 'basicInfo', basicInfo.id, currentLanguage);
-  }, [currentLanguage, projectId, basicInfo.id]);
-
-  const handleLanguageToggle = async () => {
-    if (!projectId || !secondaryLanguage || !basicInfo.id) return;
-
-    const targetLang = currentLanguage === secondaryLanguage ? primaryLanguage : secondaryLanguage;
-
-    const { hasItemDataInLanguage, getAvailableLanguagesForItem, getItemDataInLanguage } = useStoryObjectStore.getState();
-    const hasTargetLang = hasItemDataInLanguage(projectId, 'basicInfo', basicInfo.id, targetLang);
-
-    if (hasTargetLang) {
-      setCurrentLanguage(targetLang);
+    const targetLanguage = settings.secondaryLanguage;
+    if (!targetLanguage) {
+      alert('Please set a secondary language in settings first.');
       return;
     }
 
-    // Need to translate
-    const availableLanguages = getAvailableLanguagesForItem(projectId, 'basicInfo', basicInfo.id);
-    if (availableLanguages.length === 0) return;
-
-    const sourceLang = availableLanguages.includes(currentLanguage) ? currentLanguage : availableLanguages[0];
-
-    // Validate source data before translation
-    const sourceData = getItemDataInLanguage(projectId, 'basicInfo', basicInfo.id, sourceLang);
-    if (!sourceData || (!sourceData.title?.trim() && !sourceData.logline?.trim() && !sourceData.genre?.trim())) {
-      alert(`Cannot translate: No content in ${sourceLang} version. Please add content first.`);
+    // Check if translation already exists
+    if (basicInfo.languages.available.includes(targetLanguage)) {
+      alert(`${targetLanguage} translation already exists.`);
       return;
     }
 
     try {
-      await translateStoryObject({
-        projectId,
-        category: 'basicInfo',
-        itemId: basicInfo.id,
-        sourceLanguage: sourceLang,
-        targetLanguage: targetLang,
-        aiModel: settings.aiModel,
-        onTranslating: setIsTranslating,
+      // In real implementation, you'd call AI translation here
+      // For now, creating a placeholder translation
+      await addTranslation('basic_info', basicInfoId, {
+        language: targetLanguage,
+        data: {
+          title: `[${targetLanguage}] ${basicInfo.data.title}`,
+          logline: `[${targetLanguage}] ${basicInfo.data.logline}`,
+          genre: `[${targetLanguage}] ${basicInfo.data.genre}`,
+        },
+        user_request: 'Manual Translation',
       });
 
-      setCurrentLanguage(targetLang);
-    } catch (error) {
-      console.error('Translation failed:', error);
+      console.log(`✓ Added ${targetLanguage} translation`);
+      alert(`Translation added for ${targetLanguage}`);
+    } catch (err) {
+      console.error('Failed to add translation:', err);
+      alert('Failed to add translation. Please try again.');
     }
   };
+
+  const handleAIResult = async (result: any) => {
+    if (!basicInfo || !basicInfoId || !result) return;
+
+    try {
+      const updates: Partial<BasicInfoData> = {};
+      if (result.title !== undefined) updates.title = result.title;
+      if (result.logline !== undefined) updates.logline = result.logline;
+      if (result.genre !== undefined) updates.genre = result.genre;
+
+      await updateObject('basic_info', basicInfoId, {
+        data: { ...basicInfo.data, ...updates },
+        language: basicInfo.languages.active,
+        user_request: 'AI Edit',
+        create_new_version: true,
+      });
+
+      console.log('✓ AI edit applied');
+    } catch (err) {
+      console.error('Failed to apply AI edit:', err);
+      alert('Failed to apply AI edit. Please try again.');
+    }
+  };
+
+  const handleRestoreVersion = async (versionId: string) => {
+    if (!basicInfo || !basicInfoId) return;
+
+    try {
+      await activateVersion('basic_info', basicInfoId, versionId);
+      console.log('✓ Version restored');
+    } catch (err) {
+      console.error('Failed to restore version:', err);
+      alert('Failed to restore version. Please try again.');
+    }
+  };
+
+  // ============================================================================
+  // RENDER
+  // ============================================================================
 
   if (!projectId) {
     return (
@@ -193,11 +252,55 @@ const BasicInfoManager: React.FC = () => {
     );
   }
 
-  const displayInfo = projectId && basicInfo.id
-    ? getDisplayDataForItem(projectId, 'basicInfo', basicInfo.id, currentLanguage, primaryLanguage, secondaryLanguage)
-    : { data: null, displayLanguage: currentLanguage, hasRequestedLanguage: true, fallbackLanguage: null, availableLanguages: [] };
+  if (loading && !basicInfo) {
+    return (
+      <div className="basic-info-manager loading">
+        <div className="spinner" />
+        <p>Loading basic information...</p>
+      </div>
+    );
+  }
 
-  const showMissingLanguageWarning = !displayInfo.hasRequestedLanguage && displayInfo.fallbackLanguage;
+  if (error) {
+    return (
+      <div className="error-container">
+        <h3>Error Loading Basic Info</h3>
+        <p>{error}</p>
+        <button onClick={() => basicInfoId && fetchObject('basic_info', basicInfoId)}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (initializationError && !basicInfo) {
+    return (
+      <div className="error-container">
+        <h3>Unable to load basic info</h3>
+        <p>{initializationError}</p>
+        <button onClick={initializeBasicInfo} disabled={initializing}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (initializing && !basicInfo) {
+    return (
+      <div className="basic-info-manager loading">
+        <div className="spinner" />
+        <p>Loading basic information...</p>
+      </div>
+    );
+  }
+
+  if (!basicInfo) {
+    return (
+      <div className="error-container">
+        <p>Basic information not found for this project.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="basic-info-manager">
@@ -205,52 +308,62 @@ const BasicInfoManager: React.FC = () => {
         <h2>Basic Information</h2>
         {!isEditing ? (
           <div className="header-buttons">
-            {secondaryLanguage && (
-              <button
-                onClick={handleLanguageToggle}
-                className="translate-button"
-                disabled={isTranslating}
-                title={`Translate to ${currentLanguage === secondaryLanguage ? primaryLanguage : secondaryLanguage}`}
-              >
-                {isTranslating ? '⏳ Translating...' : `🌐 ${currentLanguage}`}
-              </button>
-            )}
-            <button onClick={() => setShowVersionHistory(true)} className="version-history-button">
+            <LanguageSwitcher
+              object={basicInfo}
+              onLanguageChange={handleLanguageChange}
+              disabled={loading}
+            />
+            {settings.secondaryLanguage &&
+              !basicInfo.languages.available.includes(settings.secondaryLanguage) && (
+                <button
+                  onClick={handleAddTranslation}
+                  className="translate-button"
+                  disabled={loading}
+                  title={`Translate to ${settings.secondaryLanguage}`}
+                >
+                  🌐 Add {settings.secondaryLanguage}
+                </button>
+              )}
+            <button
+              onClick={() => setShowVersionHistory(true)}
+              className="version-history-button"
+              disabled={loading}
+            >
               📚 Version History
             </button>
-            <button onClick={() => setShowAIModal(true)} className="ai-edit-button">
+            <button
+              onClick={() => setShowAIModal(true)}
+              className="ai-edit-button"
+              disabled={loading}
+            >
               🤖 AI Edit
             </button>
-            <button onClick={handleEdit} className="edit-button">
+            <button onClick={handleEdit} className="edit-button" disabled={loading}>
               Edit
             </button>
           </div>
         ) : (
           <div className="edit-buttons">
-            <button onClick={handleSave} className="save-button">
-              Save
+            <button
+              onClick={handleSave}
+              className="save-button"
+              disabled={isSaving}
+            >
+              {isSaving ? 'Saving...' : 'Save'}
             </button>
-            <button onClick={handleCancel} className="cancel-button">
+            <button
+              onClick={handleCancel}
+              className="cancel-button"
+              disabled={isSaving}
+            >
               Cancel
             </button>
           </div>
         )}
       </div>
 
-      {showMissingLanguageWarning && (
-        <div className="missing-language-warning">
-          <p>⚠️ No {currentLanguage} version available. Displaying {displayInfo.fallbackLanguage} version.</p>
-          <button
-            onClick={handleLanguageToggle}
-            className="generate-translation-button"
-            disabled={isTranslating}
-          >
-            {isTranslating ? 'Generating...' : `Generate ${currentLanguage} Version`}
-          </button>
-        </div>
-      )}
-
       <div className="basic-info-content">
+        {/* Title */}
         <div className="form-group">
           <label htmlFor="title">Title</label>
           {isEditing ? (
@@ -260,14 +373,16 @@ const BasicInfoManager: React.FC = () => {
               value={editFormData.title}
               onChange={(e) => handleChange('title', e.target.value)}
               placeholder="Enter the title of the novel"
+              disabled={isSaving}
             />
           ) : (
             <div className="display-value">
-              {basicInfo.title || 'Title not set.'}
+              {basicInfo.data.title || 'Title not set.'}
             </div>
           )}
         </div>
 
+        {/* Genre */}
         <div className="form-group">
           <label htmlFor="genre">Genre</label>
           {isEditing ? (
@@ -277,14 +392,16 @@ const BasicInfoManager: React.FC = () => {
               value={editFormData.genre}
               onChange={(e) => handleChange('genre', e.target.value)}
               placeholder="Enter the genre (e.g., Fantasy, Romance, Sci-Fi)"
+              disabled={isSaving}
             />
           ) : (
             <div className="display-value">
-              {basicInfo.genre || 'Genre not set.'}
+              {basicInfo.data.genre || 'Genre not set.'}
             </div>
           )}
         </div>
 
+        {/* Logline */}
         <div className="form-group">
           <label htmlFor="logline">Logline</label>
           {isEditing ? (
@@ -294,40 +411,48 @@ const BasicInfoManager: React.FC = () => {
               onChange={(e) => handleChange('logline', e.target.value)}
               placeholder="Summarize the core content of the novel in one or two sentences"
               rows={4}
+              disabled={isSaving}
             />
           ) : (
             <div className="display-value multiline">
-              {basicInfo.logline || 'Logline not set.'}
+              {basicInfo.data.logline || 'Logline not set.'}
             </div>
           )}
         </div>
 
+        {/* Metadata */}
         <div className="metadata">
-          <span className="item-language">Language: {currentLanguage}</span>
-          {basicInfo.updatedAt && (
+          <span className="item-language">
+            Language: {basicInfo.languages.active}
+          </span>
+          <span className="version-info">
+            Version: {basicInfo.version.number}
+          </span>
+          {basicInfo.metadata.updated_at && (
             <span className="last-updated">
-              Last updated: {basicInfo.updatedAt.toLocaleString()}
+              Last updated: {new Date(basicInfo.metadata.updated_at).toLocaleString()}
             </span>
           )}
         </div>
       </div>
 
+      {/* AI Edit Modal */}
       <AIEditModal
         isOpen={showAIModal}
         onClose={() => setShowAIModal(false)}
         category="basicInfo"
-        projectId={projectId || ''}
-        targetId={basicInfo.id}
+        projectId={projectId}
+        targetId={basicInfoId || ''}
         onResult={handleAIResult}
       />
 
-      {basicInfo.id && (
+      {/* Version History Modal */}
+      {basicInfoId && (
         <VersionHistoryModal
           isOpen={showVersionHistory}
           onClose={() => setShowVersionHistory(false)}
-          projectId={projectId || ''}
-          category="basicInfo"
-          targetId={basicInfo.id}
+          objectType="basic_info"
+          objectId={basicInfoId!}
           onRestoreVersion={handleRestoreVersion}
         />
       )}

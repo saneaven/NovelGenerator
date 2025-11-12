@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useChatStore, type StoredChatMessage } from '../../../store/chatStore';
-import { useStoryObjectStore } from '../../../store/storyObjectStore';
 import { useProjectStore } from '../../../store/projectStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
@@ -251,7 +250,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             const translationFunctionSchema = getTranslationFunctionSchema('chatMessage');
 
             // Get provider config from settings
-            const storyObjectStore = useStoryObjectStore.getState();
             const translationConfig = settingsStore.getFunctionConfig('translation');
             const providerConfig = settingsStore.getProviderConfig(translationConfig.provider);
 
@@ -306,7 +304,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             const tempChatId = `temp-message-translation-${Date.now()}`;
             const chatManagerConfig: ChatManagerConfig = {
                 projectId,
-                getStoryObjects: () => storyObjectStore.getStoryObjects(projectId),
+                getStoryObjects: () => storyObjects,
                 systemInsertConfig: {
                     promptContext: {
                         sourceLanguage,

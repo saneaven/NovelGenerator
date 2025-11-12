@@ -8,9 +8,10 @@ import { areEditCardMapsEqual } from '../chat/utils/editCardUtils';
 import { WORKSPACE_FUNCTIONS } from '../chat/types/functionCalling';
 import { useChatStore } from '../store/chatStore';
 import { useProjectStore } from '../store/projectStore';
-import { useStoryObjectStore } from '../store/storyObjectStore';
+import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
+import type { StoryObjects } from '../types/storyObject';
 
 import ChatSidebar from '../components/ChatSidebar';
 import ErrorModal from '../components/ErrorModal';
@@ -44,13 +45,23 @@ const Workspace: React.FC = () =>
         getSelectedChatId,
         fetchChats,
     } = useChatStore();
-    const { getStoryObjects, fetchStoryObjects } = useStoryObjectStore();
+    const listObjects = useUnifiedObjectStore(state => state.listObjects);
     const primaryLanguage = useSettingsStore(state => state.settings.primaryLanguage);
     const chatFunctionConfig = useSettingsStore(state => state.settings.functionConfigs.chat);
     const providerCredentials = useSettingsStore(state => state.settings.providerCredentials);
     const { currentError, showError, hideError } = useErrorStore();
 
     const { state: uiState, actions: uiActions } = useWorkspaceState(projectId);
+
+    // State to hold story objects built from unified store
+    const [storyObjects, setStoryObjects] = useState<StoryObjects>({
+        basicInfo: null,
+        characters: [],
+        organizations: [],
+        locations: [],
+        lorebook: [],
+        outline: { acts: [] },
+    });
 
     // Fetch projects if not loaded
     useEffect(() => {
@@ -113,7 +124,7 @@ const Workspace: React.FC = () =>
         return new ChatManager(
             {
                 projectId: activeProjectId,
-                getStoryObjects: () => getStoryObjects(activeProjectId),
+                getStoryObjects: () => storyObjects,
                 systemInsertConfig,
                 chatPipeline,
                 getIsLoading: () => uiState.isLoading, // Use getter to prevent ChatManager recreation
@@ -141,7 +152,7 @@ const Workspace: React.FC = () =>
         );
     }, [
         projectId,
-        getStoryObjects,
+        storyObjects,
         systemInsertConfig,
         chatPipeline,
         uiActions.setIsLoading,
@@ -162,23 +173,91 @@ const Workspace: React.FC = () =>
     );
 
     const currentProject = getCurrentProject();
-    const storyObjects = getStoryObjects(projectId ?? '');
 
-    // Fetch story objects when projectId changes
+    // Build story objects from unified store when projectId changes
     useEffect(() =>
     {
         if (!projectId) return;
 
-        fetchStoryObjects(projectId).catch(error =>
-        {
-            // Don't show error for expected 404s (outline/basicInfo not created yet)
-            console.error('Failed to fetch story objects:', error);
-            // Only show error modal if it's a real error, not missing resources
-            if (error?.status !== 404) {
-                showError('Data Error', 'Failed to load story objects. Please try again.');
+        const buildStoryObjects = async () => {
+            try {
+                const [basicInfoList, characters, organizations, locations, lorebook, acts, chapters] = await Promise.all([
+                    listObjects('basic_info', projectId),
+                    listObjects('character', projectId),
+                    listObjects('organization', projectId),
+                    listObjects('location', projectId),
+                    listObjects('lorebook', projectId),
+                    listObjects('act', projectId),
+                    listObjects('chapter', projectId),
+                ]);
+
+                // Build basic info
+                const basicInfo = basicInfoList.length > 0 ? {
+                    id: basicInfoList[0].id,
+                    title: basicInfoList[0].data.title || '',
+                    logline: basicInfoList[0].data.logline || '',
+                    genre: basicInfoList[0].data.genre || '',
+                } : null;
+
+                // Build outline
+                const outline = {
+                    acts: acts
+                        .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+                        .map(act => ({
+                            id: act.id,
+                            name: act.data.name || '',
+                            description: act.data.description || '',
+                            order: act.metadata.order || 0,
+                            chapters: chapters
+                                .filter(ch => ch.metadata.act_id === act.id)
+                                .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+                                .map(chapter => ({
+                                    id: chapter.id,
+                                    name: chapter.data.name || '',
+                                    description: chapter.data.description || '',
+                                    order: chapter.metadata.order || 0,
+                                    actId: chapter.metadata.act_id || '',
+                                })),
+                        })),
+                };
+
+                setStoryObjects({
+                    basicInfo,
+                    characters: characters.map(ch => ({
+                        id: ch.id,
+                        name: ch.data.name || '',
+                        description: ch.data.description || '',
+                    })),
+                    organizations: organizations.map(org => ({
+                        id: org.id,
+                        name: org.data.name || '',
+                        description: org.data.description || '',
+                    })),
+                    locations: locations.map(loc => ({
+                        id: loc.id,
+                        name: loc.data.name || '',
+                        description: loc.data.description || '',
+                    })),
+                    lorebook: lorebook.map(entry => ({
+                        id: entry.id,
+                        name: entry.data.name || '',
+                        description: entry.data.description || '',
+                    })),
+                    outline,
+                });
+            } catch (error) {
+                // Don't show error for expected 404s (outline/basicInfo not created yet)
+                console.error('Failed to load story objects:', error);
+                // Only show error modal if it's a real error, not missing resources
+                const errorStatus = (error as any)?.status || (error as any)?.response?.status;
+                if (errorStatus !== 404) {
+                    showError('Data Error', 'Failed to load story objects. Please try again.');
+                }
             }
-        });
-    }, [projectId, fetchStoryObjects, showError]);
+        };
+
+        buildStoryObjects();
+    }, [projectId, listObjects, showError]);
 
     // Fetch chats when projectId changes
     useEffect(() =>

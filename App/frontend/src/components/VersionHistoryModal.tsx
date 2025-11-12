@@ -1,47 +1,52 @@
 import React, { useState, useEffect } from 'react';
-import { useStoryObjectStore } from '../store/storyObjectStore';
-import type { ObjectVersion, StoryObjectCategory } from '../types/storyObject';
+import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
+import type { ObjectType } from '../types/unifiedObject';
 
 interface VersionHistoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  projectId: string;
-  category: StoryObjectCategory;
-  targetId: string;
-  onRestoreVersion: (versionData: any) => void;
+  objectType: ObjectType;
+  objectId: string;
+  onRestoreVersion?: (versionData: any) => void;
 }
 
 const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   isOpen,
   onClose,
-  projectId,
-  category,
-  targetId,
+  objectType,
+  objectId,
   onRestoreVersion,
 }) => {
-  const storyObjectStore = useStoryObjectStore();
-  const [versions, setVersions] = useState<ObjectVersion[]>([]);
-  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const store = useUnifiedObjectStore();
+  const [versions, setVersions] = useState<any[]>([]);
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (isOpen && targetId) {
-      // Fetch versions from API
-      storyObjectStore.fetchVersions(projectId, category, targetId).then((itemVersions) => {
-        setVersions(itemVersions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+    const loadVersions = async () => {
+      if (!isOpen || !objectId) return;
 
-        // Set active version as selected by default
-        const activeVersion = itemVersions.find(v => v.is_active);
-        if (activeVersion) {
-          setSelectedVersionId(activeVersion.id);
-        }
-      });
-    }
-  }, [isOpen, projectId, category, targetId, storyObjectStore]);
+      setLoading(true);
+      try {
+        const versionHistory = await store.getVersions(objectType, objectId);
+        setVersions(versionHistory.sort((a, b) => b.number - a.number));
+      } catch (error) {
+        console.error('Failed to load versions:', error);
+        alert('Failed to load version history. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const getCategoryDisplayName = (cat: StoryObjectCategory): string => {
-    const names = {
-      basicInfo: 'Basic Info',
+    loadVersions();
+  }, [isOpen, objectId, objectType]);
+
+  const currentObject = store.objects[objectId];
+  const currentLanguage = currentObject?.languages?.active || 'en';
+
+  const getTypeDisplayName = (type: ObjectType): string => {
+    const names: Record<ObjectType, string> = {
+      basic_info: 'Basic Info',
       character: 'Character',
       organization: 'Organization',
       location: 'Location',
@@ -49,36 +54,34 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       outline: 'Outline',
       act: 'Act',
       chapter: 'Chapter',
+      chapter_content: 'Chapter Content',
     };
-    return names[cat] || cat;
+    return names[type] || type;
   };
 
-  const handleSetActiveVersion = async (versionId: string) => {
-    try {
-      await storyObjectStore.setActiveVersion(projectId, category, targetId, versionId);
-      const version = versions.find(v => v.id === versionId);
-      if (version) {
-        // Get the first language's data from the version
-        const firstLangData = Object.values(version.data)[0];
-        onRestoreVersion(firstLangData);
-      }
-      onClose();
-    } catch (error) {
-      console.error('Failed to set active version:', error);
-      alert('Failed to restore version. Please try again.');
+  const handleRestoreVersion = async (versionId: string) => {
+    if (!confirm('Are you sure you want to restore this version? This will make it the active version.')) {
+      return;
     }
-  };
 
-  const handleDeleteVersion = async (versionId: string) => {
-    if (confirm('Are you sure you want to delete this version?')) {
-      try {
-        await storyObjectStore.deleteVersion(projectId, category, targetId, versionId);
-        const updatedVersions = await storyObjectStore.fetchVersions(projectId, category, targetId);
-        setVersions(updatedVersions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
-      } catch (error) {
-        console.error('Failed to delete version:', error);
-        alert('Failed to delete version. Please try again.');
+    try {
+      await store.activateVersion(objectType, objectId, versionId);
+
+      // Reload versions to show updated active status
+      const versionHistory = await store.getVersions(objectType, objectId);
+      setVersions(versionHistory.sort((a, b) => b.number - a.number));
+
+      // Call callback if provided
+      if (onRestoreVersion) {
+        const version = versionHistory.find(v => v.id === versionId);
+        if (version) {
+          const versionData = version.data[currentLanguage] || Object.values(version.data)[0];
+          onRestoreVersion(versionData);
+        }
       }
+    } catch (error) {
+      console.error('Failed to restore version:', error);
+      alert('Failed to restore version. Please try again.');
     }
   };
 
@@ -92,13 +95,13 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     setExpandedVersions(newExpanded);
   };
 
-  const renderVersionData = (data: any, category: StoryObjectCategory) => {
+  const renderVersionData = (data: any, type: ObjectType) => {
     if (!data || typeof data !== 'object') {
       return <div className="version-data-simple">{String(data)}</div>;
     }
 
     // For basic info
-    if (category === 'basicInfo') {
+    if (type === 'basic_info') {
       return (
         <div className="version-data-formatted">
           <div className="data-field">
@@ -117,45 +120,19 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       );
     }
 
-    // For outline
-    if (category === 'outline') {
+    // For outline - now handled differently (acts and chapters are separate objects)
+    if (type === 'outline') {
       return (
         <div className="version-data-formatted">
-          {data.acts && data.acts.length > 0 ? (
-            <div className="outline-structure">
-              <h4>Acts ({data.acts.length}):</h4>
-              {data.acts.map((act: any, actIndex: number) => (
-                <div key={actIndex} className="act-item">
-                  <div className="act-header">
-                    <strong>Act {actIndex + 1}: {act.name || 'Unnamed Act'}</strong>
-                  </div>
-                  {act.description && (
-                    <div className="act-description">{act.description}</div>
-                  )}
-                  {act.chapters && act.chapters.length > 0 && (
-                    <div className="chapters-list">
-                      <strong>Chapters ({act.chapters.length}):</strong>
-                      {act.chapters.map((chapter: any, chapterIndex: number) => (
-                        <div key={chapterIndex} className="chapter-item">
-                          <div className="chapter-name">Chapter {chapterIndex + 1}: {chapter.name || 'Unnamed Chapter'}</div>
-                          {chapter.description && (
-                            <div className="chapter-description">{chapter.description}</div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-outline">No acts defined</div>
-          )}
+          <div className="data-field">
+            <label>Structure:</label>
+            <span>Outline structure is managed through separate Acts and Chapters</span>
+          </div>
         </div>
       );
     }
 
-    // For name-description objects (character, organization, location, lorebook)
+    // For name-description objects (character, organization, location, lorebook, act, chapter)
     if (data.name !== undefined || data.description !== undefined) {
       return (
         <div className="version-data-formatted">
@@ -166,6 +143,21 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
           <div className="data-field">
             <label>Description:</label>
             <span className="description-text">{data.description || 'Not set'}</span>
+          </div>
+        </div>
+      );
+    }
+
+    // For chapter content
+    if (type === 'chapter_content' && data.content !== undefined) {
+      return (
+        <div className="version-data-formatted">
+          <div className="data-field">
+            <label>Content:</label>
+            <span className="content-preview">
+              {data.content.substring(0, 200)}
+              {data.content.length > 200 ? '...' : ''}
+            </span>
           </div>
         </div>
       );
@@ -185,79 +177,81 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content version-history-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>📚 {getCategoryDisplayName(category)} Version History</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
+          <h2>{getTypeDisplayName(objectType)} Version History</h2>
+          <button className="modal-close" onClick={onClose}>Close</button>
         </div>
 
         <div className="version-history-content">
-          {versions.length === 0 ? (
+          {loading ? (
+            <div className="loading-state">Loading versions...</div>
+          ) : versions.length === 0 ? (
             <div className="empty-state">
               <p>No saved versions.</p>
             </div>
           ) : (
             <div className="versions-list">
-              {versions.map((version, index) => (
-                <div
-                  key={version.id}
-                  className={`version-item ${version.is_active ? 'active' : ''} ${
-                    selectedVersionId === version.id ? 'selected' : ''
-                  }`}
-                >
-                  <div className="version-header">
-                    <div className="version-info">
-                      <div className="version-title">
-                        <span className="version-number">Version #{versions.length - index}</span>
-                        {version.is_active && <span className="active-badge">Currently Active</span>}
+              {versions.map((version) => {
+                const isCurrentVersion = currentObject?.version.id === version.id;
+                const versionData = version.data[currentLanguage] || Object.values(version.data)[0] || {};
+
+                return (
+                  <div
+                    key={version.id}
+                    className={`version-item ${isCurrentVersion ? 'active' : ''}`}
+                  >
+                    <div className="version-header">
+                      <div className="version-info">
+                        <div className="version-title">
+                          <span className="version-number">Version #{version.number}</span>
+                          {isCurrentVersion && <span className="active-badge">Currently Active</span>}
+                        </div>
+                        <div className="version-metadata">
+                          <span className="version-timestamp">
+                            {new Date(version.created_at).toLocaleString()}
+                          </span>
+                          <span className="version-request">
+                            Request: {version.user_request || 'No description'}
+                          </span>
+                        </div>
                       </div>
-                      <div className="version-metadata">
-                        <span className="version-timestamp">
-                          {new Date(version.timestamp).toLocaleString()}
-                        </span>
-                        <span className="version-request">
-                          Request: {version.user_request || 'No description'}
-                        </span>
+
+                      <div className="version-actions">
+                        <button
+                          onClick={() => toggleExpandVersion(version.id)}
+                          className="expand-button"
+                        >
+                          {expandedVersions.has(version.id) ? 'Hide details' : 'Show details'}
+                        </button>
+
+                        {!isCurrentVersion && (
+                          <button
+                            onClick={() => handleRestoreVersion(version.id)}
+                            className="restore-button"
+                          >
+                            Restore
+                          </button>
+                        )}
                       </div>
                     </div>
 
-                    <div className="version-actions">
-                      <button
-                        onClick={() => toggleExpandVersion(version.id)}
-                        className="expand-button"
-                      >
-                        {expandedVersions.has(version.id) ? '▼' : '▶'}
-                      </button>
-
-                      {!version.is_active && (
-                        <button
-                          onClick={() => handleSetActiveVersion(version.id)}
-                          className="restore-button"
-                        >
-                          Restore
-                        </button>
-                      )}
-
-                      {versions.length > 1 && (
-                        <button
-                          onClick={() => handleDeleteVersion(version.id)}
-                          className="delete-version-button"
-                          disabled={version.is_active}
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </div>
+                    {expandedVersions.has(version.id) && (
+                      <div className="version-content">
+                        <h4>Version Data (Language: {currentLanguage}):</h4>
+                        <div className="version-data">
+                          {renderVersionData(versionData, objectType)}
+                        </div>
+                        {Object.keys(version.data).length > 1 && (
+                          <div className="version-languages">
+                            <small>
+                              Available in: {Object.keys(version.data).join(', ')}
+                            </small>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-
-                  {expandedVersions.has(version.id) && (
-                    <div className="version-content">
-                      <h4>Version Data:</h4>
-                      <div className="version-data">
-                        {renderVersionData(Object.values(version.data)[0], category)}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
