@@ -16,7 +16,7 @@
 .function-call-indicator {
   background: var(--gradient-surface);
   border: 1px solid var(--color-border-medium);
-  border-radius: var(--radius-lg);
+  border-radius: var(--border-radius-lg);
   padding: var(--spacing-lg);
   box-shadow: var(--shadow-sm);
   animation: fadeInScale var(--transition-base) ease-out;
@@ -64,7 +64,7 @@
 .function-call-preview-item {
   background: var(--color-surface-base);
   padding: var(--spacing-sm) var(--spacing-md);
-  border-radius: var(--radius-sm);
+  border-radius: var(--border-radius-sm);
   font-size: var(--font-size-sm);
   color: var(--color-text-tertiary);
   border-left: 3px solid var(--color-accent-500);
@@ -74,7 +74,7 @@
 .edit-card {
   background: var(--color-surface-elevated);
   border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--border-radius-md);
   padding: var(--spacing-lg);
   box-shadow: var(--shadow-sm);
   transition: all var(--transition-base);
@@ -156,7 +156,7 @@
   padding: var(--spacing-md);
   background: var(--color-surface-subtle);
   border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-sm);
+  border-radius: var(--border-radius-sm);
   font-family: var(--font-family-mono);
   font-size: var(--font-size-xs);
   line-height: var(--line-height-relaxed);
@@ -179,7 +179,7 @@
   color: var(--color-text-inverse);
   border: none;
   padding: var(--spacing-sm) var(--spacing-lg);
-  border-radius: var(--radius-sm);
+  border-radius: var(--border-radius-sm);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
@@ -202,7 +202,7 @@
   color: var(--color-text-tertiary);
   border: 1px solid var(--color-border-default);
   padding: var(--spacing-sm) var(--spacing-lg);
-  border-radius: var(--radius-sm);
+  border-radius: var(--border-radius-sm);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
@@ -251,7 +251,7 @@
   padding: var(--spacing-md);
   background: var(--color-surface-subtle);
   border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-sm);
+  border-radius: var(--border-radius-sm);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-relaxed);
   color: var(--color-text-secondary);
@@ -268,7 +268,7 @@
   padding: var(--spacing-sm);
   background: var(--color-surface-base);
   border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-sm);
+  border-radius: var(--border-radius-sm);
   box-shadow: var(--shadow-xs);
   display: flex;
   flex-direction: column;
@@ -334,7 +334,7 @@
   padding: var(--spacing-xs) var(--spacing-sm);
   background: var(--color-surface-base);
   border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-sm);
+  border-radius: var(--border-radius-sm);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);

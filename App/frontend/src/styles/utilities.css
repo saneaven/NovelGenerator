@@ -443,7 +443,7 @@
 .card {
     background: var(--color-surface-elevated);
     border: 1px solid var(--color-border-default);
-    border-radius: var(--radius-lg);
+    border-radius: var(--border-radius-lg);
     padding: var(--spacing-xl);
     box-shadow: var(--shadow-sm);
     transition: box-shadow var(--transition-base);
@@ -456,7 +456,7 @@
 .card-flat {
     background: var(--color-surface-elevated);
     border: 1px solid var(--color-border-default);
-    border-radius: var(--radius-lg);
+    border-radius: var(--border-radius-lg);
     padding: var(--spacing-xl);
 }
 
@@ -469,7 +469,7 @@
     padding: var(--spacing-md) var(--spacing-lg);
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-semibold);
-    border-radius: var(--radius-md);
+    border-radius: var(--border-radius-md);
     transition: all var(--transition-fast);
     cursor: pointer;
     user-select: none;
@@ -544,7 +544,7 @@
     color: var(--color-text-primary);
     background: var(--color-surface-base);
     border: 2px solid var(--color-border-default);
-    border-radius: var(--radius-md);
+    border-radius: var(--border-radius-md);
     transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
@@ -567,7 +567,7 @@
     padding: var(--spacing-xs) var(--spacing-sm);
     font-size: var(--font-size-xs);
     font-weight: var(--font-weight-semibold);
-    border-radius: var(--radius-full);
+    border-radius: var(--border-radius-full);
     white-space: nowrap;
 }
 
@@ -626,7 +626,7 @@
 
 .modal {
     background: var(--color-surface-elevated);
-    border-radius: var(--radius-xl);
+    border-radius: var(--border-radius-xl);
     box-shadow: var(--shadow-2xl);
     max-width: 90vw;
     max-height: 90vh;
@@ -640,7 +640,7 @@
     height: 20px;
     border: 2px solid var(--color-border-default);
     border-top-color: var(--color-primary-500);
-    border-radius: var(--radius-full);
+    border-radius: var(--border-radius-full);
     animation: spin 0.6s linear infinite;
 }
 
@@ -739,23 +739,23 @@
 }
 
 .rounded-sm {
-    border-radius: var(--radius-sm);
+    border-radius: var(--border-radius-sm);
 }
 
 .rounded-md {
-    border-radius: var(--radius-md);
+    border-radius: var(--border-radius-md);
 }
 
 .rounded-lg {
-    border-radius: var(--radius-lg);
+    border-radius: var(--border-radius-lg);
 }
 
 .rounded-xl {
-    border-radius: var(--radius-xl);
+    border-radius: var(--border-radius-xl);
 }
 
 .rounded-full {
-    border-radius: var(--radius-full);
+    border-radius: var(--border-radius-full);
 }
 
 .shadow-none {

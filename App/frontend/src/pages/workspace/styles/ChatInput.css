@@ -19,7 +19,7 @@
   margin-bottom: var(--spacing-md);
   padding: 0;
   background: var(--color-surface-subtle);
-  border-radius: var(--radius-lg);
+  border-radius: var(--border-radius-lg);
   border: 1px solid var(--color-border-default);
   display: flex;
   flex-direction: column;
@@ -139,7 +139,7 @@
 .chat-input {
   flex: 1;
   border: 2px solid var(--color-border-default);
-  border-radius: var(--radius-xl);
+  border-radius: var(--border-radius-xl);
   padding: var(--spacing-lg) var(--spacing-xl);
   font-size: var(--font-size-base);
   font-family: inherit;
@@ -184,7 +184,7 @@
 
 .chat-input::-webkit-scrollbar-thumb {
   background: var(--color-border-medium);
-  border-radius: var(--radius-sm);
+  border-radius: var(--border-radius-sm);
 }
 
 .chat-input::-webkit-scrollbar-thumb:hover {
@@ -200,7 +200,7 @@
   min-width: 3.5rem;
   height: 3.5rem;
   border: none;
-  border-radius: var(--radius-lg);
+  border-radius: var(--border-radius-lg);
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
   transition: all var(--transition-base);
@@ -297,7 +297,7 @@
     font-size: var(--font-size-sm);
     min-height: 2.5rem;
     max-height: 8rem;
-    border-radius: var(--radius-lg);
+    border-radius: var(--border-radius-lg);
   }
 
   .send-button,
@@ -305,7 +305,7 @@
     min-width: 2.75rem;
     height: 2.75rem;
     font-size: var(--font-size-xs);
-    border-radius: var(--radius-md);
+    border-radius: var(--border-radius-md);
   }
 }
 

@@ -91,7 +91,7 @@
     border: 2px solid var(--overlay-light-light);
     width: 50px;
     height: 50px;
-    border-radius: var(--radius-full);
+    border-radius: var(--border-radius-full);
     cursor: pointer;
     font-size: var(--font-size-2xl);
     display: flex;
@@ -124,7 +124,7 @@
     color: var(--color-text-inverse);
     border: none;
     padding: var(--spacing-lg) var(--spacing-2xl);
-    border-radius: calc(var(--radius-xl) * 1.5);
+    border-radius: calc(var(--border-radius-xl) * 1.5);
     font-size: var(--font-size-lg);
     font-weight: var(--font-weight-semibold);
     cursor: pointer;
@@ -154,7 +154,7 @@
 .modal {
     background: var(--color-surface-elevated);
     padding: var(--spacing-2xl);
-    border-radius: var(--radius-xl);
+    border-radius: var(--border-radius-xl);
     width: 90%;
     max-width: 500px;
     box-shadow: var(--shadow-2xl);
@@ -162,7 +162,7 @@
 
 .modal-content {
     background: var(--color-surface-elevated);
-    border-radius: var(--radius-xl);
+    border-radius: var(--border-radius-xl);
     box-shadow: var(--shadow-2xl);
     overflow: hidden;
     display: flex;
@@ -191,7 +191,7 @@
     width: 100%;
     padding: var(--spacing-md);
     border: 2px solid var(--color-border-default);
-    border-radius: var(--radius-md);
+    border-radius: var(--border-radius-md);
     font-size: var(--font-size-base);
     color: var(--color-text-primary);
     background: var(--color-surface-base);
@@ -219,7 +219,7 @@
 .form-actions button {
     padding: var(--spacing-md) var(--spacing-xl);
     border: none;
-    border-radius: var(--radius-md);
+    border-radius: var(--border-radius-md);
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-medium);
     cursor: pointer;
@@ -257,7 +257,7 @@
     color: var(--color-text-secondary);
     padding: var(--spacing-3xl);
     background: var(--overlay-light-faint);
-    border-radius: var(--radius-xl);
+    border-radius: var(--border-radius-xl);
 }
 
 .projects-grid {
@@ -275,7 +275,7 @@
 .project-card {
     background: var(--color-surface-elevated);
     padding: var(--spacing-xl);
-    border-radius: var(--radius-xl);
+    border-radius: var(--border-radius-xl);
     box-shadow: var(--shadow-md);
     cursor: pointer;
     transition: all var(--transition-base);
@@ -313,7 +313,7 @@
     border: none;
     width: 30px;
     height: 30px;
-    border-radius: var(--radius-full);
+    border-radius: var(--border-radius-full);
     cursor: pointer;
     font-size: var(--font-size-sm);
     display: flex;
@@ -351,7 +351,7 @@
 .project-header {
     background: var(--color-surface-elevated);
     padding: var(--spacing-2xl);
-    border-radius: var(--radius-xl);
+    border-radius: var(--border-radius-xl);
     margin-bottom: var(--spacing-2xl);
     box-shadow: var(--shadow-md);
 }
@@ -405,7 +405,7 @@
 .menu-card {
     background: var(--color-surface-elevated);
     padding: var(--spacing-2xl);
-    border-radius: var(--radius-xl);
+    border-radius: var(--border-radius-xl);
     box-shadow: var(--shadow-md);
     cursor: pointer;
     transition: all var(--transition-base);
@@ -465,7 +465,7 @@
     color: var(--color-primary-500);
     padding: var(--spacing-md) var(--spacing-xl);
     border: none;
-    border-radius: var(--radius-md);
+    border-radius: var(--border-radius-md);
     text-decoration: none;
     display: inline-block;
     transition: all var(--transition-base);
@@ -502,7 +502,7 @@
 .story-objects-header {
     background: var(--color-surface-elevated);
     padding: var(--spacing-2xl);
-    border-radius: var(--radius-xl);
+    border-radius: var(--border-radius-xl);
     margin-bottom: var(--spacing-2xl);
     box-shadow: var(--shadow-md);
 }
@@ -525,7 +525,7 @@
     background: var(--color-surface-base);
     border: none;
     padding: var(--spacing-lg) var(--spacing-xl);
-    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -557,7 +557,7 @@
 
 .story-objects-content {
     background: var(--color-surface-elevated);
-    border-radius: var(--radius-xl);
+    border-radius: var(--border-radius-xl);
     box-shadow: var(--shadow-md);
     min-height: 400px;
 }

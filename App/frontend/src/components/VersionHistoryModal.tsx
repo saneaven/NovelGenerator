@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import type { ObjectType } from '../types/unifiedObject';
+import './VersionHistoryModal.css';
 
 interface VersionHistoryModalProps {
   isOpen: boolean;

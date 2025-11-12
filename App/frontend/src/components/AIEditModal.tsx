@@ -8,6 +8,7 @@ import { ChatManager, type ChatManagerConfig, type ChatManagerCallbacks } from '
 import { ChatPipeline } from '../chat/ChatPipeline';
 import { getEditFunctionSchema } from '../chat/types/editFunctionSchemas';
 import { applyEditFunctionCalls } from '../chat/utils/editFunctionApplicator';
+import './AIEditModal.css';
 
 interface ContextOptions {
   basicInfo: boolean;
