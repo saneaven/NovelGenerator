@@ -20,7 +20,7 @@ from datetime import datetime
 from ..database import get_db
 from ..auth import get_current_user
 from ..models.db_models import (
-    User, BasicInfo, Character, Organization, Location, LorebookEntry,
+    User, UserSettings, BasicInfo, Character, Organization, Location, LorebookEntry,
     Act, Chapter, ChapterContent, Outline
 )
 from ..models.translation_models import ObjectTranslation, ObjectVersion, ActiveVersion
@@ -219,7 +219,8 @@ def create_or_update_version(
     new_data: Dict[str, Any],
     user_request: str,
     user_id: UUID,
-    create_new: bool = True
+    create_new: bool = True,
+    reset_other_languages: bool = True
 ) -> ObjectVersion:
     """Create new version or update existing one"""
 
@@ -235,8 +236,15 @@ def create_or_update_version(
             ObjectVersion.id == active_version_ptr.active_version_id
         ).first()
 
+    # Determine if we should carry over translations from the previous version
+    carry_forward_languages = (
+        current_version is not None
+        and current_version.data
+        and not reset_other_languages
+    )
+
     # Merge language data
-    version_data = dict(current_version.data) if current_version and current_version.data else {}
+    version_data = dict(current_version.data) if carry_forward_languages else {}
     version_data[language] = new_data
 
     if create_new or not current_version:
@@ -386,6 +394,17 @@ async def update_object(
     # Update object's updated_at timestamp
     obj.updated_at = datetime.utcnow()
 
+    # Determine whether this update should reset other translations
+    user_settings = getattr(current_user, 'settings', None)
+    if user_settings is None:
+        user_settings = db.query(UserSettings).filter(UserSettings.user_id == current_user.id).first()
+
+    primary_language = (user_settings.primary_language if user_settings and user_settings.primary_language else request.language).strip()
+    request_language = (request.language or '').strip()
+    is_primary_language_update = request_language.lower() == (primary_language or '').lower()
+    is_translation_request = 'translation' in (request.user_request or '').lower()
+    reset_other_languages = bool(request.create_new_version and is_primary_language_update and not is_translation_request)
+
     # Create or update version
     version = create_or_update_version(
         db=db,
@@ -395,7 +414,8 @@ async def update_object(
         new_data=request.data,
         user_request=request.user_request or "User Edit",
         user_id=current_user.id,
-        create_new=request.create_new_version
+        create_new=request.create_new_version,
+        reset_other_languages=reset_other_languages
     )
 
     # Update translation cache
@@ -408,12 +428,17 @@ async def update_object(
         is_active=True  # Mark as active when updated
     )
 
-    # Deactivate other languages
-    db.query(ObjectTranslation).filter(
+    # Remove or deactivate other languages depending on whether we reset them in this version
+    other_languages_query = db.query(ObjectTranslation).filter(
         ObjectTranslation.object_type == object_type,
         ObjectTranslation.object_id == object_id,
         ObjectTranslation.language != request.language
-    ).update({'is_active': False})
+    )
+
+    if reset_other_languages:
+        other_languages_query.delete()
+    else:
+        other_languages_query.update({'is_active': False})
 
     db.commit()
 
@@ -431,7 +456,8 @@ async def add_translation(
 ):
     """
     Add new language translation for an object.
-    Creates new version with additional language.
+    Updates the latest version in-place so translations remain tied to the
+    originating content version rather than spawning a new version entry.
     """
     object_type = normalize_object_type(object_type)
 
@@ -457,7 +483,7 @@ async def add_translation(
         new_data=request.data,
         user_request=request.user_request or "Translation",
         user_id=current_user.id,
-        create_new=True
+        create_new=False
     )
 
     # Update translation cache (don't set as active - keep current active language)

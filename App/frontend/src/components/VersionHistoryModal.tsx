@@ -7,7 +7,7 @@ interface VersionHistoryModalProps {
   onClose: () => void;
   objectType: ObjectType;
   objectId: string;
-  onRestoreVersion?: (versionData: any) => void;
+  onRestoreVersion?: (versionId: string) => void;
 }
 
 const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
@@ -71,13 +71,9 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       const versionHistory = await store.getVersions(objectType, objectId);
       setVersions(versionHistory.sort((a, b) => b.number - a.number));
 
-      // Call callback if provided
+      // Notify parent that a new version was activated
       if (onRestoreVersion) {
-        const version = versionHistory.find(v => v.id === versionId);
-        if (version) {
-          const versionData = version.data[currentLanguage] || Object.values(version.data)[0];
-          onRestoreVersion(versionData);
-        }
+        onRestoreVersion(versionId);
       }
     } catch (error) {
       console.error('Failed to restore version:', error);

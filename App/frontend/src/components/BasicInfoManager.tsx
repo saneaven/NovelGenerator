@@ -16,6 +16,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import AIEditModal from './AIEditModal';
 import VersionHistoryModal from './VersionHistoryModal';
+import { TranslationService } from '../services/translationService';
 import type { BasicInfoObject, BasicInfoData } from '../types/unifiedObject';
 
 const BasicInfoManager: React.FC = () => {
@@ -25,7 +26,6 @@ const BasicInfoManager: React.FC = () => {
   const errors = useUnifiedObjectStore((state) => state.errors);
   const fetchObject = useUnifiedObjectStore((state) => state.fetchObject);
   const updateObject = useUnifiedObjectStore((state) => state.updateObject);
-  const addTranslation = useUnifiedObjectStore((state) => state.addTranslation);
   const switchLanguage = useUnifiedObjectStore((state) => state.switchLanguage);
   const activateVersion = useUnifiedObjectStore((state) => state.activateVersion);
   const listObjects = useUnifiedObjectStore((state) => state.listObjects);
@@ -170,7 +170,7 @@ const BasicInfoManager: React.FC = () => {
   };
 
   const handleAddTranslation = async () => {
-    if (!basicInfo || !basicInfoId) return;
+    if (!basicInfo || !basicInfoId || !projectId) return;
 
     const targetLanguage = settings.secondaryLanguage;
     if (!targetLanguage) {
@@ -185,23 +185,30 @@ const BasicInfoManager: React.FC = () => {
     }
 
     try {
-      // In real implementation, you'd call AI translation here
-      // For now, creating a placeholder translation
-      await addTranslation('basic_info', basicInfoId, {
-        language: targetLanguage,
-        data: {
-          title: `[${targetLanguage}] ${basicInfo.data.title}`,
-          logline: `[${targetLanguage}] ${basicInfo.data.logline}`,
-          genre: `[${targetLanguage}] ${basicInfo.data.genre}`,
+      TranslationService.setTranslationStatus(basicInfoId, { objectId: basicInfoId, isTranslating: true });
+      await TranslationService.requestTranslation({
+        projectId,
+        sourceLanguage: basicInfo.languages.active,
+        targetLanguage,
+        dataType: 'basicInfo',
+        sourceData: {
+          title: basicInfo.data.title,
+          logline: basicInfo.data.logline,
+          genre: basicInfo.data.genre,
         },
-        user_request: 'Manual Translation',
+        translationContext: {
+          projectId,
+          targetLanguage,
+        },
       });
 
       console.log(`✓ Added ${targetLanguage} translation`);
       alert(`Translation added for ${targetLanguage}`);
     } catch (err) {
       console.error('Failed to add translation:', err);
-      alert('Failed to add translation. Please try again.');
+      alert(err instanceof Error ? err.message : 'Failed to add translation. Please try again.');
+    } finally {
+      TranslationService.clearTranslationStatus(basicInfoId);
     }
   };
 
