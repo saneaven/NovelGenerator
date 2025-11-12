@@ -44,7 +44,7 @@ export async function applyTranslationFunctionCalls(
       console.error('Translation function application error:', error);
       results.push({
         success: false,
-        message: `Failed to apply ${functionCall.name}`,
+        message: `Failed to apply ${functionCall.function_name || (functionCall as any).name || 'unknown'}`,
         error: error instanceof Error ? error.message : String(error)
       });
     }
@@ -70,13 +70,14 @@ async function applyTranslationFunctionCall(
   } catch (error) {
     return {
       success: false,
-      message: `Invalid ${functionCall.name} arguments`,
+      message: `Invalid ${(functionCall.function_name || (functionCall as any).name || 'unknown')} arguments`,
       error: 'Failed to parse function arguments'
     };
   }
 
   // Route to appropriate handler
-  switch (functionCall.name) {
+  const functionName = functionCall.function_name || (functionCall as any).name || 'unknown';
+  switch (functionName) {
     case 'translate_basic_info':
       return await handleTranslateBasicInfo(context, args);
 
@@ -98,8 +99,8 @@ async function applyTranslationFunctionCall(
     default:
       return {
         success: false,
-        message: `Unknown translation function: ${functionCall.name}`,
-        error: `Function ${functionCall.name} is not supported`
+        message: `Unknown translation function: ${functionName}`,
+        error: `Function ${functionName} is not supported`
       };
   }
 }

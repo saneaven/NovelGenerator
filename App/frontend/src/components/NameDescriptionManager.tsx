@@ -17,6 +17,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import AIEditModal from './AIEditModal';
 import VersionHistoryModal from './VersionHistoryModal';
+import { TranslationService } from '../services/translationService';
 import type { UnifiedObject, ObjectType } from '../types/unifiedObject';
 
 interface NameDescriptionData {
@@ -155,6 +156,8 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   };
 
   const handleAddTranslation = async (itemId: string) => {
+    if (!projectId) return;
+
     const item = store.objects[itemId] as NameDescriptionObject;
     if (!item) return;
 
@@ -171,21 +174,31 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     }
 
     try {
-      // TODO: Use AI translation service here
-      // For now, creating a placeholder translation
-      await store.addTranslation(category, itemId, {
-        language: targetLanguage,
-        data: {
-          name: `[${targetLanguage}] ${item.data.name}`,
-          description: `[${targetLanguage}] ${item.data.description}`,
+      TranslationService.setTranslationStatus(itemId, { objectId: itemId, isTranslating: true });
+      await TranslationService.requestTranslation({
+        projectId,
+        sourceLanguage: item.languages.active,
+        targetLanguage,
+        dataType: 'nameDescription',
+        sourceData: {
+          name: item.data.name,
+          description: item.data.description,
         },
-        user_request: 'Manual Translation',
+        translationContext: {
+          projectId,
+          targetLanguage,
+          category,
+          itemId,
+        },
       });
 
       console.log(`✓ Added ${targetLanguage} translation`);
+      alert(`Translation added for ${targetLanguage}`);
     } catch (error) {
       console.error('Failed to add translation:', error);
-      alert('Failed to add translation. Please try again.');
+      alert(error instanceof Error ? error.message : 'Failed to add translation. Please try again.');
+    } finally {
+      TranslationService.clearTranslationStatus(itemId);
     }
   };
 
