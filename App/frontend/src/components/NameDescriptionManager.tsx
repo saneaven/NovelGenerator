@@ -47,6 +47,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 }) => {
   const { projectId } = useParams<{ projectId: string }>();
   const store = useUnifiedObjectStore();
+  const listObjects = useUnifiedObjectStore(state => state.listObjects);
   const { settings } = useSettingsStore();
 
   // State for items
@@ -62,17 +63,27 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   useEffect(() => {
     if (!projectId) return;
 
+    let isCancelled = false;
+
     const fetchItems = async () => {
       try {
-        const objects = await store.listObjects(category, projectId);
-        setItemIds(objects.map(obj => obj.id));
+        const objects = await listObjects(category, projectId);
+        if (!isCancelled) {
+          setItemIds(objects.map(obj => obj.id));
+        }
       } catch (error) {
-        console.error(`Failed to fetch ${category} list:`, error);
+        if (!isCancelled) {
+          console.error(`Failed to fetch ${category} list:`, error);
+        }
       }
     };
 
     fetchItems();
-  }, [projectId, category, store]);
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [projectId, category, listObjects]);
 
   // Get items from store
   const items = itemIds

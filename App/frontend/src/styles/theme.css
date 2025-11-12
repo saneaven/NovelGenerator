@@ -206,17 +206,17 @@
     --line-height-loose: 2;
 
     /* ===== Border Radius ===== */
-    --radius-sm: 0.375rem;
+    --border-radius-sm: 0.375rem;
     /* 6px */
-    --radius-md: 0.5rem;
+    --border-radius-md: 0.5rem;
     /* 8px */
-    --radius-lg: 0.75rem;
+    --border-radius-lg: 0.75rem;
     /* 12px */
-    --radius-xl: 1rem;
+    --border-radius-xl: 1rem;
     /* 16px */
-    --radius-2xl: 1.5rem;
+    --border-radius-2xl: 1.5rem;
     /* 24px */
-    --radius-full: 9999px;
+    --border-radius-full: 9999px;
 
     /* ===== Transitions ===== */
     --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -237,6 +237,13 @@
     --z-modal: 1040;
     --z-popover: 1050;
     --z-tooltip: 1060;
+
+    /* ===== Modal Gradients ===== */
+    --gradient-modal-header-primary: linear-gradient(135deg, var(--color-primary-500) 0%, var(--color-primary-600) 100%);
+    --gradient-modal-header-secondary: linear-gradient(135deg, var(--color-secondary-600) 0%, var(--color-secondary-700) 50%, var(--color-primary-600) 100%);
+    --gradient-modal-content-subtle: linear-gradient(135deg, var(--color-primary-50) 0%, white 100%);
+    --gradient-modal-content-secondary: linear-gradient(135deg, var(--color-secondary-50) 0%, var(--color-primary-50) 100%);
+    --gradient-modal-timeline: linear-gradient(180deg, var(--color-primary-400) 0%, var(--color-neutral-300) 100%);
 
     /* ===== Breakpoints (for reference in JS) ===== */
     --breakpoint-sm: 640px;
@@ -388,6 +395,13 @@
     --gradient-accent: linear-gradient(in oklch 135deg, var(--color-accent-700) 0%, var(--color-primary-900) 100%);
     --gradient-surface: linear-gradient(in oklch 135deg, var(--color-neutral-100) 0%, var(--color-neutral-200) 100%);
     --gradient-overlay: linear-gradient(in oklch 180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.3) 100%);
+
+    /* ===== Modal Gradients - Dark Mode ===== */
+    --gradient-modal-header-primary: linear-gradient(135deg, var(--color-primary-600) 0%, var(--color-primary-700) 100%);
+    --gradient-modal-header-secondary: linear-gradient(135deg, var(--color-secondary-700) 0%, var(--color-secondary-800) 50%, var(--color-primary-700) 100%);
+    --gradient-modal-content-subtle: linear-gradient(135deg, var(--color-primary-950) 0%, var(--color-neutral-900) 100%);
+    --gradient-modal-content-secondary: linear-gradient(135deg, var(--color-secondary-950) 0%, var(--color-primary-950) 100%);
+    --gradient-modal-timeline: linear-gradient(180deg, var(--color-primary-500) 0%, var(--color-neutral-700) 100%);
 
     /* ===== Shadows - Subtle for dark mode ===== */
     --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.15);

@@ -22,7 +22,7 @@
   max-height: 400px;
   padding: var(--spacing-lg);
   border: 2px solid var(--color-border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--border-radius-md);
   font-family: inherit;
   font-size: var(--font-size-base);
   line-height: var(--line-height-relaxed);
@@ -54,7 +54,7 @@
 .cancel-edit-button {
   padding: var(--spacing-md) var(--spacing-xl);
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--border-radius-md);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   cursor: pointer;

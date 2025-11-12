@@ -100,7 +100,7 @@ a:hover {
 a:focus-visible {
   outline: 2px solid var(--color-border-focus);
   outline-offset: 2px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--border-radius-sm);
 }
 
 /* ===== Buttons ===== */
@@ -217,12 +217,12 @@ pre {
 
 ::-webkit-scrollbar-track {
   background: var(--color-surface-subtle);
-  border-radius: var(--radius-md);
+  border-radius: var(--border-radius-md);
 }
 
 ::-webkit-scrollbar-thumb {
   background: var(--color-border-medium);
-  border-radius: var(--radius-md);
+  border-radius: var(--border-radius-md);
   border: 2px solid var(--color-surface-subtle);
 }
 
@@ -313,7 +313,7 @@ pre {
   color: var(--color-text-primary);
   padding: var(--spacing-md) var(--spacing-lg);
   text-decoration: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--border-radius-md);
   z-index: var(--z-modal);
   transition: top var(--transition-fast);
 }

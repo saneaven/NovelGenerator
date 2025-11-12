@@ -518,7 +518,7 @@
 .checkbox-field {
     background: var(--color-surface-base);
     border: 2px solid var(--color-border-default);
-    border-radius: var(--radius-lg);
+    border-radius: var(--border-radius-lg);
     padding: 18px 20px;
     transition: all var(--transition-base);
     position: relative;
@@ -584,7 +584,7 @@
     -webkit-appearance: none;
     background: var(--color-surface-base);
     border: 2px solid var(--color-border-medium);
-    border-radius: var(--radius-sm);
+    border-radius: var(--border-radius-sm);
     transition: all var(--transition-base);
     outline: none;
 }
@@ -704,7 +704,7 @@
 .radio-option {
     background: var(--color-surface-base);
     border: 2px solid var(--color-border-default);
-    border-radius: var(--radius-lg);
+    border-radius: var(--border-radius-lg);
     padding: 16px 18px;
     transition: all var(--transition-base);
     position: relative;
@@ -839,7 +839,7 @@
     padding: 20px;
     background: var(--color-surface-subtle);
     border: 2px solid var(--color-border-default);
-    border-radius: var(--radius-lg);
+    border-radius: var(--border-radius-lg);
     border-left: 4px solid var(--color-primary-main);
 }
 

@@ -1,78 +1,70 @@
+/* ========================================
+   Language Switcher Component
+   Following Design System Standards
+   ======================================== */
+
 .language-switcher {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  background-color: var(--bg-secondary, #f5f5f5);
-  border-radius: 4px;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: var(--color-surface-subtle);
+  border-radius: var(--border-radius-sm);
+  transition: all var(--transition-base);
 }
 
 .language-switcher-single {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  background-color: var(--bg-secondary, #f5f5f5);
-  border-radius: 4px;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: var(--color-surface-subtle);
+  border-radius: var(--border-radius-sm);
 }
 
 .language-label {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--text-secondary, #666);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
 }
 
 .language-value {
-  font-size: 0.875rem;
-  color: var(--text-primary, #333);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
 }
 
 .language-select {
-  padding: 4px 8px;
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: 4px;
-  background-color: white;
-  font-size: 0.875rem;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 2px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+  background-color: var(--color-surface-base);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
-  transition: border-color 0.2s;
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-xs);
 }
 
 .language-select:hover:not(:disabled) {
-  border-color: var(--primary-color, #007bff);
+  border-color: var(--color-primary-500);
+  box-shadow: var(--shadow-sm);
+}
+
+.language-select:focus {
+  border-color: var(--color-border-focus);
+  box-shadow: var(--shadow-focus);
 }
 
 .language-select:disabled {
-  opacity: 0.6;
+  opacity: var(--opacity-disabled);
   cursor: not-allowed;
 }
 
 .language-count {
-  font-size: 0.75rem;
-  color: var(--text-tertiary, #999);
-}
-
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-  .language-switcher,
-  .language-switcher-single {
-    background-color: var(--bg-secondary-dark, #2a2a2a);
-  }
-
-  .language-label {
-    color: var(--text-secondary-dark, #aaa);
-  }
-
-  .language-value {
-    color: var(--text-primary-dark, #eee);
-  }
-
-  .language-select {
-    background-color: var(--bg-primary-dark, #1a1a1a);
-    border-color: var(--border-color-dark, #444);
-    color: var(--text-primary-dark, #eee);
-  }
-
-  .language-count {
-    color: var(--text-tertiary-dark, #666);
-  }
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
 }

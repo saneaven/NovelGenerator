@@ -46,7 +46,8 @@ const NovelEditor: React.FC = () =>
         getSelectedChatId,
         fetchChats,
     } = useChatStore();
-    const unifiedStore = useUnifiedObjectStore();
+    const unifiedObjects = useUnifiedObjectStore(state => state.objects);
+    const listUnifiedObjects = useUnifiedObjectStore(state => state.listObjects);
     const { fetchChapterContent, ...novelStore } = useNovelStore();
     const primaryLanguage = useSettingsStore(state => state.settings.primaryLanguage);
     const chatFunctionConfig = useSettingsStore(state => state.settings.functionConfigs.chat);
@@ -183,7 +184,7 @@ const NovelEditor: React.FC = () =>
     // Get selected chapter from unified store
     const selectedChapter = useMemo(() => {
         if (!selectedChapterId) return null;
-        const chapter = unifiedStore.objects[selectedChapterId];
+        const chapter = unifiedObjects[selectedChapterId];
         if (!chapter || chapter.type !== 'chapter') return null;
         return {
             id: chapter.id,
@@ -192,7 +193,7 @@ const NovelEditor: React.FC = () =>
             order: chapter.metadata.order || 0,
             actId: chapter.metadata.act_id || '',
         };
-    }, [selectedChapterId, unifiedStore.objects]);
+    }, [selectedChapterId, unifiedObjects]);
 
     // Build story objects from unified store when projectId changes
     useEffect(() =>
@@ -202,13 +203,13 @@ const NovelEditor: React.FC = () =>
         const buildStoryObjects = async () => {
             try {
                 const [basicInfoList, characters, organizations, locations, lorebook, acts, chapters] = await Promise.all([
-                    unifiedStore.listObjects('basic_info', projectId),
-                    unifiedStore.listObjects('character', projectId),
-                    unifiedStore.listObjects('organization', projectId),
-                    unifiedStore.listObjects('location', projectId),
-                    unifiedStore.listObjects('lorebook', projectId),
-                    unifiedStore.listObjects('act', projectId),
-                    unifiedStore.listObjects('chapter', projectId),
+                    listUnifiedObjects('basic_info', projectId),
+                    listUnifiedObjects('character', projectId),
+                    listUnifiedObjects('organization', projectId),
+                    listUnifiedObjects('location', projectId),
+                    listUnifiedObjects('lorebook', projectId),
+                    listUnifiedObjects('act', projectId),
+                    listUnifiedObjects('chapter', projectId),
                 ]);
 
                 // Build basic info
@@ -277,7 +278,7 @@ const NovelEditor: React.FC = () =>
         };
 
         buildStoryObjects();
-    }, [projectId, unifiedStore, showError]);
+    }, [projectId, listUnifiedObjects, showError]);
 
     // Fetch chats when projectId changes
     useEffect(() =>
