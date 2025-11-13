@@ -1,14 +1,14 @@
 /* Syntax Highlighter */
 .syntax-highlighter {
-  font-family: ui-monospace, SFMono-Regular, SF Mono, Consolas, Liberation Mono, Menlo, monospace;
-  font-size: 14px;
-  line-height: 1.5;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
   white-space: pre-wrap;
   word-wrap: break-word;
 }
 
 .syntax-line {
-  min-height: 21px; /* Preserve empty lines */
+  min-height: 1em; /* Preserve empty lines - inherits from parent line-height */
 }
 
 /* Token Colors */
@@ -16,80 +16,80 @@
 /* Template Syntax */
 .token-variable {
   color: #0969da; /* Blue - {{var::name}} */
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .token-context {
   color: #8250df; /* Purple - {{context::name}} */
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .token-if-open {
   color: #cf222e; /* Red - {{#if::condition}} */
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
 .token-if-close {
   color: #cf222e; /* Red - {{/if}} */
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
 .token-template-error {
   color: #ffffff;
   background: #cf222e;
-  font-weight: 600;
-  padding: 2px 4px;
-  border-radius: 3px;
+  font-weight: var(--font-weight-semibold);
+  padding: var(--spacing-xs);
+  border-radius: var(--border-radius-sm);
 }
 
 /* XML Tags */
 .token-xml-tag-open {
   color: #116329; /* Green - <tag> */
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .token-xml-tag-close {
   color: #116329; /* Green - </tag> */
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .token-xml-tag-self {
   color: #116329; /* Green - <tag/> */
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .token-xml-error {
   color: #ffffff;
   background: #cf222e;
-  font-weight: 600;
-  padding: 2px 4px;
-  border-radius: 3px;
+  font-weight: var(--font-weight-semibold);
+  padding: var(--spacing-xs);
+  border-radius: var(--border-radius-sm);
 }
 
 /* Markdown */
 .token-md-header {
   color: #0969da; /* Blue */
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
 }
 
 .token-md-code {
   color: var(--color-text-secondary);
   background: var(--color-surface-subtle);
-  font-family: ui-monospace, monospace;
-  padding: 2px 4px;
-  border-radius: 3px;
+  font-family: var(--font-family-mono);
+  padding: var(--spacing-xs);
+  border-radius: var(--border-radius-sm);
 }
 
 .token-md-inline-code {
   color: var(--color-text-primary);
   background: var(--color-surface-muted);
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-size: 13px;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-xs);
 }
 
 .token-md-bold {
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
 }
 
@@ -100,7 +100,7 @@
 
 .token-md-list {
   color: #0969da;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
 /* Plain Text */

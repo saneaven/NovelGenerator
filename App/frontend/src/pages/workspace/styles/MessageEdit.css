@@ -35,7 +35,7 @@
 }
 
 .message-edit-textarea:focus {
-  border-color: var(--color-accent-500);
+  border-color: var(--color-brand-accent);
   box-shadow: var(--shadow-focus);
   background: var(--color-surface-base);
 }

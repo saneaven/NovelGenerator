@@ -262,9 +262,9 @@
 }
 
 .action-btn.translate-btn:hover:not(:disabled) {
-    background: var(--color-accent-50);
-    border-color: var(--color-accent-500);
-    color: var(--color-accent-700);
+    background: var(--color-brand-accent-soft);
+    border-color: var(--color-brand-accent);
+    color: var(--color-brand-accent-contrast);
 }
 
 .action-btn.edit-btn:hover:not(:disabled) {
@@ -360,7 +360,7 @@
 }
 
 .message-edit textarea:focus {
-    border-color: var(--color-accent-500);
+    border-color: var(--color-brand-accent);
     background: var(--color-surface-base);
     box-shadow: var(--shadow-focus);
 }

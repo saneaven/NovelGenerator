@@ -61,13 +61,9 @@
 }
 
 .theme-option.active {
-    border-color: var(--color-primary-500);
-    background: var(--color-primary-50);
+    border-color: var(--color-brand-primary);
+    background: var(--color-brand-primary-soft);
     box-shadow: var(--shadow-focus-primary);
-}
-
-[data-theme="dark"] .theme-option.active {
-    background: var(--color-primary-900);
 }
 
 .theme-option-icon {
@@ -84,12 +80,9 @@
 }
 
 .theme-option.active .theme-option-icon {
-    background: var(--color-primary-100);
+    background: var(--color-brand-primary-muted);
 }
 
-[data-theme="dark"] .theme-option.active .theme-option-icon {
-    background: var(--color-primary-800);
-}
 
 .theme-option-content {
     flex: 1;

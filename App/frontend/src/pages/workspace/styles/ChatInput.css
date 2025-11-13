@@ -72,7 +72,7 @@
 }
 
 .chat-controls-toggle:hover {
-  color: var(--color-accent-500);
+  color: var(--color-brand-accent);
   transform: scale(1.1);
 }
 
@@ -156,7 +156,7 @@
 }
 
 .chat-input:focus {
-  border-color: var(--color-accent-500);
+  border-color: var(--color-brand-accent);
   background: var(--color-surface-base);
   box-shadow: var(--shadow-focus);
 }
@@ -226,7 +226,7 @@
 }
 
 .send-button:disabled {
-  background: var(--color-neutral-300);
+  background: var(--color-surface-disabled);
   color: var(--color-text-muted);
   cursor: not-allowed;
   transform: none;
