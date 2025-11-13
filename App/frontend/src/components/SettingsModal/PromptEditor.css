@@ -2,32 +2,32 @@
 
 /* Prompts Section */
 .prompts-section {
-    margin-top: 30px;
-    padding-top: 30px;
-    border-top: 2px solid var(--color-border-default);
+    margin-top: var(--spacing-xl);
+    padding-top: var(--spacing-xl);
+    border-top: 1px solid var(--color-border-default);
     background: var(--color-surface-base);
 }
 
 .prompts-section .section-title {
-    font-size: 18px;
-    font-weight: 600;
-    margin-bottom: 8px;
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-semibold);
+    margin-bottom: var(--spacing-sm);
     color: var(--color-text-primary);
 }
 
 .prompts-section .section-description {
-    font-size: 14px;
+    font-size: var(--font-size-sm);
     color: var(--color-text-tertiary);
-    margin-bottom: 24px;
+    margin-bottom: var(--spacing-md);
 }
 
 /* Prompt Editor */
 .prompt-editor {
-    margin-bottom: 32px;
-    padding: 20px;
+    margin-bottom: var(--spacing-lg);
+    padding: var(--spacing-md);
     background: var(--color-surface-base);
     border: 1px solid var(--color-border-default);
-    border-radius: 8px;
+    border-radius: var(--border-radius-md);
     text-align: left;
 }
 
@@ -42,27 +42,27 @@
 }
 
 .loading-indicator {
-    font-size: 14px;
+    font-size: var(--font-size-sm);
     color: var(--color-text-tertiary);
-    padding: 20px;
+    padding: var(--spacing-md);
 }
 
 .editor-header {
-    margin-bottom: 16px;
+    margin-bottom: var(--spacing-sm);
     text-align: left;
 }
 
 .editor-label {
-    font-size: 16px;
-    font-weight: 600;
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-semibold);
     color: var(--color-text-primary);
     display: block;
-    margin-bottom: 4px;
+    margin-bottom: var(--spacing-xs);
     text-align: left;
 }
 
 .editor-description {
-    font-size: 14px;
+    font-size: var(--font-size-sm);
     color: var(--color-text-tertiary);
     margin: 0;
     text-align: left;
@@ -70,15 +70,15 @@
 
 /* Validation Messages */
 .validation-messages {
-    margin-top: 12px;
-    margin-bottom: 12px;
+    margin-top: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
 }
 
 .validation-errors,
 .validation-warnings {
-    margin-bottom: 12px;
-    padding: 12px;
-    border-radius: 6px;
+    margin-bottom: var(--spacing-md);
+    padding: var(--spacing-md);
+    border-radius: var(--border-radius-sm);
 }
 
 .validation-errors {
@@ -94,8 +94,8 @@
 .validation-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
 }
 
 .validation-header.error {
@@ -107,7 +107,7 @@
 }
 
 .validation-header .icon {
-    font-size: 16px;
+    font-size: var(--font-size-base);
 }
 
 .validation-list {
@@ -117,8 +117,8 @@
 }
 
 .validation-item {
-    font-size: 13px;
-    padding: 4px 0;
+    font-size: var(--font-size-sm);
+    padding: var(--spacing-xs) 0;
 }
 
 .validation-item.error {
@@ -130,13 +130,13 @@
 }
 
 .validation-item .location {
-    font-weight: 600;
-    margin-right: 4px;
+    font-weight: var(--font-weight-semibold);
+    margin-right: var(--spacing-xs);
     color: inherit;
 }
 
 .validation-item .message {
-    font-family: ui-monospace, monospace;
+    font-family: var(--font-family-mono);
     color: inherit;
 }
 
@@ -145,31 +145,31 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-top: 16px;
-    gap: 12px;
+    margin-top: var(--spacing-sm);
+    gap: var(--spacing-sm);
     flex-wrap: wrap;
 }
 
 .editor-left-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--spacing-xs);
     flex: 1;
 }
 
 .editor-right-actions {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--spacing-sm);
 }
 
 .note-input {
-    padding: 8px 12px;
+    padding: var(--spacing-xs) var(--spacing-sm);
     border: 1px solid var(--color-border-default);
-    border-radius: 4px;
-    font-size: 14px;
-    min-width: 200px;
-    max-width: 400px;
+    border-radius: var(--border-radius-sm);
+    font-size: var(--font-size-sm);
+    min-width: 180px;
+    max-width: 350px;
     flex: 1;
     background: var(--color-surface-base);
     color: var(--color-text-primary);
@@ -182,13 +182,13 @@
 }
 
 .char-count {
-    font-size: 13px;
+    font-size: var(--font-size-sm);
     color: var(--color-text-tertiary);
 }
 
 .unsaved-indicator {
     color: var(--color-warning);
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
 }
 
 /* Version History Modal */
@@ -205,7 +205,7 @@
 
 .version-history-content {
     display: flex;
-    gap: 24px;
+    gap: var(--spacing-lg);
     min-height: 400px;
     background: var(--color-surface-base);
 }
@@ -215,24 +215,24 @@
     max-width: 350px;
     overflow-y: auto;
     max-height: calc(85vh - 200px);
-    padding-right: 12px;
+    padding-right: var(--spacing-md);
 }
 
 .version-list h4 {
-    font-size: 16px;
-    font-weight: 600;
-    margin-bottom: 16px;
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-semibold);
+    margin-bottom: var(--spacing-sm);
     color: var(--color-text-primary);
 }
 
 .version-item {
-    padding: 12px;
-    margin-bottom: 8px;
+    padding: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
     background: var(--color-surface-subtle);
     border: 1px solid var(--color-border-default);
-    border-radius: 6px;
+    border-radius: var(--border-radius-sm);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all var(--transition-base);
 }
 
 .version-item:hover {
@@ -241,32 +241,32 @@
 }
 
 .version-item.selected {
-    background: var(--color-primary-50);
+    background: var(--color-brand-primary-soft);
     border-color: var(--color-primary-main);
 }
 
 .version-item.active {
-    border-left: 4px solid var(--color-success);
+    border-left: var(--spacing-xs) solid var(--color-success);
 }
 
 .version-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 6px;
+    margin-bottom: var(--spacing-xs);
 }
 
 .version-number {
-    font-weight: 600;
-    font-size: 14px;
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-base);
     color: var(--color-text-primary);
 }
 
 .badge {
-    font-size: 11px;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-weight: 600;
+    font-size: var(--font-size-sm);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--border-radius-lg);
+    font-weight: var(--font-weight-semibold);
 }
 
 .badge.active {
@@ -280,9 +280,9 @@
 }
 
 .version-meta {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--color-text-tertiary);
-    margin-bottom: 6px;
+    margin-bottom: var(--spacing-xs);
 }
 
 .version-date {
@@ -290,16 +290,16 @@
 }
 
 .version-note {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     font-style: italic;
     color: var(--color-text-secondary);
-    margin-bottom: 6px;
+    margin-bottom: var(--spacing-xs);
 }
 
 .version-preview {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--color-text-tertiary);
-    font-family: ui-monospace, monospace;
+    font-family: var(--font-family-mono);
     overflow: hidden;
     text-overflow: ellipsis;
     display: -webkit-box;
@@ -309,53 +309,53 @@
 
 .version-details {
     flex: 1;
-    border-left: 2px solid var(--color-border-default);
-    padding-left: 24px;
+    border-left: 1px solid var(--color-border-default);
+    padding-left: var(--spacing-lg);
 }
 
 .details-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 16px;
+    margin-bottom: var(--spacing-sm);
 }
 
 .details-header h4 {
-    font-size: 18px;
-    font-weight: 600;
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
     color: var(--color-text-primary);
 }
 
 .details-meta {
     background: var(--color-surface-subtle);
-    padding: 16px;
-    border-radius: 6px;
-    margin-bottom: 16px;
+    padding: var(--spacing-sm);
+    border-radius: var(--border-radius-sm);
+    margin-bottom: var(--spacing-sm);
 }
 
 .details-meta p {
-    margin: 8px 0;
-    font-size: 14px;
+    margin: var(--spacing-xs) 0;
+    font-size: var(--font-size-sm);
     color: var(--color-text-secondary);
 }
 
 .details-preview {
-    margin-top: 16px;
+    margin-top: var(--spacing-sm);
 }
 
 .details-preview h5 {
-    font-size: 14px;
-    font-weight: 600;
-    margin-bottom: 8px;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    margin-bottom: var(--spacing-xs);
     color: var(--color-text-primary);
 }
 
 .preview-content {
     background: var(--color-surface-muted);
-    padding: 16px;
-    border-radius: 6px;
-    font-family: ui-monospace, monospace;
-    font-size: 13px;
+    padding: var(--spacing-sm);
+    border-radius: var(--border-radius-sm);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-sm);
     white-space: pre-wrap;
     overflow-x: auto;
     max-height: 300px;
@@ -365,67 +365,67 @@
 
 .empty-state {
     text-align: center;
-    padding: 40px;
+    padding: var(--spacing-xl);
     color: var(--color-text-muted);
-    font-size: 14px;
+    font-size: var(--font-size-sm);
 }
 
 /* Prompts Panel */
 .prompts-panel {
-    padding: 20px;
+    padding: var(--spacing-md);
     text-align: left;
 }
 
 .panel-header {
-    margin-bottom: 32px;
+    margin-bottom: var(--spacing-lg);
     text-align: left;
 }
 
 .panel-header h3 {
-    font-size: 20px;
-    font-weight: 600;
-    margin-bottom: 8px;
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    margin-bottom: var(--spacing-xs);
     color: var(--color-text-primary);
 }
 
 .panel-description {
-    font-size: 14px;
+    font-size: var(--font-size-sm);
     color: var(--color-text-tertiary);
     margin: 0;
     text-align: left;
 }
 
 .prompt-editors {
-    margin-bottom: 32px;
+    margin-bottom: var(--spacing-lg);
 }
 
 .info-box {
-    padding: 16px;
+    padding: var(--spacing-sm);
     background: var(--color-info-light);
     border: 1px solid var(--color-info);
-    border-radius: 8px;
-    margin-top: 24px;
+    border-radius: var(--border-radius-sm);
+    margin-top: var(--spacing-md);
 }
 
 .info-box h4 {
-    font-size: 15px;
-    font-weight: 600;
-    margin-bottom: 12px;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    margin-bottom: var(--spacing-sm);
     color: var(--color-info-dark);
 }
 
 .info-box p {
-    font-size: 14px;
+    font-size: var(--font-size-sm);
     color: var(--color-info-dark);
-    margin: 8px 0;
+    margin: var(--spacing-xs) 0;
 }
 
 .info-box code {
     background: var(--color-surface-muted);
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-family: ui-monospace, monospace;
-    font-size: 13px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--border-radius-sm);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-sm);
     color: var(--color-text-primary);
 }
 
@@ -434,12 +434,12 @@
     background: var(--gradient-accent);
     color: var(--color-text-inverse);
     border: none;
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 500;
+    padding: var(--spacing-xs) var(--spacing-md);
+    border-radius: var(--border-radius-sm);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all var(--transition-base);
 }
 
 .prompt-editor .btn-primary:hover:not(:disabled) {
@@ -455,12 +455,12 @@
     background: var(--color-surface-base);
     color: var(--color-text-secondary);
     border: 1px solid var(--color-border-default);
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 500;
+    padding: var(--spacing-xs) var(--spacing-md);
+    border-radius: var(--border-radius-sm);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all var(--transition-base);
 }
 
 .prompt-editor .btn-secondary:hover:not(:disabled) {
@@ -486,9 +486,9 @@
 
     .version-details {
         border-left: none;
-        border-top: 2px solid var(--color-border-default);
+        border-top: 1px solid var(--color-border-default);
         padding-left: 0;
-        padding-top: 24px;
+        padding-top: var(--spacing-lg);
     }
 
     .editor-actions {

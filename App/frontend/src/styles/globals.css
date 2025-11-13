@@ -265,12 +265,12 @@ pre {
 
 /* ===== Selection ===== */
 ::selection {
-  background-color: var(--color-primary-200);
+  background-color: var(--color-brand-primary-tint);
   color: var(--color-text-primary);
 }
 
 ::-moz-selection {
-  background-color: var(--color-primary-200);
+  background-color: var(--color-brand-primary-tint);
   color: var(--color-text-primary);
 }
 
