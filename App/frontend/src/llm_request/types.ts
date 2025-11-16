@@ -39,6 +39,52 @@ export interface FunctionCallMetadata {
   resultMessage?: string; // Human-readable result message
 }
 
+export type FunctionCallProgressStatus = 'collecting' | 'validating' | 'ready' | 'error';
+
+export interface FunctionCallDraft {
+  id: string;
+  index: number;
+  functionName: string;
+  rawArguments: string;
+  parsedArguments: any | null;
+  segments: string[];
+}
+
+export interface FunctionCallOperationFieldPreview {
+  key: string;
+  label: string;
+  value: string;
+}
+
+export interface FunctionCallOperationChapterPreview {
+  title?: string;
+  summary?: string;
+}
+
+export interface FunctionCallOperationPreview {
+  key: string;
+  action?: string;
+  type?: string;
+  id?: string;
+  targetName?: string;
+  summary?: string;
+  data?: Record<string, any>;
+  fields?: FunctionCallOperationFieldPreview[];
+  chapters?: FunctionCallOperationChapterPreview[];
+  missingFields?: string[];
+  rawSnippet?: string;
+}
+
+export interface FunctionCallProgress {
+  draft: FunctionCallDraft;
+  status: FunctionCallProgressStatus;
+  preview?: any;
+  rawPreview: string;
+  operationPreviews?: FunctionCallOperationPreview[];
+  error?: string;
+  updatedAt: number;
+}
+
 // Helper interface for tracking function call results systematically
 export interface FunctionCallResultSummary {
   functionCallId: string;

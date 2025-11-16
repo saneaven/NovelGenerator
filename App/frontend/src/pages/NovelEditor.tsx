@@ -88,7 +88,7 @@ const NovelEditor: React.FC = () =>
         setPendingFunctionCallResults,
         setMessageEditCards,
         handleFunctionCalls,
-        handleFunctionCallsDetected,
+        handleFunctionCallProgress,
         createFunctionCallApplyHandler,
         createFunctionCallRejectHandler,
     } = functionCallHandlers;
@@ -116,11 +116,11 @@ const NovelEditor: React.FC = () =>
             console.error('Runtime processing error:', error);
             showError('Chat Error', 'An error occurred during processing. Please try again.');
         },
-        onFunctionCallsDetected: (_projId, _chatId, messageId, functionCalls) =>
+        onFunctionCallProgress: (_projId, _chatId, messageId, progressEvents) =>
         {
-            handleFunctionCallsDetected(messageId, functionCalls);
+            handleFunctionCallProgress(messageId, progressEvents);
         },
-    }), [updateMessageContentLocal, updateMessage, handleFunctionCalls, addMessage, getMessages, showError, handleFunctionCallsDetected]);
+    }), [updateMessageContentLocal, updateMessage, handleFunctionCalls, addMessage, getMessages, showError, handleFunctionCallProgress]);
 
     const chatManager = useMemo(() =>
     {

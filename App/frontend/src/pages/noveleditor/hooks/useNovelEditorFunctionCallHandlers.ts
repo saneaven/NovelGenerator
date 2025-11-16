@@ -5,7 +5,7 @@ import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { NovelEditorFunctionCallApplicator } from '../services/NovelEditorFunctionCallApplicator';
 import { NovelEditorFunctionCallService } from '../services/NovelEditorFunctionCallService';
-import type { FunctionCallMetadata, FunctionCallResultSummary } from '../../../llm_request/types';
+import type { FunctionCallMetadata, FunctionCallResultSummary, FunctionCallProgress } from '../../../llm_request/types';
 import type { EditCard } from '../../../chat/types';
 
 export function useNovelEditorFunctionCallHandlers(
@@ -24,7 +24,7 @@ export function useNovelEditorFunctionCallHandlers(
       updateChapterContentForLanguage(projectId, chapterId, content, settings.primaryLanguage, userRequest, true);
     }
   }), [updateChapterContentForLanguage, settings.primaryLanguage]);
-  const [activeFunctionCalls, setActiveFunctionCalls] = useState<Record<string, any[]>>({});
+  const [activeFunctionCalls, setActiveFunctionCalls] = useState<Record<string, FunctionCallProgress[]>>({});
   const [pendingFunctionCallResults, setPendingFunctionCallResults] = useState<FunctionCallResultSummary[]>([]);
 
   const getActiveChatId = useCallback(
@@ -235,12 +235,28 @@ export function useNovelEditorFunctionCallHandlers(
     ]
   );
 
-  const handleFunctionCallsDetected = useCallback(
-    (messageId: string, functionCalls: any[]) => {
-      setActiveFunctionCalls(prev => ({
-        ...prev,
-        [messageId]: functionCalls
-      }));
+  const handleFunctionCallProgress = useCallback(
+    (messageId: string, progressList: FunctionCallProgress[]) => {
+      if (progressList.length === 0) {
+        return;
+      }
+
+      setActiveFunctionCalls(prev => {
+        const current = prev[messageId] ? [...prev[messageId]] : [];
+        progressList.forEach(progress => {
+          const existingIndex = current.findIndex(item => item.draft.index === progress.draft.index);
+          if (existingIndex === -1) {
+            current.push(progress);
+          } else {
+            current[existingIndex] = progress;
+          }
+        });
+
+        return {
+          ...prev,
+          [messageId]: current
+        };
+      });
     },
     []
   );
@@ -252,7 +268,7 @@ export function useNovelEditorFunctionCallHandlers(
     pendingFunctionCallResults,
     setPendingFunctionCallResults,
     handleFunctionCalls,
-    handleFunctionCallsDetected,
+    handleFunctionCallProgress,
     createFunctionCallApplyHandler,
     createFunctionCallRejectHandler,
   };

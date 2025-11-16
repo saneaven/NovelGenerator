@@ -1,9 +1,10 @@
 import type { MutableRefObject } from 'react';
-import type { ChatMessage, FunctionCallMetadata, ContentPart } from '../../llm_request/types';
+import type { ChatMessage, FunctionCallMetadata, ContentPart, FunctionCallProgress } from '../../llm_request/types';
 import type { ChatPipelineContext } from '../types';
 import { streamChat } from '../../llm_request/llmService';
 import { ChatPipeline } from '../ChatPipeline';
 import { type ProviderType, type ProviderConfig } from '../../store/settingsStore';
+import { FunctionCallStreamTracker } from '../streaming/FunctionCallStreamTracker';
 
 export interface ChatManagerConfig {
   projectId: string;
@@ -38,7 +39,7 @@ export interface ChatManagerCallbacks {
   onAddMessage: (projectId: string, chatId: string, message: ChatMessage, language: string) => Promise<string>;
   onGetChatHistory: (projectId: string, chatId: string, language: string) => ChatMessage[];
   onError: (error: Error) => void;
-  onFunctionCallsDetected?: (projectId: string, chatId: string, messageId: string, functionCalls: any[]) => void;
+  onFunctionCallProgress?: (projectId: string, chatId: string, messageId: string, progress: FunctionCallProgress[]) => void;
 }
 
 export class ChatManager {
@@ -181,8 +182,9 @@ export class ChatManager {
     let accumulatedContentParts: ContentPart[] = [];
     let currentPartType: 'thinking' | 'reasoning' | 'content' | null = null;
     let currentBuffer = '';
-    let accumulatedToolCalls: any[] = [];
     let accumulatedReasoningDetails: any[] | undefined;
+    const toolCallTracker = new FunctionCallStreamTracker(functions ?? this.config.functions);
+    let finalizedToolCalls: any[] = [];
 
     // Helper to finalize current buffer into accumulated parts
     const finalizeCurrentBuffer = () => {
@@ -321,10 +323,14 @@ export class ChatManager {
 
           // Handle tool calls
           if (chunk.tool_calls) {
-            accumulatedToolCalls = this.accumulateToolCalls(accumulatedToolCalls, chunk.tool_calls);
-
-            if (this.callbacks.onFunctionCallsDetected) {
-              this.callbacks.onFunctionCallsDetected(this.config.projectId, chatId, assistantMessageId, accumulatedToolCalls);
+            const progressEvents = toolCallTracker.applyDelta(chunk.tool_calls);
+            if (progressEvents.length && this.callbacks.onFunctionCallProgress) {
+              this.callbacks.onFunctionCallProgress(
+                this.config.projectId,
+                chatId,
+                assistantMessageId,
+                progressEvents
+              );
             }
           }
 
@@ -349,43 +355,18 @@ export class ChatManager {
       throw error;
     }
 
+    finalizedToolCalls = toolCallTracker.finalize();
+
     // Post-processing
     await this.finishProcessing(
       chatId,
       assistantMessageId,
       accumulatedContentParts,
-      accumulatedToolCalls,
+      finalizedToolCalls,
       accumulatedReasoningDetails,
       context,
       language
     );
-  }
-
-  /**
-   * Accumulate tool calls
-   */
-  private accumulateToolCalls(existing: any[], newCalls: any[]): any[] {
-    newCalls.forEach((newToolCall, index) => {
-      if (!existing[index]) {
-        existing[index] = {
-          id: newToolCall.id || '',
-          type: newToolCall.type || 'function',
-          function: {
-            name: newToolCall.function?.name || '',
-            arguments: ''
-          }
-        };
-      }
-      
-      if (newToolCall.function?.arguments) {
-        existing[index].function.arguments += newToolCall.function.arguments;
-      }
-      
-      if (newToolCall.id) existing[index].id = newToolCall.id;
-      if (newToolCall.function?.name) existing[index].function.name = newToolCall.function.name;
-    });
-    
-    return existing;
   }
 
   /**
@@ -403,11 +384,12 @@ export class ChatManager {
     // Post-process the final AI response with contentParts
     const finalResponse = (toolCalls.length > 0 || reasoningDetails)
       ? {
+          content: null,
           contentParts,
           tool_calls: toolCalls,
           reasoning_details: reasoningDetails
         }
-      : { contentParts };
+      : { content: null, contentParts };
 
     console.log('ChatManager: Processing final response', {
       finalResponse,
