@@ -9,12 +9,13 @@ import { ChatPipeline } from '../../../chat/ChatPipeline';
 import { EditCardComponent } from '../../../chat/processors/DisplayProcessor';
 import type { WorkspaceUIState, WorkspaceUIActions } from '../hooks/useWorkspaceState';
 import type { StoryObjects } from '../../../types/storyObject';
-import type { ChatMessage, FunctionCallMetadata } from '../../../llm_request/types';
+import type { ChatMessage, FunctionCallMetadata, FunctionCallProgress } from '../../../llm_request/types';
 import { ChatManager, type ChatManagerConfig, type ChatManagerCallbacks } from '../../../chat/processors/ChatManager';
 import { getTranslationFunctionSchema } from '../../../chat/types/translationFunctionSchemas';
 import { applyTranslationFunctionCalls, type TranslationContext } from '../../../chat/utils/translationFunctionApplicator';
 import ToggleSwitch from '../../../components/ToggleSwitch';
 import ReasoningDisplay from '../../../components/ReasoningDisplay';
+import FunctionCallPreviewCard from './FunctionCallPreviewCard';
 
 interface ChatPanelProps
 {
@@ -27,7 +28,7 @@ interface ChatPanelProps
     storyObjects: StoryObjects;
     novelData?: Record<string, unknown>;
     messageEditCards: Record<string, EditCard[]>;
-    activeFunctionCalls: Record<string, any[]>;
+    activeFunctionCalls: Record<string, FunctionCallProgress[]>;
     onSubmit: (e: React.FormEvent, input: string, isLoading: boolean) => Promise<void>;
     onStop: () => void;
     onEditMessage: (messageId: string, content: string | null, language: string) => void;
@@ -612,16 +613,18 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                 <div className="message-edit-cards">
                                     <div className="function-call-indicator">
                                         <div className="function-call-indicator-header">
-                                            <div className="function-call-indicator-text">AI is preparing function calls...</div>
+                                            <div className="function-call-indicator-text">AI is composing function-call arguments…</div>
                                             <div className="function-call-spinner">
                                                 <div className="spinner" />
                                             </div>
                                         </div>
                                         <div className="function-call-preview">
-                                            {activeFunctionCalls[message.chatMessage.id].map((call, idx) => (
-                                                <div key={idx} className="function-call-preview-item">
-                                                    {call.function?.name || 'Function call'}
-                                                </div>
+                                            {activeFunctionCalls[message.chatMessage.id].map((progress) => (
+                                                <FunctionCallPreviewCard
+                                                    key={progress.draft.id}
+                                                    progress={progress}
+                                                    storyObjects={storyObjects}
+                                                />
                                             ))}
                                         </div>
                                     </div>
