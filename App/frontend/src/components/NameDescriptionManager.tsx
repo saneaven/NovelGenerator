@@ -10,7 +10,7 @@
  * - AI-powered editing
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -50,8 +50,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
   const { settings } = useSettingsStore();
 
-  // State for items
-  const [itemIds, setItemIds] = useState<string[]>([]);
+  const objects = store.objects;
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
@@ -67,10 +66,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 
     const fetchItems = async () => {
       try {
-        const objects = await listObjects(category, projectId);
-        if (!isCancelled) {
-          setItemIds(objects.map(obj => obj.id));
-        }
+        await listObjects(category, projectId);
       } catch (error) {
         if (!isCancelled) {
           console.error(`Failed to fetch ${category} list:`, error);
@@ -85,10 +81,30 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     };
   }, [projectId, category, listObjects]);
 
-  // Get items from store
-  const items = itemIds
-    .map(id => store.objects[id] as NameDescriptionObject)
-    .filter(Boolean);
+  // Derive items directly from store so external edits instantly reflect in UI
+  const items = useMemo(() => {
+    if (!projectId) {
+      return [];
+    }
+
+    return Object.values(objects)
+      .filter(
+        (obj): obj is NameDescriptionObject =>
+          Boolean(
+            obj &&
+            obj.type === category &&
+            obj.metadata?.project_id === projectId
+          )
+      )
+      .sort((a, b) => {
+        const orderA = a.metadata.order ?? 0;
+        const orderB = b.metadata.order ?? 0;
+        if (orderA === orderB) {
+          return a.data.name.localeCompare(b.data.name);
+        }
+        return orderA - orderB;
+      });
+  }, [objects, category, projectId]);
 
   // ============================================================================
   // CRUD OPERATIONS
@@ -98,13 +114,12 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     if (!projectId || !name.trim()) return;
 
     try {
-      const newObject = await store.createObject(
+      await store.createObject(
         category,
         projectId,
         { name: name.trim(), description: description.trim() },
         settings.primaryLanguage
       );
-      setItemIds(prev => [...prev, newObject.id]);
       setShowAddForm(false);
     } catch (error) {
       console.error('Failed to add item:', error);
@@ -143,7 +158,6 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 
     try {
       await store.deleteObject(category, itemId);
-      setItemIds(prev => prev.filter(id => id !== itemId));
     } catch (error) {
       console.error('Failed to delete item:', error);
       alert('Failed to delete. Please try again.');

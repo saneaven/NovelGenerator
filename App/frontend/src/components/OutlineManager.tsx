@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -9,10 +9,8 @@ import type { ActObject, ChapterObject, ActData, ChapterData } from '../types/un
 const OutlineManager: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const store = useUnifiedObjectStore();
+  const listObjects = useUnifiedObjectStore(state => state.listObjects);
   const settings = useSettingsStore();
-
-  const [actIds, setActIds] = useState<string[]>([]);
-  const [chapterIds, setChapterIds] = useState<string[]>([]);
 
   const [editingAct, setEditingAct] = useState<string | null>(null);
   const [editingChapter, setEditingChapter] = useState<string | null>(null);
@@ -26,39 +24,54 @@ const OutlineManager: React.FC = () => {
 
   // Load acts and chapters on mount
   useEffect(() => {
+    if (!projectId) return;
+
+    let isCancelled = false;
     const loadOutlineData = async () => {
-      if (!projectId) return;
-
       try {
-        // Load all acts for this project
-        const acts = await store.listObjects('act', projectId);
-        const sortedActIds = acts
-          .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-          .map(act => act.id);
-        setActIds(sortedActIds);
-
-        // Load all chapters for this project
-        const chapters = await store.listObjects('chapter', projectId);
-        const sortedChapterIds = chapters
-          .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-          .map(chapter => chapter.id);
-        setChapterIds(sortedChapterIds);
+        await Promise.all([
+          listObjects('act', projectId),
+          listObjects('chapter', projectId),
+        ]);
       } catch (error) {
-        console.error('Failed to load outline data:', error);
+        if (!isCancelled) {
+          console.error('Failed to load outline data:', error);
+        }
       }
     };
 
     loadOutlineData();
-  }, [projectId]);
+    return () => {
+      isCancelled = true;
+    };
+  }, [projectId, listObjects]);
 
   // Get acts and chapters from store
-  const acts = actIds
-    .map(id => store.objects[id] as ActObject)
-    .filter(Boolean);
+  const acts = useMemo(() => {
+    if (!projectId) {
+      return [];
+    }
 
-  const chapters = chapterIds
-    .map(id => store.objects[id] as ChapterObject)
-    .filter(Boolean);
+    return Object.values(store.objects)
+      .filter(
+        (obj): obj is ActObject =>
+          Boolean(obj && obj.type === 'act' && obj.metadata?.project_id === projectId)
+      )
+      .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0));
+  }, [store.objects, projectId]);
+
+  const chapters = useMemo(() => {
+    if (!projectId) {
+      return [];
+    }
+
+    return Object.values(store.objects)
+      .filter(
+        (obj): obj is ChapterObject =>
+          Boolean(obj && obj.type === 'chapter' && obj.metadata?.project_id === projectId)
+      )
+      .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0));
+  }, [store.objects, projectId]);
 
   // Helper to get chapters for a specific act
   const getChaptersForAct = (actId: string): ChapterObject[] => {
@@ -75,7 +88,7 @@ const OutlineManager: React.FC = () => {
     if (!projectId || !name.trim()) return;
 
     try {
-      const actOrder = actIds.length;
+      const actOrder = acts.length;
       const newAct = await store.createObject(
         'act',
         projectId,
@@ -83,7 +96,6 @@ const OutlineManager: React.FC = () => {
         settings.primaryLanguage,
         { order: actOrder }
       );
-      setActIds(prev => [...prev, newAct.id]);
       setShowAddActForm(false);
     } catch (error) {
       console.error('Failed to create act:', error);
@@ -121,12 +133,10 @@ const OutlineManager: React.FC = () => {
       const actChapters = getChaptersForAct(actId);
       for (const chapter of actChapters) {
         await store.deleteObject('chapter', chapter.id);
-        setChapterIds(prev => prev.filter(id => id !== chapter.id));
       }
 
       // Delete the act
       await store.deleteObject('act', actId);
-      setActIds(prev => prev.filter(id => id !== actId));
     } catch (error) {
       console.error('Failed to delete act:', error);
       alert('Failed to delete act. Please try again.');
@@ -161,7 +171,6 @@ const OutlineManager: React.FC = () => {
           order: chapterOrder
         }
       );
-      setChapterIds(prev => [...prev, newChapter.id]);
       setShowAddChapterForm(null);
     } catch (error) {
       console.error('Failed to create chapter:', error);
@@ -196,7 +205,6 @@ const OutlineManager: React.FC = () => {
 
     try {
       await store.deleteObject('chapter', chapterId);
-      setChapterIds(prev => prev.filter(id => id !== chapterId));
     } catch (error) {
       console.error('Failed to delete chapter:', error);
       alert('Failed to delete chapter. Please try again.');

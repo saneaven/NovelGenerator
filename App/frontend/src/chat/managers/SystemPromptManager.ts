@@ -43,6 +43,7 @@ export interface StoryObjectEditPromptContext extends BasePromptContext {
   targetId?: string;
   contextData?: Record<string, unknown>;
   currentData: unknown;
+  userRequest?: string;
   enablePrefill?: boolean;
   enableThinking?: boolean;
 }
@@ -252,7 +253,7 @@ export class SystemPromptManager {
   }
 
   private static async generateStoryObjectEditBundle(context: StoryObjectEditPromptContext): Promise<PromptBundle> {
-    const { category, targetId, contextData, currentData, outputLanguage } = context;
+    const { category, targetId, contextData, currentData, outputLanguage, userRequest } = context;
 
     const [systemTemplate, userTemplate] = await Promise.all([
       this.getTemplate('storyEdit', 'systemPrompt'),
@@ -285,12 +286,12 @@ export class SystemPromptManager {
       context: {
         contextData: formattedContextData,
         currentData: this.formatJsonBlock(currentData),
-        userRequest: '',
+        userRequest: userRequest ? this.formatTextBlock(userRequest) : '',
       },
       conditionals: {
         targetId: !!targetId,
         contextData: hasContextData,
-        userRequest: false,
+        userRequest: !!(userRequest && userRequest.trim() !== ''),
       },
     };
 

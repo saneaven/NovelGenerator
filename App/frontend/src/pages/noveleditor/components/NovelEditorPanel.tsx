@@ -26,6 +26,8 @@ import ChapterSidebar from './ChapterSidebar';
 interface NovelEditorPanelProps {
   projectId: string;
   selectedChapterId: string | null;
+  hasChapters: boolean;
+  chaptersInitialized: boolean;
   onToggleSidebar: () => void;
   onSelectChapter: (chapterId: string) => void;
 }
@@ -39,6 +41,8 @@ const SNAPSHOT_INTERVAL = 5 * 60 * 1000;
 const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   projectId,
   selectedChapterId,
+  hasChapters,
+  chaptersInitialized,
   onToggleSidebar,
   onSelectChapter,
 }) => {
@@ -288,11 +292,19 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   // ============================================================================
 
   if (!selectedChapterId) {
+    const isChapterMissing = chaptersInitialized && !hasChapters;
+    const heading = isChapterMissing ? 'Chapter not exist' : chaptersInitialized ? 'Loading chapter...' : 'Loading chapters...';
+    const description = isChapterMissing
+      ? 'Create a chapter in the Workspace to start editing.'
+      : chaptersInitialized
+        ? 'Opening the first available chapter. Please wait.'
+        : 'Loading your outline so we can open the first chapter.';
+
     return (
       <div className="novel-editor-panel empty-state">
         <div className="empty-message">
-          <h3>No Chapter Selected</h3>
-          <p>Select a chapter from the sidebar to start editing.</p>
+          <h3>{heading}</h3>
+          <p>{description}</p>
         </div>
       </div>
     );

@@ -20,7 +20,7 @@ export class DefaultPostProcessor implements PostProcessor {
       // Legacy: plain string content
       contentParts = [{type: 'content', text: aiResponse}];
     } else if (aiResponse.contentParts) {
-      // NEW: Already structured contentParts from ChatManager
+      // NEW: Already structured contentParts from LLMRequestManager
       contentParts = aiResponse.contentParts;
       tool_calls = aiResponse.tool_calls;
       reasoning_details = aiResponse.reasoning_details;
@@ -77,3 +77,4 @@ export class DefaultPostProcessor implements PostProcessor {
     };
   }
 }
+

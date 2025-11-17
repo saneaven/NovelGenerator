@@ -6,13 +6,13 @@ import { ChatPipeline } from '../ChatPipeline';
 import { type ProviderType, type ProviderConfig } from '../../store/settingsStore';
 import { FunctionCallStreamTracker } from '../streaming/FunctionCallStreamTracker';
 
-export interface ChatManagerConfig {
+export interface LLMRequestManagerConfig {
   projectId: string;
   getStoryObjects: () => any; // Changed from static value to function
   getNovelData?: () => any; // Novel content access function
   systemInsertConfig: any;
   chatPipeline: ChatPipeline;
-  getIsLoading: () => boolean; // Changed to getter to prevent recreating ChatManager on loading state changes
+  getIsLoading: () => boolean; // Changed to getter to prevent recreating LLMRequestManager on loading state changes
   setIsLoading: (loading: boolean) => void;
   abortControllerRef: MutableRefObject<AbortController | null>;
   getActiveChatId: () => string | undefined;
@@ -32,7 +32,7 @@ export interface ChatManagerConfig {
   };
 }
 
-export interface ChatManagerCallbacks {
+export interface LLMRequestManagerCallbacks {
   onUpdateMessage: (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, reasoning_details?: any[]) => void;
   onSyncMessageToBackend: (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, reasoning_details?: any[]) => Promise<void>;
   onFunctionCalls: (projectId: string, chatId: string, messageId: string, functionCalls: FunctionCallMetadata[]) => void;
@@ -42,12 +42,12 @@ export interface ChatManagerCallbacks {
   onFunctionCallProgress?: (projectId: string, chatId: string, messageId: string, progress: FunctionCallProgress[]) => void;
 }
 
-export class ChatManager {
-  private config: ChatManagerConfig;
-  private callbacks: ChatManagerCallbacks;
+export class LLMRequestManager {
+  private config: LLMRequestManagerConfig;
+  private callbacks: LLMRequestManagerCallbacks;
   private isStreaming: boolean = false;
 
-  constructor(config: ChatManagerConfig, callbacks: ChatManagerCallbacks) {
+  constructor(config: LLMRequestManagerConfig, callbacks: LLMRequestManagerCallbacks) {
     this.config = config;
     this.callbacks = callbacks;
   }
@@ -60,13 +60,13 @@ export class ChatManager {
 
     // Defensive check: prevent concurrent streams
     if (this.isStreaming) {
-      console.warn('ChatManager: Attempted to start new stream while one is already in progress');
+      console.warn('LLMRequestManager: Attempted to start new stream while one is already in progress');
       return;
     }
 
     const chatId = this.config.getActiveChatId();
     if (!chatId) {
-      console.error('ChatManager: No active chat selected for project', this.config.projectId);
+      console.error('LLMRequestManager: No active chat selected for project', this.config.projectId);
       return;
     }
 
@@ -86,7 +86,7 @@ export class ChatManager {
       await this.startStreaming(chatId, assistantMessageId, language);
 
     } catch (error) {
-      console.error('Chat processing error:', error);
+      console.error('LLM request processing error:', error);
       this.callbacks.onError(error instanceof Error ? error : new Error(String(error)));
     } finally {
       this.config.setIsLoading(false);
@@ -103,13 +103,13 @@ export class ChatManager {
 
     // Defensive check: prevent concurrent streams
     if (this.isStreaming) {
-      console.warn('ChatManager: Attempted to start new stream while one is already in progress');
+      console.warn('LLMRequestManager: Attempted to start new stream while one is already in progress');
       return;
     }
 
     const chatId = this.config.getActiveChatId();
     if (!chatId) {
-      console.error('ChatManager: No active chat selected for project', this.config.projectId);
+      console.error('LLMRequestManager: No active chat selected for project', this.config.projectId);
       return;
     }
 
@@ -126,7 +126,7 @@ export class ChatManager {
       await this.startStreaming(chatId, assistantMessageId, language);
 
     } catch (error) {
-      console.error('Chat processing error:', error);
+      console.error('LLM request processing error:', error);
       this.callbacks.onError(error instanceof Error ? error : new Error(String(error)));
     } finally {
       this.config.setIsLoading(false);
@@ -391,7 +391,7 @@ export class ChatManager {
         }
       : { content: null, contentParts };
 
-    console.log('ChatManager: Processing final response', {
+    console.log('LLMRequestManager: Processing final response', {
       finalResponse,
       contentPartsLength: contentParts.length,
       toolCallsLength: toolCalls.length,
@@ -403,7 +403,7 @@ export class ChatManager {
       context
     );
 
-    console.log('ChatManager: Processed message', {
+    console.log('LLMRequestManager: Processed message', {
       messageId,
       contentPartsLength: processedMessage.contentParts?.length || 0,
       functionCallsLength: processedMessage.functionCalls?.length || 0,
@@ -430,9 +430,9 @@ export class ChatManager {
         _language,
         (processedMessage as any).reasoning_details
       );
-      console.log('ChatManager: Successfully synced message to backend');
+      console.log('LLMRequestManager: Successfully synced message to backend');
     } catch (error) {
-      console.error('ChatManager: Failed to sync message to backend:', error);
+      console.error('LLMRequestManager: Failed to sync message to backend:', error);
       // Don't throw - local state is already updated
     }
 
@@ -441,10 +441,10 @@ export class ChatManager {
 
     // Call callback if function calls exist
     if (processedMessage.functionCalls && processedMessage.functionCalls.length > 0) {
-      console.log('ChatManager: Calling onFunctionCalls callback', { messageId, functionCalls: processedMessage.functionCalls });
+      console.log('LLMRequestManager: Calling onFunctionCalls callback', { messageId, functionCalls: processedMessage.functionCalls });
       this.callbacks.onFunctionCalls(this.config.projectId, chatId, messageId, processedMessage.functionCalls);
     } else {
-      console.log('ChatManager: No function calls to process');
+      console.log('LLMRequestManager: No function calls to process');
     }
   }
 
@@ -470,4 +470,5 @@ export function findLastUserMessageIdx(messages: ChatMessage[]): number
     }
     return -1;
   }
+
 

@@ -10,7 +10,7 @@ import { EditCardComponent } from '../../../chat/processors/DisplayProcessor';
 import type { WorkspaceUIState, WorkspaceUIActions } from '../hooks/useWorkspaceState';
 import type { StoryObjects } from '../../../types/storyObject';
 import type { ChatMessage, FunctionCallMetadata, FunctionCallProgress } from '../../../llm_request/types';
-import { ChatManager, type ChatManagerConfig, type ChatManagerCallbacks } from '../../../chat/processors/ChatManager';
+import { LLMRequestManager, type LLMRequestManagerConfig, type LLMRequestManagerCallbacks } from '../../../chat/processors/LLMRequestManager';
 import { getTranslationFunctionSchema } from '../../../chat/types/translationFunctionSchemas';
 import { applyTranslationFunctionCalls, type TranslationContext } from '../../../chat/utils/translationFunctionApplicator';
 import ToggleSwitch from '../../../components/ToggleSwitch';
@@ -266,8 +266,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 rejectTranslation = reject;
             });
 
-            // Setup ChatManager callbacks
-            const callbacks: ChatManagerCallbacks = {
+            // Setup LLMRequestManager callbacks
+            const callbacks: LLMRequestManagerCallbacks = {
                 onUpdateMessage: () => {},
                 onSyncMessageToBackend: async () => {},
                 onFunctionCalls: async (projId, chatId, messageId, functionCalls: FunctionCallMetadata[]) => {
@@ -301,9 +301,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 },
             };
 
-            // Create ChatManager config
+            // Create LLMRequestManager config
             const tempChatId = `temp-message-translation-${Date.now()}`;
-            const chatManagerConfig: ChatManagerConfig = {
+            const llmRequestManagerConfig: LLMRequestManagerConfig = {
                 projectId,
                 getStoryObjects: () => storyObjects,
                 systemInsertConfig: {
@@ -335,8 +335,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 reasoningConfig: translationConfig.advanced.reasoningConfig,
             };
 
-            // Create ChatManager
-            const chatManager = new ChatManager(chatManagerConfig, callbacks);
+            // Create LLMRequestManager
+            const llmRequestManager = new LLMRequestManager(llmRequestManagerConfig, callbacks);
 
             // Process translation request
             const userMessage: ChatMessage = {
@@ -346,7 +346,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 timestamp: new Date(),
             };
 
-            await chatManager.processUserMessage(userMessage);
+            await llmRequestManager.processUserMessage(userMessage);
 
             // Wait for translation result
             const translationResult = await translationPromise;
@@ -718,3 +718,5 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 };
 
 export default ChatPanel;
+
+

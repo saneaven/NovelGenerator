@@ -4,7 +4,7 @@ import { useNovelStore } from '../store/novelStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useChatStore } from '../store/chatStore';
 import type { FunctionCallMetadata, ContentPart } from '../llm_request/types';
-import { ChatManager, type ChatManagerConfig, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
+import { LLMRequestManager, type LLMRequestManagerConfig, type LLMRequestManagerCallbacks } from '../chat/processors/LLMRequestManager';
 import { ChatPipeline } from '../chat/ChatPipeline';
 import { NOVEL_EDITOR_FUNCTIONS } from '../chat/types/functionCalling';
 
@@ -54,7 +54,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
   const settingsStore = useSettingsStore();
   const chatStore = useChatStore();
   const abortControllerRef = useRef<AbortController | null>(null);
-  const chatManagerRef = useRef<ChatManager | null>(null);
+  const llmRequestManagerRef = useRef<LLMRequestManager | null>(null);
   const tempChatIdRef = useRef<string>('');
 
   useEffect(() => {
@@ -221,8 +221,8 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
       // Generate context
       const contextData = await generateNovelContext();
 
-      // Setup ChatManager callbacks
-      const callbacks: ChatManagerCallbacks = {
+      // Setup LLMRequestManager callbacks
+      const callbacks: LLMRequestManagerCallbacks = {
         onUpdateMessage: (projId, chatId, messageId, contentParts: ContentPart[]) => {
           // Update stream content display
           const textContent = contentParts
@@ -271,9 +271,9 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         },
       };
 
-      // Create a mock getStoryObjects function for ChatManager
+      // Create a mock getStoryObjects function for LLMRequestManager
       const getStoryObjects = () => {
-        // Return empty structure - ChatManager will use what we provide in promptContext
+        // Return empty structure - LLMRequestManager will use what we provide in promptContext
         return {
           basicInfo: null,
           characters: [],
@@ -284,8 +284,8 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         };
       };
 
-      // Create ChatManager config
-      const chatManagerConfig: ChatManagerConfig = {
+      // Create LLMRequestManager config
+      const llmRequestManagerConfig: LLMRequestManagerConfig = {
         projectId,
         getStoryObjects,
         getNovelData: () => novelStore.getAllChapterContents(projectId),
@@ -318,11 +318,11 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         reasoningConfig: chapterGenConfig.advanced.reasoningConfig,
       };
 
-      // Create ChatManager
-      chatManagerRef.current = new ChatManager(chatManagerConfig, callbacks);
+      // Create LLMRequestManager
+      llmRequestManagerRef.current = new LLMRequestManager(llmRequestManagerConfig, callbacks);
 
       // Process user message
-      await chatManagerRef.current.processUserMessage({
+      await llmRequestManagerRef.current.processUserMessage({
         id: `msg-user-${Date.now()}`,
         role: 'user',
         content: userRequest,
@@ -497,3 +497,5 @@ e.g., "Make the dialogue more natural and add more emotional depth to the conver
 };
 
 export default NovelChapterAIEditModal;
+
+

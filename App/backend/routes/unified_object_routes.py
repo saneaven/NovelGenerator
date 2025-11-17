@@ -147,12 +147,39 @@ def get_object_metadata(obj: Any, object_type: str) -> Dict[str, Any]:
     elif object_type in ['character', 'organization', 'location', LOREBOOK_TYPE]:
         metadata['project_id'] = str(obj.project_id)
     elif object_type == 'act':
+        outline = getattr(obj, 'outline', None)
+        if not outline:
+            raise HTTPException(status_code=500, detail='Act is missing outline relation')
+
+        metadata['project_id'] = str(outline.project_id)
         metadata['outline_id'] = str(obj.outline_id)
         metadata['order'] = obj.order
     elif object_type == 'chapter':
+        act = getattr(obj, 'act', None)
+        if not act:
+            raise HTTPException(status_code=500, detail='Chapter is missing act relation')
+
+        outline = getattr(act, 'outline', None)
+        if not outline:
+            raise HTTPException(status_code=500, detail='Chapter act is missing outline relation')
+
+        metadata['project_id'] = str(outline.project_id)
         metadata['act_id'] = str(obj.act_id)
         metadata['order'] = obj.order
     elif object_type == 'chapter_content':
+        chapter = getattr(obj, 'chapter', None)
+        if not chapter:
+            raise HTTPException(status_code=500, detail='Chapter content is missing chapter relation')
+
+        act = getattr(chapter, 'act', None)
+        if not act:
+            raise HTTPException(status_code=500, detail='Chapter content chapter is missing act relation')
+
+        outline = getattr(act, 'outline', None)
+        if not outline:
+            raise HTTPException(status_code=500, detail='Chapter content outline relation missing')
+
+        metadata['project_id'] = str(outline.project_id)
         metadata['chapter_id'] = str(obj.chapter_id)
 
     return metadata

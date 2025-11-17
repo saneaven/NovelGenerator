@@ -1,13 +1,16 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { useChatStore } from '../store/chatStore';
 import type { ObjectType } from '../types/unifiedObject';
-import type { FunctionCallMetadata, ContentPart } from '../llm_request/types';
-import { ChatManager, type ChatManagerConfig, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
+import type { FunctionCallMetadata } from '../llm_request/types';
+import type { StoryObjects } from '../types/storyObject';
+import { createEmptyStoryObjects } from '../types/storyObject';
 import { ChatPipeline } from '../chat/ChatPipeline';
 import { getEditFunctionSchema } from '../chat/types/editFunctionSchemas';
 import { applyEditFunctionCalls } from '../chat/utils/editFunctionApplicator';
+import { LLMTaskRunner } from '../chat/sessions/LLMTaskRunner';
+import { useLLMTaskStore } from '../store/llmTaskStore';
+import FunctionCallPreviewCard from '../pages/workspace/components/FunctionCallPreviewCard';
 import './AIEditModal.css';
 
 interface ContextOptions {
@@ -28,6 +31,73 @@ interface AIEditModalProps {
   onResult?: () => void;
 }
 
+const createSessionId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `ai-edit-${crypto.randomUUID()}`;
+  }
+  return `ai-edit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+};
+
+const toStoryObjects = (contextData: Record<string, any>): StoryObjects => {
+  const fallbackId = () =>
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
+  const mapItems = (items?: any[]) =>
+    Array.isArray(items)
+      ? items.map((item) => ({
+          id: item?.id ?? item?.metadata?.id ?? fallbackId(),
+          name: item?.name ?? item?.title ?? '',
+          description: item?.description ?? item?.summary ?? '',
+        }))
+      : [];
+
+  const mapOutline = (outlineData?: any) => {
+    if (!outlineData) {
+      return { acts: [] };
+    }
+
+    const acts = Array.isArray(outlineData.acts)
+      ? outlineData.acts.map((act: any) => ({
+          id: act?.id ?? fallbackId(),
+          name: act?.name ?? '',
+          description: act?.description ?? '',
+          chapters: Array.isArray(act?.chapters)
+            ? act.chapters.map((chapter: any) => ({
+                id: chapter?.id ?? fallbackId(),
+                name: chapter?.name ?? '',
+                description: chapter?.description ?? '',
+              }))
+            : [],
+        }))
+      : [];
+
+    return {
+      id: outlineData?.id ?? fallbackId(),
+      name: outlineData?.name ?? '',
+      description: outlineData?.description ?? '',
+      acts,
+    };
+  };
+
+  return {
+    basicInfo: contextData.basicInfo
+      ? {
+          id: contextData.basicInfo.id ?? fallbackId(),
+          title: contextData.basicInfo.title ?? '',
+          logline: contextData.basicInfo.logline ?? '',
+          genre: contextData.basicInfo.genre ?? '',
+        }
+      : null,
+    characters: mapItems(contextData.characters),
+    organizations: mapItems(contextData.organizations),
+    locations: mapItems(contextData.locations),
+    lorebook: mapItems(contextData.lorebook),
+    outline: mapOutline(contextData.outline),
+  } as StoryObjects;
+};
+
 const AIEditModal: React.FC<AIEditModalProps> = ({
   isOpen,
   onClose,
@@ -45,34 +115,68 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     lorebook: true,
     outline: true,
   });
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [streamContent, setStreamContent] = useState('');
-  const [error, setError] = useState<string | null>(null);
 
   const unifiedStore = useUnifiedObjectStore();
   const settingsStore = useSettingsStore();
-  const chatStore = useChatStore();
   const abortControllerRef = useRef<AbortController | null>(null);
-  const chatManagerRef = useRef<ChatManager | null>(null);
-  const tempChatIdRef = useRef<string>('');
+  const taskRunnerRef = useRef<LLMTaskRunner | null>(null);
+  const sessionIdRef = useRef<string>();
+  if (!sessionIdRef.current) {
+    sessionIdRef.current = createSessionId();
+  }
+  const sessionId = sessionIdRef.current;
+
+  const session = useLLMTaskStore(useCallback((state) => state.sessions[sessionId], [sessionId]));
+  const initializeSession = useLLMTaskStore((state) => state.initializeSession);
+  const updateSession = useLLMTaskStore((state) => state.updateSession);
+  const setContentParts = useLLMTaskStore((state) => state.setContentParts);
+  const setFunctionCallProgress = useLLMTaskStore((state) => state.setFunctionCallProgress);
+  const clearSession = useLLMTaskStore((state) => state.clearSession);
+  const [storyObjectsPreview, setStoryObjectsPreview] = useState<StoryObjects>(createEmptyStoryObjects());
+
+  const isProcessing = session?.status === 'running';
+  const sessionError = session?.error ?? null;
+  const streamContent = useMemo(() => {
+    if (!session?.contentParts || session.contentParts.length === 0) {
+      return '';
+    }
+    return session.contentParts
+      .filter((part) => part.type === 'content')
+      .map((part) => part.text)
+      .join('');
+  }, [session?.contentParts]);
+  const functionCallProgress = session?.functionCallProgress ?? [];
+  const showStreamingPlaceholder = isProcessing && !streamContent && functionCallProgress.length === 0;
 
   useEffect(() => {
-    if (!isOpen) {
-      setUserRequest('');
-      setStreamContent('');
-      setError(null);
-      setIsProcessing(false);
+    if (isOpen) {
+      initializeSession(sessionId);
+      updateSession(sessionId, { status: 'idle', error: undefined });
+      return;
+    }
+
+    setUserRequest('');
+    taskRunnerRef.current?.abort();
+    taskRunnerRef.current = null;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    clearSession(sessionId);
+    setStoryObjectsPreview(createEmptyStoryObjects());
+  }, [isOpen, sessionId, initializeSession, updateSession, clearSession]);
+
+  useEffect(() => {
+    return () => {
+      taskRunnerRef.current?.abort();
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
-      // Clean up temporary chat
-      if (tempChatIdRef.current) {
-        chatStore.deleteChat(projectId, tempChatIdRef.current);
-        tempChatIdRef.current = '';
-      }
-    }
-  }, [isOpen, projectId, chatStore]);
+      clearSession(sessionId);
+      setStoryObjectsPreview(createEmptyStoryObjects());
+    };
+  }, [sessionId, clearSession]);
 
   const generateContext = async () => {
     const context: Record<string, any> = {};
@@ -173,10 +277,8 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
 
   const getCurrentData = async () => {
     if (targetId) {
-      // Get specific item
       const object = unifiedStore.objects[targetId];
       if (!object) {
-        // Try to fetch it
         try {
           await unifiedStore.fetchObject(category, targetId);
           return unifiedStore.objects[targetId];
@@ -187,7 +289,6 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       }
       return object;
     } else {
-      // Get entire category
       try {
         const objects = await unifiedStore.listObjects(category, projectId);
         return objects;
@@ -198,149 +299,147 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     }
   };
 
+  const handleFunctionCallResults = useCallback(
+    async (functionCalls: FunctionCallMetadata[]) => {
+      if (!functionCalls || functionCalls.length === 0) {
+        updateSession(sessionId, {
+          status: 'error',
+          error: 'AI response did not include structured edits to apply.',
+        });
+        return;
+      }
+
+      try {
+        const results = await applyEditFunctionCalls(projectId, functionCalls);
+        const failedResults = results.filter((result) => !result.success);
+
+        if (failedResults.length > 0) {
+          updateSession(sessionId, {
+            status: 'error',
+            error: `Failed to apply some edits: ${failedResults.map(r => r.error || r.message).join(', ')}`,
+          });
+          return;
+        }
+
+        updateSession(sessionId, { status: 'success', error: undefined });
+        onResult?.();
+        onClose();
+      } catch (err) {
+        console.error('Function application error:', err);
+        updateSession(sessionId, {
+          status: 'error',
+          error: err instanceof Error ? err.message : 'Failed to apply edits',
+        });
+      }
+    },
+    [projectId, sessionId, updateSession, onResult, onClose]
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userRequest.trim() || isProcessing) return;
 
-    setIsProcessing(true);
-    setStreamContent('');
-    setError(null);
+    updateSession(sessionId, { status: 'running', error: undefined });
+    setContentParts(sessionId, []);
 
     try {
       const storyEditConfig = settingsStore.getFunctionConfig('storyEdit');
       const providerConfig = settingsStore.getProviderConfig(storyEditConfig.provider);
-
-      // Create temporary chat for this edit session
-      const tempChatId = `temp-edit-${Date.now()}`;
-      tempChatIdRef.current = tempChatId;
-
-      // Get function schema for this edit operation
       const functionSchema = getEditFunctionSchema(category, !!targetId);
-
-      // Generate context
       const contextData = await generateContext();
+      setStoryObjectsPreview(toStoryObjects(contextData));
       const currentData = await getCurrentData();
 
-      // Setup ChatManager callbacks
-      const callbacks: ChatManagerCallbacks = {
-        onUpdateMessage: (projId, chatId, messageId, contentParts: ContentPart[]) => {
-          // Update stream content display
-          const textContent = contentParts
-            .filter(p => p.type === 'content')
-            .map(p => p.text)
-            .join('');
-          setStreamContent(textContent);
-        },
-        onSyncMessageToBackend: async () => {
-          // No-op for temporary edit session
-        },
-        onFunctionCalls: async (projId, chatId, messageId, functionCalls: FunctionCallMetadata[]) => {
-          // Apply function calls
-          try {
-            const results = await applyEditFunctionCalls(projectId, functionCalls);
-
-            const failedResults = results.filter(r => !r.success);
-            if (failedResults.length > 0) {
-              setError(`Failed to apply some edits: ${failedResults.map(r => r.error).join(', ')}`);
-            } else {
-              // Success! Close modal
-              if (onResult) {
-                onResult();
-              }
-              onClose();
-            }
-          } catch (err) {
-            console.error('Function application error:', err);
-            setError(err instanceof Error ? err.message : 'Failed to apply edits');
-          }
-        },
-        onAddMessage: async (projId, chatId, message, language) => {
-          return `msg-${Date.now()}`;
-        },
-        onGetChatHistory: () => {
-          return [];
-        },
-        onError: (err) => {
-          setError(err.message);
-        },
-      };
-
-      // Create a mock getStoryObjects function for ChatManager
-      // ChatManager still expects this for system prompt generation
-      const getStoryObjects = () => {
-        // Return empty structure - ChatManager will use what we provide in promptContext
-        return {
-          basicInfo: null,
-          characters: [],
-          organizations: [],
-          locations: [],
-          lorebook: [],
-          outline: { acts: [] },
-        };
-      };
-
-      // Create ChatManager config
-      const chatManagerConfig: ChatManagerConfig = {
-        projectId,
-        getStoryObjects,
-        systemInsertConfig: {
-          promptContext: {
-            category,
-            targetId,
-            contextData,
-            currentData,
-            enablePrefill: storyEditConfig.advanced.enablePrefill,
-            enableThinking: storyEditConfig.advanced.thinkingMode !== 'off',
-          },
-          promptType: 'story_object_edit',
-        },
-        chatPipeline: new ChatPipeline(),
-        getIsLoading: () => isProcessing,
-        setIsLoading: (loading) => setIsProcessing(loading),
-        abortControllerRef,
-        getActiveChatId: () => tempChatId,
-        getConversationLanguage: () => settingsStore.settings.primaryLanguage,
-        provider: storyEditConfig.provider,
-        providerConfig,
-        aiModel: storyEditConfig.model,
-        temperature: storyEditConfig.temperature,
-        providerPreference: storyEditConfig.providerPreference,
-        functions: [functionSchema],
-        mode: 'workspace',
-        enablePrefill: storyEditConfig.advanced.enablePrefill,
-        thinkingMode: storyEditConfig.advanced.thinkingMode as any,
-        reasoningConfig: storyEditConfig.advanced.reasoningConfig,
-      };
-
-      // Create ChatManager
-      chatManagerRef.current = new ChatManager(chatManagerConfig, callbacks);
-
-      // Process user message
-      await chatManagerRef.current.processUserMessage({
-        id: `msg-user-${Date.now()}`,
-        role: 'user',
-        content: userRequest,
-        timestamp: new Date(),
+      const getStoryObjects = () => ({
+        basicInfo: null,
+        characters: [],
+        organizations: [],
+        locations: [],
+        lorebook: [],
+        outline: { acts: [] },
       });
 
-    } catch (err) {
-      if (err instanceof Error) {
-        if (err.name === 'AbortError') {
-          return;
+      const systemInsertConfig = {
+        enabled: true,
+        includeProjectInfo: true,
+        includeStoryObjects: true,
+        includeNovelContent: false,
+        promptContext: {
+          category,
+          targetId,
+          contextData,
+          currentData,
+          enablePrefill: storyEditConfig.advanced.enablePrefill,
+          enableThinking: storyEditConfig.advanced.thinkingMode !== 'off',
+        },
+        promptType: 'story_object_edit' as const,
+      };
+
+      taskRunnerRef.current = new LLMTaskRunner(
+        {
+          projectId,
+          getStoryObjects,
+          systemInsertConfig,
+          chatPipeline: new ChatPipeline(),
+          provider: storyEditConfig.provider,
+          providerConfig,
+          aiModel: storyEditConfig.model,
+          temperature: storyEditConfig.temperature,
+          providerPreference: storyEditConfig.providerPreference,
+          functions: [functionSchema],
+          mode: 'workspace',
+          enablePrefill: storyEditConfig.advanced.enablePrefill,
+          thinkingMode: storyEditConfig.advanced.thinkingMode as any,
+          reasoningConfig: storyEditConfig.advanced.reasoningConfig,
+          abortControllerRef,
+        },
+        {
+          onStreamUpdate: (contentParts) => setContentParts(sessionId, contentParts),
+          onFunctionCallProgress: (progress) => setFunctionCallProgress(sessionId, progress),
+          onFunctionCalls: handleFunctionCallResults,
+          onFinalMessage: (message) => {
+            if (!message.functionCalls || message.functionCalls.length === 0) {
+              updateSession(sessionId, { status: 'success', error: undefined });
+            }
+          },
+          onError: (err) => {
+            updateSession(sessionId, { status: 'error', error: err.message });
+          },
         }
-        setError(err.message);
-      } else {
-        setError('An unknown error occurred.');
+      );
+
+      await taskRunnerRef.current.run(
+        {
+          id: `msg-user-${Date.now()}`,
+          role: 'user',
+          content: userRequest.trim(),
+          timestamp: new Date(),
+        },
+        {
+          history: [],
+          language: settingsStore.settings.primaryLanguage,
+        }
+      );
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        updateSession(sessionId, { status: 'cancelled' });
+        return;
       }
+      updateSession(sessionId, {
+        status: 'error',
+        error: err instanceof Error ? err.message : 'An unknown error occurred.',
+      });
     } finally {
-      setIsProcessing(false);
-      abortControllerRef.current = null;
+      taskRunnerRef.current = null;
     }
   };
 
   const handleCancel = () => {
+    taskRunnerRef.current?.abort();
+    taskRunnerRef.current = null;
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
     onClose();
   };
@@ -416,9 +515,34 @@ e.g., "Make the main character's personality more proactive", "Make the atmosphe
             </p>
           </div>
 
-          {error && (
+          {sessionError && (
             <div className="error-message">
-              {error}
+              {sessionError}
+            </div>
+          )}
+
+          {showStreamingPlaceholder && (
+            <div className="ai-streaming-placeholder">
+              <div className="ai-streaming-spinner" />
+              <span>AI is composing structured edits...</span>
+            </div>
+          )}
+
+          {functionCallProgress.length > 0 && (
+            <div className="ai-function-preview">
+              <div className="ai-function-preview-header">
+                <h3>AI Structured Edits</h3>
+                {isProcessing && <span className="status-pill">Streaming</span>}
+              </div>
+              <div className="ai-function-preview-grid">
+                {functionCallProgress.map((progress) => (
+                  <FunctionCallPreviewCard
+                    key={progress.draft.id}
+                    progress={progress}
+                    storyObjects={storyObjectsPreview}
+                  />
+                ))}
+              </div>
             </div>
           )}
 
