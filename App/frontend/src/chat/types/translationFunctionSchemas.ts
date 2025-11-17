@@ -124,6 +124,55 @@ export const TRANSLATE_TEXT_FUNCTION: FunctionCallSchema = {
   }
 };
 
+export const TRANSLATE_BATCH_STORY_OBJECTS_FUNCTION: FunctionCallSchema = {
+  name: "translate_batch_story_objects",
+  description: "Translate multiple story objects in a single batch operation. Each object contains its type and the fields to translate.",
+  parameters: {
+    type: "object",
+    properties: {
+      translations: {
+        type: "array",
+        description: "Array of translated story objects",
+        items: {
+          type: "object",
+          properties: {
+            objectType: {
+              type: "string",
+              description: "Type of object (character, organization, location, lorebook, chapter, act, basicInfo)"
+            },
+            objectId: {
+              type: "string",
+              description: "Unique identifier of the object"
+            },
+            name: {
+              type: "string",
+              description: "Translated name (for name/description objects)"
+            },
+            description: {
+              type: "string",
+              description: "Translated description (for name/description objects)"
+            },
+            title: {
+              type: "string",
+              description: "Translated title (for basic info only)"
+            },
+            logline: {
+              type: "string",
+              description: "Translated logline (for basic info only)"
+            },
+            genre: {
+              type: "string",
+              description: "Translated genre (for basic info only)"
+            }
+          },
+          required: ["objectType", "objectId"]
+        }
+      }
+    },
+    required: ["translations"]
+  }
+};
+
 // ============================================
 // UTILITY FUNCTIONS
 // ============================================
@@ -171,6 +220,7 @@ export function getAllTranslationFunctionSchemas(): FunctionCallSchema[] {
     TRANSLATE_CHAPTER_METADATA_FUNCTION,
     TRANSLATE_CHAPTER_CONTENT_FUNCTION,
     TRANSLATE_CHAT_MESSAGE_FUNCTION,
-    TRANSLATE_TEXT_FUNCTION
+    TRANSLATE_TEXT_FUNCTION,
+    TRANSLATE_BATCH_STORY_OBJECTS_FUNCTION
   ];
 }

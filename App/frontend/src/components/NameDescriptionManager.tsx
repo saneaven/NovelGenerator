@@ -17,6 +17,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import AIEditModal from './AIEditModal';
 import VersionHistoryModal from './VersionHistoryModal';
+import RetranslateModal from './RetranslateModal';
 import { TranslationService } from '../services/translationService';
 import type { UnifiedObject, ObjectType } from '../types/unifiedObject';
 
@@ -57,6 +58,8 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   const [aiEditTargetId, setAiEditTargetId] = useState<string | undefined>(undefined);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [versionHistoryTargetId, setVersionHistoryTargetId] = useState<string | undefined>(undefined);
+  const [showRetranslateModal, setShowRetranslateModal] = useState(false);
+  const [retranslateTargetId, setRetranslateTargetId] = useState<string | undefined>(undefined);
 
   // Fetch list of items from backend
   useEffect(() => {
@@ -227,6 +230,74 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     }
   };
 
+  const handleRetranslate = async (includePrevious: boolean, userInstructions: string) => {
+    if (!projectId || !retranslateTargetId) return;
+
+    const item = store.objects[retranslateTargetId] as NameDescriptionObject;
+    if (!item) return;
+
+    const targetLanguage = settings.secondaryLanguage;
+    if (!targetLanguage) {
+      alert('Please set a secondary language in settings first.');
+      return;
+    }
+
+    try {
+      TranslationService.setTranslationStatus(retranslateTargetId, {
+        objectId: retranslateTargetId,
+        isTranslating: true,
+      });
+
+      // Build custom user message with instructions and optional previous translation
+      let userMessage = `Please retranslate this ${category} from ${item.languages.active} to ${targetLanguage}.`;
+
+      if (userInstructions) {
+        userMessage += `\n\nAdditional instructions: ${userInstructions}`;
+      }
+
+      if (includePrevious) {
+        // Get previous translation data if available
+        const prevTranslation = item.languages.available.includes(targetLanguage)
+          ? `Previous translation for reference: ${JSON.stringify({
+              name: item.data.name,
+              description: item.data.description,
+            })}`
+          : '';
+        if (prevTranslation) {
+          userMessage += `\n\n${prevTranslation}`;
+        }
+      }
+
+      await TranslationService.requestTranslation({
+        projectId,
+        sourceLanguage: item.languages.active,
+        targetLanguage,
+        dataType: 'nameDescription',
+        sourceData: {
+          name: item.data.name,
+          description: item.data.description,
+        },
+        translationContext: {
+          projectId,
+          targetLanguage,
+          category,
+          itemId: retranslateTargetId,
+        },
+        userMessage,
+      });
+
+      console.log(`✓ Retranslated to ${targetLanguage}`);
+      alert(`Retranslation complete for ${targetLanguage}`);
+      setShowRetranslateModal(false);
+      setRetranslateTargetId(undefined);
+    } catch (error) {
+      console.error('Failed to retranslate:', error);
+      alert(error instanceof Error ? error.message : 'Failed to retranslate. Please try again.');
+    } finally {
+      TranslationService.clearTranslationStatus(retranslateTargetId);
+    }
+  };
+
   // ============================================================================
   // AI & VERSION MANAGEMENT
   // ============================================================================
@@ -383,6 +454,10 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
                     onVersionHistory={() => handleShowVersionHistory(item.id)}
                     onLanguageChange={(lang) => handleLanguageChange(item.id, lang)}
                     onAddTranslation={() => handleAddTranslation(item.id)}
+                    onRetranslate={() => {
+                      setRetranslateTargetId(item.id);
+                      setShowRetranslateModal(true);
+                    }}
                   />
                 )}
               </div>
@@ -413,6 +488,21 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
           objectType={category}
           objectId={versionHistoryTargetId!}
           onRestoreVersion={handleRestoreVersion}
+        />
+      )}
+
+      {retranslateTargetId && settings.secondaryLanguage && (
+        <RetranslateModal
+          isOpen={showRetranslateModal}
+          onClose={() => {
+            setShowRetranslateModal(false);
+            setRetranslateTargetId(undefined);
+          }}
+          sourceLanguage={store.objects[retranslateTargetId]?.languages?.active || settings.primaryLanguage}
+          targetLanguage={settings.secondaryLanguage}
+          translationTimestamp={store.objects[retranslateTargetId]?.version?.created_at || null}
+          onRetranslate={handleRetranslate}
+          isTranslating={store.loading[retranslateTargetId] || false}
         />
       )}
     </div>
@@ -561,6 +651,7 @@ interface ItemDisplayProps {
   onVersionHistory: () => void;
   onLanguageChange: (language: string) => void;
   onAddTranslation: () => void;
+  onRetranslate: () => void;
 }
 
 const ItemDisplay: React.FC<ItemDisplayProps> = ({
@@ -575,6 +666,7 @@ const ItemDisplay: React.FC<ItemDisplayProps> = ({
   onVersionHistory,
   onLanguageChange,
   onAddTranslation,
+  onRetranslate,
 }) => {
   return (
     <div className="item-display">
@@ -587,9 +679,17 @@ const ItemDisplay: React.FC<ItemDisplayProps> = ({
             disabled={loading}
             showLabel={false}
           />
-          {showSecondaryLanguage &&
-            secondaryLanguage &&
-            !item.languages.available.includes(secondaryLanguage) && (
+          {showSecondaryLanguage && secondaryLanguage && (
+            item.languages.available.includes(secondaryLanguage) ? (
+              <button
+                onClick={onRetranslate}
+                className="translate-button retranslate"
+                disabled={loading}
+                title={`Retranslate to ${secondaryLanguage}`}
+              >
+                🔄 Retranslate
+              </button>
+            ) : (
               <button
                 onClick={onAddTranslation}
                 className="translate-button"
@@ -598,7 +698,8 @@ const ItemDisplay: React.FC<ItemDisplayProps> = ({
               >
                 🌐 Add {secondaryLanguage}
               </button>
-            )}
+            )
+          )}
           <button onClick={onVersionHistory} className="version-history-button" title="Version History" disabled={loading}>
             📚
           </button>

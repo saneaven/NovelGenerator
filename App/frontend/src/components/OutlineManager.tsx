@@ -3,7 +3,9 @@ import { useParams } from 'react-router-dom';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import AIEditModal from './AIEditModal';
+import RetranslateModal from './RetranslateModal';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { TranslationService } from '../services/translationService';
 import type { ActObject, ChapterObject, ActData, ChapterData } from '../types/unifiedObject';
 
 const OutlineManager: React.FC = () => {
@@ -21,6 +23,8 @@ const OutlineManager: React.FC = () => {
   const [showChapterAIModal, setShowChapterAIModal] = useState<string | null>(null);
   const [showActVersionHistory, setShowActVersionHistory] = useState<string | null>(null);
   const [showChapterVersionHistory, setShowChapterVersionHistory] = useState<string | null>(null);
+  const [showActRetranslateModal, setShowActRetranslateModal] = useState<string | null>(null);
+  const [showChapterRetranslateModal, setShowChapterRetranslateModal] = useState<string | null>(null);
 
   // Load acts and chapters on mount
   useEffect(() => {
@@ -152,6 +156,118 @@ const OutlineManager: React.FC = () => {
     }
   };
 
+  const handleAddActTranslation = async (actId: string) => {
+    if (!projectId) return;
+
+    const act = store.objects[actId] as ActObject;
+    if (!act) return;
+
+    const targetLanguage = settings.secondaryLanguage;
+    if (!targetLanguage) {
+      alert('Please set a secondary language in settings first.');
+      return;
+    }
+
+    if (act.languages.available.includes(targetLanguage)) {
+      // Just switch to it
+      await handleActLanguageChange(actId, targetLanguage);
+      return;
+    }
+
+    try {
+      TranslationService.setTranslationStatus(actId, { objectId: actId, isTranslating: true });
+      await TranslationService.requestTranslation({
+        projectId,
+        sourceLanguage: act.languages.active,
+        targetLanguage,
+        dataType: 'chapterData', // Acts use same schema as chapters (name/description)
+        sourceData: {
+          name: act.data.name,
+          description: act.data.description,
+        },
+        translationContext: {
+          projectId,
+          targetLanguage,
+          category: 'act',
+          itemId: actId,
+        },
+      });
+
+      console.log(`✓ Added ${targetLanguage} translation for act`);
+      alert(`Translation added for ${targetLanguage}`);
+    } catch (error) {
+      console.error('Failed to add act translation:', error);
+      alert(error instanceof Error ? error.message : 'Failed to add translation. Please try again.');
+    } finally {
+      TranslationService.clearTranslationStatus(actId);
+    }
+  };
+
+  const handleRetranslateAct = async (includePrevious: boolean, userInstructions: string) => {
+    if (!projectId || !showActRetranslateModal) return;
+
+    const act = store.objects[showActRetranslateModal] as ActObject;
+    if (!act) return;
+
+    const targetLanguage = settings.secondaryLanguage;
+    if (!targetLanguage) {
+      alert('Please set a secondary language in settings first.');
+      return;
+    }
+
+    try {
+      TranslationService.setTranslationStatus(showActRetranslateModal, {
+        objectId: showActRetranslateModal,
+        isTranslating: true,
+      });
+
+      let userMessage = `Please retranslate this act from ${act.languages.active} to ${targetLanguage}.`;
+
+      if (userInstructions) {
+        userMessage += `\n\nAdditional instructions: ${userInstructions}`;
+      }
+
+      if (includePrevious) {
+        const prevTranslation = act.languages.available.includes(targetLanguage)
+          ? `Previous translation for reference: ${JSON.stringify({
+              name: act.data.name,
+              description: act.data.description,
+            })}`
+          : '';
+        if (prevTranslation) {
+          userMessage += `\n\n${prevTranslation}`;
+        }
+      }
+
+      await TranslationService.requestTranslation({
+        projectId,
+        sourceLanguage: act.languages.active,
+        targetLanguage,
+        dataType: 'chapterData',
+        sourceData: {
+          name: act.data.name,
+          description: act.data.description,
+        },
+        translationContext: {
+          projectId,
+          targetLanguage,
+          category: 'act',
+          itemId: showActRetranslateModal,
+        },
+        userMessage,
+      });
+
+      console.log(`✓ Retranslated act to ${targetLanguage}`);
+      alert(`Retranslation complete for ${targetLanguage}`);
+      setShowActRetranslateModal(null);
+    } catch (error) {
+      console.error('Failed to retranslate act:', error);
+      alert(error instanceof Error ? error.message : 'Failed to retranslate. Please try again.');
+    } finally {
+      TranslationService.clearTranslationStatus(showActRetranslateModal);
+    }
+  };
+
   // ========================================================================
   // CHAPTER HANDLERS
   // ========================================================================
@@ -217,6 +333,118 @@ const OutlineManager: React.FC = () => {
     } catch (error) {
       console.error('Failed to switch chapter language:', error);
       alert('Failed to switch language. Please try again.');
+    }
+  };
+
+  const handleAddChapterTranslation = async (chapterId: string) => {
+    if (!projectId) return;
+
+    const chapter = store.objects[chapterId] as ChapterObject;
+    if (!chapter) return;
+
+    const targetLanguage = settings.secondaryLanguage;
+    if (!targetLanguage) {
+      alert('Please set a secondary language in settings first.');
+      return;
+    }
+
+    if (chapter.languages.available.includes(targetLanguage)) {
+      // Just switch to it
+      await handleChapterLanguageChange(chapterId, targetLanguage);
+      return;
+    }
+
+    try {
+      TranslationService.setTranslationStatus(chapterId, { objectId: chapterId, isTranslating: true });
+      await TranslationService.requestTranslation({
+        projectId,
+        sourceLanguage: chapter.languages.active,
+        targetLanguage,
+        dataType: 'chapterData',
+        sourceData: {
+          name: chapter.data.name,
+          description: chapter.data.description,
+        },
+        translationContext: {
+          projectId,
+          targetLanguage,
+          category: 'chapter',
+          itemId: chapterId,
+        },
+      });
+
+      console.log(`✓ Added ${targetLanguage} translation for chapter`);
+      alert(`Translation added for ${targetLanguage}`);
+    } catch (error) {
+      console.error('Failed to add chapter translation:', error);
+      alert(error instanceof Error ? error.message : 'Failed to add translation. Please try again.');
+    } finally {
+      TranslationService.clearTranslationStatus(chapterId);
+    }
+  };
+
+  const handleRetranslateChapter = async (includePrevious: boolean, userInstructions: string) => {
+    if (!projectId || !showChapterRetranslateModal) return;
+
+    const chapter = store.objects[showChapterRetranslateModal] as ChapterObject;
+    if (!chapter) return;
+
+    const targetLanguage = settings.secondaryLanguage;
+    if (!targetLanguage) {
+      alert('Please set a secondary language in settings first.');
+      return;
+    }
+
+    try {
+      TranslationService.setTranslationStatus(showChapterRetranslateModal, {
+        objectId: showChapterRetranslateModal,
+        isTranslating: true,
+      });
+
+      let userMessage = `Please retranslate this chapter from ${chapter.languages.active} to ${targetLanguage}.`;
+
+      if (userInstructions) {
+        userMessage += `\n\nAdditional instructions: ${userInstructions}`;
+      }
+
+      if (includePrevious) {
+        const prevTranslation = chapter.languages.available.includes(targetLanguage)
+          ? `Previous translation for reference: ${JSON.stringify({
+              name: chapter.data.name,
+              description: chapter.data.description,
+            })}`
+          : '';
+        if (prevTranslation) {
+          userMessage += `\n\n${prevTranslation}`;
+        }
+      }
+
+      await TranslationService.requestTranslation({
+        projectId,
+        sourceLanguage: chapter.languages.active,
+        targetLanguage,
+        dataType: 'chapterData',
+        sourceData: {
+          name: chapter.data.name,
+          description: chapter.data.description,
+        },
+        translationContext: {
+          projectId,
+          targetLanguage,
+          category: 'chapter',
+          itemId: showChapterRetranslateModal,
+        },
+        userMessage,
+      });
+
+      console.log(`✓ Retranslated chapter to ${targetLanguage}`);
+      alert(`Retranslation complete for ${targetLanguage}`);
+      setShowChapterRetranslateModal(null);
+    } catch (error) {
+      console.error('Failed to retranslate chapter:', error);
+      alert(error instanceof Error ? error.message : 'Failed to retranslate. Please try again.');
+    } finally {
+      TranslationService.clearTranslationStatus(showChapterRetranslateModal);
     }
   };
 
@@ -362,6 +590,27 @@ const OutlineManager: React.FC = () => {
                     />
                   </div>
                   <div className="act-actions">
+                    {settings.secondaryLanguage && (
+                      act.languages.available.includes(settings.secondaryLanguage) ? (
+                        <button
+                          onClick={() => setShowActRetranslateModal(act.id)}
+                          className="translate-button retranslate"
+                          disabled={!!store.loading[act.id]}
+                          title={`Retranslate to ${settings.secondaryLanguage}`}
+                        >
+                          🔄 Retranslate
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleAddActTranslation(act.id)}
+                          className="translate-button"
+                          disabled={!!store.loading[act.id]}
+                          title={`Translate to ${settings.secondaryLanguage}`}
+                        >
+                          🌐 Add {settings.secondaryLanguage}
+                        </button>
+                      )
+                    )}
                     <button
                       onClick={() => setShowActVersionHistory(act.id)}
                       className="version-history-button"
@@ -435,6 +684,27 @@ const OutlineManager: React.FC = () => {
                           />
                         </div>
                         <div className="chapter-actions">
+                          {settings.secondaryLanguage && (
+                            chapter.languages.available.includes(settings.secondaryLanguage) ? (
+                              <button
+                                onClick={() => setShowChapterRetranslateModal(chapter.id)}
+                                className="translate-button retranslate"
+                                disabled={!!store.loading[chapter.id]}
+                                title={`Retranslate to ${settings.secondaryLanguage}`}
+                              >
+                                🔄 Retranslate
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleAddChapterTranslation(chapter.id)}
+                                className="translate-button"
+                                disabled={!!store.loading[chapter.id]}
+                                title={`Translate to ${settings.secondaryLanguage}`}
+                              >
+                                🌐 Add {settings.secondaryLanguage}
+                              </button>
+                            )
+                          )}
                           <button
                             onClick={() => setShowChapterVersionHistory(chapter.id)}
                             className="version-history-button"
@@ -534,6 +804,32 @@ const OutlineManager: React.FC = () => {
           onClose={() => setShowChapterVersionHistory(null)}
           chapterId={showChapterVersionHistory}
           onRestoreVersion={handleRestoreChapterVersion}
+        />
+      )}
+
+      {/* Act Retranslate Modal */}
+      {showActRetranslateModal && settings.secondaryLanguage && (
+        <RetranslateModal
+          isOpen={!!showActRetranslateModal}
+          onClose={() => setShowActRetranslateModal(null)}
+          sourceLanguage={store.objects[showActRetranslateModal]?.languages?.active || settings.primaryLanguage}
+          targetLanguage={settings.secondaryLanguage}
+          translationTimestamp={store.objects[showActRetranslateModal]?.version?.created_at || null}
+          onRetranslate={handleRetranslateAct}
+          isTranslating={store.loading[showActRetranslateModal] || false}
+        />
+      )}
+
+      {/* Chapter Retranslate Modal */}
+      {showChapterRetranslateModal && settings.secondaryLanguage && (
+        <RetranslateModal
+          isOpen={!!showChapterRetranslateModal}
+          onClose={() => setShowChapterRetranslateModal(null)}
+          sourceLanguage={store.objects[showChapterRetranslateModal]?.languages?.active || settings.primaryLanguage}
+          targetLanguage={settings.secondaryLanguage}
+          translationTimestamp={store.objects[showChapterRetranslateModal]?.version?.created_at || null}
+          onRetranslate={handleRetranslateChapter}
+          isTranslating={store.loading[showChapterRetranslateModal] || false}
         />
       )}
     </div>
