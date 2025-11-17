@@ -570,9 +570,9 @@
 
 .add-button,
 .save-button {
-    background: var(--color-secondary-main);
-    color: var(--color-text-inverse);
-    border-color: var(--color-secondary-main);
+    background: var(--color-surface-subtle);
+    color: var(--color-text);
+    border-color: var(--color-brand-primary-border);
 }
 
 .add-button:hover:not(:disabled),
@@ -584,13 +584,13 @@
 }
 
 .edit-button {
-    background: var(--color-secondary-main);
-    color: var(--color-text-inverse);
-    border-color: var(--color-secondary-main);
+    background: var(--color-surface-base);
+    color: var(--color-text);
+    border-color: var(--color-brand-primary-border);
 }
 
 .edit-button:hover:not(:disabled) {
-    background: var(--color-brand-secondary);
+    background: var(--color-surface-hover);
     border-color: var(--color-brand-secondary);
     transform: translateY(-2px);
     box-shadow: var(--shadow-md);
@@ -609,50 +609,53 @@
 }
 
 .delete-button {
-    background: var(--color-error);
-    color: var(--color-text-inverse);
-    border-color: var(--color-error);
+    background: var(--color-surface-base);
+    color: var(--color-text);
+    border-color: var(--color-brand-primary-border);
 }
 
 .delete-button:hover:not(:disabled) {
-    background: var(--color-error-dark);
-    border-color: var(--color-error-dark);
+    background: var(--color-error);
+    border-color: var(--color-error);
     transform: translateY(-2px);
     box-shadow: var(--shadow-md);
 }
 
 .ai-edit-button {
-    background: var(--gradient-accent);
-    color: var(--color-text-inverse);
-    border-color: transparent;
+    background: var(--color-surface-base);
+    color: var(--color-text);
+    border-color: var(--color-brand-primary-border);
 }
 
 .ai-edit-button:hover:not(:disabled) {
+    background: var( --gradient-accent);
     transform: translateY(-2px);
+    color: var(--color-text-inverse);
+    border-color: transparent;
     box-shadow: var(--shadow-xl);
 }
 
 .version-history-button {
-    background: var(--color-primary-main);
-    color: var(--color-text-inverse);
-    border-color: var(--color-primary-main);
+    background: var(--color-surface-base);
+    color: var(--color-text);
+    border-color: var(--color-brand-primary-border);
 }
 
 .version-history-button:hover:not(:disabled) {
-    background: var(--color-primary-main);
+    background: var(--color-surface-hover);
     border-color: var(--color-primary-main);
     transform: translateY(-2px);
     box-shadow: var(--shadow-md);
 }
 
 .translate-button {
-    background: var(--color-warning);
-    color: var(--color-text-inverse);
-    border-color: var(--color-warning);
+    background: var(--color-surface-base);
+    color: var(--color-text);
+    border-color: var(--color-brand-primary-border);
 }
 
 .translate-button:hover:not(:disabled) {
-    background: var(--color-warning-dark);
+    background: var(--color-surface-hover);
     border-color: var(--color-warning-dark);
     transform: translateY(-2px);
     box-shadow: var(--shadow-md);
