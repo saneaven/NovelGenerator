@@ -1,12 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
-import { useNovelStore } from '../store/novelStore';
+import { useNovelStore, type ChapterContentData } from '../store/novelStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { useChatStore } from '../store/chatStore';
 import type { FunctionCallMetadata, ContentPart } from '../llm_request/types';
-import { LLMRequestManager, type LLMRequestManagerConfig, type LLMRequestManagerCallbacks } from '../chat/processors/LLMRequestManager';
 import { ChatPipeline } from '../chat/ChatPipeline';
 import { NOVEL_EDITOR_FUNCTIONS } from '../chat/types/functionCalling';
+import { LLMTaskRunner } from '../chat/sessions/LLMTaskRunner';
 
 interface NovelContextOptions {
   basicInfo: boolean;
@@ -52,10 +51,37 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
   const unifiedStore = useUnifiedObjectStore();
   const novelStore = useNovelStore();
   const settingsStore = useSettingsStore();
-  const chatStore = useChatStore();
   const abortControllerRef = useRef<AbortController | null>(null);
-  const llmRequestManagerRef = useRef<LLMRequestManager | null>(null);
-  const tempChatIdRef = useRef<string>('');
+  const taskRunnerRef = useRef<LLMTaskRunner | null>(null);
+
+  const getActiveLanguageContent = (targetChapterId: string): ChapterContentData | null => {
+    const primaryLanguage = settingsStore.settings.primaryLanguage;
+    const languageContent = novelStore.getChapterContentForLanguage(
+      projectId,
+      targetChapterId,
+      primaryLanguage
+    );
+    if (languageContent) {
+      return languageContent;
+    }
+
+    const chapterContent = novelStore.getChapterContent(projectId, targetChapterId);
+    if (!chapterContent) {
+      return null;
+    }
+
+    const activeVersion = chapterContent.versions.find((version) => version.is_active);
+    if (!activeVersion) {
+      return null;
+    }
+
+    const [fallbackLanguage] = Object.keys(activeVersion.data);
+    if (!fallbackLanguage) {
+      return null;
+    }
+
+    return activeVersion.data[fallbackLanguage] || null;
+  };
 
   useEffect(() => {
     if (!isOpen) {
@@ -63,17 +89,14 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
       setStreamContent('');
       setError(null);
       setIsProcessing(false);
+      taskRunnerRef.current?.abort();
+      taskRunnerRef.current = null;
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
-      // Clean up temporary chat
-      if (tempChatIdRef.current) {
-        chatStore.deleteChat(projectId, tempChatIdRef.current);
-        tempChatIdRef.current = '';
-      }
     }
-  }, [isOpen, projectId, chatStore]);
+  }, [isOpen, projectId]);
 
   const generateNovelContext = async (): Promise<Record<string, any>> => {
     const context: Record<string, any> = {};
@@ -175,14 +198,15 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         const allChapters = await unifiedStore.listObjects('chapter', projectId);
         const chapterMap = new Map(allChapters.map(ch => [ch.id, ch]));
 
-        Object.entries(allChapterContents).forEach(([id, content]) => {
+        Object.keys(allChapterContents).forEach((id) => {
           const chapterInfo = chapterMap.get(id);
           if (chapterInfo) {
+            const chapterLanguageContent = getActiveLanguageContent(id);
             novelContent[id] = {
               chapterName: chapterInfo.data.name || '',
               chapterDescription: chapterInfo.data.description || '',
-              content: content.content,
-              wordCount: content.wordCount,
+              content: chapterLanguageContent?.content || '',
+              wordCount: chapterLanguageContent?.wordCount ?? 0,
             };
           }
         });
@@ -210,34 +234,67 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
       const chapterGenConfig = settingsStore.getFunctionConfig('chapterGen');
       const providerConfig = settingsStore.getProviderConfig(chapterGenConfig.provider);
 
-      // Create temporary chat for this edit session
-      const tempChatId = `temp-chapter-edit-${Date.now()}`;
-      tempChatIdRef.current = tempChatId;
-
       // Get current chapter content
-      const currentChapterContent = novelStore.getChapterContent(projectId, chapterId);
-      const currentContent = currentChapterContent?.content || '';
+      const currentContent = getActiveLanguageContent(chapterId)?.content || '';
 
       // Generate context
       const contextData = await generateNovelContext();
 
-      // Setup LLMRequestManager callbacks
-      const callbacks: LLMRequestManagerCallbacks = {
-        onUpdateMessage: (projId, chatId, messageId, contentParts: ContentPart[]) => {
-          // Update stream content display
+      const getStoryObjects = () => ({
+        basicInfo: null,
+        characters: [],
+        organizations: [],
+        locations: [],
+        lorebook: [],
+        outline: { acts: [] },
+      });
+
+      const systemInsertConfig = {
+        enabled: true,
+        includeProjectInfo: true,
+        includeStoryObjects: true,
+        includeNovelContent: true,
+        promptContext: {
+          chapterName,
+          currentContent,
+          contextData,
+          enablePrefill: chapterGenConfig.advanced.enablePrefill,
+          enableThinking: chapterGenConfig.advanced.thinkingMode !== 'off',
+          userRequest,
+        },
+        promptType: 'chapter_edit' as const,
+      };
+
+      const taskRunnerConfig = {
+        projectId,
+        getStoryObjects,
+        getNovelData: () => novelStore.getAllChapterContents(projectId),
+        systemInsertConfig,
+        chatPipeline: new ChatPipeline(),
+        provider: chapterGenConfig.provider,
+        providerConfig,
+        aiModel: chapterGenConfig.model,
+        temperature: chapterGenConfig.temperature,
+        providerPreference: chapterGenConfig.providerPreference,
+        functions: NOVEL_EDITOR_FUNCTIONS,
+        mode: 'novelEditor' as const,
+        enablePrefill: chapterGenConfig.advanced.enablePrefill,
+        thinkingMode: chapterGenConfig.advanced.thinkingMode as any,
+        reasoningConfig: chapterGenConfig.advanced.reasoningConfig,
+        abortControllerRef,
+      };
+
+      taskRunnerRef.current = new LLMTaskRunner(taskRunnerConfig, {
+        onStreamUpdate: (contentParts: ContentPart[]) => {
           const textContent = contentParts
-            .filter(p => p.type === 'content')
-            .map(p => p.text)
+            .filter((p) => p.type === 'content')
+            .map((p) => p.text)
             .join('');
           setStreamContent(textContent);
         },
-        onSyncMessageToBackend: async () => {
-          // No-op for temporary edit session
-        },
-        onFunctionCalls: async (projId, chatId, messageId, functionCalls: FunctionCallMetadata[]) => {
-          // Handle update_chapter_content function call
+        onFunctionCalls: async (functionCalls: FunctionCallMetadata[]) => {
           try {
-            const updateCall = functionCalls.find(fc => fc.name === 'update_chapter_content');
+            const updateCall = functionCalls.find((fc) => fc.function_name === 'update_chapter_content');
             if (!updateCall) {
               setError('AI did not call update_chapter_content function');
               return;
@@ -247,10 +304,8 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
               ? JSON.parse(updateCall.arguments)
               : updateCall.arguments;
 
-            // Apply the chapter content update
             await novelStore.updateChapterContent(projectId, args.chapterId, args.content);
 
-            // Success! Close modal
             if (onResult) {
               onResult();
             }
@@ -260,74 +315,23 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
             setError(err instanceof Error ? err.message : 'Failed to apply chapter content update');
           }
         },
-        onAddMessage: async (projId, chatId, message, language) => {
-          return `msg-${Date.now()}`;
-        },
-        onGetChatHistory: () => {
-          return [];
-        },
         onError: (err) => {
           setError(err.message);
         },
-      };
-
-      // Create a mock getStoryObjects function for LLMRequestManager
-      const getStoryObjects = () => {
-        // Return empty structure - LLMRequestManager will use what we provide in promptContext
-        return {
-          basicInfo: null,
-          characters: [],
-          organizations: [],
-          locations: [],
-          lorebook: [],
-          outline: { acts: [] },
-        };
-      };
-
-      // Create LLMRequestManager config
-      const llmRequestManagerConfig: LLMRequestManagerConfig = {
-        projectId,
-        getStoryObjects,
-        getNovelData: () => novelStore.getAllChapterContents(projectId),
-        systemInsertConfig: {
-          promptContext: {
-            chapterName,
-            currentContent,
-            contextData,
-            enablePrefill: chapterGenConfig.advanced.enablePrefill,
-            enableThinking: chapterGenConfig.advanced.thinkingMode !== 'off',
-            userRequest,
-          },
-          promptType: 'chapter_edit',
-        },
-        chatPipeline: new ChatPipeline(),
-        getIsLoading: () => isProcessing,
-        setIsLoading: (loading) => setIsProcessing(loading),
-        abortControllerRef,
-        getActiveChatId: () => tempChatId,
-        getConversationLanguage: () => settingsStore.settings.primaryLanguage,
-        provider: chapterGenConfig.provider,
-        providerConfig,
-        aiModel: chapterGenConfig.model,
-        temperature: chapterGenConfig.temperature,
-        providerPreference: chapterGenConfig.providerPreference,
-        functions: NOVEL_EDITOR_FUNCTIONS,
-        mode: 'novelEditor',
-        enablePrefill: chapterGenConfig.advanced.enablePrefill,
-        thinkingMode: chapterGenConfig.advanced.thinkingMode as any,
-        reasoningConfig: chapterGenConfig.advanced.reasoningConfig,
-      };
-
-      // Create LLMRequestManager
-      llmRequestManagerRef.current = new LLMRequestManager(llmRequestManagerConfig, callbacks);
-
-      // Process user message
-      await llmRequestManagerRef.current.processUserMessage({
-        id: `msg-user-${Date.now()}`,
-        role: 'user',
-        content: userRequest,
-        timestamp: new Date(),
       });
+
+      await taskRunnerRef.current.run(
+        {
+          id: `msg-user-${Date.now()}`,
+          role: 'user',
+          content: userRequest,
+          timestamp: new Date(),
+        },
+        {
+          history: [],
+          language: settingsStore.settings.primaryLanguage,
+        }
+      );
 
     } catch (err) {
       if (err instanceof Error) {
@@ -341,12 +345,16 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
     } finally {
       setIsProcessing(false);
       abortControllerRef.current = null;
+      taskRunnerRef.current = null;
     }
   };
 
   const handleCancel = () => {
+    taskRunnerRef.current?.abort();
+    taskRunnerRef.current = null;
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
     onClose();
   };

@@ -94,6 +94,7 @@
     --color-brand-primary-soft: var(--color-primary-100);
     --color-brand-primary-muted: var(--color-primary-100);
     --color-brand-primary-tint: var(--color-primary-200);
+    --color-brand-primary-tint-strong: var(--color-primary-300);
     --color-brand-primary-glow: var(--color-primary-100);
     --color-brand-primary-contrast: var(--color-primary-900);
     --color-brand-primary-contrast-strong: var(--color-primary-950);
@@ -141,10 +142,10 @@
 
     /* ===== Surface Colors ===== */
     --color-surface-base: var(--color-neutral-0);
-    --color-surface-elevated: var(--color-neutral-0);
-    --color-surface-overlay: var(--color-neutral-0);
+    --color-surface-elevated: var(--color-neutral-100);
+    --color-surface-overlay: var(--color-neutral-50);
     --color-surface-subtle: var(--color-neutral-50);
-    --color-surface-muted: var(--color-neutral-100);
+    --color-surface-muted: var(--color-neutral-200);
     --color-surface-hover: var(--color-neutral-50);
 
     /* ===== Text Colors ===== */
@@ -272,6 +273,9 @@
     --border-radius-2xl: 1.5rem;
     /* 24px */
     --border-radius-full: 9999px;
+
+    --size-sidebar-width: 450px;
+    --size-sidebar-width-mobile: 100%;
 
     /* ===== Transitions ===== */
     --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);

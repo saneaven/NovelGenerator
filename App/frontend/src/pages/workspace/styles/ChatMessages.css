@@ -147,12 +147,12 @@
 }
 
 .chat-message.user .message-content {
-    background: var(--gradient-primary);
+    background: var(--color-surface-subtle);
     color: var(--color-text-inverse);
     border-radius: var(--border-radius-xl) var(--border-radius-xl) var(--border-radius-sm) var(--border-radius-xl);
     padding: var(--spacing-lg) var(--spacing-xl);
     word-wrap: break-word;
-    box-shadow: var(--shadow-lg);
+    box-shadow: var(--shadow-sm);
     line-height: var(--line-height-relaxed);
     font-size: var(--font-size-base);
 }

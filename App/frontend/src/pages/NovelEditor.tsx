@@ -494,7 +494,6 @@ const NovelEditor: React.FC = () =>
                     selectedChapterId={selectedChapterId || null}
                     hasChapters={hasChapters}
                     chaptersInitialized={isOutlineInitialized}
-                    storyObjects={storyObjects}
                     uiState={uiState}
                     uiActions={uiActions}
                     onToggleSidebar={() => uiActions.setIsChapterSidebarVisible(!uiState.isChapterSidebarVisible)}

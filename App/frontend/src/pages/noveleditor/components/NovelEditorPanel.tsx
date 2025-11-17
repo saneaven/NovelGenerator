@@ -1,56 +1,95 @@
 /**
- * NovelEditorPanel - Migrated to New Unified Translation System
+ * NovelEditorPanel - Novel Writing Interface
  *
- * Key Features:
- * - Auto-save with debouncing (in-place updates, no version spam)
- * - Manual save button (creates version snapshot)
- * - LanguageSwitcher component
- * - Direct data access from unified store
- * - Simplified state management
- *
- * Changes from old system:
- * - Uses useUnifiedObjectStore instead of novelStore
- * - Debounced auto-save: create_new_version = false
- * - Manual save: create_new_version = true
- * - No complex version logic
- * - Clean language switching
+ * Complete redesign with the following features:
+ * 
+ * Core Features:
+ * - Rich text editor for chapter content
+ * - Auto-save with debouncing (2s delay, in-place updates)
+ * - Manual save creates version snapshots
+ * - Word count tracking
+ * - Save status indicators
+ * 
+ * AI Features:
+ * - AI Edit modal for content improvement
+ * - Chat integration for AI assistance
+ * - Function calling for AI-generated content
+ * 
+ * Translation Features:
+ * - Multi-language support
+ * - Language switcher
+ * - AI translation
+ * 
+ * Version Management:
+ * - Automatic snapshots every 5 minutes (if changes exist)
+ * - Manual version creation
+ * - Version history sidebar
+ * - Version restoration
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { LanguageSwitcher } from '../../../components/LanguageSwitcher';
-import type { ChapterContentObject, ChapterContentData } from '../../../types/unifiedObject';
+import NovelChapterAIEditModal from '../../../components/NovelChapterAIEditModal';
+import { TranslationService } from '../../../services/translationService';
+import type { ChapterContentObject } from '../../../types/unifiedObject';
 import ChapterSidebar from './ChapterSidebar';
 
 interface NovelEditorPanelProps {
   projectId: string;
+  selectedChapter: {
+    id: string;
+    name: string;
+    description: string;
+    order: number;
+    actId: string;
+  } | null;
   selectedChapterId: string | null;
   hasChapters: boolean;
   chaptersInitialized: boolean;
+  uiState: any;
+  uiActions: any;
   onToggleSidebar: () => void;
   onSelectChapter: (chapterId: string) => void;
 }
 
-// Debounce delay for auto-save (milliseconds)
-const AUTO_SAVE_DELAY = 2000;
-
-// Interval for creating version snapshots (5 minutes)
-const SNAPSHOT_INTERVAL = 5 * 60 * 1000;
+// Constants
+const AUTO_SAVE_DELAY = 2000; // 2 seconds
+const SNAPSHOT_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
 const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   projectId,
+  selectedChapter,
   selectedChapterId,
   hasChapters,
   chaptersInitialized,
+  uiState,
+  uiActions,
   onToggleSidebar,
   onSelectChapter,
 }) => {
   const store = useUnifiedObjectStore();
   const { settings } = useSettingsStore();
 
-  // Get chapter content ID (in real app, you'd get this from the chapter)
+  // State
   const [chapterContentId, setChapterContentId] = useState<string | null>(null);
+  const [isResolvingContentId, setIsResolvingContentId] = useState(false);
+  const [contentIdError, setContentIdError] = useState<string | null>(null);
+  const [isAIEditModalOpen, setIsAIEditModalOpen] = useState(false);
+  
+  // Editor state
+  const [content, setContent] = useState('');
+  const [lastSavedContent, setLastSavedContent] = useState('');
+  const [lastSnapshotTime, setLastSnapshotTime] = useState(Date.now());
+  const [isSaving, setIsSaving] = useState(false);
+  const [savingType, setSavingType] = useState<'auto' | 'manual' | null>(null);
+
+  // Refs
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const snapshotIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isUserEditingRef = useRef(false);
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Get chapter content from store
   const chapterContent = chapterContentId
@@ -59,17 +98,29 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const loading = chapterContentId ? (store.loading[chapterContentId] || false) : false;
   const error = chapterContentId ? (store.errors[chapterContentId] || null) : null;
 
-  // Editor state
-  const [content, setContent] = useState('');
-  const [lastSavedContent, setLastSavedContent] = useState('');
-  const [lastSnapshotTime, setLastSnapshotTime] = useState(Date.now());
-  const [isSaving, setIsSaving] = useState(false);
-  const [savingType, setSavingType] = useState<'auto' | 'manual' | null>(null);
+  // Debug logging
+  useEffect(() => {
+    if (chapterContentId) {
+      console.log('📊 Store state for chapter content:', {
+        chapterContentId,
+        hasObject: !!chapterContent,
+        loading,
+        error,
+        objectType: chapterContent?.type,
+        objectKeys: chapterContent ? Object.keys(chapterContent) : [],
+      });
+    }
+  }, [chapterContentId, chapterContent, loading, error]);
 
-  // Refs for auto-save
-  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const snapshotIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const isUserEditingRef = useRef(false);
+  // Find existing chapter content
+  const existingChapterContent = useMemo(() => {
+    if (!selectedChapterId) return null;
+    const matchingObject = Object.values(store.objects).find(
+      (obj) =>
+        obj.type === 'chapter_content' && obj.metadata?.chapter_id === selectedChapterId
+    ) as ChapterContentObject | undefined;
+    return matchingObject || null;
+  }, [selectedChapterId, store.objects]);
 
   // Computed values
   const wordCount = useMemo(() => {
@@ -82,22 +133,118 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   // EFFECTS
   // ============================================================================
 
-  // Fetch chapter content ID when chapter selected
+  // Resolve chapter content object ID when chapter selection changes
   useEffect(() => {
-    if (selectedChapterId) {
-      // TODO: Get chapter content ID from chapter
-      // For now, using placeholder
-      // const contentId = await api.getChapterContentId(selectedChapterId);
-      // setChapterContentId(contentId);
-    }
-  }, [selectedChapterId]);
+    let isActive = true;
+
+    const resolveChapterContentId = async () => {
+      if (!projectId || !selectedChapterId) {
+        if (!isActive) return;
+        console.log('⚠️ No projectId or selectedChapterId, clearing state');
+        setChapterContentId(null);
+        setContentIdError(null);
+        setIsResolvingContentId(false);
+        return;
+      }
+
+      if (existingChapterContent) {
+        if (!isActive) return;
+        console.log('✅ Found existing chapter content in store:', existingChapterContent.id);
+        setChapterContentId(existingChapterContent.id);
+        setContentIdError(null);
+        setIsResolvingContentId(false);
+        return;
+      }
+
+      console.log('🔄 Resolving chapter content ID for chapter:', selectedChapterId);
+      setIsResolvingContentId(true);
+      setContentIdError(null);
+
+      try {
+        console.log('📡 Listing chapter_content objects...');
+        const chapterContents = await store.listObjects('chapter_content', projectId);
+        if (!isActive) return;
+
+        console.log(`📋 Found ${chapterContents.length} chapter_content objects`);
+        const matchingContent = chapterContents.find(
+          (content) => content.metadata?.chapter_id === selectedChapterId
+        );
+
+        if (matchingContent) {
+          console.log('✅ Found matching chapter content:', matchingContent.id);
+          setChapterContentId(matchingContent.id);
+          return;
+        }
+
+        // Create new chapter content if it doesn't exist
+        console.log('➕ Creating new chapter content...');
+        const primaryLanguage = settings.primaryLanguage || 'en';
+        const createdContent = await store.createObject(
+          'chapter_content',
+          projectId,
+          {
+            content: '',
+            wordCount: 0,
+          },
+          primaryLanguage,
+          { chapter_id: selectedChapterId }
+        );
+
+        if (!isActive) return;
+        console.log('✅ Created new chapter content:', createdContent.id);
+        setChapterContentId(createdContent.id);
+      } catch (err) {
+        console.error('❌ Failed to resolve chapter content ID:', err);
+        if (!isActive) return;
+        setChapterContentId(null);
+        setContentIdError('Failed to load or create chapter content.');
+      } finally {
+        if (isActive) {
+          setIsResolvingContentId(false);
+        }
+      }
+    };
+
+    resolveChapterContentId();
+
+    return () => {
+      isActive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    projectId,
+    selectedChapterId,
+    existingChapterContent,
+    // store는 stable하므로 제거
+    settings.primaryLanguage,
+  ]);
 
   // Fetch chapter content when ID available
   useEffect(() => {
-    if (chapterContentId) {
-      store.fetchObject('chapter_content', chapterContentId);
-    }
-  }, [chapterContentId]);
+    if (!chapterContentId) return;
+    
+    console.log('🔍 Fetching chapter content:', chapterContentId);
+    
+    // Set a timeout to prevent infinite loading
+    loadingTimeoutRef.current = setTimeout(() => {
+      if (!chapterContent && loading) {
+        console.error('⏱️ Loading timeout - forcing error state');
+        setContentIdError('Loading timeout. The chapter content is taking too long to load. Please try refreshing.');
+      }
+    }, 10000); // 10 second timeout
+
+    store.fetchObject('chapter_content', chapterContentId).catch(err => {
+      console.error('❌ Failed to fetch chapter content:', err);
+      setContentIdError(`Failed to fetch chapter content: ${err.message || 'Unknown error'}`);
+    });
+
+    return () => {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chapterContentId]); // store는 stable하므로 dependency에서 제거
 
   // Load content when chapter content changes or language switches
   useEffect(() => {
@@ -114,7 +261,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     // Create snapshot every 5 minutes if there are changes
     snapshotIntervalRef.current = setInterval(() => {
       if (hasUnsavedChanges) {
-        handleManualSave('Periodic Snapshot');
+        handleManualSave('Automatic Snapshot');
       }
     }, SNAPSHOT_INTERVAL);
 
@@ -264,28 +411,51 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     }
 
     if (chapterContent.languages.available.includes(targetLanguage)) {
-      alert(`${targetLanguage} translation already exists.`);
+      // Just switch to it if it already exists
+      await handleLanguageChange(targetLanguage);
       return;
     }
 
     try {
-      // In real implementation, use AI translation here
-      await store.addTranslation('chapter_content', chapterContentId, {
-        language: targetLanguage,
-        data: {
-          content: `[${targetLanguage}] ${content}`,
+      TranslationService.setTranslationStatus(chapterContentId, { objectId: chapterContentId, isTranslating: true });
+
+      // Use AI translation via TranslationService
+      await TranslationService.requestTranslation({
+        projectId,
+        sourceLanguage: chapterContent.languages.active,
+        targetLanguage,
+        dataType: 'chapterContent',
+        sourceData: {
+          content,
           wordCount,
         },
-        user_request: 'Translation',
+        translationContext: {
+          projectId,
+          chapterId: selectedChapter?.id || '',
+          targetLanguage,
+        },
       });
 
       console.log(`✓ Added ${targetLanguage} translation`);
       alert(`Translation added for ${targetLanguage}`);
-    } catch (err) {
-      console.error('Failed to add translation:', err);
-      alert('Failed to add translation. Please try again.');
+
+      // Reload and switch to the new translation
+      await store.fetchObject('chapter_content', chapterContentId);
+      await handleLanguageChange(targetLanguage);
+    } catch (error) {
+      console.error('Failed to add translation:', error);
+      alert(error instanceof Error ? error.message : 'Failed to add translation. Please try again.');
+    } finally {
+      TranslationService.clearTranslationStatus(chapterContentId);
     }
-  }, [chapterContent, chapterContentId, content, wordCount, settings.secondaryLanguage, store]);
+  }, [chapterContent, chapterContentId, content, wordCount, settings.secondaryLanguage, projectId, selectedChapter, store, handleLanguageChange]);
+
+  const handleAIEditComplete = useCallback(() => {
+    // Reload the chapter content after AI edit
+    if (chapterContentId) {
+      store.fetchObject('chapter_content', chapterContentId);
+    }
+  }, [chapterContentId, store]);
 
   // ============================================================================
   // RENDER
@@ -293,19 +463,41 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   if (!selectedChapterId) {
     const isChapterMissing = chaptersInitialized && !hasChapters;
-    const heading = isChapterMissing ? 'Chapter not exist' : chaptersInitialized ? 'Loading chapter...' : 'Loading chapters...';
+    const heading = isChapterMissing
+      ? 'No Chapters Available'
+      : chaptersInitialized
+        ? 'Loading chapter...'
+        : 'Loading chapters...';
     const description = isChapterMissing
-      ? 'Create a chapter in the Workspace to start editing.'
+      ? 'Create chapters in the Workspace to start writing.'
       : chaptersInitialized
         ? 'Opening the first available chapter. Please wait.'
         : 'Loading your outline so we can open the first chapter.';
 
     return (
       <div className="novel-editor-panel empty-state">
-        <div className="empty-message">
-          <h3>{heading}</h3>
+        <div className="empty-state-content">
+          <h2>{heading}</h2>
           <p>{description}</p>
         </div>
+      </div>
+    );
+  }
+
+  if (isResolvingContentId) {
+    return (
+      <div className="novel-editor-panel loading">
+        <div className="spinner" />
+        <p>Loading chapter content...</p>
+      </div>
+    );
+  }
+
+  if (contentIdError) {
+    return (
+      <div className="novel-editor-panel error">
+        <h3>Chapter Content Error</h3>
+        <p>{contentIdError}</p>
       </div>
     );
   }
@@ -315,6 +507,21 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       <div className="novel-editor-panel loading">
         <div className="spinner" />
         <p>Loading chapter content...</p>
+        <p style={{ fontSize: '0.875rem', color: 'var(--color-text-tertiary)', marginTop: '0.5rem' }}>
+          Chapter Content ID: {chapterContentId}
+        </p>
+        <button
+          className="toolbar-btn"
+          style={{ marginTop: '1rem' }}
+          onClick={() => {
+            console.log('🔄 Manual retry - refetching chapter content');
+            if (chapterContentId) {
+              store.fetchObject('chapter_content', chapterContentId);
+            }
+          }}
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -324,7 +531,10 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       <div className="novel-editor-panel error">
         <h3>Error Loading Chapter</h3>
         <p>{error}</p>
-        <button onClick={() => chapterContentId && store.fetchObject('chapter_content', chapterContentId)}>
+        <button
+          className="toolbar-btn"
+          onClick={() => chapterContentId && store.fetchObject('chapter_content', chapterContentId)}
+        >
           Retry
         </button>
       </div>
@@ -334,8 +544,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   if (!chapterContent) {
     return (
       <div className="novel-editor-panel empty-state">
-        <div className="empty-message">
-          <h3>Chapter Not Found</h3>
+        <div className="empty-state-content">
+          <h2>Chapter Not Found</h2>
           <p>This chapter doesn't have content yet.</p>
         </div>
       </div>
@@ -343,94 +553,138 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   }
 
   return (
-    <div className="novel-editor-panel">
-      {/* Toolbar */}
-      <div className="editor-toolbar">
-        <div className="toolbar-left">
-          <button onClick={onToggleSidebar} className="toggle-sidebar-btn">
-            ☰
-          </button>
-          <h3 className="chapter-title">Chapter Editor</h3>
-        </div>
+    <>
+      <div className="novel-editor-panel">
+        <div className="editor-main">
+          {/* Chapter Header */}
+          {selectedChapter && (
+            <div className="editor-header">
+              <div className="editor-info">
+                <h2 className="editor-chapter-title">{selectedChapter.name}</h2>
+                {selectedChapter.description && (
+                  <p className="editor-chapter-description">{selectedChapter.description}</p>
+                )}
+              </div>
+            </div>
+          )}
 
-        <div className="toolbar-center">
-          {/* Save Status */}
-          <div className="save-status">
-            {isSaving && savingType === 'auto' && <span className="saving">💾 Auto-saving...</span>}
-            {isSaving && savingType === 'manual' && <span className="saving">💾 Saving...</span>}
-            {!isSaving && hasUnsavedChanges && <span className="unsaved">● Unsaved changes</span>}
-            {!isSaving && !hasUnsavedChanges && <span className="saved">✓ Saved</span>}
+          {/* Toolbar */}
+          <div className="editor-toolbar">
+            {/* Save Status */}
+            <div className="save-status">
+              {isSaving && savingType === 'auto' && <span className="saving-indicator">💾 Auto-saving...</span>}
+              {isSaving && savingType === 'manual' && <span className="saving-indicator">💾 Saving...</span>}
+              {!isSaving && hasUnsavedChanges && <span className="unsaved-indicator">● Unsaved changes</span>}
+              {!isSaving && !hasUnsavedChanges && <span className="saved-indicator">✓ Saved</span>}
+            </div>
+
+            {/* Word Count */}
+            <div className="stat-item">
+              <span className="stat-value">{wordCount.toLocaleString()} words</span>
+            </div>
+
+            <div className="toolbar-info" />
+
+            {/* Language Switcher */}
+            <LanguageSwitcher
+              object={chapterContent}
+              onLanguageChange={handleLanguageChange}
+              disabled={isSaving}
+              showLabel={false}
+            />
+
+            {/* Add Translation Button */}
+            {settings.secondaryLanguage &&
+              !chapterContent.languages.available.includes(settings.secondaryLanguage) && (
+                <button
+                  onClick={handleAddTranslation}
+                  className="toolbar-btn translate-btn"
+                  disabled={isSaving}
+                  title={`Translate to ${settings.secondaryLanguage}`}
+                >
+                  🌐 Add {settings.secondaryLanguage}
+                </button>
+              )}
+
+            {/* AI Edit Button */}
+            <button
+              onClick={() => setIsAIEditModalOpen(true)}
+              className="toolbar-btn ai-edit-btn"
+              disabled={isSaving || !selectedChapter}
+              title="AI Edit Chapter"
+            >
+              🤖 AI Edit
+            </button>
+
+            {/* Manual Save Button */}
+            <button
+              onClick={() => handleManualSave('Manual Save')}
+              className="toolbar-btn save-btn"
+              disabled={isSaving || !hasUnsavedChanges}
+              title="Create version snapshot (Ctrl+S)"
+            >
+              💾 Save Snapshot
+            </button>
+            <div className="toolbar-separator" />
+            <button
+              onClick={onToggleSidebar}
+              className="toolbar-btn sidebar-toggle-btn"
+              title="Toggle chapter list"
+            >
+              ☰
+            </button>
+
+
           </div>
 
-          {/* Word Count */}
-          <div className="word-count">
-            <span>{wordCount.toLocaleString()} words</span>
+          {/* Editor */}
+          <div className="editor-content">
+            <textarea
+              className="novel-textarea"
+              value={content}
+              onChange={handleContentChange}
+              placeholder="Start writing your chapter..."
+              disabled={isSaving}
+            />
+          </div>
+
+          {/* Footer */}
+          <div className="editor-footer">
+            <div className="editor-footer-info">
+              <span>Language: {chapterContent.languages.active}</span>
+              <span>•</span>
+              <span>Version: {chapterContent.version.number}</span>
+              <span>•</span>
+              <span>Last snapshot: {new Date(lastSnapshotTime).toLocaleTimeString()}</span>
+            </div>
+            <div className="editor-footer-notice">
+              💡 Auto-saves every {AUTO_SAVE_DELAY / 1000}s | Snapshots every {SNAPSHOT_INTERVAL / 60000}m
+            </div>
           </div>
         </div>
 
-        <div className="toolbar-right">
-          {/* Language Switcher */}
-          <LanguageSwitcher
-            object={chapterContent}
-            onLanguageChange={handleLanguageChange}
-            disabled={isSaving}
-            showLabel={false}
-          />
-
-          {/* Add Translation Button */}
-          {settings.secondaryLanguage &&
-            !chapterContent.languages.available.includes(settings.secondaryLanguage) && (
-              <button
-                onClick={handleAddTranslation}
-                className="btn-secondary"
-                disabled={isSaving}
-                title={`Translate to ${settings.secondaryLanguage}`}
-              >
-                🌐 Add {settings.secondaryLanguage}
-              </button>
-            )}
-
-          {/* Manual Save Button */}
-          <button
-            onClick={() => handleManualSave('Manual Save')}
-            className="btn-primary save-btn"
-            disabled={isSaving || !hasUnsavedChanges}
-            title="Create version snapshot"
-          >
-            💾 Save Snapshot
-          </button>
-        </div>
-      </div>
-
-      {/* Editor */}
-      <div className="editor-container">
-        <textarea
-          className="chapter-editor"
-          value={content}
-          onChange={handleContentChange}
-          placeholder="Start writing your chapter..."
-          disabled={isSaving}
+        {/* Chapter Sidebar */}
+        <ChapterSidebar
+          projectId={projectId}
+          isVisible={uiState.isChapterSidebarVisible}
+          onToggle={() => uiActions.setIsChapterSidebarVisible(!uiState.isChapterSidebarVisible)}
+          selectedChapterId={selectedChapterId}
+          onSelectChapter={onSelectChapter}
         />
       </div>
 
-      {/* Footer */}
-      <div className="editor-footer">
-        <div className="footer-info">
-          <span>Language: {chapterContent.languages.active}</span>
-          <span>•</span>
-          <span>Version: {chapterContent.version.number}</span>
-          <span>•</span>
-          <span>
-            Last snapshot: {new Date(lastSnapshotTime).toLocaleTimeString()}
-          </span>
-        </div>
-        <div className="footer-actions">
-          <span className="auto-save-notice">
-            💡 Auto-saves every {AUTO_SAVE_DELAY / 1000}s | Snapshots every {SNAPSHOT_INTERVAL / 60000}m
-          </span>
-        </div>
-      </div>
-    </div>
+      {/* AI Edit Modal */}
+      {selectedChapter && (
+        <NovelChapterAIEditModal
+          isOpen={isAIEditModalOpen}
+          onClose={() => setIsAIEditModalOpen(false)}
+          projectId={projectId}
+          chapterId={selectedChapter.id}
+          chapterName={selectedChapter.name}
+          onResult={handleAIEditComplete}
+        />
+      )}
+    </>
   );
 };
 

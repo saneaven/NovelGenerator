@@ -14,12 +14,12 @@
 }
 
 .function-call-review-card--pending.status-pending {
-  background: var(--color-warning-light);
+  background: var(--color-brand-primary-tint-strong);
   border-color: var(--color-warning);
 }
 
 .function-call-review-card--pending.status-applied {
-  background: var(--color-success-light);
+  background: var(--color-brand-primary-tint);
   border-color: var(--color-success);
 }
 
