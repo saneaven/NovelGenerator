@@ -1,0 +1,261 @@
+import type { MutableRefObject } from 'react';
+import type {
+  ChatMessage,
+  ContentPart,
+  FunctionCallMetadata,
+  FunctionCallProgress,
+} from '../../llm_request/types';
+import { streamChat } from '../../llm_request/llmService';
+import type { ProviderConfig, ProviderType } from '../../store/settingsStore';
+import { ChatPipeline } from '../ChatPipeline';
+import type {
+  ChatPipelineContext,
+  ProcessedChatMessage,
+  SystemInsertConfig,
+} from '../types';
+import { FunctionCallStreamTracker } from '../streaming/FunctionCallStreamTracker';
+
+export interface LLMTaskRunnerConfig {
+  projectId: string;
+  getStoryObjects: () => any;
+  getNovelData?: () => any;
+  systemInsertConfig: SystemInsertConfig;
+  chatPipeline: ChatPipeline;
+  provider: ProviderType;
+  providerConfig: ProviderConfig;
+  aiModel?: string;
+  temperature?: number;
+  providerPreference?: any;
+  functions?: any[];
+  mode: 'novelEditor' | 'workspace';
+  enablePrefill?: boolean;
+  thinkingMode?: 'off' | 'model' | 'custom';
+  reasoningConfig?: {
+    effort?: 'low' | 'medium' | 'high';
+    maxTokens?: number;
+  };
+  abortControllerRef: MutableRefObject<AbortController | null>;
+}
+
+export interface LLMTaskRunnerCallbacks {
+  onStreamUpdate: (contentParts: ContentPart[]) => void;
+  onFunctionCallProgress?: (progress: FunctionCallProgress[]) => void;
+  onFunctionCalls?: (functionCalls: FunctionCallMetadata[]) => Promise<void> | void;
+  onFinalMessage?: (message: ProcessedChatMessage) => void;
+  onError: (error: Error) => void;
+}
+
+export interface LLMTaskRunOptions {
+  history?: ChatMessage[];
+  language: string;
+}
+
+export class LLMTaskRunner {
+  private isStreaming = false;
+
+  constructor(
+    private readonly config: LLMTaskRunnerConfig,
+    private readonly callbacks: LLMTaskRunnerCallbacks
+  ) {}
+
+  async run(userMessage: ChatMessage, options: LLMTaskRunOptions): Promise<void> {
+    if (this.isStreaming) {
+      console.warn('LLMTaskRunner: Attempted to start a task while one is already running');
+      return;
+    }
+
+    const language = options.language;
+    const history = options.history ?? [];
+    const assistantMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+    };
+
+    const chatHistory = [...history, userMessage, assistantMessage];
+    const context = ChatPipeline.createContext(
+      this.config.projectId,
+      this.config.getStoryObjects(),
+      this.config.mode,
+      this.config.systemInsertConfig,
+      this.config.getNovelData?.(),
+      this.config.enablePrefill,
+      this.config.thinkingMode,
+      this.config.reasoningConfig
+    );
+
+    const { conversationBlocks, functions } = await this.config.chatPipeline.preProcess(
+      chatHistory.slice(0, -1),
+      context,
+      language,
+      this.config.functions
+    );
+
+    this.isStreaming = true;
+    this.config.abortControllerRef.current = new AbortController();
+
+    const collectedContentParts: ContentPart[] = [];
+    let currentPartType: ContentPart['type'] | null = null;
+    let currentBuffer = '';
+    let accumulatedReasoningDetails: any[] | undefined;
+    const toolCallTracker = new FunctionCallStreamTracker(functions ?? this.config.functions);
+    let finalizedToolCalls: any[] = [];
+
+    const finalizeCurrentBuffer = () => {
+      if (currentPartType && currentBuffer) {
+        collectedContentParts.push({ type: currentPartType, text: currentBuffer });
+        currentBuffer = '';
+        currentPartType = null;
+      }
+    };
+
+    const emitUpdate = (nextParts: ContentPart[]) => {
+      this.callbacks.onStreamUpdate(nextParts);
+    };
+
+    const reasoningTypeForMode = () =>
+      this.config.thinkingMode === 'custom' ? 'thinking' : 'reasoning';
+
+    try {
+      for await (const chunk of streamChat(
+        conversationBlocks,
+        this.config.provider,
+        this.config.providerConfig,
+        {
+          signal: this.config.abortControllerRef.current.signal,
+          functions,
+          model: this.config.aiModel,
+          temperature: this.config.temperature,
+          providerPreference: this.config.providerPreference,
+          reasoningConfig: this.config.thinkingMode === 'model' ? this.config.reasoningConfig : undefined,
+          thinkingMode: this.config.thinkingMode,
+        }
+      )) {
+        if (typeof chunk === 'string') {
+          if (currentPartType !== 'content') {
+            finalizeCurrentBuffer();
+            const lastPart = collectedContentParts[collectedContentParts.length - 1];
+            if (lastPart && lastPart.type === 'content') {
+              const previous = collectedContentParts.pop()!;
+              currentBuffer = previous.text;
+            }
+            currentPartType = 'content';
+          }
+          currentBuffer += chunk;
+          emitUpdate([
+            ...collectedContentParts,
+            { type: 'content', text: currentBuffer },
+          ]);
+          continue;
+        }
+
+        if (chunk.reasoning_text) {
+          const reasoningType = reasoningTypeForMode();
+          if (currentPartType !== reasoningType) {
+            finalizeCurrentBuffer();
+            const lastPart = collectedContentParts[collectedContentParts.length - 1];
+            if (lastPart && (lastPart.type === 'reasoning' || lastPart.type === 'thinking')) {
+              const previous = collectedContentParts.pop()!;
+              currentBuffer = previous.text;
+            }
+            currentPartType = reasoningType;
+          }
+          currentBuffer += chunk.reasoning_text;
+          emitUpdate([
+            ...collectedContentParts,
+            { type: reasoningType, text: currentBuffer },
+          ]);
+        }
+
+        if (chunk.content) {
+          if (currentPartType !== 'content') {
+            finalizeCurrentBuffer();
+            const lastPart = collectedContentParts[collectedContentParts.length - 1];
+            if (lastPart && lastPart.type === 'content') {
+              const previous = collectedContentParts.pop()!;
+              currentBuffer = previous.text;
+            }
+            currentPartType = 'content';
+          }
+          currentBuffer += chunk.content;
+          emitUpdate([
+            ...collectedContentParts,
+            { type: 'content', text: currentBuffer },
+          ]);
+        }
+
+        if (chunk.tool_calls) {
+          const progressEvents = toolCallTracker.applyDelta(chunk.tool_calls);
+          if (progressEvents.length && this.callbacks.onFunctionCallProgress) {
+            this.callbacks.onFunctionCallProgress(progressEvents);
+          }
+        }
+
+        if (chunk.reasoning_details) {
+          if (!accumulatedReasoningDetails) {
+            accumulatedReasoningDetails = [];
+          }
+          accumulatedReasoningDetails.push(...chunk.reasoning_details);
+        }
+      }
+
+      finalizeCurrentBuffer();
+      emitUpdate([...collectedContentParts]);
+      finalizedToolCalls = toolCallTracker.finalize();
+
+      await this.finishProcessing(
+        collectedContentParts,
+        finalizedToolCalls,
+        accumulatedReasoningDetails,
+        context,
+        language
+      );
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.callbacks.onError(err);
+      throw err;
+    } finally {
+      this.isStreaming = false;
+      if (this.config.abortControllerRef.current) {
+        this.config.abortControllerRef.current = null;
+      }
+    }
+  }
+
+  abort(): void {
+    if (this.config.abortControllerRef.current) {
+      this.config.abortControllerRef.current.abort();
+      this.config.abortControllerRef.current = null;
+    }
+    this.isStreaming = false;
+  }
+
+  private async finishProcessing(
+    contentParts: ContentPart[],
+    toolCalls: any[],
+    reasoningDetails: any[] | undefined,
+    context: ChatPipelineContext,
+    _language: string
+  ): Promise<void> {
+    const finalResponse = toolCalls.length > 0 || reasoningDetails
+      ? {
+          content: null,
+          contentParts,
+          tool_calls: toolCalls,
+          reasoning_details: reasoningDetails,
+        }
+      : { content: null, contentParts };
+
+    const { message: processedMessage } = this.config.chatPipeline.postProcess(
+      finalResponse,
+      context
+    );
+
+    this.callbacks.onFinalMessage?.(processedMessage);
+
+    if (processedMessage.functionCalls && processedMessage.functionCalls.length > 0) {
+      await this.callbacks.onFunctionCalls?.(processedMessage.functionCalls);
+    }
+  }
+}

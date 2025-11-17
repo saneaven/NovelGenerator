@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import type { FunctionCallMetadata } from '../../llm_request/types';
+import type {
+  FunctionCallMetadata,
+} from '../../llm_request/types';
 import type { 
   DisplayProcessor, 
   DisplayProcessingResult, 
@@ -9,101 +11,13 @@ import type {
   EditCard,
   ChatPipelineContext 
 } from '../types';
+import { buildOperationPreviewsFromArgs } from '../utils/functionCallPreview';
+import FunctionCallReviewCard from '../../components/functionCall/FunctionCallReviewCard';
 
 marked.setOptions({
   gfm: true,
   breaks: true,
 });
-
-// Component to display preview changes in a user-friendly format
-const PreviewChangesComponent: React.FC<{ data: any }> = ({ data }) => {
-  const renderValue = (value: any): React.ReactNode => {
-    if (value === null || value === undefined) {
-      return <span className="preview-null">null</span>;
-    }
-    
-    if (typeof value === 'boolean') {
-      return <span className="preview-boolean">{value.toString()}</span>;
-    }
-    
-    if (typeof value === 'number') {
-      return <span className="preview-number">{value}</span>;
-    }
-    
-    if (typeof value === 'string') {
-      // Show strings with limited length
-      if (value.length > 100) {
-        return <span className="preview-string" title={value}>{value.substring(0, 100)}...</span>;
-      }
-      return <span className="preview-string">{value}</span>;
-    }
-    
-    if (Array.isArray(value)) {
-      if (value.length === 0) {
-        return <span className="preview-empty">[]</span>;
-      }
-      
-      // For simple arrays (strings, numbers, booleans), show compactly
-      const isSimpleArray = value.every(item => 
-        typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean'
-      );
-      
-      if (isSimpleArray && value.length <= 5) {
-        return (
-          <div className="preview-array-compact">
-            <span className="preview-array-header">Array ({value.length}): </span>
-            <span className="preview-array-values">
-              {value.map((item, index) => (
-                <span key={index} className="preview-array-value">
-                  {renderValue(item)}
-                  {index < value.length - 1 && <span className="preview-separator">, </span>}
-                </span>
-              ))}
-            </span>
-          </div>
-        );
-      }
-      
-      // For complex arrays or long arrays, show in full format
-      return (
-        <div className="preview-array">
-          <div className="preview-array-header">Array ({value.length} items):</div>
-          {value.map((item, index) => (
-            <div key={index} className="preview-array-item">
-              <span className="preview-index">[{index}]</span>
-              <div className="preview-array-item-content">{renderValue(item)}</div>
-            </div>
-          ))}
-        </div>
-      );
-    }
-    
-    if (typeof value === 'object') {
-      const entries = Object.entries(value);
-      if (entries.length === 0) {
-        return <span className="preview-empty">{}</span>;
-      }
-      return (
-        <div className="preview-object">
-          {entries.map(([objKey, objValue]) => (
-            <div key={objKey} className="preview-object-item">
-              <span className="preview-key">{objKey}:</span>
-              <div className="preview-value">{renderValue(objValue)}</div>
-            </div>
-          ))}
-        </div>
-      );
-    }
-    
-    return <span className="preview-unknown">{String(value)}</span>;
-  };
-
-  return (
-    <div className="preview-changes">
-      {renderValue(data)}
-    </div>
-  );
-};
 
 export class DefaultDisplayProcessor implements DisplayProcessor {
   process(
@@ -291,57 +205,48 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
   }
 }
 
-// Edit Card Component
 export const EditCardComponent: React.FC<{ card: EditCard }> = ({ card }) => {
-  return (
-    <div className={`edit-card ${card.isApplied ? 'applied' : 'pending'}`}>
-      <div className="edit-card-header">
-        <h4 className="edit-card-title">{card.title}</h4>
-        <div className="edit-card-status">
-          {card.isApplied ? (
-            <span className="status-applied">✓ Applied</span>
-          ) : (
-            <span className="status-pending">⏳ Pending</span>
-          )}
-        </div>
-      </div>
-      
-      <p className="edit-card-description">{card.description}</p>
-      
-      {card.data && !card.isApplied && (
-        <div className="edit-card-preview">
-          <details>
-            <summary>Preview Changes</summary>
-            <PreviewChangesComponent data={card.data} />
-          </details>
-        </div>
-      )}
-      
-      {!card.isApplied ? (
-        <div className="edit-card-actions">
-          <button 
-            className="apply-button"
-            onClick={card.onApply}
-          >
-            Apply
-          </button>
-          <button 
-            className="reject-button"
-            onClick={card.onReject}
-          >
-            Reject
-          </button>
-        </div>
-      ) : (
-        <div className="edit-card-applied-info">
-          <span className="applied-timestamp">
-            {card.appliedAt ? `Applied at ${new Date(card.appliedAt).toLocaleTimeString()}` : 'Applied'}
-          </span>
-        </div>
-      )}
+  const operationPreviews = useMemo(
+    () => buildOperationPreviewsFromArgs(card.data),
+    [card.data]
+  );
+
+  const actions = !card.isApplied ? (
+    <div className="edit-card-actions">
+      <button className="apply-button" onClick={card.onApply}>
+        Apply
+      </button>
+      <button className="reject-button" onClick={card.onReject}>
+        Reject
+      </button>
     </div>
+  ) : undefined;
+
+  const footer = card.isApplied ? (
+    <div className="review-card-applied-info">
+      <span className="applied-timestamp">
+        {card.appliedAt ? `Applied at ${new Date(card.appliedAt).toLocaleTimeString()}` : 'Applied'}
+      </span>
+    </div>
+  ) : undefined;
+
+  return (
+    <FunctionCallReviewCard
+      title={card.title}
+      eyebrow={card.isApplied ? 'Applied Function Call' : 'Pending Function Call'}
+      subtitle={card.description}
+      status={card.isApplied ? 'applied' : 'pending'}
+      operations={operationPreviews}
+      placeholder="AI is finalizing the structured preview..."
+      variant="pending"
+      collapsible={operationPreviews.length > 0}
+      defaultOpen={false}
+      actions={actions}
+      footer={footer}
+    />
   );
 };
+
 
 
 

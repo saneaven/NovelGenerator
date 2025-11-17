@@ -1,6 +1,6 @@
 import type { ChatPipelineContext } from '../types';
 import type { FunctionCallResultSummary, ChatMessage } from '../../llm_request/types';
-import { findLastUserMessageIdx } from '../processors/ChatManager';
+import { findLastUserMessageIdx } from '../processors/LLMRequestManager';
 
 export interface NovelContentChapter {
   name: string;

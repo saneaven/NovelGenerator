@@ -272,20 +272,18 @@ export class FunctionCallStreamTracker {
     const missingFields = this.computeMissingFields(schema, operation);
     const chapters = Array.isArray(data?.chapters)
       ? data.chapters.map((chapter: any, chapterIndex: number) => ({
-          title: chapter?.title ?? chapter?.name ?? `Chapter ${chapterIndex + 1}`,
-          summary: chapter?.summary ?? chapter?.description ?? '',
+          name: chapter?.name ?? `Chapter ${chapterIndex + 1}`,
+          description: chapter?.description ?? '',
         }))
       : undefined;
 
     const targetName =
       operation?.targetName ||
-      data?.title ||
       data?.name ||
       data?.logline ||
-      data?.summary ||
       data?.description;
 
-    const summary = data?.summary || data?.description;
+    const summary = data?.description ?? '';
 
     return {
       key: keySource,
@@ -317,7 +315,7 @@ export class FunctionCallStreamTracker {
       return [];
     }
 
-    const preferredKeys = ['title', 'name', 'summary', 'description', 'logline', 'genre', 'order'];
+    const preferredKeys = ['name', 'description', 'logline', 'genre', 'order'];
     const seen = new Set<string>();
     const result: FunctionCallOperationFieldPreview[] = [];
 
@@ -433,4 +431,3 @@ export class FunctionCallStreamTracker {
     return `${value.slice(0, limit)}…`;
   }
 }
-

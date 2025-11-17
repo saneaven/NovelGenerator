@@ -32,7 +32,7 @@ async function findChapterContentId(
     const result = await unifiedObjectService.listObjects<ChapterContentData>(
       'chapter_content',
       projectId,
-      { page_size: 1000 } // Get all content objects
+      { page_size: 100 } // backend limit is 100 per request
     );
 
     const contentObj = result.objects.find(

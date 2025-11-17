@@ -57,8 +57,8 @@ export interface FunctionCallOperationFieldPreview {
 }
 
 export interface FunctionCallOperationChapterPreview {
-  title?: string;
-  summary?: string;
+  name?: string;
+  description?: string;
 }
 
 export interface FunctionCallOperationPreview {

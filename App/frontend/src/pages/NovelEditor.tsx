@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ChatPipeline } from '../chat/ChatPipeline';
 import type { SystemInsertConfig, EditCard } from '../chat/types';
-import { ChatManager, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
+import { LLMRequestManager, type LLMRequestManagerCallbacks } from '../chat/processors/LLMRequestManager';
 import { DefaultDisplayProcessor } from '../chat/processors/DisplayProcessor';
 import { areEditCardMapsEqual } from '../chat/utils/editCardUtils';
 import { NOVEL_EDITOR_FUNCTIONS } from '../chat/types/functionCalling';
@@ -48,7 +48,10 @@ const NovelEditor: React.FC = () =>
     } = useChatStore();
     const unifiedObjects = useUnifiedObjectStore(state => state.objects);
     const listUnifiedObjects = useUnifiedObjectStore(state => state.listObjects);
-    const { fetchChapterContent, ...novelStore } = useNovelStore();
+    const fetchChapterContent = useNovelStore(state => state.fetchChapterContent);
+    const getAllChapterContents = useNovelStore(state => state.getAllChapterContents);
+    const getSelectedChapterId = useNovelStore(state => state.getSelectedChapterId);
+    const selectChapter = useNovelStore(state => state.selectChapter);
     const primaryLanguage = useSettingsStore(state => state.settings.primaryLanguage);
     const chatFunctionConfig = useSettingsStore(state => state.settings.functionConfigs.chat);
     const providerCredentials = useSettingsStore(state => state.settings.providerCredentials);
@@ -65,6 +68,7 @@ const NovelEditor: React.FC = () =>
         lorebook: [],
         outline: { acts: [] },
     });
+    const [isOutlineInitialized, setIsOutlineInitialized] = useState(false);
 
     // Fetch projects if not loaded
     useEffect(() => {
@@ -93,7 +97,7 @@ const NovelEditor: React.FC = () =>
         createFunctionCallRejectHandler,
     } = functionCallHandlers;
 
-    const chatManagerCallbacks = useMemo<ChatManagerCallbacks>(() => ({
+    const llmRequestManagerCallbacks = useMemo<LLMRequestManagerCallbacks>(() => ({
         onUpdateMessage: (projId, chatId, messageId, contentParts, language, reasoning_details) =>
         {
             updateMessageContentLocal(projId, chatId, messageId, contentParts, language, reasoning_details);
@@ -122,17 +126,17 @@ const NovelEditor: React.FC = () =>
         },
     }), [updateMessageContentLocal, updateMessage, handleFunctionCalls, addMessage, getMessages, showError, handleFunctionCallProgress]);
 
-    const chatManager = useMemo(() =>
+    const llmRequestManager = useMemo(() =>
     {
         const activeProjectId = projectId ?? '';
-        return new ChatManager(
+        return new LLMRequestManager(
             {
                 projectId: activeProjectId,
                 getStoryObjects: () => storyObjects,
-                getNovelData: () => novelStore.getAllChapterContents(activeProjectId),
+                getNovelData: () => getAllChapterContents(activeProjectId),
                 systemInsertConfig,
                 chatPipeline,
-                getIsLoading: () => uiState.isLoading, // Use getter to prevent ChatManager recreation
+                getIsLoading: () => uiState.isLoading, // Use getter to prevent LLMRequestManager recreation
                 setIsLoading: uiActions.setIsLoading,
                 abortControllerRef,
                 getActiveChatId: () =>
@@ -153,12 +157,12 @@ const NovelEditor: React.FC = () =>
                 thinkingMode: chatFunctionConfig.advanced.thinkingMode,
                 reasoningConfig: chatFunctionConfig.advanced.reasoningConfig,
             },
-            chatManagerCallbacks
+            llmRequestManagerCallbacks
         );
     }, [
         projectId,
         storyObjects,
-        novelStore,
+        getAllChapterContents,
         systemInsertConfig,
         chatPipeline,
         uiActions.setIsLoading,
@@ -167,19 +171,19 @@ const NovelEditor: React.FC = () =>
         chatFunctionConfig,
         providerCredentials,
         getSelectedChatId,
-        chatManagerCallbacks,
+        llmRequestManagerCallbacks,
     ]);
 
     const chatHandlers = useChatHandlers(
         projectId,
         uiActions,
-        chatManager,
+        llmRequestManager,
         pendingFunctionCallResults,
         () => setPendingFunctionCallResults([])
     );
 
     const currentProject = getCurrentProject();
-    const selectedChapterId = novelStore.getSelectedChapterId(projectId ?? '');
+    const selectedChapterId = getSelectedChapterId(projectId ?? '');
 
     // Get selected chapter from unified store
     const selectedChapter = useMemo(() => {
@@ -195,10 +199,16 @@ const NovelEditor: React.FC = () =>
         };
     }, [selectedChapterId, unifiedObjects]);
 
+    const hasChapters = storyObjects.outline.acts.some(act => act.chapters.length > 0);
+
     // Build story objects from unified store when projectId changes
     useEffect(() =>
     {
         if (!projectId) return;
+
+        setIsOutlineInitialized(false);
+        const activeProjectId = projectId;
+        let isActive = true;
 
         const buildStoryObjects = async () => {
             try {
@@ -242,43 +252,69 @@ const NovelEditor: React.FC = () =>
                         })),
                 };
 
-                setStoryObjects({
-                    basicInfo,
-                    characters: characters.map(ch => ({
-                        id: ch.id,
-                        name: ch.data.name || '',
-                        description: ch.data.description || '',
-                    })),
-                    organizations: organizations.map(org => ({
-                        id: org.id,
-                        name: org.data.name || '',
-                        description: org.data.description || '',
-                    })),
-                    locations: locations.map(loc => ({
-                        id: loc.id,
-                        name: loc.data.name || '',
-                        description: loc.data.description || '',
-                    })),
-                    lorebook: lorebook.map(entry => ({
-                        id: entry.id,
-                        name: entry.data.name || '',
-                        description: entry.data.description || '',
-                    })),
-                    outline,
-                });
+                if (isActive) {
+                    setStoryObjects({
+                        basicInfo,
+                        characters: characters.map(ch => ({
+                            id: ch.id,
+                            name: ch.data.name || '',
+                            description: ch.data.description || '',
+                        })),
+                        organizations: organizations.map(org => ({
+                            id: org.id,
+                            name: org.data.name || '',
+                            description: org.data.description || '',
+                        })),
+                        locations: locations.map(loc => ({
+                            id: loc.id,
+                            name: loc.data.name || '',
+                            description: loc.data.description || '',
+                        })),
+                        lorebook: lorebook.map(entry => ({
+                            id: entry.id,
+                            name: entry.data.name || '',
+                            description: entry.data.description || '',
+                        })),
+                        outline,
+                    });
+
+                    if (activeProjectId) {
+                        const firstActWithChapters = outline.acts.find(act => act.chapters.length > 0);
+                        const firstChapter = firstActWithChapters?.chapters[0];
+                        if (firstChapter) {
+                            const existingSelection = getSelectedChapterId(activeProjectId);
+                            const selectionStillExists = existingSelection
+                                ? outline.acts.some(act => act.chapters.some(ch => ch.id === existingSelection))
+                                : false;
+
+                            if (!selectionStillExists) {
+                                selectChapter(activeProjectId, firstChapter.id);
+                            }
+                        }
+                    }
+                }
             } catch (error) {
                 // Don't show error for expected 404s (outline/basicInfo not created yet)
                 console.error('Failed to load story objects:', error);
-                // Only show error modal if it's a real error, not missing resources
-                const errorStatus = (error as any)?.status || (error as any)?.response?.status;
-                if (errorStatus !== 404) {
-                    showError('Data Error', 'Failed to load story objects. Please try again.');
+                if (isActive) {
+                    // Only show error modal if it's a real error, not missing resources
+                    const errorStatus = (error as any)?.status || (error as any)?.response?.status;
+                    if (errorStatus !== 404) {
+                        showError('Data Error', 'Failed to load story objects. Please try again.');
+                    }
+                }
+            } finally {
+                if (isActive) {
+                    setIsOutlineInitialized(true);
                 }
             }
         };
 
         buildStoryObjects();
-    }, [projectId, listUnifiedObjects, showError]);
+        return () => {
+            isActive = false;
+        };
+    }, [projectId, listUnifiedObjects, showError, getSelectedChapterId, selectChapter]);
 
     // Fetch chats when projectId changes
     useEffect(() =>
@@ -438,7 +474,7 @@ const NovelEditor: React.FC = () =>
                     setSystemInsertConfig={setSystemInsertConfig}
                     chatPipeline={chatPipeline}
                     storyObjects={storyObjects}
-                    novelData={novelStore.getAllChapterContents(projectId ?? '')}
+                    novelData={getAllChapterContents(projectId ?? '')}
                     messageEditCards={messageEditCards}
                     activeFunctionCalls={activeFunctionCalls}
                     onSubmit={chatHandlers.handleSubmit}
@@ -456,11 +492,13 @@ const NovelEditor: React.FC = () =>
                     projectId={projectId ?? ''}
                     selectedChapter={selectedChapter}
                     selectedChapterId={selectedChapterId || null}
+                    hasChapters={hasChapters}
+                    chaptersInitialized={isOutlineInitialized}
                     storyObjects={storyObjects}
                     uiState={uiState}
                     uiActions={uiActions}
                     onToggleSidebar={() => uiActions.setIsChapterSidebarVisible(!uiState.isChapterSidebarVisible)}
-                    onSelectChapter={(chapterId) => novelStore.selectChapter(projectId ?? '', chapterId)}
+                    onSelectChapter={(chapterId) => selectChapter(projectId ?? '', chapterId)}
                 />
             </div>
 
@@ -492,4 +530,5 @@ const NovelEditor: React.FC = () =>
 };
 
 export default NovelEditor;
+
 
