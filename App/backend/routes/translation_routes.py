@@ -50,6 +50,20 @@ class BatchTranslationRequest(BaseModel):
     target_language: str
 
 
+class TranslationData(BaseModel):
+    """Single object translation data"""
+    object_type: str
+    object_id: str
+    language: str
+    data: Dict[str, Any]
+
+
+class BatchAddTranslationsRequest(BaseModel):
+    """Request to add translations for multiple objects"""
+    translations: List[TranslationData]
+    user_request: str = "Batch Translation"
+
+
 class LanguageAvailabilityResponse(BaseModel):
     """Language availability across project"""
     language: str
@@ -282,6 +296,85 @@ async def batch_delete_translations(
         "message": f"Deleted {deleted_count} translations",
         "deleted_count": deleted_count
     }
+
+
+@router.post("/batch/add-translations")
+async def batch_add_translations(
+    request: BatchAddTranslationsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Add translations for multiple objects in a single transaction.
+    Fails immediately if any translation fails (fail-fast).
+    """
+    from ..routes.unified_object_routes import (
+        create_or_update_version,
+        update_translation_cache,
+        get_object_or_404
+    )
+
+    translated_count = 0
+
+    try:
+        for translation_data in request.translations:
+            object_type = normalize_object_type(translation_data.object_type)
+            object_id = UUID(translation_data.object_id)
+
+            # Verify object exists
+            get_object_or_404(db, object_type, object_id)
+
+            # Check if translation already exists
+            existing = db.query(ObjectTranslation).filter(
+                ObjectTranslation.object_type == object_type,
+                ObjectTranslation.object_id == object_id,
+                ObjectTranslation.language == translation_data.language
+            ).first()
+
+            if existing:
+                # Skip if translation already exists
+                continue
+
+            # Create or update version with new language (in-place, don't create new version)
+            create_or_update_version(
+                db=db,
+                object_type=object_type,
+                object_id=object_id,
+                language=translation_data.language,
+                new_data=translation_data.data,
+                user_request=request.user_request,
+                user_id=current_user.id,
+                create_new=False
+            )
+
+            # Update translation cache (don't set as active - keep current active language)
+            update_translation_cache(
+                db=db,
+                object_type=object_type,
+                object_id=object_id,
+                language=translation_data.language,
+                data=translation_data.data,
+                is_active=False
+            )
+
+            translated_count += 1
+
+        # Single commit at the end (atomic operation)
+        db.commit()
+
+        return {
+            "success": True,
+            "translated_count": translated_count,
+            "message": f"Successfully translated {translated_count} objects"
+        }
+
+    except Exception as e:
+        # Rollback on any error
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Batch translation failed: {str(e)}"
+        )
 
 
 @router.get("/objects/{object_type}/{object_id}/languages")

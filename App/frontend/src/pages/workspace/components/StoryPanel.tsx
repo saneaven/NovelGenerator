@@ -1,7 +1,11 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import BasicInfoManager from '../../../components/BasicInfoManager';
 import NameDescriptionManager from '../../../components/NameDescriptionManager';
 import OutlineManager from '../../../components/OutlineManager';
+import BatchTranslationModal from '../../../components/BatchTranslationModal';
+import { useProjectStore } from '../../../store/projectStore';
+import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
+import { useSettingsStore } from '../../../store/settingsStore';
 
 type TabType = 'basicInfo' | 'characters' | 'organizations' | 'locations' | 'lorebook' | 'outline';
 
@@ -14,6 +18,11 @@ const StoryPanel: React.FC<StoryPanelProps> = ({ activeStoryTab, onTabChange }) 
   const tabsRef = useRef<HTMLDivElement>(null);
   const [showLeftButton, setShowLeftButton] = useState(false);
   const [showRightButton, setShowRightButton] = useState(false);
+  const [showBatchTranslateModal, setShowBatchTranslateModal] = useState(false);
+
+  const { currentProjectId } = useProjectStore();
+  const store = useUnifiedObjectStore();
+  const settings = useSettingsStore((state) => state.settings);
 
   const storyTabs: { id: TabType; label: string; icon: string }[] = [
     { id: 'basicInfo', label: 'Basic Info', icon: '📋' },
@@ -70,6 +79,37 @@ const StoryPanel: React.FC<StoryPanelProps> = ({ activeStoryTab, onTabChange }) 
   useEffect(() => {
     checkScroll();
   }, [activeStoryTab]);
+
+  // Calculate count of objects needing translation
+  const objectsNeedingTranslation = useMemo(() => {
+    if (!settings.secondaryLanguage || !currentProjectId) return 0;
+
+    const allObjects = Object.values(store.objects);
+    let count = 0;
+
+    allObjects.forEach((obj: any) => {
+      if (obj.metadata?.project_id !== currentProjectId) return;
+      if (obj.languages?.available.includes(settings.secondaryLanguage)) return;
+      if (obj.languages?.active !== settings.primaryLanguage) return;
+
+      count++;
+    });
+
+    return count;
+  }, [store.objects, currentProjectId, settings.primaryLanguage, settings.secondaryLanguage]);
+
+  const handleBatchTranslateComplete = () => {
+    // Refresh objects after batch translation
+    if (currentProjectId) {
+      store.listObjects('basic_info', currentProjectId);
+      store.listObjects('character', currentProjectId);
+      store.listObjects('organization', currentProjectId);
+      store.listObjects('location', currentProjectId);
+      store.listObjects('lorebook', currentProjectId);
+      store.listObjects('act', currentProjectId);
+      store.listObjects('chapter', currentProjectId);
+    }
+  };
 
   const renderStoryContent = () => {
     switch (activeStoryTab) {
@@ -138,6 +178,17 @@ const StoryPanel: React.FC<StoryPanelProps> = ({ activeStoryTab, onTabChange }) 
     <div className="story-panel">
       <div className="story-header">
         <h2>📋 Story Objects</h2>
+        <div className="story-header-controls">
+          {settings.secondaryLanguage && objectsNeedingTranslation > 0 && (
+            <button
+              onClick={() => setShowBatchTranslateModal(true)}
+              className="batch-translate-btn"
+              title={`Translate ${objectsNeedingTranslation} objects to ${settings.secondaryLanguage}`}
+            >
+              🌐 Translate All ({objectsNeedingTranslation})
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="story-tabs-container">
@@ -178,6 +229,13 @@ const StoryPanel: React.FC<StoryPanelProps> = ({ activeStoryTab, onTabChange }) 
       <div className="story-content">
         {renderStoryContent()}
       </div>
+
+      <BatchTranslationModal
+        isOpen={showBatchTranslateModal}
+        onClose={() => setShowBatchTranslateModal(false)}
+        projectId={currentProjectId || ''}
+        onComplete={handleBatchTranslateComplete}
+      />
     </div>
   );
 };

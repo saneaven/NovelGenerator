@@ -315,6 +315,32 @@ export const translationService = {
       }
     );
   },
+
+  /**
+   * Batch add translations for multiple objects
+   * @param translations Array of translation data
+   */
+  async batchAddTranslations(
+    translations: Array<{
+      objectType: ObjectType;
+      objectId: string;
+      language: string;
+      data: Record<string, any>;
+    }>
+  ): Promise<{ success: boolean; translated_count: number; message: string }> {
+    return apiClient.post<{ success: boolean; translated_count: number; message: string }>(
+      '/api/v1/batch/add-translations',
+      {
+        translations: translations.map(t => ({
+          object_type: t.objectType,
+          object_id: t.objectId,
+          language: t.language,
+          data: t.data,
+        })),
+        user_request: 'Batch Translation',
+      }
+    );
+  },
 };
 
 export default unifiedObjectService;

@@ -8,11 +8,13 @@
 import workspaceSystemPrompt from '../chat/managers/prompts/systemPrompts/WorkspaceSystemPrompt.md?raw';
 import novelEditorSystemPrompt from '../chat/managers/prompts/systemPrompts/NovelEditorSystemPrompt.md?raw';
 import translationPrompt from '../chat/managers/prompts/systemPrompts/TranslationPrompt.md?raw';
+import batchTranslationPrompt from '../chat/managers/prompts/systemPrompts/BatchTranslationPrompt.md?raw';
 import storyObjectEditPrompt from '../chat/managers/prompts/systemPrompts/StoryObjectEditPrompt.md?raw';
 import chapterEditPrompt from '../chat/managers/prompts/systemPrompts/ChapterEditPrompt.md?raw';
 
 // User Prompts
 import translationUserPrompt from '../chat/managers/prompts/userPrompts/TranslationUserPrompt.md?raw';
+import batchTranslationUserPrompt from '../chat/managers/prompts/userPrompts/BatchTranslationUserPrompt.md?raw';
 import storyObjectEditUserPrompt from '../chat/managers/prompts/userPrompts/StoryObjectEditUserPrompt.md?raw';
 import chapterEditUserPrompt from '../chat/managers/prompts/userPrompts/ChapterEditUserPrompt.md?raw';
 
@@ -23,6 +25,7 @@ import novelEditorFunctionInstructions from '../chat/managers/prompts/systemProm
 // Prefills
 import chatPrefill from '../chat/managers/prompts/prefills/ChatPrefill.md?raw';
 import translationPrefill from '../chat/managers/prompts/prefills/TranslationPrefill.md?raw';
+import batchTranslationPrefill from '../chat/managers/prompts/prefills/BatchTranslationPrefill.md?raw';
 import storyObjectEditPrefill from '../chat/managers/prompts/prefills/StoryObjectEditPrefill.md?raw';
 import chapterEditPrefill from '../chat/managers/prompts/prefills/ChapterEditPrefill.md?raw';
 
@@ -33,7 +36,7 @@ import nonLastUserMessageTag from '../chat/managers/prompts/userMessageSystemPro
 /**
  * Prompt type definitions
  */
-export type FunctionType = 'chat' | 'translation' | 'storyEdit' | 'chapterGen';
+export type FunctionType = 'chat' | 'translation' | 'batchTranslation' | 'storyEdit' | 'chapterGen';
 export type PromptCategory = 'systemPrompt' | 'functionInstructions' | 'prefill' | 'userMessageTag' | 'userPrompt';
 
 export interface PromptDefaults {
@@ -53,6 +56,11 @@ export interface PromptDefaults {
     };
   };
   translation: {
+    systemPrompt: string;
+    userPrompt: string;
+    prefill: string;
+  };
+  batchTranslation: {
     systemPrompt: string;
     userPrompt: string;
     prefill: string;
@@ -92,6 +100,11 @@ export const DEFAULT_PROMPTS: PromptDefaults = {
     systemPrompt: translationPrompt,
     userPrompt: translationUserPrompt,
     prefill: translationPrefill,
+  },
+  batchTranslation: {
+    systemPrompt: batchTranslationPrompt,
+    userPrompt: batchTranslationUserPrompt,
+    prefill: batchTranslationPrefill,
   },
   storyEdit: {
     systemPrompt: storyObjectEditPrompt,

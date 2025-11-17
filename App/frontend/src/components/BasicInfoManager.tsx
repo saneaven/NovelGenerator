@@ -16,6 +16,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import AIEditModal from './AIEditModal';
 import VersionHistoryModal from './VersionHistoryModal';
+import RetranslateModal from './RetranslateModal';
 import { TranslationService } from '../services/translationService';
 import type { BasicInfoObject, BasicInfoData } from '../types/unifiedObject';
 
@@ -53,6 +54,7 @@ const BasicInfoManager: React.FC = () => {
   // Modal state
   const [showAIModal, setShowAIModal] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [showRetranslateModal, setShowRetranslateModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // Fetch basic info ID on mount (you'll need to implement this based on your API)
@@ -212,6 +214,67 @@ const BasicInfoManager: React.FC = () => {
     }
   };
 
+  const handleRetranslate = async (includePrevious: boolean, userInstructions: string) => {
+    if (!basicInfo || !basicInfoId || !projectId) return;
+
+    const targetLanguage = settings.secondaryLanguage;
+    if (!targetLanguage) {
+      alert('Please set a secondary language in settings first.');
+      return;
+    }
+
+    try {
+      TranslationService.setTranslationStatus(basicInfoId, { objectId: basicInfoId, isTranslating: true });
+
+      // Build custom user message with instructions and optional previous translation
+      let userMessage = `Please retranslate the basic info from ${basicInfo.languages.active} to ${targetLanguage}.`;
+
+      if (userInstructions) {
+        userMessage += `\n\nAdditional instructions: ${userInstructions}`;
+      }
+
+      if (includePrevious) {
+        // Get previous translation data if available
+        const prevTranslation = basicInfo.languages.available.includes(targetLanguage)
+          ? `Previous translation for reference: ${JSON.stringify({
+              title: basicInfo.data.title,
+              logline: basicInfo.data.logline,
+              genre: basicInfo.data.genre,
+            })}`
+          : '';
+        if (prevTranslation) {
+          userMessage += `\n\n${prevTranslation}`;
+        }
+      }
+
+      await TranslationService.requestTranslation({
+        projectId,
+        sourceLanguage: basicInfo.languages.active,
+        targetLanguage,
+        dataType: 'basicInfo',
+        sourceData: {
+          title: basicInfo.data.title,
+          logline: basicInfo.data.logline,
+          genre: basicInfo.data.genre,
+        },
+        translationContext: {
+          projectId,
+          targetLanguage,
+        },
+        userMessage,
+      });
+
+      console.log(`✓ Retranslated to ${targetLanguage}`);
+      alert(`Retranslation complete for ${targetLanguage}`);
+      setShowRetranslateModal(false);
+    } catch (err) {
+      console.error('Failed to retranslate:', err);
+      alert(err instanceof Error ? err.message : 'Failed to retranslate. Please try again.');
+    } finally {
+      TranslationService.clearTranslationStatus(basicInfoId);
+    }
+  };
+
   const handleAIResult = async (result: any) => {
     if (!basicInfo || !basicInfoId || !result) return;
 
@@ -320,8 +383,17 @@ const BasicInfoManager: React.FC = () => {
               onLanguageChange={handleLanguageChange}
               disabled={loading}
             />
-            {settings.secondaryLanguage &&
-              !basicInfo.languages.available.includes(settings.secondaryLanguage) && (
+            {settings.secondaryLanguage && (
+              basicInfo.languages.available.includes(settings.secondaryLanguage) ? (
+                <button
+                  onClick={() => setShowRetranslateModal(true)}
+                  className="translate-button retranslate"
+                  disabled={loading}
+                  title={`Retranslate to ${settings.secondaryLanguage}`}
+                >
+                  🔄 Retranslate
+                </button>
+              ) : (
                 <button
                   onClick={handleAddTranslation}
                   className="translate-button"
@@ -330,7 +402,8 @@ const BasicInfoManager: React.FC = () => {
                 >
                   🌐 Add {settings.secondaryLanguage}
                 </button>
-              )}
+              )
+            )}
             <button
               onClick={() => setShowVersionHistory(true)}
               className="version-history-button"
@@ -461,6 +534,19 @@ const BasicInfoManager: React.FC = () => {
           objectType="basic_info"
           objectId={basicInfoId!}
           onRestoreVersion={handleRestoreVersion}
+        />
+      )}
+
+      {/* Retranslate Modal */}
+      {basicInfo && settings.secondaryLanguage && (
+        <RetranslateModal
+          isOpen={showRetranslateModal}
+          onClose={() => setShowRetranslateModal(false)}
+          sourceLanguage={basicInfo.languages.active}
+          targetLanguage={settings.secondaryLanguage}
+          translationTimestamp={basicInfo.version.created_at || null}
+          onRetranslate={handleRetranslate}
+          isTranslating={loading}
         />
       )}
     </div>

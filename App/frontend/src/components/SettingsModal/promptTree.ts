@@ -126,28 +126,67 @@ export const PROMPT_TREE: PromptNode[] = [
     type: 'category',
     children: [
       {
-        id: 'translation-system',
-        label: 'System Prompt',
-        type: 'prompt',
-        functionType: 'translation',
-        category: 'systemPrompt',
-        description: 'Instructions for translation behavior and quality standards'
+        id: 'translation-single',
+        label: 'Single Translation',
+        type: 'category',
+        defaultExpanded: true,
+        children: [
+          {
+            id: 'translation-single-system',
+            label: 'System Prompt',
+            type: 'prompt',
+            functionType: 'translation',
+            category: 'systemPrompt',
+            description: 'Instructions for single object translation behavior and quality standards'
+          },
+          {
+            id: 'translation-single-user',
+            label: 'User Prompt',
+            type: 'prompt',
+            functionType: 'translation',
+            category: 'userPrompt',
+            description: 'Auto-generated user message that contains single object translation payload'
+          },
+          {
+            id: 'translation-single-prefill',
+            label: 'Prefill Template',
+            type: 'prompt',
+            functionType: 'translation',
+            category: 'prefill',
+            description: 'Template for single translation responses'
+          }
+        ]
       },
       {
-        id: 'translation-user',
-        label: 'User Prompt',
-        type: 'prompt',
-        functionType: 'translation',
-        category: 'userPrompt',
-        description: 'Auto-generated user message that contains translation payload'
-      },
-      {
-        id: 'translation-prefill',
-        label: 'Prefill Template',
-        type: 'prompt',
-        functionType: 'translation',
-        category: 'prefill',
-        description: 'Template for translation responses'
+        id: 'translation-batch',
+        label: 'Batch Translation',
+        type: 'category',
+        children: [
+          {
+            id: 'translation-batch-system',
+            label: 'System Prompt',
+            type: 'prompt',
+            functionType: 'batchTranslation',
+            category: 'systemPrompt',
+            description: 'Instructions for batch translation behavior and consistency standards'
+          },
+          {
+            id: 'translation-batch-user',
+            label: 'User Prompt',
+            type: 'prompt',
+            functionType: 'batchTranslation',
+            category: 'userPrompt',
+            description: 'Auto-generated user message that contains batch translation payload'
+          },
+          {
+            id: 'translation-batch-prefill',
+            label: 'Prefill Template',
+            type: 'prompt',
+            functionType: 'batchTranslation',
+            category: 'prefill',
+            description: 'Template for batch translation responses'
+          }
+        ]
       }
     ]
   },

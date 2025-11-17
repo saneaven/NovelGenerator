@@ -7,7 +7,7 @@ import { getDefaultPrompt, getPromptKey } from '../prompts/defaults';
 
 // Types
 export type ProviderType = 'copilot' | 'openrouter' | 'custom';
-export type AIFunctionType = 'chat' | 'translation' | 'storyEdit' | 'chapterGen';
+export type AIFunctionType = 'chat' | 'translation' | 'batchTranslation' | 'storyEdit' | 'chapterGen';
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 // Generic provider config (for API requests)
@@ -105,6 +105,20 @@ const defaultSettings: Settings = {
 
         // Translation: Accurate for language translation
         translation: {
+            provider: 'copilot',
+            model: 'gpt-4o',
+            temperature: 0.2,
+            advanced: {
+                enablePrefill: false,
+                thinkingMode: 'off',
+                reasoningConfig: {
+                    effort: 'medium',
+                },
+            },
+        },
+
+        // Batch Translation: Consistent batch translation
+        batchTranslation: {
             provider: 'copilot',
             model: 'gpt-4o',
             temperature: 0.2,
@@ -266,15 +280,9 @@ export const useSettingsStore = create<SettingsStore>()(
                 set({ isLoading: true });
                 try {
                     const serverSettings = await settingsService.getSettings();
+                    // Merge server settings with defaults to ensure new configs are included
                     set({
-                        settings: {
-                            functionConfigs: serverSettings.functionConfigs as any,
-                            providerCredentials: serverSettings.providerCredentials as any,
-                            primaryLanguage: serverSettings.primaryLanguage,
-                            secondaryLanguage: serverSettings.secondaryLanguage,
-                            // Theme might not be in backend yet, use default if missing
-                            theme: (serverSettings as any).theme ?? defaultSettings.theme,
-                        },
+                        settings: mergeWithDefaults(serverSettings),
                         lastSyncedAt: new Date().toISOString(),
                         isLoading: false,
                     });
