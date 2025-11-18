@@ -1,14 +1,14 @@
 import { useRef } from 'react';
 import { useChatStore } from '../../../store/chatStore';
 import type { ChatMessage, FunctionCallResultSummary } from '../../../llm_request/types';
-import type { LLMRequestManager } from '../../../chat/processors/LLMRequestManager';
+import type { ChatManager } from '../../../chat/processors/ChatManager';
 import type { WorkspaceUIActions } from './useWorkspaceState';
 import type { ContentPart } from '../../../api/types';
 
 export function useChatHandlers(
   projectId: string | undefined,
   uiActions: WorkspaceUIActions,
-  llmRequestManager: LLMRequestManager | null,
+  chatManager: ChatManager | null,
   pendingFunctionCallResults?: FunctionCallResultSummary[],
   clearPendingFunctionCallResults?: () => void
 ) {
@@ -27,7 +27,7 @@ export function useChatHandlers(
 
   const handleSubmit = async (e: React.FormEvent, input: string, isLoading: boolean) => {
     e.preventDefault();
-    if (!uiActions || !projectId || !llmRequestManager) return;
+    if (!uiActions || !projectId || !chatManager) return;
     if (isLoading) return;
 
     const chatId = getActiveChatId();
@@ -40,7 +40,7 @@ export function useChatHandlers(
     uiActions.setInput('');
 
     if (!input?.trim()) {
-      await llmRequestManager.processEmptyRequest();
+      await chatManager.processEmptyRequest();
       return;
     }
 
@@ -51,11 +51,11 @@ export function useChatHandlers(
       timestamp: new Date(),
     };
 
-    await llmRequestManager.processUserMessage(userMessage);
+    await chatManager.processUserMessage(userMessage);
   };
 
   const handleStop = () => {
-    llmRequestManager?.abort();
+    chatManager?.abort();
   };
 
   const adjustTextareaHeight = () => {

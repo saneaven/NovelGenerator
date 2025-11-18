@@ -5,7 +5,7 @@
 
 import type { MutableRefObject } from 'react';
 import { ChatPipeline } from '../chat/ChatPipeline';
-import { LLMTaskRunner, type LLMTaskRunnerConfig, type LLMTaskRunnerCallbacks } from '../chat/sessions/LLMTaskRunner';
+import { LLMRequestManager, type LLMRequestManagerConfig, type LLMRequestManagerCallbacks } from '../chat/sessions/LLMRequestManager';
 import { TRANSLATE_BATCH_STORY_OBJECTS_FUNCTION } from '../chat/types/translationFunctionSchemas';
 import { useSettingsStore } from '../store/settingsStore';
 import type { ObjectType } from '../types/unifiedObject';
@@ -95,7 +95,7 @@ export async function requestBatchTranslation(options: BatchTranslationOptions):
   const chatPipeline = new ChatPipeline();
   const completed: string[] = [];
 
-  const taskRunnerConfig: LLMTaskRunnerConfig = {
+  const taskRunnerConfig: LLMRequestManagerConfig = {
     projectId,
     getStoryObjects: () => createEmptyStoryObjects(),
     systemInsertConfig: {
@@ -116,7 +116,7 @@ export async function requestBatchTranslation(options: BatchTranslationOptions):
     abortControllerRef,
   };
 
-  const callbacks: LLMTaskRunnerCallbacks = {
+  const callbacks: LLMRequestManagerCallbacks = {
     onStreamUpdate: (contentParts: ContentPart[]) => {
       // Parse streaming JSON to track progress
       const textContent = contentParts
@@ -181,7 +181,7 @@ export async function requestBatchTranslation(options: BatchTranslationOptions):
     },
   };
 
-  const taskRunner = new LLMTaskRunner(taskRunnerConfig, callbacks);
+  const taskRunner = new LLMRequestManager(taskRunnerConfig, callbacks);
 
   // Prepare user message
   const userMessageContent = userInstructions
