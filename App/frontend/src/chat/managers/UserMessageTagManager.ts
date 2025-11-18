@@ -1,6 +1,6 @@
 import type { ChatMessage, FunctionCallResultSummary } from '../../llm_request/types';
 import type { ChatPipelineContext } from '../types';
-import { findLastUserMessageIdx } from '../processors/LLMRequestManager';
+import { findLastUserMessageIdx } from '../processors/ChatManager';
 import { TemplateRenderer, type RenderContext } from '../utils/TemplateRenderer';
 
 import lastUserMessageTemplate from './prompts/userMessageSystemPrompts/LastUserMessageTag.md?raw';

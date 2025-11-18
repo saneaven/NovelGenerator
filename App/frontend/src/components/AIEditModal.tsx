@@ -8,7 +8,7 @@ import { createEmptyStoryObjects } from '../types/storyObject';
 import { ChatPipeline } from '../chat/ChatPipeline';
 import { getEditFunctionSchema } from '../chat/types/editFunctionSchemas';
 import { applyEditFunctionCalls } from '../chat/utils/editFunctionApplicator';
-import { LLMTaskRunner } from '../chat/sessions/LLMTaskRunner';
+import { LLMRequestManager } from '../chat/sessions/LLMRequestManager';
 import { useLLMTaskStore } from '../store/llmTaskStore';
 import FunctionCallPreviewCard from '../pages/workspace/components/FunctionCallPreviewCard';
 import './AIEditModal.css';
@@ -119,7 +119,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   const unifiedStore = useUnifiedObjectStore();
   const settingsStore = useSettingsStore();
   const abortControllerRef = useRef<AbortController | null>(null);
-  const taskRunnerRef = useRef<LLMTaskRunner | null>(null);
+  const taskRunnerRef = useRef<LLMRequestManager | null>(null);
   const sessionIdRef = useRef<string>();
   if (!sessionIdRef.current) {
     sessionIdRef.current = createSessionId();
@@ -375,7 +375,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         promptType: 'story_object_edit' as const,
       };
 
-      taskRunnerRef.current = new LLMTaskRunner(
+      taskRunnerRef.current = new LLMRequestManager(
         {
           projectId,
           getStoryObjects,

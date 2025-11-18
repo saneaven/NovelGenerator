@@ -15,7 +15,7 @@ import type {
 } from '../types';
 import { FunctionCallStreamTracker } from '../streaming/FunctionCallStreamTracker';
 
-export interface LLMTaskRunnerConfig {
+export interface LLMRequestManagerConfig {
   projectId: string;
   getStoryObjects: () => any;
   getNovelData?: () => any;
@@ -37,7 +37,7 @@ export interface LLMTaskRunnerConfig {
   abortControllerRef: MutableRefObject<AbortController | null>;
 }
 
-export interface LLMTaskRunnerCallbacks {
+export interface LLMRequestManagerCallbacks {
   onStreamUpdate: (contentParts: ContentPart[]) => void;
   onFunctionCallProgress?: (progress: FunctionCallProgress[]) => void;
   onFunctionCalls?: (functionCalls: FunctionCallMetadata[]) => Promise<void> | void;
@@ -45,22 +45,22 @@ export interface LLMTaskRunnerCallbacks {
   onError: (error: Error) => void;
 }
 
-export interface LLMTaskRunOptions {
+export interface LLMRequestManagerOptions {
   history?: ChatMessage[];
   language: string;
 }
 
-export class LLMTaskRunner {
+export class LLMRequestManager {
   private isStreaming = false;
 
   constructor(
-    private readonly config: LLMTaskRunnerConfig,
-    private readonly callbacks: LLMTaskRunnerCallbacks
+    private readonly config: LLMRequestManagerConfig,
+    private readonly callbacks: LLMRequestManagerCallbacks
   ) {}
 
-  async run(userMessage: ChatMessage, options: LLMTaskRunOptions): Promise<void> {
+  async run(userMessage: ChatMessage, options: LLMRequestManagerOptions): Promise<void> {
     if (this.isStreaming) {
-      console.warn('LLMTaskRunner: Attempted to start a task while one is already running');
+      console.warn('LLMRequestManager: Attempted to start a task while one is already running');
       return;
     }
 
