@@ -141,6 +141,7 @@ export async function requestBatchTranslation(options: BatchTranslationOptions):
       // Find the batch translation function call
       const batchCall = functionCalls.find(fc => fc.function_name === 'translate_batch_story_objects');
       if (!batchCall) {
+        console.error('Available function calls:', functionCalls.map(fc => fc.function_name));
         throw new Error('AI did not call translate_batch_story_objects function');
       }
 
@@ -149,10 +150,19 @@ export async function requestBatchTranslation(options: BatchTranslationOptions):
         ? JSON.parse(batchCall.arguments)
         : batchCall.arguments;
 
+      console.log('Batch translation function arguments:', args);
+
       const translations: TranslationResult[] = args.translations;
 
       if (!Array.isArray(translations) || translations.length === 0) {
-        throw new Error('No translations returned from AI');
+        console.error('Invalid translations received:', {
+          args,
+          translationsType: typeof translations,
+          translationsValue: translations,
+          isArray: Array.isArray(translations),
+          argsKeys: Object.keys(args || {}),
+        });
+        throw new Error(`No translations returned from AI. Received: ${JSON.stringify(args)}`);
       }
 
       // Prepare batch data for backend
