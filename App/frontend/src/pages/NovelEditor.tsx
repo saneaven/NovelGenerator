@@ -171,7 +171,7 @@ const NovelEditor: React.FC = () =>
         chatFunctionConfig,
         providerCredentials,
         getSelectedChatId,
-        llmRequestManagerCallbacks,
+        chatManagerCallbacks,
     ]);
 
     const chatHandlers = useChatHandlers(
