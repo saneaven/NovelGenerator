@@ -420,21 +420,21 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       TranslationService.setTranslationStatus(chapterContentId, { objectId: chapterContentId, isTranslating: true });
 
       // Use AI translation via TranslationService
-      await TranslationService.requestTranslation({
-        projectId,
-        sourceLanguage: chapterContent.languages.active,
-        targetLanguage,
-        dataType: 'chapterContent',
-        sourceData: {
-          content,
-          wordCount,
+      await TranslationService.translateSingle(
+        {
+          objectType: 'chapter_content',
+          objectId: chapterContentId,
+          sourceData: {
+            content,
+            wordCount,
+          },
         },
-        translationContext: {
+        {
           projectId,
-          chapterId: selectedChapter?.id || '',
+          sourceLanguage: chapterContent.languages.active,
           targetLanguage,
-        },
-      });
+        }
+      );
 
       console.log(`✓ Added ${targetLanguage} translation`);
       alert(`Translation added for ${targetLanguage}`);

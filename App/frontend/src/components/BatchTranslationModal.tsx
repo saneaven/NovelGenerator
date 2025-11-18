@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { requestBatchTranslation } from '../services/batchTranslationService';
-import type { StoryObjectToTranslate } from '../services/batchTranslationService';
+import { TranslationService } from '../services/translationService';
+import type { StoryObjectToTranslate } from '../services/translationService';
 import type { UnifiedObject, ObjectType } from '../types/unifiedObject';
 
 interface BatchTranslationModalProps {
@@ -117,9 +117,8 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
     setError(null);
 
     try {
-      await requestBatchTranslation({
+      await TranslationService.translateBatch(objectsToTranslate, {
         projectId,
-        objects: objectsToTranslate,
         sourceLanguage,
         targetLanguage,
         userInstructions: userInstructions.trim() || undefined,
