@@ -8,7 +8,6 @@
 import workspaceSystemPrompt from '../chat/managers/prompts/systemPrompts/WorkspaceSystemPrompt.md?raw';
 import novelEditorSystemPrompt from '../chat/managers/prompts/systemPrompts/NovelEditorSystemPrompt.md?raw';
 import translationPrompt from '../chat/managers/prompts/systemPrompts/TranslationPrompt.md?raw';
-import batchTranslationPrompt from '../chat/managers/prompts/systemPrompts/BatchTranslationPrompt.md?raw';
 import storyObjectEditPrompt from '../chat/managers/prompts/systemPrompts/StoryObjectEditPrompt.md?raw';
 import chapterEditPrompt from '../chat/managers/prompts/systemPrompts/ChapterEditPrompt.md?raw';
 
@@ -102,7 +101,7 @@ export const DEFAULT_PROMPTS: PromptDefaults = {
     prefill: translationPrefill,
   },
   batchTranslation: {
-    systemPrompt: batchTranslationPrompt,
+    systemPrompt: translationPrompt,
     userPrompt: batchTranslationUserPrompt,
     prefill: batchTranslationPrefill,
   },
