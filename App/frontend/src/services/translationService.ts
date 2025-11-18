@@ -181,6 +181,13 @@ export class TranslationService {
       ...obj.sourceData,
     }));
 
+    console.log('Input objects for translation:', objects.map(obj => ({
+      objectType: obj.objectType,
+      objectId: obj.objectId,
+      objectIdType: typeof obj.objectId,
+      hasObjectId: !!obj.objectId,
+    })));
+
     const promptContext = {
       sourceLanguage,
       targetLanguage,
@@ -190,6 +197,8 @@ export class TranslationService {
       enablePrefill: translationConfig.advanced.enablePrefill,
       enableThinking: translationConfig.advanced.thinkingMode !== 'off',
     };
+
+    console.log('Prompt context:', promptContext);
 
     const abortController = new AbortController();
     const abortControllerRef: MutableRefObject<AbortController | null> = providedAbortRef || { current: abortController };
@@ -273,6 +282,16 @@ export class TranslationService {
         // Prepare batch data for backend
         const batchData = translations.map(trans => {
           const { objectType, objectId, ...data } = trans;
+
+          // Debug logging
+          console.log('Processing translation:', {
+            objectType,
+            objectId,
+            objectIdType: typeof objectId,
+            hasObjectId: !!objectId,
+            data
+          });
+
           return {
             objectType: objectType as ObjectType,
             objectId,
@@ -280,6 +299,8 @@ export class TranslationService {
             data,
           };
         });
+
+        console.log('Batch data to send to backend:', JSON.stringify(batchData, null, 2));
 
         // Send to backend using unified endpoint
         await translationAPI.addTranslations(batchData);
