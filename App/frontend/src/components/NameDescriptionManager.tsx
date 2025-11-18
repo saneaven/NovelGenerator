@@ -203,22 +203,21 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 
     try {
       TranslationService.setTranslationStatus(itemId, { objectId: itemId, isTranslating: true });
-      await TranslationService.requestTranslation({
-        projectId,
-        sourceLanguage: item.languages.active,
-        targetLanguage,
-        dataType: 'nameDescription',
-        sourceData: {
-          name: item.data.name,
-          description: item.data.description,
+      await TranslationService.translateSingle(
+        {
+          objectType: category,
+          objectId: itemId,
+          sourceData: {
+            name: item.data.name,
+            description: item.data.description,
+          },
         },
-        translationContext: {
+        {
           projectId,
+          sourceLanguage: item.languages.active,
           targetLanguage,
-          category,
-          itemId,
-        },
-      });
+        }
+      );
 
       console.log(`✓ Added ${targetLanguage} translation`);
       alert(`Translation added for ${targetLanguage}`);
@@ -248,43 +247,33 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
         isTranslating: true,
       });
 
-      // Build custom user message with instructions and optional previous translation
-      let userMessage = `Please retranslate this ${category} from ${item.languages.active} to ${targetLanguage}.`;
+      // Build custom user instructions with optional previous translation
+      let instructions = userInstructions || '';
 
-      if (userInstructions) {
-        userMessage += `\n\nAdditional instructions: ${userInstructions}`;
-      }
-
-      if (includePrevious) {
-        // Get previous translation data if available
-        const prevTranslation = item.languages.available.includes(targetLanguage)
-          ? `Previous translation for reference: ${JSON.stringify({
-              name: item.data.name,
-              description: item.data.description,
-            })}`
-          : '';
-        if (prevTranslation) {
-          userMessage += `\n\n${prevTranslation}`;
-        }
-      }
-
-      await TranslationService.requestTranslation({
-        projectId,
-        sourceLanguage: item.languages.active,
-        targetLanguage,
-        dataType: 'nameDescription',
-        sourceData: {
+      if (includePrevious && item.languages.available.includes(targetLanguage)) {
+        const prevTranslation = `Previous translation for reference:\n${JSON.stringify({
           name: item.data.name,
           description: item.data.description,
+        }, null, 2)}`;
+        instructions = instructions ? `${instructions}\n\n${prevTranslation}` : prevTranslation;
+      }
+
+      await TranslationService.translateSingle(
+        {
+          objectType: category,
+          objectId: retranslateTargetId,
+          sourceData: {
+            name: item.data.name,
+            description: item.data.description,
+          },
         },
-        translationContext: {
+        {
           projectId,
+          sourceLanguage: item.languages.active,
           targetLanguage,
-          category,
-          itemId: retranslateTargetId,
-        },
-        userMessage,
-      });
+          userInstructions: instructions || undefined,
+        }
+      );
 
       console.log(`✓ Retranslated to ${targetLanguage}`);
       alert(`Retranslation complete for ${targetLanguage}`);

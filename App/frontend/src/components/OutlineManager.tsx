@@ -176,22 +176,21 @@ const OutlineManager: React.FC = () => {
 
     try {
       TranslationService.setTranslationStatus(actId, { objectId: actId, isTranslating: true });
-      await TranslationService.requestTranslation({
-        projectId,
-        sourceLanguage: act.languages.active,
-        targetLanguage,
-        dataType: 'chapterData', // Acts use same schema as chapters (name/description)
-        sourceData: {
-          name: act.data.name,
-          description: act.data.description,
+      await TranslationService.translateSingle(
+        {
+          objectType: 'act',
+          objectId: actId,
+          sourceData: {
+            name: act.data.name,
+            description: act.data.description,
+          },
         },
-        translationContext: {
+        {
           projectId,
+          sourceLanguage: act.languages.active,
           targetLanguage,
-          category: 'act',
-          itemId: actId,
-        },
-      });
+        }
+      );
 
       console.log(`✓ Added ${targetLanguage} translation for act`);
       alert(`Translation added for ${targetLanguage}`);
@@ -221,41 +220,32 @@ const OutlineManager: React.FC = () => {
         isTranslating: true,
       });
 
-      let userMessage = `Please retranslate this act from ${act.languages.active} to ${targetLanguage}.`;
+      let instructions = userInstructions || '';
 
-      if (userInstructions) {
-        userMessage += `\n\nAdditional instructions: ${userInstructions}`;
-      }
-
-      if (includePrevious) {
-        const prevTranslation = act.languages.available.includes(targetLanguage)
-          ? `Previous translation for reference: ${JSON.stringify({
-              name: act.data.name,
-              description: act.data.description,
-            })}`
-          : '';
-        if (prevTranslation) {
-          userMessage += `\n\n${prevTranslation}`;
-        }
-      }
-
-      await TranslationService.requestTranslation({
-        projectId,
-        sourceLanguage: act.languages.active,
-        targetLanguage,
-        dataType: 'chapterData',
-        sourceData: {
+      if (includePrevious && act.languages.available.includes(targetLanguage)) {
+        const prevTranslation = `Previous translation for reference:\n${JSON.stringify({
           name: act.data.name,
           description: act.data.description,
+        }, null, 2)}`;
+        instructions = instructions ? `${instructions}\n\n${prevTranslation}` : prevTranslation;
+      }
+
+      await TranslationService.translateSingle(
+        {
+          objectType: 'act',
+          objectId: showActRetranslateModal,
+          sourceData: {
+            name: act.data.name,
+            description: act.data.description,
+          },
         },
-        translationContext: {
+        {
           projectId,
+          sourceLanguage: act.languages.active,
           targetLanguage,
-          category: 'act',
-          itemId: showActRetranslateModal,
-        },
-        userMessage,
-      });
+          userInstructions: instructions || undefined,
+        }
+      );
 
       console.log(`✓ Retranslated act to ${targetLanguage}`);
       alert(`Retranslation complete for ${targetLanguage}`);
@@ -356,22 +346,21 @@ const OutlineManager: React.FC = () => {
 
     try {
       TranslationService.setTranslationStatus(chapterId, { objectId: chapterId, isTranslating: true });
-      await TranslationService.requestTranslation({
-        projectId,
-        sourceLanguage: chapter.languages.active,
-        targetLanguage,
-        dataType: 'chapterData',
-        sourceData: {
-          name: chapter.data.name,
-          description: chapter.data.description,
+      await TranslationService.translateSingle(
+        {
+          objectType: 'chapter',
+          objectId: chapterId,
+          sourceData: {
+            name: chapter.data.name,
+            description: chapter.data.description,
+          },
         },
-        translationContext: {
+        {
           projectId,
+          sourceLanguage: chapter.languages.active,
           targetLanguage,
-          category: 'chapter',
-          itemId: chapterId,
-        },
-      });
+        }
+      );
 
       console.log(`✓ Added ${targetLanguage} translation for chapter`);
       alert(`Translation added for ${targetLanguage}`);
@@ -401,41 +390,32 @@ const OutlineManager: React.FC = () => {
         isTranslating: true,
       });
 
-      let userMessage = `Please retranslate this chapter from ${chapter.languages.active} to ${targetLanguage}.`;
+      let instructions = userInstructions || '';
 
-      if (userInstructions) {
-        userMessage += `\n\nAdditional instructions: ${userInstructions}`;
-      }
-
-      if (includePrevious) {
-        const prevTranslation = chapter.languages.available.includes(targetLanguage)
-          ? `Previous translation for reference: ${JSON.stringify({
-              name: chapter.data.name,
-              description: chapter.data.description,
-            })}`
-          : '';
-        if (prevTranslation) {
-          userMessage += `\n\n${prevTranslation}`;
-        }
-      }
-
-      await TranslationService.requestTranslation({
-        projectId,
-        sourceLanguage: chapter.languages.active,
-        targetLanguage,
-        dataType: 'chapterData',
-        sourceData: {
+      if (includePrevious && chapter.languages.available.includes(targetLanguage)) {
+        const prevTranslation = `Previous translation for reference:\n${JSON.stringify({
           name: chapter.data.name,
           description: chapter.data.description,
+        }, null, 2)}`;
+        instructions = instructions ? `${instructions}\n\n${prevTranslation}` : prevTranslation;
+      }
+
+      await TranslationService.translateSingle(
+        {
+          objectType: 'chapter',
+          objectId: showChapterRetranslateModal,
+          sourceData: {
+            name: chapter.data.name,
+            description: chapter.data.description,
+          },
         },
-        translationContext: {
+        {
           projectId,
+          sourceLanguage: chapter.languages.active,
           targetLanguage,
-          category: 'chapter',
-          itemId: showChapterRetranslateModal,
-        },
-        userMessage,
-      });
+          userInstructions: instructions || undefined,
+        }
+      );
 
       console.log(`✓ Retranslated chapter to ${targetLanguage}`);
       alert(`Retranslation complete for ${targetLanguage}`);
