@@ -186,28 +186,17 @@ const BasicInfoManager: React.FC = () => {
       return;
     }
 
-    try {
+    try{
       TranslationService.setTranslationStatus(basicInfoId, { objectId: basicInfoId, isTranslating: true });
-
-      const sourceData = {
-        title: basicInfo.data.title,
-        logline: basicInfo.data.logline,
-        genre: basicInfo.data.genre,
-      };
-
-      console.log('BasicInfoManager - Starting translation:', {
-        objectType: 'basic_info',
-        objectId: basicInfoId,
-        sourceData,
-        sourceLanguage: basicInfo.languages.active,
-        targetLanguage,
-      });
-
       await TranslationService.translateSingle(
         {
           objectType: 'basic_info',
           objectId: basicInfoId,
-          sourceData,
+          sourceData: {
+            title: basicInfo.data.title,
+            logline: basicInfo.data.logline,
+            genre: basicInfo.data.genre,
+          },
         },
         {
           projectId,
