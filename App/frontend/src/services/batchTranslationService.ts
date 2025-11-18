@@ -10,7 +10,7 @@ import { TRANSLATE_BATCH_STORY_OBJECTS_FUNCTION } from '../chat/types/translatio
 import { useSettingsStore } from '../store/settingsStore';
 import type { ObjectType } from '../types/unifiedObject';
 import type { FunctionCallMetadata, ContentPart, ChatMessage } from '../llm_request/types';
-import unifiedObjectService from '../api/unifiedObjectService';
+import { translationService } from '../api/unifiedObjectService';
 
 export interface StoryObjectToTranslate {
   objectType: ObjectType;
@@ -177,7 +177,7 @@ export async function requestBatchTranslation(options: BatchTranslationOptions):
       });
 
       // Send to backend in single batch request
-      await unifiedObjectService.batchAddTranslations(batchData);
+      await translationService.batchAddTranslations(batchData);
 
       // Update progress
       if (onProgress) {
