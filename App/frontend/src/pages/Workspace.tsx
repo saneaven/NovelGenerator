@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ChatPipeline } from '../chat/ChatPipeline';
 import type { SystemInsertConfig, EditCard } from '../chat/types';
-import { LLMRequestManager, type LLMRequestManagerCallbacks } from '../chat/processors/LLMRequestManager';
+import { ChatManager, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
 import { DefaultDisplayProcessor } from '../chat/processors/DisplayProcessor';
 import { areEditCardMapsEqual } from '../chat/utils/editCardUtils';
 import { WORKSPACE_FUNCTIONS } from '../chat/types/functionCalling';
@@ -89,7 +89,7 @@ const Workspace: React.FC = () =>
         createFunctionCallRejectHandler,
     } = useFunctionCallHandlers(projectId);
 
-    const llmRequestManagerCallbacks = useMemo<LLMRequestManagerCallbacks>(() => ({
+    const chatManagerCallbacks = useMemo<ChatManagerCallbacks>(() => ({
         onUpdateMessage: (projId, chatId, messageId, contentParts, language, reasoning_details) =>
         {
             updateMessageContentLocal(projId, chatId, messageId, contentParts, language, reasoning_details);
@@ -118,16 +118,16 @@ const Workspace: React.FC = () =>
         },
     }), [updateMessageContentLocal, updateMessage, handleFunctionCalls, addMessage, getMessages, showError, handleFunctionCallProgress]);
 
-    const llmRequestManager = useMemo(() =>
+    const chatManager = useMemo(() =>
     {
         const activeProjectId = projectId ?? '';
-        return new LLMRequestManager(
+        return new ChatManager(
             {
                 projectId: activeProjectId,
                 getStoryObjects: () => storyObjects,
                 systemInsertConfig,
                 chatPipeline,
-                getIsLoading: () => uiState.isLoading, // Use getter to prevent LLMRequestManager recreation
+                getIsLoading: () => uiState.isLoading, // Use getter to prevent ChatManager recreation
                 setIsLoading: uiActions.setIsLoading,
                 abortControllerRef,
                 getActiveChatId: () =>
@@ -148,7 +148,7 @@ const Workspace: React.FC = () =>
                 thinkingMode: chatFunctionConfig.advanced.thinkingMode,
                 reasoningConfig: chatFunctionConfig.advanced.reasoningConfig,
             },
-            llmRequestManagerCallbacks
+            chatManagerCallbacks
         );
     }, [
         projectId,
@@ -161,13 +161,13 @@ const Workspace: React.FC = () =>
         chatFunctionConfig,
         providerCredentials,
         getSelectedChatId,
-        llmRequestManagerCallbacks,
+        chatManagerCallbacks,
     ]);
 
     const chatHandlers = useChatHandlers(
         projectId,
         uiActions,
-        llmRequestManager,
+        chatManager,
         pendingFunctionCallResults,
         () => setPendingFunctionCallResults([])
     );

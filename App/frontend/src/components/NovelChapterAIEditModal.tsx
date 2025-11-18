@@ -5,7 +5,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import type { FunctionCallMetadata, ContentPart } from '../llm_request/types';
 import { ChatPipeline } from '../chat/ChatPipeline';
 import { NOVEL_EDITOR_FUNCTIONS } from '../chat/types/functionCalling';
-import { LLMTaskRunner } from '../chat/sessions/LLMTaskRunner';
+import { LLMRequestManager } from '../chat/sessions/LLMRequestManager';
 
 interface NovelContextOptions {
   basicInfo: boolean;
@@ -52,7 +52,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
   const novelStore = useNovelStore();
   const settingsStore = useSettingsStore();
   const abortControllerRef = useRef<AbortController | null>(null);
-  const taskRunnerRef = useRef<LLMTaskRunner | null>(null);
+  const taskRunnerRef = useRef<LLMRequestManager | null>(null);
 
   const getActiveLanguageContent = (targetChapterId: string): ChapterContentData | null => {
     const primaryLanguage = settingsStore.settings.primaryLanguage;
@@ -284,7 +284,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         abortControllerRef,
       };
 
-      taskRunnerRef.current = new LLMTaskRunner(taskRunnerConfig, {
+      taskRunnerRef.current = new LLMRequestManager(taskRunnerConfig, {
         onStreamUpdate: (contentParts: ContentPart[]) => {
           const textContent = contentParts
             .filter((p) => p.type === 'content')

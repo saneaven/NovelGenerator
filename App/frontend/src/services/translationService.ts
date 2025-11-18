@@ -4,7 +4,7 @@ import type { ChatMessage } from '../llm_request/types';
 import type { StoryObjects } from '../types/storyObject';
 import { createEmptyStoryObjects } from '../types/storyObject';
 import { ChatPipeline } from '../chat/ChatPipeline';
-import { LLMRequestManager, type LLMRequestManagerConfig, type LLMRequestManagerCallbacks } from '../chat/processors/LLMRequestManager';
+import { ChatManager, type ChatManagerConfig, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
 import { getTranslationFunctionSchema, type TranslationDataType } from '../chat/types/translationFunctionSchemas';
 import { applyTranslationFunctionCalls, type TranslationContext } from '../chat/utils/translationFunctionApplicator';
 import { useSettingsStore } from '../store/settingsStore';
@@ -172,7 +172,7 @@ export class TranslationService {
     const fallbackStoryObjects = storyObjects ?? createEmptyStoryObjects();
     const tempChatId = `temp-translation-${Date.now()}`;
 
-    const llmRequestManagerConfig: LLMRequestManagerConfig = {
+    const chatManagerConfig: ChatManagerConfig = {
       projectId,
       getStoryObjects: () => fallbackStoryObjects,
       systemInsertConfig: {
@@ -210,7 +210,7 @@ export class TranslationService {
         }
       };
 
-      const callbacks: LLMRequestManagerCallbacks = {
+      const callbacks: ChatManagerCallbacks = {
         onUpdateMessage: () => {},
         onSyncMessageToBackend: async () => {},
         onFunctionCalls: async (_projId, _chatId, _messageId, functionCalls) => {
@@ -233,7 +233,7 @@ export class TranslationService {
         },
       };
 
-      const llmRequestManager = new LLMRequestManager(llmRequestManagerConfig, callbacks);
+      const chatManager = new ChatManager(chatManagerConfig, callbacks);
       const userPrompt: ChatMessage = {
         id: `msg-user-${Date.now()}`,
         role: 'user',
@@ -241,7 +241,7 @@ export class TranslationService {
         timestamp: new Date(),
       };
 
-      llmRequestManager.processUserMessage(userPrompt)
+      chatManager.processUserMessage(userPrompt)
         .catch(err => finish(err instanceof Error ? err : new Error('Translation request failed')));
     });
 

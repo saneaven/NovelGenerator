@@ -6,13 +6,13 @@ import { ChatPipeline } from '../ChatPipeline';
 import { type ProviderType, type ProviderConfig } from '../../store/settingsStore';
 import { FunctionCallStreamTracker } from '../streaming/FunctionCallStreamTracker';
 
-export interface LLMRequestManagerConfig {
+export interface ChatManagerConfig {
   projectId: string;
   getStoryObjects: () => any; // Changed from static value to function
   getNovelData?: () => any; // Novel content access function
   systemInsertConfig: any;
   chatPipeline: ChatPipeline;
-  getIsLoading: () => boolean; // Changed to getter to prevent recreating LLMRequestManager on loading state changes
+  getIsLoading: () => boolean; // Changed to getter to prevent recreating ChatManager on loading state changes
   setIsLoading: (loading: boolean) => void;
   abortControllerRef: MutableRefObject<AbortController | null>;
   getActiveChatId: () => string | undefined;
@@ -32,7 +32,7 @@ export interface LLMRequestManagerConfig {
   };
 }
 
-export interface LLMRequestManagerCallbacks {
+export interface ChatManagerCallbacks {
   onUpdateMessage: (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, reasoning_details?: any[]) => void;
   onSyncMessageToBackend: (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, reasoning_details?: any[]) => Promise<void>;
   onFunctionCalls: (projectId: string, chatId: string, messageId: string, functionCalls: FunctionCallMetadata[]) => void;
@@ -42,12 +42,12 @@ export interface LLMRequestManagerCallbacks {
   onFunctionCallProgress?: (projectId: string, chatId: string, messageId: string, progress: FunctionCallProgress[]) => void;
 }
 
-export class LLMRequestManager {
-  private config: LLMRequestManagerConfig;
-  private callbacks: LLMRequestManagerCallbacks;
+export class ChatManager {
+  private config: ChatManagerConfig;
+  private callbacks: ChatManagerCallbacks;
   private isStreaming: boolean = false;
 
-  constructor(config: LLMRequestManagerConfig, callbacks: LLMRequestManagerCallbacks) {
+  constructor(config: ChatManagerConfig, callbacks: ChatManagerCallbacks) {
     this.config = config;
     this.callbacks = callbacks;
   }
@@ -60,13 +60,13 @@ export class LLMRequestManager {
 
     // Defensive check: prevent concurrent streams
     if (this.isStreaming) {
-      console.warn('LLMRequestManager: Attempted to start new stream while one is already in progress');
+      console.warn('ChatManager: Attempted to start new stream while one is already in progress');
       return;
     }
 
     const chatId = this.config.getActiveChatId();
     if (!chatId) {
-      console.error('LLMRequestManager: No active chat selected for project', this.config.projectId);
+      console.error('ChatManager: No active chat selected for project', this.config.projectId);
       return;
     }
 
@@ -103,13 +103,13 @@ export class LLMRequestManager {
 
     // Defensive check: prevent concurrent streams
     if (this.isStreaming) {
-      console.warn('LLMRequestManager: Attempted to start new stream while one is already in progress');
+      console.warn('ChatManager: Attempted to start new stream while one is already in progress');
       return;
     }
 
     const chatId = this.config.getActiveChatId();
     if (!chatId) {
-      console.error('LLMRequestManager: No active chat selected for project', this.config.projectId);
+      console.error('ChatManager: No active chat selected for project', this.config.projectId);
       return;
     }
 
@@ -391,7 +391,7 @@ export class LLMRequestManager {
         }
       : { content: null, contentParts };
 
-    console.log('LLMRequestManager: Processing final response', {
+    console.log('ChatManager: Processing final response', {
       finalResponse,
       contentPartsLength: contentParts.length,
       toolCallsLength: toolCalls.length,
@@ -403,7 +403,7 @@ export class LLMRequestManager {
       context
     );
 
-    console.log('LLMRequestManager: Processed message', {
+    console.log('ChatManager: Processed message', {
       messageId,
       contentPartsLength: processedMessage.contentParts?.length || 0,
       functionCallsLength: processedMessage.functionCalls?.length || 0,
@@ -430,9 +430,9 @@ export class LLMRequestManager {
         _language,
         (processedMessage as any).reasoning_details
       );
-      console.log('LLMRequestManager: Successfully synced message to backend');
+      console.log('ChatManager: Successfully synced message to backend');
     } catch (error) {
-      console.error('LLMRequestManager: Failed to sync message to backend:', error);
+      console.error('ChatManager: Failed to sync message to backend:', error);
       // Don't throw - local state is already updated
     }
 
@@ -441,10 +441,10 @@ export class LLMRequestManager {
 
     // Call callback if function calls exist
     if (processedMessage.functionCalls && processedMessage.functionCalls.length > 0) {
-      console.log('LLMRequestManager: Calling onFunctionCalls callback', { messageId, functionCalls: processedMessage.functionCalls });
+      console.log('ChatManager: Calling onFunctionCalls callback', { messageId, functionCalls: processedMessage.functionCalls });
       this.callbacks.onFunctionCalls(this.config.projectId, chatId, messageId, processedMessage.functionCalls);
     } else {
-      console.log('LLMRequestManager: No function calls to process');
+      console.log('ChatManager: No function calls to process');
     }
   }
 
