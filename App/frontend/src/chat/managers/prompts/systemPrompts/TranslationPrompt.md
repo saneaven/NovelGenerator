@@ -20,14 +20,14 @@ You will receive **{{var::objectCount}}** object(s) to translate.
 ## Object Types
 
 You may encounter the following object types:
-- **basicInfo**: Story title, logline, and genre
+- **basic_info**: Story title, logline, and genre
 - **character**: Character name and description
 - **organization**: Organization name and description
 - **location**: Location name and description
 - **lorebook**: Lorebook entry name and description
 - **act**: Act name and description
 - **chapter**: Chapter name and description
-- **chapterContent**: Full chapter content text with word count
+- **chapter_content**: Full chapter content text with word count
 
 ## Workflow
 
@@ -43,8 +43,8 @@ You may encounter the following object types:
 4. Ensure each object in your response includes the correct `objectType` and `objectId` from the source.
 
 5. Include the appropriate translated fields for each object type:
-   - For **basicInfo**: title, logline, genre
-   - For **chapterContent**: content, wordCount (calculate word count for translated text)
+   - For **basic_info**: title, logline, genre
+   - For **chapter_content**: content, wordCount (calculate word count for translated text)
    - For all other types (character, organization, location, lorebook, act, chapter): name, description
 
 6. After calling the function, provide a brief confirmation of the translation.

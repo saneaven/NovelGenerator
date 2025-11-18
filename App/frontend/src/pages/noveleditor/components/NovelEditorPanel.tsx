@@ -422,7 +422,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       // Use AI translation via TranslationService
       await TranslationService.translateSingle(
         {
-          objectType: 'chapterContent',
+          objectType: 'chapter_content',
           objectId: chapterContentId,
           sourceData: {
             content,
