@@ -11,8 +11,7 @@ import type { WorkspaceUIState, WorkspaceUIActions } from '../hooks/useWorkspace
 import type { StoryObjects } from '../../../types/storyObject';
 import type { ChatMessage, FunctionCallMetadata, FunctionCallProgress } from '../../../llm_request/types';
 import { ChatManager, type ChatManagerConfig, type ChatManagerCallbacks } from '../../../chat/processors/ChatManager';
-import { getTranslationFunctionSchema } from '../../../chat/types/translationFunctionSchemas';
-import { applyTranslationFunctionCalls, type TranslationContext } from '../../../chat/utils/translationFunctionApplicator';
+import { TRANSLATE_BATCH_STORY_OBJECTS_FUNCTION } from '../../../chat/types/translationFunctionSchemas';
 import ToggleSwitch from '../../../components/ToggleSwitch';
 import ReasoningDisplay from '../../../components/ReasoningDisplay';
 import FunctionCallPreviewCard from './FunctionCallPreviewCard';
@@ -247,8 +246,25 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 dataToTranslate.thinking = thinkingText;
             }
 
-            // Get translation function schema
-            const translationFunctionSchema = getTranslationFunctionSchema('chatMessage');
+            // Create simple chat message translation function schema
+            const chatMessageTranslationSchema = {
+                name: "translate_chat_message",
+                description: "Translate a chat message from one language to another",
+                parameters: {
+                    type: "object" as const,
+                    properties: {
+                        content: {
+                            type: "string",
+                            description: "The translated message content"
+                        },
+                        thinking: {
+                            type: "string",
+                            description: "The translated thinking/reasoning text (if present)"
+                        }
+                    },
+                    required: ["content"]
+                }
+            };
 
             // Get provider config from settings
             const translationConfig = settingsStore.getFunctionConfig('translation');
@@ -272,26 +288,28 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 onSyncMessageToBackend: async () => {},
                 onFunctionCalls: async (projId, chatId, messageId, functionCalls: FunctionCallMetadata[]) => {
                     try {
-                        // Create translation context (chat messages don't use store updates)
-                        const translationContext: TranslationContext = {
-                            projectId,
-                            targetLanguage,
-                        };
-
-                        // Apply translation function calls
-                        const results = await applyTranslationFunctionCalls(functionCalls, translationContext);
-
-                        const failedResults = results.filter(r => !r.success);
-                        if (failedResults.length > 0) {
-                            rejectTranslation(new Error(`Translation failed: ${failedResults.map(r => r.error).join(', ')}`));
-                        } else {
-                            // Get translated content from result
-                            const result = results[0];
-                            resolveTranslation(result.data);
+                        // Find the translation function call
+                        const translationCall = functionCalls.find(fc => fc.function_name === 'translate_chat_message');
+                        if (!translationCall) {
+                            rejectTranslation(new Error('AI did not call translate_chat_message function'));
+                            return;
                         }
+
+                        // Parse the arguments
+                        const args = typeof translationCall.arguments === 'string'
+                            ? JSON.parse(translationCall.arguments)
+                            : translationCall.arguments;
+
+                        if (!args.content) {
+                            rejectTranslation(new Error('Translation missing content field'));
+                            return;
+                        }
+
+                        // Return the translated data
+                        resolveTranslation(args);
                     } catch (err) {
-                        console.error('Translation function application error:', err);
-                        rejectTranslation(err instanceof Error ? err : new Error('Failed to apply translation'));
+                        console.error('Translation function parsing error:', err);
+                        rejectTranslation(err instanceof Error ? err : new Error('Failed to parse translation'));
                     }
                 },
                 onAddMessage: async () => `msg-${Date.now()}`,
@@ -328,7 +346,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 aiModel: translationConfig.model,
                 temperature: translationConfig.temperature,
                 providerPreference: translationConfig.providerPreference,
-                functions: [translationFunctionSchema],
+                functions: [chatMessageTranslationSchema],
                 mode: 'workspace',
                 enablePrefill: translationConfig.advanced.enablePrefill,
                 thinkingMode: translationConfig.advanced.thinkingMode as any,
