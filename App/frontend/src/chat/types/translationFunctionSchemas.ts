@@ -126,43 +126,43 @@ export const TRANSLATE_TEXT_FUNCTION: FunctionCallSchema = {
 
 export const TRANSLATE_BATCH_STORY_OBJECTS_FUNCTION: FunctionCallSchema = {
   name: "translate_batch_story_objects",
-  description: "Translate multiple story objects in a single batch operation. Each object contains its type and the fields to translate.",
+  description: "Translate multiple story objects in a single batch operation. MUST return ALL objects with their translated content. Each object must include its type, ID, and the appropriate translated fields based on object type.",
   parameters: {
     type: "object",
     properties: {
       translations: {
         type: "array",
-        description: "Array of translated story objects",
+        description: "Array containing ALL translated story objects. This array MUST NOT be empty and MUST include every object from the input.",
         items: {
           type: "object",
           properties: {
             objectType: {
               type: "string",
-              description: "Type of object (character, organization, location, lorebook, chapter, act, basicInfo)"
+              description: "Type of object - MUST match the source object type (character, organization, location, lorebook, chapter, act, basicInfo)"
             },
             objectId: {
               type: "string",
-              description: "Unique identifier of the object"
+              description: "Unique identifier - MUST match the source object ID exactly"
             },
             name: {
               type: "string",
-              description: "Translated name (for name/description objects)"
+              description: "Translated name (REQUIRED for character, organization, location, lorebook, chapter, act objects)"
             },
             description: {
               type: "string",
-              description: "Translated description (for name/description objects)"
+              description: "Translated description (REQUIRED for character, organization, location, lorebook, chapter, act objects)"
             },
             title: {
               type: "string",
-              description: "Translated title (for basic info only)"
+              description: "Translated title (REQUIRED for basicInfo objects)"
             },
             logline: {
               type: "string",
-              description: "Translated logline (for basic info only)"
+              description: "Translated logline (REQUIRED for basicInfo objects)"
             },
             genre: {
               type: "string",
-              description: "Translated genre (for basic info only)"
+              description: "Translated genre (REQUIRED for basicInfo objects)"
             }
           },
           required: ["objectType", "objectId"]
