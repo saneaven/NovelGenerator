@@ -20,6 +20,7 @@ Requirements:
 - Maintain consistency in terminology, character names, and style across all objects
 - Include the objectType and objectId for each object (matching the source)
 - Include the appropriate translated fields based on object type:
-  - For basicInfo objects: title, logline, genre
+  - For basic_info objects: title, logline, genre
+  - For chapter_content objects: content, wordCount
   - For all other object types: name, description
 - The translations array must contain exactly {{var::objectCount}} objects
