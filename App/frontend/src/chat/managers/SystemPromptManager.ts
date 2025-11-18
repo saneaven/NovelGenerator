@@ -13,7 +13,6 @@ const PROMPT_TYPE = {
   STORY_OBJECT_EDIT: 'story_object_edit',
   CHAPTER_EDIT: 'chapter_edit',
   TRANSLATION: 'translation',
-  BATCH_TRANSLATION: 'batch_translation',
 } as const;
 
 export type PromptType = typeof PROMPT_TYPE[keyof typeof PROMPT_TYPE];
@@ -73,24 +72,9 @@ export type TranslationDataType =
   | 'general';
 
 /**
- * Context for translation prompts
+ * Context for translation prompts (unified for single and batch translations)
  */
 export interface TranslationPromptContext extends BasePromptContext {
-  sourceLanguage: string;
-  targetLanguage: string;
-  dataType: TranslationDataType;
-  sourceData: unknown;
-  previousVersionData?: unknown;
-  previousTranslation?: string;
-  userInstructions?: string;
-  enablePrefill?: boolean;
-  enableThinking?: boolean;
-}
-
-/**
- * Context for batch translation prompts
- */
-export interface BatchTranslationPromptContext extends BasePromptContext {
   sourceLanguage: string;
   targetLanguage: string;
   objectCount: number;
@@ -114,7 +98,7 @@ export class SystemPromptManager {
    * Load a prompt template from store or fallback to bundled default
    */
   private static async getTemplate(
-    functionType: 'chat' | 'translation' | 'batchTranslation' | 'storyEdit' | 'chapterGen',
+    functionType: 'chat' | 'translation' | 'storyEdit' | 'chapterGen',
     category: 'systemPrompt' | 'functionInstructions' | 'prefill' | 'userPrompt',
     name?: 'workspace' | 'novelEditor'
   ): Promise<string> {
@@ -148,7 +132,6 @@ export class SystemPromptManager {
   static generatePrompt(type: typeof PromptType.STORY_OBJECT_EDIT, context: StoryObjectEditPromptContext): Promise<string>;
   static generatePrompt(type: typeof PromptType.CHAPTER_EDIT, context: ChapterEditPromptContext): Promise<string>;
   static generatePrompt(type: typeof PromptType.TRANSLATION, context: TranslationPromptContext): Promise<string>;
-  static generatePrompt(type: typeof PromptType.BATCH_TRANSLATION, context: BatchTranslationPromptContext): Promise<string>;
   static async generatePrompt(type: PromptType, context?: unknown): Promise<string> {
     const bundle = await this.generatePromptBundle(type as any, context as any);
     return bundle.systemPrompt;
@@ -158,7 +141,6 @@ export class SystemPromptManager {
   static generatePromptBundle(type: typeof PromptType.STORY_OBJECT_EDIT, context: StoryObjectEditPromptContext): Promise<PromptBundle>;
   static generatePromptBundle(type: typeof PromptType.CHAPTER_EDIT, context: ChapterEditPromptContext): Promise<PromptBundle>;
   static generatePromptBundle(type: typeof PromptType.TRANSLATION, context: TranslationPromptContext): Promise<PromptBundle>;
-  static generatePromptBundle(type: typeof PromptType.BATCH_TRANSLATION, context: BatchTranslationPromptContext): Promise<PromptBundle>;
   static async generatePromptBundle(type: PromptType, context?: unknown): Promise<PromptBundle> {
     switch (type) {
       case PromptType.CHAT_SYSTEM:
@@ -169,8 +151,6 @@ export class SystemPromptManager {
         return this.generateChapterEditBundle(context as ChapterEditPromptContext);
       case PromptType.TRANSLATION:
         return this.generateTranslationBundle(context as TranslationPromptContext);
-      case PromptType.BATCH_TRANSLATION:
-        return this.generateBatchTranslationBundle(context as BatchTranslationPromptContext);
       default:
         throw new Error(`Unknown prompt type: ${type}`);
     }
@@ -183,7 +163,6 @@ export class SystemPromptManager {
   static validateContext(type: typeof PromptType.CHAPTER_EDIT, context: ChapterEditPromptContext): { isValid: boolean; errors: string[] };
   static validateContext(type: typeof PromptType.CHAT_SYSTEM, context?: ChatSystemPromptContext): { isValid: boolean; errors: string[] };
   static validateContext(type: typeof PromptType.TRANSLATION, context: TranslationPromptContext): { isValid: boolean; errors: string[] };
-  static validateContext(type: typeof PromptType.BATCH_TRANSLATION, context: BatchTranslationPromptContext): { isValid: boolean; errors: string[] };
   static validateContext(type: PromptType, context?: unknown): { isValid: boolean; errors: string[] } {
     const errors: string[] = [];
     const normalizedContext = (context ?? {}) as Record<string, unknown>;
@@ -220,27 +199,11 @@ export class SystemPromptManager {
         if (!translationContext?.targetLanguage) {
           errors.push('Target language is required for translation prompt');
         }
-        if (!translationContext?.dataType) {
-          errors.push('Data type is required for translation prompt');
+        if (!translationContext?.objectsArray) {
+          errors.push('Objects array is required for translation prompt');
         }
-        if (!translationContext?.sourceData) {
-          errors.push('Source data is required for translation prompt');
-        }
-        break;
-      }
-      case PromptType.BATCH_TRANSLATION: {
-        const batchTranslationContext = normalizedContext as Partial<BatchTranslationPromptContext>;
-        if (!batchTranslationContext?.sourceLanguage) {
-          errors.push('Source language is required for batch translation prompt');
-        }
-        if (!batchTranslationContext?.targetLanguage) {
-          errors.push('Target language is required for batch translation prompt');
-        }
-        if (!batchTranslationContext?.objectsArray) {
-          errors.push('Objects array is required for batch translation prompt');
-        }
-        if (typeof batchTranslationContext?.objectCount !== 'number' || batchTranslationContext.objectCount < 1) {
-          errors.push('Valid object count is required for batch translation prompt');
+        if (typeof translationContext?.objectCount !== 'number' || translationContext.objectCount < 1) {
+          errors.push('Valid object count is required for translation prompt');
         }
         break;
       }
@@ -396,77 +359,14 @@ export class SystemPromptManager {
     const {
       sourceLanguage,
       targetLanguage,
-      dataType,
-      sourceData,
-      previousVersionData,
-      previousTranslation,
-      userInstructions,
-    } = context;
-
-    const [systemTemplate, userTemplate] = await Promise.all([
-      this.getTemplate('translation', 'systemPrompt'),
-      this.getTemplate('translation', 'userPrompt'),
-    ]);
-
-    const dataTypeName = this.getDataTypeDisplayName(dataType);
-    const previousVersionContext = previousVersionData ? this.formatJsonBlock(previousVersionData) : '';
-    const previousTranslationReference = previousTranslation ? this.formatTextBlock(previousTranslation) : '';
-
-    const systemRenderContext: RenderContext = {
-      variables: {
-        sourceLanguage,
-        targetLanguage,
-        dataTypeName,
-      },
-      conditionals: {
-        thinking: context.enableThinking ?? false,
-        prefill: context.enablePrefill ?? false,
-      },
-    };
-
-    const userRenderContext: RenderContext = {
-      variables: {
-        sourceLanguage,
-        targetLanguage,
-        dataTypeName,
-      },
-      context: {
-        previousVersionContext,
-        previousTranslationReference,
-        userInstructions: userInstructions || '',
-        sourceData: this.formatJsonBlock(sourceData),
-      },
-      conditionals: {
-        previousVersionContext: !!previousVersionData,
-        previousTranslationReference: !!previousTranslation,
-        userInstructions: !!userInstructions,
-      },
-    };
-
-    return {
-      systemPrompt: TemplateRenderer.render(systemTemplate, systemRenderContext, {
-        templateId: this.templateId('translation', 'systemPrompt'),
-      }),
-      userPrompts: [
-        TemplateRenderer.render(userTemplate, userRenderContext, {
-          templateId: this.templateId('translation', 'userPrompt'),
-        }),
-      ],
-    };
-  }
-
-  private static async generateBatchTranslationBundle(context: BatchTranslationPromptContext): Promise<PromptBundle> {
-    const {
-      sourceLanguage,
-      targetLanguage,
       objectCount,
       objectsArray,
       userInstructions,
     } = context;
 
     const [systemTemplate, userTemplate] = await Promise.all([
-      this.getTemplate('batchTranslation', 'systemPrompt'),
-      this.getTemplate('batchTranslation', 'userPrompt'),
+      this.getTemplate('translation', 'systemPrompt'),
+      this.getTemplate('translation', 'userPrompt'),
     ]);
 
     const systemRenderContext: RenderContext = {
@@ -477,7 +377,6 @@ export class SystemPromptManager {
       },
       conditionals: {
         thinking: context.enableThinking ?? false,
-        prefill: context.enablePrefill ?? false,
       },
     };
 
@@ -498,11 +397,11 @@ export class SystemPromptManager {
 
     return {
       systemPrompt: TemplateRenderer.render(systemTemplate, systemRenderContext, {
-        templateId: this.templateId('batchTranslation', 'systemPrompt'),
+        templateId: this.templateId('translation', 'systemPrompt'),
       }),
       userPrompts: [
         TemplateRenderer.render(userTemplate, userRenderContext, {
-          templateId: this.templateId('batchTranslation', 'userPrompt'),
+          templateId: this.templateId('translation', 'userPrompt'),
         }),
       ],
     };
@@ -522,7 +421,7 @@ export class SystemPromptManager {
   }
 
   private static templateId(
-    functionType: 'chat' | 'translation' | 'batchTranslation' | 'storyEdit' | 'chapterGen',
+    functionType: 'chat' | 'translation' | 'storyEdit' | 'chapterGen',
     category: 'systemPrompt' | 'userPrompt',
     variant: string = 'default'
   ): string {

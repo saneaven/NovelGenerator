@@ -192,6 +192,9 @@ const OutlineManager: React.FC = () => {
         }
       );
 
+      // Refresh object to update UI with new translation
+      await store.fetchObject('act', actId);
+
       console.log(`✓ Added ${targetLanguage} translation for act`);
       alert(`Translation added for ${targetLanguage}`);
     } catch (error) {
@@ -246,6 +249,9 @@ const OutlineManager: React.FC = () => {
           userInstructions: instructions || undefined,
         }
       );
+
+      // Refresh object to update UI with new translation
+      await store.fetchObject('act', showActRetranslateModal);
 
       console.log(`✓ Retranslated act to ${targetLanguage}`);
       alert(`Retranslation complete for ${targetLanguage}`);
@@ -362,6 +368,9 @@ const OutlineManager: React.FC = () => {
         }
       );
 
+      // Refresh object to update UI with new translation
+      await store.fetchObject('chapter', chapterId);
+
       console.log(`✓ Added ${targetLanguage} translation for chapter`);
       alert(`Translation added for ${targetLanguage}`);
     } catch (error) {
@@ -416,6 +425,9 @@ const OutlineManager: React.FC = () => {
           userInstructions: instructions || undefined,
         }
       );
+
+      // Refresh object to update UI with new translation
+      await store.fetchObject('chapter', showChapterRetranslateModal);
 
       console.log(`✓ Retranslated chapter to ${targetLanguage}`);
       alert(`Retranslation complete for ${targetLanguage}`);

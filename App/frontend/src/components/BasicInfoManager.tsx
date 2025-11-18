@@ -205,6 +205,9 @@ const BasicInfoManager: React.FC = () => {
         }
       );
 
+      // Refresh object to update UI with new translation
+      await fetchObject('basic_info', basicInfoId);
+
       console.log(`✓ Added ${targetLanguage} translation`);
       alert(`Translation added for ${targetLanguage}`);
     } catch (err) {
@@ -257,6 +260,9 @@ const BasicInfoManager: React.FC = () => {
           userInstructions: instructions || undefined,
         }
       );
+
+      // Refresh object to update UI with new translation
+      await fetchObject('basic_info', basicInfoId);
 
       console.log(`✓ Retranslated to ${targetLanguage}`);
       alert(`Retranslation complete for ${targetLanguage}`);

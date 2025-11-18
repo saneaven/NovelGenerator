@@ -13,7 +13,6 @@ import {
   type PromptBundle,
   type ChatSystemPromptContext,
   type TranslationPromptContext,
-  type BatchTranslationPromptContext,
   type StoryObjectEditPromptContext,
   type ChapterEditPromptContext
 } from '../managers/SystemPromptManager';
@@ -156,15 +155,6 @@ export class DefaultPreProcessor implements PreProcessor {
         return await SystemPromptManager.generatePromptBundle(
           PromptType.CHAPTER_EDIT,
           promptContext as ChapterEditPromptContext
-        );
-
-      case 'batchTranslation':
-        if (!promptContext) {
-          throw new Error('Batch translation prompt requires promptContext to be set');
-        }
-        return await SystemPromptManager.generatePromptBundle(
-          PromptType.BATCH_TRANSLATION,
-          promptContext as BatchTranslationPromptContext
         );
 
       default:

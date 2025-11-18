@@ -369,6 +369,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
           targetId,
           contextData,
           currentData,
+          userRequest: userRequest.trim(),
           enablePrefill: storyEditConfig.advanced.enablePrefill,
           enableThinking: storyEditConfig.advanced.thinkingMode !== 'off',
         },
@@ -409,12 +410,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       );
 
       await taskRunnerRef.current.run(
-        {
-          id: `msg-user-${Date.now()}`,
-          role: 'user',
-          content: userRequest.trim(),
-          timestamp: new Date(),
-        },
+        null,
         {
           history: [],
           language: settingsStore.settings.primaryLanguage,

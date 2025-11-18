@@ -171,7 +171,7 @@ export class TranslationService {
     }
 
     const settingsStore = useSettingsStore.getState();
-    const translationConfig = settingsStore.getFunctionConfig('batchTranslation');
+    const translationConfig = settingsStore.getFunctionConfig('translation');
     const providerConfig = settingsStore.getProviderConfig(translationConfig.provider);
 
     // Prepare objects array for prompt
@@ -298,22 +298,8 @@ export class TranslationService {
 
     const llmManager = new LLMRequestManager(llmConfig, callbacks);
 
-    // Prepare user message
-    const userMessageContent = objects.length === 1
-      ? (userInstructions || `Translate this ${objects[0].objectType} from ${sourceLanguage} to ${targetLanguage}.`)
-      : (userInstructions
-          ? `Translate all objects with the following instructions:\n\n${userInstructions}`
-          : 'Translate all provided objects');
-
-    const userMessage: ChatMessage = {
-      id: `msg-translation-${Date.now()}`,
-      role: 'user',
-      content: userMessageContent,
-      timestamp: new Date(),
-    };
-
     try {
-      await llmManager.run(userMessage, {
+      await llmManager.run(null, {
         history: [],
         language: targetLanguage,
       });

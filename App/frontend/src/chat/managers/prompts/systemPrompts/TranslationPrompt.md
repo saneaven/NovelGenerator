@@ -51,13 +51,13 @@ You may encounter the following object types:
 
 ## User Instructions
 
-{{if::var::userInstructions}}
+{{#if::userInstructions}}
 The user has provided the following specific instructions for this translation:
 
-{{var::userInstructions}}
+{{context::userInstructions}}
 
 Please follow these instructions while maintaining all other translation requirements.
-{{endif}}
+{{/if}}
 
 ## Critical Requirements
 

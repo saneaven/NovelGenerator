@@ -219,6 +219,9 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
         }
       );
 
+      // Refresh object to update UI with new translation
+      await store.fetchObject(category, itemId);
+
       console.log(`✓ Added ${targetLanguage} translation`);
       alert(`Translation added for ${targetLanguage}`);
     } catch (error) {
@@ -274,6 +277,9 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
           userInstructions: instructions || undefined,
         }
       );
+
+      // Refresh object to update UI with new translation
+      await store.fetchObject(category, retranslateTargetId);
 
       console.log(`✓ Retranslated to ${targetLanguage}`);
       alert(`Retranslation complete for ${targetLanguage}`);

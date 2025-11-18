@@ -7,7 +7,7 @@ import { getDefaultPrompt, getPromptKey } from '../prompts/defaults';
 
 // Types
 export type ProviderType = 'copilot' | 'openrouter' | 'custom';
-export type AIFunctionType = 'chat' | 'translation' | 'batchTranslation' | 'storyEdit' | 'chapterGen';
+export type AIFunctionType = 'chat' | 'translation' | 'storyEdit' | 'chapterGen';
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 // Generic provider config (for API requests)

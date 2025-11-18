@@ -1,1 +1,1 @@
-I'll translate {{var::dataTypeName}} from {{var::sourceLanguage}} to {{var::targetLanguage}}.
+I'll translate {{var::objectCount}} object(s) from {{var::sourceLanguage}} to {{var::targetLanguage}}.

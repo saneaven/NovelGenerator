@@ -321,12 +321,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
       });
 
       await taskRunnerRef.current.run(
-        {
-          id: `msg-user-${Date.now()}`,
-          role: 'user',
-          content: userRequest,
-          timestamp: new Date(),
-        },
+        null,
         {
           history: [],
           language: settingsStore.settings.primaryLanguage,

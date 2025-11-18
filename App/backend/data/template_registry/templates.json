@@ -44,11 +44,11 @@
         "source": "Translation prompt context.",
         "example": "English"
       },
-      "dataTypeName": {
-        "description": "Human readable label for the translation payload type.",
+      "objectCount": {
+        "description": "Number of objects to translate in the batch.",
         "type": "string",
-        "source": "Translation prompt data-type mapping.",
-        "example": "Chapter Content"
+        "source": "Translation prompt context (unified batch system).",
+        "example": "5"
       },
       "mode": {
         "description": "Workspace mode label communicated to the assistant.",
@@ -90,25 +90,15 @@
         "type": "string",
         "source": "Chapter edit context."
       },
-      "previousVersionContext": {
-        "description": "JSON block of the previous data version for comparison.",
-        "type": "string",
-        "source": "Translation prompt context (optional)."
-      },
-      "previousTranslationReference": {
-        "description": "Text block holding the previous translation.",
-        "type": "string",
-        "source": "Translation prompt context (optional)."
-      },
       "userInstructions": {
         "description": "Additional user guidance for the translation task.",
         "type": "string",
         "source": "Translation prompt context (optional)."
       },
-      "sourceData": {
-        "description": "JSON block of the source payload to translate.",
+      "objectsArray": {
+        "description": "JSON array of story objects to translate.",
         "type": "string",
-        "source": "Translation prompt context."
+        "source": "Translation prompt context (unified batch system)."
       },
       "functionResults": {
         "description": "Summary of recent function call results appended to user messages.",
@@ -157,20 +147,6 @@
         "description": "True when the user supplied explicit edit instructions.",
         "type": "boolean",
         "source": "Story/chapter edit contexts.",
-        "supportsNegation": true,
-        "default": false
-      },
-      "previousVersionContext": {
-        "description": "True when previous version data exists for translation.",
-        "type": "boolean",
-        "source": "Translation prompt context.",
-        "supportsNegation": true,
-        "default": false
-      },
-      "previousTranslationReference": {
-        "description": "True when an earlier translation is provided for reference.",
-        "type": "boolean",
-        "source": "Translation prompt context.",
         "supportsNegation": true,
         "default": false
       },
@@ -289,13 +265,20 @@
           "targetLanguage": {
             "required": true
           },
-          "dataTypeName": {
+          "objectCount": {
             "required": true
           }
         },
-        "contexts": {},
+        "contexts": {
+          "userInstructions": {
+            "required": false
+          }
+        },
         "conditionals": {
           "thinking": {
+            "required": false
+          },
+          "userInstructions": {
             "required": false
           }
         }
@@ -387,31 +370,19 @@
           "targetLanguage": {
             "required": true
           },
-          "dataTypeName": {
+          "objectCount": {
             "required": true
           }
         },
         "contexts": {
-          "previousVersionContext": {
-            "required": false
-          },
-          "previousTranslationReference": {
-            "required": false
+          "objectsArray": {
+            "required": true
           },
           "userInstructions": {
             "required": false
-          },
-          "sourceData": {
-            "required": true
           }
         },
         "conditionals": {
-          "previousVersionContext": {
-            "required": false
-          },
-          "previousTranslationReference": {
-            "required": false
-          },
           "userInstructions": {
             "required": false
           }
@@ -507,7 +478,7 @@
           "targetLanguage": {
             "required": true
           },
-          "dataTypeName": {
+          "objectCount": {
             "required": true
           }
         },

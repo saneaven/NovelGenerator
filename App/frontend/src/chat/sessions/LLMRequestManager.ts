@@ -58,7 +58,7 @@ export class LLMRequestManager {
     private readonly callbacks: LLMRequestManagerCallbacks
   ) {}
 
-  async run(userMessage: ChatMessage, options: LLMRequestManagerOptions): Promise<void> {
+  async run(userMessage: ChatMessage | null, options: LLMRequestManagerOptions): Promise<void> {
     if (this.isStreaming) {
       console.warn('LLMRequestManager: Attempted to start a task while one is already running');
       return;
@@ -73,7 +73,11 @@ export class LLMRequestManager {
       timestamp: new Date(),
     };
 
-    const chatHistory = [...history, userMessage, assistantMessage];
+    // Only add userMessage to history if provided
+    const chatHistory = userMessage
+      ? [...history, userMessage, assistantMessage]
+      : [...history, assistantMessage];
+
     const context = ChatPipeline.createContext(
       this.config.projectId,
       this.config.getStoryObjects(),
