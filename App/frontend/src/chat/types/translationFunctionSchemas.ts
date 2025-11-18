@@ -36,7 +36,7 @@ export const TRANSLATE_BATCH_STORY_OBJECTS_FUNCTION: FunctionCallSchema = {
           properties: {
             objectType: {
               type: "string",
-              description: "Type of object - MUST match the source object type (character, organization, location, lorebook, chapter, act, basicInfo, chapterContent)"
+              description: "Type of object - MUST match the source object type (character, organization, location, lorebook, chapter, act, basic_info, chapter_content)"
             },
             objectId: {
               type: "string",
@@ -52,23 +52,23 @@ export const TRANSLATE_BATCH_STORY_OBJECTS_FUNCTION: FunctionCallSchema = {
             },
             title: {
               type: "string",
-              description: "Translated title (REQUIRED for basicInfo objects)"
+              description: "Translated title (REQUIRED for basic_info objects)"
             },
             logline: {
               type: "string",
-              description: "Translated logline (REQUIRED for basicInfo objects)"
+              description: "Translated logline (REQUIRED for basic_info objects)"
             },
             genre: {
               type: "string",
-              description: "Translated genre (REQUIRED for basicInfo objects)"
+              description: "Translated genre (REQUIRED for basic_info objects)"
             },
             content: {
               type: "string",
-              description: "Translated content (REQUIRED for chapterContent objects)"
+              description: "Translated content (REQUIRED for chapter_content objects)"
             },
             wordCount: {
               type: "number",
-              description: "Word count of translated content (REQUIRED for chapterContent objects)"
+              description: "Word count of translated content (REQUIRED for chapter_content objects)"
             }
           },
           required: ["objectType", "objectId"]

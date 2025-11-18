@@ -190,7 +190,7 @@ const BasicInfoManager: React.FC = () => {
       TranslationService.setTranslationStatus(basicInfoId, { objectId: basicInfoId, isTranslating: true });
       await TranslationService.translateSingle(
         {
-          objectType: 'basicInfo',
+          objectType: 'basic_info',
           objectId: basicInfoId,
           sourceData: {
             title: basicInfo.data.title,
@@ -242,7 +242,7 @@ const BasicInfoManager: React.FC = () => {
 
       await TranslationService.translateSingle(
         {
-          objectType: 'basicInfo',
+          objectType: 'basic_info',
           objectId: basicInfoId,
           sourceData: {
             title: basicInfo.data.title,
