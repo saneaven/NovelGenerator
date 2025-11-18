@@ -32,10 +32,15 @@ You may encounter the following object types:
 2. Translate all objects maintaining consistency in terminology and style.
 3. Use the `translate_batch_story_objects` function with an array containing ALL translated objects.
 4. Ensure each object in your response includes the correct objectType and objectId from the source.
-5. After calling the function, provide a brief confirmation of the batch translation.
+5. Include the appropriate translated fields for each object type:
+   - For basicInfo: title, logline, genre
+   - For all other types (character, organization, location, lorebook, act, chapter): name, description
+6. After calling the function, provide a brief confirmation of the batch translation.
 
-## Important
+## Critical Requirements
 
-- Process ALL objects in the batch, not just some of them
-- Maintain the exact objectId and objectType for each translation
+- **MUST process ALL objects in the batch** - Never skip or omit any objects
+- **MUST maintain the exact objectId and objectType** for each translation
+- **MUST include all required fields** for each object type (see workflow step 5)
+- **MUST return a non-empty translations array** - An empty array will cause an error
 - Keep terminology consistent across related objects (e.g., character names should be the same across all objects)
