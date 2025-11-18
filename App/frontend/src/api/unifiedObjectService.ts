@@ -317,8 +317,33 @@ export const translationService = {
   },
 
   /**
-   * Batch add translations for multiple objects
-   * @param translations Array of translation data
+   * Add translations for one or more objects (unified endpoint)
+   * @param translations Array of translation data (can be 1 or many objects)
+   */
+  async addTranslations(
+    translations: Array<{
+      objectType: ObjectType;
+      objectId: string;
+      language: string;
+      data: Record<string, any>;
+    }>
+  ): Promise<{ success: boolean; translated_count: number; message: string }> {
+    return apiClient.post<{ success: boolean; translated_count: number; message: string }>(
+      '/api/v1/translations',
+      {
+        translations: translations.map(t => ({
+          object_type: t.objectType,
+          object_id: t.objectId,
+          language: t.language,
+          data: t.data,
+        })),
+        user_request: 'Translation',
+      }
+    );
+  },
+
+  /**
+   * @deprecated Use addTranslations instead. This alias is kept for backward compatibility.
    */
   async batchAddTranslations(
     translations: Array<{
@@ -328,18 +353,7 @@ export const translationService = {
       data: Record<string, any>;
     }>
   ): Promise<{ success: boolean; translated_count: number; message: string }> {
-    return apiClient.post<{ success: boolean; translated_count: number; message: string }>(
-      '/api/v1/batch/add-translations',
-      {
-        translations: translations.map(t => ({
-          object_type: t.objectType,
-          object_id: t.objectId,
-          language: t.language,
-          data: t.data,
-        })),
-        user_request: 'Batch Translation',
-      }
-    );
+    return this.addTranslations(translations);
   },
 };
 

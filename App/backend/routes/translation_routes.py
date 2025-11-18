@@ -42,14 +42,6 @@ class TranslationStatus(BaseModel):
         from_attributes = True
 
 
-class BatchTranslationRequest(BaseModel):
-    """Request to translate multiple objects"""
-    object_ids: List[str]
-    object_type: str
-    source_language: str
-    target_language: str
-
-
 class TranslationData(BaseModel):
     """Single object translation data"""
     object_type: str
@@ -58,10 +50,10 @@ class TranslationData(BaseModel):
     data: Dict[str, Any]
 
 
-class BatchAddTranslationsRequest(BaseModel):
-    """Request to add translations for multiple objects"""
+class AddTranslationsRequest(BaseModel):
+    """Request to add translations (single or batch)"""
     translations: List[TranslationData]
-    user_request: str = "Batch Translation"
+    user_request: str = "Translation"
 
 
 class LanguageAvailabilityResponse(BaseModel):
@@ -298,15 +290,15 @@ async def batch_delete_translations(
     }
 
 
-@router.post("/batch/add-translations")
-async def batch_add_translations(
-    request: BatchAddTranslationsRequest,
+@router.post("/translations")
+async def add_translations(
+    request: AddTranslationsRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Add translations for multiple objects in a single transaction.
-    Fails immediately if any translation fails (fail-fast).
+    Unified translation endpoint - handles single or batch translations.
+    All translations are atomic - fails immediately if any translation fails.
     """
     from ..routes.unified_object_routes import (
         create_or_update_version,
@@ -365,7 +357,7 @@ async def batch_add_translations(
         return {
             "success": True,
             "translated_count": translated_count,
-            "message": f"Successfully translated {translated_count} objects"
+            "message": f"Successfully translated {translated_count} object{'s' if translated_count != 1 else ''}"
         }
 
     except Exception as e:
@@ -373,7 +365,7 @@ async def batch_add_translations(
         db.rollback()
         raise HTTPException(
             status_code=500,
-            detail=f"Batch translation failed: {str(e)}"
+            detail=f"Translation failed: {str(e)}"
         )
 
 

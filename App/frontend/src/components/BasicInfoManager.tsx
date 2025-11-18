@@ -186,23 +186,24 @@ const BasicInfoManager: React.FC = () => {
       return;
     }
 
-    try {
+    try{
       TranslationService.setTranslationStatus(basicInfoId, { objectId: basicInfoId, isTranslating: true });
-      await TranslationService.requestTranslation({
-        projectId,
-        sourceLanguage: basicInfo.languages.active,
-        targetLanguage,
-        dataType: 'basicInfo',
-        sourceData: {
-          title: basicInfo.data.title,
-          logline: basicInfo.data.logline,
-          genre: basicInfo.data.genre,
+      await TranslationService.translateSingle(
+        {
+          objectType: 'basicInfo',
+          objectId: basicInfoId,
+          sourceData: {
+            title: basicInfo.data.title,
+            logline: basicInfo.data.logline,
+            genre: basicInfo.data.genre,
+          },
         },
-        translationContext: {
+        {
           projectId,
+          sourceLanguage: basicInfo.languages.active,
           targetLanguage,
-        },
-      });
+        }
+      );
 
       console.log(`✓ Added ${targetLanguage} translation`);
       alert(`Translation added for ${targetLanguage}`);
@@ -226,43 +227,36 @@ const BasicInfoManager: React.FC = () => {
     try {
       TranslationService.setTranslationStatus(basicInfoId, { objectId: basicInfoId, isTranslating: true });
 
-      // Build custom user message with instructions and optional previous translation
-      let userMessage = `Please retranslate the basic info from ${basicInfo.languages.active} to ${targetLanguage}.`;
+      // Build custom user instructions with optional previous translation
+      let instructions = userInstructions || '';
 
-      if (userInstructions) {
-        userMessage += `\n\nAdditional instructions: ${userInstructions}`;
-      }
-
-      if (includePrevious) {
+      if (includePrevious && basicInfo.languages.available.includes(targetLanguage)) {
         // Get previous translation data if available
-        const prevTranslation = basicInfo.languages.available.includes(targetLanguage)
-          ? `Previous translation for reference: ${JSON.stringify({
-              title: basicInfo.data.title,
-              logline: basicInfo.data.logline,
-              genre: basicInfo.data.genre,
-            })}`
-          : '';
-        if (prevTranslation) {
-          userMessage += `\n\n${prevTranslation}`;
-        }
-      }
-
-      await TranslationService.requestTranslation({
-        projectId,
-        sourceLanguage: basicInfo.languages.active,
-        targetLanguage,
-        dataType: 'basicInfo',
-        sourceData: {
+        const prevTranslation = `Previous translation for reference:\n${JSON.stringify({
           title: basicInfo.data.title,
           logline: basicInfo.data.logline,
           genre: basicInfo.data.genre,
+        }, null, 2)}`;
+        instructions = instructions ? `${instructions}\n\n${prevTranslation}` : prevTranslation;
+      }
+
+      await TranslationService.translateSingle(
+        {
+          objectType: 'basicInfo',
+          objectId: basicInfoId,
+          sourceData: {
+            title: basicInfo.data.title,
+            logline: basicInfo.data.logline,
+            genre: basicInfo.data.genre,
+          },
         },
-        translationContext: {
+        {
           projectId,
+          sourceLanguage: basicInfo.languages.active,
           targetLanguage,
-        },
-        userMessage,
-      });
+          userInstructions: instructions || undefined,
+        }
+      );
 
       console.log(`✓ Retranslated to ${targetLanguage}`);
       alert(`Retranslation complete for ${targetLanguage}`);
