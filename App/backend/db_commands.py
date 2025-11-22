@@ -9,7 +9,7 @@ import subprocess
 import sys
 from database import engine, Base, DATABASE_URL
 from models import db_models
-from sqlalchemy import text, inspect
+from sqlalchemy import text, inspect, MetaData
 
 
 def upgrade():
@@ -58,8 +58,23 @@ def reset():
         return
 
     print("Dropping all tables...")
-    Base.metadata.drop_all(bind=engine)
-    print("✓ All tables dropped")
+    
+    try:
+        # Try aggressive schema drop for PostgreSQL (handles all dependencies/leftovers)
+        with engine.connect() as conn:
+            conn.execute(text("DROP SCHEMA public CASCADE;"))
+            conn.execute(text("CREATE SCHEMA public;"))
+            conn.execute(text("GRANT ALL ON SCHEMA public TO postgres;"))
+            conn.execute(text("GRANT ALL ON SCHEMA public TO public;"))
+            conn.commit()
+        print("✓ Schema reset successfully (PostgreSQL optimized)")
+    except Exception as e:
+        print(f"Note: Schema reset failed ({e}), falling back to table drop...")
+        # Reflect all tables to ensure we drop everything, including orphan tables
+        meta = MetaData()
+        meta.reflect(bind=engine)
+        meta.drop_all(bind=engine)
+        print("✓ All tables dropped")
 
     print("\nCreating all tables...")
     Base.metadata.create_all(bind=engine)
@@ -97,7 +112,8 @@ def test_connection():
     try:
         with engine.connect() as conn:
             result = conn.execute(text("SELECT version()"))
-            version = result.fetchone()[0]
+            row = result.fetchone()
+            version = row[0] if row else "Unknown"
             print(f"✓ Connected to PostgreSQL")
             print(f"  Database: {engine.url.database}")
             print(f"  Host: {engine.url.host}")

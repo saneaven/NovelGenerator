@@ -1,10 +1,6 @@
 import type { StoryObjectCategory } from '../../types/storyObject';
 
-import chatPrefillTemplate from './prompts/prefills/ChatPrefill.md?raw';
-import storyObjectEditPrefillTemplate from './prompts/prefills/StoryObjectEditPrefill.md?raw';
-import chapterEditPrefillTemplate from './prompts/prefills/ChapterEditPrefill.md?raw';
-import translationPrefillTemplate from './prompts/prefills/TranslationPrefill.md?raw';
-import { TemplateRenderer, type RenderContext } from '../utils/TemplateRenderer';
+import { renderTemplate } from '../../templateEngine/engine';
 import { useSettingsStore, type AIFunctionType } from '../../store/settingsStore';
 
 /**
@@ -76,13 +72,37 @@ export interface TranslationPrefillContext extends BasePrefillContext {
  */
 export class PrefillManager {
   /**
+   * Load a prefill template from store
+   */
+  private static async getTemplate(
+    functionType: 'chat' | 'translation' | 'storyEdit' | 'chapterGen',
+    category: 'prefill'
+  ): Promise<string> {
+    const store = useSettingsStore.getState();
+
+    // Try to get from cache first
+    const cached = store.getPromptFromCache(functionType, category);
+    if (cached) {
+      return cached;
+    }
+
+    // Load from backend (will cache automatically)
+    try {
+      return await store.loadPrompt(functionType, category);
+    } catch (error) {
+      console.error('Failed to load prefill:', error);
+      throw new Error(`No prefill template found for ${functionType}/${category}`);
+    }
+  }
+
+  /**
    * Generate prefill based on type and context - Overloaded for type safety
    */
-  static generatePrefill(type: typeof PrefillType.CHAT_ASSISTANT, context?: ChatAssistantPrefillContext): string;
-  static generatePrefill(type: typeof PrefillType.STORY_OBJECT_EDIT_ASSISTANT, context: StoryObjectEditPrefillContext): string;
-  static generatePrefill(type: typeof PrefillType.CHAPTER_EDIT_ASSISTANT, context: ChapterEditPrefillContext): string;
-  static generatePrefill(type: typeof PrefillType.TRANSLATION_ASSISTANT, context: TranslationPrefillContext): string;
-  static generatePrefill(type: PrefillType, context?: unknown): string {
+  static generatePrefill(type: typeof PrefillType.CHAT_ASSISTANT, context?: ChatAssistantPrefillContext): Promise<string>;
+  static generatePrefill(type: typeof PrefillType.STORY_OBJECT_EDIT_ASSISTANT, context: StoryObjectEditPrefillContext): Promise<string>;
+  static generatePrefill(type: typeof PrefillType.CHAPTER_EDIT_ASSISTANT, context: ChapterEditPrefillContext): Promise<string>;
+  static generatePrefill(type: typeof PrefillType.TRANSLATION_ASSISTANT, context: TranslationPrefillContext): Promise<string>;
+  static async generatePrefill(type: PrefillType, context?: unknown): Promise<string> {
     switch (type) {
       case PrefillType.CHAT_ASSISTANT:
         return this.generateChatAssistantPrefill(context as ChatAssistantPrefillContext | undefined);
@@ -169,7 +189,7 @@ export class PrefillManager {
     }
   }
 
-  private static generateChatAssistantPrefill(context: ChatAssistantPrefillContext = {}): string {
+  private static async generateChatAssistantPrefill(context: ChatAssistantPrefillContext = {}): Promise<string> {
     const language = this.resolveLanguage(context.outputLanguage);
     const mode = context.mode || 'workspace';
     const hasFunctions = context.hasFunctions ? 'yes' : 'no';
@@ -177,24 +197,26 @@ export class PrefillManager {
     const functionType = this.mapPrefillTypeToFunctionType(PrefillType.CHAT_ASSISTANT);
     const advancedSettings = settings.functionConfigs[functionType].advanced;
 
-    const renderContext: RenderContext = {
-      variables: {
+    const template = await this.getTemplate('chat', 'prefill');
+
+    const data = {
+      var: {
         language,
         mode,
-        hasFunctions,
+        enableThinking: advancedSettings.thinkingMode !== 'off',
+        enablePrefill: advancedSettings.enablePrefill,
       },
-      conditionals: {
-        thinking: advancedSettings.enableThinking,
-        prefill: advancedSettings.enablePrefill,
-      },
+      context: {
+        hasFunctions: context.hasFunctions || false,
+        today: new Date().toISOString().split('T')[0],
+        recentMessages: []
+      }
     };
 
-    return TemplateRenderer.render(chatPrefillTemplate, renderContext, {
-      templateId: this.templateId('chat'),
-    });
+    return renderTemplate(template, data);
   }
 
-  private static generateStoryObjectEditPrefill(context: StoryObjectEditPrefillContext): string {
+  private static async generateStoryObjectEditPrefill(context: StoryObjectEditPrefillContext): Promise<string> {
     const { category, editScope, outputLanguage } = context;
 
     const categoryName = this.getCategoryDisplayName(category);
@@ -204,24 +226,28 @@ export class PrefillManager {
     const functionType = this.mapPrefillTypeToFunctionType(PrefillType.STORY_OBJECT_EDIT_ASSISTANT);
     const advancedSettings = settings.functionConfigs[functionType].advanced;
 
-    const renderContext: RenderContext = {
-      variables: {
+    const template = await this.getTemplate('storyEdit', 'prefill');
+
+    const data = {
+      var: {
         categoryName,
         language,
         editScope: scope,
+        category,
+        enableThinking: advancedSettings.thinkingMode !== 'off',
+        enablePrefill: advancedSettings.enablePrefill,
       },
-      conditionals: {
-        thinking: advancedSettings.enableThinking,
-        prefill: advancedSettings.enablePrefill,
-      },
+      context: {
+        currentData: {}, // Placeholder, will be filled by actual data if available
+        userRequest: '',
+        relatedContext: {}
+      }
     };
 
-    return TemplateRenderer.render(storyObjectEditPrefillTemplate, renderContext, {
-      templateId: this.templateId('storyEdit'),
-    });
+    return renderTemplate(template, data);
   }
 
-  private static generateChapterEditPrefill(context: ChapterEditPrefillContext): string {
+  private static async generateChapterEditPrefill(context: ChapterEditPrefillContext): Promise<string> {
     const { chapterName, outputLanguage } = context;
 
     const language = this.resolveLanguage(outputLanguage);
@@ -229,23 +255,27 @@ export class PrefillManager {
     const functionType = this.mapPrefillTypeToFunctionType(PrefillType.CHAPTER_EDIT_ASSISTANT);
     const advancedSettings = settings.functionConfigs[functionType].advanced;
 
-    const renderContext: RenderContext = {
-      variables: {
+    const template = await this.getTemplate('chapterGen', 'prefill');
+
+    const data = {
+      var: {
         chapterName,
         language,
+        enableThinking: advancedSettings.thinkingMode !== 'off',
+        enablePrefill: advancedSettings.enablePrefill,
       },
-      conditionals: {
-        thinking: advancedSettings.enableThinking,
-        prefill: advancedSettings.enablePrefill,
-      },
+      context: {
+        content: '',
+        userRequest: '',
+        previousChapterSummary: '',
+        worldInfo: ''
+      }
     };
 
-    return TemplateRenderer.render(chapterEditPrefillTemplate, renderContext, {
-      templateId: this.templateId('chapterGen'),
-    });
+    return renderTemplate(template, data);
   }
 
-  private static generateTranslationPrefill(context: TranslationPrefillContext): string {
+  private static async generateTranslationPrefill(context: TranslationPrefillContext): Promise<string> {
     const { sourceLanguage, targetLanguage, dataType } = context;
 
     const dataTypeName = this.getDataTypeDisplayName(dataType);
@@ -253,21 +283,22 @@ export class PrefillManager {
     const functionType = this.mapPrefillTypeToFunctionType(PrefillType.TRANSLATION_ASSISTANT);
     const advancedSettings = settings.functionConfigs[functionType].advanced;
 
-    const renderContext: RenderContext = {
-      variables: {
+    const template = await this.getTemplate('translation', 'prefill');
+
+    const data = {
+      var: {
         sourceLanguage,
         targetLanguage,
         dataTypeName,
+        enableThinking: advancedSettings.thinkingMode !== 'off',
+        enablePrefill: advancedSettings.enablePrefill,
       },
-      conditionals: {
-        thinking: advancedSettings.enableThinking,
-        prefill: advancedSettings.enablePrefill,
-      },
+      context: {
+        content: ''
+      }
     };
 
-    return TemplateRenderer.render(translationPrefillTemplate, renderContext, {
-      templateId: this.templateId('translation'),
-    });
+    return renderTemplate(template, data);
   }
 
   private static resolveLanguage(language?: string): string {
@@ -275,9 +306,7 @@ export class PrefillManager {
     return trimmed.length > 0 ? trimmed : 'the language used by the user';
   }
 
-  private static templateId(functionType: 'chat' | 'storyEdit' | 'chapterGen' | 'translation'): string {
-    return `${functionType}/prefill/assistant`;
-  }
+
 
   /**
    * Get display name for story object category

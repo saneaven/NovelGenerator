@@ -1,0 +1,26 @@
+# Translation Request
+
+Translate the following **{{ variable.objectCount }}** story objects from **{{ variable.sourceLanguage }}** to **{{ variable.targetLanguage }}**.
+
+{% if variable.userInstructions %}
+## Additional Instructions
+
+{{ variable.userInstructions }}
+{% endif %}
+
+## Objects to Translate ({{ variable.sourceLanguage }})
+
+{{ variable.objectsArray }}
+
+## Critical Instructions
+
+**You MUST translate ALL {{ variable.objectCount }} objects** - do not skip any objects. Return the complete batch using the `translate_batch_story_objects` function with all translated objects in a single response.
+
+Requirements:
+- Maintain consistency in terminology, character names, and style across all objects
+- Include the objectType and objectId for each object (matching the source)
+- Include the appropriate translated fields based on object type:
+  - For basic_info objects: title, logline, genre
+  - For chapter_content objects: content, wordCount
+  - For all other object types: name, description
+- The translations array must contain exactly {{ variable.objectCount }} objects

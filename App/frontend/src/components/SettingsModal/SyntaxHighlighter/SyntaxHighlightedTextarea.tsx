@@ -1,6 +1,9 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
-import SyntaxHighlighter from './SyntaxHighlighter';
-import './SyntaxHighlightedTextarea.css';
+import React, { useRef } from 'react';
+import CodeMirror from '@uiw/react-codemirror';
+import { EditorView, keymap } from '@codemirror/view';
+import { EditorSelection } from '@codemirror/state';
+import { templateLanguage } from './templateLanguage';
+import { templateTheme } from './templateTheme';
 
 interface SyntaxHighlightedTextareaProps
 {
@@ -12,7 +15,8 @@ interface SyntaxHighlightedTextareaProps
 }
 
 /**
- * Textarea with syntax highlighting overlay
+ * CodeMirror-based textarea with syntax highlighting
+ * Replaces the old overlay-based implementation
  */
 const SyntaxHighlightedTextarea: React.FC<SyntaxHighlightedTextareaProps> = ({
     value,
@@ -22,90 +26,77 @@ const SyntaxHighlightedTextarea: React.FC<SyntaxHighlightedTextareaProps> = ({
     maxHeight = 600
 }) =>
 {
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const highlighterRef = useRef<HTMLDivElement>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
+    const editorRef = useRef<any>(null);
 
-    // Sync scroll between textarea and highlighter
-    const handleScroll = useCallback(() =>
-    {
-        if (textareaRef.current && highlighterRef.current)
+    // Custom extension for Tab handling (insert 2 spaces)
+    const tabExtension = keymap.of([
         {
-            highlighterRef.current.scrollTop = textareaRef.current.scrollTop;
-            highlighterRef.current.scrollLeft = textareaRef.current.scrollLeft;
-        }
-    }, []);
-
-    // Handle textarea change
-    const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) =>
-    {
-        onChange(e.target.value);
-    }, [onChange]);
-
-    // Handle Tab key for indentation
-    const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) =>
-    {
-        if (e.key === 'Tab')
-        {
-            e.preventDefault();
-            const textarea = textareaRef.current;
-            if (!textarea) return;
-
-            const start = textarea.selectionStart;
-            const end = textarea.selectionEnd;
-
-            // Insert tab character
-            const newValue = value.substring(0, start) + '  ' + value.substring(end);
-            onChange(newValue);
-
-            // Restore cursor position
-            setTimeout(() =>
+            key: 'Tab',
+            run: (view) =>
             {
-                textarea.selectionStart = textarea.selectionEnd = start + 2;
-            }, 0);
-        }
-    }, [value, onChange]);
+                const { state } = view;
+                const changes = state.changeByRange((range) =>
+                {
+                    return {
+                        changes: { from: range.from, to: range.to, insert: '  ' },
+                        range: EditorSelection.range(range.from + 2, range.from + 2),
+                    };
+                });
+                view.dispatch(changes);
+                return true;
+            },
+        },
+        {
+            key: 'Shift-Tab',
+            run: () => true, // Prevent Shift+Tab from changing focus
+        },
+    ]);
 
-    // Auto-resize textarea based on content
-    useEffect(() =>
-    {
-        const textarea = textareaRef.current;
-        if (!textarea) return;
-
-        // Reset height to recalculate
-        textarea.style.height = 'auto';
-
-        // Set new height based on content
-        const scrollHeight = textarea.scrollHeight;
-        const newHeight = Math.min(Math.max(scrollHeight, minHeight), maxHeight);
-        textarea.style.height = `${newHeight}px`;
-    }, [value, minHeight, maxHeight]);
+    // Height extension - dynamic height based on content
+    const heightExtension = EditorView.theme({
+        '&': {
+            minHeight: `${minHeight}px`,
+            maxHeight: `${maxHeight}px`,
+        },
+        '.cm-scroller': {
+            overflow: 'auto',
+        },
+    });
 
     return (
-        <div className="syntax-highlighted-textarea-container" ref={containerRef}>
-            {/* Syntax highlighter overlay */}
-            <div
-                className="syntax-highlighter-wrapper"
-                ref={highlighterRef}
-            >
-                <SyntaxHighlighter code={value} />
-            </div>
-
-            {/* Textarea */}
-            <textarea
-                ref={textareaRef}
-                className="syntax-textarea"
-                value={value}
-                onChange={handleChange}
-                onScroll={handleScroll}
-                onKeyDown={handleKeyDown}
-                placeholder={placeholder}
-                spellCheck={false}
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-            />
-        </div>
+        <CodeMirror
+            ref={editorRef}
+            value={value}
+            onChange={(value) => onChange(value)}
+            placeholder={placeholder}
+            extensions={[
+                templateLanguage,
+                templateTheme,
+                tabExtension,
+                heightExtension,
+                EditorView.lineWrapping,
+            ]}
+            basicSetup={{
+                lineNumbers: false,
+                highlightActiveLineGutter: false,
+                highlightActiveLine: true,
+                foldGutter: false,
+                dropCursor: true,
+                allowMultipleSelections: true,
+                indentOnInput: true,
+                bracketMatching: true,
+                closeBrackets: false,
+                autocompletion: false,
+                rectangularSelection: true,
+                crosshairCursor: true,
+                highlightSelectionMatches: false,
+                closeBracketsKeymap: false,
+                searchKeymap: false,
+                foldKeymap: false,
+                completionKeymap: false,
+                lintKeymap: false,
+            }}
+        />
     );
 };
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { promptService, type VersionHistoryItem } from '../../api/promptService';
-import type { FunctionType, PromptCategory } from '../../prompts/defaults';
+import type { FunctionType, PromptCategory } from '../../types/prompts';
 import { useErrorStore } from '../../store/errorStore';
 
 interface VersionHistoryModalProps {

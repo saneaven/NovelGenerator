@@ -30,7 +30,7 @@ from models.db_models import (
 )
 from models.translation_models import ObjectVersion, ObjectTranslation, ActiveVersion
 
-
+ 
 class TranslationDataMigrator:
     """Migrates translation data from old system to new three-layer architecture"""
 

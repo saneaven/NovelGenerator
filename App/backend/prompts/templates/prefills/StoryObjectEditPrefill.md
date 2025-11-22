@@ -1,0 +1,1 @@
+I understand you want to edit {{ variable.categoryName }} ({{ variable.editScope }}). I'll provide the updated JSON in {{ variable.language }}.

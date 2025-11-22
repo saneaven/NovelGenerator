@@ -2,8 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { settingsService } from '../api/settingsService';
 import { promptService } from '../api/promptService';
-import type { FunctionType, PromptCategory } from '../prompts/defaults';
-import { getDefaultPrompt, getPromptKey } from '../prompts/defaults';
+import type { FunctionType, PromptCategory } from '../types/prompts';
+import { getPromptKey } from '../types/prompts';
 
 // Types
 export type ProviderType = 'copilot' | 'openrouter' | 'custom';
@@ -467,38 +467,8 @@ export const useSettingsStore = create<SettingsStore>()(
 
                     return promptData.content;
                 } catch (error) {
-                    console.error('Failed to load prompt from backend, using default:', error);
-
-                    // Fallback to bundled default
-                    const defaultContent = getDefaultPrompt(functionType, category, name);
-                    if (defaultContent) {
-                        // Check if any versions exist
-                        try {
-                            const versions = await promptService.getVersionHistory(functionType, category, name);
-
-                            // If no versions exist, auto-save the default as version 1
-                            if (versions.length === 0) {
-                                console.log('No versions found, auto-saving default preset as version 1');
-                                await promptService.savePrompt(
-                                    functionType,
-                                    category,
-                                    defaultContent,
-                                    'Initial default preset',
-                                    name
-                                );
-                            }
-                        } catch (saveError) {
-                            console.error('Failed to auto-save default preset:', saveError);
-                            // Continue even if auto-save fails - user can still use the default
-                        }
-
-                        const cache = get().promptCache;
-                        cache.set(key, defaultContent);
-                        set({ promptCache: new Map(cache) });
-                        return defaultContent;
-                    }
-
-                    throw new Error(`No prompt found for ${key}`);
+                    console.error(`Failed to load prompt from backend: ${key}`, error);
+                    throw error;
                 }
             },
 

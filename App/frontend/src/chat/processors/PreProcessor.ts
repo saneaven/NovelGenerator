@@ -49,7 +49,7 @@ export class DefaultPreProcessor implements PreProcessor {
 
       if (messages[i].role === 'user')
       {
-        processed = this.processUserMessage(context, i, messages);
+        processed = await this.processUserMessage(context, i, messages, conversationLanguage);
       }
       else
       {
@@ -67,7 +67,7 @@ export class DefaultPreProcessor implements PreProcessor {
 
     // Add prefill at the end if enabled
     if (context.enablePrefill) {
-      const prefill = this.generatePrefill(context, conversationLanguage, functions);
+      const prefill = await this.generatePrefill(context, conversationLanguage, functions);
       if (prefill && prefill.trim().length > 0) {
         conversationBlocks.push({
           role: 'assistant',
@@ -127,6 +127,7 @@ export class DefaultPreProcessor implements PreProcessor {
               functions: context.systemInsertConfig.enabled && context.systemInsertConfig.includeProjectInfo ? functions : undefined,
               enablePrefill: context.enablePrefill,
               enableThinking: context.thinkingMode === 'custom',
+              enableCustomThinking: context.thinkingMode === 'custom',
             };
         return await SystemPromptManager.generatePromptBundle(PromptType.CHAT_SYSTEM, chatPromptContext);
 
@@ -166,12 +167,13 @@ export class DefaultPreProcessor implements PreProcessor {
           functions: context.systemInsertConfig.enabled && context.systemInsertConfig.includeProjectInfo ? functions : undefined,
           enablePrefill: context.enablePrefill,
           enableThinking: context.thinkingMode === 'custom',
+          enableCustomThinking: context.thinkingMode === 'custom',
         };
         return await SystemPromptManager.generatePromptBundle(PromptType.CHAT_SYSTEM, fallbackContext);
     }
   }
 
-  private generatePrefill(context: ChatPipelineContext, conversationLanguage?: string, functions?: FunctionCallSchema[]): string {
+  private async generatePrefill(context: ChatPipelineContext, conversationLanguage?: string, functions?: FunctionCallSchema[]): Promise<string> {
     // For now, we only use CHAT_ASSISTANT prefill for normal chat mode
     // This can be extended to support other prefill types based on context
     const prefillContext: ChatAssistantPrefillContext = {
@@ -180,7 +182,7 @@ export class DefaultPreProcessor implements PreProcessor {
       hasFunctions: context.systemInsertConfig.enabled && context.systemInsertConfig.includeProjectInfo && !!functions && functions.length > 0
     };
 
-    return PrefillManager.generatePrefill(PrefillType.CHAT_ASSISTANT, prefillContext);
+    return await PrefillManager.generatePrefill(PrefillType.CHAT_ASSISTANT, prefillContext);
   }
 
   private processAssistantMessage(_context: ChatPipelineContext, messageIndex: number, allMessages: ChatMessage[]): ProcessedChatMessage {
@@ -199,7 +201,7 @@ export class DefaultPreProcessor implements PreProcessor {
 
     return processed;
   }
-  private processUserMessage(context: ChatPipelineContext, messageIndex: number, allMessages: ChatMessage[]): ProcessedChatMessage {
+  private async processUserMessage(context: ChatPipelineContext, messageIndex: number, allMessages: ChatMessage[], conversationLanguage?: string): Promise<ProcessedChatMessage> {
     const message = allMessages[messageIndex];
 
     // Ensure content is a string before processing
@@ -211,19 +213,20 @@ export class DefaultPreProcessor implements PreProcessor {
       originalContent: messageContent
     };
 
-    processed.content = this.addSystemInfo(processed.content || '', context, messageIndex, allMessages);
+    processed.content = await this.addSystemInfo(processed.content || '', context, messageIndex, allMessages, conversationLanguage);
 
     return processed;
   }
 
 
-  private addSystemInfo(processedContent: string, context: ChatPipelineContext, messageIndex: number, allMessages: ChatMessage[]): string {
+  private async addSystemInfo(processedContent: string, context: ChatPipelineContext, messageIndex: number, allMessages: ChatMessage[], conversationLanguage?: string): Promise<string> {
     // Pass message index and all messages to UserMessageTagManager to find nearest assistant function calls
-    return UserMessageTagManager.buildSystemTag(
+    return await UserMessageTagManager.buildSystemTag(
       processedContent,
       context,
       messageIndex,
-      allMessages
+      allMessages,
+      conversationLanguage
     );
   }
 

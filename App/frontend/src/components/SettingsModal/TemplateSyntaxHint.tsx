@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { TemplatePlaceholderInfo, TemplateSyntaxInfo } from '../../api/promptService';
 import type { PromptNode } from './promptTree';
-import { usePromptSyntaxMetadata } from './usePromptSyntaxMetadata';
+import { PROMPT_SCHEMAS } from '../../templateEngine/schema';
+import type { PromptType } from '../../templateEngine/schema';
 
 import './TemplateSyntaxHint.css';
 
@@ -10,68 +10,36 @@ interface TemplateSyntaxHintProps {
     selectedNode: PromptNode | null;
 }
 
-type PlaceholderGroupKey = 'variables' | 'contexts' | 'conditionals';
+type PlaceholderGroupKey = 'variable' | 'context' | 'state';
 
 const GROUP_LABELS: Record<PlaceholderGroupKey, string> = {
-    variables: 'Variables',
-    contexts: 'Contexts',
-    conditionals: 'Conditionals',
+    variable: 'Variables (Settings)',
+    context: 'Context Data',
+    state: 'State (Logic)',
 };
 
 function buildTokenPreview(group: PlaceholderGroupKey, name: string): string {
-    if (group === 'variables') return `{{var::${name}}}`;
-    if (group === 'contexts') return `{{context::${name}}}`;
-    return `{{#if::${name}}}`;
+    return `{{ ${group}.${name} }}`;
 }
 
-function buildCopyValue(group: PlaceholderGroupKey, name: string): string {
-    if (group === 'conditionals') {
-        return `{{#if::${name}}}`;
-    }
-    return buildTokenPreview(group, name);
+function buildTooltip(desc: string, example: any): string {
+    return `${desc}\nExample: ${JSON.stringify(example)}`;
 }
 
-function buildTooltip(entry: TemplatePlaceholderInfo): string | undefined {
-    const parts: string[] = [];
-    if (entry.description) {
-        parts.push(entry.description.trim());
+function getSchemaKey(functionType: string): PromptType | null {
+    switch (functionType) {
+        case 'chat': return 'chat';
+        case 'translation': return 'translation';
+        case 'storyEdit': return 'storyObjectEdit';
+        case 'chapterGen': return 'chapterEdit';
+        default: return null;
     }
-    if (entry.source) {
-        parts.push(`Source: ${entry.source}`);
-    }
-    if (parts.length === 0) {
-        return undefined;
-    }
-    return parts.join('\n');
-}
-
-function findMatchingTemplate(
-    metadata: TemplateSyntaxInfo[] | undefined,
-    node: PromptNode | null
-): TemplateSyntaxInfo | null {
-    if (!metadata || !node || node.type !== 'prompt') {
-        return null;
-    }
-
-    return (
-        metadata.find((entry) => {
-            if (entry.function_type !== node.functionType) return false;
-            if (entry.category !== node.category) return false;
-
-            const variant = entry.variant ?? null;
-            const nodeName = node.name ?? null;
-            return variant === nodeName;
-        }) ??
-        metadata.find((entry) => entry.function_type === node.functionType && entry.category === node.category) ??
-        null
-    );
 }
 
 const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-    const { data, loading, error, refresh } = usePromptSyntaxMetadata();
 
     useEffect(() => {
         setIsOpen(false);
@@ -110,10 +78,11 @@ const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode })
         return () => window.clearTimeout(timeout);
     }, [copyFeedback]);
 
-    const templateInfo = useMemo(
-        () => findMatchingTemplate(data?.templates, selectedNode),
-        [data, selectedNode]
-    );
+    const schema = useMemo(() => {
+        if (!selectedNode || selectedNode.type !== 'prompt') return null;
+        const key = getSchemaKey(selectedNode.functionType || '');
+        return key ? PROMPT_SCHEMAS[key] : null;
+    }, [selectedNode]);
 
     const hasPromptSelection = Boolean(selectedNode && selectedNode.type === 'prompt');
 
@@ -136,42 +105,37 @@ const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode })
     };
 
     const renderGroup = (group: PlaceholderGroupKey) => {
-        const entries = templateInfo?.placeholders[group] ?? [];
-        if (entries.length === 0) {
+        if (!schema) return null;
+        const entries = (schema as any)[group];
+        
+        if (!entries) return null;
+
+        const keys = Object.keys(entries);
+        
+        if (keys.length === 0) {
             return null;
         }
-
-        const requiredCount = entries.filter((entry) => entry.required).length;
-        const optionalCount = entries.length - requiredCount;
 
         return (
             <section key={group} className="syntax-section">
                 <header className="syntax-section-header">
                     <span className="syntax-section-title">{GROUP_LABELS[group]}</span>
-                    <span className="syntax-section-meta">
-                        {requiredCount} required / {optionalCount} optional
-                    </span>
                 </header>
                 <div className="syntax-token-grid">
-                    {entries.map((entry) => {
-                        const preview = buildTokenPreview(group, entry.name);
-                        const copyValue = buildCopyValue(group, entry.name);
-                        const tooltip = buildTooltip(entry);
-                        const badge = entry.required ? 'Required' : 'Optional';
+                    {keys.map((key) => {
+                        const entry = entries[key];
+                        const preview = buildTokenPreview(group, key);
+                        const tooltip = buildTooltip(entry.desc, entry.example);
 
                         return (
                             <button
-                                key={entry.name}
+                                key={key}
                                 type="button"
-                                className={`syntax-token-chip ${entry.required ? 'required' : 'optional'}`}
-                                onClick={() => handleCopy(copyValue)}
+                                className="syntax-token-chip optional"
+                                onClick={() => handleCopy(preview)}
                                 title={tooltip}
                             >
                                 <span className="syntax-token-text">{preview}</span>
-                                <span className="syntax-token-badge">{badge}</span>
-                                {entry.supports_negation ? (
-                                    <span className="syntax-token-negation">! allowed</span>
-                                ) : null}
                             </button>
                         );
                     })}
@@ -182,28 +146,17 @@ const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode })
 
     let content: React.ReactNode = null;
 
-    if (loading && !data) {
-        content = <div className="syntax-empty">Loading double bracket syntax...</div>;
-    } else if (error) {
-        content = (
-            <div className="syntax-empty syntax-error">
-                <p>Failed to load syntax metadata.</p>
-                <button type="button" onClick={() => void refresh()} className="syntax-retry-button">
-                    Retry
-                </button>
-            </div>
-        );
-    } else if (!templateInfo) {
-        content = <div className="syntax-empty">This prompt does not use template tokens.</div>;
+    if (!schema) {
+        content = <div className="syntax-empty">No variables available for this prompt type.</div>;
     } else {
-        const groups = (['variables', 'contexts', 'conditionals'] as PlaceholderGroupKey[])
+        const groups = (['variable', 'context', 'state'] as PlaceholderGroupKey[])
             .map((group) => renderGroup(group))
             .filter(Boolean);
 
         content = groups.length > 0 ? (
             groups
         ) : (
-            <div className="syntax-empty">This prompt does not use template tokens.</div>
+            <div className="syntax-empty">No variables available.</div>
         );
     }
 
@@ -230,9 +183,9 @@ const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode })
             </button>
 
             {isOpen && (
-                <div className="syntax-popover" role="dialog" aria-label="Double bracket syntax tokens">
+                <div className="syntax-popover" role="dialog" aria-label="LiquidJS syntax tokens">
                     <header className="syntax-popover-header">
-                        <h4>Double Bracket Syntax</h4>
+                        <h4>LiquidJS Syntax</h4>
                         <button
                             type="button"
                             className="syntax-popover-close"

@@ -11,28 +11,11 @@ from ..schemas.prompts import (
     PromptVersionCreate,
     PromptVersionResponse,
     VersionHistoryItem,
-    PromptValidationRequest,
-    ValidationResult,
-    PromptRestoreRequest,
-    PromptSyntaxMetadata
+    PromptRestoreRequest
 )
 from ..services.prompt_service import prompt_service
-from ..services.template_validator import validator
-from ..services import template_registry
 
 router = APIRouter(prefix="/api/v1/prompts", tags=["prompts"])
-
-
-@router.get(
-    "/syntax/metadata",
-    response_model=PromptSyntaxMetadata
-)
-async def get_prompt_syntax_metadata(
-    current_user: User = Depends(get_current_user)
-) -> PromptSyntaxMetadata:
-    """Return template syntax metadata describing allowed placeholders."""
-    data = template_registry.build_syntax_metadata()
-    return PromptSyntaxMetadata(**data)
 
 
 # Routes without prompt_name (must come before routes with {prompt_name} to avoid conflicts)
@@ -78,14 +61,6 @@ async def save_prompt_without_name(
     db: Session = Depends(get_db)
 ):
     """Save new version of a prompt without a name"""
-
-    # Validate the template
-    validation = validator.validate(data.content)
-    if not validation.valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"message": "Invalid template syntax", "validation": validation.dict()}
-        )
 
     result = prompt_service.save_new_version(
         db=db,
@@ -200,14 +175,6 @@ async def save_prompt_with_name(
 ):
     """Save new version of a prompt with a name"""
 
-    # Validate the template
-    validation = validator.validate(data.content)
-    if not validation.valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"message": "Invalid template syntax", "validation": validation.dict()}
-        )
-
     result = prompt_service.save_new_version(
         db=db,
         user_id=current_user.id,
@@ -275,19 +242,3 @@ async def restore_version_with_name(
         )
 
     return {"success": True, "restored_version": data.version_number}
-
-
-# Validation endpoint (doesn't use function_type/category pattern)
-
-@router.post(
-    "/validate",
-    response_model=ValidationResult
-)
-async def validate_template(
-    data: PromptValidationRequest,
-    current_user: User = Depends(get_current_user)
-):
-    """Validate template syntax without saving"""
-
-    validation = validator.validate(data.content)
-    return validation

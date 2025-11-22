@@ -11,24 +11,22 @@ Format: {function_type: {category: {name?: content}}}
 
 from pathlib import Path
 
-# Get the project root directory
-# Backend is at: NovelGenerator/App/backend/
-# Frontend prompts are at: NovelGenerator/App/frontend/src/chat/managers/prompts/
-BACKEND_DIR = Path(__file__).parent.parent
-FRONTEND_PROMPTS_DIR = BACKEND_DIR.parent / 'frontend' / 'src' / 'chat' / 'managers' / 'prompts'
+# Get the current directory (App/backend/prompts/)
+CURRENT_DIR = Path(__file__).parent
+TEMPLATES_DIR = CURRENT_DIR / 'templates'
 
 
 def _load_prompt_file(relative_path: str) -> str:
     """
-    Load a prompt file from the frontend prompts directory.
+    Load a prompt file from the templates directory.
 
     Args:
-        relative_path: Path relative to the frontend prompts directory
+        relative_path: Path relative to the templates directory
 
     Returns:
         str: Content of the prompt file
     """
-    file_path = FRONTEND_PROMPTS_DIR / relative_path
+    file_path = TEMPLATES_DIR / relative_path
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             return f.read()

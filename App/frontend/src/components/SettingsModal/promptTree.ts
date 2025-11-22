@@ -3,7 +3,7 @@
  * Defines the hierarchical organization of all prompts in the system
  */
 
-import type { FunctionType, PromptCategory } from '../../prompts/defaults';
+import type { FunctionType, PromptCategory } from '../../types/prompts';
 
 export interface PromptNode {
   id: string;

@@ -1,0 +1,1 @@
+I'll translate {{ variable.objectCount }} object(s) from {{ variable.sourceLanguage }} to {{ variable.targetLanguage }}.

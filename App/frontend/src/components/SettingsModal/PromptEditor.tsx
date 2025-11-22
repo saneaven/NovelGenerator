@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import SyntaxHighlightedTextarea from './SyntaxHighlighter/SyntaxHighlightedTextarea';
 import { promptService, type ValidationResult } from '../../api/promptService';
-import type { FunctionType, PromptCategory } from '../../prompts/defaults';
+import { validateTemplate } from '../../templateEngine/engine';
+import type { FunctionType, PromptCategory } from '../../types/prompts';
 import { useSettingsStore } from '../../store/settingsStore';
 import ValidationWarnings from './ValidationWarnings';
 import VersionHistoryModal from './VersionHistoryModal';
@@ -69,15 +70,21 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
         return () => clearTimeout(timer);
     }, [content]);
 
-    const validateContent = async (text: string) =>
+    const validateContent = (text: string) =>
     {
-        try
-        {
-            const result = await promptService.validateTemplate(text);
-            setValidation(result);
-        } catch (error)
-        {
-            console.error('Validation failed:', error);
+        const result = validateTemplate(text);
+        
+        if (result.isValid) {
+            setValidation({ valid: true, errors: [], warnings: [] });
+        } else {
+            setValidation({
+                valid: false,
+                errors: [{
+                    message: result.error || 'Unknown syntax error',
+                    severity: 'error'
+                }],
+                warnings: []
+            });
         }
     };
 
@@ -133,6 +140,7 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
         return (
             <div className="prompt-editor loading">
                 <label>{label}</label>
+                {description && <p className="prompt-description">{description}</p>}
                 <div className="loading-indicator">Loading prompt...</div>
             </div>
         );
@@ -140,6 +148,7 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
 
     return (
         <div className="prompt-editor">
+            {description && <p className="prompt-description">{description}</p>}
             {/* Syntax highlighted textarea */}
             <SyntaxHighlightedTextarea
                 value={content}

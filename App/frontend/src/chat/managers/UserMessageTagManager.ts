@@ -1,10 +1,10 @@
 import type { ChatMessage, FunctionCallResultSummary } from '../../llm_request/types';
 import type { ChatPipelineContext } from '../types';
 import { findLastUserMessageIdx } from '../processors/ChatManager';
-import { TemplateRenderer, type RenderContext } from '../utils/TemplateRenderer';
-
-import lastUserMessageTemplate from './prompts/userMessageSystemPrompts/LastUserMessageTag.md?raw';
-import nonLastUserMessageTemplate from './prompts/userMessageSystemPrompts/NonLastUserMessageTag.md?raw';
+import { renderTemplate } from '../../templateEngine/engine';
+import { useSettingsStore } from '../../store/settingsStore';
+// import type { PromptCategory, FunctionType } from '../../types/prompts'; // Not strictly needed if we use string literals, but good for reference.
+// Removing unused imports to fix lint errors.
 
 /**
  * Enum defining different types of user message tags
@@ -34,6 +34,9 @@ export interface LastUserMessageTagContext {
 
   // Custom additions
   customSections?: CustomSection[];
+
+  // Output language
+  outputLanguage?: string;
 }
 
 /**
@@ -42,6 +45,9 @@ export interface LastUserMessageTagContext {
 export interface NonLastUserMessageTagContext {
   // Only function call results
   functionCallResults?: FunctionCallResultSummary[];
+
+  // Output language
+  outputLanguage?: string;
 }
 
 /**
@@ -71,14 +77,14 @@ export class UserMessageTagManager {
   /**
    * Generate user message tag based on type and context - Overloaded for type safety
    */
-  static generateTag(type: typeof UserTagType.LAST_USER_MESSAGE, context: LastUserMessageTagContext): string;
-  static generateTag(type: typeof UserTagType.NON_LAST_USER_MESSAGE, context: NonLastUserMessageTagContext): string;
-  static generateTag(type: UserTagType, context: unknown): string {
+  static async generateTag(type: typeof UserTagType.LAST_USER_MESSAGE, context: LastUserMessageTagContext): Promise<string>;
+  static async generateTag(type: typeof UserTagType.NON_LAST_USER_MESSAGE, context: NonLastUserMessageTagContext): Promise<string>;
+  static async generateTag(type: UserTagType, context: unknown): Promise<string> {
     switch (type) {
       case UserTagType.LAST_USER_MESSAGE:
-        return this.generateLastUserMessageTag(context as LastUserMessageTagContext);
+        return await this.generateLastUserMessageTag(context as LastUserMessageTagContext);
       case UserTagType.NON_LAST_USER_MESSAGE:
-        return this.generateNonLastUserMessageTag(context as NonLastUserMessageTagContext);
+        return await this.generateNonLastUserMessageTag(context as NonLastUserMessageTagContext);
       default:
         throw new Error(`Unknown user tag type: ${type}`);
     }
@@ -88,12 +94,13 @@ export class UserMessageTagManager {
    * Main entry point - replaces SystemTagManager.buildSystemTag
    * Determines if this is the last user message and generates appropriate tag
    */
-  static buildSystemTag(
+  static async buildSystemTag(
     userMessageContent: string,
     context: ChatPipelineContext,
     messageIndex: number,
-    allMessages: ChatMessage[]
-  ): string {
+    allMessages: ChatMessage[],
+    outputLanguage?: string
+  ): Promise<string> {
     const functionCallResults = this.extractLastFunctionCallResults(messageIndex, allMessages);
     const isLastUserMessage = findLastUserMessageIdx(allMessages) === messageIndex;
 
@@ -105,17 +112,19 @@ export class UserMessageTagManager {
         novelData: context.novelData,
         includeStoryContext: context.systemInsertConfig.includeStoryObjects,
         includeNovelContent: context.systemInsertConfig.includeNovelContent,
+        outputLanguage,
       };
 
-      const tag = this.generateTag(UserTagType.LAST_USER_MESSAGE, tagContext);
+      const tag = await this.generateTag(UserTagType.LAST_USER_MESSAGE, tagContext);
       return this.wrapUserMessageWithTag(userMessageContent, tag);
     } else {
       // Non-last user message - only function results
       const tagContext: NonLastUserMessageTagContext = {
         functionCallResults,
+        outputLanguage,
       };
 
-      const tag = this.generateTag(UserTagType.NON_LAST_USER_MESSAGE, tagContext);
+      const tag = await this.generateTag(UserTagType.NON_LAST_USER_MESSAGE, tagContext);
       return this.wrapUserMessageWithTag(userMessageContent, tag);
     }
   }
@@ -151,118 +160,65 @@ export class UserMessageTagManager {
   /**
    * Generate tag for last user message (includes everything)
    */
-  private static generateLastUserMessageTag(context: LastUserMessageTagContext): string {
-    const renderContext: RenderContext = {
-      context: {
-        functionResults: this.formatFunctionResults(context.functionCallResults),
-        storyContext: this.formatStoryContext(context),
-        novelContent: this.formatNovelContent(context),
-        customSections: this.formatCustomSections(context.customSections),
+  private static async generateLastUserMessageTag(context: LastUserMessageTagContext): Promise<string> {
+    const data = {
+      var: {
+        language: this.resolveLanguage(context.outputLanguage),
       },
+      context: {
+        functionResults: context.functionCallResults || [],
+        storyContext: context.includeStoryContext ? this.simplifyStoryObjects(context.storyObjects) : null,
+        novelContent: context.includeNovelContent ? this.buildNovelContentActs(context.storyObjects, context.novelData) : null,
+        customSections: context.customSections || [],
+      }
     };
+
+    const template = await useSettingsStore.getState().loadPrompt('chat', 'userMessageTag', 'lastMessage');
 
     return this.renderUserMessageTemplate(
       'chat/userMessageTag/lastMessage',
-      lastUserMessageTemplate,
-      renderContext
+      template,
+      data
     );
   }
 
   /**
    * Generate tag for non-last user message (only function results)
    */
-  private static generateNonLastUserMessageTag(context: NonLastUserMessageTagContext): string {
-    const renderContext: RenderContext = {
-      context: {
-        functionResults: this.formatFunctionResults(context.functionCallResults),
+  private static async generateNonLastUserMessageTag(context: NonLastUserMessageTagContext): Promise<string> {
+    const data = {
+      var: {
+        language: this.resolveLanguage(context.outputLanguage),
       },
+      context: {
+        functionResults: context.functionCallResults || [],
+      }
     };
+
+    const template = await useSettingsStore.getState().loadPrompt('chat', 'userMessageTag', 'nonLastMessage');
 
     return this.renderUserMessageTemplate(
       'chat/userMessageTag/nonLastMessage',
-      nonLastUserMessageTemplate,
-      renderContext
+      template,
+      data
     );
   }
 
   private static renderUserMessageTemplate(
-    templateId: string,
+    _templateId: string,
     template: string,
-    renderContext: RenderContext
+    data: any
   ): string {
-    const rendered = TemplateRenderer.render(template, renderContext, { templateId });
+    const rendered = renderTemplate(template, data);
     return rendered.replace(/\n{3,}/g, '\n\n').trim();
   }
 
   /**
-   * Format function call results section
+   * Resolve language parameter to a display string
    */
-  private static formatFunctionResults(functionCallResults?: FunctionCallResultSummary[]): string {
-    if (!functionCallResults || functionCallResults.length === 0) {
-      return '';
-    }
-
-    const results = functionCallResults.map(result =>
-      `Function call ${result.functionName} was ${result.success ? 'accepted' : 'rejected'}. ${result.resultMessage}`
-    ).join('\n');
-
-    return `# Function Call Results\n${results}`;
-  }
-
-  /**
-   * Format story context section
-   */
-  private static formatStoryContext(context: LastUserMessageTagContext): string {
-    if (!context.includeStoryContext || !context.storyObjects) {
-      return '';
-    }
-
-    return `# Current Project Status\n\`\`\`json\n${JSON.stringify(this.simplifyStoryObjects(context.storyObjects), null, 2)}\n\`\`\``;
-  }
-
-  /**
-   * Format novel content section
-   */
-  private static formatNovelContent(context: LastUserMessageTagContext): string {
-    if (!context.includeNovelContent || !context.novelData || !context.storyObjects) {
-      return '';
-    }
-
-    const novelActs = this.buildNovelContentActs(context.storyObjects, context.novelData);
-    if (novelActs.length === 0) {
-      return '';
-    }
-
-    return `# Current Novel Content\n\`\`\`json\n${JSON.stringify(novelActs, null, 2)}\n\`\`\``;
-  }
-
-  /**
-   * Format custom sections
-   */
-  private static formatCustomSections(sections?: CustomSection[]): string {
-    if (!sections || sections.length === 0) {
-      return '';
-    }
-
-    return sections.map(section => {
-      const heading = `# ${section.heading}`;
-      let content = section.content;
-
-      // Format content based on specified format
-      if (section.format === 'json') {
-        try {
-          const parsed = typeof content === 'string' ? JSON.parse(content) : content;
-          content = `\`\`\`json\n${JSON.stringify(parsed, null, 2)}\n\`\`\``;
-        } catch {
-          content = `\`\`\`json\n${content}\n\`\`\``;
-        }
-      } else if (section.format === 'text') {
-        content = `\`\`\`text\n${content}\n\`\`\``;
-      }
-      // markdown format or no format - use as-is
-
-      return `${heading}\n${content}`;
-    }).join('\n\n');
+  private static resolveLanguage(language?: string): string {
+    const trimmed = language ? language.trim() : '';
+    return trimmed.length > 0 ? trimmed : 'the language used by the user';
   }
 
   /**

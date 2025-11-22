@@ -1,9 +1,8 @@
 import type { FunctionCallSchema } from '../types/functionCalling';
 import type { StoryObjectCategory } from '../../types/storyObject';
 
-import { TemplateRenderer, type RenderContext } from '../utils/TemplateRenderer';
+import { renderTemplate } from '../../templateEngine/engine';
 import { useSettingsStore } from '../../store/settingsStore';
-import { getDefaultPrompt } from '../../prompts/defaults';
 
 /**
  * Enum defining different types of system prompts
@@ -33,6 +32,7 @@ export interface ChatSystemPromptContext extends BasePromptContext {
   functions?: FunctionCallSchema[];
   enablePrefill?: boolean;
   enableThinking?: boolean;
+  enableCustomThinking?: boolean;
 }
 
 /**
@@ -46,6 +46,7 @@ export interface StoryObjectEditPromptContext extends BasePromptContext {
   userRequest?: string;
   enablePrefill?: boolean;
   enableThinking?: boolean;
+  enableCustomThinking?: boolean;
 }
 
 /**
@@ -58,6 +59,7 @@ export interface ChapterEditPromptContext extends BasePromptContext {
   contextData?: Record<string, unknown>;
   enablePrefill?: boolean;
   enableThinking?: boolean;
+  enableCustomThinking?: boolean;
 }
 
 /**
@@ -82,6 +84,7 @@ export interface TranslationPromptContext extends BasePromptContext {
   userInstructions?: string;
   enablePrefill?: boolean;
   enableThinking?: boolean;
+  enableCustomThinking?: boolean;
 }
 
 export interface PromptBundle {
@@ -114,12 +117,7 @@ export class SystemPromptManager {
     try {
       return await store.loadPrompt(functionType, category, name);
     } catch (error) {
-      console.error('Failed to load prompt, using bundled default:', error);
-      // Final fallback to bundled default
-      const fallback = getDefaultPrompt(functionType, category, name);
-      if (fallback) {
-        return fallback;
-      }
+      console.error('Failed to load prompt:', error);
       throw new Error(`No prompt template found for ${functionType}/${category}/${name || 'default'}`);
     }
   }
@@ -176,9 +174,6 @@ export class SystemPromptManager {
         if (!editContext?.currentData) {
           errors.push('Current data is required for story object edit prompt');
         }
-        if (!editContext?.jsonSchema) {
-          errors.push('JSON schema is required for story object edit prompt');
-        }
         break;
       }
       case PromptType.CHAPTER_EDIT: {
@@ -228,21 +223,23 @@ export class SystemPromptManager {
     const functionInstructions = await this.buildFunctionInstructions(context);
     const language = this.resolveLanguage(context.outputLanguage);
 
-    const renderContext: RenderContext = {
-      variables: {
+    const data = {
+      variable: {
         functionInstructions,
         language,
+        mode,
+        today: new Date().toISOString().split('T')[0],
       },
-      conditionals: {
-        thinking: context.enableThinking ?? false,
-        prefill: context.enablePrefill ?? false,
+      state: {
+        enableThinking: context.enableThinking ?? false,
+        enableCustomThinking: context.enableCustomThinking ?? false,
+        enablePrefill: context.enablePrefill ?? false,
+        hasFunctions: !!(context.functions && context.functions.length > 0),
       },
+      context: {}
     };
 
-    const templateId = this.templateId('chat', 'systemPrompt', mode);
-    const systemPrompt = TemplateRenderer.render(systemTemplate, renderContext, {
-      templateId,
-    });
+    const systemPrompt = renderTemplate(systemTemplate, data);
 
     return {
       systemPrompt,
@@ -261,46 +258,38 @@ export class SystemPromptManager {
     const categoryName = this.getCategoryDisplayName(category);
     const editScope = targetId ? 'a specific item' : 'the entire category';
     const language = this.resolveLanguage(outputLanguage);
-    const formattedContextData = this.formatContextData(contextData);
-    const hasContextData = !!contextData && Object.keys(contextData).length > 0;
 
-    const systemRenderContext: RenderContext = {
-      variables: {
+    const systemData = {
+      variable: {
         categoryName,
         editScope,
         language,
       },
-      conditionals: {
-        thinking: context.enableThinking ?? false,
-        prefill: context.enablePrefill ?? false,
+      state: {
+        enableThinking: context.enableThinking ?? false,
+        enableCustomThinking: context.enableCustomThinking ?? false,
+        enablePrefill: context.enablePrefill ?? false,
       },
+      context: {}
     };
 
-    const userRenderContext: RenderContext = {
-      variables: {
+    const userData = {
+      variable: {
         categoryName,
         targetId: targetId ?? '',
+        userRequest: userRequest || '',
       },
+      state: {},
       context: {
-        contextData: formattedContextData,
-        currentData: this.formatJsonBlock(currentData),
-        userRequest: userRequest ? this.formatTextBlock(userRequest) : '',
-      },
-      conditionals: {
-        targetId: !!targetId,
-        contextData: hasContextData,
-        userRequest: !!(userRequest && userRequest.trim() !== ''),
-      },
+        contextData,
+        currentData,
+      }
     };
 
     return {
-      systemPrompt: TemplateRenderer.render(systemTemplate, systemRenderContext, {
-        templateId: this.templateId('storyEdit', 'systemPrompt'),
-      }),
+      systemPrompt: renderTemplate(systemTemplate, systemData),
       userPrompts: [
-        TemplateRenderer.render(userTemplate, userRenderContext, {
-          templateId: this.templateId('storyEdit', 'userPrompt'),
-        }),
+        renderTemplate(userTemplate, userData),
       ],
     };
   }
@@ -314,43 +303,36 @@ export class SystemPromptManager {
     ]);
 
     const language = this.resolveLanguage(outputLanguage);
-    const formattedContextData = this.formatContextData(contextData);
-    const hasContextData = !!contextData && Object.keys(contextData).length > 0;
 
-    const systemRenderContext: RenderContext = {
-      variables: {
+    const systemData = {
+      variable: {
         chapterName,
         language,
       },
-      conditionals: {
-        thinking: context.enableThinking ?? false,
-        prefill: context.enablePrefill ?? false,
+      state: {
+        enableThinking: context.enableThinking ?? false,
+        enableCustomThinking: context.enableCustomThinking ?? false,
+        enablePrefill: context.enablePrefill ?? false,
       },
+      context: {}
     };
 
-    const userRenderContext: RenderContext = {
-      variables: {
+    const userData = {
+      variable: {
         chapterName,
-      },
-      context: {
-        contextData: formattedContextData,
-        currentContent: this.formatTextBlock(currentContent),
+        currentContent,
         userRequest: userRequest || '',
       },
-      conditionals: {
-        contextData: hasContextData,
-        userRequest: !!userRequest,
-      },
+      state: {},
+      context: {
+        contextData,
+      }
     };
 
     return {
-      systemPrompt: TemplateRenderer.render(systemTemplate, systemRenderContext, {
-        templateId: this.templateId('chapterGen', 'systemPrompt'),
-      }),
+      systemPrompt: renderTemplate(systemTemplate, systemData),
       userPrompts: [
-        TemplateRenderer.render(userTemplate, userRenderContext, {
-          templateId: this.templateId('chapterGen', 'userPrompt'),
-        }),
+        renderTemplate(userTemplate, userData),
       ],
     };
   }
@@ -369,40 +351,36 @@ export class SystemPromptManager {
       this.getTemplate('translation', 'userPrompt'),
     ]);
 
-    const systemRenderContext: RenderContext = {
-      variables: {
+    const systemData = {
+      variable: {
         sourceLanguage,
         targetLanguage,
-        objectCount: objectCount.toString(),
+        objectCount,
       },
-      conditionals: {
-        thinking: context.enableThinking ?? false,
+      state: {
+        enableThinking: context.enableThinking ?? false,
+        enableCustomThinking: context.enableCustomThinking ?? false,
+        enablePrefill: context.enablePrefill ?? false,
       },
+      context: {}
     };
 
-    const userRenderContext: RenderContext = {
-      variables: {
+    const userData = {
+      variable: {
         sourceLanguage,
         targetLanguage,
-        objectCount: objectCount.toString(),
-      },
-      context: {
-        objectsArray,
+        objectCount,
+        objectsArray, // Pass raw string (it's already JSON stringified in context)
         userInstructions: userInstructions || '',
       },
-      conditionals: {
-        userInstructions: !!userInstructions,
-      },
+      state: {},
+      context: {}
     };
 
     return {
-      systemPrompt: TemplateRenderer.render(systemTemplate, systemRenderContext, {
-        templateId: this.templateId('translation', 'systemPrompt'),
-      }),
+      systemPrompt: renderTemplate(systemTemplate, systemData),
       userPrompts: [
-        TemplateRenderer.render(userTemplate, userRenderContext, {
-          templateId: this.templateId('translation', 'userPrompt'),
-        }),
+        renderTemplate(userTemplate, userData),
       ],
     };
   }
@@ -418,57 +396,6 @@ export class SystemPromptManager {
   private static resolveLanguage(language?: string): string {
     const trimmed = language ? language.trim() : '';
     return trimmed.length > 0 ? trimmed : 'the language used by the user';
-  }
-
-  private static templateId(
-    functionType: 'chat' | 'translation' | 'storyEdit' | 'chapterGen',
-    category: 'systemPrompt' | 'userPrompt',
-    variant: string = 'default'
-  ): string {
-    return `${functionType}/${category}/${variant}`;
-  }
-
-  private static formatContextData(contextData?: Record<string, unknown>): string {
-    if (!contextData || Object.keys(contextData).length === 0) {
-      return 'No additional context provided.';
-    }
-
-    return Object.entries(contextData)
-      .map(([key, value]) => `### ${this.formatHeading(key)}\n${this.formatJsonBlock(value)}`)
-      .join('\n\n');
-  }
-
-  private static formatJsonBlock(value: unknown): string {
-    if (value === undefined) {
-      return 'Not provided.';
-    }
-
-    const serialized = this.safeStringify(value);
-    return `\u0060\u0060\u0060json\n${serialized}\n\u0060\u0060\u0060`;
-  }
-
-  private static formatTextBlock(value: string): string {
-    if (!value) {
-      return 'No content provided.';
-    }
-
-    return `\u0060\u0060\u0060text\n${value}\n\u0060\u0060\u0060`;
-  }
-
-  private static safeStringify(value: unknown): string {
-    try {
-      return JSON.stringify(value, null, 2);
-    } catch {
-      return String(value);
-    }
-  }
-
-  private static formatHeading(input: string): string {
-    if (!input) {
-      return '';
-    }
-
-    return input.charAt(0).toUpperCase() + input.slice(1);
   }
 
   /**
@@ -488,21 +415,4 @@ export class SystemPromptManager {
 
     return names[category] || category;
   }
-
-  /**
-   * Get display name for translation data type
-   */
-  private static getDataTypeDisplayName(dataType: TranslationDataType): string {
-    const names = {
-      nameDescription: 'Name and Description',
-      basicInfo: 'Basic Info',
-      chapterData: 'Chapter Data',
-      chapterContent: 'Chapter Content',
-      chatMessage: 'Chat Message',
-      general: 'General Data',
-    } as const;
-
-    return names[dataType] || dataType;
-  }
-
 }
