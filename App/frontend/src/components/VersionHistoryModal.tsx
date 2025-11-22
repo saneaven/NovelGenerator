@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
+import { useErrorStore } from '../store/errorStore';
 import type { ObjectType } from '../types/unifiedObject';
 import './VersionHistoryModal.css';
 
@@ -19,6 +20,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   onRestoreVersion,
 }) => {
   const store = useUnifiedObjectStore();
+  const { showError } = useErrorStore();
   const [versions, setVersions] = useState<any[]>([]);
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -33,7 +35,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
         setVersions(versionHistory.sort((a, b) => b.number - a.number));
       } catch (error) {
         console.error('Failed to load versions:', error);
-        alert('Failed to load version history. Please try again.');
+        showError('Load Error', 'Failed to load version history. Please try again.');
       } finally {
         setLoading(false);
       }
@@ -78,7 +80,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       }
     } catch (error) {
       console.error('Failed to restore version:', error);
-      alert('Failed to restore version. Please try again.');
+      showError('Restore Error', 'Failed to restore version. Please try again.');
     }
   };
 

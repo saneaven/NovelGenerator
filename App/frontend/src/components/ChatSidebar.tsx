@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useChatStore, type Chat } from '../store/chatStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useErrorStore } from '../store/errorStore';
 import { TranslationService } from '../services/translationService';
 
 interface ChatSidebarProps {
@@ -25,6 +26,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
     deleteChat,
   } = useChatStore();
   const { settings } = useSettingsStore();
+  const { showError } = useErrorStore();
 
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -72,7 +74,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
   const handleDeleteChat = (chatId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (chats.length <= 1) {
-      alert('Cannot delete the last chat');
+      showError('Warning', 'Cannot delete the last chat');
       return;
     }
 

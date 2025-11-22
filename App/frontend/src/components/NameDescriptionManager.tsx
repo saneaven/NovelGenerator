@@ -14,6 +14,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useErrorStore } from '../store/errorStore';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import AIEditModal from './AIEditModal';
 import VersionHistoryModal from './VersionHistoryModal';
@@ -50,6 +51,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   const store = useUnifiedObjectStore();
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
   const { settings } = useSettingsStore();
+  const { showError } = useErrorStore();
 
   const objects = store.objects;
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -126,7 +128,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
       setShowAddForm(false);
     } catch (error) {
       console.error('Failed to add item:', error);
-      alert('Failed to add item. Please try again.');
+      showError('Create Error', 'Failed to add item. Please try again.');
     }
   };
 
@@ -150,7 +152,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
       setEditingItemId(null);
     } catch (error) {
       console.error('Failed to update item:', error);
-      alert('Failed to update. Please try again.');
+      showError('Update Error', 'Failed to update. Please try again.');
     }
   };
 
@@ -163,7 +165,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
       await store.deleteObject(category, itemId);
     } catch (error) {
       console.error('Failed to delete item:', error);
-      alert('Failed to delete. Please try again.');
+      showError('Delete Error', 'Failed to delete. Please try again.');
     }
   };
 
@@ -179,7 +181,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
       await store.switchLanguage(category, itemId, newLanguage);
     } catch (error) {
       console.error('Failed to switch language:', error);
-      alert('Failed to switch language. Please try again.');
+      showError('Language Switch Error', 'Failed to switch language. Please try again.');
     }
   };
 
@@ -191,7 +193,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 
     const targetLanguage = settings.secondaryLanguage;
     if (!targetLanguage) {
-      alert('Please set a secondary language in settings first.');
+      showError('Warning', 'Please set a secondary language in settings first.');
       return;
     }
 
@@ -222,11 +224,10 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
       // Refresh object to update UI with new translation
       await store.fetchObject(category, itemId);
 
-      console.log(`✓ Added ${targetLanguage} translation`);
-      alert(`Translation added for ${targetLanguage}`);
+      showError('Success', `Translation added for ${targetLanguage}`);
     } catch (error) {
       console.error('Failed to add translation:', error);
-      alert(error instanceof Error ? error.message : 'Failed to add translation. Please try again.');
+      showError('Translation Error', error instanceof Error ? error.message : 'Failed to add translation. Please try again.');
     } finally {
       TranslationService.clearTranslationStatus(itemId);
     }
@@ -240,7 +241,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 
     const targetLanguage = settings.secondaryLanguage;
     if (!targetLanguage) {
-      alert('Please set a secondary language in settings first.');
+      showError('Warning', 'Please set a secondary language in settings first.');
       return;
     }
 
@@ -281,13 +282,12 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
       // Refresh object to update UI with new translation
       await store.fetchObject(category, retranslateTargetId);
 
-      console.log(`✓ Retranslated to ${targetLanguage}`);
-      alert(`Retranslation complete for ${targetLanguage}`);
+      showError('Success', `Retranslation complete for ${targetLanguage}`);
       setShowRetranslateModal(false);
       setRetranslateTargetId(undefined);
     } catch (error) {
       console.error('Failed to retranslate:', error);
-      alert(error instanceof Error ? error.message : 'Failed to retranslate. Please try again.');
+      showError('Retranslation Error', error instanceof Error ? error.message : 'Failed to retranslate. Please try again.');
     } finally {
       TranslationService.clearTranslationStatus(retranslateTargetId);
     }
@@ -323,7 +323,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
           });
         } catch (error) {
           console.error('Failed to apply AI edit:', error);
-          alert('Failed to apply AI edit. Please try again.');
+          showError('AI Edit Error', 'Failed to apply AI edit. Please try again.');
         }
       }
     } else {
@@ -368,7 +368,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
       console.log('✓ Version restored');
     } catch (error) {
       console.error('Failed to restore version:', error);
-      alert('Failed to restore version. Please try again.');
+      showError('Restore Error', 'Failed to restore version. Please try again.');
     }
   };
 

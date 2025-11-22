@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { promptService, type VersionHistoryItem } from '../../api/promptService';
 import type { FunctionType, PromptCategory } from '../../prompts/defaults';
+import { useErrorStore } from '../../store/errorStore';
 
 interface VersionHistoryModalProps {
   functionType: FunctionType;
@@ -17,6 +18,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   onClose,
   onRestore,
 }) => {
+  const { showError } = useErrorStore();
   const [versions, setVersions] = useState<VersionHistoryItem[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -33,7 +35,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       setVersions(history);
     } catch (error) {
       console.error('Failed to load version history:', error);
-      alert('Failed to load version history');
+      showError('Load Error', 'Failed to load version history');
     } finally {
       setIsLoading(false);
     }
@@ -47,11 +49,11 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     setIsRestoring(true);
     try {
       await promptService.restoreVersion(functionType, category, versionNumber, name);
-      alert(`Version ${versionNumber} restored successfully!`);
+      showError('Success', `Version ${versionNumber} restored successfully!`);
       onRestore();
     } catch (error) {
       console.error('Failed to restore version:', error);
-      alert('Failed to restore version');
+      showError('Restore Error', 'Failed to restore version');
     } finally {
       setIsRestoring(false);
     }

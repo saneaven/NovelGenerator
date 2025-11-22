@@ -30,6 +30,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../../store/settingsStore';
+import { useErrorStore } from '../../../store/errorStore';
 import { LanguageSwitcher } from '../../../components/LanguageSwitcher';
 import NovelChapterAIEditModal from '../../../components/NovelChapterAIEditModal';
 import { TranslationService } from '../../../services/translationService';
@@ -71,6 +72,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 }) => {
   const store = useUnifiedObjectStore();
   const { settings } = useSettingsStore();
+  const { showError } = useErrorStore();
 
   // State
   const [chapterContentId, setChapterContentId] = useState<string | null>(null);
@@ -349,7 +351,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         console.log('✓ Manual save (new version)');
       } catch (err) {
         console.error('Manual save failed:', err);
-        alert('Failed to save. Please try again.');
+        showError('Save Error', 'Failed to save. Please try again.');
       } finally {
         setIsSaving(false);
         setSavingType(null);
@@ -395,7 +397,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         console.log(`✓ Switched to ${newLanguage}`);
       } catch (err) {
         console.error('Failed to switch language:', err);
-        alert('Failed to switch language. Please try again.');
+        showError('Language Switch Error', 'Failed to switch language. Please try again.');
       }
     },
     [chapterContent, chapterContentId, hasUnsavedChanges, handleAutoSave, store]
@@ -406,7 +408,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
     const targetLanguage = settings.secondaryLanguage;
     if (!targetLanguage) {
-      alert('Please set a secondary language in settings first.');
+      showError('Warning', 'Please set a secondary language in settings first.');
       return;
     }
 
@@ -437,14 +439,14 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       );
 
       console.log(`✓ Added ${targetLanguage} translation`);
-      alert(`Translation added for ${targetLanguage}`);
+      showError('Success', `Translation added for ${targetLanguage}`);
 
       // Reload and switch to the new translation
       await store.fetchObject('chapter_content', chapterContentId);
       await handleLanguageChange(targetLanguage);
     } catch (error) {
       console.error('Failed to add translation:', error);
-      alert(error instanceof Error ? error.message : 'Failed to add translation. Please try again.');
+      showError('Translation Error', error instanceof Error ? error.message : 'Failed to add translation. Please try again.');
     } finally {
       TranslationService.clearTranslationStatus(chapterContentId);
     }

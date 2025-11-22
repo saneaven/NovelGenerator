@@ -13,6 +13,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useErrorStore } from '../store/errorStore';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import AIEditModal from './AIEditModal';
 import VersionHistoryModal from './VersionHistoryModal';
@@ -32,6 +33,7 @@ const BasicInfoManager: React.FC = () => {
   const listObjects = useUnifiedObjectStore((state) => state.listObjects);
   const createObject = useUnifiedObjectStore((state) => state.createObject);
   const { settings } = useSettingsStore();
+  const { showError } = useErrorStore();
 
   // Get basic info from unified store
   // In real implementation, you'd need to get the basic info ID first
@@ -131,10 +133,9 @@ const BasicInfoManager: React.FC = () => {
       });
 
       setIsEditing(false);
-      console.log('✓ Basic info saved successfully');
     } catch (err) {
       console.error('Failed to save basic info:', err);
-      alert('Failed to save. Please try again.');
+      showError('Save Error', 'Failed to save. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -164,10 +165,9 @@ const BasicInfoManager: React.FC = () => {
     try {
       // Clean language switch - NO version created!
       await switchLanguage('basic_info', basicInfoId, newLanguage);
-      console.log(`✓ Switched to ${newLanguage}`);
     } catch (err) {
       console.error('Failed to switch language:', err);
-      alert('Failed to switch language. Please try again.');
+      showError('Language Switch Error', 'Failed to switch language. Please try again.');
     }
   };
 
@@ -176,13 +176,13 @@ const BasicInfoManager: React.FC = () => {
 
     const targetLanguage = settings.secondaryLanguage;
     if (!targetLanguage) {
-      alert('Please set a secondary language in settings first.');
+      showError('Warning', 'Please set a secondary language in settings first.');
       return;
     }
 
     // Check if translation already exists
     if (basicInfo.languages.available.includes(targetLanguage)) {
-      alert(`${targetLanguage} translation already exists.`);
+      showError('Warning', `${targetLanguage} translation already exists.`);
       return;
     }
 
@@ -208,11 +208,10 @@ const BasicInfoManager: React.FC = () => {
       // Refresh object to update UI with new translation
       await fetchObject('basic_info', basicInfoId);
 
-      console.log(`✓ Added ${targetLanguage} translation`);
-      alert(`Translation added for ${targetLanguage}`);
+      showError('Success', `Translation added for ${targetLanguage}`);
     } catch (err) {
       console.error('Failed to add translation:', err);
-      alert(err instanceof Error ? err.message : 'Failed to add translation. Please try again.');
+      showError('Translation Error', err instanceof Error ? err.message : 'Failed to add translation. Please try again.');
     } finally {
       TranslationService.clearTranslationStatus(basicInfoId);
     }
@@ -223,7 +222,7 @@ const BasicInfoManager: React.FC = () => {
 
     const targetLanguage = settings.secondaryLanguage;
     if (!targetLanguage) {
-      alert('Please set a secondary language in settings first.');
+      showError('Warning', 'Please set a secondary language in settings first.');
       return;
     }
 
@@ -264,12 +263,11 @@ const BasicInfoManager: React.FC = () => {
       // Refresh object to update UI with new translation
       await fetchObject('basic_info', basicInfoId);
 
-      console.log(`✓ Retranslated to ${targetLanguage}`);
-      alert(`Retranslation complete for ${targetLanguage}`);
+      showError('Success', `Retranslation complete for ${targetLanguage}`);
       setShowRetranslateModal(false);
     } catch (err) {
       console.error('Failed to retranslate:', err);
-      alert(err instanceof Error ? err.message : 'Failed to retranslate. Please try again.');
+      showError('Retranslation Error', err instanceof Error ? err.message : 'Failed to retranslate. Please try again.');
     } finally {
       TranslationService.clearTranslationStatus(basicInfoId);
     }
@@ -291,10 +289,9 @@ const BasicInfoManager: React.FC = () => {
         create_new_version: true,
       });
 
-      console.log('✓ AI edit applied');
     } catch (err) {
       console.error('Failed to apply AI edit:', err);
-      alert('Failed to apply AI edit. Please try again.');
+      showError('AI Edit Error', 'Failed to apply AI edit. Please try again.');
     }
   };
 
@@ -303,10 +300,9 @@ const BasicInfoManager: React.FC = () => {
 
     try {
       await activateVersion('basic_info', basicInfoId, versionId);
-      console.log('✓ Version restored');
     } catch (err) {
       console.error('Failed to restore version:', err);
-      alert('Failed to restore version. Please try again.');
+      showError('Restore Error', 'Failed to restore version. Please try again.');
     }
   };
 

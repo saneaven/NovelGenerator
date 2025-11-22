@@ -12,6 +12,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { useErrorStore } from '../../store/errorStore';
 import { LanguageSwitcher } from '../LanguageSwitcher';
 import type { CharacterObject, CharacterData } from '../../types/unifiedObject';
 import './CharacterEditorExample.css';
@@ -32,6 +33,7 @@ export const CharacterEditorExample: React.FC<CharacterEditorExampleProps> = ({
   // ===========================================================================
 
   const store = useUnifiedObjectStore();
+  const { showError } = useErrorStore();
   const character = store.objects[characterId] as CharacterObject | undefined;
   const loading = store.loading[characterId] || false;
   const error = store.errors[characterId] || null;
@@ -86,10 +88,9 @@ export const CharacterEditorExample: React.FC<CharacterEditorExampleProps> = ({
       });
 
       setHasChanges(false);
-      console.log('✓ Character saved successfully');
     } catch (err) {
       console.error('Failed to save character:', err);
-      alert('Failed to save character. Please try again.');
+      showError('Save Error', 'Failed to save character. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -101,10 +102,9 @@ export const CharacterEditorExample: React.FC<CharacterEditorExampleProps> = ({
     try {
       // This switches language WITHOUT creating a new version!
       await store.switchLanguage('character', characterId, newLanguage);
-      console.log(`✓ Switched to ${newLanguage}`);
     } catch (err) {
       console.error('Failed to switch language:', err);
-      alert('Failed to switch language. Please try again.');
+      showError('Language Switch Error', 'Failed to switch language. Please try again.');
     }
   };
 
@@ -116,7 +116,7 @@ export const CharacterEditorExample: React.FC<CharacterEditorExampleProps> = ({
 
     // Check if language already exists
     if (character.languages.available.includes(targetLanguage)) {
-      alert('This language already exists. Use language switcher to view it.');
+      showError('Warning', 'This language already exists. Use language switcher to view it.');
       return;
     }
 
@@ -131,11 +131,10 @@ export const CharacterEditorExample: React.FC<CharacterEditorExampleProps> = ({
         user_request: 'Manual Translation',
       });
 
-      console.log(`✓ Added ${targetLanguage} translation`);
-      alert(`Translation added for ${targetLanguage}`);
+      showError('Success', `Translation added for ${targetLanguage}`);
     } catch (err) {
       console.error('Failed to add translation:', err);
-      alert('Failed to add translation. Please try again.');
+      showError('Translation Error', 'Failed to add translation. Please try again.');
     }
   };
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useErrorStore } from '../store/errorStore';
 import AIEditModal from './AIEditModal';
 import RetranslateModal from './RetranslateModal';
 import { LanguageSwitcher } from './LanguageSwitcher';
@@ -13,6 +14,7 @@ const OutlineManager: React.FC = () => {
   const store = useUnifiedObjectStore();
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
   const settings = useSettingsStore();
+  const { showError } = useErrorStore();
 
   const [editingAct, setEditingAct] = useState<string | null>(null);
   const [editingChapter, setEditingChapter] = useState<string | null>(null);
@@ -103,7 +105,7 @@ const OutlineManager: React.FC = () => {
       setShowAddActForm(false);
     } catch (error) {
       console.error('Failed to create act:', error);
-      alert('Failed to create act. Please try again.');
+      showError('Create Error', 'Failed to create act. Please try again.');
     }
   };
 
@@ -123,7 +125,7 @@ const OutlineManager: React.FC = () => {
       setEditingAct(null);
     } catch (error) {
       console.error('Failed to update act:', error);
-      alert('Failed to update act. Please try again.');
+      showError('Update Error', 'Failed to update act. Please try again.');
     }
   };
 
@@ -143,7 +145,7 @@ const OutlineManager: React.FC = () => {
       await store.deleteObject('act', actId);
     } catch (error) {
       console.error('Failed to delete act:', error);
-      alert('Failed to delete act. Please try again.');
+      showError('Delete Error', 'Failed to delete act. Please try again.');
     }
   };
 
@@ -152,7 +154,7 @@ const OutlineManager: React.FC = () => {
       await store.switchLanguage('act', actId, newLanguage);
     } catch (error) {
       console.error('Failed to switch act language:', error);
-      alert('Failed to switch language. Please try again.');
+      showError('Language Switch Error', 'Failed to switch language. Please try again.');
     }
   };
 
@@ -164,7 +166,7 @@ const OutlineManager: React.FC = () => {
 
     const targetLanguage = settings.secondaryLanguage;
     if (!targetLanguage) {
-      alert('Please set a secondary language in settings first.');
+      showError('Warning', 'Please set a secondary language in settings first.');
       return;
     }
 
@@ -195,11 +197,10 @@ const OutlineManager: React.FC = () => {
       // Refresh object to update UI with new translation
       await store.fetchObject('act', actId);
 
-      console.log(`✓ Added ${targetLanguage} translation for act`);
-      alert(`Translation added for ${targetLanguage}`);
+      showError('Success', `Translation added for ${targetLanguage}`);
     } catch (error) {
       console.error('Failed to add act translation:', error);
-      alert(error instanceof Error ? error.message : 'Failed to add translation. Please try again.');
+      showError('Translation Error', error instanceof Error ? error.message : 'Failed to add translation. Please try again.');
     } finally {
       TranslationService.clearTranslationStatus(actId);
     }
@@ -213,7 +214,7 @@ const OutlineManager: React.FC = () => {
 
     const targetLanguage = settings.secondaryLanguage;
     if (!targetLanguage) {
-      alert('Please set a secondary language in settings first.');
+      showError('Warning', 'Please set a secondary language in settings first.');
       return;
     }
 
@@ -253,12 +254,11 @@ const OutlineManager: React.FC = () => {
       // Refresh object to update UI with new translation
       await store.fetchObject('act', showActRetranslateModal);
 
-      console.log(`✓ Retranslated act to ${targetLanguage}`);
-      alert(`Retranslation complete for ${targetLanguage}`);
+      showError('Success', `Retranslation complete for ${targetLanguage}`);
       setShowActRetranslateModal(null);
     } catch (error) {
       console.error('Failed to retranslate act:', error);
-      alert(error instanceof Error ? error.message : 'Failed to retranslate. Please try again.');
+      showError('Retranslation Error', error instanceof Error ? error.message : 'Failed to retranslate. Please try again.');
     } finally {
       TranslationService.clearTranslationStatus(showActRetranslateModal);
     }
@@ -286,7 +286,7 @@ const OutlineManager: React.FC = () => {
       setShowAddChapterForm(null);
     } catch (error) {
       console.error('Failed to create chapter:', error);
-      alert('Failed to create chapter. Please try again.');
+      showError('Create Error', 'Failed to create chapter. Please try again.');
     }
   };
 
@@ -306,7 +306,7 @@ const OutlineManager: React.FC = () => {
       setEditingChapter(null);
     } catch (error) {
       console.error('Failed to update chapter:', error);
-      alert('Failed to update chapter. Please try again.');
+      showError('Update Error', 'Failed to update chapter. Please try again.');
     }
   };
 
@@ -319,7 +319,7 @@ const OutlineManager: React.FC = () => {
       await store.deleteObject('chapter', chapterId);
     } catch (error) {
       console.error('Failed to delete chapter:', error);
-      alert('Failed to delete chapter. Please try again.');
+      showError('Delete Error', 'Failed to delete chapter. Please try again.');
     }
   };
 
@@ -328,7 +328,7 @@ const OutlineManager: React.FC = () => {
       await store.switchLanguage('chapter', chapterId, newLanguage);
     } catch (error) {
       console.error('Failed to switch chapter language:', error);
-      alert('Failed to switch language. Please try again.');
+      showError('Language Switch Error', 'Failed to switch language. Please try again.');
     }
   };
 
@@ -340,7 +340,7 @@ const OutlineManager: React.FC = () => {
 
     const targetLanguage = settings.secondaryLanguage;
     if (!targetLanguage) {
-      alert('Please set a secondary language in settings first.');
+      showError('Warning', 'Please set a secondary language in settings first.');
       return;
     }
 
@@ -371,11 +371,10 @@ const OutlineManager: React.FC = () => {
       // Refresh object to update UI with new translation
       await store.fetchObject('chapter', chapterId);
 
-      console.log(`✓ Added ${targetLanguage} translation for chapter`);
-      alert(`Translation added for ${targetLanguage}`);
+      showError('Success', `Translation added for ${targetLanguage}`);
     } catch (error) {
       console.error('Failed to add chapter translation:', error);
-      alert(error instanceof Error ? error.message : 'Failed to add translation. Please try again.');
+      showError('Translation Error', error instanceof Error ? error.message : 'Failed to add translation. Please try again.');
     } finally {
       TranslationService.clearTranslationStatus(chapterId);
     }
@@ -389,7 +388,7 @@ const OutlineManager: React.FC = () => {
 
     const targetLanguage = settings.secondaryLanguage;
     if (!targetLanguage) {
-      alert('Please set a secondary language in settings first.');
+      showError('Warning', 'Please set a secondary language in settings first.');
       return;
     }
 
@@ -429,12 +428,11 @@ const OutlineManager: React.FC = () => {
       // Refresh object to update UI with new translation
       await store.fetchObject('chapter', showChapterRetranslateModal);
 
-      console.log(`✓ Retranslated chapter to ${targetLanguage}`);
-      alert(`Retranslation complete for ${targetLanguage}`);
+      showError('Success', `Retranslation complete for ${targetLanguage}`);
       setShowChapterRetranslateModal(null);
     } catch (error) {
       console.error('Failed to retranslate chapter:', error);
-      alert(error instanceof Error ? error.message : 'Failed to retranslate. Please try again.');
+      showError('Retranslation Error', error instanceof Error ? error.message : 'Failed to retranslate. Please try again.');
     } finally {
       TranslationService.clearTranslationStatus(showChapterRetranslateModal);
     }
@@ -502,7 +500,7 @@ const OutlineManager: React.FC = () => {
       setShowActVersionHistory(null);
     } catch (error) {
       console.error('Failed to restore version:', error);
-      alert('Failed to restore version. Please try again.');
+      showError('Restore Error', 'Failed to restore version. Please try again.');
     }
   };
 
@@ -514,7 +512,7 @@ const OutlineManager: React.FC = () => {
       setShowChapterVersionHistory(null);
     } catch (error) {
       console.error('Failed to restore version:', error);
-      alert('Failed to restore version. Please try again.');
+      showError('Restore Error', 'Failed to restore version. Please try again.');
     }
   };
 
