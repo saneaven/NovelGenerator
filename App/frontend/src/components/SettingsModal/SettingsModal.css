@@ -809,8 +809,8 @@
     color: var(--color-text-primary);
 }
 
-/* Reasoning Configuration Section */
-.reasoning-config {
+/* Thinking Configuration Section */
+.thinking-config {
     margin-top: var(--spacing-lg);
     padding: var(--spacing-lg);
     background: var(--color-surface-subtle);

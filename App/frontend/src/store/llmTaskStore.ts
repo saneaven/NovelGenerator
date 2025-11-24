@@ -7,7 +7,7 @@ export interface LLMTaskSessionState {
   id: string;
   status: TaskSessionStatus;
   contentParts: ContentPart[];
-  reasoningParts: ContentPart[];
+  thinkingParts: ContentPart[];
   functionCallProgress: FunctionCallProgress[];
   error?: string;
   updatedAt: number;
@@ -17,7 +17,7 @@ const createDefaultSession = (id: string): LLMTaskSessionState => ({
   id,
   status: 'idle',
   contentParts: [],
-  reasoningParts: [],
+  thinkingParts: [],
   functionCallProgress: [],
   updatedAt: Date.now(),
 });
@@ -27,7 +27,7 @@ interface LLMTaskStore {
   initializeSession: (id: string) => void;
   updateSession: (id: string, partial: Partial<Omit<LLMTaskSessionState, 'id'>>) => void;
   setContentParts: (id: string, contentParts: ContentPart[]) => void;
-  setReasoningParts: (id: string, reasoningParts: ContentPart[]) => void;
+  setThinkingParts: (id: string, thinkingParts: ContentPart[]) => void;
   setFunctionCallProgress: (id: string, progress: FunctionCallProgress[]) => void;
   clearSession: (id: string) => void;
 }
@@ -74,7 +74,7 @@ export const useLLMTaskStore = create<LLMTaskStore>((set) => ({
         },
       };
     }),
-  setReasoningParts: (id, reasoningParts) =>
+  setThinkingParts: (id, thinkingParts) =>
     set((state) => {
       const existing = state.sessions[id] ?? createDefaultSession(id);
       return {
@@ -82,7 +82,7 @@ export const useLLMTaskStore = create<LLMTaskStore>((set) => ({
           ...state.sessions,
           [id]: {
             ...existing,
-            reasoningParts,
+            thinkingParts,
             updatedAt: Date.now(),
           },
         },

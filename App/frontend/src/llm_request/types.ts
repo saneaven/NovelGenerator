@@ -20,8 +20,8 @@ export interface ConversationBlock {
   name?: string; // for function role messages
 }
 
-// Reasoning detail from OpenRouter (model-native reasoning)
-export interface ReasoningDetail {
+// Thinking detail from OpenRouter (model-native thinking)
+export interface ThinkingDetail {
   type: 'summary' | 'text' | 'encrypted';
   summary?: string;
   text?: string;
@@ -98,7 +98,7 @@ export interface ChatMessage extends ConversationBlock {
   id: string;
   timestamp: Date;
   functionCalls?: FunctionCallMetadata[];
-  reasoning_details?: ReasoningDetail[];
+  thinking_details?: ThinkingDetail[];
 }
 
 

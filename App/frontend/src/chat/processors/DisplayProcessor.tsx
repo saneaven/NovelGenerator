@@ -51,7 +51,7 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
 
     // Extract content from contentParts if available
     if (message.contentParts && message.contentParts.length > 0) {
-      // Only extract content type parts (not thinking/reasoning)
+      // Only extract content type parts (not thinking)
       const contentParts = message.contentParts.filter(part => part.type === 'content');
       content = contentParts.map(part => part.text).join('');
     } else {

@@ -24,7 +24,7 @@ Break language barriers in your creative process.
 ### ⚙️ Advanced AI Configuration
 Tailor the AI to your needs.
 - **Model Selection**: Choose from various AI models and providers.
-- **Custom Settings**: Adjust temperature, system prompts, and reasoning capabilities.
+- **Custom Settings**: Adjust temperature, system prompts, and thinking capabilities.
 - **Function Calling**: The AI can autonomously perform actions like creating new characters or updating chapter content.
 
 ### 🔄 Version Control & Project Management

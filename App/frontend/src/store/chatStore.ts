@@ -6,7 +6,7 @@ import { type LanguageData } from '../types/multilingual';
 // Language-specific content for chat messages
 export interface MessageContentData {
   contentParts: ContentPart[];
-  reasoning_details?: any[];
+  thinking_details?: any[];
 }
 
 // Extended chat message with language support (for storage)
@@ -43,8 +43,8 @@ interface ChatStore {
   // Message management
   fetchMessages: (projectId: string, chatId: string) => Promise<void>;
   addMessage: (projectId: string, chatId: string, message: ChatMessage, language: string) => Promise<string>;
-  updateMessage: (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, reasoning_details?: any[]) => Promise<void>;
-  updateMessageContentLocal: (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, reasoning_details?: any[]) => void;
+  updateMessage: (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, thinking_details?: any[]) => Promise<void>;
+  updateMessageContentLocal: (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, thinking_details?: any[]) => void;
   getMessages: (projectId: string, chatId: string, language: string) => ChatMessage[];
   deleteMessage: (projectId: string, chatId: string, messageId: string) => Promise<void>;
 
@@ -59,7 +59,7 @@ interface ChatStore {
     messageId: string,
     translatedData: {
       contentParts?: ContentPart[];
-      reasoning_details?: any[];
+      thinking_details?: any[];
     },
     targetLanguage: string
   ) => void;
@@ -83,7 +83,7 @@ const convertToDisplayMessage = (storedMessage: StoredChatMessage, language: str
 
   // Defensive: Ensure contentParts is always an array
   const contentParts = Array.isArray(languageData?.contentParts) ? languageData.contentParts : [];
-  const reasoning_details = languageData?.reasoning_details;
+  const thinking_details = languageData?.thinking_details;
 
   // Extract only the ChatMessage fields, excluding the 'data' property
   const { data, ...messageFields } = storedMessage;
@@ -91,7 +91,7 @@ const convertToDisplayMessage = (storedMessage: StoredChatMessage, language: str
   return {
     ...messageFields,
     contentParts,
-    reasoning_details,
+    thinking_details,
   };
 };
 
@@ -295,8 +295,8 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         payload.function_calls = message.functionCalls;
       }
 
-      if (message.reasoning_details) {
-        payload.reasoning_details = message.reasoning_details;
+      if (message.thinking_details) {
+        payload.thinking_details = message.thinking_details;
       }
 
       const backendMessage = await chatService.addMessage(projectId, chatId, payload);
@@ -325,7 +325,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     }
   },
 
-  updateMessage: async (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, reasoning_details?: any[]) => {
+  updateMessage: async (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, thinking_details?: any[]) => {
     set({ isLoading: true, error: null });
     try {
       const payload: any = {
@@ -337,9 +337,9 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         payload.content_parts = contentParts;
       }
 
-      // Include reasoning_details metadata if provided
-      if (reasoning_details !== undefined) {
-        payload.reasoning_details = reasoning_details;
+      // Include thinking_details metadata if provided
+      if (thinking_details !== undefined) {
+        payload.thinking_details = thinking_details;
       }
 
       const backendMessage = await chatService.updateMessage(projectId, chatId, messageId, payload);
@@ -377,7 +377,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     messageId: string,
     contentParts: ContentPart[],
     language: string,
-    reasoning_details?: any[]
+    thinking_details?: any[]
   ) => {
     set((state) => ({
       chatsByProject: {
@@ -395,7 +395,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
                             ...msg.data,
                             [language]: {
                               contentParts,
-                              reasoning_details
+                              thinking_details
                             }
                           }
                         }
@@ -550,7 +550,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     messageId: string,
     translatedData: {
       contentParts?: ContentPart[];
-      reasoning_details?: any[];
+      thinking_details?: any[];
     },
     targetLanguage: string
   ) => {
@@ -570,7 +570,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
                             ...msg.data,
                             [targetLanguage]: {
                               contentParts: translatedData.contentParts || [],
-                              reasoning_details: translatedData.reasoning_details
+                              thinking_details: translatedData.thinking_details
                             },
                           },
                         }

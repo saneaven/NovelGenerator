@@ -60,8 +60,8 @@ def fix_message_content(session):
                         new_data = {
                             "contentParts": [{"type": "content", "text": lang_data['content']}]
                         }
-                        if 'reasoning_details' in lang_data:
-                            new_data['reasoning_details'] = lang_data['reasoning_details']
+                        if 'thinking_details' in lang_data:
+                            new_data['thinking_details'] = lang_data['thinking_details']
                         message.data[language] = new_data
                         modified = True
                     else:

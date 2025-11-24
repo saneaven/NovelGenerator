@@ -102,7 +102,7 @@ export class LLMRequestManager {
     const collectedContentParts: ContentPart[] = [];
     let currentPartType: ContentPart['type'] | null = null;
     let currentBuffer = '';
-    let accumulatedReasoningDetails: any[] | undefined;
+    let accumulatedThinkingDetails: any[] | undefined;
     const toolCallTracker = new FunctionCallStreamTracker(functions ?? this.config.functions);
     let finalizedToolCalls: any[] = [];
 
@@ -118,7 +118,7 @@ export class LLMRequestManager {
       this.callbacks.onStreamUpdate(nextParts);
     };
 
-    const reasoningTypeForMode = () => 'thinking';
+    const thinkingTypeForMode = () => 'thinking';
 
     try {
       for await (const chunk of streamChat(
@@ -153,21 +153,22 @@ export class LLMRequestManager {
           continue;
         }
 
-        if (chunk.reasoning_text) {
-          const reasoningType = reasoningTypeForMode();
-          if (currentPartType !== reasoningType) {
+        const thinkingText = (chunk as any).thinking_text;
+        if (thinkingText) {
+          const thinkingType = thinkingTypeForMode();
+          if (currentPartType !== thinkingType) {
             finalizeCurrentBuffer();
             const lastPart = collectedContentParts[collectedContentParts.length - 1];
             if (lastPart && lastPart.type === 'thinking') {
               const previous = collectedContentParts.pop()!;
               currentBuffer = previous.text;
             }
-            currentPartType = reasoningType;
+            currentPartType = thinkingType;
           }
-          currentBuffer += chunk.reasoning_text;
+          currentBuffer += thinkingText;
           emitUpdate([
             ...collectedContentParts,
-            { type: reasoningType, text: currentBuffer },
+            { type: thinkingType, text: currentBuffer },
           ]);
         }
 
@@ -195,11 +196,12 @@ export class LLMRequestManager {
           }
         }
 
-        if (chunk.reasoning_details) {
-          if (!accumulatedReasoningDetails) {
-            accumulatedReasoningDetails = [];
+        const thinkingDetails = (chunk as any).thinking_details;
+        if (thinkingDetails) {
+          if (!accumulatedThinkingDetails) {
+            accumulatedThinkingDetails = [];
           }
-          accumulatedReasoningDetails.push(...chunk.reasoning_details);
+          accumulatedThinkingDetails.push(...thinkingDetails);
         }
       }
 
@@ -210,7 +212,7 @@ export class LLMRequestManager {
       await this.finishProcessing(
         collectedContentParts,
         finalizedToolCalls,
-        accumulatedReasoningDetails,
+        accumulatedThinkingDetails,
         context,
         language
       );
@@ -237,16 +239,16 @@ export class LLMRequestManager {
   private async finishProcessing(
     contentParts: ContentPart[],
     toolCalls: any[],
-    reasoningDetails: any[] | undefined,
+    thinkingDetails: any[] | undefined,
     context: ChatPipelineContext,
     _language: string
   ): Promise<void> {
-    const finalResponse = toolCalls.length > 0 || reasoningDetails
+    const finalResponse = toolCalls.length > 0 || thinkingDetails
       ? {
           content: null,
           contentParts,
           tool_calls: toolCalls,
-          reasoning_details: reasoningDetails,
+          thinking_details: thinkingDetails,
         }
       : { content: null, contentParts };
 

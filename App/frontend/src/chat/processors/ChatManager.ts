@@ -25,7 +25,7 @@ export interface ChatManagerConfig {
   functions?: any[]; // Function schemas for this context
   mode: 'novelEditor' | 'workspace'; // Explicit mode distinction
   enablePrefill?: boolean; // Enable assistant prefill
-  thinkingMode?: 'off' | 'model' | 'custom'; // Thinking mode: off, model-native reasoning, or custom prompt-based
+  thinkingMode?: 'off' | 'model' | 'custom'; // Thinking mode: off, model-native thinking, or custom prompt-based
   thinkingConfig?: {
     effort?: 'low' | 'medium' | 'high';
     maxTokens?: number;
@@ -33,8 +33,8 @@ export interface ChatManagerConfig {
 }
 
 export interface ChatManagerCallbacks {
-  onUpdateMessage: (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, reasoning_details?: any[]) => void;
-  onSyncMessageToBackend: (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, reasoning_details?: any[]) => Promise<void>;
+  onUpdateMessage: (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, thinking_details?: any[]) => void;
+  onSyncMessageToBackend: (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, thinking_details?: any[]) => Promise<void>;
   onFunctionCalls: (projectId: string, chatId: string, messageId: string, functionCalls: FunctionCallMetadata[]) => void;
   onAddMessage: (projectId: string, chatId: string, message: ChatMessage, language: string) => Promise<string>;
   onGetChatHistory: (projectId: string, chatId: string, language: string) => ChatMessage[];
@@ -182,7 +182,7 @@ export class ChatManager {
     let accumulatedContentParts: ContentPart[] = [];
     let currentPartType: 'thinking' | 'content' | null = null;
     let currentBuffer = '';
-    let accumulatedReasoningDetails: any[] | undefined;
+    let accumulatedThinkingDetails: any[] | undefined;
     const toolCallTracker = new FunctionCallStreamTracker(functions ?? this.config.functions);
     let finalizedToolCalls: any[] = [];
 
@@ -224,7 +224,7 @@ export class ChatManager {
       }
     };
 
-    // Prepare reasoning config for model mode
+    // Prepare thinking config for model mode
     const thinkingConfig = this.config.thinkingMode === 'model' ? this.config.thinkingConfig : undefined;
 
     try {
@@ -267,31 +267,32 @@ export class ChatManager {
         } else {
           // Structured chunk
 
-          // Handle reasoning_text (thinking/reasoning chunks from backend)
-          if (chunk.reasoning_text) {
-            const reasoningType = 'thinking';
+          // Handle thinking_text (model-native thinking chunks from backend)
+          const thinkingText = (chunk as any).thinking_text;
+          if (thinkingText) {
+            const thinkingType = 'thinking';
 
-            if (currentPartType !== reasoningType) {
+            if (currentPartType !== thinkingType) {
               finalizeCurrentBuffer(); // Type changed - finalize previous buffer
 
-              // Check if the last accumulated part is reasoning/thinking to continue it
+              // Check if the last accumulated part is thinking to continue it
               const lastPart = accumulatedContentParts[accumulatedContentParts.length - 1];
               if (lastPart && lastPart.type === 'thinking') {
-                // Remove and prepend to continue the reasoning block
-                const previousReasoning = accumulatedContentParts.pop()!;
-                currentBuffer = previousReasoning.text;
+                // Remove and prepend to continue the thinking block
+                const previousThinking = accumulatedContentParts.pop()!;
+                currentBuffer = previousThinking.text;
               }
 
-              currentPartType = reasoningType;
+              currentPartType = thinkingType;
             }
 
             // Backend sends incremental delta, so append to buffer
-            currentBuffer += chunk.reasoning_text;
+            currentBuffer += thinkingText;
 
             // Show thinking in progress
             scheduleUpdate([
               ...accumulatedContentParts,
-              {type: reasoningType, text: currentBuffer}
+              {type: thinkingType, text: currentBuffer}
             ]);
           }
 
@@ -334,12 +335,13 @@ export class ChatManager {
             }
           }
 
-          // Store reasoning_details metadata
-          if (chunk.reasoning_details) {
-            if (!accumulatedReasoningDetails) {
-              accumulatedReasoningDetails = [];
+          // Store thinking_details metadata (with backward compatibility)
+          const thinkingDetails = (chunk as any).thinking_details;
+          if (thinkingDetails) {
+            if (!accumulatedThinkingDetails) {
+              accumulatedThinkingDetails = [];
             }
-            accumulatedReasoningDetails.push(...chunk.reasoning_details);
+            accumulatedThinkingDetails.push(...thinkingDetails);
           }
         }
       }
@@ -363,7 +365,7 @@ export class ChatManager {
       assistantMessageId,
       accumulatedContentParts,
       finalizedToolCalls,
-      accumulatedReasoningDetails,
+      accumulatedThinkingDetails,
       context,
       language
     );
@@ -377,17 +379,17 @@ export class ChatManager {
     messageId: string,
     contentParts: ContentPart[],
     toolCalls: any[],
-    reasoningDetails: any[] | undefined,
+    thinkingDetails: any[] | undefined,
     context: ChatPipelineContext,
     _language: string
   ): Promise<void> {
     // Post-process the final AI response with contentParts
-    const finalResponse = (toolCalls.length > 0 || reasoningDetails)
+    const finalResponse = (toolCalls.length > 0 || thinkingDetails)
       ? {
           content: null,
           contentParts,
           tool_calls: toolCalls,
-          reasoning_details: reasoningDetails
+          thinking_details: thinkingDetails
         }
       : { content: null, contentParts };
 
@@ -395,7 +397,7 @@ export class ChatManager {
       finalResponse,
       contentPartsLength: contentParts.length,
       toolCallsLength: toolCalls.length,
-      hasReasoningDetails: !!reasoningDetails
+      hasThinkingDetails: !!thinkingDetails
     });
 
     const { message: processedMessage } = this.config.chatPipeline.postProcess(
@@ -407,7 +409,7 @@ export class ChatManager {
       messageId,
       contentPartsLength: processedMessage.contentParts?.length || 0,
       functionCallsLength: processedMessage.functionCalls?.length || 0,
-      hasReasoningDetails: !!(processedMessage as any).reasoning_details
+      hasThinkingDetails: !!(processedMessage as any).thinking_details
     });
 
     // Save the final processed message (local update first)
@@ -417,7 +419,7 @@ export class ChatManager {
       messageId,
       processedMessage.contentParts || [],
       _language,
-      (processedMessage as any).reasoning_details
+      (processedMessage as any).thinking_details
     );
 
     // Sync to backend to persist data
@@ -428,7 +430,7 @@ export class ChatManager {
         messageId,
         processedMessage.contentParts || [],
         _language,
-        (processedMessage as any).reasoning_details
+        (processedMessage as any).thinking_details
       );
       console.log('ChatManager: Successfully synced message to backend');
     } catch (error) {

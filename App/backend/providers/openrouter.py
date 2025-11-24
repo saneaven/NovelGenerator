@@ -41,7 +41,7 @@ class OpenRouterProvider(AsyncOpenAIProvider):
     def _build_extra_body(
         self,
         provider_preference: Optional[Dict],
-        reasoning_config: Optional[Dict],
+        thinking_config: Optional[Dict],
     ) -> Optional[Dict]:
         extra: Dict[str, Dict] = {}
 
@@ -56,8 +56,9 @@ class OpenRouterProvider(AsyncOpenAIProvider):
             if provider_payload:
                 extra["provider"] = provider_payload
 
-        if reasoning_config:
-            extra["reasoning"] = reasoning_config
+        if thinking_config:
+            # OpenRouter expects the field name 'reasoning', map from our thinking config
+            extra["reasoning"] = thinking_config
 
         return extra or None
 
@@ -74,14 +75,18 @@ class OpenRouterProvider(AsyncOpenAIProvider):
             return chunk, []
 
         delta = choices[0].get("delta") or {}
-        reasoning_details = delta.get("reasoning_details")
-        if not reasoning_details:
+        thinking_details = delta.get("thinking_details") or delta.get("reasoning_details")
+        if not thinking_details:
             return chunk, []
 
-        for detail in reasoning_details:
+        for detail in thinking_details:
             if isinstance(detail, dict) and detail.get("type") == "text" and detail.get("text"):
-                reasoning = delta.setdefault("reasoning", {})
-                reasoning["text"] = detail["text"]
+                thinking = delta.setdefault("thinking", {})
+                thinking["text"] = detail["text"]
                 break
+
+        # Normalize key for downstream consumers
+        if "reasoning_details" in delta and "thinking_details" not in delta:
+            delta["thinking_details"] = delta.pop("reasoning_details")
 
         return chunk, []

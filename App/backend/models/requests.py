@@ -12,6 +12,11 @@ class ProviderPreference(BaseModel):
     only: Optional[List[str]] = None
     ignore: Optional[List[str]] = None
 
+class ThinkingConfig(BaseModel):
+    """Thinking configuration for model-native thinking"""
+    effort: Optional[str] = "medium"
+    max_tokens: Optional[int] = Field(default=None, alias="maxTokens")
+
 class ContentPart(BaseModel):
     """A part of message content (content or thinking)"""
     type: Literal["content", "thinking"]
@@ -33,5 +38,5 @@ class ChatCompletionRequest(BaseModel):
     max_tokens: Optional[int] = None
     config: ProviderConfig = Field(default_factory=ProviderConfig)
     provider_preference: Optional[ProviderPreference] = None
-    reasoning_config: Optional[dict] = None  # preserved for provider compatibility if ever passed through
     thinking_mode: Optional[Literal["off", "custom", "model"]] = "off"
+    thinking_config: Optional[ThinkingConfig] = None

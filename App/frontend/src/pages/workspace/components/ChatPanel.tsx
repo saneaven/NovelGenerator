@@ -11,7 +11,7 @@ import type { WorkspaceUIState, WorkspaceUIActions } from '../hooks/useWorkspace
 import type { StoryObjects } from '../../../types/storyObject';
 import type { ChatMessage, FunctionCallProgress } from '../../../llm_request/types';
 import ToggleSwitch from '../../../components/ToggleSwitch';
-import ReasoningDisplay from '../../../components/ReasoningDisplay';
+import ThinkingDisplay from '../../../components/ThinkingDisplay';
 import FunctionCallPreviewCard from './FunctionCallPreviewCard';
 import { collapseContentParts } from '../../../chat/utils/contentParts';
 
@@ -251,7 +251,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
             const translatedData: any = {
                 contentParts: translatedContentParts,
-                reasoning_details: sourceData.reasoning_details, // Keep original (not translated)
+                thinking_details: sourceData.thinking_details, // Keep original (not translated)
             };
 
             addTranslatedMessage(projectId, selectedChatId, message.id, translatedData, targetLanguage);
@@ -377,9 +377,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                             key={message.chatMessage.id}
                             className={`chat-message ${message.chatMessage.role}${isEditing ? ' editing' : ''}`}
                         >
-                            {/* Show reasoning/thinking above the message bubble */}
+                            {/* Show thinking above the message bubble */}
                             {message.chatMessage.role === 'assistant' && (
-                                <ReasoningDisplay
+                                <ThinkingDisplay
                                     contentParts={message.chatMessage.contentParts}
                                     displayMode="separate"
                                     isStreaming={uiState.isLoading && message.chatMessage.id === storedMessages[storedMessages.length - 1]?.id}

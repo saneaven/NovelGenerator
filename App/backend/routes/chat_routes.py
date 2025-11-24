@@ -210,8 +210,8 @@ async def create_message(
             part.model_dump() for part in data.content_parts
         ]
 
-    if data.reasoning_details:
-        message_data[data.language]['reasoning_details'] = data.reasoning_details
+    if data.thinking_details:
+        message_data[data.language]['thinking_details'] = data.thinking_details
 
     message = ChatMessage(
         id=uuid.uuid4(),
@@ -292,8 +292,8 @@ async def update_message(
             part.model_dump() for part in data.content_parts
         ]
 
-    if data.reasoning_details is not None:
-        message_data[data.language]['reasoning_details'] = data.reasoning_details
+    if data.thinking_details is not None:
+        message_data[data.language]['thinking_details'] = data.thinking_details
 
     message.data = message_data  # type: ignore
     flag_modified(message, "data")

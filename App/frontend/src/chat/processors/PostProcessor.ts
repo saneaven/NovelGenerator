@@ -4,7 +4,7 @@ import type {
   ProcessedChatMessage,
   ChatPipelineContext
 } from '../types';
-import type { ReasoningDetail, ContentPart } from '../../llm_request/types';
+import type { ThinkingDetail, ContentPart } from '../../llm_request/types';
 
 export class DefaultPostProcessor implements PostProcessor {
   process(
@@ -13,7 +13,7 @@ export class DefaultPostProcessor implements PostProcessor {
   ): PostProcessingResult {
     let contentParts: ContentPart[];
     let tool_calls: any[] | undefined;
-    let reasoning_details: ReasoningDetail[] | undefined;
+    let thinking_details: ThinkingDetail[] | undefined;
 
     // Handle different response formats
     if (typeof aiResponse === 'string') {
@@ -23,17 +23,17 @@ export class DefaultPostProcessor implements PostProcessor {
       // NEW: Already structured contentParts from ChatManager
       contentParts = aiResponse.contentParts;
       tool_calls = aiResponse.tool_calls;
-      reasoning_details = aiResponse.reasoning_details;
+      thinking_details = aiResponse.thinking_details;
     } else if (aiResponse.content) {
       // Fallback: old format with plain content
       contentParts = [{type: 'content', text: aiResponse.content}];
       tool_calls = aiResponse.tool_calls;
-      reasoning_details = aiResponse.reasoning_details;
+      thinking_details = aiResponse.thinking_details;
     } else {
       // No content at all
       contentParts = [];
       tool_calls = aiResponse.tool_calls;
-      reasoning_details = aiResponse.reasoning_details;
+      thinking_details = aiResponse.thinking_details;
     }
 
     // Create processed message
@@ -42,7 +42,7 @@ export class DefaultPostProcessor implements PostProcessor {
       role: 'assistant',
       contentParts,
       timestamp: new Date(),
-      reasoning_details
+      thinking_details
     };
 
     // Process tool calls if present

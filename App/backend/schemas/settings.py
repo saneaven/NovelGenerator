@@ -26,7 +26,7 @@ class ProviderPreference(BaseModel):
 
 
 class ThinkingConfig(BaseModel):
-    """Thinking configuration for model-native reasoning"""
+    """Thinking configuration for model-native thinking"""
     effort: Optional[str] = "medium"  # 'low' | 'medium' | 'high'
     maxTokens: Optional[int] = None
 

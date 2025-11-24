@@ -39,14 +39,14 @@ class MessageCreate(BaseModel):
     content_parts: Optional[List[ContentPart]] = None
     language: str = "English"
     function_calls: Optional[List[Dict[str, Any]]] = None
-    reasoning_details: Optional[List[Dict[str, Any]]] = None
+    thinking_details: Optional[List[Dict[str, Any]]] = None
 
 
 class MessageUpdate(BaseModel):
     content_parts: Optional[List[ContentPart]] = None
     language: str = "English"
     function_calls: Optional[List[Dict[str, Any]]] = None
-    reasoning_details: Optional[List[Dict[str, Any]]] = None
+    thinking_details: Optional[List[Dict[str, Any]]] = None
 
 
 class MessageResponse(BaseModel):

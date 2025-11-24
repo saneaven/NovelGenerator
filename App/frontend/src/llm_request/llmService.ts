@@ -1,4 +1,4 @@
-import { type ConversationBlock, type ReasoningDetail } from "./types";
+import { type ConversationBlock, type ThinkingDetail } from "./types";
 import { type ProviderType, type ProviderConfig, type ProviderPreference, type ThinkingConfig } from "../store/settingsStore";
 
 const API_BASE = "http://localhost:8000/api/v1";
@@ -19,7 +19,7 @@ export async function* streamChat(
         thinkingConfig?: ThinkingConfig;
         thinkingMode?: 'off' | 'custom' | 'model';
     }
-): AsyncGenerator<string | { content: string | null; tool_calls?: any[]; reasoning?: string; reasoning_details?: ReasoningDetail[]; reasoning_text?: string }>
+): AsyncGenerator<string | { content: string | null; tool_calls?: any[]; thinking?: string; thinking_details?: ThinkingDetail[]; thinking_text?: string }>
 {
     const endpoint = `${API_BASE}/chat/completions/${provider}/stream`;
 
@@ -49,10 +49,10 @@ export async function* streamChat(
         requestBody.provider_preference = opts.providerPreference;
     }
 
-    // Add reasoning config for OpenRouter
+    // Add thinking config for OpenRouter
     if (provider === 'openrouter' && opts?.thinkingConfig)
     {
-        requestBody.reasoning_config = opts.thinkingConfig;
+        requestBody.thinking_config = opts.thinkingConfig;
     }
 
     // Add thinking_mode for all providers
@@ -128,7 +128,7 @@ export async function* streamChat(
                 if (!data) continue;
                 if (data === "[DONE]") return;
 
-                // OpenAI-compatible stream: handle content, tool_calls, and reasoning
+                // OpenAI-compatible stream: handle content, tool_calls, and thinking
                 try
                 {
                     const chunk = JSON.parse(data);
@@ -136,17 +136,17 @@ export async function* streamChat(
                     const delta = chunk?.choices?.[0]?.delta;
                     const content: string | undefined = delta?.content;
                     const tool_calls = delta?.tool_calls;
-                    const reasoning_details = delta?.reasoning_details;
-                    const reasoning_text: string | undefined = delta?.reasoning?.text;
+                    const thinking_details: ThinkingDetail[] | undefined = delta?.thinking_details;
+                    const thinking_text: string | undefined = delta?.thinking?.text;
 
-                    // Yield tool calls or reasoning as object
-                    if (tool_calls || reasoning_details || reasoning_text)
+                    // Yield tool calls or thinking as object
+                    if (tool_calls || thinking_details || thinking_text)
                     {
                         yield {
-                            content: null,  // Don't send content with reasoning to prevent interruption
+                            content: null,  // Don't send content with thinking to prevent interruption
                             tool_calls,
-                            reasoning_details,
-                            reasoning_text
+                            thinking_details,
+                            thinking_text
                         };
                     } else if (content)
                     {

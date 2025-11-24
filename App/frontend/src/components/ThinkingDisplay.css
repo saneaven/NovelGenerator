@@ -16,8 +16,7 @@
   word-wrap: break-word;
 }
 
-.content-part-thinking,
-.content-part-reasoning {
+.content-part-thinking {
   background: rgba(100, 150, 255, 0.05);
   border-left: 3px solid rgba(100, 150, 255, 0.3);
   padding: 12px;
@@ -42,7 +41,7 @@
 /* ===================================
    SEPARATE MODE - Individual minimal thinking cards
    =================================== */
-.message-with-reasoning {
+.message-with-thinking {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -130,8 +129,7 @@
    DARK MODE SUPPORT
    =================================== */
 @media (prefers-color-scheme: dark) {
-  .content-part-thinking,
-  .content-part-reasoning {
+  .content-part-thinking {
     background: rgba(100, 150, 255, 0.08);
     border-left-color: rgba(100, 150, 255, 0.4);
   }

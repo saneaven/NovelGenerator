@@ -16,7 +16,7 @@ class BaseProvider(ABC):
         functions: Optional[List[Dict]] = None,
         max_tokens: Optional[int] = None,
         provider_preference: Optional[Dict] = None,
-        reasoning_config: Optional[Dict] = None,
+        thinking_config: Optional[Dict] = None,
         thinking_mode: Optional[str] = None
     ) -> AsyncGenerator[bytes, None]:
         """
@@ -29,7 +29,7 @@ class BaseProvider(ABC):
             functions: Optional function calling schemas
             max_tokens: Maximum tokens to generate
             provider_preference: Provider-specific preferences (e.g., OpenRouter only/ignore)
-            reasoning_config: Reasoning configuration for model-native reasoning (e.g., OpenRouter)
+            thinking_config: Thinking configuration for model-native thinking (mapped to provider-native thinking field)
             thinking_mode: Thinking mode ('off', 'custom', 'model')
 
         Yields:

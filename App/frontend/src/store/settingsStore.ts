@@ -35,7 +35,7 @@ export interface ProviderPreference {
     ignore?: string[];
 }
 
-// Thinking configuration for model-native reasoning (OpenRouter)
+// Thinking configuration for model-native thinking (OpenRouter)
 export interface ThinkingConfig {
     effort?: 'low' | 'medium' | 'high';
     maxTokens?: number;
@@ -212,35 +212,19 @@ interface SettingsStore {
     resetToDefaults: () => void;
 }
 
-// Helper to migrate old settings format
-const migrateAdvancedSettings = (advanced: any): AdvancedFunctionSettings => {
-    // Handle old enableThinking boolean -> new thinkingMode
-    if ('enableThinking' in advanced && !('thinkingMode' in advanced)) {
-        return {
-            enablePrefill: advanced.enablePrefill ?? false,
-            thinkingMode: advanced.enableThinking ? 'custom' : 'off',
-            thinkingConfig: advanced.thinkingConfig ?? advanced.reasoningConfig ?? {
-                effort: 'medium',
-            },
-        };
-    }
+// Helper to normalize advanced settings without legacy fallbacks
+const migrateAdvancedSettings = (advanced: any): AdvancedFunctionSettings => ({
+    enablePrefill: advanced.enablePrefill ?? false,
+    thinkingMode: advanced.thinkingMode ?? 'off',
+    thinkingConfig: advanced.thinkingConfig ?? { effort: 'medium' },
+});
 
-    // Ensure reasoningConfig exists
-    return {
-        ...advanced,
-        thinkingConfig: advanced.thinkingConfig ?? advanced.reasoningConfig ?? {
-            effort: 'medium',
-        },
-    };
-};
-
-// Helper to merge stored settings with defaults (for backward compatibility)
+// Helper to merge stored settings with defaults
 const mergeWithDefaults = (stored: any): Settings => {
     if (!stored || typeof stored !== 'object') {
         return defaultSettings;
     }
 
-    // Migrate function configs
     const migratedFunctionConfigs: any = {};
     if (stored.functionConfigs) {
         for (const [key, config] of Object.entries(stored.functionConfigs) as [string, any][]) {

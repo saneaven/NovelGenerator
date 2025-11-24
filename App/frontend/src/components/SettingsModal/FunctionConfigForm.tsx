@@ -207,7 +207,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
 
             {/* Thinking Config (only shown for model mode) */}
             {config.advanced.thinkingMode === 'model' && (
-              <div className="reasoning-config">
+              <div className="thinking-config">
                 <h5 className="subsection-title">Thinking Configuration</h5>
 
                 <div className="form-field">
@@ -245,7 +245,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                     className="config-input"
                   />
                   <p className="field-hint">
-                    Directly specify reasoning token budget (1024-32000). Leave empty to use effort-based allocation.
+                    Directly specify thinking token budget (1024-32000). Leave empty to use effort-based allocation.
                   </p>
                 </div>
               </div>

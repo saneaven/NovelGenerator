@@ -64,7 +64,7 @@ class AsyncOpenAIProvider(BaseProvider):
         functions: Optional[List[Dict]],
         max_tokens: Optional[int],
         provider_preference: Optional[Dict],
-        reasoning_config: Optional[Dict],
+        thinking_config: Optional[Dict],
     ) -> Dict[str, object]:
         request: Dict[str, object] = {
             "model": model,
@@ -80,7 +80,7 @@ class AsyncOpenAIProvider(BaseProvider):
             request["tools"] = [{"type": "function", "function": fn} for fn in functions]
             request["tool_choice"] = "auto"
 
-        extra_body = self._build_extra_body(provider_preference, reasoning_config)
+        extra_body = self._build_extra_body(provider_preference, thinking_config)
         if extra_body:
             request["extra_body"] = extra_body
 
@@ -93,7 +93,7 @@ class AsyncOpenAIProvider(BaseProvider):
     def _build_extra_body(
         self,
         provider_preference: Optional[Dict],
-        reasoning_config: Optional[Dict],
+        thinking_config: Optional[Dict],
     ) -> Optional[Dict]:
         return None
 
@@ -167,7 +167,7 @@ class AsyncOpenAIProvider(BaseProvider):
 
             if thinking_block:
                 extra_chunks.append(
-                    {"choices": [{"delta": {"reasoning": {"text": thinking_block}}}]}
+                    {"choices": [{"delta": {"thinking": {"text": thinking_block}}}]}
                 )
 
         updated_choice = copy.deepcopy(first_choice)
@@ -192,7 +192,7 @@ class AsyncOpenAIProvider(BaseProvider):
         if final_content:
             final_chunks.append({"choices": [{"delta": {"content": final_content}}]})
         if final_thinking:
-            final_chunks.append({"choices": [{"delta": {"reasoning": {"text": final_thinking}}}]})
+            final_chunks.append({"choices": [{"delta": {"thinking": {"text": final_thinking}}}]})
         return final_chunks
 
     async def stream_chat(
@@ -203,7 +203,7 @@ class AsyncOpenAIProvider(BaseProvider):
         functions: Optional[List[Dict]] = None,
         max_tokens: Optional[int] = None,
         provider_preference: Optional[Dict] = None,
-        reasoning_config: Optional[Dict] = None,
+        thinking_config: Optional[Dict] = None,
         thinking_mode: Optional[str] = None,
     ) -> AsyncGenerator[bytes, None]:
         if not self.validate_config():
@@ -218,7 +218,7 @@ class AsyncOpenAIProvider(BaseProvider):
             functions,
             max_tokens,
             provider_preference,
-            reasoning_config,
+            thinking_config,
         )
 
         parser = ThinkingStreamParser() if thinking_mode == "custom" else None

@@ -321,7 +321,7 @@ export class TranslationService {
   }
 
   /**
-   * Translate a single chat message (content + optional thinking/reasoning)
+   * Translate a single chat message (content + optional thinking)
    */
   static async translateChatMessage(
     source: { content: string },

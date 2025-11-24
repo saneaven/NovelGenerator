@@ -248,14 +248,14 @@ export interface ChatMessageCreate {
   content_parts?: ContentPart[];
   language?: string;
   function_calls?: any;
-  reasoning_details?: any[];
+  thinking_details?: any[];
 }
 
 export interface ChatMessageUpdate {
   content_parts?: ContentPart[];
   language?: string;
   function_calls?: any;
-  reasoning_details?: any[];
+  thinking_details?: any[];
 }
 
 export interface ChatMessageResponse {
@@ -264,7 +264,7 @@ export interface ChatMessageResponse {
   role: string;
   data: LanguageData<{
     contentParts: ContentPart[];
-    reasoning_details?: any[];
+    thinking_details?: any[];
   }>;
   function_calls?: any;
   created_at: string;
