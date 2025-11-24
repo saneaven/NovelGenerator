@@ -1,5 +1,5 @@
 import { type ConversationBlock, type ReasoningDetail } from "./types";
-import { type ProviderType, type ProviderConfig, type ProviderPreference, type ReasoningConfig } from "../store/settingsStore";
+import { type ProviderType, type ProviderConfig, type ProviderPreference, type ThinkingConfig } from "../store/settingsStore";
 
 const API_BASE = "http://localhost:8000/api/v1";
 
@@ -16,7 +16,7 @@ export async function* streamChat(
         model?: string;
         functions?: any[];
         providerPreference?: ProviderPreference;
-        reasoningConfig?: ReasoningConfig;
+        thinkingConfig?: ThinkingConfig;
         thinkingMode?: 'off' | 'custom' | 'model';
     }
 ): AsyncGenerator<string | { content: string | null; tool_calls?: any[]; reasoning?: string; reasoning_details?: ReasoningDetail[]; reasoning_text?: string }>
@@ -50,9 +50,9 @@ export async function* streamChat(
     }
 
     // Add reasoning config for OpenRouter
-    if (provider === 'openrouter' && opts?.reasoningConfig)
+    if (provider === 'openrouter' && opts?.thinkingConfig)
     {
-        requestBody.reasoning_config = opts.reasoningConfig;
+        requestBody.reasoning_config = opts.thinkingConfig;
     }
 
     // Add thinking_mode for all providers

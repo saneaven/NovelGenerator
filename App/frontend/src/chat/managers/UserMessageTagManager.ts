@@ -162,7 +162,7 @@ export class UserMessageTagManager {
    */
   private static async generateLastUserMessageTag(context: LastUserMessageTagContext): Promise<string> {
     const data = {
-      var: {
+      variable: {
         language: this.resolveLanguage(context.outputLanguage),
       },
       context: {
@@ -187,7 +187,7 @@ export class UserMessageTagManager {
    */
   private static async generateNonLastUserMessageTag(context: NonLastUserMessageTagContext): Promise<string> {
     const data = {
-      var: {
+      variable: {
         language: this.resolveLanguage(context.outputLanguage),
       },
       context: {

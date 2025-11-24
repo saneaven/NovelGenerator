@@ -155,7 +155,7 @@ const NovelEditor: React.FC = () =>
                 mode: 'novelEditor',
                 enablePrefill: chatFunctionConfig.advanced.enablePrefill,
                 thinkingMode: chatFunctionConfig.advanced.thinkingMode,
-                reasoningConfig: chatFunctionConfig.advanced.reasoningConfig,
+                thinkingConfig: chatFunctionConfig.advanced.thinkingConfig,
             },
             chatManagerCallbacks
         );

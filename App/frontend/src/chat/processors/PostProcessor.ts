@@ -40,7 +40,6 @@ export class DefaultPostProcessor implements PostProcessor {
     const message: ProcessedChatMessage = {
       id: crypto.randomUUID(),
       role: 'assistant',
-      content: null,  // Deprecated - use contentParts instead
       contentParts,
       timestamp: new Date(),
       reasoning_details

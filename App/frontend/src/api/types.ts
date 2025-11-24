@@ -239,7 +239,7 @@ export interface ChatResponse extends BaseMetadata {
 }
 
 export interface ContentPart {
-  type: 'content' | 'thinking' | 'reasoning';
+  type: 'content' | 'thinking';
   text: string;
 }
 

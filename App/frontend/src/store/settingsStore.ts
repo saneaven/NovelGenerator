@@ -35,8 +35,8 @@ export interface ProviderPreference {
     ignore?: string[];
 }
 
-// Reasoning configuration for model-native reasoning (OpenRouter)
-export interface ReasoningConfig {
+// Thinking configuration for model-native reasoning (OpenRouter)
+export interface ThinkingConfig {
     effort?: 'low' | 'medium' | 'high';
     maxTokens?: number;
 }
@@ -45,7 +45,7 @@ export interface ReasoningConfig {
 export interface AdvancedFunctionSettings {
     enablePrefill: boolean;
     thinkingMode: 'off' | 'model' | 'custom';
-    reasoningConfig?: ReasoningConfig;
+    thinkingConfig?: ThinkingConfig;
 }
 
 // Complete configuration for a single AI function
@@ -97,7 +97,7 @@ const defaultSettings: Settings = {
             advanced: {
                 enablePrefill: false,
                 thinkingMode: 'off',
-                reasoningConfig: {
+                thinkingConfig: {
                     effort: 'medium',
                 },
             },
@@ -111,7 +111,7 @@ const defaultSettings: Settings = {
             advanced: {
                 enablePrefill: false,
                 thinkingMode: 'off',
-                reasoningConfig: {
+                thinkingConfig: {
                     effort: 'medium',
                 },
             },
@@ -125,7 +125,7 @@ const defaultSettings: Settings = {
             advanced: {
                 enablePrefill: false,
                 thinkingMode: 'off',
-                reasoningConfig: {
+                thinkingConfig: {
                     effort: 'medium',
                 },
             },
@@ -139,7 +139,7 @@ const defaultSettings: Settings = {
             advanced: {
                 enablePrefill: false,
                 thinkingMode: 'off',
-                reasoningConfig: {
+                thinkingConfig: {
                     effort: 'medium',
                 },
             },
@@ -153,7 +153,7 @@ const defaultSettings: Settings = {
             advanced: {
                 enablePrefill: true,
                 thinkingMode: 'off',
-                reasoningConfig: {
+                thinkingConfig: {
                     effort: 'medium',
                 },
             },
@@ -219,7 +219,7 @@ const migrateAdvancedSettings = (advanced: any): AdvancedFunctionSettings => {
         return {
             enablePrefill: advanced.enablePrefill ?? false,
             thinkingMode: advanced.enableThinking ? 'custom' : 'off',
-            reasoningConfig: advanced.reasoningConfig ?? {
+            thinkingConfig: advanced.thinkingConfig ?? advanced.reasoningConfig ?? {
                 effort: 'medium',
             },
         };
@@ -228,7 +228,7 @@ const migrateAdvancedSettings = (advanced: any): AdvancedFunctionSettings => {
     // Ensure reasoningConfig exists
     return {
         ...advanced,
-        reasoningConfig: advanced.reasoningConfig ?? {
+        thinkingConfig: advanced.thinkingConfig ?? advanced.reasoningConfig ?? {
             effort: 'medium',
         },
     };

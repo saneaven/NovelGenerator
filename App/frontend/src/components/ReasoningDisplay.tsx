@@ -20,8 +20,8 @@ const ReasoningDisplay: React.FC<ReasoningDisplayProps> = ({
     return null;
   }
 
-  // Extract thinking/reasoning parts
-  const thinkingParts = contentParts.filter(p => p.type === 'thinking' || p.type === 'reasoning');
+  // Extract thinking parts
+  const thinkingParts = contentParts.filter(p => p.type === 'thinking');
   const contentOnlyParts = contentParts.filter(p => p.type === 'content');
 
   // Generate stable key for a content part based on text hash and position
@@ -56,7 +56,7 @@ const ReasoningDisplay: React.FC<ReasoningDisplayProps> = ({
             ) : (
               <div className="thinking-block">
                 <div className="thinking-indicator">
-                  {part.type === 'thinking' ? '💭 Thinking' : '🧠 Reasoning'}
+                  {'🧠 Thinking'}
                 </div>
                 <div className="thinking-text">{part.text}</div>
               </div>
@@ -85,7 +85,7 @@ const ReasoningDisplay: React.FC<ReasoningDisplayProps> = ({
             >
               <span className="toggle-icon">{isExpanded ? '▼' : '▶'}</span>
               <span className="toggle-label">
-                💭 {part.type === 'thinking' ? 'Thinking' : 'Reasoning'}
+                💭 Thinking
               </span>
               {isStreamingThisBlock && <span className="streaming-indicator">●</span>}
             </button>

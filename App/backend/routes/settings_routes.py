@@ -41,7 +41,7 @@ async def get_user_settings(
                     'advanced': {
                         'enablePrefill': False,
                         'thinkingMode': 'off',
-                        'reasoningConfig': {'effort': 'medium'}
+                        'thinkingConfig': {'effort': 'medium'}
                     }
                 },
                 'translation': {
@@ -51,7 +51,7 @@ async def get_user_settings(
                     'advanced': {
                         'enablePrefill': False,
                         'thinkingMode': 'off',
-                        'reasoningConfig': {'effort': 'medium'}
+                        'thinkingConfig': {'effort': 'medium'}
                     }
                 },
                 'storyEdit': {
@@ -61,7 +61,7 @@ async def get_user_settings(
                     'advanced': {
                         'enablePrefill': False,
                         'thinkingMode': 'off',
-                        'reasoningConfig': {'effort': 'medium'}
+                        'thinkingConfig': {'effort': 'medium'}
                     }
                 },
                 'chapterGen': {
@@ -71,7 +71,7 @@ async def get_user_settings(
                     'advanced': {
                         'enablePrefill': True,
                         'thinkingMode': 'off',
-                        'reasoningConfig': {'effort': 'medium'}
+                        'thinkingConfig': {'effort': 'medium'}
                     }
                 }
             },

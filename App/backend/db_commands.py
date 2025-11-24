@@ -8,7 +8,9 @@ Usage: python db_commands.py <command>
 import subprocess
 import sys
 from database import engine, Base, DATABASE_URL
-from models import db_models
+# Import all models so Base.metadata includes every table (core + translation)
+from models import db_models  # noqa: F401
+from models import translation_models  # noqa: F401
 from sqlalchemy import text, inspect, MetaData
 
 

@@ -16,7 +16,7 @@ import {
   type StoryObjectEditPromptContext,
   type ChapterEditPromptContext
 } from '../managers/SystemPromptManager';
-import { PrefillManager, PrefillType, type ChatAssistantPrefillContext } from '../managers/PrefillManager';
+import { PrefillManager, PrefillType, type ChatAssistantPrefillContext, type TranslationPrefillContext } from '../managers/PrefillManager';
 
 export class DefaultPreProcessor implements PreProcessor {
   async process(
@@ -32,13 +32,13 @@ export class DefaultPreProcessor implements PreProcessor {
     const promptBundle = await this.generatePromptBundle(context, conversationLanguage, functions);
     conversationBlocks.push({
       role: 'system',
-      content: promptBundle.systemPrompt
+      contentParts: [{ type: 'content', text: promptBundle.systemPrompt }]
     });
 
     for (const autoUserContent of promptBundle.userPrompts) {
       conversationBlocks.push({
         role: 'user',
-        content: autoUserContent
+        contentParts: [{ type: 'content', text: autoUserContent }]
       });
     }
 
@@ -59,7 +59,7 @@ export class DefaultPreProcessor implements PreProcessor {
         processedMessages.push(processed);
         conversationBlocks.push({
           role: processed.role,
-          content: typeof processed.content === 'string' ? processed.content : (processed.content ?? ''),
+          contentParts: processed.contentParts,
           function_call: processed.function_call,
           name: processed.name
         });
@@ -71,7 +71,7 @@ export class DefaultPreProcessor implements PreProcessor {
       if (prefill && prefill.trim().length > 0) {
         conversationBlocks.push({
           role: 'assistant',
-          content: prefill
+          contentParts: [{ type: 'content', text: prefill }]
         });
       }
     }
@@ -93,9 +93,9 @@ export class DefaultPreProcessor implements PreProcessor {
       conversationBlocks: conversationBlocks.map((block, idx) => ({
         index: idx,
         role: block.role,
-        contentType: typeof block.content,
-        contentValue: block.content,
-        isString: typeof block.content === 'string'
+        contentPartsLength: block.contentParts.length,
+        contentParts: block.contentParts,
+        isArray: Array.isArray(block.contentParts)
       })),
       functions: availableFunctions
     });
@@ -174,8 +174,27 @@ export class DefaultPreProcessor implements PreProcessor {
   }
 
   private async generatePrefill(context: ChatPipelineContext, conversationLanguage?: string, functions?: FunctionCallSchema[]): Promise<string> {
-    // For now, we only use CHAT_ASSISTANT prefill for normal chat mode
-    // This can be extended to support other prefill types based on context
+    const promptType = context.systemInsertConfig.promptType || 'chat';
+
+    if (promptType === 'translation') {
+      const translationContext = context.systemInsertConfig.promptContext as TranslationPromptContext | undefined;
+      if (!translationContext) {
+        return '';
+      }
+
+      const prefillContext: TranslationPrefillContext = {
+        sourceLanguage: translationContext.sourceLanguage,
+        targetLanguage: translationContext.targetLanguage,
+        dataType: translationContext.translationType === 'chat' ? 'chatMessage' : 'general',
+        translationType: translationContext.translationType || 'story',
+        outputLanguage: conversationLanguage,
+        objectCount: translationContext.translationType === 'chat' ? undefined : (translationContext as any).objectCount
+      };
+
+      return await PrefillManager.generatePrefill(PrefillType.TRANSLATION_ASSISTANT, prefillContext);
+    }
+
+    // Default: chat prefill
     const prefillContext: ChatAssistantPrefillContext = {
       mode: context.mode,
       outputLanguage: conversationLanguage,
@@ -188,32 +207,42 @@ export class DefaultPreProcessor implements PreProcessor {
   private processAssistantMessage(_context: ChatPipelineContext, messageIndex: number, allMessages: ChatMessage[]): ProcessedChatMessage {
     const message = allMessages[messageIndex];
 
-    // Ensure content is a string before processing
-    const messageContent = typeof message.content === 'string' ? message.content : '';
+    // Extract text from contentParts
+    const messageContent = message.contentParts
+      .filter(part => part.type === 'content')
+      .map(part => part.text)
+      .join('');
 
     const processed: ProcessedChatMessage = {
       ...message,
-      content: messageContent,
-      originalContent: messageContent
+      originalContent: messageContent,
+      originalContentParts: [...message.contentParts]
     };
 
-    processed.content = this.summarizeEditTags(processed.content || '');
+    // Process the content and update contentParts
+    const processedContent = this.summarizeEditTags(messageContent);
+    processed.contentParts = [{ type: 'content', text: processedContent }];
 
     return processed;
   }
   private async processUserMessage(context: ChatPipelineContext, messageIndex: number, allMessages: ChatMessage[], conversationLanguage?: string): Promise<ProcessedChatMessage> {
     const message = allMessages[messageIndex];
 
-    // Ensure content is a string before processing
-    const messageContent = typeof message.content === 'string' ? message.content : '';
+    // Extract text from contentParts
+    const messageContent = message.contentParts
+      .filter(part => part.type === 'content')
+      .map(part => part.text)
+      .join('');
 
     const processed: ProcessedChatMessage = {
       ...message,
-      content: messageContent,
-      originalContent: messageContent
+      originalContent: messageContent,
+      originalContentParts: [...message.contentParts]
     };
 
-    processed.content = await this.addSystemInfo(processed.content || '', context, messageIndex, allMessages, conversationLanguage);
+    // Process the content and update contentParts
+    const processedContent = await this.addSystemInfo(messageContent, context, messageIndex, allMessages, conversationLanguage);
+    processed.contentParts = [{ type: 'content', text: processedContent }];
 
     return processed;
   }

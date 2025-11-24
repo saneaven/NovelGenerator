@@ -116,8 +116,14 @@ async def stream_chat(provider: str, request: ChatCompletionRequest):
                 detail=f"Invalid configuration for provider '{provider}'"
             )
 
-        # Convert messages to dict format
-        messages = [msg.model_dump() for msg in request.messages]
+        # Convert messages to dict format with content field for LLM providers
+        messages = [
+            {
+                "role": msg.role,
+                "content": msg.get_content_text()
+            }
+            for msg in request.messages
+        ]
 
         async def event_gen():
             # Prepare provider preference for OpenRouter

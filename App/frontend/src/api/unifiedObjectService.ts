@@ -341,20 +341,6 @@ export const translationService = {
       }
     );
   },
-
-  /**
-   * @deprecated Use addTranslations instead. This alias is kept for backward compatibility.
-   */
-  async batchAddTranslations(
-    translations: Array<{
-      objectType: ObjectType;
-      objectId: string;
-      language: string;
-      data: Record<string, any>;
-    }>
-  ): Promise<{ success: boolean; translated_count: number; message: string }> {
-    return this.addTranslations(translations);
-  },
 };
 
 export default unifiedObjectService;

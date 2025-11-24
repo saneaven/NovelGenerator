@@ -25,8 +25,8 @@ class ProviderPreference(BaseModel):
     ignore: Optional[List[str]] = None
 
 
-class ReasoningConfig(BaseModel):
-    """Reasoning configuration for model-native reasoning"""
+class ThinkingConfig(BaseModel):
+    """Thinking configuration for model-native reasoning"""
     effort: Optional[str] = "medium"  # 'low' | 'medium' | 'high'
     maxTokens: Optional[int] = None
 
@@ -35,7 +35,7 @@ class AdvancedFunctionSettings(BaseModel):
     """Advanced settings for AI functions"""
     enablePrefill: bool = False
     thinkingMode: str = "off"  # 'off' | 'model' | 'custom'
-    reasoningConfig: Optional[ReasoningConfig] = Field(default_factory=lambda: ReasoningConfig())
+    thinkingConfig: Optional[ThinkingConfig] = Field(default_factory=lambda: ThinkingConfig())
 
 
 class FunctionAIConfig(BaseModel):

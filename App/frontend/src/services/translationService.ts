@@ -1,21 +1,21 @@
 /**
  * Unified Translation Service
  *
- * Core philosophy: Everything is a batch translation.
- * Single translations are just batches of size 1.
+ * Core philosophy: reuse one pipeline for translation tasks.
+ * - Story objects: batch (single = batch of size 1) via translate_batch_story_objects.
+ * - Chat messages: dedicated chat translation flow via translate_chat_message.
  *
- * This service handles both single and batch translation operations
- * using a unified pipeline with LLMRequestManager and batch function schema.
+ * This service handles all translation operations using LLMRequestManager.
  */
 
 import type { MutableRefObject } from 'react';
 import type { LanguageData } from '../types/multilingual';
 import { ChatPipeline } from '../chat/ChatPipeline';
 import { LLMRequestManager, type LLMRequestManagerConfig, type LLMRequestManagerCallbacks } from '../chat/sessions/LLMRequestManager';
-import { TRANSLATE_BATCH_STORY_OBJECTS_FUNCTION } from '../chat/types/translationFunctionSchemas';
+import { TRANSLATE_BATCH_STORY_OBJECTS_FUNCTION, TRANSLATE_CHAT_MESSAGE_FUNCTION } from '../chat/types/translationFunctionSchemas';
 import { useSettingsStore } from '../store/settingsStore';
 import type { ObjectType } from '../types/unifiedObject';
-import type { FunctionCallMetadata, ContentPart, ChatMessage } from '../llm_request/types';
+import type { FunctionCallMetadata, ContentPart } from '../llm_request/types';
 import { translationService as translationAPI } from '../api/unifiedObjectService';
 
 // ============================================================================
@@ -182,13 +182,15 @@ export class TranslationService {
     }));
 
     const promptContext = {
+      translationType: 'story' as const,
       sourceLanguage,
       targetLanguage,
       objectCount: objects.length,
       objectsArray: JSON.stringify(objectsArray, null, 2),
       userInstructions: userInstructions || '',
       enablePrefill: translationConfig.advanced.enablePrefill,
-      enableThinking: translationConfig.advanced.thinkingMode !== 'off',
+      enableThinking: false,
+      enableCustomThinking: false,
     };
 
     const abortController = new AbortController();
@@ -199,14 +201,20 @@ export class TranslationService {
 
     const chatPipeline = new ChatPipeline();
     const completed: string[] = [];
+    const systemInsertConfig = {
+      ...ChatPipeline.createDefaultSystemConfig(),
+      enabled: true,
+      includeProjectInfo: false,
+      includeStoryObjects: false,
+      includeNovelContent: false,
+      promptContext,
+      promptType: 'translation' as const,
+    };
 
     const llmConfig: LLMRequestManagerConfig = {
       projectId,
       getStoryObjects: () => createEmptyStoryObjects(),
-      systemInsertConfig: {
-        promptContext,
-        promptType: 'translation',
-      },
+      systemInsertConfig,
       chatPipeline,
       provider: translationConfig.provider,
       providerConfig,
@@ -217,7 +225,7 @@ export class TranslationService {
       mode: 'workspace',
       enablePrefill: translationConfig.advanced.enablePrefill,
       thinkingMode: translationConfig.advanced.thinkingMode as any,
-      reasoningConfig: translationConfig.advanced.reasoningConfig,
+      thinkingConfig: translationConfig.advanced.thinkingConfig,
       abortControllerRef,
     };
 
@@ -312,6 +320,140 @@ export class TranslationService {
     }
   }
 
+  /**
+   * Translate a single chat message (content + optional thinking/reasoning)
+   */
+  static async translateChatMessage(
+    source: { content: string },
+    options: {
+      projectId: string;
+      sourceLanguage: string;
+      targetLanguage: string;
+      userInstructions?: string;
+      abortControllerRef?: MutableRefObject<AbortController | null>;
+    }
+  ): Promise<{ content: string }> {
+    const {
+      projectId,
+      sourceLanguage,
+      targetLanguage,
+      userInstructions,
+      abortControllerRef: providedAbortRef,
+    } = options;
+
+    const settingsStore = useSettingsStore.getState();
+    const translationConfig = settingsStore.getFunctionConfig('translation');
+    const providerConfig = settingsStore.getProviderConfig(translationConfig.provider);
+
+    const promptContext = {
+      translationType: 'chat' as const,
+      sourceLanguage,
+      targetLanguage,
+      sourceContent: source.content,
+      userInstructions: userInstructions || '',
+      enablePrefill: translationConfig.advanced.enablePrefill,
+      enableThinking: false,
+      enableCustomThinking: false,
+    };
+
+    const abortController = new AbortController();
+    const abortControllerRef: MutableRefObject<AbortController | null> = providedAbortRef || { current: abortController };
+    if (providedAbortRef) {
+      providedAbortRef.current = abortController;
+    }
+
+    const chatPipeline = new ChatPipeline();
+    const systemInsertConfig = {
+      ...ChatPipeline.createDefaultSystemConfig(),
+      enabled: true,
+      includeProjectInfo: false,
+      includeStoryObjects: false,
+      includeNovelContent: false,
+      promptContext,
+      promptType: 'translation' as const,
+    };
+
+    let resolveTranslation!: (value: { content: string }) => void;
+    let rejectTranslation!: (error: Error) => void;
+    let translationSettled = false;
+    const translationPromise = new Promise<{ content: string }>((resolve, reject) => {
+      resolveTranslation = (value) => {
+        translationSettled = true;
+        resolve(value);
+      };
+      rejectTranslation = (error) => {
+        translationSettled = true;
+        reject(error);
+      };
+    });
+
+    const llmConfig: LLMRequestManagerConfig = {
+      projectId,
+      getStoryObjects: () => createEmptyStoryObjects(),
+      systemInsertConfig,
+      chatPipeline,
+      provider: translationConfig.provider,
+      providerConfig,
+      aiModel: translationConfig.model,
+      temperature: translationConfig.temperature,
+      providerPreference: translationConfig.providerPreference,
+      functions: [TRANSLATE_CHAT_MESSAGE_FUNCTION],
+      mode: 'workspace',
+      enablePrefill: translationConfig.advanced.enablePrefill,
+      thinkingMode: translationConfig.advanced.thinkingMode as any,
+      thinkingConfig: translationConfig.advanced.thinkingConfig,
+      abortControllerRef,
+    };
+
+    const callbacks: LLMRequestManagerCallbacks = {
+      onStreamUpdate: () => {},
+      onFunctionCalls: async (functionCalls: FunctionCallMetadata[]) => {
+        const translationCall = functionCalls.find(fc => fc.function_name === TRANSLATE_CHAT_MESSAGE_FUNCTION.name);
+        if (!translationCall) {
+          rejectTranslation(new Error('AI did not call translate_chat_message function'));
+          return;
+        }
+
+        try {
+          const args = typeof translationCall.arguments === 'string'
+            ? JSON.parse(translationCall.arguments)
+            : translationCall.arguments;
+
+          if (!args || !args.content) {
+            rejectTranslation(new Error('Translation missing content field'));
+            return;
+          }
+
+          resolveTranslation({
+            content: args.content,
+          });
+        } catch (err) {
+          rejectTranslation(err instanceof Error ? err : new Error('Failed to parse translation result'));
+        }
+      },
+      onError: (error: Error) => {
+        rejectTranslation(error);
+      },
+    };
+
+    const llmManager = new LLMRequestManager(llmConfig, callbacks);
+
+    try {
+      await llmManager.run(null, {
+        history: [],
+        language: targetLanguage,
+      });
+      if (!translationSettled) {
+        rejectTranslation(new Error('No translation result returned by the AI'));
+      }
+      return await translationPromise;
+    } finally {
+      if (!providedAbortRef && abortControllerRef.current) {
+        abortControllerRef.current = null;
+      }
+    }
+  }
+
   // ==========================================================================
   // CONVENIENCE WRAPPERS
   // ==========================================================================
@@ -341,3 +483,4 @@ export class TranslationService {
 export const translateObjects = TranslationService.translateObjects.bind(TranslationService);
 export const translateSingle = TranslationService.translateSingle.bind(TranslationService);
 export const translateBatch = TranslationService.translateBatch.bind(TranslationService);
+export const translateChatMessage = TranslationService.translateChatMessage.bind(TranslationService);

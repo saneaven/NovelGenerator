@@ -55,8 +55,8 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
       const contentParts = message.contentParts.filter(part => part.type === 'content');
       content = contentParts.map(part => part.text).join('');
     } else {
-      // Fall back to legacy content fields
-      content = message.originalContent || message.content || '';
+      // Fall back to originalContent if contentParts is empty
+      content = message.originalContent || '';
     }
 
     // Only remove system tags for user messages, not assistant messages

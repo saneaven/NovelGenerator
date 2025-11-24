@@ -391,7 +391,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
           mode: 'workspace',
           enablePrefill: storyEditConfig.advanced.enablePrefill,
           thinkingMode: storyEditConfig.advanced.thinkingMode as any,
-          reasoningConfig: storyEditConfig.advanced.reasoningConfig,
+          thinkingConfig: storyEditConfig.advanced.thinkingConfig,
           abortControllerRef,
         },
         {

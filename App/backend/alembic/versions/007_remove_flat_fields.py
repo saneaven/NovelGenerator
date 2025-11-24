@@ -23,6 +23,7 @@ Tables modified:
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.engine.reflection import Inspector
 
 # revision identifiers, used by Alembic.
 revision = '007'
@@ -45,10 +46,20 @@ def upgrade() -> None:
     # ========================================================================
     print("Removing flat fields from basic_info...")
 
-    op.drop_column('basic_info', 'title')
-    op.drop_column('basic_info', 'logline')
-    op.drop_column('basic_info', 'genre')
-    op.drop_column('basic_info', 'active_version_id')
+    conn = op.get_bind()
+    inspector = Inspector.from_engine(conn)
+
+    def column_exists(table: str, column: str) -> bool:
+        return any(col['name'] == column for col in inspector.get_columns(table))
+
+    def drop_if_exists(table: str, column: str):
+        if column_exists(table, column):
+            op.drop_column(table, column)
+
+    drop_if_exists('basic_info', 'title')
+    drop_if_exists('basic_info', 'logline')
+    drop_if_exists('basic_info', 'genre')
+    drop_if_exists('basic_info', 'active_version_id')
 
     # Drop versions relationship (viewonly, so just cleanup comment)
     # The actual relationship is defined in Python, not in DB
@@ -58,45 +69,45 @@ def upgrade() -> None:
     # ========================================================================
     print("Removing flat fields from characters...")
 
-    op.drop_column('characters', 'name')
-    op.drop_column('characters', 'description')
-    op.drop_column('characters', 'active_version_id')
+    drop_if_exists('characters', 'name')
+    drop_if_exists('characters', 'description')
+    drop_if_exists('characters', 'active_version_id')
 
     # ========================================================================
     # 3. ORGANIZATIONS
     # ========================================================================
     print("Removing flat fields from organizations...")
 
-    op.drop_column('organizations', 'name')
-    op.drop_column('organizations', 'description')
-    op.drop_column('organizations', 'active_version_id')
+    drop_if_exists('organizations', 'name')
+    drop_if_exists('organizations', 'description')
+    drop_if_exists('organizations', 'active_version_id')
 
     # ========================================================================
     # 4. LOCATIONS
     # ========================================================================
     print("Removing flat fields from locations...")
 
-    op.drop_column('locations', 'name')
-    op.drop_column('locations', 'description')
-    op.drop_column('locations', 'active_version_id')
+    drop_if_exists('locations', 'name')
+    drop_if_exists('locations', 'description')
+    drop_if_exists('locations', 'active_version_id')
 
     # ========================================================================
     # 5. LOREBOOK_ENTRIES
     # ========================================================================
     print("Removing flat fields from lorebook_entries...")
 
-    op.drop_column('lorebook_entries', 'name')
-    op.drop_column('lorebook_entries', 'description')
-    op.drop_column('lorebook_entries', 'active_version_id')
+    drop_if_exists('lorebook_entries', 'name')
+    drop_if_exists('lorebook_entries', 'description')
+    drop_if_exists('lorebook_entries', 'active_version_id')
 
     # ========================================================================
     # 6. ACTS (keep order - it's structural)
     # ========================================================================
     print("Removing flat fields from acts...")
 
-    op.drop_column('acts', 'name')
-    op.drop_column('acts', 'description')
-    op.drop_column('acts', 'active_version_id')
+    drop_if_exists('acts', 'name')
+    drop_if_exists('acts', 'description')
+    drop_if_exists('acts', 'active_version_id')
     # Keep: id, outline_id, order, created_at, updated_at
 
     # ========================================================================
@@ -104,9 +115,9 @@ def upgrade() -> None:
     # ========================================================================
     print("Removing flat fields from chapters...")
 
-    op.drop_column('chapters', 'name')
-    op.drop_column('chapters', 'description')
-    op.drop_column('chapters', 'active_version_id')
+    drop_if_exists('chapters', 'name')
+    drop_if_exists('chapters', 'description')
+    drop_if_exists('chapters', 'active_version_id')
     # Keep: id, act_id, order, created_at, updated_at
 
     # ========================================================================
@@ -114,14 +125,14 @@ def upgrade() -> None:
     # ========================================================================
     print("Removing active_version_id from outlines...")
 
-    op.drop_column('outlines', 'active_version_id')
+    drop_if_exists('outlines', 'active_version_id')
 
     # ========================================================================
     # 9. CHAPTER_CONTENTS
     # ========================================================================
     print("Removing active_version_id from chapter_contents...")
 
-    op.drop_column('chapter_contents', 'active_version_id')
+    drop_if_exists('chapter_contents', 'active_version_id')
 
     print("\n✓ All flat fields removed!")
     print("Core tables now contain only structure (IDs, relationships, timestamps).\n")

@@ -56,7 +56,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
     });
   };
 
-  const handleReasoningConfigChange = (
+  const handleThinkingConfigChange = (
     key: 'effort' | 'maxTokens',
     value: any
   ) => {
@@ -64,8 +64,8 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
       ...config,
       advanced: {
         ...config.advanced,
-        reasoningConfig: {
-          ...config.advanced.reasoningConfig,
+        thinkingConfig: {
+          ...config.advanced.thinkingConfig,
           [key]: value,
         },
       },
@@ -156,7 +156,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
           </div>
 
           <div className="thinking-mode-field">
-            <label className="field-label">Thinking & Reasoning Mode</label>
+            <label className="field-label">Thinking Mode</label>
             <div className="radio-group">
               <label className="radio-option">
                 <input
@@ -168,7 +168,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                 />
                 <div className="radio-content">
                   <span className="radio-title">Off</span>
-                  <span className="radio-description">No thinking or reasoning shown</span>
+                  <span className="radio-description">No thinking shown</span>
                 </div>
               </label>
 
@@ -181,9 +181,9 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                   onChange={() => handleThinkingModeChange('model')}
                 />
                 <div className="radio-content">
-                  <span className="radio-title">Model Reasoning</span>
+                  <span className="radio-title">Model Thinking</span>
                   <span className="radio-description">
-                    Use model's native reasoning tokens (OpenRouter only)
+                    Use model's native thinking tokens (OpenRouter only)
                   </span>
                 </div>
               </label>
@@ -205,17 +205,17 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
               </label>
             </div>
 
-            {/* Reasoning Config (only shown for model mode) */}
+            {/* Thinking Config (only shown for model mode) */}
             {config.advanced.thinkingMode === 'model' && (
               <div className="reasoning-config">
-                <h5 className="subsection-title">Reasoning Configuration</h5>
+                <h5 className="subsection-title">Thinking Configuration</h5>
 
                 <div className="form-field">
                   <label>Effort Level</label>
                   <select
-                    value={config.advanced.reasoningConfig?.effort || 'medium'}
+                    value={config.advanced.thinkingConfig?.effort || 'medium'}
                     onChange={(e) =>
-                      handleReasoningConfigChange('effort', e.target.value)
+                      handleThinkingConfigChange('effort', e.target.value)
                     }
                     className="config-select"
                   >
@@ -224,19 +224,19 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                     <option value="high">High (~80% of max tokens)</option>
                   </select>
                   <p className="field-hint">
-                    Controls how much reasoning the model performs internally
+                    Controls how much thinking the model performs internally
                   </p>
                 </div>
 
                 <div className="form-field">
-                  <label>Max Reasoning Tokens (optional)</label>
+                  <label>Max Thinking Tokens (optional)</label>
                   <input
                     type="number"
                     min="1024"
                     max="32000"
-                    value={config.advanced.reasoningConfig?.maxTokens || ''}
+                    value={config.advanced.thinkingConfig?.maxTokens || ''}
                     onChange={(e) =>
-                      handleReasoningConfigChange(
+                      handleThinkingConfigChange(
                         'maxTokens',
                         e.target.value ? parseInt(e.target.value) : undefined
                       )

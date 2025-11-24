@@ -72,11 +72,11 @@ export type TranslationDataType =
   | 'chapterContent'
   | 'chatMessage'
   | 'general';
-
 /**
- * Context for translation prompts (unified for single and batch translations)
+ * Context for story-object translation prompts (single/batch)
  */
-export interface TranslationPromptContext extends BasePromptContext {
+export interface StoryTranslationPromptContext extends BasePromptContext {
+  translationType?: 'story';
   sourceLanguage: string;
   targetLanguage: string;
   objectCount: number;
@@ -86,6 +86,24 @@ export interface TranslationPromptContext extends BasePromptContext {
   enableThinking?: boolean;
   enableCustomThinking?: boolean;
 }
+
+/**
+ * Context for chat message translation prompts
+ */
+export interface ChatTranslationPromptContext extends BasePromptContext {
+  translationType: 'chat';
+  sourceLanguage: string;
+  targetLanguage: string;
+  sourceContent: string;
+  userInstructions?: string;
+  enablePrefill?: boolean;
+  enableThinking?: boolean;
+  enableCustomThinking?: boolean;
+}
+
+export type TranslationPromptContext =
+  | StoryTranslationPromptContext
+  | ChatTranslationPromptContext;
 
 export interface PromptBundle {
   systemPrompt: string;
@@ -103,7 +121,7 @@ export class SystemPromptManager {
   private static async getTemplate(
     functionType: 'chat' | 'translation' | 'storyEdit' | 'chapterGen',
     category: 'systemPrompt' | 'functionInstructions' | 'prefill' | 'userPrompt',
-    name?: 'workspace' | 'novelEditor'
+    name?: string
   ): Promise<string> {
     const store = useSettingsStore.getState();
 
@@ -188,17 +206,25 @@ export class SystemPromptManager {
       }
       case PromptType.TRANSLATION: {
         const translationContext = normalizedContext as Partial<TranslationPromptContext>;
+        const translationType = (translationContext as Partial<StoryTranslationPromptContext | ChatTranslationPromptContext>).translationType || 'story';
         if (!translationContext?.sourceLanguage) {
           errors.push('Source language is required for translation prompt');
         }
         if (!translationContext?.targetLanguage) {
           errors.push('Target language is required for translation prompt');
         }
-        if (!translationContext?.objectsArray) {
-          errors.push('Objects array is required for translation prompt');
-        }
-        if (typeof translationContext?.objectCount !== 'number' || translationContext.objectCount < 1) {
-          errors.push('Valid object count is required for translation prompt');
+        if (translationType === 'chat') {
+          if (!(translationContext as Partial<ChatTranslationPromptContext>)?.sourceContent) {
+            errors.push('Source content is required for chat translation prompt');
+          }
+        } else {
+          if (!(translationContext as Partial<StoryTranslationPromptContext>)?.objectsArray) {
+            errors.push('Objects array is required for translation prompt');
+          }
+          const count = (translationContext as Partial<StoryTranslationPromptContext>)?.objectCount;
+          if (typeof count !== 'number' || count < 1) {
+            errors.push('Valid object count is required for translation prompt');
+          }
         }
         break;
       }
@@ -338,18 +364,82 @@ export class SystemPromptManager {
   }
 
   private static async generateTranslationBundle(context: TranslationPromptContext): Promise<PromptBundle> {
+    const translationType = context.translationType || 'story';
+
+    if (translationType === 'chat') {
+      const chatContext = context as ChatTranslationPromptContext;
+      const {
+        sourceLanguage,
+        targetLanguage,
+        sourceContent,
+        userInstructions,
+      } = chatContext;
+
+      let systemTemplate: string;
+      let userTemplate: string;
+
+
+    [systemTemplate, userTemplate] = await Promise.all([
+        this.getTemplate('translation', 'systemPrompt', 'chat'),
+        this.getTemplate('translation', 'userPrompt', 'chat'),
+    ]);
+
+      const systemData = {
+        variable: {
+          sourceLanguage,
+          targetLanguage,
+        },
+        state: {
+          enableThinking: chatContext.enableThinking ?? false,
+          enableCustomThinking: chatContext.enableCustomThinking ?? false,
+          enablePrefill: chatContext.enablePrefill ?? false,
+        },
+        context: {}
+      };
+
+      const userData = {
+        variable: {
+          sourceLanguage,
+          targetLanguage,
+          sourceContent,
+          userInstructions: userInstructions || '',
+        },
+        state: {},
+        context: {}
+      };
+
+      return {
+        systemPrompt: renderTemplate(systemTemplate, systemData),
+        userPrompts: [
+          renderTemplate(userTemplate, userData),
+        ],
+      };
+    }
+
+    const storyContext = context as StoryTranslationPromptContext;
     const {
       sourceLanguage,
       targetLanguage,
       objectCount,
       objectsArray,
       userInstructions,
-    } = context;
+    } = storyContext;
 
-    const [systemTemplate, userTemplate] = await Promise.all([
-      this.getTemplate('translation', 'systemPrompt'),
-      this.getTemplate('translation', 'userPrompt'),
-    ]);
+    let systemTemplate: string;
+    let userTemplate: string;
+
+    try {
+      [systemTemplate, userTemplate] = await Promise.all([
+        this.getTemplate('translation', 'systemPrompt', 'story'),
+        this.getTemplate('translation', 'userPrompt', 'story'),
+      ]);
+    } catch (error) {
+      // Fallback to unnamed templates if named ones are missing
+      [systemTemplate, userTemplate] = await Promise.all([
+        this.getTemplate('translation', 'systemPrompt'),
+        this.getTemplate('translation', 'userPrompt'),
+      ]);
+    }
 
     const systemData = {
       variable: {
@@ -358,9 +448,9 @@ export class SystemPromptManager {
         objectCount,
       },
       state: {
-        enableThinking: context.enableThinking ?? false,
-        enableCustomThinking: context.enableCustomThinking ?? false,
-        enablePrefill: context.enablePrefill ?? false,
+        enableThinking: storyContext.enableThinking ?? false,
+        enableCustomThinking: storyContext.enableCustomThinking ?? false,
+        enablePrefill: storyContext.enablePrefill ?? false,
       },
       context: {}
     };

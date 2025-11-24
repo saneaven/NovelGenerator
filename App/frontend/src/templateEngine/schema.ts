@@ -27,6 +27,10 @@ export const PROMPT_SCHEMAS = {
     },
     context: {
       recentMessages: { desc: "List of recent messages", example: [] as any[] },
+      functionResults: { desc: "Function call results", example: [] as any[] },
+      storyContext: { desc: "Simplified story context", example: {} as any },
+      novelContent: { desc: "Novel content by acts", example: [] as any[] },
+      customSections: { desc: "Custom user sections", example: [] as any[] },
     }
   },
   translation: {
@@ -36,6 +40,8 @@ export const PROMPT_SCHEMAS = {
       objectCount: { desc: "Number of objects", example: 1 },
       objectsArray: { desc: "JSON string of objects", example: "[{...}]" },
       userInstructions: { desc: "User instructions", example: "Translate nicely" },
+      dataTypeName: { desc: "Human-friendly data type label", example: "Chat Message" },
+      sourceContent: { desc: "Source chat content", example: "Hello there" },
     },
     state: {
       enableThinking: { desc: "Enable thinking process", example: true },

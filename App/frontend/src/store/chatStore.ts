@@ -10,7 +10,7 @@ export interface MessageContentData {
 }
 
 // Extended chat message with language support (for storage)
-export interface StoredChatMessage extends Omit<ChatMessage, 'content'> {
+export interface StoredChatMessage extends Omit<ChatMessage, 'contentParts'> {
   data: LanguageData<MessageContentData>; // Language-specific content
 }
 
@@ -63,6 +63,12 @@ interface ChatStore {
     },
     targetLanguage: string
   ) => void;
+  clearMessageTranslations: (
+    projectId: string,
+    chatId: string,
+    messageId: string,
+    preserveLanguages?: string[]
+  ) => void;
   getMessageForLanguage: (projectId: string, chatId: string, messageId: string, language: string) => ChatMessage | null;
   hasMessageInLanguage: (projectId: string, chatId: string, messageId: string, language: string) => boolean;
 
@@ -79,24 +85,13 @@ const convertToDisplayMessage = (storedMessage: StoredChatMessage, language: str
   const contentParts = Array.isArray(languageData?.contentParts) ? languageData.contentParts : [];
   const reasoning_details = languageData?.reasoning_details;
 
-  // Ensure content is always a string, never undefined or object
-  let content = '';
-  try {
-    content = contentParts
-      .filter(p => p && p.type === 'content' && typeof p.text === 'string')
-      .map(p => p.text)
-      .join('');
-  } catch (error) {
-    console.error('Error extracting content from contentParts:', error);
-    content = '';
-  }
+  // Extract only the ChatMessage fields, excluding the 'data' property
+  const { data, ...messageFields } = storedMessage;
 
   return {
-    ...storedMessage,
-    content: content, // Explicitly set to ensure it's a string
+    ...messageFields,
     contentParts,
     reasoning_details,
-    data: undefined,
   };
 };
 
@@ -293,14 +288,8 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       const payload: any = {
         role: message.role,
         language: language,
+        content_parts: message.contentParts,
       };
-
-      if (message.contentParts) {
-        payload.content_parts = message.contentParts;
-      } else if (message.content !== undefined && message.content !== null) {
-        // Always send content_parts even if content is empty string
-        payload.content_parts = [{type: 'content', text: message.content}];
-      }
 
       if (message.functionCalls) {
         payload.function_calls = message.functionCalls;
@@ -579,8 +568,47 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
                           ...msg,
                           data: {
                             ...msg.data,
-                            [targetLanguage]: translatedData,
+                            [targetLanguage]: {
+                              contentParts: translatedData.contentParts || [],
+                              reasoning_details: translatedData.reasoning_details
+                            },
                           },
+                        }
+                      : msg
+                  ),
+                }
+              : chat
+        ) || [],
+      },
+    }));
+  },
+
+  clearMessageTranslations: (
+    projectId: string,
+    chatId: string,
+    messageId: string,
+    preserveLanguages: string[] = []
+  ) => {
+    const preserveSet = new Set(preserveLanguages);
+
+    set((state) => ({
+      chatsByProject: {
+        ...state.chatsByProject,
+        [projectId]:
+          state.chatsByProject[projectId]?.map((chat) =>
+            chat.id === chatId
+              ? {
+                  ...chat,
+                  messages: chat.messages.map((msg) =>
+                    msg.id === messageId
+                      ? {
+                          ...msg,
+                          data: Object.entries(msg.data || {}).reduce((acc, [lang, data]) => {
+                            if (preserveSet.size === 0 || preserveSet.has(lang)) {
+                              acc[lang] = data;
+                            }
+                            return acc;
+                          }, {} as LanguageData<MessageContentData>),
                         }
                       : msg
                   ),

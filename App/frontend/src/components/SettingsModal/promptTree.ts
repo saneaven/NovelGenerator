@@ -126,28 +126,73 @@ export const PROMPT_TREE: PromptNode[] = [
     type: 'category',
     children: [
       {
-        id: 'translation-system',
-        label: 'System Prompt',
-        type: 'prompt',
-        functionType: 'translation',
-        category: 'systemPrompt',
-        description: 'Instructions for translation behavior and quality standards'
+        id: 'translation-story',
+        label: 'Story Objects',
+        type: 'category',
+        defaultExpanded: true,
+        children: [
+          {
+            id: 'translation-story-system',
+            label: 'System Prompt',
+            type: 'prompt',
+            functionType: 'translation',
+            category: 'systemPrompt',
+            name: 'story',
+            description: 'Instructions for translating story objects (single or batch)'
+          },
+          {
+            id: 'translation-story-user',
+            label: 'User Prompt',
+            type: 'prompt',
+            functionType: 'translation',
+            category: 'userPrompt',
+            name: 'story',
+            description: 'Auto-generated user message with story object payload'
+          },
+          {
+            id: 'translation-story-prefill',
+            label: 'Prefill Template',
+            type: 'prompt',
+            functionType: 'translation',
+            category: 'prefill',
+            name: 'story',
+            description: 'Template for story-object translation responses'
+          }
+        ]
       },
       {
-        id: 'translation-user',
-        label: 'User Prompt',
-        type: 'prompt',
-        functionType: 'translation',
-        category: 'userPrompt',
-        description: 'Auto-generated user message that contains translation payload'
-      },
-      {
-        id: 'translation-prefill',
-        label: 'Prefill Template',
-        type: 'prompt',
-        functionType: 'translation',
-        category: 'prefill',
-        description: 'Template for translation responses'
+        id: 'translation-chat',
+        label: 'Chat Messages',
+        type: 'category',
+        children: [
+          {
+            id: 'translation-chat-system',
+            label: 'System Prompt',
+            type: 'prompt',
+            functionType: 'translation',
+            category: 'systemPrompt',
+            name: 'chat',
+            description: 'Instructions for translating chat messages'
+          },
+          {
+            id: 'translation-chat-user',
+            label: 'User Prompt',
+            type: 'prompt',
+            functionType: 'translation',
+            category: 'userPrompt',
+            name: 'chat',
+            description: 'Auto-generated user message with chat payload'
+          },
+          {
+            id: 'translation-chat-prefill',
+            label: 'Prefill Template',
+            type: 'prompt',
+            functionType: 'translation',
+            category: 'prefill',
+            name: 'chat',
+            description: 'Template for chat translation responses'
+          }
+        ]
       }
     ]
   },

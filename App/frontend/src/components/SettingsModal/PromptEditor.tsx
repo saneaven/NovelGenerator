@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import SyntaxHighlightedTextarea from './SyntaxHighlighter/SyntaxHighlightedTextarea';
 import { promptService, type ValidationResult } from '../../api/promptService';
 import { validateTemplate } from '../../templateEngine/engine';
+import { mapFunctionTypeToSchemaType } from '../../templateEngine/validator';
 import type { FunctionType, PromptCategory } from '../../types/prompts';
 import { useSettingsStore } from '../../store/settingsStore';
 import ValidationWarnings from './ValidationWarnings';
@@ -68,14 +69,27 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
         }, 500);
 
         return () => clearTimeout(timer);
-    }, [content]);
+    }, [content, functionType, category, name]);
 
-    const validateContent = (text: string) =>
+    const validateContent = async (text: string) =>
     {
-        const result = validateTemplate(text);
-        
+        // Map functionType to schema type for variable validation
+        const schemaType = mapFunctionTypeToSchemaType(functionType);
+
+        // Perform validation (with variable checking if schema type is available)
+        const result = await validateTemplate(text, schemaType || undefined);
+
         if (result.isValid) {
-            setValidation({ valid: true, errors: [], warnings: [] });
+            setValidation({
+                valid: true,
+                errors: [],
+                warnings: result.warnings?.map(w => ({
+                    message: w.message,
+                    line: w.line,
+                    column: w.column,
+                    severity: w.severity
+                })) || []
+            });
         } else {
             setValidation({
                 valid: false,
@@ -83,7 +97,12 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
                     message: result.error || 'Unknown syntax error',
                     severity: 'error'
                 }],
-                warnings: []
+                warnings: result.warnings?.map(w => ({
+                    message: w.message,
+                    line: w.line,
+                    column: w.column,
+                    severity: w.severity
+                })) || []
             });
         }
     };

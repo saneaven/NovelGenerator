@@ -9,12 +9,11 @@ import { ChatPipeline } from '../../../chat/ChatPipeline';
 import { EditCardComponent } from '../../../chat/processors/DisplayProcessor';
 import type { WorkspaceUIState, WorkspaceUIActions } from '../hooks/useWorkspaceState';
 import type { StoryObjects } from '../../../types/storyObject';
-import type { ChatMessage, FunctionCallMetadata, FunctionCallProgress } from '../../../llm_request/types';
-import { ChatManager, type ChatManagerConfig, type ChatManagerCallbacks } from '../../../chat/processors/ChatManager';
-import { TRANSLATE_BATCH_STORY_OBJECTS_FUNCTION } from '../../../chat/types/translationFunctionSchemas';
+import type { ChatMessage, FunctionCallProgress } from '../../../llm_request/types';
 import ToggleSwitch from '../../../components/ToggleSwitch';
 import ReasoningDisplay from '../../../components/ReasoningDisplay';
 import FunctionCallPreviewCard from './FunctionCallPreviewCard';
+import { collapseContentParts } from '../../../chat/utils/contentParts';
 
 interface ChatPanelProps
 {
@@ -30,7 +29,7 @@ interface ChatPanelProps
     activeFunctionCalls: Record<string, FunctionCallProgress[]>;
     onSubmit: (e: React.FormEvent, input: string, isLoading: boolean) => Promise<void>;
     onStop: () => void;
-    onEditMessage: (messageId: string, content: string | null, language: string) => void;
+    onEditMessage: (messageId: string, content: string, language: string) => void;
     onEditContentChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
     onSaveEdit: (editingMessageId: string | null, editContent: string, language: string) => void;
     onCancelEdit: () => void;
@@ -85,10 +84,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     const selectedChat = selectedChatId ? getSelectedChat(projectId) : undefined;
     const storedMessages = useMemo(() => selectedChat?.messages ?? [], [selectedChat]);
 
-    const [messageLanguages, setMessageLanguages] = useState<Record<string, string>>({});
     const [translatingMessages, setTranslatingMessages] = useState<Record<string, boolean>>({});
     const [translationErrors, setTranslationErrors] = useState<Record<string, string | null>>({});
     const [isControlsCollapsed, setIsControlsCollapsed] = useState(true);
+    const [isTranslationView, setIsTranslationView] = useState(false);
 
     const currentProject = getCurrentProject();
 
@@ -107,36 +106,17 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
     useEffect(() =>
     {
-        setMessageLanguages({});
         setTranslatingMessages({});
         setTranslationErrors({});
     }, [selectedChatId]);
 
     useEffect(() =>
     {
-        setMessageLanguages(prev =>
-        {
-            const updated = { ...prev };
-            storedMessages.forEach(message =>
-            {
-                if (!updated[message.id])
-                {
-                    if (message.data[primaryLanguage])
-                    {
-                        updated[message.id] = primaryLanguage;
-                    } else if (secondaryLanguage && message.data[secondaryLanguage])
-                    {
-                        updated[message.id] = secondaryLanguage;
-                    } else
-                    {
-                        const availableLanguages = Object.keys(message.data);
-                        updated[message.id] = availableLanguages[0] || primaryLanguage;
-                    }
-                }
-            });
-            return updated;
-        });
-    }, [storedMessages, primaryLanguage, secondaryLanguage]);
+        // If secondary language disappears, snap back to primary view
+        if (!secondaryLanguage) {
+            setIsTranslationView(false);
+        }
+    }, [secondaryLanguage]);
 
     useEffect(() =>
     {
@@ -164,7 +144,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     const resolveDisplayInfo = useCallback(
         (message: StoredChatMessage): DisplayMessageInfo =>
         {
-            const requestedLanguage = messageLanguages[message.id] || primaryLanguage;
+            const wantsTranslation = Boolean(isTranslationView && secondaryLanguage);
+            const requestedLanguage = wantsTranslation && secondaryLanguage ? secondaryLanguage : primaryLanguage;
             const hasRequestedLanguage = Boolean(requestedLanguage && message.data[requestedLanguage]);
 
             if (hasRequestedLanguage)
@@ -179,7 +160,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 };
             }
 
-            const fallback = TranslationService.getBestLanguageData(message.data, primaryLanguage, secondaryLanguage ?? undefined);
+            const fallback = TranslationService.getBestLanguageData(
+                message.data,
+                primaryLanguage,
+                secondaryLanguage ?? undefined
+            );
 
             const displayLanguage = fallback?.language ?? requestedLanguage ?? primaryLanguage;
             const fallbackLanguage = fallback ? fallback.language : null;
@@ -194,7 +179,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 fallbackLanguage
             };
         },
-        [messageLanguages, primaryLanguage, secondaryLanguage, convertToDisplayMessage]
+        [isTranslationView, primaryLanguage, secondaryLanguage, convertToDisplayMessage]
     );
 
     const displayMessages = useMemo(
@@ -202,26 +187,32 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         [storedMessages, resolveDisplayInfo]
     );
 
-    const setMessageLanguage = (messageId: string, language: string) =>
+    const translateMessage = async (message: StoredChatMessage) =>
     {
-        setMessageLanguages(prev => ({ ...prev, [messageId]: language }));
-        setTranslationErrors(prev => ({ ...prev, [messageId]: null }));
-    };
-
-    const translateMessage = async (message: StoredChatMessage, sourceLanguage: string, targetLanguage: string) =>
-    {
+        if (!secondaryLanguage)
+        {
+            showError('Translation Failed', 'No secondary language configured.');
+            return;
+        }
         if (!selectedChatId)
         {
             showError('Translation Failed', 'No active chat selected.');
             return;
         }
 
-        const sourceData = message.data[sourceLanguage];
+        const sourceLanguage = primaryLanguage;
+        const targetLanguage = secondaryLanguage;
+        const sourceData = message.data[sourceLanguage] || TranslationService.getBestLanguageData(message.data, sourceLanguage)?.data;
+        if (!sourceData)
+        {
+            showError('Translation Failed', `No ${sourceLanguage} content available to translate.`);
+            return;
+        }
         const contentParts = sourceData?.contentParts ?? [];
-        const sourceContent = contentParts
-            .filter((p: any) => p.type === 'content')
-            .map((p: any) => p.text)
-            .join('');
+        const {
+            content: sourceContent,
+            thinking
+        } = collapseContentParts(contentParts);
 
         if (!sourceContent.trim())
         {
@@ -232,150 +223,28 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         try
         {
             setTranslatingMessages(prev => ({ ...prev, [message.id]: true }));
+            setTranslationErrors(prev => ({ ...prev, [message.id]: null }));
             TranslationService.setTranslationStatus(message.id, { objectId: message.id, isTranslating: true });
 
-            // Extract thinking/reasoning text for translation
-            const thinkingText = contentParts
-                .filter((p: any) => p.type === 'thinking' || p.type === 'reasoning')
-                .map((p: any) => p.text)
-                .join('\n\n');
-
-            // Prepare data for translation
-            const dataToTranslate: any = { content: sourceContent };
-            if (thinkingText) {
-                dataToTranslate.thinking = thinkingText;
-            }
-
-            // Create simple chat message translation function schema
-            const chatMessageTranslationSchema = {
-                name: "translate_chat_message",
-                description: "Translate a chat message from one language to another",
-                parameters: {
-                    type: "object" as const,
-                    properties: {
-                        content: {
-                            type: "string",
-                            description: "The translated message content"
-                        },
-                        thinking: {
-                            type: "string",
-                            description: "The translated thinking/reasoning text (if present)"
-                        }
-                    },
-                    required: ["content"]
+            const translationResult = await TranslationService.translateChatMessage(
+                {
+                    content: sourceContent
+                },
+                {
+                    projectId,
+                    sourceLanguage,
+                    targetLanguage
                 }
-            };
-
-            // Get provider config from settings
-            const translationConfig = settingsStore.getFunctionConfig('translation');
-            const providerConfig = settingsStore.getProviderConfig(translationConfig.provider);
-
-            // Create temporary abort controller
-            const abortController = new AbortController();
-            const abortControllerRef = { current: abortController };
-
-            // Promise to wait for translation result
-            let resolveTranslation: (value: any) => void;
-            let rejectTranslation: (error: Error) => void;
-            const translationPromise = new Promise<any>((resolve, reject) => {
-                resolveTranslation = resolve;
-                rejectTranslation = reject;
-            });
-
-            // Setup LLMRequestManager callbacks
-            const callbacks: ChatManagerCallbacks = {
-                onUpdateMessage: () => {},
-                onSyncMessageToBackend: async () => {},
-                onFunctionCalls: async (projId, chatId, messageId, functionCalls: FunctionCallMetadata[]) => {
-                    try {
-                        // Find the translation function call
-                        const translationCall = functionCalls.find(fc => fc.function_name === 'translate_chat_message');
-                        if (!translationCall) {
-                            rejectTranslation(new Error('AI did not call translate_chat_message function'));
-                            return;
-                        }
-
-                        // Parse the arguments
-                        const args = typeof translationCall.arguments === 'string'
-                            ? JSON.parse(translationCall.arguments)
-                            : translationCall.arguments;
-
-                        if (!args.content) {
-                            rejectTranslation(new Error('Translation missing content field'));
-                            return;
-                        }
-
-                        // Return the translated data
-                        resolveTranslation(args);
-                    } catch (err) {
-                        console.error('Translation function parsing error:', err);
-                        rejectTranslation(err instanceof Error ? err : new Error('Failed to parse translation'));
-                    }
-                },
-                onAddMessage: async () => `msg-${Date.now()}`,
-                onGetChatHistory: () => [],
-                onError: (err) => {
-                    rejectTranslation(err);
-                },
-            };
-
-            // Create LLMRequestManager config
-            const tempChatId = `temp-message-translation-${Date.now()}`;
-            const chatManagerConfig: ChatManagerConfig = {
-                projectId,
-                getStoryObjects: () => storyObjects,
-                systemInsertConfig: {
-                    promptContext: {
-                        sourceLanguage,
-                        targetLanguage,
-                        dataType: 'chatMessage',
-                        sourceData: dataToTranslate,
-                        enablePrefill: translationConfig.advanced.enablePrefill,
-                        enableThinking: translationConfig.advanced.thinkingMode !== 'off',
-                    },
-                    promptType: 'translation',
-                },
-                chatPipeline: new ChatPipeline(),
-                getIsLoading: () => false,
-                setIsLoading: () => {},
-                abortControllerRef,
-                getActiveChatId: () => tempChatId,
-                getConversationLanguage: () => targetLanguage,
-                provider: translationConfig.provider,
-                providerConfig,
-                aiModel: translationConfig.model,
-                temperature: translationConfig.temperature,
-                providerPreference: translationConfig.providerPreference,
-                functions: [chatMessageTranslationSchema],
-                mode: 'workspace',
-                enablePrefill: translationConfig.advanced.enablePrefill,
-                thinkingMode: translationConfig.advanced.thinkingMode as any,
-                reasoningConfig: translationConfig.advanced.reasoningConfig,
-            };
-
-            // Create LLMRequestManager
-            const chatManager = new ChatManager(chatManagerConfig, callbacks);
-
-            // Process translation request
-            const userMessage: ChatMessage = {
-                id: `msg-user-${Date.now()}`,
-                role: 'user',
-                content: `Please translate this chat message from ${sourceLanguage} to ${targetLanguage}`,
-                timestamp: new Date(),
-            };
-
-            await chatManager.processUserMessage(userMessage);
-
-            // Wait for translation result
-            const translationResult = await translationPromise;
-            const translatedContent = translationResult.translatedContent || translationResult.content;
+            );
+            const translatedContent = translationResult.content || sourceContent;
+            const translatedThinking = thinking;
 
             // Reconstruct contentParts with translated text
             const translatedContentParts = contentParts.map((part: any) => {
                 if (part.type === 'content') {
                     return { ...part, text: translatedContent };
-                } else if ((part.type === 'thinking' || part.type === 'reasoning') && translationResult.thinking) {
-                    return { ...part, text: translationResult.thinking };
+                } else if (part.type === 'thinking') {
+                    return { ...part, text: translatedThinking };
                 }
                 return part;
             });
@@ -386,7 +255,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             };
 
             addTranslatedMessage(projectId, selectedChatId, message.id, translatedData, targetLanguage);
-            setMessageLanguage(message.id, targetLanguage);
         } catch (error)
         {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred during translation.';
@@ -397,55 +265,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             setTranslatingMessages(prev => ({ ...prev, [message.id]: false }));
             TranslationService.clearTranslationStatus(message.id);
         }
-    };
-
-    const handleLanguageToggle = async (message: DisplayMessageInfo) =>
-    {
-        if (!secondaryLanguage) return;
-
-        const activeLanguage = messageLanguages[message.storedMessage.id] || primaryLanguage;
-        const targetLanguage = activeLanguage === secondaryLanguage ? primaryLanguage : secondaryLanguage;
-
-        if (message.storedMessage.data[targetLanguage])
-        {
-            setMessageLanguage(message.storedMessage.id, targetLanguage);
-            return;
-        }
-
-        const availableLanguages = Object.keys(message.storedMessage.data);
-        if (availableLanguages.length === 0)
-        {
-            showError('Translation Failed', 'No available content to translate.');
-            return;
-        }
-
-        const sourceLanguage = message.storedMessage.data[activeLanguage]
-            ? activeLanguage
-            : availableLanguages[0];
-
-        await translateMessage(message.storedMessage, sourceLanguage, targetLanguage);
-    };
-
-    const ensureLanguageAvailable = async (message: DisplayMessageInfo, targetLanguage: string) =>
-    {
-        if (message.storedMessage.data[targetLanguage])
-        {
-            setMessageLanguage(message.storedMessage.id, targetLanguage);
-            return;
-        }
-
-        const availableLanguages = Object.keys(message.storedMessage.data);
-        if (availableLanguages.length === 0)
-        {
-            showError('Translation Failed', 'No available content to translate.');
-            return;
-        }
-
-        const sourceLanguage = message.displayLanguage && message.storedMessage.data[message.displayLanguage]
-            ? message.displayLanguage
-            : availableLanguages[0];
-
-        await translateMessage(message.storedMessage, sourceLanguage, targetLanguage);
     };
 
     const renderMessageContent = (
@@ -474,7 +293,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         );
     };
 
-    const canTranslate = Boolean(secondaryLanguage && secondaryLanguage !== primaryLanguage);
+    const translationEnabled = Boolean(secondaryLanguage && secondaryLanguage !== primaryLanguage);
+    const translationTargetLabel = secondaryLanguage || 'secondary language';
 
     return (
         <div className={`chat-panel ${uiState.isChatVisible ? 'visible' : 'hidden'}`}>
@@ -498,6 +318,21 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                     </button>
                     <h2>{selectedChat?.name || 'AI Chat'}</h2>
                 </div>
+                {translationEnabled && (
+                    <div className="chat-translation-toggle">
+                        <button
+                            className="chat-toggle-btn"
+                            onClick={() => setIsTranslationView(prev => !prev)}
+                            disabled={uiState.isLoading}
+                            title={isTranslationView ? `View ${primaryLanguage}` : `View ${translationTargetLabel}`}
+                        >
+                            {isTranslationView ? `View ${primaryLanguage}` : `View ${translationTargetLabel}`}
+                        </button>
+                        {isTranslationView && (
+                            <span className="translation-view-note">Viewing translation (read-only)</span>
+                        )}
+                    </div>
+                )}
                 <button
                     className="chat-close-btn mobile-only"
                     onClick={() => uiActions.setIsChatVisible(false)}
@@ -526,15 +361,16 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                     const isEditing = uiState.editingMessageId === message.chatMessage.id;
                     const processingResult = chatPipeline.processForDisplay(message.chatMessage, displayContext);
                     const isLastAssistantLoading = isAssistant && index === displayMessages.length - 1 && uiState.isLoading;
-                    const activeLanguage = messageLanguages[message.storedMessage.id] || primaryLanguage;
-
-                    const translateButtonLabel = !secondaryLanguage
-                        ? ''
-                        : activeLanguage === secondaryLanguage
-                            ? `View ${primaryLanguage}`
-                            : `View ${secondaryLanguage}`;
-
                     const isTranslating = Boolean(translatingMessages[message.storedMessage.id]);
+                    const primaryMessage = message.storedMessage.data[primaryLanguage]
+                        ? convertToDisplayMessage(message.storedMessage, primaryLanguage)
+                        : message.chatMessage;
+                    const { content: primaryPlainContent } = collapseContentParts(primaryMessage.contentParts);
+                    const translationAvailable = secondaryLanguage ? Boolean(message.storedMessage.data[secondaryLanguage]) : false;
+                    const translateButtonLabel = translationAvailable
+                        ? `Refresh ${translationTargetLabel}`
+                        : `Translate to ${translationTargetLabel}`;
+                    const translateDisabled = !translationEnabled || isTranslating;
 
                     return (
                         <div
@@ -587,20 +423,23 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                                 <div className="translation-error">{translationErrors[message.storedMessage.id]}</div>
                                             )}
                                             <div className="action-buttons">
-                                                {canTranslate && (
+                                                {translationEnabled && (
                                                     <button
                                                         className="action-btn translate-btn"
-                                                        onClick={() => handleLanguageToggle(message)}
-                                                        disabled={isTranslating}
+                                                        onClick={() => translateMessage(message.storedMessage)}
+                                                        disabled={translateDisabled}
                                                         title={translateButtonLabel}
                                                     >
-                                                        {isTranslating ? '⟳' : '🌐'}
+                                                        {isTranslating ? '⟳' : translationAvailable ? '↻' : '🌐'}
                                                     </button>
                                                 )}
                                                 <button
                                                     className="action-btn edit-btn"
-                                                    onClick={() => onEditMessage(message.chatMessage.id, message.chatMessage.content, message.displayLanguage)}
-                                                    disabled={isTranslating || !message.hasRequestedLanguage}
+                                                    onClick={() => {
+                                                        setIsTranslationView(false);
+                                                        onEditMessage(message.chatMessage.id, primaryPlainContent, primaryLanguage);
+                                                    }}
+                                                    disabled={isTranslating || !primaryPlainContent.trim()}
                                                     title="Edit"
                                                 >
                                                     ✎

@@ -146,7 +146,7 @@ const Workspace: React.FC = () =>
                 mode: 'workspace',
                 enablePrefill: chatFunctionConfig.advanced.enablePrefill,
                 thinkingMode: chatFunctionConfig.advanced.thinkingMode,
-                reasoningConfig: chatFunctionConfig.advanced.reasoningConfig,
+                thinkingConfig: chatFunctionConfig.advanced.thinkingConfig,
             },
             chatManagerCallbacks
         );

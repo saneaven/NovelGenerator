@@ -64,7 +64,7 @@ export interface ChatPipelineContext {
   mode: 'novelEditor' | 'workspace'; // Explicit mode distinction
   enablePrefill?: boolean; // Enable assistant prefill at the end
   thinkingMode?: 'off' | 'model' | 'custom'; // Thinking mode: off, model-native reasoning, or custom prompt-based
-  reasoningConfig?: {
+  thinkingConfig?: {
     effort?: 'low' | 'medium' | 'high';
     maxTokens?: number;
   };

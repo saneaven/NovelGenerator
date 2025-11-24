@@ -280,7 +280,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         mode: 'novelEditor' as const,
         enablePrefill: chapterGenConfig.advanced.enablePrefill,
         thinkingMode: chapterGenConfig.advanced.thinkingMode as any,
-        reasoningConfig: chapterGenConfig.advanced.reasoningConfig,
+        thinkingConfig: chapterGenConfig.advanced.thinkingConfig,
         abortControllerRef,
       };
 

@@ -1,7 +1,7 @@
 
 export type Role = "system" | "user" | "assistant" | "function";
 
-export type ContentPartType = "content" | "thinking" | "reasoning";
+export type ContentPartType = "content" | "thinking";
 
 export interface ContentPart {
   type: ContentPartType;
@@ -15,7 +15,7 @@ export interface FunctionCall {
 
 export interface ConversationBlock {
   role: Role;
-  content: string | null;
+  contentParts: ContentPart[];
   function_call?: FunctionCall;
   name?: string; // for function role messages
 }
@@ -97,7 +97,6 @@ export interface FunctionCallResultSummary {
 export interface ChatMessage extends ConversationBlock {
   id: string;
   timestamp: Date;
-  contentParts?: ContentPart[];
   functionCalls?: FunctionCallMetadata[];
   reasoning_details?: ReasoningDetail[];
 }

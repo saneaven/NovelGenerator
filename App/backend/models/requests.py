@@ -12,14 +12,18 @@ class ProviderPreference(BaseModel):
     only: Optional[List[str]] = None
     ignore: Optional[List[str]] = None
 
-class ReasoningConfig(BaseModel):
-    """Reasoning configuration for OpenRouter (model-native reasoning)"""
-    effort: Optional[Literal["low", "medium", "high"]] = None
-    max_tokens: Optional[int] = None
+class ContentPart(BaseModel):
+    """A part of message content (content or thinking)"""
+    type: Literal["content", "thinking"]
+    text: str
 
 class Message(BaseModel):
     role: Literal["system", "user", "assistant"]
-    content: str
+    contentParts: List[ContentPart]
+
+    def get_content_text(self) -> str:
+        """Extract text content from contentParts for LLM providers"""
+        return "".join(part.text for part in self.contentParts if part.type == "content")
 
 class ChatCompletionRequest(BaseModel):
     messages: List[Message]
@@ -29,5 +33,5 @@ class ChatCompletionRequest(BaseModel):
     max_tokens: Optional[int] = None
     config: ProviderConfig = Field(default_factory=ProviderConfig)
     provider_preference: Optional[ProviderPreference] = None
-    reasoning_config: Optional[ReasoningConfig] = None
+    reasoning_config: Optional[dict] = None  # preserved for provider compatibility if ever passed through
     thinking_mode: Optional[Literal["off", "custom", "model"]] = "off"

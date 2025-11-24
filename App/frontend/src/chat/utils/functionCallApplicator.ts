@@ -54,6 +54,7 @@ export class FunctionCallApplicator {
     }
 
     let processedCount = 0;
+    let errorCount = 0;
     const results: string[] = [];
 
     for (const operation of args.operations) {
@@ -61,42 +62,57 @@ export class FunctionCallApplicator {
 
       if (!action || !type) {
         results.push(`Skipped operation: missing action or type`);
+        errorCount++;
         continue;
       }
 
       try {
         switch (action) {
           case 'create':
-            await this.handleCreateOperation(projectId, type, data, results);
-            processedCount++;
+            if (await this.handleCreateOperation(projectId, type, data, results)) {
+              processedCount++;
+            } else {
+              errorCount++;
+            }
             break;
           case 'update':
             if (!id || !data) {
               results.push(`Skipped update operation for ${type}: missing id or data`);
+              errorCount++;
               continue;
             }
-            await this.handleUpdateOperation(projectId, type, id, data, results);
-            processedCount++;
+            if (await this.handleUpdateOperation(projectId, type, id, data, results)) {
+              processedCount++;
+            } else {
+              errorCount++;
+            }
             break;
           case 'delete':
             if (!id) {
               results.push(`Skipped delete operation for ${type}: missing id`);
+              errorCount++;
               continue;
             }
-            await this.handleDeleteOperation(projectId, type, id, results);
-            processedCount++;
+            if (await this.handleDeleteOperation(projectId, type, id, results)) {
+              processedCount++;
+            } else {
+              errorCount++;
+            }
             break;
           default:
             results.push(`Unknown action: ${action}`);
+            errorCount++;
         }
       } catch (error) {
         results.push(`Error processing ${action} ${type}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        errorCount++;
       }
     }
 
     return {
-      success: true,
-      message: `Processed ${processedCount} operations: ${results.join(', ')}`
+      success: errorCount === 0,
+      message: `Processed ${processedCount} operations${results.length ? `: ${results.join(', ')}` : ''}`,
+      error: errorCount ? results.join(', ') : undefined
     };
   }
 
@@ -105,10 +121,10 @@ export class FunctionCallApplicator {
     type: string,
     data: any,
     results: string[]
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (!data) {
       results.push(`Skipped create ${type}: missing data`);
-      return;
+      return false;
     }
 
     const settings = useSettingsStore.getState();
@@ -140,7 +156,7 @@ export class FunctionCallApplicator {
         break;
       default:
         results.push(`Unknown create type: ${type}`);
-        return;
+        return false;
     }
 
     switch (objectType) {
@@ -170,7 +186,7 @@ export class FunctionCallApplicator {
           }, language);
         }
         results.push(`Created/updated basic info`);
-        break;
+        return true;
       }
       case 'character':
         await this.store.createObject('character', projectId, {
@@ -178,28 +194,28 @@ export class FunctionCallApplicator {
           description: data.description || ''
         }, language);
         results.push(`Created character: ${data.name}`);
-        break;
+        return true;
       case 'organization':
         await this.store.createObject('organization', projectId, {
           name: data.name || '',
           description: data.description || ''
         }, language);
         results.push(`Created organization: ${data.name}`);
-        break;
+        return true;
       case 'location':
         await this.store.createObject('location', projectId, {
           name: data.name || '',
           description: data.description || ''
         }, language);
         results.push(`Created location: ${data.name}`);
-        break;
+        return true;
       case 'lorebook':
         await this.store.createObject('lorebook', projectId, {
           name: data.name || '',
           description: data.description || ''
         }, language);
         results.push(`Created lorebook entry: ${data.name}`);
-        break;
+        return true;
       case 'act': {
         const acts = await this.store.listObjects('act', projectId);
         const actOrder = typeof data.order === 'number' && Number.isFinite(data.order)
@@ -235,12 +251,12 @@ export class FunctionCallApplicator {
           }
         }
         results.push(`Created act: ${data.name}`);
-        break;
+        return true;
       }
       case 'chapter': {
         if (!data.actId) {
           results.push(`Skipped create chapter: missing actId`);
-          return;
+          return false;
         }
 
         const chapters = await this.store.listObjects('chapter', projectId);
@@ -257,11 +273,13 @@ export class FunctionCallApplicator {
           order: chapterOrder
         });
         results.push(`Created chapter: ${data.name}`);
-        break;
+        return true;
       }
       default:
         results.push(`Unknown create type: ${type}`);
     }
+
+    return false;
   }
 
   private async handleUpdateOperation(
@@ -270,7 +288,7 @@ export class FunctionCallApplicator {
     id: string,
     data: any,
     results: string[]
-  ): Promise<void> {
+  ): Promise<boolean> {
     const itemName = data.name || 'Unknown';
 
     // Map old type names to ObjectType
@@ -299,14 +317,25 @@ export class FunctionCallApplicator {
         break;
       default:
         results.push(`Unknown update type: ${type}`);
-        return;
+        return false;
     }
 
     // Get the object
-    const object = this.store.objects[id];
+    let object = this.store.getObject(id);
+    if (!object) {
+      // If the object isn't in the local cache, try fetching it
+      try {
+        await this.store.fetchObject(objectType, id);
+        object = this.store.getObject(id);
+      } catch (fetchError) {
+        results.push(`${type} with id ${id} not found`);
+        return false;
+      }
+    }
+
     if (!object) {
       results.push(`${type} with id ${id} not found`);
-      return;
+      return false;
     }
 
     // Handle order for acts and chapters
@@ -339,6 +368,7 @@ export class FunctionCallApplicator {
 
     const displayName = objectType === 'basic_info' ? 'basic info' : itemName;
     results.push(`Updated ${objectType}: ${displayName}`);
+    return true;
   }
 
   private async handleDeleteOperation(
@@ -346,7 +376,7 @@ export class FunctionCallApplicator {
     type: string,
     id: string,
     results: string[]
-  ): Promise<void> {
+  ): Promise<boolean> {
     // Map old type names to ObjectType
     let objectType: ObjectType;
     switch (type) {
@@ -370,14 +400,24 @@ export class FunctionCallApplicator {
         break;
       default:
         results.push(`Unknown delete type: ${type}`);
-        return;
+        return false;
     }
 
     // Get the object to get its name
-    const object = this.store.objects[id];
+    let object = this.store.getObject(id);
+    if (!object) {
+      try {
+        await this.store.fetchObject(objectType, id);
+        object = this.store.getObject(id);
+      } catch (fetchError) {
+        results.push(`${type} with id ${id} not found`);
+        return false;
+      }
+    }
+
     if (!object) {
       results.push(`${type} with id ${id} not found`);
-      return;
+      return false;
     }
 
     const objectName = object.data.name || 'Unknown';
@@ -386,6 +426,7 @@ export class FunctionCallApplicator {
     await this.store.deleteObject(objectType, id);
 
     results.push(`Deleted ${objectType}: ${objectName}`);
+    return true;
   }
 
 }

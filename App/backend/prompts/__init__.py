@@ -41,9 +41,12 @@ _NOVEL_EDITOR_SYSTEM_PROMPT = _load_prompt_file('systemPrompts/NovelEditorSystem
 _WORKSPACE_FUNCTION_INSTRUCTIONS = _load_prompt_file('systemPrompts/functionInstructions/workspace.md')
 _NOVEL_EDITOR_FUNCTION_INSTRUCTIONS = _load_prompt_file('systemPrompts/functionInstructions/novelEditor.md')
 _CHAT_PREFILL = _load_prompt_file('prefills/ChatPrefill.md')
-_TRANSLATION_SYSTEM_PROMPT = _load_prompt_file('systemPrompts/TranslationPrompt.md')
-_TRANSLATION_USER_PROMPT = _load_prompt_file('userPrompts/TranslationUserPrompt.md')
-_TRANSLATION_PREFILL = _load_prompt_file('prefills/TranslationPrefill.md')
+_TRANSLATION_SYSTEM_PROMPT_STORY = _load_prompt_file('systemPrompts/TranslationPrompt.md')
+_TRANSLATION_USER_PROMPT_STORY = _load_prompt_file('userPrompts/TranslationUserPrompt.md')
+_TRANSLATION_PREFILL_STORY = _load_prompt_file('prefills/TranslationPrefill.md')
+_TRANSLATION_SYSTEM_PROMPT_CHAT = _load_prompt_file('systemPrompts/ChatTranslationPrompt.md')
+_TRANSLATION_USER_PROMPT_CHAT = _load_prompt_file('userPrompts/ChatTranslationUserPrompt.md')
+_TRANSLATION_PREFILL_CHAT = _load_prompt_file('prefills/ChatTranslationPrefill.md')
 _STORY_EDIT_SYSTEM_PROMPT = _load_prompt_file('systemPrompts/StoryObjectEditPrompt.md')
 _STORY_EDIT_USER_PROMPT = _load_prompt_file('userPrompts/StoryObjectEditUserPrompt.md')
 _STORY_EDIT_PREFILL = _load_prompt_file('prefills/StoryObjectEditPrefill.md')
@@ -72,9 +75,18 @@ DEFAULT_PROMPTS = {
         },
     },
     'translation': {
-        'systemPrompt': _TRANSLATION_SYSTEM_PROMPT,
-        'userPrompt': _TRANSLATION_USER_PROMPT,
-        'prefill': _TRANSLATION_PREFILL,
+        'systemPrompt': {
+            'story': _TRANSLATION_SYSTEM_PROMPT_STORY,
+            'chat': _TRANSLATION_SYSTEM_PROMPT_CHAT,
+        },
+        'userPrompt': {
+            'story': _TRANSLATION_USER_PROMPT_STORY,
+            'chat': _TRANSLATION_USER_PROMPT_CHAT,
+        },
+        'prefill': {
+            'story': _TRANSLATION_PREFILL_STORY,
+            'chat': _TRANSLATION_PREFILL_CHAT,
+        },
     },
     'storyEdit': {
         'systemPrompt': _STORY_EDIT_SYSTEM_PROMPT,

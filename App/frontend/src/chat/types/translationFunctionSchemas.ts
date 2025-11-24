@@ -79,6 +79,28 @@ export const TRANSLATE_BATCH_STORY_OBJECTS_FUNCTION: FunctionCallSchema = {
   }
 };
 
+/**
+ * Chat message translation function schema
+ */
+export const TRANSLATE_CHAT_MESSAGE_FUNCTION: FunctionCallSchema = {
+  name: "translate_chat_message",
+  description: "Translate a chat message (and optional thinking/custom thinking) from one language to another.",
+  parameters: {
+    type: "object",
+    properties: {
+      content: {
+        type: "string",
+        description: "Translated message content"
+      },
+      thinking: {
+        type: "string",
+        description: "Translated native thinking text (if provided in source)"
+      },
+    },
+    required: ["content"]
+  }
+};
+
 // ============================================================================
 // EXPORTS
 // ============================================================================

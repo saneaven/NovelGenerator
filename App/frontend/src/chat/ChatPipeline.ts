@@ -65,17 +65,17 @@ export class ChatPipeline {
   static createContext(
     projectId: string,
     storyObjects: any,
-    mode: 'novelEditor' | 'workspace',
-    systemConfig?: SystemInsertConfig,
-    novelData?: any,
-    enablePrefill?: boolean,
-    thinkingMode?: 'off' | 'model' | 'custom',
-    reasoningConfig?: {
-      effort?: 'low' | 'medium' | 'high';
-      maxTokens?: number;
-    }
-  ): ChatPipelineContext {
-    return {
+  mode: 'novelEditor' | 'workspace',
+  systemConfig?: SystemInsertConfig,
+  novelData?: any,
+  enablePrefill?: boolean,
+  thinkingMode?: 'off' | 'model' | 'custom',
+  thinkingConfig?: {
+    effort?: 'low' | 'medium' | 'high';
+    maxTokens?: number;
+  }
+): ChatPipelineContext {
+  return {
       projectId,
       storyObjects,
       systemInsertConfig: systemConfig || this.createDefaultSystemConfig(),
@@ -83,7 +83,7 @@ export class ChatPipeline {
       mode,
       enablePrefill,
       thinkingMode,
-      reasoningConfig
+      thinkingConfig
     };
   }
 }

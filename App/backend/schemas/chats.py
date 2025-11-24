@@ -6,8 +6,8 @@ from typing import Optional, Dict, Any, List, Literal
 
 
 class ContentPart(BaseModel):
-    """A part of message content (content, thinking, or reasoning)"""
-    type: Literal["content", "thinking", "reasoning"]
+    """A part of message content (content or thinking)"""
+    type: Literal["content", "thinking"]
     text: str
 
 

@@ -64,6 +64,8 @@ export interface TranslationPrefillContext extends BasePrefillContext {
   sourceLanguage: string;
   targetLanguage: string;
   dataType: TranslationDataType;
+  translationType?: 'story' | 'chat';
+  objectCount?: number;
 }
 
 /**
@@ -76,22 +78,23 @@ export class PrefillManager {
    */
   private static async getTemplate(
     functionType: 'chat' | 'translation' | 'storyEdit' | 'chapterGen',
-    category: 'prefill'
+    category: 'prefill',
+    name?: string
   ): Promise<string> {
     const store = useSettingsStore.getState();
 
     // Try to get from cache first
-    const cached = store.getPromptFromCache(functionType, category);
+    const cached = store.getPromptFromCache(functionType, category, name);
     if (cached) {
       return cached;
     }
 
     // Load from backend (will cache automatically)
     try {
-      return await store.loadPrompt(functionType, category);
+      return await store.loadPrompt(functionType, category, name);
     } catch (error) {
       console.error('Failed to load prefill:', error);
-      throw new Error(`No prefill template found for ${functionType}/${category}`);
+      throw new Error(`No prefill template found for ${functionType}/${category}/${name || 'default'}`);
     }
   }
 
@@ -200,7 +203,7 @@ export class PrefillManager {
     const template = await this.getTemplate('chat', 'prefill');
 
     const data = {
-      var: {
+      variable: {
         language,
         mode,
         enableThinking: advancedSettings.thinkingMode !== 'off',
@@ -229,7 +232,7 @@ export class PrefillManager {
     const template = await this.getTemplate('storyEdit', 'prefill');
 
     const data = {
-      var: {
+      variable: {
         categoryName,
         language,
         editScope: scope,
@@ -258,7 +261,7 @@ export class PrefillManager {
     const template = await this.getTemplate('chapterGen', 'prefill');
 
     const data = {
-      var: {
+      variable: {
         chapterName,
         language,
         enableThinking: advancedSettings.thinkingMode !== 'off',
@@ -283,18 +286,27 @@ export class PrefillManager {
     const functionType = this.mapPrefillTypeToFunctionType(PrefillType.TRANSLATION_ASSISTANT);
     const advancedSettings = settings.functionConfigs[functionType].advanced;
 
-    const template = await this.getTemplate('translation', 'prefill');
+    const translationType = context.translationType || (dataType === 'chatMessage' ? 'chat' : 'story');
+
+    let template: string;
+    try {
+      template = await this.getTemplate('translation', 'prefill', translationType === 'chat' ? 'chat' : 'story');
+    } catch (error) {
+      template = await this.getTemplate('translation', 'prefill');
+    }
 
     const data = {
-      var: {
+      variable: {
         sourceLanguage,
         targetLanguage,
         dataTypeName,
         enableThinking: advancedSettings.thinkingMode !== 'off',
         enablePrefill: advancedSettings.enablePrefill,
+        objectCount: translationType === 'chat' ? undefined : (context.objectCount ?? 1)
       },
       context: {
-        content: ''
+        content: translationType === 'chat' ? '' : '',
+        sourceThinking: ''
       }
     };
 

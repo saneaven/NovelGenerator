@@ -26,7 +26,7 @@ export interface ChatManagerConfig {
   mode: 'novelEditor' | 'workspace'; // Explicit mode distinction
   enablePrefill?: boolean; // Enable assistant prefill
   thinkingMode?: 'off' | 'model' | 'custom'; // Thinking mode: off, model-native reasoning, or custom prompt-based
-  reasoningConfig?: {
+  thinkingConfig?: {
     effort?: 'low' | 'medium' | 'high';
     maxTokens?: number;
   };
@@ -143,7 +143,7 @@ export class ChatManager {
     return {
       id: crypto.randomUUID(),
       role: 'assistant',
-      content: '',
+      contentParts: [],
       timestamp: new Date(),
     };
   }
@@ -164,7 +164,7 @@ export class ChatManager {
       this.config.getNovelData?.(),
       this.config.enablePrefill,
       this.config.thinkingMode,
-      this.config.reasoningConfig
+      this.config.thinkingConfig
     );
 
     // Pre-process messages
@@ -180,7 +180,7 @@ export class ChatManager {
 
     // Accumulate interleaved content parts with simplified single-buffer approach
     let accumulatedContentParts: ContentPart[] = [];
-    let currentPartType: 'thinking' | 'reasoning' | 'content' | null = null;
+    let currentPartType: 'thinking' | 'content' | null = null;
     let currentBuffer = '';
     let accumulatedReasoningDetails: any[] | undefined;
     const toolCallTracker = new FunctionCallStreamTracker(functions ?? this.config.functions);
@@ -225,7 +225,7 @@ export class ChatManager {
     };
 
     // Prepare reasoning config for model mode
-    const reasoningConfig = this.config.thinkingMode === 'model' ? this.config.reasoningConfig : undefined;
+    const thinkingConfig = this.config.thinkingMode === 'model' ? this.config.thinkingConfig : undefined;
 
     try {
       for await (const chunk of streamChat(
@@ -238,7 +238,7 @@ export class ChatManager {
           model: this.config.aiModel,
           temperature: this.config.temperature,
           providerPreference: this.config.providerPreference,
-          reasoningConfig,
+          thinkingConfig,
           thinkingMode: this.config.thinkingMode,
         }
       )) {
@@ -269,14 +269,14 @@ export class ChatManager {
 
           // Handle reasoning_text (thinking/reasoning chunks from backend)
           if (chunk.reasoning_text) {
-            const reasoningType = this.config.thinkingMode === 'custom' ? 'thinking' : 'reasoning';
+            const reasoningType = 'thinking';
 
             if (currentPartType !== reasoningType) {
               finalizeCurrentBuffer(); // Type changed - finalize previous buffer
 
               // Check if the last accumulated part is reasoning/thinking to continue it
               const lastPart = accumulatedContentParts[accumulatedContentParts.length - 1];
-              if (lastPart && (lastPart.type === 'reasoning' || lastPart.type === 'thinking')) {
+              if (lastPart && lastPart.type === 'thinking') {
                 // Remove and prepend to continue the reasoning block
                 const previousReasoning = accumulatedContentParts.pop()!;
                 currentBuffer = previousReasoning.text;

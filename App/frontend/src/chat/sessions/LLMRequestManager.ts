@@ -30,7 +30,7 @@ export interface LLMRequestManagerConfig {
   mode: 'novelEditor' | 'workspace';
   enablePrefill?: boolean;
   thinkingMode?: 'off' | 'model' | 'custom';
-  reasoningConfig?: {
+  thinkingConfig?: {
     effort?: 'low' | 'medium' | 'high';
     maxTokens?: number;
   };
@@ -86,7 +86,7 @@ export class LLMRequestManager {
       this.config.getNovelData?.(),
       this.config.enablePrefill,
       this.config.thinkingMode,
-      this.config.reasoningConfig
+      this.config.thinkingConfig
     );
 
     const { conversationBlocks, functions } = await this.config.chatPipeline.preProcess(
@@ -118,8 +118,7 @@ export class LLMRequestManager {
       this.callbacks.onStreamUpdate(nextParts);
     };
 
-    const reasoningTypeForMode = () =>
-      this.config.thinkingMode === 'custom' ? 'thinking' : 'reasoning';
+    const reasoningTypeForMode = () => 'thinking';
 
     try {
       for await (const chunk of streamChat(
@@ -132,7 +131,7 @@ export class LLMRequestManager {
           model: this.config.aiModel,
           temperature: this.config.temperature,
           providerPreference: this.config.providerPreference,
-          reasoningConfig: this.config.thinkingMode === 'model' ? this.config.reasoningConfig : undefined,
+          thinkingConfig: this.config.thinkingMode === 'model' ? this.config.thinkingConfig : undefined,
           thinkingMode: this.config.thinkingMode,
         }
       )) {
@@ -159,7 +158,7 @@ export class LLMRequestManager {
           if (currentPartType !== reasoningType) {
             finalizeCurrentBuffer();
             const lastPart = collectedContentParts[collectedContentParts.length - 1];
-            if (lastPart && (lastPart.type === 'reasoning' || lastPart.type === 'thinking')) {
+            if (lastPart && lastPart.type === 'thinking') {
               const previous = collectedContentParts.pop()!;
               currentBuffer = previous.text;
             }

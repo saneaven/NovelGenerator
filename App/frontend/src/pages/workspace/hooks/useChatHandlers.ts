@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { useChatStore } from '../../../store/chatStore';
+import { useSettingsStore } from '../../../store/settingsStore';
 import type { ChatMessage, FunctionCallResultSummary } from '../../../llm_request/types';
 import type { ChatManager } from '../../../chat/processors/ChatManager';
 import type { WorkspaceUIActions } from './useWorkspaceState';
@@ -12,7 +13,8 @@ export function useChatHandlers(
   pendingFunctionCallResults?: FunctionCallResultSummary[],
   clearPendingFunctionCallResults?: () => void
 ) {
-  const { selectChat, getSelectedChatId, updateMessage, deleteMessage } = useChatStore();
+  const { selectChat, getSelectedChatId, updateMessage, deleteMessage, clearMessageTranslations } = useChatStore();
+  const primaryLanguage = useSettingsStore(state => state.settings.primaryLanguage);
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   const getActiveChatId = () => (projectId ? getSelectedChatId(projectId) : undefined);
@@ -47,7 +49,7 @@ export function useChatHandlers(
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
-      content: input.trim(),
+      contentParts: [{ type: 'content', text: input.trim() }],
       timestamp: new Date(),
     };
 
@@ -65,10 +67,9 @@ export function useChatHandlers(
     }
   };
 
-  const handleEditMessage = (messageId: string, content: string | null, language: string) => {
-    if (!content) return;
+  const handleEditMessage = (messageId: string, content: string, _language: string) => {
     uiActions.setEditingMessageId(messageId);
-    uiActions.setEditingLanguage(language);
+    uiActions.setEditingLanguage(primaryLanguage);
     uiActions.setEditContent(content);
     setTimeout(adjustTextareaHeight, 0);
   };
@@ -78,15 +79,17 @@ export function useChatHandlers(
     adjustTextareaHeight();
   };
 
-  const handleSaveEdit = (editingMessageId: string | null, editContent: string, language: string) => {
+  const handleSaveEdit = (editingMessageId: string | null, editContent: string, _language: string) => {
     if (!projectId || !editingMessageId) return;
     const chatId = getActiveChatId();
     if (!chatId) return;
 
-    // Convert the string content to ContentPart array
+    // Convert the string content to ContentPart array for the primary language only
     const contentParts: ContentPart[] = [{ type: 'content', text: editContent }];
 
-    updateMessage(projectId, chatId, editingMessageId, contentParts, language);
+    updateMessage(projectId, chatId, editingMessageId, contentParts, primaryLanguage);
+    // Purge cached translations so the next view requires a fresh translate
+    clearMessageTranslations(projectId, chatId, editingMessageId, [primaryLanguage]);
     uiActions.setEditingMessageId(null);
     uiActions.setEditingLanguage(null);
     uiActions.setEditContent('');
