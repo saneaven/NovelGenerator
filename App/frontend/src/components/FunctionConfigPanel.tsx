@@ -97,12 +97,16 @@ const FunctionConfigPanel: React.FC<FunctionConfigPanelProps> = ({
                     <div className="form-group">
                         <label>Provider</label>
                         <select value={config.provider} onChange={handleProviderChange}>
-                            <option value="copilot">GitHub Copilot</option>
+                            <option value="openai">OpenAI</option>
+                            <option value="gemini">Gemini</option>
+                            <option value="claude">Claude</option>
                             <option value="openrouter">OpenRouter</option>
                             <option value="custom">Custom Endpoint</option>
                         </select>
                         <small className="help-text">
-                            {config.provider === 'copilot' && 'Uses server-side authentication'}
+                            {config.provider === 'openai' && 'Direct OpenAI API access'}
+                            {config.provider === 'gemini' && 'Google Gemini models'}
+                            {config.provider === 'claude' && 'Anthropic Claude models'}
                             {config.provider === 'openrouter' && 'Access to 100+ models'}
                             {config.provider === 'custom' && 'Your own API endpoint'}
                         </small>
@@ -116,11 +120,9 @@ const FunctionConfigPanel: React.FC<FunctionConfigPanelProps> = ({
                             value={config.model}
                             onChange={(e) => onConfigChange({ ...config, model: e.target.value })}
                             placeholder={
-                                config.provider === 'copilot'
-                                    ? 'e.g., gpt-4o, gpt-4o-mini'
-                                    : config.provider === 'openrouter'
+                                config.provider === 'openrouter'
                                     ? 'e.g., anthropic/claude-3.5-sonnet'
-                                    : 'e.g., gpt-4'
+                                    : 'e.g., gpt-4o'
                             }
                         />
                     </div>

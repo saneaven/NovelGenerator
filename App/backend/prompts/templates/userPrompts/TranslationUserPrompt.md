@@ -10,17 +10,28 @@ Translate the following **{{ variable.objectCount }}** story objects from **{{ v
 
 ## Objects to Translate ({{ variable.sourceLanguage }})
 
-{{ variable.objectsArray }}
+{{ context.objectsArray | json }}
 
 ## Critical Instructions
 
-**You MUST translate ALL {{ variable.objectCount }} objects** - do not skip any objects. Return the complete batch using the `translate_batch_story_objects` function with all translated objects in a single response.
+**You MUST translate ALL {{ variable.objectCount }} objects** - do not skip any objects.
+
+For each object, call the appropriate translation function:
+- `translate_character` for character objects
+- `translate_organization` for organization objects
+- `translate_location` for location objects
+- `translate_lorebook_entry` for lorebook objects
+- `translate_act` for act objects
+- `translate_chapter` for chapter objects
+- `translate_basic_info` for basic_info objects
+- `translate_manuscript` for manuscript objects
+
+You will make **{{ variable.objectCount }} function calls** total (one per object).
 
 Requirements:
+- Use the `objectId` from the source as the `id` parameter
 - Maintain consistency in terminology, character names, and style across all objects
-- Include the objectType and objectId for each object (matching the source)
 - Include the appropriate translated fields based on object type:
-  - For basic_info objects: title, logline, genre
-  - For chapter_content objects: content, wordCount
-  - For all other object types: name, description
-- The translations array must contain exactly {{ variable.objectCount }} objects
+  - For basic_info: id, title, logline, genre
+  - For manuscript: id, content
+  - For all other types: id, name, description

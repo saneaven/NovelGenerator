@@ -1,0 +1,73 @@
+/* ========================================
+   MOBILE CHAT - Shared Mobile Chat Styles
+   Consistent behavior across all pages
+   ======================================== */
+
+@media (max-width: 768px) {
+    /* ===== Chat Panel Mobile ===== */
+    .chat-panel {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100vh;
+        z-index: 1050; /* Higher than any header (z-sticky: 1010) */
+        transform: translateX(-100%);
+        transition: transform var(--transition-base, 0.2s) ease;
+        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .chat-panel.visible {
+        transform: translateX(0);
+    }
+
+    .chat-panel.hidden {
+        transform: translateX(-100%);
+    }
+
+    /* ===== Chat Overlay ===== */
+    .chat-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1049; /* Just below chat panel */
+        animation: fadeIn var(--duration-normal, 0.2s) ease-out;
+    }
+
+    /* ===== Sidebar Overlay ===== */
+    .sidebar-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1051; /* Above chat panel for sidebar */
+        animation: fadeIn var(--duration-normal, 0.2s) ease-out;
+    }
+
+    /* ===== Mobile-only visibility ===== */
+    .mobile-only {
+        display: block !important;
+    }
+}
+
+/* ===== Desktop: Hide mobile-only elements ===== */
+@media (min-width: 769px) {
+    .mobile-only {
+        display: none !important;
+    }
+}
+
+/* ===== Fade In Animation ===== */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}

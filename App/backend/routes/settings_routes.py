@@ -35,7 +35,7 @@ async def get_user_settings(
             user_id=current_user.id,
             function_configs={
                 'chat': {
-                    'provider': 'copilot',
+                    'provider': 'openrouter',
                     'model': 'gpt-4o-mini',
                     'temperature': 0.7,
                     'advanced': {
@@ -45,7 +45,7 @@ async def get_user_settings(
                     }
                 },
                 'translation': {
-                    'provider': 'copilot',
+                    'provider': 'openrouter',
                     'model': 'gpt-4o',
                     'temperature': 0.2,
                     'advanced': {
@@ -55,7 +55,7 @@ async def get_user_settings(
                     }
                 },
                 'storyEdit': {
-                    'provider': 'copilot',
+                    'provider': 'openrouter',
                     'model': 'gpt-4o',
                     'temperature': 0.3,
                     'advanced': {
@@ -65,7 +65,7 @@ async def get_user_settings(
                     }
                 },
                 'chapterGen': {
-                    'provider': 'copilot',
+                    'provider': 'openrouter',
                     'model': 'gpt-4o',
                     'temperature': 0.7,
                     'advanced': {
@@ -76,11 +76,16 @@ async def get_user_settings(
                 }
             },
             provider_credentials={
-                'copilot': {},
                 'openrouter': {'apiKey': ''},
-                'custom': {'baseUrl': '', 'apiKey': ''}
+                'custom': {'baseUrl': '', 'apiKey': ''},
+                'claude': {'apiKey': ''},
+                'gemini': {'apiKey': '', 'baseUrl': None},
+                'openai': {'apiKey': ''}
             },
-            primary_language='English'
+            provider_preferences={},
+            main_language='English',
+            sub_languages=[],
+            default_sub_language=None
         )
         db.add(settings)
         db.commit()
@@ -89,8 +94,9 @@ async def get_user_settings(
     return UserSettingsResponse(
         functionConfigs=settings.function_configs,
         providerCredentials=settings.provider_credentials,
-        primaryLanguage=settings.primary_language,
-        secondaryLanguage=settings.secondary_language,
+        mainLanguage=settings.main_language,
+        subLanguages=settings.sub_languages or [],
+        defaultSubLanguage=settings.default_sub_language,
         theme=settings.theme
     )
 
@@ -124,11 +130,22 @@ async def update_user_settings(
     if update_data.providerCredentials is not None:
         settings.provider_credentials = update_data.providerCredentials.model_dump()
 
-    if update_data.primaryLanguage is not None:
-        settings.primary_language = update_data.primaryLanguage
+    if update_data.mainLanguage is not None:
+        settings.main_language = update_data.mainLanguage
 
-    if update_data.secondaryLanguage is not None:
-        settings.secondary_language = update_data.secondaryLanguage
+    if update_data.subLanguages is not None:
+        settings.sub_languages = update_data.subLanguages
+        # Validate defaultSubLanguage is in subLanguages
+        if settings.default_sub_language and settings.default_sub_language not in update_data.subLanguages:
+            settings.default_sub_language = update_data.subLanguages[0] if update_data.subLanguages else None
+
+    if update_data.defaultSubLanguage is not None:
+        # Validate it's in subLanguages
+        if update_data.defaultSubLanguage in (settings.sub_languages or []):
+            settings.default_sub_language = update_data.defaultSubLanguage
+    elif update_data.defaultSubLanguage == "":
+        # Allow explicitly clearing the default
+        settings.default_sub_language = None
 
     if update_data.theme is not None:
         settings.theme = update_data.theme
@@ -139,8 +156,9 @@ async def update_user_settings(
     return UserSettingsResponse(
         functionConfigs=settings.function_configs,
         providerCredentials=settings.provider_credentials,
-        primaryLanguage=settings.primary_language,
-        secondaryLanguage=settings.secondary_language,
+        mainLanguage=settings.main_language,
+        subLanguages=settings.sub_languages or [],
+        defaultSubLanguage=settings.default_sub_language,
         theme=settings.theme
     )
 
@@ -175,8 +193,9 @@ async def update_function_config(
     return UserSettingsResponse(
         functionConfigs=settings.function_configs,
         providerCredentials=settings.provider_credentials,
-        primaryLanguage=settings.primary_language,
-        secondaryLanguage=settings.secondary_language,
+        mainLanguage=settings.main_language,
+        subLanguages=settings.sub_languages or [],
+        defaultSubLanguage=settings.default_sub_language,
         theme=settings.theme
     )
 
@@ -203,8 +222,9 @@ async def sync_settings_from_client(
             user_id=current_user.id,
             function_configs=client_settings.get('functionConfigs', {}),
             provider_credentials=client_settings.get('providerCredentials', {}),
-            primary_language=client_settings.get('primaryLanguage', 'English'),
-            secondary_language=client_settings.get('secondaryLanguage'),
+            main_language=client_settings.get('mainLanguage', 'English'),
+            sub_languages=client_settings.get('subLanguages', []),
+            default_sub_language=client_settings.get('defaultSubLanguage'),
             theme=client_settings.get('theme', 'system')
         )
         db.add(settings)
@@ -212,8 +232,10 @@ async def sync_settings_from_client(
         # Update existing settings
         settings.function_configs = client_settings.get('functionConfigs', settings.function_configs)
         settings.provider_credentials = client_settings.get('providerCredentials', settings.provider_credentials)
-        settings.primary_language = client_settings.get('primaryLanguage', settings.primary_language)
-        settings.secondary_language = client_settings.get('secondaryLanguage', settings.secondary_language)
+        settings.provider_preferences = client_settings.get('providerPreferences', settings.provider_preferences)
+        settings.main_language = client_settings.get('mainLanguage', settings.main_language)
+        settings.sub_languages = client_settings.get('subLanguages', settings.sub_languages)
+        settings.default_sub_language = client_settings.get('defaultSubLanguage', settings.default_sub_language)
         settings.theme = client_settings.get('theme', settings.theme)
 
     db.commit()

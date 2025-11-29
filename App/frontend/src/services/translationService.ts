@@ -2,7 +2,7 @@
  * Unified Translation Service
  *
  * Core philosophy: reuse one pipeline for translation tasks.
- * - Story objects: batch (single = batch of size 1) via translate_batch_story_objects.
+ * - Story objects: type-specific translation functions (translate_character, translate_location, etc.)
  * - Chat messages: dedicated chat translation flow via translate_chat_message.
  *
  * This service handles all translation operations using LLMRequestManager.
@@ -12,8 +12,14 @@ import type { MutableRefObject } from 'react';
 import type { LanguageData } from '../types/multilingual';
 import { ChatPipeline } from '../chat/ChatPipeline';
 import { LLMRequestManager, type LLMRequestManagerConfig, type LLMRequestManagerCallbacks } from '../chat/sessions/LLMRequestManager';
-import { TRANSLATE_BATCH_STORY_OBJECTS_FUNCTION, TRANSLATE_CHAT_MESSAGE_FUNCTION } from '../chat/types/translationFunctionSchemas';
+import {
+  TRANSLATION_FUNCTIONS,
+  TRANSLATION_FUNCTION_TO_TYPE,
+  TRANSLATION_FUNCTION_NAMES,
+  TRANSLATE_CHAT_MESSAGE_FUNCTION,
+} from '../chat/types/translationFunctionSchemas';
 import { useSettingsStore } from '../store/settingsStore';
+import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import type { ObjectType } from '../types/unifiedObject';
 import type { FunctionCallMetadata, ContentPart } from '../llm_request/types';
 import { translationService as translationAPI } from '../api/unifiedObjectService';
@@ -70,27 +76,48 @@ function createEmptyStoryObjects() {
 // ============================================================================
 
 export class TranslationService {
-  private static translationStatuses = new Map<string, TranslationStatus>();
-
   // ==========================================================================
-  // TRANSLATION STATUS MANAGEMENT
+  // TRANSLATION STATUS MANAGEMENT (delegates to unifiedObjectStore)
   // ==========================================================================
 
+  /**
+   * Set translation status for an object.
+   * Uses the reactive Zustand store instead of a static Map.
+   */
   static setTranslationStatus(objectId: string, status: Partial<TranslationStatus>): void {
-    const existing = this.translationStatuses.get(objectId) || { objectId, isTranslating: false };
-    this.translationStatuses.set(objectId, { ...existing, ...status });
+    const store = useUnifiedObjectStore.getState();
+    store.setTranslating(objectId, status.isTranslating ?? false);
   }
 
+  /**
+   * Get translation status for an object.
+   * Reads from the reactive Zustand store.
+   */
   static getTranslationStatus(objectId: string): TranslationStatus | null {
-    return this.translationStatuses.get(objectId) || null;
+    const store = useUnifiedObjectStore.getState();
+    const isTranslating = store.translating[objectId] ?? false;
+    return { objectId, isTranslating };
   }
 
+  /**
+   * Clear translation status for an object.
+   * Removes from the reactive Zustand store.
+   */
   static clearTranslationStatus(objectId: string): void {
-    this.translationStatuses.delete(objectId);
+    const store = useUnifiedObjectStore.getState();
+    store.clearTranslating(objectId);
   }
 
+  /**
+   * Clear all translation statuses.
+   * Note: This clears via store's clearAllObjects which also clears translating state.
+   */
   static clearAllTranslationStatuses(): void {
-    this.translationStatuses.clear();
+    // Clear all translating states by setting each to false
+    const store = useUnifiedObjectStore.getState();
+    Object.keys(store.translating).forEach(objectId => {
+      store.clearTranslating(objectId);
+    });
   }
 
   // ==========================================================================
@@ -186,7 +213,7 @@ export class TranslationService {
       sourceLanguage,
       targetLanguage,
       objectCount: objects.length,
-      objectsArray: JSON.stringify(objectsArray, null, 2),
+      objectsArray,  // Pass array directly, not stringified
       userInstructions: userInstructions || '',
       enablePrefill: translationConfig.advanced.enablePrefill,
       enableThinking: false,
@@ -221,7 +248,7 @@ export class TranslationService {
       aiModel: translationConfig.model,
       temperature: translationConfig.temperature,
       providerPreference: translationConfig.providerPreference,
-      functions: [TRANSLATE_BATCH_STORY_OBJECTS_FUNCTION],
+      functions: TRANSLATION_FUNCTIONS,
       mode: 'workspace',
       enablePrefill: translationConfig.advanced.enablePrefill,
       thinkingMode: translationConfig.advanced.thinkingMode as any,
@@ -237,11 +264,11 @@ export class TranslationService {
           .map(p => p.text)
           .join('');
 
-        // Extract completed object IDs from partial JSON
-        if (textContent.includes('objectId')) {
-          const matches = textContent.match(/"objectId":\s*"([^"]+)"/g);
+        // Extract completed object IDs from partial JSON (now uses "id" field)
+        if (textContent.includes('"id"')) {
+          const matches = textContent.match(/"id":\s*"([^"]+)"/g);
           if (matches && onProgress) {
-            const ids = matches.map(m => m.match(/"objectId":\s*"([^"]+)"/)?.[1]).filter(Boolean) as string[];
+            const ids = matches.map(m => m.match(/"id":\s*"([^"]+)"/)?.[1]).filter(Boolean) as string[];
             const newCompleted = ids.filter(id => !completed.includes(id));
             if (newCompleted.length > 0) {
               completed.push(...newCompleted);
@@ -251,31 +278,63 @@ export class TranslationService {
         }
       },
       onFunctionCalls: async (functionCalls: FunctionCallMetadata[]) => {
-        // Find the batch translation function call
-        const batchCall = functionCalls.find(fc => fc.function_name === 'translate_batch_story_objects');
-        if (!batchCall) {
+        // Filter for translation function calls only
+        const translationCalls = functionCalls.filter(
+          fc => TRANSLATION_FUNCTION_NAMES.has(fc.function_name)
+        );
+
+        if (translationCalls.length === 0) {
           console.error('Available function calls:', functionCalls.map(fc => fc.function_name));
-          throw new Error('AI did not call translate_batch_story_objects function');
+          throw new Error('AI did not call any translation functions');
         }
 
-        // Parse the results
-        const args = typeof batchCall.arguments === 'string'
-          ? JSON.parse(batchCall.arguments)
-          : batchCall.arguments;
+        console.log(`Received ${translationCalls.length} translation function calls`);
 
-        console.log('Translation function arguments:', args);
+        // Accumulate translations from individual function calls
+        const translations: TranslationResult[] = [];
 
-        const translations: TranslationResult[] = args.translations;
+        for (const call of translationCalls) {
+          const objectType = TRANSLATION_FUNCTION_TO_TYPE[call.function_name];
+          if (!objectType) continue;
 
-        if (!Array.isArray(translations) || translations.length === 0) {
-          console.error('Invalid translations received:', {
-            args,
-            translationsType: typeof translations,
-            translationsValue: translations,
-            isArray: Array.isArray(translations),
-            argsKeys: Object.keys(args || {}),
+          const args = typeof call.arguments === 'string'
+            ? JSON.parse(call.arguments)
+            : call.arguments;
+
+          if (!args.id) {
+            console.warn('Skipping translation call without id:', args);
+            continue;
+          }
+
+          // Extract id and rest of the data
+          const { id, ...data } = args;
+
+          // manuscript인 경우 wordCount 자동 계산
+          if (objectType === 'manuscript' && data.content) {
+            data.wordCount = data.content.split(/\s+/).filter(Boolean).length;
+          }
+
+          translations.push({
+            objectType,
+            objectId: id,
+            ...data,
           });
-          throw new Error(`No translations returned from AI. Received: ${JSON.stringify(args)}`);
+
+          // Report progress for each completed translation
+          if (onProgress) {
+            onProgress(translations.map(t => t.objectId));
+          }
+        }
+
+        if (translations.length === 0) {
+          throw new Error('No valid translations received from AI');
+        }
+
+        // Verify we got all expected translations
+        if (translations.length !== objects.length) {
+          console.warn(
+            `Expected ${objects.length} translations but received ${translations.length}`
+          );
         }
 
         // Prepare batch data for backend
@@ -292,7 +351,7 @@ export class TranslationService {
         // Send to backend using unified endpoint
         await translationAPI.addTranslations(batchData);
 
-        // Update progress
+        // Final progress update
         if (onProgress) {
           onProgress(translations.map(t => t.objectId));
         }

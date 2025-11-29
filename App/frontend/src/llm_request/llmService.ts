@@ -19,7 +19,7 @@ export async function* streamChat(
         thinkingConfig?: ThinkingConfig;
         thinkingMode?: 'off' | 'custom' | 'model';
     }
-): AsyncGenerator<string | { content: string | null; tool_calls?: any[]; thinking?: string; thinking_details?: ThinkingDetail[]; thinking_text?: string }>
+): AsyncGenerator<string | { content: string | null; tool_calls?: any[]; thinking?: string; thinking_details?: ThinkingDetail[]; thinking_text?: string; thinking_signature?: string }>
 {
     const endpoint = `${API_BASE}/chat/completions/${provider}/stream`;
 
@@ -49,8 +49,8 @@ export async function* streamChat(
         requestBody.provider_preference = opts.providerPreference;
     }
 
-    // Add thinking config for OpenRouter
-    if (provider === 'openrouter' && opts?.thinkingConfig)
+    // Thinking config is provider-agnostic; each provider maps what it supports
+    if (opts?.thinkingConfig)
     {
         requestBody.thinking_config = opts.thinkingConfig;
     }
@@ -81,6 +81,7 @@ export async function* streamChat(
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let receivedProperTermination = false;
 
     while (true)
     {
@@ -126,27 +127,38 @@ export async function* streamChat(
             for (const data of dataLines)
             {
                 if (!data) continue;
-                if (data === "[DONE]") return;
+                if (data === "[DONE]") {
+                    receivedProperTermination = true;
+                    return;
+                }
 
                 // OpenAI-compatible stream: handle content, tool_calls, and thinking
                 try
                 {
                     const chunk = JSON.parse(data);
 
+                    // If provider streams error objects inside data frames
+                    if (chunk?.error) {
+                        const errMsg = chunk.error.message || chunk.error.code || JSON.stringify(chunk.error);
+                        throw new Error(`Backend Error: ${errMsg}`);
+                    }
+
                     const delta = chunk?.choices?.[0]?.delta;
                     const content: string | undefined = delta?.content;
                     const tool_calls = delta?.tool_calls;
                     const thinking_details: ThinkingDetail[] | undefined = delta?.thinking_details;
                     const thinking_text: string | undefined = delta?.thinking?.text;
+                    const thinking_signature: string | undefined = delta?.thinking?.signature;
 
                     // Yield tool calls or thinking as object
-                    if (tool_calls || thinking_details || thinking_text)
+                    if (tool_calls || thinking_details || thinking_text || thinking_signature)
                     {
                         yield {
                             content: null,  // Don't send content with thinking to prevent interruption
                             tool_calls,
                             thinking_details,
-                            thinking_text
+                            thinking_text,
+                            thinking_signature,
                         };
                     } else if (content)
                     {
@@ -154,7 +166,10 @@ export async function* streamChat(
                     }
 
                     const finish = chunk?.choices?.[0]?.finish_reason;
-                    if (finish && finish !== null) return;
+                    if (finish && finish !== null) {
+                        receivedProperTermination = true;
+                        return;
+                    }
                 } catch (error)
                 {
                     // If not JSON, yield as-is
@@ -162,6 +177,15 @@ export async function* streamChat(
                 }
             }
         }
+    }
+
+    // Check if stream ended properly (but not if aborted by user)
+    if (!receivedProperTermination) {
+        // Check if this was an intentional abort - don't throw error in that case
+        if (opts?.signal?.aborted) {
+            return; // Silently end - abort was intentional
+        }
+        throw new Error('Stream ended unexpectedly without completion signal');
     }
 }
 

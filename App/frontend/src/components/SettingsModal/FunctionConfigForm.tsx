@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type {
   FunctionAIConfig,
   ProviderType,
   AIFunctionType,
   ProviderCredentials,
+  ThinkingConfig,
 } from '../../store/settingsStore';
 import ModelBrowser from './ModelBrowser';
 
@@ -20,11 +21,31 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
   credentials,
   onChange,
 }) => {
+  const [showModelBrowser, setShowModelBrowser] = useState(false);
+
+  // Detect if model is GPT-5 family (gpt-5, gpt-5-mini, gpt-5.1, etc.)
+  const isGpt5 = config.provider === 'openai' && /gpt-?5/i.test(config.model);
+
   const handleProviderChange = (provider: ProviderType) => {
+    // If switching to Gemini and thinking mode is 'off', change to 'model'
+    // because Gemini doesn't support disabling thinking
+    const newThinkingMode =
+      provider === 'gemini' && config.advanced.thinkingMode === 'off'
+        ? 'model'
+        : config.advanced.thinkingMode;
+
+    // Close model browser when provider changes
+    setShowModelBrowser(false);
+
     onChange({
       ...config,
       provider,
+      model: '',  // Clear model when provider changes
       providerPreference: provider === 'openrouter' ? config.providerPreference : undefined,
+      advanced: {
+        ...config.advanced,
+        thinkingMode: newThinkingMode,
+      },
     });
   };
 
@@ -57,7 +78,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
   };
 
   const handleThinkingConfigChange = (
-    key: 'effort' | 'maxTokens',
+    key: keyof ThinkingConfig,
     value: any
   ) => {
     onChange({
@@ -85,12 +106,16 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
             onChange={(e) => handleProviderChange(e.target.value as ProviderType)}
             className="config-select"
           >
-            <option value="copilot">GitHub Copilot</option>
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Gemini</option>
+            <option value="claude">Claude</option>
             <option value="openrouter">OpenRouter</option>
             <option value="custom">Custom Endpoint</option>
           </select>
           <p className="field-hint">
-            {config.provider === 'copilot' && 'Server-authenticated GitHub Copilot access'}
+            {config.provider === 'openai' && 'Direct OpenAI API access (GPT-4o, o1, etc.)'}
+            {config.provider === 'gemini' && 'Google Gemini with thought summaries'}
+            {config.provider === 'claude' && 'Anthropic Claude with extended thinking'}
             {config.provider === 'openrouter' && 'Access to 100+ AI models via OpenRouter'}
             {config.provider === 'custom' && 'Use your own OpenAI-compatible endpoint'}
           </p>
@@ -98,19 +123,44 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
 
         <div className="form-field">
           <label>AI Model</label>
-          <input
-            type="text"
-            value={config.model}
-            onChange={(e) => handleModelChange(e.target.value)}
-            placeholder="e.g., gpt-4o, anthropic/claude-3.5-sonnet"
-            className="config-input"
-          />
+          <div className="model-input-row">
+            <input
+              type="text"
+              value={config.model}
+              onChange={(e) => handleModelChange(e.target.value)}
+              placeholder="e.g., gpt-4o, anthropic/claude-3.5-sonnet"
+              className="config-input"
+            />
+            <button
+              type="button"
+              onClick={() => setShowModelBrowser(!showModelBrowser)}
+              className={`browse-model-btn ${showModelBrowser ? 'active' : ''}`}
+              title="Browse available models"
+            >
+              {showModelBrowser ? 'Hide' : 'Browse'}
+            </button>
+          </div>
           <p className="field-hint">
             Model identifier for this function
           </p>
+          {/* Model Browser */}
+          {showModelBrowser && (
+            <ModelBrowser
+              key={config.provider}  // Remount when provider changes
+              autoExpand={true}
+              provider={config.provider}
+              currentModel={config.model}
+              providerPreference={config.providerPreference}
+              credentials={credentials}
+              onSelectModel={handleModelChange}
+              onUpdateProviderPreference={(pref) =>
+                onChange({ ...config, providerPreference: pref })
+              }
+            />
+          )}
         </div>
 
-        <div className="form-field">
+        <div className={`form-field ${isGpt5 ? 'disabled' : ''}`}>
           <label>
             Temperature: <span className="temperature-value">{config.temperature.toFixed(1)}</span>
           </label>
@@ -122,6 +172,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
             value={config.temperature}
             onChange={(e) => handleTemperatureChange(parseFloat(e.target.value))}
             className="temperature-slider"
+            disabled={isGpt5}
           />
           <div className="temperature-labels">
             <small>Precise (0.0)</small>
@@ -129,7 +180,9 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
             <small>Creative (2.0)</small>
           </div>
           <p className="field-hint">
-            Lower values produce more focused and deterministic outputs. Higher values increase creativity and randomness.
+            {isGpt5
+              ? 'Temperature is not supported for GPT-5 models. Use Reasoning Effort instead.'
+              : 'Lower values produce more focused and deterministic outputs. Higher values increase creativity and randomness.'}
           </p>
         </div>
       </div>
@@ -139,17 +192,20 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
         <h4 className="section-title">Advanced Settings</h4>
 
         <div className="advanced-options">
-          <div className="checkbox-field">
+          <div className={`checkbox-field ${config.provider === 'openai' || config.provider === 'gemini' ? 'disabled' : ''}`}>
             <label className="checkbox-label">
               <input
                 type="checkbox"
                 checked={config.advanced.enablePrefill}
                 onChange={(e) => handleAdvancedChange('enablePrefill', e.target.checked)}
+                disabled={config.provider === 'openai' || config.provider === 'gemini'}
               />
               <div className="checkbox-content">
                 <span className="checkbox-title">Enable Assistant Prefill</span>
                 <span className="checkbox-description">
-                  Pre-fill the assistant's response to guide output format (Anthropic models only)
+                  {config.provider === 'openai' || config.provider === 'gemini'
+                    ? `${config.provider === 'openai' ? 'OpenAI' : 'Gemini'} does not support assistant prefill`
+                    : 'Pre-fill the assistant\'s response to guide output format (Anthropic models only)'}
                 </span>
               </div>
             </label>
@@ -158,17 +214,22 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
           <div className="thinking-mode-field">
             <label className="field-label">Thinking Mode</label>
             <div className="radio-group">
-              <label className="radio-option">
+              <label className={`radio-option ${config.provider === 'gemini' ? 'disabled' : ''}`}>
                 <input
                   type="radio"
                   name={`thinking-mode-${functionType}`}
                   value="off"
                   checked={config.advanced.thinkingMode === 'off'}
                   onChange={() => handleThinkingModeChange('off')}
+                  disabled={config.provider === 'gemini'}
                 />
                 <div className="radio-content">
                   <span className="radio-title">Off</span>
-                  <span className="radio-description">No thinking shown</span>
+                  <span className="radio-description">
+                    {config.provider === 'gemini'
+                      ? 'Gemini does not support disabling thinking'
+                      : 'No thinking shown'}
+                  </span>
                 </div>
               </label>
 
@@ -183,7 +244,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                 <div className="radio-content">
                   <span className="radio-title">Model Thinking</span>
                   <span className="radio-description">
-                    Use model's native thinking tokens (OpenRouter only)
+                    Use model's native thinking tokens (if the model supports it)
                   </span>
                 </div>
               </label>
@@ -210,64 +271,165 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
               <div className="thinking-config">
                 <h5 className="subsection-title">Thinking Configuration</h5>
 
-                <div className="form-field">
-                  <label>Effort Level</label>
-                  <select
-                    value={config.advanced.thinkingConfig?.effort || 'medium'}
-                    onChange={(e) =>
-                      handleThinkingConfigChange('effort', e.target.value)
-                    }
-                    className="config-select"
-                  >
-                    <option value="low">Low (~20% of max tokens)</option>
-                    <option value="medium">Medium (~50% of max tokens)</option>
-                    <option value="high">High (~80% of max tokens)</option>
-                  </select>
-                  <p className="field-hint">
-                    Controls how much thinking the model performs internally
-                  </p>
-                </div>
+                {/* Generic settings for OpenRouter/Custom/OpenAI */}
+                {config.provider !== 'claude' && config.provider !== 'gemini' && (
+                  <>
+                    <div className="form-field">
+                      <label>{isGpt5 ? 'Reasoning Effort (GPT-5)' : 'Effort Level'}</label>
+                      <select
+                        value={config.advanced.thinkingConfig?.effort || 'medium'}
+                        onChange={(e) =>
+                          handleThinkingConfigChange('effort', e.target.value)
+                        }
+                        className="config-select"
+                      >
+                        {/* 'none' option only for GPT-5 */}
+                        {isGpt5 && (
+                          <option value="none">None - No reasoning (fastest)</option>
+                        )}
+                        <option value="low">Low {isGpt5 ? '- Quick reasoning' : '(~20% of max tokens)'}</option>
+                        <option value="medium">Medium {isGpt5 ? '- Balanced' : '(~50% of max tokens)'}</option>
+                        <option value="high">High {isGpt5 ? '- Deep reasoning' : '(~80% of max tokens)'}</option>
+                      </select>
+                      <p className="field-hint">
+                        {isGpt5
+                          ? 'Controls how much reasoning GPT-5 performs before responding'
+                          : 'Controls how much thinking the model performs internally'}
+                      </p>
+                    </div>
 
-                <div className="form-field">
-                  <label>Max Thinking Tokens (optional)</label>
-                  <input
-                    type="number"
-                    min="1024"
-                    max="32000"
-                    value={config.advanced.thinkingConfig?.maxTokens || ''}
-                    onChange={(e) =>
-                      handleThinkingConfigChange(
-                        'maxTokens',
-                        e.target.value ? parseInt(e.target.value) : undefined
-                      )
-                    }
-                    placeholder="Auto (based on effort)"
-                    className="config-input"
-                  />
-                  <p className="field-hint">
-                    Directly specify thinking token budget (1024-32000). Leave empty to use effort-based allocation.
-                  </p>
-                </div>
+                    {/* Verbosity dropdown - GPT-5 only */}
+                    {isGpt5 && (
+                      <div className="form-field">
+                        <label>Output Verbosity (GPT-5)</label>
+                        <select
+                          value={config.advanced.thinkingConfig?.verbosity || 'medium'}
+                          onChange={(e) =>
+                            handleThinkingConfigChange('verbosity', e.target.value)
+                          }
+                          className="config-select"
+                        >
+                          <option value="low">Low - Concise output</option>
+                          <option value="medium">Medium - Standard</option>
+                          <option value="high">High - Detailed output</option>
+                        </select>
+                        <p className="field-hint">
+                          Controls the length and detail of the model's output
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Max tokens - not for GPT-5 (uses max_output_tokens automatically) */}
+                    {!isGpt5 && (
+                      <div className="form-field">
+                        <label>Max Thinking Tokens (optional)</label>
+                        <input
+                          type="number"
+                          min="1024"
+                          max="32000"
+                          value={config.advanced.thinkingConfig?.maxTokens || ''}
+                          onChange={(e) =>
+                            handleThinkingConfigChange(
+                              'maxTokens',
+                              e.target.value ? parseInt(e.target.value) : undefined
+                            )
+                          }
+                          placeholder="Auto (based on effort)"
+                          className="config-input"
+                        />
+                        <p className="field-hint">
+                          Directly specify thinking token budget. Leave empty to use effort-based allocation.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Claude-specific */}
+                {config.provider === 'claude' && (
+                  <div className="form-field">
+                    <label>Claude Thinking Budget (tokens)</label>
+                    <input
+                      type="number"
+                      min="256"
+                      value={config.advanced.thinkingConfig?.claudeBudgetTokens || ''}
+                      onChange={(e) =>
+                        handleThinkingConfigChange(
+                          'claudeBudgetTokens',
+                          e.target.value ? parseInt(e.target.value) : undefined
+                        )
+                      }
+                      placeholder="Auto"
+                      className="config-input"
+                    />
+                    <p className="field-hint">Leave blank to use the model default budget.</p>
+                  </div>
+                )}
+
+                {/* Gemini-specific */}
+                {config.provider === 'gemini' && (
+                  <>
+                    {config.model.toLowerCase().includes('gemini-3') && (
+                      <div className="form-field">
+                        <label>Thinking Level (Gemini 3)</label>
+                        {/*
+                          Gemini 3 supports only 'low' | 'high'. Default to 'high' if legacy value exists.
+                        */}
+                        {(() => {
+                          const lvl = config.advanced.thinkingConfig?.geminiThinkingLevel === 'low' ? 'low' : 'high';
+                          if (config.advanced.thinkingConfig?.geminiThinkingLevel !== lvl) {
+                            handleThinkingConfigChange('geminiThinkingLevel', lvl);
+                          }
+                          return null;
+                        })()}
+                        <select
+                          value={
+                            config.advanced.thinkingConfig?.geminiThinkingLevel === 'low'
+                              ? 'low'
+                              : 'high'
+                          }
+                          onChange={(e) =>
+                            handleThinkingConfigChange(
+                              'geminiThinkingLevel',
+                              e.target.value as ThinkingConfig['geminiThinkingLevel']
+                            )
+                          }
+                          className="config-select"
+                        >
+                          <option value="low">Low</option>
+                          <option value="high">High</option>
+                        </select>
+                        <p className="field-hint">Controls depth of reasoning for Gemini 3 models.</p>
+                      </div>
+                    )}
+
+                    {config.model.toLowerCase().includes('2.5') && (
+                      <div className="form-field">
+                        <label>Thinking Budget (tokens) for 2.5</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={config.advanced.thinkingConfig?.geminiBudgetTokens ?? ''}
+                          onChange={(e) =>
+                            handleThinkingConfigChange(
+                              'geminiBudgetTokens',
+                              e.target.value === '' ? undefined : parseInt(e.target.value)
+                            )
+                          }
+                          placeholder="Set 0 to disable"
+                          className="config-input"
+                        />
+                        <p className="field-hint">Set 0 to effectively disable thinking where supported.</p>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Model Browser */}
-      <div className="config-section">
-        <ModelBrowser
-          functionType={functionType}
-          provider={config.provider}
-          currentModel={config.model}
-          providerPreference={config.providerPreference}
-          credentials={credentials}
-          onSelectModel={handleModelChange}
-          onUpdateProviderPreference={(pref) =>
-            onChange({ ...config, providerPreference: pref })
-          }
-        />
-      </div>
     </div>
   );
 };

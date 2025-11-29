@@ -54,10 +54,9 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       organization: 'Organization',
       location: 'Location',
       lorebook: 'Lorebook',
-      outline: 'Outline',
       act: 'Act',
       chapter: 'Chapter',
-      chapter_content: 'Chapter Content',
+      manuscript: 'Manuscript',
     };
     return names[type] || type;
   };
@@ -119,18 +118,6 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       );
     }
 
-    // For outline - now handled differently (acts and chapters are separate objects)
-    if (type === 'outline') {
-      return (
-        <div className="version-data-formatted">
-          <div className="data-field">
-            <label>Structure:</label>
-            <span>Outline structure is managed through separate Acts and Chapters</span>
-          </div>
-        </div>
-      );
-    }
-
     // For name-description objects (character, organization, location, lorebook, act, chapter)
     if (data.name !== undefined || data.description !== undefined) {
       return (
@@ -147,8 +134,8 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       );
     }
 
-    // For chapter content
-    if (type === 'chapter_content' && data.content !== undefined) {
+    // For manuscript content
+    if (type === 'manuscript' && data.content !== undefined) {
       return (
         <div className="version-data-formatted">
           <div className="data-field">

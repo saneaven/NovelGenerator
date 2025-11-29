@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
-import { useNovelStore } from '../../../store/novelStore';
-import type { ActObject, ChapterObject } from '../../../types/unifiedObject';
+import type { ActObject, ChapterObject, ManuscriptObject, VersionHistoryEntry } from '../../../types/unifiedObject';
 
 interface ChapterSidebarProps {
   projectId: string;
@@ -19,10 +18,11 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
   onSelectChapter,
 }) => {
   const store = useUnifiedObjectStore();
-  const { getChapterContent, getVersions, setActiveVersion } = useNovelStore();
   const [showVersions, setShowVersions] = useState(false);
   const [actIds, setActIds] = useState<string[]>([]);
   const [chapterIds, setChapterIds] = useState<string[]>([]);
+  const [selectedChapterVersions, setSelectedChapterVersions] = useState<VersionHistoryEntry[]>([]);
+  const [activeVersionId, setActiveVersionId] = useState<string | null>(null);
 
   // Load acts and chapters on mount
   useEffect(() => {
@@ -43,6 +43,9 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
           .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
           .map(chapter => chapter.id);
         setChapterIds(sortedChapterIds);
+
+        // Also load manuscript objects
+        await store.listObjects('manuscript', projectId);
       } catch (error) {
         console.error('Failed to load outline data:', error);
       }
@@ -50,6 +53,40 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
 
     loadOutlineData();
   }, [projectId]);
+
+  // Load versions when selected chapter changes
+  useEffect(() => {
+    const loadVersions = async () => {
+      if (!selectedChapterId) {
+        setSelectedChapterVersions([]);
+        setActiveVersionId(null);
+        return;
+      }
+
+      const manuscriptObj = store.getManuscriptByChapterId(selectedChapterId);
+      if (!manuscriptObj) {
+        setSelectedChapterVersions([]);
+        setActiveVersionId(null);
+        return;
+      }
+
+      try {
+        const versions = await store.getVersions('manuscript', manuscriptObj.id);
+        setSelectedChapterVersions(versions);
+        // Find active version (the one with highest number or marked as current)
+        // For now, assume first version (by number desc) is active if not specified
+        if (versions.length > 0) {
+          const sortedVersions = [...versions].sort((a, b) => b.number - a.number);
+          setActiveVersionId(sortedVersions[0].id);
+        }
+      } catch (error) {
+        console.error('Failed to load versions:', error);
+        setSelectedChapterVersions([]);
+      }
+    };
+
+    loadVersions();
+  }, [selectedChapterId, store.objects]);
 
   // Get acts and chapters from store
   const acts = actIds
@@ -67,16 +104,24 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
       .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0));
   };
 
-  // Get versions for selected chapter
-  const selectedChapterVersions = selectedChapterId ? getVersions(projectId, selectedChapterId) : [];
-  const selectedChapterContent = selectedChapterId ? getChapterContent(projectId, selectedChapterId) : null;
+  // Get manuscript from unified store
+  const getManuscript = (chapterId: string): ManuscriptObject | null => {
+    return store.getManuscriptByChapterId(chapterId) as ManuscriptObject | null;
+  };
+
+  // Get selected manuscript
+  const selectedManuscript = selectedChapterId ? getManuscript(selectedChapterId) : null;
 
   // Find selected chapter for display
   const selectedChapter = selectedChapterId ? (store.objects[selectedChapterId] as ChapterObject) : null;
 
   if (acts.length === 0) {
     return (
-      <div className={`chapter-sidebar ${isVisible ? 'visible' : 'hidden'}`}>
+      <>
+        {isVisible && (
+          <div className="chapter-sidebar-backdrop" onClick={onToggle} />
+        )}
+        <div className={`chapter-sidebar ${isVisible ? 'visible' : 'hidden'}`}>
         <div className="chapter-sidebar-header">
           <h3>Chapters</h3>
           <button
@@ -94,16 +139,21 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
           </div>
         </div>
       </div>
+      </>
     );
   }
 
   const handleVersionSelect = async (versionId: string) => {
-    if (selectedChapterId) {
-      try {
-        await setActiveVersion(projectId, selectedChapterId, versionId);
-      } catch (error) {
-        console.error('Failed to set active version:', error);
-      }
+    if (!selectedChapterId) return;
+
+    const manuscriptObj = store.getManuscriptByChapterId(selectedChapterId);
+    if (!manuscriptObj) return;
+
+    try {
+      await store.activateVersion('manuscript', manuscriptObj.id, versionId);
+      setActiveVersionId(versionId);
+    } catch (error) {
+      console.error('Failed to set active version:', error);
     }
   };
 
@@ -117,8 +167,12 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
   };
 
   return (
-    <div className={`chapter-sidebar ${isVisible ? 'visible' : 'hidden'}`}>
-      <div className="chapter-sidebar-header">
+    <>
+      {isVisible && (
+        <div className="chapter-sidebar-backdrop" onClick={onToggle} />
+      )}
+      <div className={`chapter-sidebar ${isVisible ? 'visible' : 'hidden'}`}>
+        <div className="chapter-sidebar-header">
         <div className="sidebar-nav">
           <button
             className={`nav-tab ${!showVersions ? 'active' : ''}`}
@@ -166,8 +220,8 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
                 <div className="chapters-list">
                   {actChapters.length > 0 ? (
                     actChapters.map((chapter, chapterIndex) => {
-                      const chapterContent = getChapterContent(projectId, chapter.id);
-                      const wordCount = chapterContent?.wordCount || 0;
+                      const manuscript = getManuscript(chapter.id);
+                      const wordCount = manuscript?.data?.wordCount || 0;
                       const isSelected = selectedChapterId === chapter.id;
 
                       return (
@@ -196,16 +250,6 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
                               {chapter.data.description}
                             </div>
                           )}
-                          <div className="chapter-status">
-                            {chapterContent ? (
-                              <span className="status-indicator has-content">●</span>
-                            ) : (
-                              <span className="status-indicator no-content">○</span>
-                            )}
-                            <span className="status-text">
-                              {chapterContent ? 'Has content' : 'Empty'}
-                            </span>
-                          </div>
                         </div>
                       );
                     })
@@ -221,7 +265,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
         ) : (
           // Versions View
           <div className="versions-section">
-            {selectedChapterContent && selectedChapter && (
+            {selectedManuscript && selectedChapter && (
               <div className="selected-chapter-info">
                 <h4 className="chapter-title">
                   {selectedChapter.data.name || 'Untitled Chapter'}
@@ -233,26 +277,27 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
             )}
 
             <div className="versions-list">
-              {selectedChapterVersions
-                .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+              {[...selectedChapterVersions]
+                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                 .map((version, index) => {
                   // Calculate total word count from all languages
-                  const totalWordCount = Object.values(version.data).reduce((sum, langData) => sum + (langData.wordCount || 0), 0);
+                  const totalWordCount = Object.values(version.data).reduce((sum, langData: any) => sum + (langData.wordCount || 0), 0);
+                  const isActive = version.id === activeVersionId;
 
                   return (
                     <div
                       key={version.id}
-                      className={`version-item ${version.is_active ? 'active' : ''}`}
+                      className={`version-item ${isActive ? 'active' : ''}`}
                       onClick={() => handleVersionSelect(version.id)}
                     >
                       <div className="version-header">
                         <div className="version-info">
                           <div className="version-label">
                             {index === 0 ? 'Latest' : `Version ${selectedChapterVersions.length - index}`}
-                            {version.is_active && ' (Current)'}
+                            {isActive && ' (Current)'}
                           </div>
                           <div className="version-date">
-                            {formatDate(new Date(version.timestamp))}
+                            {formatDate(new Date(version.created_at))}
                           </div>
                         </div>
                         <div className="version-meta">
@@ -262,7 +307,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
                         </div>
                       </div>
                       <div className="version-description">
-                        {version.userRequest}
+                        {version.user_request || 'No description'}
                       </div>
                     </div>
                   );
@@ -277,7 +322,8 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 };
 

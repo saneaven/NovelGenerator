@@ -20,8 +20,8 @@ from datetime import datetime
 from ..database import get_db
 from ..auth import get_current_user
 from ..models.db_models import (
-    User, UserSettings, BasicInfo, Character, Organization, Location, LorebookEntry,
-    Act, Chapter, ChapterContent, Outline
+    User, BasicInfo, Character, Organization, Location, LorebookEntry,
+    Act, Chapter, Manuscript, Outline
 )
 from ..models.translation_models import ObjectTranslation, ObjectVersion, ActiveVersion
 from ..utils.object_type_aliases import normalize_object_type, externalize_object_type
@@ -112,7 +112,7 @@ def get_object_model_class(object_type: str):
         LOREBOOK_TYPE: LorebookEntry,
         'act': Act,
         'chapter': Chapter,
-        'chapter_content': ChapterContent,
+        'manuscript': Manuscript,
     }
 
     if object_type not in type_map:
@@ -166,18 +166,18 @@ def get_object_metadata(obj: Any, object_type: str) -> Dict[str, Any]:
         metadata['project_id'] = str(outline.project_id)
         metadata['act_id'] = str(obj.act_id)
         metadata['order'] = obj.order
-    elif object_type == 'chapter_content':
+    elif object_type == 'manuscript':
         chapter = getattr(obj, 'chapter', None)
         if not chapter:
-            raise HTTPException(status_code=500, detail='Chapter content is missing chapter relation')
+            raise HTTPException(status_code=500, detail='Manuscript is missing chapter relation')
 
         act = getattr(chapter, 'act', None)
         if not act:
-            raise HTTPException(status_code=500, detail='Chapter content chapter is missing act relation')
+            raise HTTPException(status_code=500, detail='Manuscript chapter is missing act relation')
 
         outline = getattr(act, 'outline', None)
         if not outline:
-            raise HTTPException(status_code=500, detail='Chapter content outline relation missing')
+            raise HTTPException(status_code=500, detail='Manuscript outline relation missing')
 
         metadata['project_id'] = str(outline.project_id)
         metadata['chapter_id'] = str(obj.chapter_id)
@@ -422,15 +422,10 @@ async def update_object(
     obj.updated_at = datetime.utcnow()
 
     # Determine whether this update should reset other translations
-    user_settings = getattr(current_user, 'settings', None)
-    if user_settings is None:
-        user_settings = db.query(UserSettings).filter(UserSettings.user_id == current_user.id).first()
-
-    primary_language = (user_settings.primary_language if user_settings and user_settings.primary_language else request.language).strip()
-    request_language = (request.language or '').strip()
-    is_primary_language_update = request_language.lower() == (primary_language or '').lower()
+    # Reset other languages for any user edit (not translations) so that editing in one
+    # language doesn't carry forward stale data from other languages
     is_translation_request = 'translation' in (request.user_request or '').lower()
-    reset_other_languages = bool(request.create_new_version and is_primary_language_update and not is_translation_request)
+    reset_other_languages = bool(request.create_new_version and not is_translation_request)
 
     # Create or update version
     version = create_or_update_version(
@@ -727,7 +722,7 @@ async def list_objects(
         else:
             # No outline, return empty result set
             query = query.filter(model_class.id == None)
-    elif object_type == 'chapter_content':
+    elif object_type == 'manuscript':
         # Need to get chapters first
         outline = db.query(Outline).filter(Outline.project_id == project_id).first()
         if outline:
@@ -903,11 +898,11 @@ async def create_object(
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
-    elif object_type == 'chapter_content':
+    elif object_type == 'manuscript':
         # Need chapter_id - must be provided in metadata
         chapter_id_value = metadata.get('chapter_id')
         if not chapter_id_value:
-            raise HTTPException(status_code=400, detail="ChapterContent creation requires chapter_id in request")
+            raise HTTPException(status_code=400, detail="Manuscript creation requires chapter_id in request")
 
         try:
             chapter_uuid = UUID(str(chapter_id_value))
@@ -924,12 +919,12 @@ async def create_object(
         if not chapter:
             raise HTTPException(status_code=404, detail="Chapter not found for project")
 
-        existing_content = db.query(ChapterContent).filter(
-            ChapterContent.chapter_id == chapter_uuid
+        existing_manuscript = db.query(Manuscript).filter(
+            Manuscript.chapter_id == chapter_uuid
         ).first()
 
-        if existing_content:
-            raise HTTPException(status_code=400, detail="ChapterContent already exists for this chapter")
+        if existing_manuscript:
+            raise HTTPException(status_code=400, detail="Manuscript already exists for this chapter")
 
         core_obj = model_class(
             id=object_id,
@@ -1056,18 +1051,18 @@ async def delete_object(
 
 
 # ============================================================================
-# CHAPTER CONTENT SPECIFIC ENDPOINT (for in-place updates during typing)
+# MANUSCRIPT SPECIFIC ENDPOINT (for in-place updates during typing)
 # ============================================================================
 
-@router.patch("/objects/chapter_content/{object_id}/content")
-async def update_chapter_content_inplace(
+@router.patch("/objects/manuscript/{object_id}/content")
+async def update_manuscript_inplace(
     object_id: UUID,
     request: UpdateObjectRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Special endpoint for chapter content in-place updates.
+    Special endpoint for manuscript in-place updates.
     Used during continuous typing in novel editor to avoid version spam.
     """
-    return await update_object('chapter_content', object_id, request, db, current_user)
+    return await update_object('manuscript', object_id, request, db, current_user)

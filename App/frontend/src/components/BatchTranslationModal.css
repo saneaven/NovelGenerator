@@ -1,0 +1,622 @@
+/* Batch Translation Modal - Modern Design (mirrors AIEditModal) */
+
+/* Overlay */
+.batch-translation-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+  animation: fadeIn var(--transition-base);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Modal Container */
+.batch-translation-modal {
+  max-width: 700px;
+  width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface-base);
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+  animation: slideInUp 0.3s ease-out;
+  box-shadow: var(--shadow-2xl);
+}
+
+/* Header */
+.batch-translation-modal .modal-header {
+  background: var(--gradient-accent);
+  color: white;
+  padding: var(--spacing-xl) var(--spacing-2xl);
+  border-bottom: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+}
+
+.batch-translation-modal .modal-header h2 {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex: 1;
+}
+
+.batch-translation-modal .modal-close {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: var(--spacing-sm);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-2xl);
+  font-weight: 300;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.batch-translation-modal .modal-close:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: rotate(90deg);
+}
+
+/* ==================== CONFIG SCREEN ==================== */
+.batch-translation-config {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-2xl);
+  background: var(--color-surface-base);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+}
+
+/* Form Groups */
+.batch-translation-modal .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.batch-translation-modal .form-group > label {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+/* Language Selector Row */
+.language-selector-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.language-select {
+  flex: 1;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border: 2px solid var(--color-border-medium);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-md);
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.language-select:focus {
+  outline: none;
+  border-color: var(--color-brand-primary);
+  box-shadow: 0 0 0 3px var(--color-brand-primary-muted);
+}
+
+.swap-languages-btn {
+  width: 44px;
+  height: 44px;
+  border: 2px solid var(--color-border-medium);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xl);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.swap-languages-btn:hover {
+  background: var(--color-brand-primary-soft);
+  border-color: var(--color-brand-primary);
+  color: var(--color-brand-primary);
+  transform: scale(1.05);
+}
+
+/* Checkbox Group - Card Style */
+.batch-translation-modal .checkbox-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.batch-translation-modal .checkbox-label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--color-surface-subtle);
+  border: 2px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.batch-translation-modal .checkbox-label:hover {
+  background: var(--color-surface-muted);
+  border-color: var(--color-brand-primary-border);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.batch-translation-modal .checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--color-brand-primary);
+  flex-shrink: 0;
+}
+
+.batch-translation-modal .checkbox-label:has(input[type="checkbox"]:checked) {
+  background: var(--color-brand-primary-soft);
+  border-color: var(--color-brand-primary);
+  box-shadow: 0 0 0 3px var(--color-brand-primary-muted);
+}
+
+.batch-translation-modal .checkbox-label span {
+  flex: 1;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.batch-translation-modal .checkbox-label:has(input[type="checkbox"]:checked) span {
+  color: var(--color-brand-primary-active);
+  font-weight: 600;
+}
+
+/* Textarea */
+.batch-translation-modal textarea {
+  padding: var(--spacing-lg);
+  border: 2px solid var(--color-border-medium);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-md);
+  line-height: 1.6;
+  font-family: var(--font-family-base);
+  resize: vertical;
+  transition: all 0.2s ease;
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+}
+
+.batch-translation-modal textarea:focus {
+  outline: none;
+  border-color: var(--color-brand-primary);
+  box-shadow: 0 0 0 3px var(--color-brand-primary-muted);
+}
+
+.batch-translation-modal textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Translation Summary */
+.translation-summary {
+  padding: var(--spacing-lg);
+  background: var(--color-brand-primary-soft);
+  border: 2px solid var(--color-brand-primary);
+  border-radius: var(--border-radius-md);
+  text-align: center;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-md);
+}
+
+.translation-summary strong {
+  color: var(--color-brand-primary);
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+}
+
+/* ==================== PROGRESS SCREEN ==================== */
+.batch-translation-progress {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-2xl);
+  background: var(--color-surface-base);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+}
+
+.progress-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.progress-header p {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  text-align: center;
+}
+
+/* Progress Bar */
+.progress-bar {
+  height: 12px;
+  background: var(--color-surface-muted);
+  border-radius: var(--border-radius-full);
+  overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-brand-primary) 0%, var(--color-brand-primary-hover) 100%);
+  border-radius: var(--border-radius-full);
+  transition: width 0.3s ease;
+  position: relative;
+}
+
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 100%
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Progress List */
+.progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  max-height: 300px;
+  overflow-y: auto;
+  padding: var(--spacing-md);
+  background: var(--color-surface-elevated);
+  border: 2px solid var(--color-border-default);
+  border-radius: var(--border-radius-lg);
+}
+
+.progress-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius-sm);
+  transition: all 0.2s ease;
+  background: var(--color-surface-subtle);
+}
+
+.progress-item.completed {
+  background: var(--color-feedback-success-soft);
+}
+
+.progress-item.current {
+  background: var(--color-brand-primary-soft);
+  border: 2px solid var(--color-brand-primary);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.progress-icon {
+  font-size: var(--font-size-md);
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.progress-item.completed .progress-icon {
+  color: var(--color-feedback-success-base);
+}
+
+.progress-item.current .progress-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.progress-label {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progress-item.completed .progress-label {
+  color: var(--color-feedback-success-strong);
+  font-weight: 500;
+}
+
+.progress-item.current .progress-label {
+  color: var(--color-brand-primary-active);
+  font-weight: 600;
+}
+
+/* ==================== COMPLETE SCREEN ==================== */
+.batch-translation-complete {
+  flex: 1;
+  padding: var(--spacing-2xl);
+  background: var(--color-surface-base);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+  align-items: center;
+  justify-content: center;
+}
+
+/* Success Message */
+.success-message {
+  text-align: center;
+  padding: var(--spacing-2xl);
+  background: var(--color-feedback-success-soft);
+  border: 2px solid var(--color-feedback-success-base);
+  border-radius: var(--border-radius-lg);
+  animation: slideInUp 0.3s ease-out;
+}
+
+.success-message h3 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-size-xl);
+  color: var(--color-feedback-success-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+}
+
+.success-message p {
+  margin: 0;
+  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+}
+
+/* Error Message */
+.batch-translation-complete .error-message {
+  text-align: center;
+  padding: var(--spacing-2xl);
+  background: var(--color-feedback-error-soft);
+  border: 2px solid var(--color-feedback-error-base);
+  border-radius: var(--border-radius-lg);
+  animation: shake 0.5s ease-in-out;
+}
+
+.batch-translation-complete .error-message h3 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-size-xl);
+  color: var(--color-feedback-error-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+}
+
+.batch-translation-complete .error-message p {
+  margin: 0;
+  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+}
+
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-10px);
+  }
+  75% {
+    transform: translateX(10px);
+  }
+}
+
+/* ==================== MODAL ACTIONS ==================== */
+.batch-translation-modal .modal-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  justify-content: flex-end;
+  padding-top: var(--spacing-lg);
+  border-top: 2px solid var(--color-border-default);
+  margin-top: auto;
+}
+
+.batch-translation-modal .modal-actions button {
+  padding: var(--spacing-md) var(--spacing-2xl);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.batch-translation-modal .btn-secondary {
+  background: var(--color-surface-muted);
+  border-color: var(--color-border-medium);
+  color: var(--color-text-secondary);
+}
+
+.batch-translation-modal .btn-secondary:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-strong);
+  transform: translateY(-1px);
+}
+
+.batch-translation-modal .btn-primary {
+  background: var(--color-brand-primary);
+  border-color: var(--color-brand-primary-hover);
+  color: white;
+}
+
+.batch-translation-modal .btn-primary:hover:not(:disabled) {
+  background: var(--color-brand-primary-hover);
+  border-color: var(--color-brand-primary-active);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.batch-translation-modal .btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ==================== ANIMATIONS ==================== */
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ==================== RESPONSIVE ==================== */
+@media (max-width: 768px) {
+  .batch-translation-modal {
+    max-width: 95vw;
+    max-height: 95vh;
+  }
+
+  .batch-translation-config,
+  .batch-translation-progress,
+  .batch-translation-complete {
+    padding: var(--spacing-lg);
+  }
+
+  .batch-translation-modal .modal-header {
+    padding: var(--spacing-lg) var(--spacing-xl);
+  }
+
+  .batch-translation-modal .modal-header h2 {
+    font-size: var(--font-size-lg);
+  }
+
+  .language-selector-row {
+    flex-direction: column;
+  }
+
+  .language-select {
+    width: 100%;
+  }
+
+  .swap-languages-btn {
+    width: 100%;
+    transform: rotate(90deg);
+  }
+
+  .batch-translation-modal .checkbox-group {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .batch-translation-modal .modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .batch-translation-modal .modal-actions button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* ==================== SCROLLBAR ==================== */
+.batch-translation-config::-webkit-scrollbar,
+.batch-translation-progress::-webkit-scrollbar,
+.progress-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.batch-translation-config::-webkit-scrollbar-track,
+.batch-translation-progress::-webkit-scrollbar-track,
+.progress-list::-webkit-scrollbar-track {
+  background: var(--color-scrollbar-track);
+  border-radius: var(--border-radius-md);
+}
+
+.batch-translation-config::-webkit-scrollbar-thumb,
+.batch-translation-progress::-webkit-scrollbar-thumb,
+.progress-list::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar-thumb);
+  border-radius: var(--border-radius-md);
+}
+
+.batch-translation-config::-webkit-scrollbar-thumb:hover,
+.batch-translation-progress::-webkit-scrollbar-thumb:hover,
+.progress-list::-webkit-scrollbar-thumb:hover {
+  background: var(--color-scrollbar-thumb-hover);
+}

@@ -66,21 +66,30 @@ class AsyncOpenAIProvider(BaseProvider):
         provider_preference: Optional[Dict],
         thinking_config: Optional[Dict],
     ) -> Dict[str, object]:
+        is_gpt5 = self._is_gpt5_model(model)
+
         request: Dict[str, object] = {
             "model": model,
             "messages": messages,
-            "temperature": temperature,
             "stream": True,
         }
 
+        # GPT-5 doesn't support temperature parameter
+        if not is_gpt5:
+            request["temperature"] = temperature
+
+        # GPT-5 uses max_output_tokens instead of max_tokens
         if max_tokens is not None:
-            request["max_tokens"] = max_tokens
+            if is_gpt5:
+                request["max_output_tokens"] = max_tokens
+            else:
+                request["max_tokens"] = max_tokens
 
         if functions:
             request["tools"] = [{"type": "function", "function": fn} for fn in functions]
             request["tool_choice"] = "auto"
 
-        extra_body = self._build_extra_body(provider_preference, thinking_config)
+        extra_body = self._build_extra_body(provider_preference, thinking_config, model)
         if extra_body:
             request["extra_body"] = extra_body
 
@@ -94,8 +103,13 @@ class AsyncOpenAIProvider(BaseProvider):
         self,
         provider_preference: Optional[Dict],
         thinking_config: Optional[Dict],
+        model: str = "",
     ) -> Optional[Dict]:
         return None
+
+    def _is_gpt5_model(self, model: str) -> bool:
+        """Check if model is GPT-5 family. Override in subclasses if needed."""
+        return False
 
     def _additional_request_kwargs(self) -> Dict[str, object]:
         return {}
@@ -222,6 +236,7 @@ class AsyncOpenAIProvider(BaseProvider):
         )
 
         parser = ThinkingStreamParser() if thinking_mode == "custom" else None
+        last_finish_reason = None
 
         for attempt in range(self.max_retries):
             stream = None
@@ -229,6 +244,12 @@ class AsyncOpenAIProvider(BaseProvider):
                 stream = await client.chat.completions.create(**request_kwargs)
                 async for chunk in stream:
                     chunk_dict = chunk.model_dump(exclude_none=True)
+
+                    # Track finish_reason from choices
+                    for choice in chunk_dict.get("choices", []):
+                        if choice.get("finish_reason"):
+                            last_finish_reason = choice.get("finish_reason")
+
                     chunk_dict, extra_chunks = self._mutate_chunk(chunk_dict, thinking_mode)
 
                     chunk_dict, parser_chunks = self._apply_thinking_parser(chunk_dict, parser)
@@ -263,6 +284,11 @@ class AsyncOpenAIProvider(BaseProvider):
 
         for final_chunk in self._finalize_parser(parser):
             yield self._format_sse(final_chunk)
+
+        # Check for error finish_reasons and emit error if needed
+        if last_finish_reason == "content_filter":
+            yield self._format_error("Content blocked by filter (content_filter)")
+            return  # Don't yield [DONE] after error
 
         yield b"data: [DONE]\n\n"
 

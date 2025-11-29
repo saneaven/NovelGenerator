@@ -78,7 +78,12 @@ const ProjectMenu: React.FC = () => {
           <p>Write your novel with a structured editor</p>
           <div className="menu-arrow">→</div>
         </div>
+
       </div>
+
+      <button className="back-home-btn mobile-only" onClick={() => navigate('/')}>
+        ← Back to Home
+      </button>
     </div>
   );
 };

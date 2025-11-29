@@ -68,3 +68,4 @@ class BaseProvider(ABC):
     def display_name(self) -> str:
         """Human-readable provider name"""
         pass
+

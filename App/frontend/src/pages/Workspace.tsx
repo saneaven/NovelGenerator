@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { ChatPipeline } from '../chat/ChatPipeline';
 import type { SystemInsertConfig, EditCard } from '../chat/types';
 import { ChatManager, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
@@ -7,15 +7,17 @@ import { DefaultDisplayProcessor } from '../chat/processors/DisplayProcessor';
 import { areEditCardMapsEqual } from '../chat/utils/editCardUtils';
 import { WORKSPACE_FUNCTIONS } from '../chat/types/functionCalling';
 import { useChatStore } from '../store/chatStore';
+import { useChatUIStore } from '../store/chatUIStore';
 import { useProjectStore } from '../store/projectStore';
-import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
+import { useUnifiedObjectStore, useStoryObjects } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
-import type { StoryObjects } from '../types/storyObject';
 
 import ChatSidebar from '../components/ChatSidebar';
 import ErrorModal from '../components/ErrorModal';
 import SettingsModal from '../components/SettingsModal/SettingsModal';
+import LanguageDropdown from '../components/ui/LanguageDropdown';
+import BatchTranslationModal from '../components/BatchTranslationModal';
 import ChatPanel from './workspace/components/ChatPanel';
 import StoryPanel from './workspace/components/StoryPanel';
 
@@ -31,10 +33,12 @@ import './workspace/styles/MessageEdit.css';
 import './workspace/styles/ChatInput.css';
 import './workspace/styles/ChatSidebar.css';
 import './workspace/styles/MessageEditCards.css';
+import '../components/MobileChat.css';
 
 const Workspace: React.FC = () =>
 {
     const { projectId } = useParams<{ projectId: string }>();
+    const navigate = useNavigate();
 
     const { getCurrentProject, fetchProjects, projects, isLoading: projectsLoading } = useProjectStore();
     const {
@@ -46,22 +50,83 @@ const Workspace: React.FC = () =>
         fetchChats,
     } = useChatStore();
     const listObjects = useUnifiedObjectStore(state => state.listObjects);
-    const primaryLanguage = useSettingsStore(state => state.settings.primaryLanguage);
+    const mainLanguage = useSettingsStore(state => state.settings.mainLanguage);
     const chatFunctionConfig = useSettingsStore(state => state.settings.functionConfigs.chat);
     const providerCredentials = useSettingsStore(state => state.settings.providerCredentials);
     const { currentError, showError, hideError } = useErrorStore();
+    const chatUI = useChatUIStore();
+
+    // Force re-render when crossing desktop/mobile breakpoint
+    const [_isDesktop, setIsDesktop] = useState(() => window.innerWidth > 768);
+    useEffect(() => {
+        const handleResize = () => {
+            const desktop = window.innerWidth > 768;
+            setIsDesktop(prev => {
+                if (prev !== desktop) return desktop;
+                return prev;
+            });
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     const { state: uiState, actions: uiActions } = useWorkspaceState(projectId);
+    const settings = useSettingsStore(state => state.settings);
 
-    // State to hold story objects built from unified store
-    const [storyObjects, setStoryObjects] = useState<StoryObjects>({
-        basicInfo: null,
-        characters: [],
-        organizations: [],
-        locations: [],
-        lorebook: [],
-        outline: { acts: [] },
-    });
+    // Batch translation modal state
+    const [showBatchTranslateModal, setShowBatchTranslateModal] = useState(false);
+    const unifiedStore = useUnifiedObjectStore();
+
+    // Build available languages list (main + all sub languages)
+    const availableLanguages = useMemo(() => {
+        const languages = [settings.mainLanguage];
+        if (settings.subLanguages && settings.subLanguages.length > 0) {
+            languages.push(...settings.subLanguages);
+        }
+        return languages;
+    }, [settings.mainLanguage, settings.subLanguages]);
+
+    // Calculate count of objects needing translation to any sub language
+    const objectsNeedingTranslation = useMemo(() => {
+        if (!settings.subLanguages || settings.subLanguages.length === 0 || !projectId) return 0;
+
+        const allObjects = Object.values(unifiedStore.objects);
+        let count = 0;
+
+        allObjects.forEach((obj: any) => {
+            if (obj.metadata?.project_id !== projectId) return;
+
+            // Check if object is missing any sub language translation
+            const availableLangs = obj.languages?.available || [];
+            const needsAnyTranslation = settings.subLanguages.some(
+                (subLang: string) => !availableLangs.includes(subLang)
+            );
+
+            if (needsAnyTranslation) {
+                count++;
+            }
+        });
+
+        return count;
+    }, [unifiedStore.objects, projectId, settings.subLanguages]);
+
+    // Handler for batch translation complete
+    const handleBatchTranslateComplete = () => {
+        // Refresh objects after batch translation
+        if (projectId) {
+            listObjects('basic_info', projectId, uiState.globalDisplayLanguage);
+            listObjects('character', projectId, uiState.globalDisplayLanguage);
+            listObjects('organization', projectId, uiState.globalDisplayLanguage);
+            listObjects('location', projectId, uiState.globalDisplayLanguage);
+            listObjects('lorebook', projectId, uiState.globalDisplayLanguage);
+            listObjects('act', projectId, uiState.globalDisplayLanguage);
+            listObjects('chapter', projectId, uiState.globalDisplayLanguage);
+        }
+        setShowBatchTranslateModal(false);
+    };
+
+    // Derive story objects reactively from unified store
+    const storyObjects = useStoryObjects(projectId);
 
     // Fetch projects if not loaded
     useEffect(() => {
@@ -85,6 +150,9 @@ const Workspace: React.FC = () =>
         setMessageEditCards,
         handleFunctionCalls,
         handleFunctionCallProgress,
+        handleBatchConfirm,
+        isMessageConfirmed,
+        setConfirmedMessages,
         createFunctionCallApplyHandler,
         createFunctionCallRejectHandler,
     } = useFunctionCallHandlers(projectId);
@@ -110,7 +178,7 @@ const Workspace: React.FC = () =>
         onError: (error) =>
         {
             console.error('Runtime processing error:', error);
-            showError('Chat Error', 'An error occurred during processing. Please try again.');
+            showError('Chat Error', error.message || 'An error occurred during processing. Please try again.');
         },
         onFunctionCallProgress: (_projId, _chatId, messageId, progressEvents) =>
         {
@@ -127,16 +195,15 @@ const Workspace: React.FC = () =>
                 getStoryObjects: () => storyObjects,
                 systemInsertConfig,
                 chatPipeline,
-                getIsLoading: () => uiState.isLoading, // Use getter to prevent ChatManager recreation
-                setIsLoading: uiActions.setIsLoading,
+                getIsLoading: () => chatUI.isLoading(activeProjectId),
+                setIsLoading: (loading: boolean) => chatUI.setLoading(activeProjectId, loading),
                 abortControllerRef,
                 getActiveChatId: () =>
                 {
-                    if (uiState.selectedChatId) return uiState.selectedChatId;
                     if (!activeProjectId) return undefined;
                     return getSelectedChatId(activeProjectId);
                 },
-                getConversationLanguage: () => primaryLanguage,
+                getConversationLanguage: () => mainLanguage,
                 aiModel: chatFunctionConfig.model,
                 temperature: chatFunctionConfig.temperature,
                 provider: chatFunctionConfig.provider,
@@ -155,9 +222,8 @@ const Workspace: React.FC = () =>
         storyObjects,
         systemInsertConfig,
         chatPipeline,
-        uiActions.setIsLoading,
-        uiState.selectedChatId,
-        primaryLanguage,
+        chatUI,
+        mainLanguage,
         chatFunctionConfig,
         providerCredentials,
         getSelectedChatId,
@@ -166,7 +232,6 @@ const Workspace: React.FC = () =>
 
     const chatHandlers = useChatHandlers(
         projectId,
-        uiActions,
         chatManager,
         pendingFunctionCallResults,
         () => setPendingFunctionCallResults([])
@@ -174,14 +239,15 @@ const Workspace: React.FC = () =>
 
     const currentProject = getCurrentProject();
 
-    // Build story objects from unified store when projectId changes
+    // Populate unified store cache when projectId changes
+    // The useStoryObjects hook will reactively derive storyObjects from the cache
     useEffect(() =>
     {
         if (!projectId) return;
 
-        const buildStoryObjects = async () => {
+        const populateStoreCache = async () => {
             try {
-                const [basicInfoList, characters, organizations, locations, lorebook, acts, chapters] = await Promise.all([
+                await Promise.all([
                     listObjects('basic_info', projectId),
                     listObjects('character', projectId),
                     listObjects('organization', projectId),
@@ -190,65 +256,9 @@ const Workspace: React.FC = () =>
                     listObjects('act', projectId),
                     listObjects('chapter', projectId),
                 ]);
-
-                // Build basic info
-                const basicInfo = basicInfoList.length > 0 ? {
-                    id: basicInfoList[0].id,
-                    title: basicInfoList[0].data.title || '',
-                    logline: basicInfoList[0].data.logline || '',
-                    genre: basicInfoList[0].data.genre || '',
-                } : null;
-
-                // Build outline
-                const outline = {
-                    acts: acts
-                        .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-                        .map(act => ({
-                            id: act.id,
-                            name: act.data.name || '',
-                            description: act.data.description || '',
-                            order: act.metadata.order || 0,
-                            chapters: chapters
-                                .filter(ch => ch.metadata.act_id === act.id)
-                                .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-                                .map(chapter => ({
-                                    id: chapter.id,
-                                    name: chapter.data.name || '',
-                                    description: chapter.data.description || '',
-                                    order: chapter.metadata.order || 0,
-                                    actId: chapter.metadata.act_id || '',
-                                })),
-                        })),
-                };
-
-                setStoryObjects({
-                    basicInfo,
-                    characters: characters.map(ch => ({
-                        id: ch.id,
-                        name: ch.data.name || '',
-                        description: ch.data.description || '',
-                    })),
-                    organizations: organizations.map(org => ({
-                        id: org.id,
-                        name: org.data.name || '',
-                        description: org.data.description || '',
-                    })),
-                    locations: locations.map(loc => ({
-                        id: loc.id,
-                        name: loc.data.name || '',
-                        description: loc.data.description || '',
-                    })),
-                    lorebook: lorebook.map(entry => ({
-                        id: entry.id,
-                        name: entry.data.name || '',
-                        description: entry.data.description || '',
-                    })),
-                    outline,
-                });
             } catch (error) {
                 // Don't show error for expected 404s (outline/basicInfo not created yet)
                 console.error('Failed to load story objects:', error);
-                // Only show error modal if it's a real error, not missing resources
                 const errorStatus = (error as any)?.status || (error as any)?.response?.status;
                 if (errorStatus !== 404) {
                     showError('Data Error', 'Failed to load story objects. Please try again.');
@@ -256,7 +266,7 @@ const Workspace: React.FC = () =>
             }
         };
 
-        buildStoryObjects();
+        populateStoreCache();
     }, [projectId, listObjects, showError]);
 
     // Fetch chats when projectId changes
@@ -275,11 +285,12 @@ const Workspace: React.FC = () =>
     {
         if (!projectId) return;
 
-        const chatId = uiState.selectedChatId ?? getSelectedChatId(projectId);
+        const chatId = getSelectedChatId(projectId);
         if (!chatId) return;
 
-        const messages = getMessages(projectId, chatId, primaryLanguage);
+        const messages = getMessages(projectId, chatId, mainLanguage);
         const restored: Record<string, EditCard[]> = {};
+        const restoredConfirmed: Record<string, boolean> = {};
 
         messages.forEach(message =>
         {
@@ -310,6 +321,13 @@ const Workspace: React.FC = () =>
                     return card;
                 });
                 restored[message.id] = cards;
+
+                // Check if all function calls in this message have been applied/rejected
+                const allProcessed = cards.every(card => card.isApplied || card.isRejected);
+                if (allProcessed && cards.length > 0)
+                {
+                    restoredConfirmed[message.id] = true;
+                }
             }
         });
 
@@ -317,19 +335,24 @@ const Workspace: React.FC = () =>
         {
             setMessageEditCards(restored);
         }
+
+        // Restore confirmed state for messages that were already processed
+        if (Object.keys(restoredConfirmed).length > 0)
+        {
+            setConfirmedMessages(prev => ({ ...prev, ...restoredConfirmed }));
+        }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
         projectId,
-        uiState.selectedChatId,
         getSelectedChatId,
         getMessages,
-        primaryLanguage,
+        mainLanguage,
         displayProcessor,
         storyObjects,
         systemInsertConfig,
         createFunctionCallApplyHandler,
         createFunctionCallRejectHandler,
-        // Note: messageEditCards and setMessageEditCards intentionally omitted to prevent render loops
+        // Note: messageEditCards, setMessageEditCards, setConfirmedMessages intentionally omitted to prevent render loops
         // messageEditCards is only used for comparison, not as a trigger
     ]);
 
@@ -367,44 +390,60 @@ const Workspace: React.FC = () =>
                     <h1>{`${currentProject.name} - Workspace`}</h1>
                     <div className="workspace-controls">
                         <button
+                            className="back-btn mobile-only"
+                            onClick={() => navigate(`/project/${projectId}`)}
+                            title="Back to project"
+                        >
+                            ←
+                        </button>
+                        <button
+                            className={`chat-toggle-btn mobile-only ${chatUI.isChatVisible(projectId ?? '') ? 'active' : ''}`}
+                            onClick={() =>
+                            {
+                                chatUI.toggleChatVisible(projectId ?? '');
+                                chatUI.setMobileSidebarVisible(projectId ?? '', false);
+                            }}
+                        >
+                            Chat
+                        </button>
+                        {availableLanguages.length > 1 && (
+                            <LanguageDropdown
+                                languages={availableLanguages}
+                                value={uiState.globalDisplayLanguage}
+                                onChange={uiActions.setGlobalDisplayLanguage}
+                                title="Select display language"
+                                showTranslateAll={settings.subLanguages && settings.subLanguages.length > 0 && objectsNeedingTranslation > 0}
+                                translateCount={objectsNeedingTranslation}
+                                onTranslateAllClick={() => setShowBatchTranslateModal(true)}
+                            />
+                        )}
+                        <button
                             className="settings-btn"
                             onClick={() => uiActions.setIsSettingsOpen(true)}
                             title="Settings"
                         >
                             ⚙
                         </button>
-                        <button
-                            className={`chat-toggle-btn mobile-only ${uiState.isChatVisible ? 'active' : ''}`}
-                            onClick={() =>
-                            {
-                                uiActions.setIsChatVisible(!uiState.isChatVisible);
-                                uiActions.setIsMobileSidebarVisible(false);
-                            }}
-                        >
-                            Chat
-                        </button>
                     </div>
                 </div>
             </div>
 
-            <div className={`workspace-content ${uiState.isChatVisible ? 'chat-visible' : ''}`}>
+            <div className={`workspace-content ${chatUI.isChatVisible(projectId ?? '') ? 'chat-visible' : ''}`}>
                 <ChatSidebar
                     projectId={projectId ?? ''}
                     onSelectChat={chatHandlers.handleSelectChat}
-                    isMobileVisible={uiState.isMobileSidebarVisible}
-                    isDesktopVisible={uiState.isDesktopChatListVisible}
                 />
 
                 <ChatPanel
                     projectId={projectId ?? ''}
-                    uiState={uiState}
-                    uiActions={uiActions}
                     systemInsertConfig={systemInsertConfig}
                     setSystemInsertConfig={setSystemInsertConfig}
                     chatPipeline={chatPipeline}
-                    storyObjects={storyObjects}
+                    storyObjects={storyObjects as unknown as import('../types/storyObject').StoryObjects}
                     messageEditCards={messageEditCards}
                     activeFunctionCalls={activeFunctionCalls}
+                    onBatchConfirm={handleBatchConfirm}
+                    isMessageConfirmed={isMessageConfirmed}
                     onSubmit={chatHandlers.handleSubmit}
                     onStop={chatHandlers.handleStop}
                     onEditMessage={chatHandlers.handleEditMessage}
@@ -419,23 +458,71 @@ const Workspace: React.FC = () =>
                 <StoryPanel
                     activeStoryTab={uiState.activeStoryTab}
                     onTabChange={uiActions.setActiveStoryTab}
+                    globalDisplayLanguage={uiState.globalDisplayLanguage}
                 />
             </div>
 
-            {uiState.isChatVisible && (
-                <div className="chat-overlay mobile-only" onClick={() => uiActions.setIsChatVisible(false)} />
+            {chatUI.isChatVisible(projectId ?? '') && (
+                <div className="chat-overlay mobile-only" onClick={() => chatUI.setChatVisible(projectId ?? '', false)} />
             )}
 
-            {uiState.isMobileSidebarVisible && (
-                <div className="sidebar-overlay mobile-only" onClick={() => uiActions.setIsMobileSidebarVisible(false)} />
+            {chatUI.isMobileSidebarVisible(projectId ?? '') && (
+                <div className="sidebar-overlay mobile-only" onClick={() => chatUI.setMobileSidebarVisible(projectId ?? '', false)} />
             )}
 
-            {uiState.isDesktopChatListVisible && (
-                <div className="desktop-chat-overlay desktop-only" onClick={() => uiActions.setIsDesktopChatListVisible(false)} />
+            {chatUI.isDesktopChatListVisible(projectId ?? '') && (
+                <div className="desktop-chat-overlay desktop-only" onClick={() => chatUI.setDesktopChatListVisible(projectId ?? '', false)} />
             )}
+
+            {/* Mobile Footer */}
+            <footer className="mobile-footer">
+                <button
+                    className="footer-back-btn"
+                    onClick={() => navigate(`/project/${projectId}`)}
+                    title="Back to project"
+                >
+                    ←
+                </button>
+                <button
+                    className={`footer-chat-toggle-btn ${chatUI.isChatVisible(projectId ?? '') ? 'active' : ''}`}
+                    onClick={() =>
+                    {
+                        chatUI.toggleChatVisible(projectId ?? '');
+                        chatUI.setMobileSidebarVisible(projectId ?? '', false);
+                    }}
+                >
+                    Chat
+                </button>
+                {availableLanguages.length > 1 && (
+                    <LanguageDropdown
+                        languages={availableLanguages}
+                        value={uiState.globalDisplayLanguage}
+                        onChange={uiActions.setGlobalDisplayLanguage}
+                        title="Select display language"
+                        showTranslateAll={settings.subLanguages && settings.subLanguages.length > 0 && objectsNeedingTranslation > 0}
+                        translateCount={objectsNeedingTranslation}
+                        onTranslateAllClick={() => setShowBatchTranslateModal(true)}
+                    />
+                )}
+                <button
+                    className="footer-settings-btn"
+                    onClick={() => uiActions.setIsSettingsOpen(true)}
+                    title="Settings"
+                >
+                    ⚙
+                </button>
+            </footer>
+
+            <BatchTranslationModal
+                isOpen={showBatchTranslateModal}
+                onClose={() => setShowBatchTranslateModal(false)}
+                projectId={projectId || ''}
+                onComplete={handleBatchTranslateComplete}
+            />
 
             <ErrorModal
                 isOpen={!!currentError}
+                type={currentError?.type}
                 title={currentError?.title || ''}
                 message={currentError?.message || ''}
                 onClose={hideError}

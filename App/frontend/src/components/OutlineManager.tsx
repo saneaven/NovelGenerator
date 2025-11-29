@@ -5,16 +5,21 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
 import AIEditModal from './AIEditModal';
 import RetranslateModal from './RetranslateModal';
-import { LanguageSwitcher } from './LanguageSwitcher';
+import { DropdownMenu, DropdownItem, DropdownDivider } from './ui/DropdownMenu';
 import { TranslationService } from '../services/translationService';
-import type { ActObject, ChapterObject, ActData, ChapterData } from '../types/unifiedObject';
+import type { ActObject, ChapterObject } from '../types/unifiedObject';
 
-const OutlineManager: React.FC = () => {
+interface OutlineManagerProps {
+  globalDisplayLanguage: string;
+}
+
+const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }) => {
   const { projectId } = useParams<{ projectId: string }>();
   const store = useUnifiedObjectStore();
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
+  const translating = useUnifiedObjectStore(state => state.translating);
   const settings = useSettingsStore();
-  const { showError } = useErrorStore();
+  const { showError, showSuccess } = useErrorStore();
 
   const [editingAct, setEditingAct] = useState<string | null>(null);
   const [editingChapter, setEditingChapter] = useState<string | null>(null);
@@ -28,7 +33,7 @@ const OutlineManager: React.FC = () => {
   const [showActRetranslateModal, setShowActRetranslateModal] = useState<string | null>(null);
   const [showChapterRetranslateModal, setShowChapterRetranslateModal] = useState<string | null>(null);
 
-  // Load acts and chapters on mount
+  // Load acts and chapters on mount or when language changes
   useEffect(() => {
     if (!projectId) return;
 
@@ -36,8 +41,8 @@ const OutlineManager: React.FC = () => {
     const loadOutlineData = async () => {
       try {
         await Promise.all([
-          listObjects('act', projectId),
-          listObjects('chapter', projectId),
+          listObjects('act', projectId, globalDisplayLanguage),
+          listObjects('chapter', projectId, globalDisplayLanguage),
         ]);
       } catch (error) {
         if (!isCancelled) {
@@ -50,7 +55,7 @@ const OutlineManager: React.FC = () => {
     return () => {
       isCancelled = true;
     };
-  }, [projectId, listObjects]);
+  }, [projectId, listObjects, globalDisplayLanguage]);
 
   // Get acts and chapters from store
   const acts = useMemo(() => {
@@ -86,6 +91,23 @@ const OutlineManager: React.FC = () => {
       .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0));
   };
 
+  // Helper to compute effective display language with fallback
+  const getActEffectiveLanguage = (act: ActObject) => {
+    const available = act.languages.available;
+    if (available.includes(globalDisplayLanguage)) {
+      return { effectiveLanguage: globalDisplayLanguage, isFallback: false };
+    }
+    return { effectiveLanguage: available[0] || globalDisplayLanguage, isFallback: true };
+  };
+
+  const getChapterEffectiveLanguage = (chapter: ChapterObject) => {
+    const available = chapter.languages.available;
+    if (available.includes(globalDisplayLanguage)) {
+      return { effectiveLanguage: globalDisplayLanguage, isFallback: false };
+    }
+    return { effectiveLanguage: available[0] || globalDisplayLanguage, isFallback: true };
+  };
+
   // ========================================================================
   // ACT HANDLERS
   // ========================================================================
@@ -95,11 +117,11 @@ const OutlineManager: React.FC = () => {
 
     try {
       const actOrder = acts.length;
-      const newAct = await store.createObject(
+      await store.createObject(
         'act',
         projectId,
         { name: name.trim(), description: description.trim() },
-        settings.primaryLanguage,
+        settings.settings.mainLanguage,
         { order: actOrder }
       );
       setShowAddActForm(false);
@@ -115,10 +137,12 @@ const OutlineManager: React.FC = () => {
     const act = store.objects[actId] as ActObject;
     if (!act) return;
 
+    const { effectiveLanguage } = getActEffectiveLanguage(act);
+
     try {
       await store.updateObject('act', actId, {
         data: { name: name.trim(), description: description.trim() },
-        language: act.languages.active,
+        language: effectiveLanguage,
         create_new_version: true,
         user_request: 'Manual Edit',
       });
@@ -149,74 +173,16 @@ const OutlineManager: React.FC = () => {
     }
   };
 
-  const handleActLanguageChange = async (actId: string, newLanguage: string) => {
-    try {
-      await store.switchLanguage('act', actId, newLanguage);
-    } catch (error) {
-      console.error('Failed to switch act language:', error);
-      showError('Language Switch Error', 'Failed to switch language. Please try again.');
-    }
-  };
-
-  const handleAddActTranslation = async (actId: string) => {
-    if (!projectId) return;
-
-    const act = store.objects[actId] as ActObject;
-    if (!act) return;
-
-    const targetLanguage = settings.secondaryLanguage;
-    if (!targetLanguage) {
-      showError('Warning', 'Please set a secondary language in settings first.');
-      return;
-    }
-
-    if (act.languages.available.includes(targetLanguage)) {
-      // Just switch to it
-      await handleActLanguageChange(actId, targetLanguage);
-      return;
-    }
-
-    try {
-      TranslationService.setTranslationStatus(actId, { objectId: actId, isTranslating: true });
-      await TranslationService.translateSingle(
-        {
-          objectType: 'act',
-          objectId: actId,
-          sourceData: {
-            name: act.data.name,
-            description: act.data.description,
-          },
-        },
-        {
-          projectId,
-          sourceLanguage: act.languages.active,
-          targetLanguage,
-        }
-      );
-
-      // Refresh object to update UI with new translation
-      await store.fetchObject('act', actId);
-
-      showError('Success', `Translation added for ${targetLanguage}`);
-    } catch (error) {
-      console.error('Failed to add act translation:', error);
-      showError('Translation Error', error instanceof Error ? error.message : 'Failed to add translation. Please try again.');
-    } finally {
-      TranslationService.clearTranslationStatus(actId);
-    }
-  };
-
-  const handleRetranslateAct = async (includePrevious: boolean, userInstructions: string) => {
+  const handleRetranslateAct = async (
+    sourceLanguage: string,
+    targetLanguage: string,
+    includePrevious: boolean,
+    userInstructions: string
+  ) => {
     if (!projectId || !showActRetranslateModal) return;
 
     const act = store.objects[showActRetranslateModal] as ActObject;
     if (!act) return;
-
-    const targetLanguage = settings.secondaryLanguage;
-    if (!targetLanguage) {
-      showError('Warning', 'Please set a secondary language in settings first.');
-      return;
-    }
 
     try {
       TranslationService.setTranslationStatus(showActRetranslateModal, {
@@ -245,7 +211,7 @@ const OutlineManager: React.FC = () => {
         },
         {
           projectId,
-          sourceLanguage: act.languages.active,
+          sourceLanguage,
           targetLanguage,
           userInstructions: instructions || undefined,
         }
@@ -254,7 +220,7 @@ const OutlineManager: React.FC = () => {
       // Refresh object to update UI with new translation
       await store.fetchObject('act', showActRetranslateModal);
 
-      showError('Success', `Retranslation complete for ${targetLanguage}`);
+      showSuccess('Success', `Retranslation complete for ${targetLanguage}`);
       setShowActRetranslateModal(null);
     } catch (error) {
       console.error('Failed to retranslate act:', error);
@@ -273,11 +239,11 @@ const OutlineManager: React.FC = () => {
 
     try {
       const chapterOrder = getChaptersForAct(actId).length;
-      const newChapter = await store.createObject(
+      await store.createObject(
         'chapter',
         projectId,
         { name: name.trim(), description: description.trim() },
-        settings.primaryLanguage,
+        settings.settings.mainLanguage,
         {
           act_id: actId,
           order: chapterOrder
@@ -296,10 +262,12 @@ const OutlineManager: React.FC = () => {
     const chapter = store.objects[chapterId] as ChapterObject;
     if (!chapter) return;
 
+    const { effectiveLanguage } = getChapterEffectiveLanguage(chapter);
+
     try {
       await store.updateObject('chapter', chapterId, {
         data: { name: name.trim(), description: description.trim() },
-        language: chapter.languages.active,
+        language: effectiveLanguage,
         create_new_version: true,
         user_request: 'Manual Edit',
       });
@@ -323,74 +291,16 @@ const OutlineManager: React.FC = () => {
     }
   };
 
-  const handleChapterLanguageChange = async (chapterId: string, newLanguage: string) => {
-    try {
-      await store.switchLanguage('chapter', chapterId, newLanguage);
-    } catch (error) {
-      console.error('Failed to switch chapter language:', error);
-      showError('Language Switch Error', 'Failed to switch language. Please try again.');
-    }
-  };
-
-  const handleAddChapterTranslation = async (chapterId: string) => {
-    if (!projectId) return;
-
-    const chapter = store.objects[chapterId] as ChapterObject;
-    if (!chapter) return;
-
-    const targetLanguage = settings.secondaryLanguage;
-    if (!targetLanguage) {
-      showError('Warning', 'Please set a secondary language in settings first.');
-      return;
-    }
-
-    if (chapter.languages.available.includes(targetLanguage)) {
-      // Just switch to it
-      await handleChapterLanguageChange(chapterId, targetLanguage);
-      return;
-    }
-
-    try {
-      TranslationService.setTranslationStatus(chapterId, { objectId: chapterId, isTranslating: true });
-      await TranslationService.translateSingle(
-        {
-          objectType: 'chapter',
-          objectId: chapterId,
-          sourceData: {
-            name: chapter.data.name,
-            description: chapter.data.description,
-          },
-        },
-        {
-          projectId,
-          sourceLanguage: chapter.languages.active,
-          targetLanguage,
-        }
-      );
-
-      // Refresh object to update UI with new translation
-      await store.fetchObject('chapter', chapterId);
-
-      showError('Success', `Translation added for ${targetLanguage}`);
-    } catch (error) {
-      console.error('Failed to add chapter translation:', error);
-      showError('Translation Error', error instanceof Error ? error.message : 'Failed to add translation. Please try again.');
-    } finally {
-      TranslationService.clearTranslationStatus(chapterId);
-    }
-  };
-
-  const handleRetranslateChapter = async (includePrevious: boolean, userInstructions: string) => {
+  const handleRetranslateChapter = async (
+    sourceLanguage: string,
+    targetLanguage: string,
+    includePrevious: boolean,
+    userInstructions: string
+  ) => {
     if (!projectId || !showChapterRetranslateModal) return;
 
     const chapter = store.objects[showChapterRetranslateModal] as ChapterObject;
     if (!chapter) return;
-
-    const targetLanguage = settings.secondaryLanguage;
-    if (!targetLanguage) {
-      showError('Warning', 'Please set a secondary language in settings first.');
-      return;
-    }
 
     try {
       TranslationService.setTranslationStatus(showChapterRetranslateModal, {
@@ -419,7 +329,7 @@ const OutlineManager: React.FC = () => {
         },
         {
           projectId,
-          sourceLanguage: chapter.languages.active,
+          sourceLanguage,
           targetLanguage,
           userInstructions: instructions || undefined,
         }
@@ -428,7 +338,7 @@ const OutlineManager: React.FC = () => {
       // Refresh object to update UI with new translation
       await store.fetchObject('chapter', showChapterRetranslateModal);
 
-      showError('Success', `Retranslation complete for ${targetLanguage}`);
+      showSuccess('Success', `Retranslation complete for ${targetLanguage}`);
       setShowChapterRetranslateModal(null);
     } catch (error) {
       console.error('Failed to retranslate chapter:', error);
@@ -442,7 +352,7 @@ const OutlineManager: React.FC = () => {
   // AI & VERSION HISTORY HANDLERS
   // ========================================================================
 
-  const handleAIResult = async (result: any) => {
+  const handleAIResult = async (_result?: any) => {
     if (!projectId) return;
 
     // TODO: Implement full outline AI edit
@@ -457,10 +367,12 @@ const OutlineManager: React.FC = () => {
     if (!act) return;
 
     if (result && result.name !== undefined && result.description !== undefined) {
+      const { effectiveLanguage } = getActEffectiveLanguage(act);
+
       try {
         await store.updateObject('act', showActAIModal, {
           data: { name: result.name, description: result.description },
-          language: act.languages.active,
+          language: effectiveLanguage,
           create_new_version: true,
           user_request: 'AI Edit',
         });
@@ -478,10 +390,12 @@ const OutlineManager: React.FC = () => {
     if (!chapter) return;
 
     if (result && result.name !== undefined && result.description !== undefined) {
+      const { effectiveLanguage } = getChapterEffectiveLanguage(chapter);
+
       try {
         await store.updateObject('chapter', showChapterAIModal, {
           data: { name: result.name, description: result.description },
-          language: chapter.languages.active,
+          language: effectiveLanguage,
           create_new_version: true,
           user_request: 'AI Edit',
         });
@@ -535,17 +449,36 @@ const OutlineManager: React.FC = () => {
         <div className="header-buttons">
           <button
             onClick={() => setShowAIModal(true)}
-            className="ai-edit-button"
+            className="ai-edit-button desktop-only"
           >
             AI Edit
           </button>
           <button
             onClick={() => setShowAddActForm(true)}
-            className="add-button"
+            className="add-button desktop-only"
             disabled={showAddActForm}
           >
             Add Act
           </button>
+          <DropdownMenu
+            trigger={
+              <button className="more-button mobile-only" title="More actions">
+                •••
+              </button>
+            }
+          >
+            <DropdownItem
+              icon="🤖"
+              label="AI Edit"
+              onClick={() => setShowAIModal(true)}
+            />
+            <DropdownItem
+              icon="➕"
+              label="Add Act"
+              onClick={() => setShowAddActForm(true)}
+              disabled={showAddActForm}
+            />
+          </DropdownMenu>
         </div>
       </div>
 
@@ -565,6 +498,7 @@ const OutlineManager: React.FC = () => {
         ) : (
           acts.map((act, actIndex) => {
             const actChapters = getChaptersForAct(act.id);
+            const { isFallback: actIsFallback } = getActEffectiveLanguage(act);
 
             return (
               <div key={act.id} className="act-card">
@@ -572,66 +506,69 @@ const OutlineManager: React.FC = () => {
                   <div className="act-title">
                     <span className="act-number">Act {actIndex + 1}</span>
                     <h3>{act.data.name}</h3>
-                    <LanguageSwitcher
-                      object={act}
-                      onLanguageChange={(lang) => handleActLanguageChange(act.id, lang)}
-                      disabled={!!store.loading[act.id]}
-                      showLabel={false}
-                    />
+                    {actIsFallback && <span className="fallback-warning" title={`${globalDisplayLanguage} not available`}>⚠️</span>}
                   </div>
-                  <div className="act-actions">
-                    {settings.secondaryLanguage && (
-                      act.languages.available.includes(settings.secondaryLanguage) ? (
-                        <button
-                          onClick={() => setShowActRetranslateModal(act.id)}
-                          className="translate-button retranslate"
-                          disabled={!!store.loading[act.id]}
-                          title={`Retranslate to ${settings.secondaryLanguage}`}
-                        >
-                          🔄 Retranslate
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleAddActTranslation(act.id)}
-                          className="translate-button"
-                          disabled={!!store.loading[act.id]}
-                          title={`Translate to ${settings.secondaryLanguage}`}
-                        >
-                          🌐 Add {settings.secondaryLanguage}
-                        </button>
-                      )
-                    )}
-                    <button
-                      onClick={() => setShowActVersionHistory(act.id)}
-                      className="version-history-button"
-                    >
-                      History
-                    </button>
-                    <button
-                      onClick={() => setShowActAIModal(act.id)}
-                      className="ai-edit-button"
-                    >
-                      AI Edit
-                    </button>
+                  <div className="card-actions">
                     <button
                       onClick={() => setEditingAct(act.id)}
-                      className="edit-button"
+                      className="card-edit-btn desktop-only"
+                      disabled={!!store.loading[act.id]}
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => setShowAddChapterForm(act.id)}
-                      className="add-chapter-button"
+                      className="card-add-btn desktop-only"
                       disabled={showAddChapterForm === act.id}
                     >
-                      Add Chapter
+                      + Chapter
                     </button>
-                    <button
-                      onClick={() => handleDeleteAct(act.id)}
-                      className="delete-button"
+                    <DropdownMenu
+                      trigger={
+                        <button className="more-button" disabled={!!store.loading[act.id]} title="More actions">
+                          •••
+                        </button>
+                      }
                     >
-                      Delete
-                    </button>
+                      <DropdownItem
+                        icon="✏️"
+                        label="Edit"
+                        onClick={() => setEditingAct(act.id)}
+                        disabled={!!store.loading[act.id]}
+                        className="mobile-only"
+                      />
+                      <DropdownItem
+                        icon="➕"
+                        label="Add Chapter"
+                        onClick={() => setShowAddChapterForm(act.id)}
+                        disabled={showAddChapterForm === act.id}
+                        className="mobile-only"
+                      />
+                      <DropdownDivider className="mobile-only" />
+                      {settings.settings.defaultSubLanguage &&
+                        act.languages.available.includes(settings.settings.defaultSubLanguage) && (
+                          <DropdownItem
+                            icon="🔄"
+                            label="Retranslate"
+                            onClick={() => setShowActRetranslateModal(act.id)}
+                            disabled={!!store.loading[act.id]}
+                          />
+                      )}
+                      <DropdownItem
+                        icon="📚"
+                        label="History"
+                        onClick={() => setShowActVersionHistory(act.id)}
+                        disabled={!!store.loading[act.id]}
+                      />
+                      <DropdownDivider />
+                      <DropdownItem
+                        icon="🗑️"
+                        label="Delete"
+                        onClick={() => handleDeleteAct(act.id)}
+                        variant="danger"
+                        disabled={!!store.loading[act.id]}
+                      />
+                    </DropdownMenu>
                   </div>
                 </div>
 
@@ -640,6 +577,7 @@ const OutlineManager: React.FC = () => {
                     act={act}
                     onUpdate={(name, description) => handleUpdateAct(act.id, name, description)}
                     onCancel={() => setEditingAct(null)}
+                    onAIEdit={() => setShowActAIModal(act.id)}
                   />
                 ) : (
                   <div className="act-content">
@@ -658,7 +596,9 @@ const OutlineManager: React.FC = () => {
                 )}
 
                 <div className="chapters-list">
-                  {actChapters.map((chapter, chapterIndex) => (
+                  {actChapters.map((chapter, chapterIndex) => {
+                    const { isFallback: chapterIsFallback } = getChapterEffectiveLanguage(chapter);
+                    return (
                     <div key={chapter.id} className="chapter-card">
                       <div className="chapter-header">
                         <div className="chapter-title">
@@ -666,59 +606,54 @@ const OutlineManager: React.FC = () => {
                             Chapter {chapterIndex + 1}
                           </span>
                           <h4>{chapter.data.name}</h4>
-                          <LanguageSwitcher
-                            object={chapter}
-                            onLanguageChange={(lang) => handleChapterLanguageChange(chapter.id, lang)}
-                            disabled={!!store.loading[chapter.id]}
-                            showLabel={false}
-                          />
+                          {chapterIsFallback && <span className="fallback-warning" title={`${globalDisplayLanguage} not available`}>⚠️</span>}
                         </div>
-                        <div className="chapter-actions">
-                          {settings.secondaryLanguage && (
-                            chapter.languages.available.includes(settings.secondaryLanguage) ? (
-                              <button
-                                onClick={() => setShowChapterRetranslateModal(chapter.id)}
-                                className="translate-button retranslate"
-                                disabled={!!store.loading[chapter.id]}
-                                title={`Retranslate to ${settings.secondaryLanguage}`}
-                              >
-                                🔄 Retranslate
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleAddChapterTranslation(chapter.id)}
-                                className="translate-button"
-                                disabled={!!store.loading[chapter.id]}
-                                title={`Translate to ${settings.secondaryLanguage}`}
-                              >
-                                🌐 Add {settings.secondaryLanguage}
-                              </button>
-                            )
-                          )}
-                          <button
-                            onClick={() => setShowChapterVersionHistory(chapter.id)}
-                            className="version-history-button"
-                          >
-                            History
-                          </button>
-                          <button
-                            onClick={() => setShowChapterAIModal(chapter.id)}
-                            className="ai-edit-button"
-                          >
-                            AI Edit
-                          </button>
+                        <div className="card-actions">
                           <button
                             onClick={() => setEditingChapter(chapter.id)}
-                            className="edit-button"
+                            className="card-edit-btn desktop-only"
+                            disabled={!!store.loading[chapter.id]}
                           >
                             Edit
                           </button>
-                          <button
-                            onClick={() => handleDeleteChapter(chapter.id)}
-                            className="delete-button"
+                          <DropdownMenu
+                            trigger={
+                              <button className="more-button" disabled={!!store.loading[chapter.id]} title="More actions">
+                                •••
+                              </button>
+                            }
                           >
-                            Delete
-                          </button>
+                            <DropdownItem
+                              icon="✏️"
+                              label="Edit"
+                              onClick={() => setEditingChapter(chapter.id)}
+                              disabled={!!store.loading[chapter.id]}
+                              className="mobile-only"
+                            />
+                            {settings.settings.defaultSubLanguage &&
+                              chapter.languages.available.includes(settings.settings.defaultSubLanguage) && (
+                                <DropdownItem
+                                  icon="🔄"
+                                  label="Retranslate"
+                                  onClick={() => setShowChapterRetranslateModal(chapter.id)}
+                                  disabled={!!store.loading[chapter.id]}
+                                />
+                            )}
+                            <DropdownItem
+                              icon="📚"
+                              label="History"
+                              onClick={() => setShowChapterVersionHistory(chapter.id)}
+                              disabled={!!store.loading[chapter.id]}
+                            />
+                            <DropdownDivider />
+                            <DropdownItem
+                              icon="🗑️"
+                              label="Delete"
+                              onClick={() => handleDeleteChapter(chapter.id)}
+                              variant="danger"
+                              disabled={!!store.loading[chapter.id]}
+                            />
+                          </DropdownMenu>
                         </div>
                       </div>
 
@@ -727,6 +662,7 @@ const OutlineManager: React.FC = () => {
                           chapter={chapter}
                           onUpdate={(name, description) => handleUpdateChapter(chapter.id, name, description)}
                           onCancel={() => setEditingChapter(null)}
+                          onAIEdit={() => setShowChapterAIModal(chapter.id)}
                         />
                       ) : (
                         <div className="chapter-content">
@@ -736,7 +672,8 @@ const OutlineManager: React.FC = () => {
                         </div>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -747,7 +684,7 @@ const OutlineManager: React.FC = () => {
       <AIEditModal
         isOpen={showAIModal}
         onClose={() => setShowAIModal(false)}
-        category="outline"
+        category="act"
         projectId={projectId || ''}
         targetId={''} // Outline-level edit
         onResult={handleAIResult}
@@ -784,6 +721,7 @@ const OutlineManager: React.FC = () => {
           onClose={() => setShowActVersionHistory(null)}
           actId={showActVersionHistory}
           onRestoreVersion={handleRestoreActVersion}
+          globalDisplayLanguage={globalDisplayLanguage}
         />
       )}
 
@@ -794,34 +732,51 @@ const OutlineManager: React.FC = () => {
           onClose={() => setShowChapterVersionHistory(null)}
           chapterId={showChapterVersionHistory}
           onRestoreVersion={handleRestoreChapterVersion}
+          globalDisplayLanguage={globalDisplayLanguage}
         />
       )}
 
       {/* Act Retranslate Modal */}
-      {showActRetranslateModal && settings.secondaryLanguage && (
-        <RetranslateModal
-          isOpen={!!showActRetranslateModal}
-          onClose={() => setShowActRetranslateModal(null)}
-          sourceLanguage={store.objects[showActRetranslateModal]?.languages?.active || settings.primaryLanguage}
-          targetLanguage={settings.secondaryLanguage}
-          translationTimestamp={store.objects[showActRetranslateModal]?.version?.created_at || null}
-          onRetranslate={handleRetranslateAct}
-          isTranslating={store.loading[showActRetranslateModal] || false}
-        />
-      )}
+      {showActRetranslateModal && (() => {
+        const act = store.objects[showActRetranslateModal] as ActObject | undefined;
+        const availableLanguages = [settings.settings.mainLanguage, ...settings.settings.subLanguages];
+        return (
+          <RetranslateModal
+            isOpen={!!showActRetranslateModal}
+            onClose={() => setShowActRetranslateModal(null)}
+            objectType="act"
+            objectId={showActRetranslateModal}
+            defaultSourceLanguage={settings.settings.mainLanguage}
+            defaultTargetLanguage={globalDisplayLanguage}
+            availableLanguages={availableLanguages}
+            manuscriptLanguages={act?.languages?.available}
+            translationTimestamp={act?.version?.created_at || null}
+            onRetranslate={handleRetranslateAct}
+            isTranslating={translating[showActRetranslateModal] || false}
+          />
+        );
+      })()}
 
       {/* Chapter Retranslate Modal */}
-      {showChapterRetranslateModal && settings.secondaryLanguage && (
-        <RetranslateModal
-          isOpen={!!showChapterRetranslateModal}
-          onClose={() => setShowChapterRetranslateModal(null)}
-          sourceLanguage={store.objects[showChapterRetranslateModal]?.languages?.active || settings.primaryLanguage}
-          targetLanguage={settings.secondaryLanguage}
-          translationTimestamp={store.objects[showChapterRetranslateModal]?.version?.created_at || null}
-          onRetranslate={handleRetranslateChapter}
-          isTranslating={store.loading[showChapterRetranslateModal] || false}
-        />
-      )}
+      {showChapterRetranslateModal && (() => {
+        const chapter = store.objects[showChapterRetranslateModal] as ChapterObject | undefined;
+        const availableLanguages = [settings.settings.mainLanguage, ...settings.settings.subLanguages];
+        return (
+          <RetranslateModal
+            isOpen={!!showChapterRetranslateModal}
+            onClose={() => setShowChapterRetranslateModal(null)}
+            objectType="chapter"
+            objectId={showChapterRetranslateModal}
+            defaultSourceLanguage={settings.settings.mainLanguage}
+            defaultTargetLanguage={globalDisplayLanguage}
+            availableLanguages={availableLanguages}
+            manuscriptLanguages={chapter?.languages?.available}
+            translationTimestamp={chapter?.version?.created_at || null}
+            onRetranslate={handleRetranslateChapter}
+            isTranslating={translating[showChapterRetranslateModal] || false}
+          />
+        );
+      })()}
     </div>
   );
 };
@@ -892,9 +847,10 @@ interface EditActFormProps {
   act: ActObject;
   onUpdate: (name: string, description: string) => void;
   onCancel: () => void;
+  onAIEdit: () => void;
 }
 
-const EditActForm: React.FC<EditActFormProps> = ({ act, onUpdate, onCancel }) => {
+const EditActForm: React.FC<EditActFormProps> = ({ act, onUpdate, onCancel, onAIEdit }) => {
   const [name, setName] = useState(act.data.name);
   const [description, setDescription] = useState(act.data.description);
 
@@ -927,13 +883,18 @@ const EditActForm: React.FC<EditActFormProps> = ({ act, onUpdate, onCancel }) =>
             rows={4}
           />
         </div>
-        <div className="form-actions">
-          <button type="button" onClick={onCancel} className="cancel-button">
-            Cancel
+        <div className="form-actions-split">
+          <button type="button" onClick={onAIEdit} className="ai-edit-btn">
+            🤖 AI Edit
           </button>
-          <button type="submit" className="save-button">
-            Save
-          </button>
+          <div className="form-actions-right">
+            <button type="button" onClick={onCancel} className="cancel-button">
+              Cancel
+            </button>
+            <button type="submit" className="save-button">
+              Save
+            </button>
+          </div>
         </div>
       </form>
     </div>
@@ -1007,9 +968,10 @@ interface EditChapterFormProps {
   chapter: ChapterObject;
   onUpdate: (name: string, description: string) => void;
   onCancel: () => void;
+  onAIEdit: () => void;
 }
 
-const EditChapterForm: React.FC<EditChapterFormProps> = ({ chapter, onUpdate, onCancel }) => {
+const EditChapterForm: React.FC<EditChapterFormProps> = ({ chapter, onUpdate, onCancel, onAIEdit }) => {
   const [name, setName] = useState(chapter.data.name);
   const [description, setDescription] = useState(chapter.data.description);
 
@@ -1042,13 +1004,18 @@ const EditChapterForm: React.FC<EditChapterFormProps> = ({ chapter, onUpdate, on
             rows={3}
           />
         </div>
-        <div className="form-actions">
-          <button type="button" onClick={onCancel} className="cancel-button">
-            Cancel
+        <div className="form-actions-split">
+          <button type="button" onClick={onAIEdit} className="ai-edit-btn">
+            🤖 AI Edit
           </button>
-          <button type="submit" className="save-button">
-            Save
-          </button>
+          <div className="form-actions-right">
+            <button type="button" onClick={onCancel} className="cancel-button">
+              Cancel
+            </button>
+            <button type="submit" className="save-button">
+              Save
+            </button>
+          </div>
         </div>
       </form>
     </div>
@@ -1064,6 +1031,7 @@ interface ActVersionHistoryModalProps {
   onClose: () => void;
   actId: string;
   onRestoreVersion: (versionId: string) => void;
+  globalDisplayLanguage: string;
 }
 
 const ActVersionHistoryModal: React.FC<ActVersionHistoryModalProps> = ({
@@ -1071,6 +1039,7 @@ const ActVersionHistoryModal: React.FC<ActVersionHistoryModalProps> = ({
   onClose,
   actId,
   onRestoreVersion,
+  globalDisplayLanguage,
 }) => {
   const store = useUnifiedObjectStore();
   const [versions, setVersions] = useState<any[]>([]);
@@ -1116,9 +1085,14 @@ const ActVersionHistoryModal: React.FC<ActVersionHistoryModalProps> = ({
             </div>
           ) : (
             <div className="versions-list">
-              {versions.map((version, index) => {
+              {versions.map((version) => {
                 const isCurrentVersion = act?.version.id === version.id;
-                const versionData = version.data[act?.languages.active || 'en'] || {};
+                // Use globalDisplayLanguage with fallback to available languages
+                const availableLanguages = act?.languages.available || [];
+                const effectiveLanguage = availableLanguages.includes(globalDisplayLanguage)
+                  ? globalDisplayLanguage
+                  : (availableLanguages[0] || 'en');
+                const versionData = version.data[effectiveLanguage] || {};
 
                 return (
                   <div
@@ -1211,6 +1185,7 @@ interface ChapterVersionHistoryModalProps {
   onClose: () => void;
   chapterId: string;
   onRestoreVersion: (versionId: string) => void;
+  globalDisplayLanguage: string;
 }
 
 const ChapterVersionHistoryModal: React.FC<ChapterVersionHistoryModalProps> = ({
@@ -1218,6 +1193,7 @@ const ChapterVersionHistoryModal: React.FC<ChapterVersionHistoryModalProps> = ({
   onClose,
   chapterId,
   onRestoreVersion,
+  globalDisplayLanguage,
 }) => {
   const store = useUnifiedObjectStore();
   const [versions, setVersions] = useState<any[]>([]);
@@ -1263,9 +1239,14 @@ const ChapterVersionHistoryModal: React.FC<ChapterVersionHistoryModalProps> = ({
             </div>
           ) : (
             <div className="versions-list">
-              {versions.map((version, index) => {
+              {versions.map((version) => {
                 const isCurrentVersion = chapter?.version.id === version.id;
-                const versionData = version.data[chapter?.languages.active || 'en'] || {};
+                // Use globalDisplayLanguage with fallback to available languages
+                const availableLanguages = chapter?.languages.available || [];
+                const effectiveLanguage = availableLanguages.includes(globalDisplayLanguage)
+                  ? globalDisplayLanguage
+                  : (availableLanguages[0] || 'en');
+                const versionData = version.data[effectiveLanguage] || {};
 
                 return (
                   <div

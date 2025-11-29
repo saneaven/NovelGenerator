@@ -24,7 +24,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
   register: async (email: string, username: string, password: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await authService.register({ email, username, password });
+      await authService.register({ email, username, password });
       // Token is automatically stored by authService
       // Now fetch the user data
       const user = await authService.getCurrentUser();
@@ -45,7 +45,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
   login: async (username: string, password: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await authService.login({ username, password });
+      await authService.login({ username, password });
       // Token is automatically stored by authService
       // Now fetch the user data
       const user = await authService.getCurrentUser();

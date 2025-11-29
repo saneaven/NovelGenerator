@@ -195,7 +195,6 @@ export class PrefillManager {
   private static async generateChatAssistantPrefill(context: ChatAssistantPrefillContext = {}): Promise<string> {
     const language = this.resolveLanguage(context.outputLanguage);
     const mode = context.mode || 'workspace';
-    const hasFunctions = context.hasFunctions ? 'yes' : 'no';
     const settings = useSettingsStore.getState().settings;
     const functionType = this.mapPrefillTypeToFunctionType(PrefillType.CHAT_ASSISTANT);
     const advancedSettings = settings.functionConfigs[functionType].advanced;

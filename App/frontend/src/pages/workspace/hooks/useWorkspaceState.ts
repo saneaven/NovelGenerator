@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useChatStore } from '../../../store/chatStore';
+import { useSettingsStore } from '../../../store/settingsStore';
 
 type TabType = 'basicInfo' | 'characters' | 'organizations' | 'locations' | 'lorebook' | 'outline';
 
@@ -15,6 +16,7 @@ export interface WorkspaceUIState {
   editingMessageId: string | null;
   editingLanguage: string | null;
   editContent: string;
+  globalDisplayLanguage: string; // Actual language name (e.g., 'English', 'Korean')
 }
 
 export interface WorkspaceUIActions {
@@ -29,15 +31,17 @@ export interface WorkspaceUIActions {
   setEditingMessageId: (id: string | null) => void;
   setEditingLanguage: (language: string | null) => void;
   setEditContent: (content: string) => void;
+  setGlobalDisplayLanguage: (lang: string) => void;
 }
 
 export function useWorkspaceState(projectId: string | undefined) {
   const chatStore = useChatStore();
   const { getChats, getSelectedChatId, selectChat, createChat } = chatStore;
+  const mainLanguage = useSettingsStore((state) => state.settings.mainLanguage);
   const initializedProjectRef = useRef<string | null>(null);
   const chats = projectId ? getChats(projectId) : [];
 
-  const [state, setState] = useState<WorkspaceUIState>({
+  const [state, setState] = useState<WorkspaceUIState>(() => ({
     isChatVisible: true,
     activeStoryTab: 'basicInfo',
     selectedChatId: null,
@@ -49,7 +53,8 @@ export function useWorkspaceState(projectId: string | undefined) {
     editingMessageId: null,
     editingLanguage: null,
     editContent: '',
-  });
+    globalDisplayLanguage: mainLanguage,
+  }));
 
   // Initialize chat selection AFTER chats are loaded
   useEffect(() => {
@@ -152,6 +157,10 @@ export function useWorkspaceState(projectId: string | undefined) {
     setState(prev => ({ ...prev, editContent: content }));
   }, []);
 
+  const setGlobalDisplayLanguage = useCallback((lang: string) => {
+    setState(prev => ({ ...prev, globalDisplayLanguage: lang }));
+  }, []);
+
   // Memoize the actions object to prevent recreating it on every render
   const actions: WorkspaceUIActions = useMemo(() => ({
     setIsChatVisible,
@@ -165,6 +174,7 @@ export function useWorkspaceState(projectId: string | undefined) {
     setEditingMessageId,
     setEditingLanguage,
     setEditContent,
+    setGlobalDisplayLanguage,
   }), [
     setIsChatVisible,
     setActiveStoryTab,
@@ -177,6 +187,7 @@ export function useWorkspaceState(projectId: string | undefined) {
     setEditingMessageId,
     setEditingLanguage,
     setEditContent,
+    setGlobalDisplayLanguage,
   ]);
 
   return { state, actions };

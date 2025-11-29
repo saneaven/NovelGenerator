@@ -130,13 +130,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
           {mainTab === 'language' && (
             <LanguagePanel
-              primaryLanguage={localSettings.primaryLanguage}
-              secondaryLanguage={localSettings.secondaryLanguage}
-              onPrimaryChange={(language) =>
-                setLocalSettings({ ...localSettings, primaryLanguage: language })
+              mainLanguage={localSettings.mainLanguage}
+              subLanguages={localSettings.subLanguages}
+              defaultSubLanguage={localSettings.defaultSubLanguage}
+              onMainLanguageChange={(language) =>
+                setLocalSettings(prev => ({ ...prev, mainLanguage: language }))
               }
-              onSecondaryChange={(language) =>
-                setLocalSettings({ ...localSettings, secondaryLanguage: language })
+              onSubLanguagesChange={(languages) =>
+                setLocalSettings(prev => ({ ...prev, subLanguages: languages }))
+              }
+              onDefaultSubLanguageChange={(language) =>
+                setLocalSettings(prev => ({ ...prev, defaultSubLanguage: language }))
               }
             />
           )}

@@ -1,35 +1,260 @@
-import React, { useState } from 'react';
-import type { AIFunctionType, ProviderType, ProviderPreference, ProviderCredentials } from '../../store/settingsStore';
+import React, { useState, useEffect, useMemo } from 'react';
+import type { ProviderType, ProviderPreference, ProviderCredentials } from '../../store/settingsStore';
 import { fetchModels, fetchModelEndpoints } from '../../llm_request/llmService';
 
 interface ModelBrowserProps {
-  functionType: AIFunctionType;
   provider: ProviderType;
   currentModel: string;
   providerPreference?: ProviderPreference;
   credentials: ProviderCredentials;
   onSelectModel: (modelId: string) => void;
   onUpdateProviderPreference: (pref?: ProviderPreference) => void;
+  autoExpand?: boolean;
 }
 
+type SortOption = 'name-asc' | 'name-desc' | 'price-asc' | 'price-desc';
+
+// Tree node for hierarchical display
+interface TreeNode {
+  id: string;
+  label: string;
+  type: 'base' | 'version' | 'grade' | 'family' | 'model';
+  children?: TreeNode[];
+  model?: any;
+}
+
+// Parse Gemini model ID into components
+const parseGeminiModelId = (id: string): { base: string; version: string; grade: string } | null => {
+  // Match patterns like: gemini-2.5-flash, gemini-2.0-flash-thinking-exp, gemma-3-27b-it
+  const geminiRegex = /^(gemini)-(\d+\.?\d*)-([a-z]+)/;
+  const gemmaRegex = /^(gemma)-(\d+)/;
+
+  const geminiMatch = id.match(geminiRegex);
+  if (geminiMatch) {
+    return {
+      base: geminiMatch[1],
+      version: geminiMatch[2],
+      grade: geminiMatch[3]
+    };
+  }
+
+  const gemmaMatch = id.match(gemmaRegex);
+  if (gemmaMatch) {
+    return {
+      base: gemmaMatch[1],
+      version: gemmaMatch[2],
+      grade: ''  // Gemma doesn't have grade in the same way
+    };
+  }
+
+  return null;
+};
+
+// Parse OpenAI model ID: gpt-{version}-{variant} or o{version}[-variant]
+const parseOpenAIModelId = (id: string): { series: string; version: string } | null => {
+  // GPT models: gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo
+  const gptRegex = /^gpt-([\d.]+o?)/;
+  const gptMatch = id.match(gptRegex);
+  if (gptMatch) {
+    return { series: 'GPT', version: gptMatch[1] };
+  }
+
+  // O-series: o1, o1-mini, o3, o3-pro, o4-mini
+  const oRegex = /^(o\d+)/;
+  const oMatch = id.match(oRegex);
+  if (oMatch) {
+    return { series: 'O-Series', version: oMatch[1] };
+  }
+
+  return null;
+};
+
+// Capitalize first letter
+const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+
+// Build tree for OpenRouter (1-level: Family -> Models)
+const buildOpenRouterTree = (models: any[]): TreeNode[] => {
+  const familyMap: Record<string, TreeNode> = {};
+
+  models.forEach(model => {
+    const parts = model.id.split('/');
+    const familyName = parts.length > 1 ? capitalize(parts[0]) : 'Other';
+
+    if (!familyMap[familyName]) {
+      familyMap[familyName] = {
+        id: `family-${familyName}`,
+        label: familyName,
+        type: 'family',
+        children: []
+      };
+    }
+
+    familyMap[familyName].children!.push({
+      id: model.id,
+      label: model.display_name || model.name || model.id,
+      type: 'model',
+      model
+    });
+  });
+
+  return Object.values(familyMap).sort((a, b) => a.label.localeCompare(b.label));
+};
+
+// Build tree for Gemini (4-level: Base -> Version -> Grade -> Models)
+const buildGeminiTree = (models: any[]): TreeNode[] => {
+  const geminiNode: TreeNode = { id: 'base-gemini', label: 'Gemini', type: 'base', children: [] };
+  const gemmaNode: TreeNode = { id: 'base-gemma', label: 'Gemma', type: 'base', children: [] };
+  const otherNode: TreeNode = { id: 'base-other', label: 'Other', type: 'base', children: [] };
+
+  models.forEach(model => {
+    const parts = parseGeminiModelId(model.id);
+
+    if (!parts) {
+      // Unparseable model goes to Other
+      otherNode.children!.push({
+        id: model.id,
+        label: model.display_name || model.id,
+        type: 'model',
+        model
+      });
+      return;
+    }
+
+    if (parts.base === 'gemma') {
+      // Gemma: flat list under Gemma folder
+      gemmaNode.children!.push({
+        id: model.id,
+        label: model.display_name || model.id,
+        type: 'model',
+        model
+      });
+    } else {
+      // Gemini: 4-level hierarchy
+      let versionNode = geminiNode.children!.find(c => c.label === parts.version);
+      if (!versionNode) {
+        versionNode = {
+          id: `version-${parts.version}`,
+          label: parts.version,
+          type: 'version',
+          children: []
+        };
+        geminiNode.children!.push(versionNode);
+      }
+
+      let gradeNode = versionNode.children!.find(c => c.label === capitalize(parts.grade));
+      if (!gradeNode) {
+        gradeNode = {
+          id: `grade-${parts.version}-${parts.grade}`,
+          label: capitalize(parts.grade),
+          type: 'grade',
+          children: []
+        };
+        versionNode.children!.push(gradeNode);
+      }
+
+      gradeNode.children!.push({
+        id: model.id,
+        label: model.display_name || model.id,
+        type: 'model',
+        model
+      });
+    }
+  });
+
+  // Sort versions descending (2.5 > 2.0 > 1.5)
+  geminiNode.children!.sort((a, b) => parseFloat(b.label) - parseFloat(a.label));
+
+  // Sort grades by hierarchy (Pro > Flash > Nano)
+  const gradeOrder: Record<string, number> = { 'Ultra': 4, 'Pro': 3, 'Flash': 2, 'Nano': 1 };
+  geminiNode.children!.forEach(versionNode => {
+    versionNode.children!.sort((a, b) => (gradeOrder[b.label] || 0) - (gradeOrder[a.label] || 0));
+  });
+
+  return [geminiNode, gemmaNode, otherNode].filter(n => n.children!.length > 0);
+};
+
+// Build tree for OpenAI (2-level: Series -> Version -> Models)
+const buildOpenAITree = (models: any[]): TreeNode[] => {
+  const gptNode: TreeNode = { id: 'series-gpt', label: 'GPT', type: 'base', children: [] };
+  const oSeriesNode: TreeNode = { id: 'series-o', label: 'O-Series', type: 'base', children: [] };
+  const otherNode: TreeNode = { id: 'series-other', label: 'Other', type: 'base', children: [] };
+
+  models.forEach(model => {
+    const parts = parseOpenAIModelId(model.id);
+
+    if (!parts) {
+      otherNode.children!.push({ id: model.id, label: model.id, type: 'model', model });
+      return;
+    }
+
+    const parentNode = parts.series === 'GPT' ? gptNode : oSeriesNode;
+
+    let versionNode = parentNode.children!.find(c => c.label === parts.version);
+    if (!versionNode) {
+      versionNode = {
+        id: `version-${parts.series}-${parts.version}`,
+        label: parts.version,
+        type: 'version',
+        children: []
+      };
+      parentNode.children!.push(versionNode);
+    }
+
+    versionNode.children!.push({ id: model.id, label: model.id, type: 'model', model });
+  });
+
+  // Sort GPT versions: 4o > 4.1 > 4 > 3.5
+  gptNode.children!.sort((a, b) => {
+    // Handle 'o' suffix specially (4o should come before 4)
+    const aHasO = a.label.endsWith('o');
+    const bHasO = b.label.endsWith('o');
+    const aNum = parseFloat(a.label.replace('o', ''));
+    const bNum = parseFloat(b.label.replace('o', ''));
+
+    if (aNum !== bNum) return bNum - aNum;  // Descending by number
+    if (aHasO && !bHasO) return -1;  // 'o' suffix comes first
+    if (!aHasO && bHasO) return 1;
+    return 0;
+  });
+
+  // Sort O-series versions: o4 > o3 > o1
+  oSeriesNode.children!.sort((a, b) => {
+    const numA = parseInt(a.label.replace('o', ''));
+    const numB = parseInt(b.label.replace('o', ''));
+    return numB - numA;  // Descending
+  });
+
+  return [gptNode, oSeriesNode, otherNode].filter(n => n.children!.length > 0);
+};
+
 const ModelBrowser: React.FC<ModelBrowserProps> = ({
-  functionType,
   provider,
   currentModel,
   providerPreference,
   credentials,
   onSelectModel,
   onUpdateProviderPreference,
+  autoExpand = false,
 }) => {
-  const [showModels, setShowModels] = useState(false);
   const [modelsData, setModelsData] = useState<any>(null);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
-  const [showUnsupportedModels, setShowUnsupportedModels] = useState(false);
+
+  // Search and sort state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortOption, setSortOption] = useState<SortOption>('name-asc');
+
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(new Set());
   const [modelEndpoints, setModelEndpoints] = useState<Record<string, any>>({});
   const [loadingEndpoints, setLoadingEndpoints] = useState<Record<string, boolean>>({});
+
+  // Auto-load models when auto-expanded
+  useEffect(() => {
+    if (autoExpand && !modelsData && !loadingModels) {
+      loadModels();
+    }
+  }, [autoExpand]);
 
   const loadModels = async () => {
     setLoadingModels(true);
@@ -56,15 +281,6 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
     }
   };
 
-  const toggleModelsSection = () => {
-    if (!showModels) {
-      setShowModels(true);
-      loadModels();
-    } else {
-      setShowModels(false);
-    }
-  };
-
   const toggleSectionExpansion = (sectionKey: string) => {
     setExpandedSections(prev => {
       const newSet = new Set(prev);
@@ -87,6 +303,27 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
       }
       return newSet;
     });
+  };
+
+  // Determine if provider should use tree grouping
+  const shouldGroupByFamily = (): boolean => {
+    return provider === 'openrouter' || provider === 'gemini' || provider === 'openai';
+  };
+
+  // Determine what details to show based on provider
+  const getDetailsConfig = () => {
+    if (provider === 'openrouter') {
+      return {
+        showArchitecture: true,
+        showPricing: true,
+        showEndpoints: true,
+      };
+    }
+    return {
+      showArchitecture: false,
+      showPricing: false,
+      showEndpoints: false,
+    };
   };
 
   const loadModelEndpoints = async (modelId: string, canonicalSlug: string) => {
@@ -121,7 +358,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
     }
   };
 
-  const toggleProviderOnly = (modelId: string, providerName: string) => {
+  const toggleProviderOnly = (_modelId: string, providerName: string) => {
     const currentPref = providerPreference || {};
     const currentOnly = currentPref.only || [];
     const currentIgnore = currentPref.ignore || [];
@@ -146,7 +383,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
     }
   };
 
-  const toggleProviderIgnore = (modelId: string, providerName: string) => {
+  const toggleProviderIgnore = (_modelId: string, providerName: string) => {
     const currentPref = providerPreference || {};
     const currentOnly = currentPref.only || [];
     const currentIgnore = currentPref.ignore || [];
@@ -175,50 +412,71 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
     onUpdateProviderPreference(undefined);
   };
 
-  const separateModelsBySupport = (models: any[]) => {
-    if (provider === 'openrouter') {
-      return { supported: models, unsupported: [] };
+  // Get model display name
+  const getModelDisplayName = (model: any): string => {
+    return model.display_name || model.displayName || model.name || model.id;
+  };
+
+  // Filter and sort models
+  const processedModels = useMemo(() => {
+    if (!modelsData?.data) return [];
+
+    let models = [...modelsData.data];
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      models = models.filter((model: any) => {
+        const name = getModelDisplayName(model).toLowerCase();
+        const id = (model.id || '').toLowerCase();
+        return name.includes(query) || id.includes(query);
+      });
     }
 
-    const supported: any[] = [];
-    const unsupported: any[] = [];
-
-    models.forEach(model => {
-      if (model.policy) {
-        supported.push(model);
-      } else {
-        unsupported.push(model);
+    // Sort models
+    models.sort((a: any, b: any) => {
+      switch (sortOption) {
+        case 'name-asc':
+          return getModelDisplayName(a).localeCompare(getModelDisplayName(b));
+        case 'name-desc':
+          return getModelDisplayName(b).localeCompare(getModelDisplayName(a));
+        case 'price-asc':
+          if (provider === 'openrouter') {
+            const priceA = parseFloat(a.pricing?.prompt || '0');
+            const priceB = parseFloat(b.pricing?.prompt || '0');
+            return priceA - priceB;
+          }
+          return 0;
+        case 'price-desc':
+          if (provider === 'openrouter') {
+            const priceA = parseFloat(a.pricing?.prompt || '0');
+            const priceB = parseFloat(b.pricing?.prompt || '0');
+            return priceB - priceA;
+          }
+          return 0;
+        default:
+          return 0;
       }
     });
 
-    return { supported, unsupported };
-  };
+    return models;
+  }, [modelsData, searchQuery, sortOption, provider]);
 
-  const groupModelsByFamily = (models: any[]) => {
-    const grouped: Record<string, any[]> = {};
+  // Build model tree based on provider
+  const modelTree = useMemo((): TreeNode[] | null => {
+    if (!shouldGroupByFamily() || !processedModels.length) return null;
 
-    models.forEach(model => {
-      let family = 'Unknown';
-
-      if (provider === 'openrouter') {
-        const parts = model.id.split('/');
-        if (parts.length > 1) {
-          family = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
-        } else {
-          family = 'Other';
-        }
-      } else {
-        family = model.capabilities?.family || 'Unknown';
-      }
-
-      if (!grouped[family]) {
-        grouped[family] = [];
-      }
-      grouped[family].push(model);
-    });
-
-    return grouped;
-  };
+    if (provider === 'openrouter') {
+      return buildOpenRouterTree(processedModels);
+    }
+    if (provider === 'gemini') {
+      return buildGeminiTree(processedModels);
+    }
+    if (provider === 'openai') {
+      return buildOpenAITree(processedModels);
+    }
+    return null;
+  }, [processedModels, provider]);
 
   const parseMarkdownLinks = (text: string) => {
     const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
@@ -237,7 +495,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
           href={match[2]}
           target="_blank"
           rel="noopener noreferrer"
-          className="policy-link"
+          className="model-card__link"
         >
           {match[1]}
         </a>
@@ -253,17 +511,20 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
     return parts.length > 0 ? parts : text;
   };
 
-  const renderOpenRouterModelItem = (model: any) => {
+  const renderModelCard = (model: any) => {
+    const detailsConfig = getDetailsConfig();
+    const isSelected = currentModel === model.id;
     const MAX_DESC_LENGTH = 150;
     const isDescriptionLong = model.description && model.description.length > MAX_DESC_LENGTH;
     const isDescExpanded = expandedSections.has(`${model.id}-description`);
 
     return (
-      <div key={model.id} className="model-item">
-        <div className="model-top-bar">
-          <div className="model-title-section">
-            <h4 className="model-name">{model.name}</h4>
-            <span className="model-id">{model.id}</span>
+      <div key={model.id} className={`model-card ${isSelected ? 'model-card--selected' : ''}`}>
+        <div className="model-card__header">
+          <div className="model-card__info">
+            <h4 className="model-card__name">{getModelDisplayName(model)}</h4>
+            <span className="model-card__id">{model.id}</span>
+            {model.version && <span className="model-card__version">v{model.version}</span>}
           </div>
           <button
             type="button"
@@ -271,17 +532,26 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
               e.preventDefault();
               onSelectModel(model.id);
             }}
-            className="select-model-btn"
-            title="Use this model"
+            className={`model-card__select-btn ${isSelected ? 'model-card__select-btn--selected' : ''}`}
+            title={isSelected ? 'Currently selected' : 'Use this model'}
           >
-            <span className="btn-icon">✓</span>
-            Use Model
+            {isSelected ? 'Selected' : 'Use'}
           </button>
         </div>
 
+        {/* OpenRouter: Show pricing inline */}
+        {provider === 'openrouter' && model.pricing && (
+          <div className="model-card__pricing-inline">
+            <span className="model-card__price">
+              ${(parseFloat(model.pricing.prompt) * 1000000).toFixed(2)} / ${(parseFloat(model.pricing.completion) * 1000000).toFixed(2)} per 1M tokens
+            </span>
+          </div>
+        )}
+
+        {/* Description (OpenRouter only) */}
         {model.description && (
-          <div className="model-description-section">
-            <p className="model-description">
+          <div className="model-card__description">
+            <p>
               {parseMarkdownLinks(
                 isDescriptionLong && !isDescExpanded
                   ? model.description.substring(0, MAX_DESC_LENGTH) + '...'
@@ -292,62 +562,63 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
               <button
                 type="button"
                 onClick={() => toggleSectionExpansion(`${model.id}-description`)}
-                className="expand-description-btn"
+                className="model-card__expand-btn"
               >
-                {isDescExpanded ? '− Show less' : '+ Show more'}
+                {isDescExpanded ? 'Show less' : 'Show more'}
               </button>
             )}
           </div>
         )}
 
-        <div className="model-details-actions">
-          {model.architecture && (
-            <button
-              type="button"
-              onClick={() => toggleSectionExpansion(`${model.id}-architecture`)}
-              className={`detail-btn ${expandedSections.has(`${model.id}-architecture`) ? 'active' : ''}`}
-            >
-              <span className="detail-icon">🏗</span>
-              Architecture
-            </button>
-          )}
-          {model.pricing && (
-            <button
-              type="button"
-              onClick={() => toggleSectionExpansion(`${model.id}-pricing`)}
-              className={`detail-btn ${expandedSections.has(`${model.id}-pricing`) ? 'active' : ''}`}
-            >
-              <span className="detail-icon">💰</span>
-              Pricing
-            </button>
-          )}
-          {model.canonical_slug && (
-            <button
-              type="button"
-              onClick={() => handleProviderToggle(model.id, model.canonical_slug)}
-              className={`detail-btn ${expandedSections.has(`${model.id}-provider`) ? 'active' : ''}`}
-            >
-              <span className="detail-icon">🌐</span>
-              Providers
-            </button>
-          )}
-        </div>
+        {/* Detail buttons - Only for OpenRouter */}
+        {(detailsConfig.showArchitecture || detailsConfig.showPricing || detailsConfig.showEndpoints) && (
+          <div className="model-card__actions">
+            {detailsConfig.showArchitecture && model.architecture && (
+              <button
+                type="button"
+                onClick={() => toggleSectionExpansion(`${model.id}-architecture`)}
+                className={`model-card__action-btn ${expandedSections.has(`${model.id}-architecture`) ? 'model-card__action-btn--active' : ''}`}
+              >
+                Architecture
+              </button>
+            )}
+            {detailsConfig.showPricing && model.pricing && (
+              <button
+                type="button"
+                onClick={() => toggleSectionExpansion(`${model.id}-pricing`)}
+                className={`model-card__action-btn ${expandedSections.has(`${model.id}-pricing`) ? 'model-card__action-btn--active' : ''}`}
+              >
+                Pricing Details
+              </button>
+            )}
+            {detailsConfig.showEndpoints && model.canonical_slug && (
+              <button
+                type="button"
+                onClick={() => handleProviderToggle(model.id, model.canonical_slug)}
+                className={`model-card__action-btn ${expandedSections.has(`${model.id}-provider`) ? 'model-card__action-btn--active' : ''}`}
+              >
+                Providers
+              </button>
+            )}
+          </div>
+        )}
 
+        {/* Expanded sections */}
         {expandedSections.has(`${model.id}-architecture`) && model.architecture && (
-          <div className="expanded-section">
-            <h5>Architecture:</h5>
+          <div className="model-card__details">
+            <h5>Architecture</h5>
             <ul>
-              <li>Input Modalities: {model.architecture.input_modalities?.join(', ')}</li>
-              <li>Output Modalities: {model.architecture.output_modalities?.join(', ')}</li>
+              <li>Input: {model.architecture.input_modalities?.join(', ')}</li>
+              <li>Output: {model.architecture.output_modalities?.join(', ')}</li>
               <li>Tokenizer: {model.architecture.tokenizer}</li>
-              {model.architecture.instruct_type && <li>Instruct Type: {model.architecture.instruct_type}</li>}
+              {model.architecture.instruct_type && <li>Instruct: {model.architecture.instruct_type}</li>}
             </ul>
           </div>
         )}
 
         {expandedSections.has(`${model.id}-pricing`) && model.pricing && (
-          <div className="expanded-section">
-            <h5>Pricing (per 1M tokens):</h5>
+          <div className="model-card__details">
+            <h5>Pricing (per 1M tokens)</h5>
             <ul>
               <li>Prompt: ${(parseFloat(model.pricing.prompt) * 1000000).toFixed(2)}</li>
               <li>Completion: ${(parseFloat(model.pricing.completion) * 1000000).toFixed(2)}</li>
@@ -357,105 +628,80 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
         )}
 
         {expandedSections.has(`${model.id}-provider`) && (
-          <div className="expanded-section">
-            <div className="provider-header-row">
-              <h5>Available Providers/Endpoints:</h5>
+          <div className="model-card__details">
+            <div className="model-card__details-header">
+              <h5>Available Providers</h5>
               {providerPreference && (
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    clearProviderPreference();
-                  }}
-                  className="clear-preference-btn"
-                  title="Clear provider preferences"
+                  onClick={clearProviderPreference}
+                  className="model-card__clear-btn"
                 >
                   Clear Filters
                 </button>
               )}
             </div>
             {loadingEndpoints[model.id] ? (
-              <p className="loading-text">Loading provider information...</p>
+              <p className="model-card__loading">Loading providers...</p>
             ) : modelEndpoints[model.id]?.data?.endpoints ? (
               <>
-                {(() => {
-                  const pref = providerPreference;
-                  if (pref && (pref.only || pref.ignore)) {
-                    return (
-                      <div className="provider-preference-display">
-                        {pref.only && (
-                          <div className="preference-tag only">
-                            Only: {pref.only.join(', ')}
-                          </div>
-                        )}
-                        {pref.ignore && (
-                          <div className="preference-tag ignore">
-                            Ignore: {pref.ignore.join(', ')}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
-                <div className="endpoints-list">
+                {providerPreference && (providerPreference.only || providerPreference.ignore) && (
+                  <div className="model-card__filters">
+                    {providerPreference.only && (
+                      <span className="model-card__filter model-card__filter--only">
+                        Only: {providerPreference.only.join(', ')}
+                      </span>
+                    )}
+                    {providerPreference.ignore && (
+                      <span className="model-card__filter model-card__filter--ignore">
+                        Ignore: {providerPreference.ignore.join(', ')}
+                      </span>
+                    )}
+                  </div>
+                )}
+                <div className="model-card__endpoints">
                   {modelEndpoints[model.id].data.endpoints.map((endpoint: any, idx: number) => {
                     const pref = providerPreference || {};
                     const isInOnly = pref.only?.includes(endpoint.provider_name);
                     const isInIgnore = pref.ignore?.includes(endpoint.provider_name);
 
                     return (
-                      <div key={idx} className="endpoint-item">
-                        <div className="endpoint-header">
-                          <span className="endpoint-provider">{endpoint.provider_name}</span>
+                      <div key={idx} className="model-card__endpoint">
+                        <div className="model-card__endpoint-header">
+                          <span className="model-card__endpoint-name">{endpoint.provider_name}</span>
                           {endpoint.status && (
-                            <span className={`endpoint-status ${endpoint.status}`}>
+                            <span className={`model-card__endpoint-status model-card__endpoint-status--${endpoint.status}`}>
                               {endpoint.status}
                             </span>
                           )}
                           {endpoint.uptime_last_30m !== undefined && (
-                            <span className="endpoint-uptime">
-                              {(endpoint.uptime_last_30m * 100).toFixed(1)}% uptime
+                            <span className="model-card__endpoint-uptime">
+                              {(endpoint.uptime_last_30m * 100).toFixed(1)}%
                             </span>
                           )}
                         </div>
-                        <div className="endpoint-details">
+                        <div className="model-card__endpoint-info">
                           {endpoint.context_length && (
-                            <span className="endpoint-detail">
-                              Context: {endpoint.context_length?.toLocaleString()} tokens
-                            </span>
+                            <span>Context: {endpoint.context_length?.toLocaleString()}</span>
                           )}
                           {endpoint.pricing && (
-                            <span className="endpoint-detail">
-                              Pricing: ${(parseFloat(endpoint.pricing.prompt) * 1000000).toFixed(2)} / ${(parseFloat(endpoint.pricing.completion) * 1000000).toFixed(2)} per 1M
+                            <span>
+                              ${(parseFloat(endpoint.pricing.prompt) * 1000000).toFixed(2)} / ${(parseFloat(endpoint.pricing.completion) * 1000000).toFixed(2)}
                             </span>
                           )}
                         </div>
-                        {endpoint.supported_parameters && endpoint.supported_parameters.length > 0 && (
-                          <div className="endpoint-params">
-                            <small>Params: {endpoint.supported_parameters.join(', ')}</small>
-                          </div>
-                        )}
-                        <div className="endpoint-actions">
+                        <div className="model-card__endpoint-actions">
                           <button
                             type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              toggleProviderOnly(model.id, endpoint.provider_name);
-                            }}
-                            className={`provider-filter-btn ${isInOnly ? 'active-only' : ''}`}
-                            title="Only use this provider"
+                            onClick={() => toggleProviderOnly(model.id, endpoint.provider_name)}
+                            className={`model-card__endpoint-btn ${isInOnly ? 'model-card__endpoint-btn--active' : ''}`}
                           >
                             {isInOnly ? '✓ Only' : 'Only'}
                           </button>
                           <button
                             type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              toggleProviderIgnore(model.id, endpoint.provider_name);
-                            }}
-                            className={`provider-filter-btn ${isInIgnore ? 'active-ignore' : ''}`}
-                            title="Ignore this provider"
+                            onClick={() => toggleProviderIgnore(model.id, endpoint.provider_name)}
+                            className={`model-card__endpoint-btn model-card__endpoint-btn--ignore ${isInIgnore ? 'model-card__endpoint-btn--active' : ''}`}
                           >
                             {isInIgnore ? '✓ Ignore' : 'Ignore'}
                           </button>
@@ -466,7 +712,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
                 </div>
               </>
             ) : (
-              <p className="error-text">Failed to load provider information</p>
+              <p className="model-card__error">Failed to load providers</p>
             )}
           </div>
         )}
@@ -474,208 +720,117 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
     );
   };
 
-  const renderCopilotModelItem = (model: any, isUnsupported = false) => (
-    <div key={model.id} className={`model-item ${isUnsupported ? 'unsupported' : ''}`}>
-      <div className="model-top-bar">
-        <div className="model-title-section">
-          <div className="model-title-row">
-            <h4 className="model-name">{model.name}</h4>
-            {model.policy ? (
-              <span className={`policy-status ${model.policy.state}`}>
-                {model.policy.state === 'enabled' ? '✓' : '⚠'}
-              </span>
-            ) : (
-              <span className="policy-status unsupported-badge">⚠</span>
-            )}
-            {model.version && <span className="model-version">v{model.version}</span>}
-          </div>
-          <span className="model-id">{model.id}</span>
+  // Count total models in a tree node
+  const countModels = (node: TreeNode): number => {
+    if (node.type === 'model') return 1;
+    return node.children?.reduce((sum, child) => sum + countModels(child), 0) || 0;
+  };
+
+  // Render a tree node recursively
+  const renderTreeNode = (node: TreeNode, depth: number = 0): React.ReactNode => {
+    if (node.type === 'model') {
+      return (
+        <div key={node.id} className={`model-tree__model model-tree__model--depth-${depth}`}>
+          {renderModelCard(node.model)}
         </div>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            onSelectModel(model.id);
-          }}
-          className="select-model-btn"
-          title="Use this model"
+      );
+    }
+
+    const isExpanded = expandedFamilies.has(node.id);
+    const modelCount = countModels(node);
+
+    return (
+      <div key={node.id} className={`model-tree__node model-tree__node--${node.type} model-tree__node--depth-${depth}`}>
+        <div
+          className={`model-tree__header ${isExpanded ? 'model-tree__header--expanded' : ''}`}
+          onClick={() => toggleFamilyExpansion(node.id)}
         >
-          <span className="btn-icon">✓</span>
-          Use Model
-        </button>
-      </div>
-
-      {model.policy?.terms ? (
-        <div className="model-policy">
-          <p className="policy-terms">{parseMarkdownLinks(model.policy.terms)}</p>
+          <span className="model-tree__toggle">{isExpanded ? '▼' : '▶'}</span>
+          <span className="model-tree__label">{node.label}</span>
+          <span className="model-tree__count">{modelCount} models</span>
         </div>
-      ) : isUnsupported && (
-        <div className="model-policy unsupported-warning">
-          <p className="policy-terms">
-            ⚠ This model is not officially supported or recommended. Use at your own discretion.
-          </p>
-        </div>
-      )}
-
-      <div className="model-details-actions">
-        {model.capabilities?.supports && (
-          <button
-            type="button"
-            onClick={() => toggleSectionExpansion(`${model.id}-supports`)}
-            className={`detail-btn ${expandedSections.has(`${model.id}-supports`) ? 'active' : ''}`}
-          >
-            <span className="detail-icon">✨</span>
-            Features
-          </button>
-        )}
-        {model.capabilities?.limits && (
-          <button
-            type="button"
-            onClick={() => toggleSectionExpansion(`${model.id}-limits`)}
-            className={`detail-btn ${expandedSections.has(`${model.id}-limits`) ? 'active' : ''}`}
-          >
-            <span className="detail-icon">📊</span>
-            Limits
-          </button>
+        {isExpanded && node.children && (
+          <div className="model-tree__children">
+            {node.children.map(child => renderTreeNode(child, depth + 1))}
+          </div>
         )}
       </div>
+    );
+  };
 
-      {expandedSections.has(`${model.id}-supports`) && model.capabilities?.supports && (
-        <div className="expanded-section">
-          <h5>Supported Features:</h5>
-          <ul>
-            {Object.entries(model.capabilities.supports).map(([feature, supported]) => (
-              <li key={feature} className={supported ? 'supported' : 'not-supported'}>
-                {feature}: {supported ? '✓' : '✗'}
-              </li>
-            ))}
-          </ul>
+  const renderModelList = () => {
+    if (loadingModels) {
+      return <div className="model-browser__loading">Loading models...</div>;
+    }
+
+    if (modelsError) {
+      return (
+        <div className="model-browser__error">
+          <p>Error: {modelsError}</p>
+          <button type="button" onClick={loadModels} className="model-browser__retry-btn">
+            Retry
+          </button>
         </div>
-      )}
+      );
+    }
 
-      {expandedSections.has(`${model.id}-limits`) && model.capabilities?.limits && (
-        <div className="expanded-section">
-          <h5>Model Limits:</h5>
-          <ul>
-            <li>Max Context Window: {model.capabilities.limits.max_context_window_tokens?.toLocaleString()} tokens</li>
-            <li>Max Output: {model.capabilities.limits.max_output_tokens?.toLocaleString()} tokens</li>
-            <li>Max Prompt: {model.capabilities.limits.max_prompt_tokens?.toLocaleString()} tokens</li>
-            {model.capabilities.limits.vision && (
-              <>
-                <li>Max Image Size: {(model.capabilities.limits.vision.max_prompt_image_size / 1024 / 1024).toFixed(1)} MB</li>
-                <li>Max Images: {model.capabilities.limits.vision.max_prompt_images}</li>
-                <li>Supported Media: {model.capabilities.limits.vision.supported_media_types?.join(', ')}</li>
-              </>
-            )}
-          </ul>
+    if (!modelsData?.data || processedModels.length === 0) {
+      if (searchQuery) {
+        return <div className="model-browser__empty">No models found matching "{searchQuery}"</div>;
+      }
+      return <div className="model-browser__empty">No models available</div>;
+    }
+
+    // Tree display (OpenRouter, Gemini)
+    if (modelTree) {
+      return (
+        <div className="model-browser__list model-browser__list--tree">
+          {modelTree.map(node => renderTreeNode(node, 0))}
         </div>
-      )}
-    </div>
-  );
+      );
+    }
 
-  const renderModelItem = (model: any, isUnsupported = false) => {
-    return provider === 'openrouter'
-      ? renderOpenRouterModelItem(model)
-      : renderCopilotModelItem(model, isUnsupported);
+    // Flat list display (Claude, OpenAI, etc.)
+    return (
+      <div className="model-browser__list model-browser__list--flat">
+        {processedModels.map((model: any) => renderModelCard(model))}
+      </div>
+    );
   };
 
   return (
     <div className="model-browser">
-      <div className="model-browser-header">
-        <button
-          type="button"
-          onClick={toggleModelsSection}
-          className="models-toggle-btn"
-        >
-          {showModels ? '▲ Hide Available Models' : '▼ Browse Available Models'}
-        </button>
-      </div>
 
-      {showModels && (
-        <div className="models-section">
-          {loadingModels && <p className="loading-text">Loading models...</p>}
-          {modelsError && (
-            <div className="error-text">
-              <p>Error: {modelsError}</p>
-              <button type="button" onClick={loadModels} className="retry-button">
-                Retry
-              </button>
-            </div>
-          )}
-          {modelsData && !loadingModels && !modelsError && (() => {
-            const { supported, unsupported } = separateModelsBySupport(modelsData.data || []);
-            const supportedGrouped = groupModelsByFamily(supported);
-            const unsupportedGrouped = groupModelsByFamily(unsupported);
+      {
+        <div className="model-browser__content">
+          {/* Toolbar: Search and Sort */}
+          <div className="model-browser__toolbar">
+            <input
+              type="text"
+              placeholder="Search models..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="model-browser__search"
+            />
+            <select
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value as SortOption)}
+              className="model-browser__sort"
+            >
+              <option value="name-asc">Name (A-Z)</option>
+              <option value="name-desc">Name (Z-A)</option>
+              {provider === 'openrouter' && (
+                <>
+                  <option value="price-asc">Price (Low-High)</option>
+                  <option value="price-desc">Price (High-Low)</option>
+                </>
+              )}
+            </select>
+          </div>
 
-            return (
-              <div className="models-display">
-                {Object.entries(supportedGrouped).map(([family, models]) => {
-                  const familyKey = `supported-${family}`;
-                  const isExpanded = expandedFamilies.has(familyKey);
-                  return (
-                    <div key={family} className="model-family">
-                      <div
-                        className="family-header-container"
-                        onClick={() => toggleFamilyExpansion(familyKey)}
-                      >
-                        <h4 className="family-header">{family} Family ({models.length})</h4>
-                        <span className="family-toggle-icon">{isExpanded ? '▼' : '▶'}</span>
-                      </div>
-                      {isExpanded && (
-                        <div className="family-models">
-                          {models.map((model: any) => renderModelItem(model, false))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {Object.keys(unsupportedGrouped).length > 0 && (
-                  <div className="unsupported-models-section">
-                    <div className="unsupported-header">
-                      <h4 className="family-header unsupported-title">
-                        Unrecommended/Unsupported Models
-                      </h4>
-                      <button
-                        type="button"
-                        onClick={() => setShowUnsupportedModels(!showUnsupportedModels)}
-                        className="unsupported-view-btn"
-                      >
-                        {showUnsupportedModels ? 'Hide ▲' : 'View ▼'}
-                      </button>
-                    </div>
-
-                    {showUnsupportedModels && (
-                      <div className="unsupported-models-content">
-                        {Object.entries(unsupportedGrouped).map(([family, models]) => {
-                          const familyKey = `unsupported-${family}`;
-                          const isExpanded = expandedFamilies.has(familyKey);
-                          return (
-                            <div key={family} className="model-family unsupported-family">
-                              <div
-                                className="family-header-container"
-                                onClick={() => toggleFamilyExpansion(familyKey)}
-                              >
-                                <h5 className="family-header unsupported-family-header">{family} Family ({models.length})</h5>
-                                <span className="family-toggle-icon">{isExpanded ? '▼' : '▶'}</span>
-                              </div>
-                              {isExpanded && (
-                                <div className="family-models">
-                                  {models.map((model: any) => renderModelItem(model, true))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
+          {renderModelList()}
         </div>
-      )}
+      }
     </div>
   );
 };

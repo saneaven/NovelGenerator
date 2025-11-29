@@ -49,29 +49,32 @@ class UserSettings(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, unique=True)
 
     # DEPRECATED: Keep for backward compatibility during migration
-    active_provider = Column(String(50), default='copilot')
+    active_provider = Column(String(50), default='openrouter')
     ai_model = Column(String(100), default='gpt-5-mini')
     providers_config = Column(JSONB, server_default='{}')
     provider_preferences = Column(JSONB, server_default='{}')
 
     # NEW: Function-based configuration (provider, model, temperature, advanced settings per function)
     function_configs = Column(JSONB, nullable=False, server_default="""{
-        "chat": {"provider": "copilot", "model": "gpt-4o-mini", "temperature": 0.7, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
-        "translation": {"provider": "copilot", "model": "gpt-4o", "temperature": 0.2, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
-        "storyEdit": {"provider": "copilot", "model": "gpt-4o", "temperature": 0.3, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
-        "chapterGen": {"provider": "copilot", "model": "gpt-4o", "temperature": 0.7, "advanced": {"enablePrefill": true, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}}
+        "chat": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
+        "translation": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.2, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
+        "storyEdit": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.3, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
+        "chapterGen": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "advanced": {"enablePrefill": true, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}}
     }""")
 
     # NEW: Provider credentials (shared across functions)
     provider_credentials = Column(JSONB, nullable=False, server_default="""{
-        "copilot": {},
+        "openai": {"apiKey": ""},
+        "gemini": {"apiKey": ""},
+        "claude": {"apiKey": ""},
         "openrouter": {"apiKey": ""},
         "custom": {"baseUrl": "", "apiKey": ""}
     }""")
 
     # Language settings
-    primary_language = Column(String(50), default='English', nullable=False)
-    secondary_language = Column(String(50))
+    main_language = Column(String(50), default='English', nullable=False)
+    sub_languages = Column(JSONB, server_default='[]')  # Array of strings
+    default_sub_language = Column(String(50))  # For quick-translate, nullable
 
     # Theme settings
     theme = Column(String(20), default='system', nullable=False)
@@ -269,7 +272,7 @@ class Chapter(Base):
 
     # Relationships
     act = relationship("Act", back_populates="chapters")
-    content = relationship("ChapterContent", back_populates="chapter", uselist=False, cascade="all, delete-orphan")
+    manuscript = relationship("Manuscript", back_populates="chapter", uselist=False, cascade="all, delete-orphan")
 
 
 # ============================================================================
@@ -299,12 +302,12 @@ class StoryObjectVersion(Base):
 
 
 # ============================================================================
-# CHAPTER CONTENT (Novel Writing)
+# MANUSCRIPT (Novel Writing - Chapter Content)
 # ============================================================================
 
-class ChapterContent(Base):
-    """Content for each chapter - structure only (content in object_translations)"""
-    __tablename__ = 'chapter_contents'
+class Manuscript(Base):
+    """Manuscript content for each chapter - structure only (content in object_translations)"""
+    __tablename__ = 'manuscripts'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     chapter_id = Column(UUID(as_uuid=True), ForeignKey('chapters.id', ondelete='CASCADE'), nullable=False, unique=True)
@@ -313,17 +316,16 @@ class ChapterContent(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
-    chapter = relationship("Chapter", back_populates="content")
-    # Note: ChapterContentVersion kept for backward compatibility during migration
-    versions = relationship("ChapterContentVersion", back_populates="chapter_content", cascade="all, delete-orphan")
+    chapter = relationship("Chapter", back_populates="manuscript")
+    versions = relationship("ManuscriptVersion", back_populates="manuscript", cascade="all, delete-orphan")
 
 
-class ChapterContentVersion(Base):
-    """Version history for chapter content with multilingual support"""
-    __tablename__ = 'chapter_content_versions'
+class ManuscriptVersion(Base):
+    """Version history for manuscript content with multilingual support"""
+    __tablename__ = 'manuscript_versions'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    chapter_content_id = Column(UUID(as_uuid=True), ForeignKey('chapter_contents.id', ondelete='CASCADE'), nullable=False, index=True)
+    manuscript_id = Column(UUID(as_uuid=True), ForeignKey('manuscripts.id', ondelete='CASCADE'), nullable=False, index=True)
 
     user_request = Column(Text)
     is_active = Column(Boolean, default=False, nullable=False)
@@ -335,7 +337,7 @@ class ChapterContentVersion(Base):
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships
-    chapter_content = relationship("ChapterContent", back_populates="versions")
+    manuscript = relationship("Manuscript", back_populates="versions")
 
 
 # ============================================================================

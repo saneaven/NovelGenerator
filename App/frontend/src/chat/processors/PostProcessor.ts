@@ -9,7 +9,7 @@ import type { ThinkingDetail, ContentPart } from '../../llm_request/types';
 export class DefaultPostProcessor implements PostProcessor {
   process(
     aiResponse: any,
-    context: ChatPipelineContext
+    _context: ChatPipelineContext
   ): PostProcessingResult {
     let contentParts: ContentPart[];
     let tool_calls: any[] | undefined;

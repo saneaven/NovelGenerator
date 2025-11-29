@@ -6,7 +6,9 @@ from enum import Enum
 
 class ProviderType(str, Enum):
     """AI provider types"""
-    COPILOT = "copilot"
+    OPENAI = "openai"
+    GEMINI = "gemini"
+    CLAUDE = "claude"
     OPENROUTER = "openrouter"
     CUSTOM = "custom"
 
@@ -27,8 +29,11 @@ class ProviderPreference(BaseModel):
 
 class ThinkingConfig(BaseModel):
     """Thinking configuration for model-native thinking"""
-    effort: Optional[str] = "medium"  # 'low' | 'medium' | 'high'
+    effort: Optional[str] = "medium"  # legacy OpenRouter-style effort
     maxTokens: Optional[int] = None
+    claudeBudgetTokens: Optional[int] = None
+    geminiThinkingLevel: Optional[str] = None  # 'low' | 'high'
+    geminiBudgetTokens: Optional[int] = None
 
 
 class AdvancedFunctionSettings(BaseModel):
@@ -50,11 +55,6 @@ class FunctionAIConfig(BaseModel):
         use_enum_values = True
 
 
-class CopilotCredentials(BaseModel):
-    """Copilot credentials (empty - server-side auth)"""
-    pass
-
-
 class OpenRouterCredentials(BaseModel):
     """OpenRouter credentials"""
     apiKey: str = ""
@@ -66,9 +66,26 @@ class CustomCredentials(BaseModel):
     apiKey: Optional[str] = ""
 
 
+class ClaudeCredentials(BaseModel):
+    """Claude (Anthropic) credentials"""
+    apiKey: str = ""
+
+
+class GeminiCredentials(BaseModel):
+    """Gemini (Google) credentials"""
+    apiKey: str = ""
+
+
+class OpenAICredentials(BaseModel):
+    """OpenAI credentials"""
+    apiKey: str = ""
+
+
 class ProviderCredentials(BaseModel):
     """All provider credentials"""
-    copilot: CopilotCredentials = Field(default_factory=CopilotCredentials)
+    openai: OpenAICredentials = Field(default_factory=OpenAICredentials)
+    gemini: GeminiCredentials = Field(default_factory=GeminiCredentials)
+    claude: ClaudeCredentials = Field(default_factory=ClaudeCredentials)
     openrouter: OpenRouterCredentials = Field(default_factory=OpenRouterCredentials)
     custom: CustomCredentials = Field(default_factory=CustomCredentials)
 
@@ -84,8 +101,9 @@ class UserSettingsResponse(BaseModel):
     """User settings response"""
     functionConfigs: Dict[str, FunctionAIConfig]
     providerCredentials: ProviderCredentials
-    primaryLanguage: str
-    secondaryLanguage: Optional[str] = None
+    mainLanguage: str
+    subLanguages: List[str] = []
+    defaultSubLanguage: Optional[str] = None
     theme: str = "system"
 
     class Config:
@@ -96,6 +114,7 @@ class UserSettingsUpdate(BaseModel):
     """Update user settings"""
     functionConfigs: Optional[Dict[str, FunctionAIConfig]] = None
     providerCredentials: Optional[ProviderCredentials] = None
-    primaryLanguage: Optional[str] = None
-    secondaryLanguage: Optional[str] = None
+    mainLanguage: Optional[str] = None
+    subLanguages: Optional[List[str]] = None
+    defaultSubLanguage: Optional[str] = None
     theme: Optional[str] = None

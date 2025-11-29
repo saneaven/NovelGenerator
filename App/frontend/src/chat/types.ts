@@ -1,5 +1,4 @@
-import type { ConversationBlock, ChatMessage, ContentPart } from '../llm_request/types';
-import type { StoryObjects } from '../types/storyObject';
+import type { ConversationBlock, ChatMessage, ContentPart, FunctionCallMetadata } from '../llm_request/types';
 import type { FunctionCallSchema } from './types/functionCalling';
 import type {
   ChatSystemPromptContext,
@@ -7,6 +6,7 @@ import type {
   StoryObjectEditPromptContext,
   ChapterEditPromptContext,
 } from './managers/SystemPromptManager';
+import type { ThinkingConfig } from '../store/settingsStore';
 
 // Extend existing ChatMessage for pipeline processing
 export interface ProcessedChatMessage extends ChatMessage {
@@ -48,26 +48,25 @@ export interface EditCard {
   title: string;
   description: string;
   isApplied: boolean;
+  isRejected?: boolean; // True if user explicitly rejected this card
   data: any;
   editTagData?: any; // Store the full edit tag data for direct access
   appliedAt?: Date; // When the card was applied
-  onApply: () => void;
-  onReject: () => void;
+  functionCall?: FunctionCallMetadata; // Reference to the original function call metadata
+  onApply?: () => void; // Optional - not needed when using grouped card
+  onReject?: () => void; // Optional - not needed when using grouped card
 }
 
 // Chat pipeline context
 export interface ChatPipelineContext {
   projectId: string;
-  storyObjects: StoryObjects;
+  storyObjects: any; // Simplified story objects from store
   systemInsertConfig: SystemInsertConfig;
   novelData?: any; // Novel content data
   mode: 'novelEditor' | 'workspace'; // Explicit mode distinction
   enablePrefill?: boolean; // Enable assistant prefill at the end
   thinkingMode?: 'off' | 'model' | 'custom'; // Thinking mode: off, model-native thinking, or custom prompt-based
-  thinkingConfig?: {
-    effort?: 'low' | 'medium' | 'high';
-    maxTokens?: number;
-  };
+  thinkingConfig?: ThinkingConfig;
 }
 
 // Pipeline processor interfaces

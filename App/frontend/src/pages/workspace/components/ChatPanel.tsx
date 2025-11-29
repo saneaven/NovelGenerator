@@ -1,25 +1,23 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useChatStore, type StoredChatMessage } from '../../../store/chatStore';
+import { useChatUIStore } from '../../../store/chatUIStore';
 import { useProjectStore } from '../../../store/projectStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import type { SystemInsertConfig, EditCard } from '../../../chat/types';
 import { TranslationService } from '../../../services/translationService';
 import { ChatPipeline } from '../../../chat/ChatPipeline';
-import { EditCardComponent } from '../../../chat/processors/DisplayProcessor';
-import type { WorkspaceUIState, WorkspaceUIActions } from '../hooks/useWorkspaceState';
 import type { StoryObjects } from '../../../types/storyObject';
 import type { ChatMessage, FunctionCallProgress } from '../../../llm_request/types';
 import ToggleSwitch from '../../../components/ToggleSwitch';
 import ThinkingDisplay from '../../../components/ThinkingDisplay';
 import FunctionCallPreviewCard from './FunctionCallPreviewCard';
+import GroupedFunctionCallCard from '../../../components/functionCall/GroupedFunctionCallCard';
 import { collapseContentParts } from '../../../chat/utils/contentParts';
 
 interface ChatPanelProps
 {
     projectId: string;
-    uiState: WorkspaceUIState;
-    uiActions: WorkspaceUIActions;
     systemInsertConfig: SystemInsertConfig;
     setSystemInsertConfig: (config: SystemInsertConfig | ((prev: SystemInsertConfig) => SystemInsertConfig)) => void;
     chatPipeline: ChatPipeline;
@@ -27,6 +25,8 @@ interface ChatPanelProps
     novelData?: Record<string, unknown>;
     messageEditCards: Record<string, EditCard[]>;
     activeFunctionCalls: Record<string, FunctionCallProgress[]>;
+    onBatchConfirm: (messageId: string, selections: Record<string, boolean>) => Promise<void>;
+    isMessageConfirmed: (messageId: string) => boolean;
     onSubmit: (e: React.FormEvent, input: string, isLoading: boolean) => Promise<void>;
     onStop: () => void;
     onEditMessage: (messageId: string, content: string, language: string) => void;
@@ -50,8 +50,6 @@ interface DisplayMessageInfo
 
 const ChatPanel: React.FC<ChatPanelProps> = ({
     projectId,
-    uiState,
-    uiActions,
     systemInsertConfig,
     setSystemInsertConfig,
     chatPipeline,
@@ -59,6 +57,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     novelData,
     messageEditCards,
     activeFunctionCalls,
+    onBatchConfirm,
+    isMessageConfirmed,
     onSubmit,
     onStop,
     onEditMessage,
@@ -71,23 +71,30 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 }) =>
 {
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const { getSelectedChatId, getSelectedChat, convertToDisplayMessage, addTranslatedMessage } = useChatStore();
+    const { convertToDisplayMessage, addTranslatedMessage } = useChatStore();
+    const chatUI = useChatUIStore();
     const { getCurrentProject } = useProjectStore();
     const { settings } = useSettingsStore();
     const { showError } = useErrorStore();
 
-    const primaryLanguage = settings.primaryLanguage;
-    const secondaryLanguage = settings.secondaryLanguage;
-    const aiModel = settings.aiModel;
+    const mainLanguage = settings.mainLanguage;
+    const defaultSubLanguage = settings.defaultSubLanguage;
 
-    const selectedChatId = getSelectedChatId(projectId);
-    const selectedChat = selectedChatId ? getSelectedChat(projectId) : undefined;
+    // Use state selectors for proper Zustand reactivity (re-render when store changes)
+    // IMPORTANT: Get chatId from state inside selector, not from closure (avoids stale value)
+    const selectedChatId = useChatStore((state) => state.selectedChatByProject[projectId]);
+    const selectedChat = useChatStore((state) => {
+        const chatId = state.selectedChatByProject[projectId];
+        if (!chatId) return undefined;
+        return state.chatsByProject[projectId]?.find((c) => c.id === chatId);
+    });
     const storedMessages = useMemo(() => selectedChat?.messages ?? [], [selectedChat]);
 
     const [translatingMessages, setTranslatingMessages] = useState<Record<string, boolean>>({});
     const [translationErrors, setTranslationErrors] = useState<Record<string, string | null>>({});
     const [isControlsCollapsed, setIsControlsCollapsed] = useState(true);
-    const [isTranslationView, setIsTranslationView] = useState(false);
+    // Per-message language view: tracks which messages are showing translation
+    const [messageLanguageView, setMessageLanguageView] = useState<Record<string, 'primary' | 'secondary'>>({});
 
     const currentProject = getCurrentProject();
 
@@ -112,11 +119,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
     useEffect(() =>
     {
-        // If secondary language disappears, snap back to primary view
-        if (!secondaryLanguage) {
-            setIsTranslationView(false);
+        // If secondary language disappears, reset all per-message views to primary
+        if (!defaultSubLanguage) {
+            setMessageLanguageView({});
         }
-    }, [secondaryLanguage]);
+    }, [defaultSubLanguage]);
 
     useEffect(() =>
     {
@@ -128,7 +135,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
             }
         }
-    }, [storedMessages, uiState.isLoading]);
+    }, [storedMessages, chatUI.isLoading(projectId)]);
 
     const displayContext = useMemo(() =>
     {
@@ -144,8 +151,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     const resolveDisplayInfo = useCallback(
         (message: StoredChatMessage): DisplayMessageInfo =>
         {
-            const wantsTranslation = Boolean(isTranslationView && secondaryLanguage);
-            const requestedLanguage = wantsTranslation && secondaryLanguage ? secondaryLanguage : primaryLanguage;
+            // Check per-message language preference
+            const messageView = messageLanguageView[message.id];
+            const wantsTranslation = Boolean(messageView === 'secondary' && defaultSubLanguage);
+            const requestedLanguage = wantsTranslation && defaultSubLanguage ? defaultSubLanguage : mainLanguage;
             const hasRequestedLanguage = Boolean(requestedLanguage && message.data[requestedLanguage]);
 
             if (hasRequestedLanguage)
@@ -162,11 +171,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
             const fallback = TranslationService.getBestLanguageData(
                 message.data,
-                primaryLanguage,
-                secondaryLanguage ?? undefined
+                mainLanguage,
+                defaultSubLanguage ?? undefined
             );
 
-            const displayLanguage = fallback?.language ?? requestedLanguage ?? primaryLanguage;
+            const displayLanguage = fallback?.language ?? requestedLanguage ?? mainLanguage;
             const fallbackLanguage = fallback ? fallback.language : null;
             const chatMessage = convertToDisplayMessage(message, displayLanguage);
 
@@ -179,7 +188,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 fallbackLanguage
             };
         },
-        [isTranslationView, primaryLanguage, secondaryLanguage, convertToDisplayMessage]
+        [messageLanguageView, mainLanguage, defaultSubLanguage, convertToDisplayMessage]
     );
 
     const displayMessages = useMemo(
@@ -189,9 +198,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
     const translateMessage = async (message: StoredChatMessage) =>
     {
-        if (!secondaryLanguage)
+        if (!defaultSubLanguage)
         {
-            showError('Translation Failed', 'No secondary language configured.');
+            showError('Translation Failed', 'No default translation language configured. Add sub languages in Settings.');
             return;
         }
         if (!selectedChatId)
@@ -200,8 +209,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             return;
         }
 
-        const sourceLanguage = primaryLanguage;
-        const targetLanguage = secondaryLanguage;
+        const sourceLanguage = mainLanguage;
+        const targetLanguage = defaultSubLanguage;
         const sourceData = message.data[sourceLanguage] || TranslationService.getBestLanguageData(message.data, sourceLanguage)?.data;
         if (!sourceData)
         {
@@ -254,7 +263,13 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 thinking_details: sourceData.thinking_details, // Keep original (not translated)
             };
 
-            addTranslatedMessage(projectId, selectedChatId, message.id, translatedData, targetLanguage);
+            await addTranslatedMessage(projectId, selectedChatId, message.id, translatedData, targetLanguage);
+
+            // Auto-switch to show translation after successful translate
+            setMessageLanguageView(prev => ({
+                ...prev,
+                [message.id]: 'secondary'
+            }));
         } catch (error)
         {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred during translation.';
@@ -280,7 +295,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                     </div>
                 )}
                 {processed.displayContent}
-                {uiState.isLoading &&
+                {chatUI.isLoading(projectId) &&
                     message.chatMessage.role === 'assistant' &&
                     message === displayMessages[displayMessages.length - 1] && (
                         <div className="typing-indicator inline">
@@ -293,11 +308,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         );
     };
 
-    const translationEnabled = Boolean(secondaryLanguage && secondaryLanguage !== primaryLanguage);
-    const translationTargetLabel = secondaryLanguage || 'secondary language';
+    const translationEnabled = Boolean(defaultSubLanguage && defaultSubLanguage !== mainLanguage);
+    const translationTargetLabel = defaultSubLanguage || 'secondary language';
 
     return (
-        <div className={`chat-panel ${uiState.isChatVisible ? 'visible' : 'hidden'}`}>
+        <div className={`chat-panel ${chatUI.isChatVisible(projectId) ? 'visible' : 'hidden'}`}>
             <div className="chat-header">
                 <div className="chat-header-left">
                     <button
@@ -306,10 +321,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                         {
                             if (window.innerWidth <= 768)
                             {
-                                uiActions.setIsMobileSidebarVisible(true);
+                                chatUI.setMobileSidebarVisible(projectId, true);
                             } else
                             {
-                                uiActions.setIsDesktopChatListVisible(!uiState.isDesktopChatListVisible);
+                                chatUI.setDesktopChatListVisible(projectId, !chatUI.isDesktopChatListVisible(projectId));
                             }
                         }}
                         title="View chat list"
@@ -318,24 +333,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                     </button>
                     <h2>{selectedChat?.name || 'AI Chat'}</h2>
                 </div>
-                {translationEnabled && (
-                    <div className="chat-translation-toggle">
-                        <button
-                            className="chat-toggle-btn"
-                            onClick={() => setIsTranslationView(prev => !prev)}
-                            disabled={uiState.isLoading}
-                            title={isTranslationView ? `View ${primaryLanguage}` : `View ${translationTargetLabel}`}
-                        >
-                            {isTranslationView ? `View ${primaryLanguage}` : `View ${translationTargetLabel}`}
-                        </button>
-                        {isTranslationView && (
-                            <span className="translation-view-note">Viewing translation (read-only)</span>
-                        )}
-                    </div>
-                )}
                 <button
                     className="chat-close-btn mobile-only"
-                    onClick={() => uiActions.setIsChatVisible(false)}
+                    onClick={() => chatUI.setChatVisible(projectId, false)}
                 >
                     Close
                 </button>
@@ -358,15 +358,16 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 {
                     const isAssistant = message.chatMessage.role === 'assistant';
                     const isUser = message.chatMessage.role === 'user';
-                    const isEditing = uiState.editingMessageId === message.chatMessage.id;
+                    const editing = chatUI.getEditing(projectId);
+                    const isEditing = editing.messageId === message.chatMessage.id;
                     const processingResult = chatPipeline.processForDisplay(message.chatMessage, displayContext);
-                    const isLastAssistantLoading = isAssistant && index === displayMessages.length - 1 && uiState.isLoading;
+                    const isLastAssistantLoading = isAssistant && index === displayMessages.length - 1 && chatUI.isLoading(projectId);
                     const isTranslating = Boolean(translatingMessages[message.storedMessage.id]);
-                    const primaryMessage = message.storedMessage.data[primaryLanguage]
-                        ? convertToDisplayMessage(message.storedMessage, primaryLanguage)
+                    const primaryMessage = message.storedMessage.data[mainLanguage]
+                        ? convertToDisplayMessage(message.storedMessage, mainLanguage)
                         : message.chatMessage;
                     const { content: primaryPlainContent } = collapseContentParts(primaryMessage.contentParts);
-                    const translationAvailable = secondaryLanguage ? Boolean(message.storedMessage.data[secondaryLanguage]) : false;
+                    const translationAvailable = defaultSubLanguage ? Boolean(message.storedMessage.data[defaultSubLanguage]) : false;
                     const translateButtonLabel = translationAvailable
                         ? `Refresh ${translationTargetLabel}`
                         : `Translate to ${translationTargetLabel}`;
@@ -380,9 +381,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                             {/* Show thinking above the message bubble */}
                             {message.chatMessage.role === 'assistant' && (
                                 <ThinkingDisplay
+                                    messageId={message.chatMessage.id}
                                     contentParts={message.chatMessage.contentParts}
                                     displayMode="separate"
-                                    isStreaming={uiState.isLoading && message.chatMessage.id === storedMessages[storedMessages.length - 1]?.id}
+                                    isStreaming={chatUI.isLoading(projectId) && message.chatMessage.id === storedMessages[storedMessages.length - 1]?.id}
                                 />
                             )}
 
@@ -396,7 +398,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                     <div className="message-edit">
                                         <textarea
                                             ref={editTextareaRef}
-                                            value={uiState.editContent}
+                                            value={editing.content}
                                             onChange={onEditContentChange}
                                             placeholder={`Edit content`}
                                         />
@@ -404,9 +406,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                             <button
                                                 className="save-button"
                                                 onClick={() => onSaveEdit(
-                                                    uiState.editingMessageId,
-                                                    uiState.editContent,
-                                                    uiState.editingLanguage || message.displayLanguage
+                                                    editing.messageId,
+                                                    editing.content,
+                                                    editing.language || message.displayLanguage
                                                 )}
                                             >
                                                 Save
@@ -423,6 +425,25 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                                 <div className="translation-error">{translationErrors[message.storedMessage.id]}</div>
                                             )}
                                             <div className="action-buttons">
+                                                {/* Per-message language toggle - only show when translation exists */}
+                                                {translationAvailable && (
+                                                    <button
+                                                        className="action-btn language-toggle-btn"
+                                                        onClick={() => setMessageLanguageView(prev => ({
+                                                            ...prev,
+                                                            [message.storedMessage.id]: prev[message.storedMessage.id] === 'secondary' ? 'primary' : 'secondary'
+                                                        }))}
+                                                        title={messageLanguageView[message.storedMessage.id] === 'secondary'
+                                                            ? `Switch to ${mainLanguage}`
+                                                            : `Switch to ${defaultSubLanguage}`
+                                                        }
+                                                    >
+                                                        {messageLanguageView[message.storedMessage.id] === 'secondary'
+                                                            ? defaultSubLanguage?.slice(0, 2).toUpperCase()
+                                                            : mainLanguage?.slice(0, 2).toUpperCase()
+                                                        }
+                                                    </button>
+                                                )}
                                                 {translationEnabled && (
                                                     <button
                                                         className="action-btn translate-btn"
@@ -436,8 +457,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                                 <button
                                                     className="action-btn edit-btn"
                                                     onClick={() => {
-                                                        setIsTranslationView(false);
-                                                        onEditMessage(message.chatMessage.id, primaryPlainContent, primaryLanguage);
+                                                        // Switch to primary view for this message when editing
+                                                        setMessageLanguageView(prev => ({
+                                                            ...prev,
+                                                            [message.storedMessage.id]: 'primary'
+                                                        }));
+                                                        onEditMessage(message.chatMessage.id, primaryPlainContent, mainLanguage);
                                                     }}
                                                     disabled={isTranslating || !primaryPlainContent.trim()}
                                                     title="Edit"
@@ -488,11 +513,14 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                 </div>
                             )}
 
-                            {messageEditCards[message.chatMessage.id] && (
+                            {messageEditCards[message.chatMessage.id] && messageEditCards[message.chatMessage.id].length > 0 && (
                                 <div className="message-edit-cards">
-                                    {messageEditCards[message.chatMessage.id].map(card => (
-                                        <EditCardComponent key={card.id} card={card} />
-                                    ))}
+                                    <GroupedFunctionCallCard
+                                        cards={messageEditCards[message.chatMessage.id]}
+                                        onConfirm={(selections) => onBatchConfirm(message.chatMessage.id, selections)}
+                                        isConfirmed={isMessageConfirmed(message.chatMessage.id)}
+                                        storyObjects={storyObjects}
+                                    />
                                 </div>
                             )}
                         </div>
@@ -540,25 +568,25 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                     )}
                 </div>
 
-                <form onSubmit={(e) => onSubmit(e, uiState.input, uiState.isLoading)} className="chat-form">
+                <form onSubmit={(e) => onSubmit(e, chatUI.getInput(projectId), chatUI.isLoading(projectId))} className="chat-form">
                     <div className="input-group">
                         <textarea
-                            value={uiState.input}
-                            onChange={(e) => uiActions.setInput(e.target.value)}
-                            placeholder={`Enter a message in ${primaryLanguage}...`}
+                            value={chatUI.getInput(projectId)}
+                            onChange={(e) => chatUI.setInput(projectId, e.target.value)}
+                            placeholder={`Enter a message in ${mainLanguage}...`}
                             rows={1}
                             className="chat-input"
-                            disabled={uiState.isLoading}
+                            disabled={chatUI.isLoading(projectId)}
                             onKeyDown={(e) =>
                             {
                                 if (e.key === 'Enter' && !e.shiftKey)
                                 {
                                     e.preventDefault();
-                                    onSubmit(e as any, uiState.input, uiState.isLoading);
+                                    onSubmit(e as any, chatUI.getInput(projectId), chatUI.isLoading(projectId));
                                 }
                             }}
                         />
-                        {uiState.isLoading ? (
+                        {chatUI.isLoading(projectId) ? (
                             <button type="button" onClick={onStop} className="stop-button">
                                 Stop
                             </button>

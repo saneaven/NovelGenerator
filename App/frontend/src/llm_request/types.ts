@@ -34,6 +34,7 @@ export interface FunctionCallMetadata {
   arguments: any;
   result?: any;
   isApplied: boolean;
+  isRejected?: boolean; // True if user explicitly rejected this function call
   appliedAt?: Date;
   error?: string;
   resultMessage?: string; // Human-readable result message
@@ -90,6 +91,7 @@ export interface FunctionCallResultSummary {
   functionCallId: string;
   functionName: string;
   success: boolean;
+  isRejected?: boolean; // True if user explicitly rejected this function call
   resultMessage: string;
   appliedAt: Date;
 }

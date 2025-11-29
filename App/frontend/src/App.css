@@ -448,6 +448,29 @@
     font-size: var(--font-size-2xl);
 }
 
+.back-home-btn {
+    width: 100%;
+    margin-top: var(--spacing-xl);
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-md);
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-base);
+}
+
+.back-home-btn:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text-primary);
+    border-color: var(--color-border-medium);
+}
+
+.back-home-btn:active {
+    transform: scale(0.98);
+}
+
 /* ===== Error Container ===== */
 .error-container {
     text-align: center;

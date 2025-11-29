@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { chatService, type ChatResponse, type ChatMessageResponse } from '../api';
-import { type ChatMessage, type FunctionCallMetadata, type ContentPart } from '../llm_request/types';
+import { type ChatMessage, type FunctionCallMetadata, type ContentPart, type Role } from '../llm_request/types';
 import { type LanguageData } from '../types/multilingual';
 
 // Language-specific content for chat messages
@@ -50,7 +50,7 @@ interface ChatStore {
 
   // Function call management
   updateMessageFunctionCalls: (projectId: string, chatId: string, messageId: string, functionCalls: FunctionCallMetadata[]) => void;
-  updateFunctionCallStatus: (projectId: string, chatId: string, messageId: string, functionCallId: string, isApplied: boolean, result?: any, error?: string, resultMessage?: string) => void;
+  updateFunctionCallStatus: (projectId: string, chatId: string, messageId: string, functionCallId: string, isApplied: boolean, result?: any, error?: string, resultMessage?: string, isRejected?: boolean) => void;
 
   // Translation support
   addTranslatedMessage: (
@@ -62,7 +62,7 @@ interface ChatStore {
       thinking_details?: any[];
     },
     targetLanguage: string
-  ) => void;
+  ) => Promise<void>;
   clearMessageTranslations: (
     projectId: string,
     chatId: string,
@@ -99,7 +99,7 @@ const convertToDisplayMessage = (storedMessage: StoredChatMessage, language: str
 const convertBackendMessage = (message: ChatMessageResponse): StoredChatMessage => {
   return {
     id: message.id,
-    role: message.role,
+    role: message.role as Role,
     data: message.data,
     functionCalls: message.function_calls,
     timestamp: new Date(message.created_at),
@@ -484,7 +484,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     }
   },
 
-  updateFunctionCallStatus: async (projectId: string, chatId: string, messageId: string, functionCallId: string, isApplied: boolean, result?: any, error?: string, resultMessage?: string) => {
+  updateFunctionCallStatus: async (projectId: string, chatId: string, messageId: string, functionCallId: string, isApplied: boolean, result?: any, error?: string, resultMessage?: string, isRejected?: boolean) => {
     // Update local state first for immediate UI response
     set((state) => ({
       chatsByProject: {
@@ -503,13 +503,16 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
                               ? {
                                   ...funcCall,
                                   isApplied,
+                                  isRejected: isRejected ?? false,
                                   result,
                                   error,
                                   resultMessage:
                                     resultMessage ||
-                                    (isApplied
-                                      ? 'Function call accepted and executed successfully'
-                                      : 'Function call was rejected'),
+                                    (isRejected
+                                      ? 'User rejected this function call'
+                                      : isApplied
+                                        ? 'Function call accepted and executed successfully'
+                                        : 'Function call was rejected'),
                                   appliedAt: isApplied ? new Date() : undefined,
                                 }
                               : funcCall
@@ -543,8 +546,8 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     }
   },
 
-  // Translation support (local updates - would sync to backend on next message update)
-  addTranslatedMessage: (
+  // Translation support - syncs to backend
+  addTranslatedMessage: async (
     projectId: string,
     chatId: string,
     messageId: string,
@@ -554,6 +557,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     },
     targetLanguage: string
   ) => {
+    // 1. Update local state first (optimistic update for immediate UI response)
     set((state) => ({
       chatsByProject: {
         ...state.chatsByProject,
@@ -581,6 +585,17 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         ) || [],
       },
     }));
+
+    // 2. Sync to backend
+    try {
+      await chatService.updateMessage(projectId, chatId, messageId, {
+        content_parts: translatedData.contentParts,
+        language: targetLanguage,
+        thinking_details: translatedData.thinking_details,
+      });
+    } catch (error) {
+      console.error('Failed to persist translation to backend:', error);
+    }
   },
 
   clearMessageTranslations: (

@@ -26,6 +26,9 @@
 }
 
 .chat-header h2 {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
     margin: 0;
     font-size: var(--font-size-lg);
     font-weight: var(--font-weight-semibold);
@@ -34,6 +37,8 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     letter-spacing: -0.015em;
+    max-width: 50%;
+    text-align: center;
 }
 
 /* ===== Chat List Button ===== */

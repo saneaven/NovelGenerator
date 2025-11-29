@@ -1,7 +1,9 @@
 import type { FunctionCallMetadata } from '../../llm_request/types';
-import type { UnifiedObjectStore } from '../../store/unifiedObjectStore';
-import type { ObjectType } from '../../types/unifiedObject';
+import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import type { ObjectType, UnifiedObject } from '../../types/unifiedObject';
 import { useSettingsStore } from '../../store/settingsStore';
+
+type UnifiedObjectStore = ReturnType<typeof useUnifiedObjectStore.getState>;
 
 export interface EditTagApplicationResult {
   success: boolean;
@@ -9,424 +11,282 @@ export interface EditTagApplicationResult {
   error?: string;
 }
 
+type Handler = (projectId: string, args: any) => Promise<EditTagApplicationResult>;
+
 export class FunctionCallApplicator {
   private store: UnifiedObjectStore;
+  private language: string;
 
   constructor(store: UnifiedObjectStore) {
     this.store = store;
+    this.language = useSettingsStore.getState().settings.mainLanguage;
   }
 
   async applyFunctionCall(
     projectId: string,
     functionCall: FunctionCallMetadata
   ): Promise<EditTagApplicationResult> {
-    try {
-      switch (functionCall.function_name) {
-        case 'manage_story_objects':
-          return await this.applyManageStoryObjects(projectId, functionCall.arguments);
-        default:
-          return {
-            success: false,
-            message: 'Unknown function name',
-            error: `Unsupported function: ${functionCall.function_name}`
-          };
-      }
-    } catch (error) {
+    const args = typeof functionCall.arguments === 'string'
+      ? this.safeParse(functionCall.arguments)
+      : functionCall.arguments;
+
+    const handler = this.handlers[functionCall.function_name];
+    if (!handler) {
       return {
         success: false,
-        message: 'Failed to apply function call',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
-    }
-  }
-
-
-  private async applyManageStoryObjects(
-    projectId: string,
-    args: any
-  ): Promise<EditTagApplicationResult> {
-    if (!args || !args.operations || !Array.isArray(args.operations)) {
-      return {
-        success: false,
-        message: 'Invalid manage_story_objects arguments',
-        error: 'Function must receive operations array'
+        message: 'Unknown function',
+        error: `Unsupported function: ${functionCall.function_name}`,
       };
     }
 
-    let processedCount = 0;
-    let errorCount = 0;
-    const results: string[] = [];
-
-    for (const operation of args.operations) {
-      const { action, type, id, data } = operation;
-
-      if (!action || !type) {
-        results.push(`Skipped operation: missing action or type`);
-        errorCount++;
-        continue;
-      }
-
-      try {
-        switch (action) {
-          case 'create':
-            if (await this.handleCreateOperation(projectId, type, data, results)) {
-              processedCount++;
-            } else {
-              errorCount++;
-            }
-            break;
-          case 'update':
-            if (!id || !data) {
-              results.push(`Skipped update operation for ${type}: missing id or data`);
-              errorCount++;
-              continue;
-            }
-            if (await this.handleUpdateOperation(projectId, type, id, data, results)) {
-              processedCount++;
-            } else {
-              errorCount++;
-            }
-            break;
-          case 'delete':
-            if (!id) {
-              results.push(`Skipped delete operation for ${type}: missing id`);
-              errorCount++;
-              continue;
-            }
-            if (await this.handleDeleteOperation(projectId, type, id, results)) {
-              processedCount++;
-            } else {
-              errorCount++;
-            }
-            break;
-          default:
-            results.push(`Unknown action: ${action}`);
-            errorCount++;
-        }
-      } catch (error) {
-        results.push(`Error processing ${action} ${type}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        errorCount++;
-      }
-    }
-
-    return {
-      success: errorCount === 0,
-      message: `Processed ${processedCount} operations${results.length ? `: ${results.join(', ')}` : ''}`,
-      error: errorCount ? results.join(', ') : undefined
-    };
+    return handler(projectId, args || {});
   }
 
-  private async handleCreateOperation(
-    projectId: string,
-    type: string,
-    data: any,
-    results: string[]
-  ): Promise<boolean> {
-    if (!data) {
-      results.push(`Skipped create ${type}: missing data`);
-      return false;
-    }
+  // ------------------------------------------------------------------------ //
+  // Handlers
+  // ------------------------------------------------------------------------ //
 
-    const settings = useSettingsStore.getState();
-    const language = settings.settings.primaryLanguage;
+  private handlers: Record<string, Handler> = {
+    // Basic info
+    create_basic_info: async (projectId, args) => {
+      const { title, logline, genre } = args || {};
+      if (!title || !logline || !genre) {
+        return this.error('Missing required fields for basic info');
+      }
 
-    // Map old type names to ObjectType
-    let objectType: ObjectType;
-    switch (type) {
-      case 'basic_info':
-        objectType = 'basic_info';
-        break;
-      case 'character':
-        objectType = 'character';
-        break;
-      case 'organization':
-        objectType = 'organization';
-        break;
-      case 'location':
-        objectType = 'location';
-        break;
-      case 'lorebook':
-        objectType = 'lorebook';
-        break;
-      case 'act':
-        objectType = 'act';
-        break;
-      case 'chapter':
-        objectType = 'chapter';
-        break;
-      default:
-        results.push(`Unknown create type: ${type}`);
-        return false;
-    }
+      const existing = await this.store.listObjects('basic_info', projectId);
+      if (existing.length > 0) {
+        const basic = existing[0];
+        await this.store.updateObject('basic_info', basic.id, {
+          data: { title, logline, genre },
+          language: basic.languages.active,
+          create_new_version: true,
+          user_request: 'AI Edit',
+        });
+        return this.ok('Updated basic info');
+      }
 
-    switch (objectType) {
-      case 'basic_info': {
-        // Get basic info for this project
-        const basicInfoList = await this.store.listObjects('basic_info', projectId);
+      await this.store.createObject('basic_info', projectId, { title, logline, genre }, this.language);
+      return this.ok('Created basic info');
+    },
 
-        if (basicInfoList.length > 0) {
-          // Update existing
-          const basicInfo = basicInfoList[0];
-          await this.store.updateObject('basic_info', basicInfo.id, {
-            data: {
-              title: data.title || '',
-              logline: data.logline || '',
-              genre: data.genre || ''
+    update_basic_info: async (_projectId, args) => {
+      const { id, title, logline, genre } = args || {};
+      if (!id) return this.error('Missing id for update_basic_info');
+
+      const object = await this.ensureObject('basic_info', id);
+      await this.store.updateObject('basic_info', id, {
+        data: {
+          title: title ?? object.data.title,
+          logline: logline ?? object.data.logline,
+          genre: genre ?? object.data.genre,
+        },
+        language: object.languages.active,
+        create_new_version: true,
+        user_request: 'AI Edit',
+      });
+      return this.ok('Updated basic info');
+    },
+
+    // Characters
+    create_character: async (projectId, args) =>
+      this.createSimple('character', projectId, args),
+    update_character: async (_projectId, args) =>
+      this.updateSimple('character', args),
+    delete_character: async (_projectId, args) =>
+      this.deleteSimple('character', args),
+
+    // Organizations
+    create_organization: async (projectId, args) =>
+      this.createSimple('organization', projectId, args),
+    update_organization: async (_projectId, args) =>
+      this.updateSimple('organization', args),
+    delete_organization: async (_projectId, args) =>
+      this.deleteSimple('organization', args),
+
+    // Locations
+    create_location: async (projectId, args) =>
+      this.createSimple('location', projectId, args),
+    update_location: async (_projectId, args) =>
+      this.updateSimple('location', args),
+    delete_location: async (_projectId, args) =>
+      this.deleteSimple('location', args),
+
+    // Lorebook
+    create_lorebook_entry: async (projectId, args) =>
+      this.createSimple('lorebook', projectId, args),
+    update_lorebook_entry: async (_projectId, args) =>
+      this.updateSimple('lorebook', args),
+    delete_lorebook_entry: async (_projectId, args) =>
+      this.deleteSimple('lorebook', args),
+
+    // Acts
+    create_act: async (projectId, args) => {
+      const { name, description, order, chapters } = args || {};
+      if (!name || !description) {
+        return this.error('Missing name or description for act');
+      }
+
+      const acts = await this.store.listObjects('act', projectId);
+      const actOrder = Number.isFinite(order) ? order : acts.length;
+
+      const newAct = await this.store.createObject(
+        'act',
+        projectId,
+        { name, description },
+        this.language,
+        { order: actOrder }
+      );
+
+      if (Array.isArray(chapters)) {
+        for (let i = 0; i < chapters.length; i += 1) {
+          const ch = chapters[i];
+          if (!ch) continue;
+          const chapterOrder = Number.isFinite(ch.order) ? ch.order : i;
+          await this.store.createObject(
+            'chapter',
+            projectId,
+            {
+              name: ch.name || '',
+              description: ch.description || '',
             },
-            language: basicInfo.languages.active,
-            create_new_version: true,
-            user_request: 'AI Edit',
-          });
-        } else {
-          // Create new
-          await this.store.createObject('basic_info', projectId, {
-            title: data.title || '',
-            logline: data.logline || '',
-            genre: data.genre || ''
-          }, language);
+            this.language,
+            { act_id: newAct.id, order: chapterOrder }
+          );
         }
-        results.push(`Created/updated basic info`);
-        return true;
       }
-      case 'character':
-        await this.store.createObject('character', projectId, {
-          name: data.name || '',
-          description: data.description || ''
-        }, language);
-        results.push(`Created character: ${data.name}`);
-        return true;
-      case 'organization':
-        await this.store.createObject('organization', projectId, {
-          name: data.name || '',
-          description: data.description || ''
-        }, language);
-        results.push(`Created organization: ${data.name}`);
-        return true;
-      case 'location':
-        await this.store.createObject('location', projectId, {
-          name: data.name || '',
-          description: data.description || ''
-        }, language);
-        results.push(`Created location: ${data.name}`);
-        return true;
-      case 'lorebook':
-        await this.store.createObject('lorebook', projectId, {
-          name: data.name || '',
-          description: data.description || ''
-        }, language);
-        results.push(`Created lorebook entry: ${data.name}`);
-        return true;
-      case 'act': {
-        const acts = await this.store.listObjects('act', projectId);
-        const actOrder = typeof data.order === 'number' && Number.isFinite(data.order)
-          ? data.order
-          : acts.length;
 
-        const newAct = await this.store.createObject('act', projectId, {
-          name: data.name || '',
-          description: data.description || ''
-        }, language, {
-          order: actOrder
-        });
+      return this.ok(`Created act "${name}"`);
+    },
 
-        // Handle chapters within act if provided
-        if (data.chapters && Array.isArray(data.chapters)) {
-          for (let index = 0; index < data.chapters.length; index += 1) {
-            const chapter = data.chapters[index];
-            if (!chapter) {
-              continue;
-            }
+    update_act: async (_projectId, args) => {
+      const { id, name, description } = args || {};
+      if (!id) return this.error('Missing id for update_act');
+      const object = await this.ensureObject('act', id);
 
-            const chapterOrder = typeof chapter.order === 'number' && Number.isFinite(chapter.order)
-              ? chapter.order
-              : index;
+      await this.store.updateObject('act', id, {
+        data: {
+          name: name ?? object.data.name,
+          description: description ?? object.data.description,
+        },
+        language: object.languages.active,
+        create_new_version: true,
+        user_request: 'AI Edit',
+      });
 
-            await this.store.createObject('chapter', projectId, {
-              name: chapter.name || '',
-              description: chapter.description || ''
-            }, language, {
-              act_id: newAct.id,
-              order: chapterOrder
-            });
-          }
-        }
-        results.push(`Created act: ${data.name}`);
-        return true;
+      return this.ok('Updated act');
+    },
+
+    delete_act: async (_projectId, args) => this.deleteSimple('act', args),
+
+    // Chapters
+    create_chapter: async (projectId, args) => {
+      const { name, description, actId, order } = args || {};
+      if (!name || !description || !actId) {
+        return this.error('Missing required fields for create_chapter');
       }
-      case 'chapter': {
-        if (!data.actId) {
-          results.push(`Skipped create chapter: missing actId`);
-          return false;
-        }
 
-        const chapters = await this.store.listObjects('chapter', projectId);
-        const existingChapters = chapters.filter(ch => ch.metadata.act_id === data.actId);
-        const chapterOrder = typeof data.order === 'number' && Number.isFinite(data.order)
-          ? data.order
-          : existingChapters.length;
+      const chapters = await this.store.listObjects('chapter', projectId);
+      const existingInAct = chapters.filter((ch: UnifiedObject) => ch.metadata?.act_id === actId);
+      const chapterOrder = Number.isFinite(order) ? order : existingInAct.length;
 
-        await this.store.createObject('chapter', projectId, {
-          name: data.name || '',
-          description: data.description || ''
-        }, language, {
-          act_id: data.actId,
-          order: chapterOrder
-        });
-        results.push(`Created chapter: ${data.name}`);
-        return true;
-      }
-      default:
-        results.push(`Unknown create type: ${type}`);
+      await this.store.createObject(
+        'chapter',
+        projectId,
+        { name, description },
+        this.language,
+        { act_id: actId, order: chapterOrder }
+      );
+
+      return this.ok(`Created chapter "${name}"`);
+    },
+
+    update_chapter: async (_projectId, args) => {
+      const { id, name, description } = args || {};
+      if (!id) return this.error('Missing id for update_chapter');
+
+      const object = await this.ensureObject('chapter', id);
+
+      await this.store.updateObject('chapter', id, {
+        data: {
+          name: name ?? object.data.name,
+          description: description ?? object.data.description,
+        },
+        language: object.languages.active,
+        create_new_version: true,
+        user_request: 'AI Edit',
+      });
+
+      return this.ok('Updated chapter');
+    },
+
+    delete_chapter: async (_projectId, args) => this.deleteSimple('chapter', args),
+  };
+
+  // ------------------------------------------------------------------------ //
+  // Helpers
+  // ------------------------------------------------------------------------ //
+
+  private async createSimple(type: ObjectType, projectId: string, args: any): Promise<EditTagApplicationResult> {
+    const { name, description } = args || {};
+    if (!name || !description) {
+      return this.error(`Missing name or description for ${type}`);
     }
 
-    return false;
+    await this.store.createObject(type, projectId, { name, description }, this.language);
+    return this.ok(`Created ${type}: ${name}`);
   }
 
-  private async handleUpdateOperation(
-    projectId: string,
-    type: string,
-    id: string,
-    data: any,
-    results: string[]
-  ): Promise<boolean> {
-    const itemName = data.name || 'Unknown';
+  private async updateSimple(type: ObjectType, args: any): Promise<EditTagApplicationResult> {
+    const { id, name, description } = args || {};
+    if (!id) return this.error(`Missing id for update_${type}`);
 
-    // Map old type names to ObjectType
-    let objectType: ObjectType;
-    switch (type) {
-      case 'basic_info':
-        objectType = 'basic_info';
-        break;
-      case 'character':
-        objectType = 'character';
-        break;
-      case 'organization':
-        objectType = 'organization';
-        break;
-      case 'location':
-        objectType = 'location';
-        break;
-      case 'lorebook':
-        objectType = 'lorebook';
-        break;
-      case 'act':
-        objectType = 'act';
-        break;
-      case 'chapter':
-        objectType = 'chapter';
-        break;
-      default:
-        results.push(`Unknown update type: ${type}`);
-        return false;
-    }
-
-    // Get the object
-    let object = this.store.getObject(id);
-    if (!object) {
-      // If the object isn't in the local cache, try fetching it
-      try {
-        await this.store.fetchObject(objectType, id);
-        object = this.store.getObject(id);
-      } catch (fetchError) {
-        results.push(`${type} with id ${id} not found`);
-        return false;
-      }
-    }
-
-    if (!object) {
-      results.push(`${type} with id ${id} not found`);
-      return false;
-    }
-
-    // Handle order for acts and chapters
-    if (objectType === 'act' && (typeof data.order !== 'number' || !Number.isFinite(data.order))) {
-      data.order = object.metadata.order;
-    } else if (objectType === 'chapter' && (typeof data.order !== 'number' || !Number.isFinite(data.order))) {
-      data.order = object.metadata.order;
-      if (!data.actId) {
-        data.actId = object.metadata.act_id;
-      }
-    }
-
-    // Update the object
-    const updateData: any = {};
-    if (objectType === 'basic_info') {
-      updateData.title = data.title !== undefined ? data.title : object.data.title;
-      updateData.logline = data.logline !== undefined ? data.logline : object.data.logline;
-      updateData.genre = data.genre !== undefined ? data.genre : object.data.genre;
-    } else {
-      updateData.name = data.name !== undefined ? data.name : object.data.name;
-      updateData.description = data.description !== undefined ? data.description : object.data.description;
-    }
-
-    await this.store.updateObject(objectType, id, {
-      data: updateData,
+    const object = await this.ensureObject(type, id);
+    await this.store.updateObject(type, id, {
+      data: {
+        name: name ?? object.data.name,
+        description: description ?? object.data.description,
+      },
       language: object.languages.active,
       create_new_version: true,
       user_request: 'AI Edit',
     });
-
-    const displayName = objectType === 'basic_info' ? 'basic info' : itemName;
-    results.push(`Updated ${objectType}: ${displayName}`);
-    return true;
+    return this.ok(`Updated ${type}`);
   }
 
-  private async handleDeleteOperation(
-    projectId: string,
-    type: string,
-    id: string,
-    results: string[]
-  ): Promise<boolean> {
-    // Map old type names to ObjectType
-    let objectType: ObjectType;
-    switch (type) {
-      case 'character':
-        objectType = 'character';
-        break;
-      case 'organization':
-        objectType = 'organization';
-        break;
-      case 'location':
-        objectType = 'location';
-        break;
-      case 'lorebook':
-        objectType = 'lorebook';
-        break;
-      case 'act':
-        objectType = 'act';
-        break;
-      case 'chapter':
-        objectType = 'chapter';
-        break;
-      default:
-        results.push(`Unknown delete type: ${type}`);
-        return false;
-    }
+  private async deleteSimple(type: ObjectType, args: any): Promise<EditTagApplicationResult> {
+    const { id } = args || {};
+    if (!id) return this.error(`Missing id for delete_${type}`);
+    await this.store.deleteObject(type, id);
+    return this.ok(`Deleted ${type}`);
+  }
 
-    // Get the object to get its name
+  private async ensureObject(type: ObjectType, id: string) {
     let object = this.store.getObject(id);
     if (!object) {
-      try {
-        await this.store.fetchObject(objectType, id);
-        object = this.store.getObject(id);
-      } catch (fetchError) {
-        results.push(`${type} with id ${id} not found`);
-        return false;
-      }
+      await this.store.fetchObject(type, id);
+      object = this.store.getObject(id);
     }
-
     if (!object) {
-      results.push(`${type} with id ${id} not found`);
-      return false;
+      throw new Error(`${type} with id ${id} not found`);
     }
-
-    const objectName = object.data.name || 'Unknown';
-
-    // Delete the object
-    await this.store.deleteObject(objectType, id);
-
-    results.push(`Deleted ${objectType}: ${objectName}`);
-    return true;
+    return object;
   }
 
+  private ok(message: string): EditTagApplicationResult {
+    return { success: true, message };
+  }
+
+  private error(message: string): EditTagApplicationResult {
+    return { success: false, message, error: message };
+  }
+
+  private safeParse(raw: string): any {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
 }
+

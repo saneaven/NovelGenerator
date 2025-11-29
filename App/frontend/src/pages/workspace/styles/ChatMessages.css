@@ -279,6 +279,21 @@
     color: var(--color-error-dark);
 }
 
+.action-btn.language-toggle-btn {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-bold);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    min-width: 2.5rem;
+    background: var(--color-primary-light);
+    border-color: var(--color-primary-main);
+    color: var(--color-primary-main);
+}
+
+.action-btn.language-toggle-btn:hover:not(:disabled) {
+    background: var(--color-primary-main);
+    color: var(--color-primary-contrast);
+}
+
 /* ===== Translation Error ===== */
 .translation-error {
     background: var(--color-error-light);

@@ -17,17 +17,20 @@ You will receive **{{ variable.objectCount }}** object(s) to translate.
 5. **Natural Language**: Ensure all translations sound natural and fluent in the target language, not mechanical.
 6. **Completeness**: Translate EVERY object in the provided payload without skipping any.
 
-## Object Types
+## Available Translation Functions
 
-You may encounter the following object types:
-- **basic_info**: Story title, logline, and genre
-- **character**: Character name and description
-- **organization**: Organization name and description
-- **location**: Location name and description
-- **lorebook**: Lorebook entry name and description
-- **act**: Act name and description
-- **chapter**: Chapter name and description
-- **chapter_content**: Full chapter content text with word count
+Call the appropriate function for each object type:
+
+| Object Type | Function | Required Fields |
+|-------------|----------|-----------------|
+| character | `translate_character` | id, name, description |
+| organization | `translate_organization` | id, name, description |
+| location | `translate_location` | id, name, description |
+| lorebook | `translate_lorebook_entry` | id, name, description |
+| act | `translate_act` | id, name, description |
+| chapter | `translate_chapter` | id, name, description |
+| basic_info | `translate_basic_info` | id, title, logline, genre |
+| manuscript | `translate_manuscript` | id, content |
 
 ## Workflow
 
@@ -35,19 +38,23 @@ You may encounter the following object types:
    - For single objects: Focus on accuracy and natural expression.
    - For multiple objects: Additionally ensure cross-object consistency in terminology.
 
-2. Translate all objects maintaining consistency in terminology and style.
+2. For EACH object in the input, call the appropriate `translate_*` function.
+   - You MUST call one function per object
+   - Each function call translates exactly ONE object
+   - Call multiple functions in sequence within your response
 
-3. Use the `translate_batch_story_objects` function with an array containing ALL translated objects.
-   - Even if you receive only 1 object, return it in an array format.
+3. Use the object's `objectId` as the `id` parameter in each function call.
 
-4. Ensure each object in your response includes the correct `objectType` and `objectId` from the source.
+4. Include all required fields for the object type (see table above).
 
-5. Include the appropriate translated fields for each object type:
-   - For **basic_info**: title, logline, genre
-   - For **chapter_content**: content, wordCount (calculate word count for translated text)
-   - For all other types (character, organization, location, lorebook, act, chapter): name, description
+5. After calling all functions, provide a brief confirmation of the translations.
 
-6. After calling the function, provide a brief confirmation of the translation.
+## Example
+
+If given 3 objects to translate (1 character, 1 location, 1 basic_info), you should make 3 separate function calls:
+- First call: `translate_character` with the character's id, name, description
+- Second call: `translate_location` with the location's id, name, description
+- Third call: `translate_basic_info` with the basic_info's id, title, logline, genre
 
 ## User Instructions
 
@@ -61,9 +68,9 @@ Please follow these instructions while maintaining all other translation require
 
 ## Critical Requirements
 
-- **MUST process ALL objects in the payload** - Never skip or omit any objects
-- **MUST maintain the exact objectId and objectType** for each translation
-- **MUST include all required fields** for each object type (see workflow step 5)
-- **MUST return a non-empty translations array** - An empty array will cause an error
-- For chapter content with word count, calculate the accurate word count in the target language
-- Keep terminology consistent across related objects (e.g., character names should be the same across all objects when translating multiple items)
+- **MUST call the appropriate translate function for EACH object** - Do not skip any objects
+- **MUST use the correct function for each object type** - See the table above
+- **MUST use the exact objectId as the id parameter** - Match the source object ID exactly
+- **MUST include all required fields** - Each function has specific required fields
+- **Call N functions for N objects** - One function call per object
+- Keep terminology consistent across all translations (e.g., character names should match)

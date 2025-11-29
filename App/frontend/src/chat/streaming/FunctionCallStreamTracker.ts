@@ -95,6 +95,8 @@ export class FunctionCallStreamTracker {
           return idx;
         }
       }
+      // New ID we haven't seen before: assign a fresh slot so it doesn't collide
+      return this.drafts.size;
     }
 
     return fallbackPosition;

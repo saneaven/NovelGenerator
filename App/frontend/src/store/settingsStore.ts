@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+﻿import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { settingsService } from '../api/settingsService';
 import { promptService } from '../api/promptService';
@@ -6,7 +6,7 @@ import type { FunctionType, PromptCategory } from '../types/prompts';
 import { getPromptKey } from '../types/prompts';
 
 // Types
-export type ProviderType = 'copilot' | 'openrouter' | 'custom';
+export type ProviderType = 'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom';
 export type AIFunctionType = 'chat' | 'translation' | 'storyEdit' | 'chapterGen';
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -19,7 +19,15 @@ export interface ProviderConfig {
 
 // Provider configurations (credentials only - shared across functions)
 export interface ProviderCredentials {
-    copilot: {};
+    openai: {
+        apiKey: string;
+    };
+    gemini: {
+        apiKey: string;
+    };
+    claude: {
+        apiKey: string;
+    };
     openrouter: {
         apiKey: string;
     };
@@ -35,10 +43,14 @@ export interface ProviderPreference {
     ignore?: string[];
 }
 
-// Thinking configuration for model-native thinking (OpenRouter)
+// Thinking configuration for model-native thinking
 export interface ThinkingConfig {
-    effort?: 'low' | 'medium' | 'high';
+    effort?: 'none' | 'low' | 'medium' | 'high';  // 'none' for GPT-5
     maxTokens?: number;
+    verbosity?: 'low' | 'medium' | 'high';  // GPT-5 output verbosity
+    claudeBudgetTokens?: number;
+    geminiThinkingLevel?: 'low' | 'high';  // Gemini only supports low/high
+    geminiBudgetTokens?: number;
 }
 
 // Advanced settings for AI functions
@@ -68,8 +80,9 @@ export interface Settings {
     };
 
     // Language settings
-    primaryLanguage: string;
-    secondaryLanguage: string | null;
+    mainLanguage: string;
+    subLanguages: string[];
+    defaultSubLanguage: string | null;
 
     // Theme settings
     theme: ThemeMode;
@@ -78,7 +91,15 @@ export interface Settings {
 // Default settings
 const defaultSettings: Settings = {
     providerCredentials: {
-        copilot: {},
+        openai: {
+            apiKey: '',
+        },
+        gemini: {
+            apiKey: '',
+        },
+        claude: {
+            apiKey: '',
+        },
         openrouter: {
             apiKey: '',
         },
@@ -91,7 +112,7 @@ const defaultSettings: Settings = {
     functionConfigs: {
         // Chat: Fast and cheap for conversation
         chat: {
-            provider: 'copilot',
+            provider: 'openrouter',
             model: 'gpt-4o-mini',
             temperature: 0.7,
             advanced: {
@@ -105,21 +126,7 @@ const defaultSettings: Settings = {
 
         // Translation: Accurate for language translation
         translation: {
-            provider: 'copilot',
-            model: 'gpt-4o',
-            temperature: 0.2,
-            advanced: {
-                enablePrefill: false,
-                thinkingMode: 'off',
-                thinkingConfig: {
-                    effort: 'medium',
-                },
-            },
-        },
-
-        // Batch Translation: Consistent batch translation
-        batchTranslation: {
-            provider: 'copilot',
+            provider: 'openrouter',
             model: 'gpt-4o',
             temperature: 0.2,
             advanced: {
@@ -133,7 +140,7 @@ const defaultSettings: Settings = {
 
         // Story Edit: Good at structured editing
         storyEdit: {
-            provider: 'copilot',
+            provider: 'openrouter',
             model: 'gpt-4o',
             temperature: 0.3,
             advanced: {
@@ -147,7 +154,7 @@ const defaultSettings: Settings = {
 
         // Chapter Gen: Creative writing
         chapterGen: {
-            provider: 'copilot',
+            provider: 'openrouter',
             model: 'gpt-4o',
             temperature: 0.7,
             advanced: {
@@ -160,8 +167,9 @@ const defaultSettings: Settings = {
         },
     },
 
-    primaryLanguage: 'English',
-    secondaryLanguage: null,
+    mainLanguage: 'English',
+    subLanguages: [],
+    defaultSubLanguage: null,
 
     // Default to system theme preference
     theme: 'system',
@@ -196,8 +204,11 @@ interface SettingsStore {
     getProviderConfig: (provider: ProviderType) => any;
 
     // Language setters
-    setPrimaryLanguage: (language: string) => void;
-    setSecondaryLanguage: (language: string | null) => void;
+    setMainLanguage: (language: string) => void;
+    setSubLanguages: (languages: string[]) => void;
+    setDefaultSubLanguage: (language: string | null) => void;
+    addSubLanguage: (language: string) => void;
+    removeSubLanguage: (language: string) => void;
 
     // Theme setter
     setTheme: (theme: ThemeMode) => void;
@@ -245,8 +256,9 @@ const mergeWithDefaults = (stored: any): Settings => {
             ...defaultSettings.functionConfigs,
             ...migratedFunctionConfigs,
         },
-        primaryLanguage: stored.primaryLanguage ?? defaultSettings.primaryLanguage,
-        secondaryLanguage: stored.secondaryLanguage ?? defaultSettings.secondaryLanguage,
+        mainLanguage: stored.mainLanguage ?? defaultSettings.mainLanguage,
+        subLanguages: stored.subLanguages ?? defaultSettings.subLanguages,
+        defaultSubLanguage: stored.defaultSubLanguage ?? defaultSettings.defaultSubLanguage,
         theme: stored.theme ?? defaultSettings.theme,
     };
 };
@@ -404,16 +416,66 @@ export const useSettingsStore = create<SettingsStore>()(
             },
 
             // Language setters
-            setPrimaryLanguage: (language) => {
+            setMainLanguage: (language: string) => {
                 set((state) => ({
-                    settings: { ...state.settings, primaryLanguage: language },
+                    settings: { ...state.settings, mainLanguage: language },
                 }));
             },
 
-            setSecondaryLanguage: (language) => {
+            setSubLanguages: (languages: string[]) => {
+                set((state) => {
+                    // If default is no longer in the list, update it
+                    const newDefault = state.settings.defaultSubLanguage && languages.includes(state.settings.defaultSubLanguage)
+                        ? state.settings.defaultSubLanguage
+                        : languages[0] || null;
+                    return {
+                        settings: {
+                            ...state.settings,
+                            subLanguages: languages,
+                            defaultSubLanguage: newDefault,
+                        },
+                    };
+                });
+            },
+
+            setDefaultSubLanguage: (language: string | null) => {
                 set((state) => ({
-                    settings: { ...state.settings, secondaryLanguage: language },
+                    settings: { ...state.settings, defaultSubLanguage: language },
                 }));
+            },
+
+            addSubLanguage: (language: string) => {
+                set((state) => {
+                    if (state.settings.subLanguages.includes(language)) {
+                        return state; // Already exists
+                    }
+                    const newSubLanguages = [...state.settings.subLanguages, language];
+                    return {
+                        settings: {
+                            ...state.settings,
+                            subLanguages: newSubLanguages,
+                            // Set as default if it's the first one
+                            defaultSubLanguage: state.settings.defaultSubLanguage || language,
+                        },
+                    };
+                });
+            },
+
+            removeSubLanguage: (language: string) => {
+                set((state) => {
+                    const newSubLanguages = state.settings.subLanguages.filter(l => l !== language);
+                    // Update default if we removed it
+                    const newDefault = state.settings.defaultSubLanguage === language
+                        ? newSubLanguages[0] || null
+                        : state.settings.defaultSubLanguage;
+                    return {
+                        settings: {
+                            ...state.settings,
+                            subLanguages: newSubLanguages,
+                            defaultSubLanguage: newDefault,
+                        },
+                    };
+                });
             },
 
             // Theme setter

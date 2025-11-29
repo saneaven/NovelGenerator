@@ -2,11 +2,12 @@ import type { MutableRefObject } from 'react';
 import type {
   ChatMessage,
   ContentPart,
+  ContentPartType,
   FunctionCallMetadata,
   FunctionCallProgress,
 } from '../../llm_request/types';
 import { streamChat } from '../../llm_request/llmService';
-import type { ProviderConfig, ProviderType } from '../../store/settingsStore';
+import type { ProviderConfig, ProviderType, ThinkingConfig } from '../../store/settingsStore';
 import { ChatPipeline } from '../ChatPipeline';
 import type {
   ChatPipelineContext,
@@ -30,10 +31,7 @@ export interface LLMRequestManagerConfig {
   mode: 'novelEditor' | 'workspace';
   enablePrefill?: boolean;
   thinkingMode?: 'off' | 'model' | 'custom';
-  thinkingConfig?: {
-    effort?: 'low' | 'medium' | 'high';
-    maxTokens?: number;
-  };
+  thinkingConfig?: ThinkingConfig;
   abortControllerRef: MutableRefObject<AbortController | null>;
 }
 
@@ -52,11 +50,16 @@ export interface LLMRequestManagerOptions {
 
 export class LLMRequestManager {
   private isStreaming = false;
+  private readonly config: LLMRequestManagerConfig;
+  private readonly callbacks: LLMRequestManagerCallbacks;
 
   constructor(
-    private readonly config: LLMRequestManagerConfig,
-    private readonly callbacks: LLMRequestManagerCallbacks
-  ) {}
+    config: LLMRequestManagerConfig,
+    callbacks: LLMRequestManagerCallbacks
+  ) {
+    this.config = config;
+    this.callbacks = callbacks;
+  }
 
   async run(userMessage: ChatMessage | null, options: LLMRequestManagerOptions): Promise<void> {
     if (this.isStreaming) {
@@ -69,7 +72,7 @@ export class LLMRequestManager {
     const assistantMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'assistant',
-      content: '',
+      contentParts: [],
       timestamp: new Date(),
     };
 
@@ -100,7 +103,7 @@ export class LLMRequestManager {
     this.config.abortControllerRef.current = new AbortController();
 
     const collectedContentParts: ContentPart[] = [];
-    let currentPartType: ContentPart['type'] | null = null;
+    let currentPartType: ContentPartType | null = null;
     let currentBuffer = '';
     let accumulatedThinkingDetails: any[] | undefined;
     const toolCallTracker = new FunctionCallStreamTracker(functions ?? this.config.functions);
@@ -118,7 +121,7 @@ export class LLMRequestManager {
       this.callbacks.onStreamUpdate(nextParts);
     };
 
-    const thinkingTypeForMode = () => 'thinking';
+    const thinkingType: ContentPartType = 'thinking';
 
     try {
       for await (const chunk of streamChat(
@@ -155,7 +158,6 @@ export class LLMRequestManager {
 
         const thinkingText = (chunk as any).thinking_text;
         if (thinkingText) {
-          const thinkingType = thinkingTypeForMode();
           if (currentPartType !== thinkingType) {
             finalizeCurrentBuffer();
             const lastPart = collectedContentParts[collectedContentParts.length - 1];

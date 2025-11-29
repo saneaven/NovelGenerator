@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
-import { useNovelStore, type ChapterContentData } from '../store/novelStore';
 import { useSettingsStore } from '../store/settingsStore';
 import type { FunctionCallMetadata, ContentPart } from '../llm_request/types';
 import { ChatPipeline } from '../chat/ChatPipeline';
 import { NOVEL_EDITOR_FUNCTIONS } from '../chat/types/functionCalling';
 import { LLMRequestManager } from '../chat/sessions/LLMRequestManager';
+import type { ManuscriptObject } from '../types/unifiedObject';
 
 interface NovelContextOptions {
   basicInfo: boolean;
@@ -49,38 +49,20 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const unifiedStore = useUnifiedObjectStore();
-  const novelStore = useNovelStore();
   const settingsStore = useSettingsStore();
   const abortControllerRef = useRef<AbortController | null>(null);
   const taskRunnerRef = useRef<LLMRequestManager | null>(null);
 
-  const getActiveLanguageContent = (targetChapterId: string): ChapterContentData | null => {
-    const primaryLanguage = settingsStore.settings.primaryLanguage;
-    const languageContent = novelStore.getChapterContentForLanguage(
-      projectId,
-      targetChapterId,
-      primaryLanguage
-    );
-    if (languageContent) {
-      return languageContent;
-    }
-
-    const chapterContent = novelStore.getChapterContent(projectId, targetChapterId);
-    if (!chapterContent) {
+  // Get manuscript data from unified store
+  const getActiveLanguageContent = (targetChapterId: string): { content: string; wordCount: number } | null => {
+    const manuscriptObj = unifiedStore.getManuscriptByChapterId(targetChapterId) as ManuscriptObject | null;
+    if (!manuscriptObj || !manuscriptObj.data) {
       return null;
     }
-
-    const activeVersion = chapterContent.versions.find((version) => version.is_active);
-    if (!activeVersion) {
-      return null;
-    }
-
-    const [fallbackLanguage] = Object.keys(activeVersion.data);
-    if (!fallbackLanguage) {
-      return null;
-    }
-
-    return activeVersion.data[fallbackLanguage] || null;
+    return {
+      content: manuscriptObj.data.content || '',
+      wordCount: manuscriptObj.data.wordCount || 0,
+    };
   };
 
   useEffect(() => {
@@ -191,22 +173,23 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
 
       // All novel content
       if (contextOptions.allNovelContent) {
-        const allChapterContents = novelStore.getAllChapterContents(projectId);
+        const allManuscripts = await unifiedStore.listObjects('manuscript', projectId);
         const novelContent: Record<string, any> = {};
 
         // Get all chapters from unified store for metadata
         const allChapters = await unifiedStore.listObjects('chapter', projectId);
         const chapterMap = new Map(allChapters.map(ch => [ch.id, ch]));
 
-        Object.keys(allChapterContents).forEach((id) => {
-          const chapterInfo = chapterMap.get(id);
+        allManuscripts.forEach((manuscriptObj) => {
+          const contentChapterId = manuscriptObj.metadata?.chapter_id as string | undefined;
+          if (!contentChapterId) return;
+          const chapterInfo = chapterMap.get(contentChapterId);
           if (chapterInfo) {
-            const chapterLanguageContent = getActiveLanguageContent(id);
-            novelContent[id] = {
+            novelContent[contentChapterId] = {
               chapterName: chapterInfo.data.name || '',
               chapterDescription: chapterInfo.data.description || '',
-              content: chapterLanguageContent?.content || '',
-              wordCount: chapterLanguageContent?.wordCount ?? 0,
+              content: manuscriptObj.data?.content || '',
+              wordCount: manuscriptObj.data?.wordCount ?? 0,
             };
           }
         });
@@ -265,10 +248,24 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         promptType: 'chapter_edit' as const,
       };
 
+      // Get novel data from unified store - convert to expected format
+      const getNovelData = () => {
+        const allContent: Record<string, any> = {};
+        Object.values(unifiedStore.objects).forEach(obj => {
+          if (obj.type === 'manuscript' && obj.metadata?.project_id === projectId) {
+            const contentChapterId = obj.metadata?.chapter_id as string;
+            if (contentChapterId) {
+              allContent[contentChapterId] = obj;
+            }
+          }
+        });
+        return allContent;
+      };
+
       const taskRunnerConfig = {
         projectId,
         getStoryObjects,
-        getNovelData: () => novelStore.getAllChapterContents(projectId),
+        getNovelData,
         systemInsertConfig,
         chatPipeline: new ChatPipeline(),
         provider: chapterGenConfig.provider,
@@ -280,7 +277,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         mode: 'novelEditor' as const,
         enablePrefill: chapterGenConfig.advanced.enablePrefill,
         thinkingMode: chapterGenConfig.advanced.thinkingMode as any,
-        thinkingConfig: chapterGenConfig.advanced.thinkingConfig,
+        thinkingConfig: chapterGenConfig.advanced.thinkingConfig as any,
         abortControllerRef,
       };
 
@@ -294,9 +291,9 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         },
         onFunctionCalls: async (functionCalls: FunctionCallMetadata[]) => {
           try {
-            const updateCall = functionCalls.find((fc) => fc.function_name === 'update_chapter_content');
+            const updateCall = functionCalls.find((fc) => fc.function_name === 'update_manuscript');
             if (!updateCall) {
-              setError('AI did not call update_chapter_content function');
+              setError('AI did not call update_manuscript function');
               return;
             }
 
@@ -304,7 +301,23 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
               ? JSON.parse(updateCall.arguments)
               : updateCall.arguments;
 
-            await novelStore.updateChapterContent(projectId, args.chapterId, args.content);
+            // Find the manuscript object and update via unified store
+            const manuscriptObj = unifiedStore.getManuscriptByChapterId(args.chapterId);
+            if (!manuscriptObj) {
+              setError(`Manuscript not found for chapter ${args.chapterId}`);
+              return;
+            }
+
+            const wordCount = args.content.trim().split(/\s+/).filter(Boolean).length;
+            await unifiedStore.updateObject('manuscript', manuscriptObj.id, {
+              data: {
+                content: args.content,
+                wordCount,
+              },
+              language: settingsStore.settings.mainLanguage,
+              create_new_version: true,
+              user_request: 'AI Generated Content',
+            });
 
             if (onResult) {
               onResult();
@@ -324,7 +337,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         null,
         {
           history: [],
-          language: settingsStore.settings.primaryLanguage,
+          language: settingsStore.settings.mainLanguage,
         }
       );
 

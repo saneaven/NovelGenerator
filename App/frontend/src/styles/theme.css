@@ -142,10 +142,10 @@
 
     /* ===== Surface Colors ===== */
     --color-surface-base: var(--color-neutral-0);
-    --color-surface-elevated: var(--color-neutral-100);
-    --color-surface-overlay: var(--color-neutral-50);
+    --color-surface-elevated: var(--color-neutral-200);
+    --color-surface-overlay: var(--color-neutral-100);
     --color-surface-subtle: var(--color-neutral-50);
-    --color-surface-muted: var(--color-neutral-200);
+    --color-surface-muted: var(--color-neutral-300);
     --color-surface-hover: var(--color-neutral-50);
 
     /* ===== Text Colors ===== */
@@ -184,6 +184,7 @@
         0 8px 10px rgba(0, 0, 0, 0.04);
     --shadow-2xl: 0 25px 50px rgba(0, 0, 0, 0.15);
     --shadow-inner: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+    --shadow-inner-bottom: inset 0 -4px 4px rgba(0, 0, 0, 0.06);
     --shadow-focus: 0 0 0 3px rgba(59, 130, 246, 0.1);
     --shadow-focus-primary: 0 0 0 3px rgba(139, 92, 246, 0.15);
 
@@ -206,6 +207,18 @@
     /* 64px */
     --spacing-5xl: 6rem;
     /* 96px */
+
+    /* ===== Size Variables ===== */
+    --size-6: 1.5rem;
+    /* 24px - separators */
+    --size-12: 3rem;
+    /* 48px - spinner */
+    --size-menu-width: 15rem;
+    /* 240px - dropdown menus */
+    --size-content-sm: 24rem;
+    /* 384px - content containers */
+    --size-chat-panel: 400px;
+    /* chat panel width */
 
     /* ===== Typography Scale ===== */
     --font-family-base: system-ui,
@@ -278,7 +291,7 @@
     --size-sidebar-width-mobile: 100%;
 
     /* ===== Transitions ===== */
-    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-fast: 150ms cubic-bezier(0.2, 0, 0.2, 1);
     --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
     --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
     --transition-slower: 500ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -439,7 +452,7 @@
 
     /* ===== Text Colors - Light on Dark ===== */
     --color-text-primary: var(--color-neutral-1000);
-    --color-text-secondary: var(--color-neutral-800);
+    --color-text-secondary: var(--color-neutral-900);
     --color-text-tertiary: var(--color-neutral-600);
     --color-text-muted: var(--color-neutral-500);
     --color-text-disabled: var(--color-neutral-400);

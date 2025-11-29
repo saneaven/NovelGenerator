@@ -167,38 +167,38 @@ export interface ChapterResponse extends BaseMetadata {
 }
 
 // ============================================================================
-// CHAPTER CONTENT
+// MANUSCRIPT (Chapter Content)
 // ============================================================================
 
-export interface ChapterContentCreate {
+export interface ManuscriptCreate {
   content: string;
   language?: string;
   userRequest?: string;
 }
 
-export interface ChapterContentUpdate {
+export interface ManuscriptUpdate {
   content: string;
   language?: string;
   userRequest?: string;
   create_new_version?: boolean;  // If false, updates existing active version instead of creating new one
 }
 
-export interface ChapterContentVersionResponse {
+export interface ManuscriptVersionResponse {
   id: string;
-  chapter_content_id: string;
+  manuscript_id: string;
   userRequest: string;
   is_active: boolean;  // Use snake_case to match backend
   data: LanguageData<{ content: string; wordCount: number }>;
   timestamp: string;
 }
 
-export interface ChapterContentResponse {
+export interface ManuscriptResponse {
   id: string;
   chapter_id: string;
   active_version_id?: string;
   created_at: string;
   updated_at: string;
-  versions: ChapterContentVersionResponse[];
+  versions: ManuscriptVersionResponse[];
 }
 
 // ============================================================================

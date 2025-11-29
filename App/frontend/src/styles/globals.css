@@ -135,12 +135,9 @@ select {
   font-family: inherit;
   font-size: inherit;
   line-height: inherit;
-  margin: 0;
-  padding: 0;
   border: none;
   background: none;
   color: var(--color-text-primary);
-  appearance: none;
 }
 
 input:focus,

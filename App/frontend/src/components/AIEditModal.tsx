@@ -28,7 +28,7 @@ interface AIEditModalProps {
   category: ObjectType;
   projectId: string;
   targetId?: string;
-  onResult?: () => void;
+  onResult?: (result?: any) => void | Promise<void>;
 }
 
 const createSessionId = () => {
@@ -95,7 +95,7 @@ const toStoryObjects = (contextData: Record<string, any>): StoryObjects => {
     locations: mapItems(contextData.locations),
     lorebook: mapItems(contextData.lorebook),
     outline: mapOutline(contextData.outline),
-  } as StoryObjects;
+  } as unknown as StoryObjects;
 };
 
 const AIEditModal: React.FC<AIEditModalProps> = ({
@@ -120,7 +120,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   const settingsStore = useSettingsStore();
   const abortControllerRef = useRef<AbortController | null>(null);
   const taskRunnerRef = useRef<LLMRequestManager | null>(null);
-  const sessionIdRef = useRef<string>();
+  const sessionIdRef = useRef<string | undefined>(undefined);
   if (!sessionIdRef.current) {
     sessionIdRef.current = createSessionId();
   }
@@ -413,7 +413,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         null,
         {
           history: [],
-          language: settingsStore.settings.primaryLanguage,
+          language: settingsStore.settings.mainLanguage,
         }
       );
     } catch (err) {

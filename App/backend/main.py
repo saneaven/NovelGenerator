@@ -1,12 +1,15 @@
+import asyncio
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, PlainTextResponse
 from .models.requests import ChatCompletionRequest, ProviderConfig
 from .providers.registry import ProviderRegistry
-from .providers.copilot import CopilotProvider
 from .providers.openrouter import OpenRouterProvider
 from .providers.custom import CustomOpenAIProvider
+from .providers.claude_provider import ClaudeProvider
+from .providers.gemini_provider import GeminiProvider
+from .providers.openai_provider import OpenAIProvider
 
 # Import database API routes
 from .routes.auth_routes import router as auth_router
@@ -58,19 +61,27 @@ async def list_providers():
         metadata = {
             "name": provider_name,
             "display_name": provider_dict["display_name"],
-            "supports": ["chat", "models", "functions"]
+            "capabilities": {
+                "chat": True,
+                "models": True,
+                "functions": provider_name in {"openrouter", "custom", "gemini", "claude"},
+                "thinking": provider_name in {"openrouter", "claude", "gemini", "custom"}
+            }
         }
 
-        if provider_name == "copilot":
-            metadata["requires_api_key"] = False
-            metadata["description"] = "GitHub Copilot API (server-configured)"
-        elif provider_name == "openrouter":
+        if provider_name == "openrouter":
             metadata["requires_api_key"] = True
             metadata["description"] = "OpenRouter unified LLM API"
         elif provider_name == "custom":
             metadata["requires_api_key"] = True
             metadata["requires_base_url"] = True
             metadata["description"] = "Custom OpenAI-compatible endpoint"
+        elif provider_name == "claude":
+            metadata["requires_api_key"] = True
+            metadata["description"] = "Anthropic Claude with extended thinking"
+        elif provider_name == "gemini":
+            metadata["requires_api_key"] = True
+            metadata["description"] = "Google Gemini with thought summaries"
 
         providers_info.append(metadata)
 
@@ -86,6 +97,7 @@ async def get_models(provider: str, config: ProviderConfig):
             config.model_dump()
         )
 
+        # All providers now require API key for model listing
         if not provider_instance.validate_config():
             raise HTTPException(
                 status_code=400,
@@ -102,7 +114,7 @@ async def get_models(provider: str, config: ProviderConfig):
 
 
 @app.post("/api/v1/chat/completions/{provider}/stream")
-async def stream_chat(provider: str, request: ChatCompletionRequest):
+async def stream_chat(provider: str, request: ChatCompletionRequest, req: Request):
     """Stream chat completions from specified provider"""
     try:
         provider_instance = ProviderRegistry.get_provider(
@@ -127,16 +139,12 @@ async def stream_chat(provider: str, request: ChatCompletionRequest):
 
         async def event_gen():
             # Prepare provider preference for OpenRouter
-            provider_pref = None
-            if provider == "openrouter" and request.provider_preference:
-                provider_pref = request.provider_preference.model_dump(exclude_none=True)
+            provider_pref = request.provider_preference.model_dump(exclude_none=True) if request.provider_preference else None
 
-            # Prepare thinking config for OpenRouter
-            thinking_cfg = None
-            if provider == "openrouter" and request.thinking_config:
-                thinking_cfg = request.thinking_config.model_dump(exclude_none=True)
+            # Thinking config is provider-agnostic; each provider maps fields they understand
+            thinking_cfg = request.thinking_config.model_dump(exclude_none=True) if request.thinking_config else None
 
-            async for chunk in provider_instance.stream_chat(
+            stream = provider_instance.stream_chat(
                 messages=messages,
                 model=request.model,
                 temperature=request.temperature,
@@ -145,8 +153,22 @@ async def stream_chat(provider: str, request: ChatCompletionRequest):
                 provider_preference=provider_pref,
                 thinking_config=thinking_cfg,
                 thinking_mode=request.thinking_mode
-            ):
-                yield chunk
+            )
+
+            try:
+                async for chunk in stream:
+                    # Check if client disconnected
+                    if await req.is_disconnected():
+                        print("Client disconnected, stopping stream")
+                        break
+                    yield chunk
+            except asyncio.CancelledError:
+                print("Stream cancelled due to client disconnect")
+                raise  # Re-raise to let FastAPI handle cleanup
+            finally:
+                # Ensure generator is closed
+                if hasattr(stream, 'aclose'):
+                    await stream.aclose()
 
         return StreamingResponse(event_gen(), media_type="text/event-stream")
 

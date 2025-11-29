@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useChatStore, type Chat } from '../store/chatStore';
+import { useChatUIStore } from '../store/chatUIStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
 import { TranslationService } from '../services/translationService';
@@ -7,16 +8,15 @@ import { TranslationService } from '../services/translationService';
 interface ChatSidebarProps {
   projectId: string;
   onSelectChat: (chatId: string) => void;
-  isMobileVisible?: boolean;
-  isDesktopVisible?: boolean;
 }
 
 const ChatSidebar: React.FC<ChatSidebarProps> = ({
   projectId,
   onSelectChat,
-  isMobileVisible = false,
-  isDesktopVisible = false,
 }) => {
+  const chatUI = useChatUIStore();
+  const isMobileVisible = chatUI.isMobileSidebarVisible(projectId);
+  const isDesktopVisible = chatUI.isDesktopChatListVisible(projectId);
   const {
     createChat,
     getChats,
@@ -104,8 +104,8 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
     }
 
     const lastMessage = chat.messages[chat.messages.length - 1];
-    const primaryLanguage = settings.primaryLanguage;
-    const secondaryLanguage = settings.secondaryLanguage ?? undefined;
+    const mainLanguage = settings.mainLanguage;
+    const defaultSubLanguage = settings.defaultSubLanguage ?? undefined;
 
     const extractText = (messageData: any): string => {
       const parts = messageData.contentParts || [];
@@ -115,12 +115,12 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
         .join(' ');
     };
 
-    if (lastMessage.data[primaryLanguage]) {
-      const content = extractText(lastMessage.data[primaryLanguage]);
+    if (lastMessage.data[mainLanguage]) {
+      const content = extractText(lastMessage.data[mainLanguage]);
       return content.length > 50 ? `${content.substring(0, 50)}...` : content || 'No content';
     }
 
-    const fallback = TranslationService.getBestLanguageData(lastMessage.data, primaryLanguage, secondaryLanguage);
+    const fallback = TranslationService.getBestLanguageData(lastMessage.data, mainLanguage, defaultSubLanguage);
     if (fallback) {
       const content = extractText(fallback.data);
       return content.length > 50 ? `${content.substring(0, 50)}...` : content || 'No content';
@@ -195,7 +195,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 <>
                   <div className="chat-name">{chat.name}</div>
                   <div className="chat-preview">{resolvePreviewContent(chat)}</div>
-                  <div className="chat-time">{formatTime(chat.updatedAt)}</div>
+                  <div className="chat-time">{formatTime(chat.updated_at)}</div>
                 </>
               )}
             </div>

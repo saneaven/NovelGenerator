@@ -2,8 +2,9 @@ import type {
   FunctionCallOperationFieldPreview,
   FunctionCallOperationPreview,
 } from '../../llm_request/types';
+import { isIdField } from './objectNameResolver';
 
-const ELLIPSIS = '…';
+const ELLIPSIS = '...';
 
 export const buildOperationPreviewsFromArgs = (
   args: any,
@@ -51,6 +52,7 @@ export const buildPreviewFromOperation = (
 
   const targetName =
     operation?.targetName ||
+    data?.title ||
     data?.name ||
     data?.logline ||
     data?.description;
@@ -90,12 +92,16 @@ export const extractFieldPreviews = (
     return [];
   }
 
-  const preferredKeys = ['name', 'description', 'logline', 'genre', 'order'];
+  const preferredKeys = ['name', 'genre', 'logline', 'description', 'content', 'order'];
   const seen = new Set<string>();
   const result: FunctionCallOperationFieldPreview[] = [];
 
   const pushField = (key: string, value: any) => {
     if (result.length >= limit || value === undefined || value === null) {
+      return;
+    }
+    // Skip ID fields - they'll be resolved to names separately
+    if (isIdField(key)) {
       return;
     }
     if (typeof value === 'string') {

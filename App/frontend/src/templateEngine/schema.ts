@@ -38,7 +38,6 @@ export const PROMPT_SCHEMAS = {
       sourceLanguage: { desc: "Source language", example: "English" },
       targetLanguage: { desc: "Target language", example: "Korean" },
       objectCount: { desc: "Number of objects", example: 1 },
-      objectsArray: { desc: "JSON string of objects", example: "[{...}]" },
       userInstructions: { desc: "User instructions", example: "Translate nicely" },
       dataTypeName: { desc: "Human-friendly data type label", example: "Chat Message" },
       sourceContent: { desc: "Source chat content", example: "Hello there" },
@@ -48,7 +47,9 @@ export const PROMPT_SCHEMAS = {
       enablePrefill: { desc: "Enable prefill", example: true },
       enableCustomThinking: { desc: "Enable custom thinking", example: false },
     },
-    context: {}
+    context: {
+      objectsArray: { desc: "Array of objects to translate", example: [] as Record<string, any>[] },
+    }
   },
   storyObjectEdit: {
     variable: {

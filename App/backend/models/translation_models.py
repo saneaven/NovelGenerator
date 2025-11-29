@@ -40,7 +40,7 @@ class ObjectTranslation(Base):
     # Object identification
     object_type = Column(String(50), nullable=False, index=True)
     # Types: 'basic_info', 'character', 'organization', 'location',
-    #        'lorebook', 'act', 'chapter', 'chapter_content'
+    #        'lorebook', 'act', 'chapter', 'manuscript'
 
     object_id = Column(UUID(as_uuid=True), nullable=False, index=True)
 

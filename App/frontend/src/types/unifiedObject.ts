@@ -19,7 +19,7 @@ export type ObjectType =
   | 'lorebook'
   | 'act'
   | 'chapter'
-  | 'chapter_content';
+  | 'manuscript';
 
 // ============================================================================
 // UNIFIED OBJECT (Response from API)
@@ -119,7 +119,7 @@ export interface ChapterData {
   description: string;
 }
 
-export interface ChapterContentData {
+export interface ManuscriptData {
   content: string;
   wordCount: number;
 }
@@ -135,7 +135,7 @@ export type LocationObject = UnifiedObject<LocationData>;
 export type LorebookEntryObject = UnifiedObject<LorebookEntryData>;
 export type ActObject = UnifiedObject<ActData>;
 export type ChapterObject = UnifiedObject<ChapterData>;
-export type ChapterContentObject = UnifiedObject<ChapterContentData>;
+export type ManuscriptObject = UnifiedObject<ManuscriptData>;
 
 // ============================================================================
 // REQUEST TYPES

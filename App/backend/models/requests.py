@@ -13,9 +13,24 @@ class ProviderPreference(BaseModel):
     ignore: Optional[List[str]] = None
 
 class ThinkingConfig(BaseModel):
-    """Thinking configuration for model-native thinking"""
-    effort: Optional[str] = "medium"
+    """
+    Provider-agnostic thinking configuration.
+
+    Fields are optional; providers pick what they understand.
+    """
+    # Common - effort now includes 'none' for GPT-5
+    effort: Optional[Literal["none", "low", "medium", "high"]] = "medium"
     max_tokens: Optional[int] = Field(default=None, alias="maxTokens")
+
+    # GPT-5 specific - output verbosity
+    verbosity: Optional[Literal["low", "medium", "high"]] = None
+
+    # Claude (Anthropic)
+    claude_budget_tokens: Optional[int] = Field(default=None, alias="claudeBudgetTokens")
+
+    # Gemini
+    gemini_thinking_level: Optional[Literal["low", "high"]] = Field(default=None, alias="geminiThinkingLevel")
+    gemini_budget_tokens: Optional[int] = Field(default=None, alias="geminiBudgetTokens")
 
 class ContentPart(BaseModel):
     """A part of message content (content or thinking)"""

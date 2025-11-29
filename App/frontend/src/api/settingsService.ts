@@ -4,10 +4,10 @@ import type { Settings } from '../store/settingsStore';
 export interface SettingsSyncResponse {
     functionConfigs: Settings['functionConfigs'];
     providerCredentials: Settings['providerCredentials'];
-    primaryLanguage: string;
-    secondaryLanguage: string | null;
-    enablePrefill: boolean;
-    enableThinking: boolean;
+    mainLanguage: string;
+    subLanguages: string[];
+    defaultSubLanguage: string | null;
+    theme: string;
 }
 
 export const settingsService = {

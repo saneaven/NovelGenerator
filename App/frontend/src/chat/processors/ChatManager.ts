@@ -3,7 +3,7 @@ import type { ChatMessage, FunctionCallMetadata, ContentPart, FunctionCallProgre
 import type { ChatPipelineContext } from '../types';
 import { streamChat } from '../../llm_request/llmService';
 import { ChatPipeline } from '../ChatPipeline';
-import { type ProviderType, type ProviderConfig } from '../../store/settingsStore';
+import { type ProviderType, type ProviderConfig, type ThinkingConfig } from '../../store/settingsStore';
 import { FunctionCallStreamTracker } from '../streaming/FunctionCallStreamTracker';
 
 export interface ChatManagerConfig {
@@ -26,10 +26,7 @@ export interface ChatManagerConfig {
   mode: 'novelEditor' | 'workspace'; // Explicit mode distinction
   enablePrefill?: boolean; // Enable assistant prefill
   thinkingMode?: 'off' | 'model' | 'custom'; // Thinking mode: off, model-native thinking, or custom prompt-based
-  thinkingConfig?: {
-    effort?: 'low' | 'medium' | 'high';
-    maxTokens?: number;
-  };
+  thinkingConfig?: ThinkingConfig;
 }
 
 export interface ChatManagerCallbacks {
@@ -46,6 +43,7 @@ export class ChatManager {
   private config: ChatManagerConfig;
   private callbacks: ChatManagerCallbacks;
   private isStreaming: boolean = false;
+  private isAborted: boolean = false;
 
   constructor(config: ChatManagerConfig, callbacks: ChatManagerCallbacks) {
     this.config = config;
@@ -86,11 +84,19 @@ export class ChatManager {
       await this.startStreaming(chatId, assistantMessageId, language);
 
     } catch (error) {
-      console.error('LLM request processing error:', error);
-      this.callbacks.onError(error instanceof Error ? error : new Error(String(error)));
+      // Don't show error for intentional abort
+      const isAbortError = error instanceof DOMException && error.name === 'AbortError';
+      if (isAbortError || this.isAborted) {
+        console.log('Stream aborted by user');
+        // Don't call onError - this was intentional
+      } else {
+        console.error('LLM request processing error:', error);
+        this.callbacks.onError(error instanceof Error ? error : new Error(String(error)));
+      }
     } finally {
       this.config.setIsLoading(false);
       this.isStreaming = false;
+      this.isAborted = false;  // Reset abort flag
       this.config.abortControllerRef.current = null;
     }
   }
@@ -126,11 +132,19 @@ export class ChatManager {
       await this.startStreaming(chatId, assistantMessageId, language);
 
     } catch (error) {
-      console.error('LLM request processing error:', error);
-      this.callbacks.onError(error instanceof Error ? error : new Error(String(error)));
+      // Don't show error for intentional abort
+      const isAbortError = error instanceof DOMException && error.name === 'AbortError';
+      if (isAbortError || this.isAborted) {
+        console.log('Stream aborted by user');
+        // Don't call onError - this was intentional
+      } else {
+        console.error('LLM request processing error:', error);
+        this.callbacks.onError(error instanceof Error ? error : new Error(String(error)));
+      }
     } finally {
       this.config.setIsLoading(false);
       this.isStreaming = false;
+      this.isAborted = false;  // Reset abort flag
       this.config.abortControllerRef.current = null;
     }
   }
@@ -455,9 +469,9 @@ export class ChatManager {
    */
   abort(): void {
     if (this.config.abortControllerRef.current) {
+      this.isAborted = true;  // Mark as intentional abort
       this.config.abortControllerRef.current.abort();
-      this.config.setIsLoading(false);
-      this.isStreaming = false;
+      // Let finally block handle state cleanup
     }
   }
 }

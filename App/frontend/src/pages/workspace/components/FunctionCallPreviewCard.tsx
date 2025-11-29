@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
 import type { FunctionCallOperationPreview, FunctionCallProgress } from '../../../llm_request/types';
 import FunctionCallReviewCard from '../../../components/functionCall/FunctionCallReviewCard';
-import type { StoryObjects, Act, Chapter } from '../../../types/storyObject';
+import type { StoryObjects } from '../../../types/storyObject';
+import { resolveStoryObjectName } from '../../../chat/utils/objectNameResolver';
 
 interface FunctionCallPreviewCardProps {
   progress: FunctionCallProgress;
@@ -35,49 +36,6 @@ const FunctionCallPreviewCard: React.FC<FunctionCallPreviewCardProps> = ({ progr
       variant="streaming"
     />
   );
-};
-
-const resolveStoryObjectName = (
-  storyObjects: StoryObjects,
-  type?: string,
-  id?: string
-): string | undefined => {
-  if (!type || !id) return undefined;
-
-  switch (type) {
-    case 'basic_info':
-      return storyObjects.basicInfo?.title || storyObjects.basicInfo?.logline;
-    case 'character':
-      return storyObjects.characters.find((item) => item.id === id)?.name;
-    case 'organization':
-      return storyObjects.organizations.find((item) => item.id === id)?.name;
-    case 'location':
-      return storyObjects.locations.find((item) => item.id === id)?.name;
-    case 'lorebook':
-      return storyObjects.lorebook.find((item) => item.id === id)?.name;
-    case 'act':
-      return findAct(storyObjects.outline?.acts, id)?.name;
-    case 'chapter': {
-      const chapter = findChapter(storyObjects.outline?.acts, id);
-      return chapter?.name;
-    }
-    default:
-      return undefined;
-  }
-};
-
-const findAct = (acts: Act[] | undefined, id: string) =>
-  acts?.find((act) => act.id === id);
-
-const findChapter = (acts: Act[] | undefined, id: string): Chapter | undefined => {
-  if (!acts) return undefined;
-  for (const act of acts) {
-    const chapter = act.chapters?.find((entry) => entry.id === id);
-    if (chapter) {
-      return chapter;
-    }
-  }
-  return undefined;
 };
 
 export default FunctionCallPreviewCard;

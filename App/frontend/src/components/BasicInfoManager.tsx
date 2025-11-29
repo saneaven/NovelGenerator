@@ -1,39 +1,39 @@
 /**
- * BasicInfoManager - Migrated to New Unified Translation System
+ * BasicInfoManager - Using Global Language Toggle
  *
- * Changes from old system:
- * - Uses useUnifiedObjectStore instead of useStoryObjectStore
- * - Direct data access (no useLanguageAwareData hook)
- * - LanguageSwitcher component for language switching
- * - Simplified save logic (no manual sync)
- * - Cleaner translation flow
+ * Uses global display language from parent (StoryPanel) instead of per-object switching.
+ * Shows warning icon when displaying in fallback language.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
-import { LanguageSwitcher } from './LanguageSwitcher';
 import AIEditModal from './AIEditModal';
 import VersionHistoryModal from './VersionHistoryModal';
 import RetranslateModal from './RetranslateModal';
+import { DropdownMenu, DropdownItem } from './ui/DropdownMenu';
 import { TranslationService } from '../services/translationService';
 import type { BasicInfoObject, BasicInfoData } from '../types/unifiedObject';
 
-const BasicInfoManager: React.FC = () => {
+interface BasicInfoManagerProps {
+  globalDisplayLanguage: string;
+}
+
+const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLanguage }) => {
   const { projectId } = useParams<{ projectId: string }>();
   const objects = useUnifiedObjectStore((state) => state.objects);
   const loadingMap = useUnifiedObjectStore((state) => state.loading);
   const errors = useUnifiedObjectStore((state) => state.errors);
   const fetchObject = useUnifiedObjectStore((state) => state.fetchObject);
   const updateObject = useUnifiedObjectStore((state) => state.updateObject);
-  const switchLanguage = useUnifiedObjectStore((state) => state.switchLanguage);
   const activateVersion = useUnifiedObjectStore((state) => state.activateVersion);
   const listObjects = useUnifiedObjectStore((state) => state.listObjects);
   const createObject = useUnifiedObjectStore((state) => state.createObject);
   const { settings } = useSettingsStore();
-  const { showError } = useErrorStore();
+  const { showError, showSuccess } = useErrorStore();
+  const translating = useUnifiedObjectStore((state) => state.translating);
 
   // Get basic info from unified store
   // In real implementation, you'd need to get the basic info ID first
@@ -58,6 +58,19 @@ const BasicInfoManager: React.FC = () => {
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [showRetranslateModal, setShowRetranslateModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Compute effective display language with fallback
+  const { effectiveLanguage, isFallback } = useMemo(() => {
+    if (!basicInfo) {
+      return { effectiveLanguage: globalDisplayLanguage, isFallback: false };
+    }
+    const available = basicInfo.languages.available;
+    if (available.includes(globalDisplayLanguage)) {
+      return { effectiveLanguage: globalDisplayLanguage, isFallback: false };
+    }
+    // Fallback to any available language
+    return { effectiveLanguage: available[0] || globalDisplayLanguage, isFallback: true };
+  }, [basicInfo, globalDisplayLanguage]);
 
   // Fetch basic info ID on mount (you'll need to implement this based on your API)
   const initializeBasicInfo = useCallback(async () => {
@@ -84,7 +97,7 @@ const BasicInfoManager: React.FC = () => {
           logline: '',
           genre: '',
         },
-        settings.primaryLanguage
+        settings.mainLanguage
       );
       setBasicInfoId(newBasicInfo.id);
     } catch (err) {
@@ -95,19 +108,19 @@ const BasicInfoManager: React.FC = () => {
     } finally {
       setInitializing(false);
     }
-  }, [projectId, listObjects, createObject, settings.primaryLanguage]);
+  }, [projectId, listObjects, createObject, settings.mainLanguage]);
 
   useEffect(() => {
     setBasicInfoId(null);
     initializeBasicInfo();
   }, [initializeBasicInfo]);
 
-  // Fetch basic info when ID is available
+  // Fetch basic info when ID is available or language changes
   useEffect(() => {
     if (basicInfoId) {
-      fetchObject('basic_info', basicInfoId);
+      fetchObject('basic_info', basicInfoId, globalDisplayLanguage);
     }
-  }, [basicInfoId, fetchObject]);
+  }, [basicInfoId, fetchObject, globalDisplayLanguage]);
 
   // Sync edit form when basic info loads or language changes
   useEffect(() => {
@@ -127,7 +140,7 @@ const BasicInfoManager: React.FC = () => {
     try {
       await updateObject('basic_info', basicInfoId, {
         data: editFormData,
-        language: basicInfo.languages.active,
+        language: effectiveLanguage,
         user_request: 'User Edit',
         create_new_version: true,
       });
@@ -159,72 +172,13 @@ const BasicInfoManager: React.FC = () => {
     setIsEditing(true);
   };
 
-  const handleLanguageChange = async (newLanguage: string) => {
-    if (!basicInfo || !basicInfoId) return;
-
-    try {
-      // Clean language switch - NO version created!
-      await switchLanguage('basic_info', basicInfoId, newLanguage);
-    } catch (err) {
-      console.error('Failed to switch language:', err);
-      showError('Language Switch Error', 'Failed to switch language. Please try again.');
-    }
-  };
-
-  const handleAddTranslation = async () => {
+  const handleRetranslate = async (
+    sourceLanguage: string,
+    targetLanguage: string,
+    includePrevious: boolean,
+    userInstructions: string
+  ) => {
     if (!basicInfo || !basicInfoId || !projectId) return;
-
-    const targetLanguage = settings.secondaryLanguage;
-    if (!targetLanguage) {
-      showError('Warning', 'Please set a secondary language in settings first.');
-      return;
-    }
-
-    // Check if translation already exists
-    if (basicInfo.languages.available.includes(targetLanguage)) {
-      showError('Warning', `${targetLanguage} translation already exists.`);
-      return;
-    }
-
-    try{
-      TranslationService.setTranslationStatus(basicInfoId, { objectId: basicInfoId, isTranslating: true });
-      await TranslationService.translateSingle(
-        {
-          objectType: 'basic_info',
-          objectId: basicInfoId,
-          sourceData: {
-            title: basicInfo.data.title,
-            logline: basicInfo.data.logline,
-            genre: basicInfo.data.genre,
-          },
-        },
-        {
-          projectId,
-          sourceLanguage: basicInfo.languages.active,
-          targetLanguage,
-        }
-      );
-
-      // Refresh object to update UI with new translation
-      await fetchObject('basic_info', basicInfoId);
-
-      showError('Success', `Translation added for ${targetLanguage}`);
-    } catch (err) {
-      console.error('Failed to add translation:', err);
-      showError('Translation Error', err instanceof Error ? err.message : 'Failed to add translation. Please try again.');
-    } finally {
-      TranslationService.clearTranslationStatus(basicInfoId);
-    }
-  };
-
-  const handleRetranslate = async (includePrevious: boolean, userInstructions: string) => {
-    if (!basicInfo || !basicInfoId || !projectId) return;
-
-    const targetLanguage = settings.secondaryLanguage;
-    if (!targetLanguage) {
-      showError('Warning', 'Please set a secondary language in settings first.');
-      return;
-    }
 
     try {
       TranslationService.setTranslationStatus(basicInfoId, { objectId: basicInfoId, isTranslating: true });
@@ -254,7 +208,7 @@ const BasicInfoManager: React.FC = () => {
         },
         {
           projectId,
-          sourceLanguage: basicInfo.languages.active,
+          sourceLanguage,
           targetLanguage,
           userInstructions: instructions || undefined,
         }
@@ -263,7 +217,7 @@ const BasicInfoManager: React.FC = () => {
       // Refresh object to update UI with new translation
       await fetchObject('basic_info', basicInfoId);
 
-      showError('Success', `Retranslation complete for ${targetLanguage}`);
+      showSuccess('Success', `Retranslation complete for ${targetLanguage}`);
       setShowRetranslateModal(false);
     } catch (err) {
       console.error('Failed to retranslate:', err);
@@ -284,7 +238,7 @@ const BasicInfoManager: React.FC = () => {
 
       await updateObject('basic_info', basicInfoId, {
         data: { ...basicInfo.data, ...updates },
-        language: basicInfo.languages.active,
+        language: effectiveLanguage,
         user_request: 'AI Edit',
         create_new_version: true,
       });
@@ -373,67 +327,66 @@ const BasicInfoManager: React.FC = () => {
       <div className="section-header">
         <h2>Basic Information</h2>
         {!isEditing ? (
-          <div className="header-buttons">
-            <LanguageSwitcher
-              object={basicInfo}
-              onLanguageChange={handleLanguageChange}
-              disabled={loading}
-            />
-            {settings.secondaryLanguage && (
-              basicInfo.languages.available.includes(settings.secondaryLanguage) ? (
-                <button
-                  onClick={() => setShowRetranslateModal(true)}
-                  className="translate-button retranslate"
-                  disabled={loading}
-                  title={`Retranslate to ${settings.secondaryLanguage}`}
-                >
-                  🔄 Retranslate
-                </button>
-              ) : (
-                <button
-                  onClick={handleAddTranslation}
-                  className="translate-button"
-                  disabled={loading}
-                  title={`Translate to ${settings.secondaryLanguage}`}
-                >
-                  🌐 Add {settings.secondaryLanguage}
-                </button>
-              )
-            )}
-            <button
-              onClick={() => setShowVersionHistory(true)}
-              className="version-history-button"
-              disabled={loading}
-            >
-              📚 Version History
+          <div className="card-actions">
+            <button onClick={handleEdit} className="card-edit-btn desktop-only" disabled={loading}>
+              Edit
             </button>
+            <DropdownMenu
+              trigger={
+                <button className="more-button" disabled={loading} title="More actions">
+                  •••
+                </button>
+              }
+            >
+              <DropdownItem
+                icon="✏️"
+                label="Edit"
+                onClick={handleEdit}
+                disabled={loading}
+                className="mobile-only"
+              />
+              {settings.defaultSubLanguage &&
+                basicInfo.languages.available.includes(settings.defaultSubLanguage) && (
+                  <DropdownItem
+                    icon="🔄"
+                    label="Retranslate"
+                    onClick={() => setShowRetranslateModal(true)}
+                    disabled={loading}
+                  />
+              )}
+              <DropdownItem
+                icon="📚"
+                label="History"
+                onClick={() => setShowVersionHistory(true)}
+                disabled={loading}
+              />
+            </DropdownMenu>
+          </div>
+        ) : (
+          <div className="form-actions-split">
             <button
               onClick={() => setShowAIModal(true)}
-              className="ai-edit-button"
-              disabled={loading}
+              className="ai-edit-btn"
+              disabled={isSaving}
             >
               🤖 AI Edit
             </button>
-            <button onClick={handleEdit} className="edit-button" disabled={loading}>
-              Edit
-            </button>
-          </div>
-        ) : (
-          <div className="edit-buttons">
-            <button
-              onClick={handleSave}
-              className="save-button"
-              disabled={isSaving}
-            >
-              {isSaving ? 'Saving...' : 'Save'}
-            </button>
-            <button
-              onClick={handleCancel}
-              className="cancel-button"
-              disabled={isSaving}
-            >
-              Cancel
-            </button>
+            <div className="form-actions-right">
+              <button
+                onClick={handleCancel}
+                className="cancel-button"
+                disabled={isSaving}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                className="save-button"
+                disabled={isSaving}
+              >
+                {isSaving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -499,7 +452,8 @@ const BasicInfoManager: React.FC = () => {
         {/* Metadata */}
         <div className="metadata">
           <span className="item-language">
-            Language: {basicInfo.languages.active}
+            {isFallback && <span className="fallback-warning" title={`${globalDisplayLanguage} not available, showing ${effectiveLanguage}`}>⚠️ </span>}
+            Language: {effectiveLanguage}
           </span>
           <span className="version-info">
             Version: {basicInfo.version.number}
@@ -516,7 +470,7 @@ const BasicInfoManager: React.FC = () => {
       <AIEditModal
         isOpen={showAIModal}
         onClose={() => setShowAIModal(false)}
-        category="basicInfo"
+        category="basic_info"
         projectId={projectId}
         targetId={basicInfoId || ''}
         onResult={handleAIResult}
@@ -534,15 +488,19 @@ const BasicInfoManager: React.FC = () => {
       )}
 
       {/* Retranslate Modal */}
-      {basicInfo && settings.secondaryLanguage && (
+      {basicInfo && basicInfoId && (
         <RetranslateModal
           isOpen={showRetranslateModal}
           onClose={() => setShowRetranslateModal(false)}
-          sourceLanguage={basicInfo.languages.active}
-          targetLanguage={settings.secondaryLanguage}
+          objectType="basic_info"
+          objectId={basicInfoId}
+          defaultSourceLanguage={settings.mainLanguage}
+          defaultTargetLanguage={globalDisplayLanguage}
+          availableLanguages={[settings.mainLanguage, ...settings.subLanguages]}
+          manuscriptLanguages={basicInfo.languages.available}
           translationTimestamp={basicInfo.version.created_at || null}
           onRetranslate={handleRetranslate}
-          isTranslating={loading}
+          isTranslating={translating[basicInfoId] || false}
         />
       )}
     </div>

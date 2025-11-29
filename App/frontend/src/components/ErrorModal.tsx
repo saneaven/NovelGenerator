@@ -1,15 +1,31 @@
 import React from 'react';
+import type { NotificationType } from '../store/errorStore';
 import './ErrorModal.css';
 
 interface ErrorModalProps {
   isOpen: boolean;
+  type?: NotificationType;
   title: string;
   message: string;
   onClose: () => void;
 }
 
-const ErrorModal: React.FC<ErrorModalProps> = ({ isOpen, title, message, onClose }) => {
+const NOTIFICATION_CONFIG: Record<NotificationType, { icon: string; buttonClass: string }> = {
+  success: { icon: '✓', buttonClass: 'notification-ok-btn--success' },
+  error: { icon: '⚠️', buttonClass: 'notification-ok-btn--error' },
+  info: { icon: 'ℹ️', buttonClass: 'notification-ok-btn--info' },
+};
+
+const ErrorModal: React.FC<ErrorModalProps> = ({
+  isOpen,
+  type = 'error',
+  title,
+  message,
+  onClose
+}) => {
   if (!isOpen) return null;
+
+  const config = NOTIFICATION_CONFIG[type];
 
   const handleOverlayClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
@@ -24,17 +40,17 @@ const ErrorModal: React.FC<ErrorModalProps> = ({ isOpen, title, message, onClose
   };
 
   return (
-    <div 
-      className="error-modal-overlay" 
+    <div
+      className="error-modal-overlay"
       onClick={handleOverlayClick}
       onKeyDown={handleKeyDown}
       tabIndex={-1}
     >
-      <div className="error-modal">
+      <div className={`error-modal notification-modal--${type}`}>
         <div className="error-modal-header">
-          <div className="error-icon">⚠️</div>
+          <div className={`error-icon notification-icon--${type}`}>{config.icon}</div>
           <h3 className="error-title">{title}</h3>
-          <button 
+          <button
             className="error-close-btn"
             onClick={onClose}
             title="Close"
@@ -42,14 +58,14 @@ const ErrorModal: React.FC<ErrorModalProps> = ({ isOpen, title, message, onClose
             ✕
           </button>
         </div>
-        
+
         <div className="error-modal-body">
           <p className="error-message">{message}</p>
         </div>
-        
+
         <div className="error-modal-footer">
-          <button 
-            className="error-ok-btn"
+          <button
+            className={`error-ok-btn ${config.buttonClass}`}
             onClick={onClose}
             autoFocus
           >

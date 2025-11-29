@@ -80,7 +80,7 @@ export interface StoryTranslationPromptContext extends BasePromptContext {
   sourceLanguage: string;
   targetLanguage: string;
   objectCount: number;
-  objectsArray: string; // Already JSON stringified
+  objectsArray: Record<string, any>[];  // Array of objects (passed to context)
   userInstructions?: string;
   enablePrefill?: boolean;
   enableThinking?: boolean;
@@ -460,11 +460,12 @@ export class SystemPromptManager {
         sourceLanguage,
         targetLanguage,
         objectCount,
-        objectsArray, // Pass raw string (it's already JSON stringified in context)
         userInstructions: userInstructions || '',
       },
       state: {},
-      context: {}
+      context: {
+        objectsArray,  // Array goes in context, use {{ context.objectsArray | json }} in template
+      }
     };
 
     return {

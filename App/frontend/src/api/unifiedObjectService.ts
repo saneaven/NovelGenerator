@@ -240,13 +240,13 @@ export const unifiedObjectService = {
 };
 
 // ============================================================================
-// CHAPTER CONTENT SPECIFIC
+// MANUSCRIPT SPECIFIC
 // ============================================================================
 
-export const chapterContentService = {
+export const manuscriptService = {
   /**
-   * Update chapter content in-place (for continuous typing in editor)
-   * @param id Chapter content ID
+   * Update manuscript in-place (for continuous typing in editor)
+   * @param id Manuscript ID
    * @param request Update request
    */
   async updateInPlace(
@@ -254,7 +254,7 @@ export const chapterContentService = {
     request: UpdateObjectRequest
   ): Promise<UnifiedObject> {
     return apiClient.patch<UnifiedObject>(
-      `/api/v1/objects/chapter_content/${id}/content`,
+      `/api/v1/objects/manuscript/${id}/content`,
       request
     );
   },

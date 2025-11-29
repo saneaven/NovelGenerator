@@ -1,36 +1,36 @@
 /**
- * Novel/Chapter Content service
+ * Novel/Manuscript service
  * Now using unified object system
  */
 
 import { unifiedObjectService } from './unifiedObjectService';
 import type {
-  ChapterContentCreate,
-  ChapterContentUpdate,
-  ChapterContentResponse,
-  ChapterContentVersionResponse,
+  ManuscriptCreate,
+  ManuscriptUpdate,
+  ManuscriptResponse,
+  ManuscriptVersionResponse,
 } from './types';
 import type {
   UnifiedObject,
-  ChapterContentData,
+  ManuscriptData,
   VersionHistoryEntry,
 } from '../types/unifiedObject';
 
 // ============================================================================
-// HELPER: Find chapter content ID from chapter ID
+// HELPER: Find manuscript ID from chapter ID
 // ============================================================================
 
 /**
- * Find the chapter_content object ID for a given chapter ID
+ * Find the manuscript object ID for a given chapter ID
  * Returns null if not found
  */
-async function findChapterContentId(
+async function findManuscriptId(
   projectId: string,
   chapterId: string
 ): Promise<string | null> {
   try {
-    const result = await unifiedObjectService.listObjects<ChapterContentData>(
-      'chapter_content',
+    const result = await unifiedObjectService.listObjects<ManuscriptData>(
+      'manuscript',
       projectId,
       { page_size: 100 } // backend limit is 100 per request
     );
@@ -41,7 +41,7 @@ async function findChapterContentId(
 
     return contentObj?.id || null;
   } catch (error) {
-    console.error('[novelService] Error finding chapter content ID:', error);
+    console.error('[novelService] Error finding manuscript ID:', error);
     return null;
   }
 }
@@ -51,15 +51,15 @@ async function findChapterContentId(
 // ============================================================================
 
 /**
- * Convert UnifiedObject to old ChapterContentResponse format
+ * Convert UnifiedObject to ManuscriptResponse format
  * This maintains backward compatibility with existing code
  */
 function convertToLegacyFormat(
-  unifiedObj: UnifiedObject<ChapterContentData>,
+  unifiedObj: UnifiedObject<ManuscriptData>,
   versionHistory?: VersionHistoryEntry[]
-): ChapterContentResponse {
+): ManuscriptResponse {
   // Convert version history to old format
-  const versions: ChapterContentVersionResponse[] = [];
+  const versions: ManuscriptVersionResponse[] = [];
 
   if (versionHistory && versionHistory.length > 0) {
     versionHistory.forEach((version) => {
@@ -77,7 +77,7 @@ function convertToLegacyFormat(
 
       versions.push({
         id: version.id,
-        chapter_content_id: unifiedObj.id,
+        manuscript_id: unifiedObj.id,
         userRequest: version.user_request || 'No description',
         is_active: version.id === unifiedObj.version.id,
         data: languageData,
@@ -100,7 +100,7 @@ function convertToLegacyFormat(
 
     versions.push({
       id: unifiedObj.version.id,
-      chapter_content_id: unifiedObj.id,
+      manuscript_id: unifiedObj.id,
       userRequest: 'Current version',
       is_active: true,
       data: currentData,
@@ -124,13 +124,13 @@ function convertToLegacyFormat(
 
 export const novelService = {
   /**
-   * Create chapter content
+   * Create manuscript
    */
-  async createChapterContent(
+  async createManuscript(
     projectId: string,
     chapterId: string,
-    data: ChapterContentCreate
-  ): Promise<ChapterContentResponse> {
+    data: ManuscriptCreate
+  ): Promise<ManuscriptResponse> {
     // Count words
     const wordCount = data.content
       .trim()
@@ -138,8 +138,8 @@ export const novelService = {
       .filter((word) => word.length > 0).length;
 
     // Create using unified API
-    const unifiedObj = await unifiedObjectService.createObject<ChapterContentData>(
-      'chapter_content',
+    const unifiedObj = await unifiedObjectService.createObject<ManuscriptData>(
+      'manuscript',
       projectId,
       {
         data: {
@@ -155,52 +155,52 @@ export const novelService = {
     );
 
     // Get version history
-    const versions = await unifiedObjectService.getVersions('chapter_content', unifiedObj.id);
+    const versions = await unifiedObjectService.getVersions('manuscript', unifiedObj.id);
 
     // Convert to legacy format
     return convertToLegacyFormat(unifiedObj, versions);
   },
 
   /**
-   * Get chapter content with all versions
+   * Get manuscript with all versions
    */
-  async getChapterContent(
+  async getManuscript(
     projectId: string,
     chapterId: string
-  ): Promise<ChapterContentResponse> {
-    // Find content ID
-    const contentId = await findChapterContentId(projectId, chapterId);
+  ): Promise<ManuscriptResponse> {
+    // Find manuscript ID
+    const manuscriptId = await findManuscriptId(projectId, chapterId);
 
-    if (!contentId) {
-      throw new Error(`No content found for chapter ${chapterId}`);
+    if (!manuscriptId) {
+      throw new Error(`No manuscript found for chapter ${chapterId}`);
     }
 
     // Get object
-    const unifiedObj = await unifiedObjectService.getObject<ChapterContentData>(
-      'chapter_content',
-      contentId
+    const unifiedObj = await unifiedObjectService.getObject<ManuscriptData>(
+      'manuscript',
+      manuscriptId
     );
 
     // Get version history
-    const versions = await unifiedObjectService.getVersions('chapter_content', contentId);
+    const versions = await unifiedObjectService.getVersions('manuscript', manuscriptId);
 
     // Convert to legacy format
     return convertToLegacyFormat(unifiedObj, versions);
   },
 
   /**
-   * Update chapter content (creates new version by default)
+   * Update manuscript (creates new version by default)
    */
-  async updateChapterContent(
+  async updateManuscript(
     projectId: string,
     chapterId: string,
-    data: ChapterContentUpdate
-  ): Promise<ChapterContentResponse> {
-    // Find content ID
-    const contentId = await findChapterContentId(projectId, chapterId);
+    data: ManuscriptUpdate
+  ): Promise<ManuscriptResponse> {
+    // Find manuscript ID
+    const manuscriptId = await findManuscriptId(projectId, chapterId);
 
-    if (!contentId) {
-      throw new Error(`No content found for chapter ${chapterId}`);
+    if (!manuscriptId) {
+      throw new Error(`No manuscript found for chapter ${chapterId}`);
     }
 
     // Count words
@@ -210,9 +210,9 @@ export const novelService = {
       .filter((word) => word.length > 0).length;
 
     // Update using unified API
-    const unifiedObj = await unifiedObjectService.updateObject<ChapterContentData>(
-      'chapter_content',
-      contentId,
+    const unifiedObj = await unifiedObjectService.updateObject<ManuscriptData>(
+      'manuscript',
+      manuscriptId,
       {
         data: {
           content: data.content,
@@ -225,49 +225,49 @@ export const novelService = {
     );
 
     // Get version history
-    const versions = await unifiedObjectService.getVersions('chapter_content', contentId);
+    const versions = await unifiedObjectService.getVersions('manuscript', manuscriptId);
 
     // Convert to legacy format
     return convertToLegacyFormat(unifiedObj, versions);
   },
 
   /**
-   * Set active version for chapter content
+   * Set active version for manuscript
    */
-  async setActiveChapterVersion(
+  async setActiveManuscriptVersion(
     projectId: string,
     chapterId: string,
     versionId: string
-  ): Promise<ChapterContentResponse> {
-    // Find content ID
-    const contentId = await findChapterContentId(projectId, chapterId);
+  ): Promise<ManuscriptResponse> {
+    // Find manuscript ID
+    const manuscriptId = await findManuscriptId(projectId, chapterId);
 
-    if (!contentId) {
-      throw new Error(`No content found for chapter ${chapterId}`);
+    if (!manuscriptId) {
+      throw new Error(`No manuscript found for chapter ${chapterId}`);
     }
 
     // Activate version
-    await unifiedObjectService.activateVersion('chapter_content', contentId, versionId);
+    await unifiedObjectService.activateVersion('manuscript', manuscriptId, versionId);
 
     // Get updated object
-    const unifiedObj = await unifiedObjectService.getObject<ChapterContentData>(
-      'chapter_content',
-      contentId
+    const unifiedObj = await unifiedObjectService.getObject<ManuscriptData>(
+      'manuscript',
+      manuscriptId
     );
 
     // Get version history
-    const versions = await unifiedObjectService.getVersions('chapter_content', contentId);
+    const versions = await unifiedObjectService.getVersions('manuscript', manuscriptId);
 
     // Convert to legacy format
     return convertToLegacyFormat(unifiedObj, versions);
   },
 
   /**
-   * Helper: Get chapter content ID from chapter ID
-   * Useful for components that need the content ID directly
+   * Helper: Get manuscript ID from chapter ID
+   * Useful for components that need the manuscript ID directly
    */
-  async getChapterContentId(projectId: string, chapterId: string): Promise<string | null> {
-    return findChapterContentId(projectId, chapterId);
+  async getManuscriptId(projectId: string, chapterId: string): Promise<string | null> {
+    return findManuscriptId(projectId, chapterId);
   },
 };
 

@@ -1,4 +1,5 @@
-// OpenAI Function Calling Types for Story Object Management
+// Gemini-safe function schemas for workspace and novel editing.
+// Only uses simple JSON Schema subset (type/properties/required) with no conditionals.
 
 export interface FunctionCallSchema {
   name: string;
@@ -22,199 +23,310 @@ export interface FunctionCallResult {
   data?: any;
 }
 
-// Workspace Story Object Function Schemas (for story structure management)
+// ----- Workspace: story-structure functions --------------------------------
+
+const baseTextFields = {
+  name: { type: "string" },
+  description: { type: "string" },
+};
+
+const baseIdField = {
+  id: { type: "string", description: "ID of the target object" },
+};
+
 export const WORKSPACE_FUNCTIONS: FunctionCallSchema[] = [
   {
-    name: "manage_story_objects",
-    description: "Create, update, or delete story objects in a single operation. Supports batch operations for efficient management.",
+    name: "create_basic_info",
+    description: "Create or replace the project's basic info (title, logline, genre).",
     parameters: {
       type: "object",
       properties: {
-        operations: {
+        title: { type: "string" },
+        logline: { type: "string" },
+        genre: { type: "string" },
+      },
+      required: ["title", "logline", "genre"],
+    },
+  },
+  {
+    name: "update_basic_info",
+    description: "Update an existing basic info record.",
+    parameters: {
+      type: "object",
+      properties: {
+        ...baseIdField,
+        title: { type: "string" },
+        logline: { type: "string" },
+        genre: { type: "string" },
+      },
+      required: ["id"],
+    },
+  },
+
+  // Characters
+  {
+    name: "create_character",
+    description: "Create a character.",
+    parameters: {
+      type: "object",
+      properties: {
+        ...baseTextFields,
+      },
+      required: ["name", "description"],
+    },
+  },
+  {
+    name: "update_character",
+    description: "Update a character by id.",
+    parameters: {
+      type: "object",
+      properties: {
+        ...baseIdField,
+        ...baseTextFields,
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "delete_character",
+    description: "Delete a character by id.",
+    parameters: {
+      type: "object",
+      properties: {
+        ...baseIdField,
+      },
+      required: ["id"],
+    },
+  },
+
+  // Organizations
+  {
+    name: "create_organization",
+    description: "Create an organization.",
+    parameters: {
+      type: "object",
+      properties: {
+        ...baseTextFields,
+      },
+      required: ["name", "description"],
+    },
+  },
+  {
+    name: "update_organization",
+    description: "Update an organization by id.",
+    parameters: {
+      type: "object",
+      properties: {
+        ...baseIdField,
+        ...baseTextFields,
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "delete_organization",
+    description: "Delete an organization by id.",
+    parameters: {
+      type: "object",
+      properties: {
+        ...baseIdField,
+      },
+      required: ["id"],
+    },
+  },
+
+  // Locations
+  {
+    name: "create_location",
+    description: "Create a location.",
+    parameters: {
+      type: "object",
+      properties: {
+        ...baseTextFields,
+      },
+      required: ["name", "description"],
+    },
+  },
+  {
+    name: "update_location",
+    description: "Update a location by id.",
+    parameters: {
+      type: "object",
+      properties: {
+        ...baseIdField,
+        ...baseTextFields,
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "delete_location",
+    description: "Delete a location by id.",
+    parameters: {
+      type: "object",
+      properties: {
+        ...baseIdField,
+      },
+      required: ["id"],
+    },
+  },
+
+  // Lorebook
+  {
+    name: "create_lorebook_entry",
+    description: "Create a lorebook entry.",
+    parameters: {
+      type: "object",
+      properties: {
+        ...baseTextFields,
+      },
+      required: ["name", "description"],
+    },
+  },
+  {
+    name: "update_lorebook_entry",
+    description: "Update a lorebook entry by id.",
+    parameters: {
+      type: "object",
+      properties: {
+        ...baseIdField,
+        ...baseTextFields,
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "delete_lorebook_entry",
+    description: "Delete a lorebook entry by id.",
+    parameters: {
+      type: "object",
+      properties: {
+        ...baseIdField,
+      },
+      required: ["id"],
+    },
+  },
+
+  // Acts
+  {
+    name: "create_act",
+    description: "Create an act. Optionally include chapters to create with it.",
+    parameters: {
+      type: "object",
+      properties: {
+        ...baseTextFields,
+        order: { type: "integer", description: "0-based order within the outline" },
+        chapters: {
           type: "array",
           items: {
             type: "object",
             properties: {
-              action: {
-                type: "string",
-                enum: ["create", "update", "delete"],
-                description: "The action to perform on the story object"
-              },
-              type: {
-                type: "string",
-                enum: ["basic_info", "character", "organization", "location", "lorebook", "act", "chapter"],
-                description: "The type of story object to manage"
-              },
-              id: {
-                type: "string",
-                description: "Required for update and delete actions. When action is 'create' just type 'null'. The ID of the object to modify or remove."
-              },
-              data: {
-                type: "object",
-                description: "Required for create and update actions. The object data.",
-                properties: {
-                  name: { type: "string" },
-                  description: { type: "string" },
-                  title: { type: "string", description: "Only for basic_info type" },
-                  logline: { type: "string", description: "Only for basic_info type" },
-                  genre: { type: "string", description: "Only for basic_info type" },
-                  actId: { type: "string", description: "The act this chapter belongs to (required for new chapters)" },
-                  order: {
-                    type: "integer",
-                    description: "0-based order within its parent collection (acts: outline order, chapters: act order)"
-                  },
-                  chapters: {
-                    type: "array",
-                    description: "Only for act type",
-                    items: {
-                      type: "object",
-                      properties: {
-                        name: { type: "string" },
-                        description: { type: "string" },
-                        order: {
-                          type: "integer",
-                          description: "0-based order within the act"
-                        },
-                        actId: {
-                          type: "string",
-                          description: "Optional override actId for new chapters; defaults to the parent act"
-                        }
-                      },
-                      required: ["name", "description", "order"]
-                    }
-                  }
-                }
-              }
+              ...baseTextFields,
+              order: { type: "integer", description: "0-based order within the act" },
             },
-            required: ["action", "type"],
-            allOf: [
-              {
-                if: {
-                  properties: { action: { const: "update" } }
-                },
-                then: {
-                  required: ["id", "data"]
-                }
-              },
-              {
-                if: {
-                  properties: { action: { const: "delete" } }
-                },
-                then: {
-                  required: ["id"]
-                }
-              },
-              {
-                if: {
-                  properties: { action: { const: "create" } }
-                },
-                then: {
-                  required: ["data"]
-                }
-              },
-              {
-                if: {
-                  properties: {
-                    type: { const: "basic_info" },
-                    action: { enum: ["create", "update"] }
-                  }
-                },
-                then: {
-                  properties: {
-                    data: {
-                      required: ["title", "logline", "genre"]
-                    }
-                  }
-                }
-              },
-              {
-                if: {
-                  properties: {
-                    type: { const: "chapter" },
-                    action: { enum: ["create", "update"] }
-                  }
-                },
-                then: {
-                  properties: {
-                    data: {
-                      required: ["name", "description", "actId", "order"]
-                    }
-                  }
-                }
-              },
-              {
-                if: {
-                  properties: {
-                    type: { const: "act" },
-                    action: { enum: ["create", "update"] }
-                  }
-                },
-                then: {
-                  properties: {
-                    data: {
-                      required: ["name", "description", "order"],
-                      properties: {
-                        chapters: {
-                          items: {
-                            required: ["name", "description", "order"]
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              },
-              {
-                if: {
-                  properties: {
-                    type: { enum: ["character", "organization", "location", "lorebook"] },
-                    action: { enum: ["create", "update"] }
-                  }
-                },
-                then: {
-                  properties: {
-                    data: {
-                      required: ["name", "description"]
-                    }
-                  }
-                }
-              }
-            ]
-          }
-        }
+            required: ["name", "description", "order"],
+          },
+        },
       },
-      required: ["operations"]
-    }
-  }
+      required: ["name", "description"],
+    },
+  },
+  {
+    name: "update_act",
+    description: "Update an act by id.",
+    parameters: {
+      type: "object",
+      properties: {
+        ...baseIdField,
+        ...baseTextFields,
+        order: { type: "integer", description: "0-based order within the outline" },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "delete_act",
+    description: "Delete an act by id.",
+    parameters: {
+      type: "object",
+      properties: {
+        ...baseIdField,
+      },
+      required: ["id"],
+    },
+  },
+
+  // Chapters
+  {
+    name: "create_chapter",
+    description: "Create a chapter within an act.",
+    parameters: {
+      type: "object",
+      properties: {
+        ...baseTextFields,
+        actId: { type: "string", description: "ID of the parent act" },
+        order: { type: "integer", description: "0-based order within the act" },
+      },
+      required: ["name", "description", "actId", "order"],
+    },
+  },
+  {
+    name: "update_chapter",
+    description: "Update a chapter by id.",
+    parameters: {
+      type: "object",
+      properties: {
+        ...baseIdField,
+        ...baseTextFields,
+        actId: { type: "string", description: "New parent act id (optional)" },
+        order: { type: "integer", description: "0-based order within the act" },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "delete_chapter",
+    description: "Delete a chapter by id.",
+    parameters: {
+      type: "object",
+      properties: {
+        ...baseIdField,
+      },
+      required: ["id"],
+    },
+  },
 ];
 
-// Novel Editor Function Schemas (for chapter content management)
+// ----- Novel editor functions (unchanged, already Gemini-safe) -------------
+
 export const NOVEL_EDITOR_FUNCTIONS: FunctionCallSchema[] = [
   {
-    name: "update_chapter_content",
-    description: "Update the content of a specific chapter. Used for AI-generated chapter content or content modifications.",
+    name: "update_manuscript",
+    description: "Update the manuscript content of a specific chapter. Used for AI-generated chapter content or content modifications.",
     parameters: {
       type: "object",
       properties: {
         chapterId: {
           type: "string",
-          description: "The ID of the chapter to update"
+          description: "The ID of the chapter to update",
         },
         content: {
           type: "string",
-          description: "The new content for the chapter"
-        }
+          description: "The new content for the chapter",
+        },
       },
-      required: ["chapterId", "content"]
-    }
-  }
+      required: ["chapterId", "content"],
+    },
+  },
 ];
 
-
+// ---------------------------------------------------------------------------
 // Function call message types for chat
+// ---------------------------------------------------------------------------
+
 export interface FunctionCallMessage {
   id: string;
-  role: 'assistant';
+  role: "assistant";
   content: string | null;
   function_call?: FunctionCall;
   timestamp: Date;
@@ -222,8 +334,9 @@ export interface FunctionCallMessage {
 
 export interface FunctionResultMessage {
   id: string;
-  role: 'function';
+  role: "function";
   name: string;
   content: string;
   timestamp: Date;
 }
+

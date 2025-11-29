@@ -6,7 +6,6 @@
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import type { FunctionCallMetadata } from '../../llm_request/types';
-import type { ObjectType } from '../../types/unifiedObject';
 
 export interface FunctionApplicationResult {
   success: boolean;
@@ -156,7 +155,7 @@ async function handleEditBasicInfo(
   if (basicInfoList.length > 0) {
     basicInfoId = basicInfoList[0].id;
     const basicInfo = store.objects[basicInfoId];
-    const language = basicInfo?.languages.active || settings.settings.primaryLanguage;
+    const language = basicInfo?.languages.active || settings.settings.mainLanguage;
 
     // Update existing basic info
     await store.updateObject('basic_info', basicInfoId, {
@@ -179,7 +178,7 @@ async function handleEditBasicInfo(
         logline: args.logline,
         genre: args.genre
       },
-      settings.settings.primaryLanguage
+      settings.settings.mainLanguage
     );
     basicInfoId = newBasicInfo.id;
   }
@@ -192,7 +191,7 @@ async function handleEditBasicInfo(
 }
 
 async function handleEditCharacter(
-  projectId: string,
+  _projectId: string,
   args: { id: string; name: string; description: string },
   store: any
 ): Promise<FunctionApplicationResult> {
@@ -220,7 +219,7 @@ async function handleEditCharacter(
 }
 
 async function handleEditOrganization(
-  projectId: string,
+  _projectId: string,
   args: { id: string; name: string; description: string },
   store: any
 ): Promise<FunctionApplicationResult> {
@@ -248,7 +247,7 @@ async function handleEditOrganization(
 }
 
 async function handleEditLocation(
-  projectId: string,
+  _projectId: string,
   args: { id: string; name: string; description: string },
   store: any
 ): Promise<FunctionApplicationResult> {
@@ -276,7 +275,7 @@ async function handleEditLocation(
 }
 
 async function handleEditLorebookEntry(
-  projectId: string,
+  _projectId: string,
   args: { id: string; name: string; description: string },
   store: any
 ): Promise<FunctionApplicationResult> {
@@ -317,10 +316,6 @@ async function handleEditAct(
       error: `Act with id ${args.id} not found`
     };
   }
-
-  const actOrder = typeof args.order === 'number' && Number.isFinite(args.order)
-    ? args.order
-    : existingAct.metadata.order || 0;
 
   // Update act metadata
   await store.updateObject('act', args.id, {
@@ -377,7 +372,7 @@ async function handleEditAct(
           name: chapter.name,
           description: chapter.description
         },
-        settings.settings.primaryLanguage,
+        settings.settings.mainLanguage,
         {
           act_id: targetActId,
           order: chapterOrder
@@ -394,7 +389,7 @@ async function handleEditAct(
 }
 
 async function handleEditChapterMetadata(
-  projectId: string,
+  _projectId: string,
   args: { id: string; name: string; description: string },
   store: any
 ): Promise<FunctionApplicationResult> {
@@ -498,7 +493,7 @@ async function handleEditOutline(
                 name: chapter.name,
                 description: chapter.description
               },
-              settings.settings.primaryLanguage,
+              settings.settings.mainLanguage,
               {
                 act_id: targetActId,
                 order: chapterOrder
@@ -516,7 +511,7 @@ async function handleEditOutline(
           name: act.name,
           description: act.description
         },
-        settings.settings.primaryLanguage,
+        settings.settings.mainLanguage,
         {
           order: actOrder
         }
@@ -549,7 +544,7 @@ async function handleEditOutline(
             name: chapter.name,
             description: chapter.description
           },
-          settings.settings.primaryLanguage,
+          settings.settings.mainLanguage,
           {
             act_id: targetActId,
             order: chapterOrder
@@ -603,7 +598,7 @@ async function handleEditCharactersBatch(
           name: character.name,
           description: character.description
         },
-        settings.settings.primaryLanguage
+        settings.settings.mainLanguage
       );
       results.created++;
     }
@@ -647,7 +642,7 @@ async function handleEditOrganizationsBatch(
           name: org.name,
           description: org.description
         },
-        settings.settings.primaryLanguage
+        settings.settings.mainLanguage
       );
       results.created++;
     }
@@ -691,7 +686,7 @@ async function handleEditLocationsBatch(
           name: location.name,
           description: location.description
         },
-        settings.settings.primaryLanguage
+        settings.settings.mainLanguage
       );
       results.created++;
     }
@@ -735,7 +730,7 @@ async function handleEditLorebookBatch(
           name: entry.name,
           description: entry.description
         },
-        settings.settings.primaryLanguage
+        settings.settings.mainLanguage
       );
       results.created++;
     }
@@ -824,7 +819,7 @@ async function handleEditActsBatch(
                 name: chapter.name,
                 description: chapter.description
               },
-              settings.settings.primaryLanguage,
+              settings.settings.mainLanguage,
               {
                 act_id: targetActId,
                 order: chapterOrder
@@ -842,7 +837,7 @@ async function handleEditActsBatch(
           name: act.name,
           description: act.description
         },
-        settings.settings.primaryLanguage,
+        settings.settings.mainLanguage,
         {
           order: actOrder
         }
@@ -876,7 +871,7 @@ async function handleEditActsBatch(
             name: chapter.name,
             description: chapter.description
           },
-          settings.settings.primaryLanguage,
+          settings.settings.mainLanguage,
           {
             act_id: targetActId,
             order: chapterOrder
@@ -943,7 +938,7 @@ async function handleEditChaptersBatch(
           name: chapter.name,
           description: chapter.description
         },
-        settings.settings.primaryLanguage,
+        settings.settings.mainLanguage,
         {
           act_id: targetActId,
           order: chapterOrder

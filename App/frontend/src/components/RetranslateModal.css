@@ -1,0 +1,516 @@
+/* Retranslate Modal - Modern Design (mirrors AIEditModal) */
+
+/* Overlay */
+.retranslate-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+  animation: fadeIn var(--transition-base);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Modal Container */
+.retranslate-modal {
+  max-width: 600px;
+  width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface-base);
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+  animation: slideInUp 0.3s ease-out;
+  box-shadow: var(--shadow-2xl);
+}
+
+/* Header */
+.retranslate-modal .modal-header {
+  background: var(--gradient-accent);
+  color: white;
+  padding: var(--spacing-xl) var(--spacing-2xl);
+  border-bottom: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+}
+
+.retranslate-modal .modal-header h2 {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex: 1;
+}
+
+.retranslate-modal .modal-close {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: var(--spacing-sm);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-2xl);
+  font-weight: 300;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.retranslate-modal .modal-close:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.25);
+  transform: rotate(90deg);
+}
+
+.retranslate-modal .modal-close:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Form Styling */
+.retranslate-form {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-2xl);
+  background: var(--color-surface-base);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+}
+
+/* Language Selection Section */
+.retranslate-modal .language-selection-section {
+  background: var(--color-surface-elevated);
+  padding: var(--spacing-xl);
+  border-radius: var(--border-radius-lg);
+  border: 2px solid var(--color-border-default);
+  box-shadow: var(--shadow-sm);
+}
+
+.retranslate-modal .language-selection-section h3 {
+  margin: 0 0 var(--spacing-lg) 0;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.retranslate-modal .language-selector-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--spacing-md);
+}
+
+.retranslate-modal .language-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.retranslate-modal .language-field label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.retranslate-modal .language-select {
+  padding: var(--spacing-md) var(--spacing-lg);
+  border: 2px solid var(--color-border-medium);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-md);
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  appearance: auto;
+  -webkit-appearance: auto;
+}
+
+.retranslate-modal .language-select:focus {
+  outline: none;
+  border-color: var(--color-brand-primary);
+  box-shadow: 0 0 0 3px var(--color-brand-primary-muted);
+}
+
+.retranslate-modal .language-select:disabled {
+  background: var(--color-surface-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.retranslate-modal .swap-languages-btn {
+  padding: var(--spacing-md);
+  min-width: 44px;
+  height: 44px;
+  border: 2px solid var(--color-border-medium);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xl);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.retranslate-modal .swap-languages-btn:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  border-color: var(--color-brand-primary);
+  color: var(--color-brand-primary);
+  transform: scale(1.05);
+}
+
+.retranslate-modal .swap-languages-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Info Section - Card Style (for timestamp) */
+.retranslate-modal .info-section {
+  background: var(--color-surface-subtle);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-border-default);
+}
+
+.retranslate-modal .info-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.retranslate-modal .info-label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.retranslate-modal .info-value {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+/* Form Groups */
+.retranslate-modal .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.retranslate-modal .form-group h3 {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.retranslate-modal .form-group label {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+/* Checkbox - Card Style */
+.retranslate-modal .checkbox-label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--color-surface-subtle);
+  border: 2px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.retranslate-modal .checkbox-label:hover {
+  background: var(--color-surface-muted);
+  border-color: var(--color-brand-primary-border);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.retranslate-modal .checkbox-label input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--color-brand-primary);
+  flex-shrink: 0;
+}
+
+.retranslate-modal .checkbox-label input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.retranslate-modal .checkbox-label:has(input[type="checkbox"]:disabled) {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.retranslate-modal .checkbox-label:has(input[type="checkbox"]:disabled):hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.retranslate-modal .checkbox-label:has(input[type="checkbox"]:checked) {
+  background: var(--color-brand-primary-soft);
+  border-color: var(--color-brand-primary);
+  box-shadow: 0 0 0 3px var(--color-brand-primary-muted);
+}
+
+.retranslate-modal .checkbox-text {
+  flex: 1;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.retranslate-modal .checkbox-label input[type="checkbox"]:checked ~ .checkbox-text {
+  color: var(--color-brand-primary-active);
+  font-weight: 600;
+}
+
+/* Field Hint */
+.retranslate-modal .field-hint {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+  line-height: 1.6;
+  padding: var(--spacing-md);
+  background: var(--color-surface-subtle);
+  border-radius: var(--border-radius-sm);
+  border-left: 3px solid var(--color-brand-secondary-outline);
+}
+
+/* Textarea */
+.retranslate-modal .instructions-textarea {
+  padding: var(--spacing-lg);
+  border: 2px solid var(--color-border-medium);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-md);
+  line-height: 1.6;
+  font-family: var(--font-family-base);
+  resize: vertical;
+  transition: all 0.2s ease;
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+}
+
+.retranslate-modal .instructions-textarea:focus {
+  outline: none;
+  border-color: var(--color-brand-primary);
+  box-shadow: 0 0 0 3px var(--color-brand-primary-muted);
+}
+
+.retranslate-modal .instructions-textarea:disabled {
+  background: var(--color-surface-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.retranslate-modal .instructions-textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Processing Message */
+.retranslate-modal .processing-message {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+  background: var(--color-brand-primary-soft);
+  border: 2px solid var(--color-brand-primary);
+  border-radius: var(--border-radius-md);
+  color: var(--color-brand-primary-active);
+  font-weight: 600;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.retranslate-modal .processing-message .spinner {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Modal Actions */
+.retranslate-modal .modal-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  justify-content: flex-end;
+  padding-top: var(--spacing-lg);
+  border-top: 2px solid var(--color-border-default);
+}
+
+.retranslate-modal .modal-actions button {
+  padding: var(--spacing-md) var(--spacing-2xl);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.retranslate-modal .btn-secondary {
+  background: var(--color-surface-muted);
+  border-color: var(--color-border-medium);
+  color: var(--color-text-secondary);
+}
+
+.retranslate-modal .btn-secondary:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-strong);
+  transform: translateY(-1px);
+}
+
+.retranslate-modal .btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.retranslate-modal .btn-primary {
+  background: var(--color-brand-primary);
+  border-color: var(--color-brand-primary-hover);
+  color: white;
+}
+
+.retranslate-modal .btn-primary:hover:not(:disabled) {
+  background: var(--color-brand-primary-hover);
+  border-color: var(--color-brand-primary-active);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.retranslate-modal .btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Animation */
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .retranslate-modal {
+    max-width: 95vw;
+    max-height: 95vh;
+  }
+
+  .retranslate-form {
+    padding: var(--spacing-lg);
+  }
+
+  .retranslate-modal .modal-header {
+    padding: var(--spacing-lg) var(--spacing-xl);
+  }
+
+  .retranslate-modal .modal-header h2 {
+    font-size: var(--font-size-lg);
+  }
+
+  .retranslate-modal .modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .retranslate-modal .modal-actions button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .retranslate-modal .language-selector-row {
+    flex-direction: column;
+    gap: var(--spacing-lg);
+  }
+
+  .retranslate-modal .swap-languages-btn {
+    align-self: center;
+    transform: rotate(90deg);
+  }
+
+  .retranslate-modal .swap-languages-btn:hover:not(:disabled) {
+    transform: rotate(90deg) scale(1.05);
+  }
+}
+
+/* Scrollbar Styling */
+.retranslate-form::-webkit-scrollbar {
+  width: 8px;
+}
+
+.retranslate-form::-webkit-scrollbar-track {
+  background: var(--color-scrollbar-track);
+  border-radius: var(--border-radius-md);
+}
+
+.retranslate-form::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar-thumb);
+  border-radius: var(--border-radius-md);
+}
+
+.retranslate-form::-webkit-scrollbar-thumb:hover {
+  background: var(--color-scrollbar-thumb-hover);
+}

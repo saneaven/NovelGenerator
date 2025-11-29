@@ -3,12 +3,14 @@ import type { ContentPart } from '../llm_request/types';
 import './ThinkingDisplay.css';
 
 interface ThinkingDisplayProps {
+  messageId: string;
   contentParts?: ContentPart[];
   displayMode?: 'inline' | 'separate';
   isStreaming?: boolean;
 }
 
 const ThinkingDisplay: React.FC<ThinkingDisplayProps> = ({
+  messageId,
   contentParts,
   displayMode = 'separate',
   isStreaming = false,
@@ -20,14 +22,7 @@ const ThinkingDisplay: React.FC<ThinkingDisplayProps> = ({
   const thinkingParts = contentParts.filter((p) => p.type === 'thinking');
   if (thinkingParts.length === 0) return null;
 
-  const generateStableKey = (text: string, index: number): string => {
-    let hash = 0;
-    for (let i = 0; i < text.length; i++) {
-      hash = ((hash << 5) - hash) + text.charCodeAt(i) + i;
-      hash |= 0;
-    }
-    return `${index}-${Math.abs(hash)}`;
-  };
+  const getStableKey = (index: number): string => `${messageId}-thinking-${index}`;
 
   const toggleExpanded = (key: string) => {
     setExpandedStates((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -38,7 +33,7 @@ const ThinkingDisplay: React.FC<ThinkingDisplayProps> = ({
       <div className="message-content-interleaved">
         {contentParts.map((part, index) => (
           <div
-            key={generateStableKey(part.text, index)}
+            key={getStableKey(index)}
             className={`content-part content-part-${part.type}`}
           >
             {part.type === 'content' ? (
@@ -58,7 +53,7 @@ const ThinkingDisplay: React.FC<ThinkingDisplayProps> = ({
   return (
     <div className="message-with-thinking">
       {thinkingParts.map((part, index) => {
-        const key = generateStableKey(part.text, index);
+        const key = getStableKey(index);
         const isExpanded = expandedStates[key] ?? false;
         const isLast = index === thinkingParts.length - 1;
         const streaming = isStreaming && isLast;

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useChatStore } from '../../../store/chatStore';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useErrorStore } from '../../../store/errorStore';
@@ -18,6 +18,10 @@ export function useFunctionCallHandlers(
   const [functionCallApplicator] = useState(() => new FunctionCallApplicator(unifiedStore));
   const [activeFunctionCalls, setActiveFunctionCalls] = useState<Record<string, FunctionCallProgress[]>>({});
   const [pendingFunctionCallResults, setPendingFunctionCallResults] = useState<FunctionCallResultSummary[]>([]);
+  const [confirmedMessages, setConfirmedMessages] = useState<Record<string, boolean>>({});
+
+  // Store function calls by message ID for batch operations
+  const functionCallsByMessage = useRef<Record<string, FunctionCallMetadata[]>>({});
 
   const getActiveChatId = useCallback(
     () => (projectId ? getSelectedChatId(projectId) : undefined),
@@ -193,14 +197,19 @@ export function useFunctionCallHandlers(
 
       updateMessageFunctionCalls(projectId, chatId, messageId, functionCalls);
 
-      const functionCallCards = functionCalls.map(funcCall => ({
+      // Store function calls for batch operations
+      functionCallsByMessage.current[messageId] = functionCalls;
+
+      const functionCallCards: EditCard[] = functionCalls.map(funcCall => ({
         id: funcCall.id,
         type: FunctionCallService.mapFunctionToEditType(funcCall.function_name),
         title: FunctionCallService.getFunctionCallTitle(funcCall.function_name),
         description: FunctionCallService.generateFunctionCallSummary(funcCall.function_name, funcCall.arguments),
         isApplied: funcCall.isApplied,
+        isRejected: funcCall.isRejected,
         data: funcCall.arguments,
         appliedAt: funcCall.appliedAt,
+        functionCall: funcCall, // Include reference to full function call
         onApply: createFunctionCallApplyHandler(messageId, funcCall),
         onReject: createFunctionCallRejectHandler(messageId, funcCall)
       }));
@@ -224,6 +233,179 @@ export function useFunctionCallHandlers(
       createFunctionCallRejectHandler,
       setMessageEditCards,
     ]
+  );
+
+  /**
+   * Handle batch confirmation of function calls with user selections
+   * @param messageId - The message ID containing the function calls
+   * @param selections - Map of function call ID to whether it should be applied (true) or rejected (false)
+   */
+  const handleBatchConfirm = useCallback(
+    async (messageId: string, selections: Record<string, boolean>) => {
+      if (!projectId) return;
+      const chatId = getActiveChatId();
+      if (!chatId) return;
+
+      // Get function calls from ref first, fallback to extracting from cards
+      let functionCalls = functionCallsByMessage.current[messageId];
+      if (!functionCalls || functionCalls.length === 0) {
+        // Fallback: extract function calls from the edit cards (for restored cards)
+        const cards = messageEditCards[messageId];
+        if (cards && cards.length > 0) {
+          functionCalls = cards
+            .filter(card => card.functionCall)
+            .map(card => card.functionCall!);
+        }
+      }
+      if (!functionCalls || functionCalls.length === 0) return;
+
+      const results: { cardId: string; success: boolean; isRejected: boolean; message: string }[] = [];
+
+      // Process each function call based on selection
+      for (const funcCall of functionCalls) {
+        const isSelected = selections[funcCall.id] ?? true; // Default to selected if not specified
+
+        if (isSelected) {
+          // Apply the function call
+          try {
+            const result = await functionCallApplicator.applyFunctionCall(projectId, funcCall);
+
+            if (result.success) {
+              updateFunctionCallStatus(
+                projectId, chatId, messageId, funcCall.id,
+                true, result, undefined, result.message, false
+              );
+              results.push({
+                cardId: funcCall.id,
+                success: true,
+                isRejected: false,
+                message: result.message
+              });
+
+              setPendingFunctionCallResults(prev => [...prev, {
+                functionCallId: funcCall.id,
+                functionName: funcCall.function_name,
+                success: true,
+                isRejected: false,
+                resultMessage: result.message,
+                appliedAt: new Date()
+              }]);
+            } else {
+              updateFunctionCallStatus(
+                projectId, chatId, messageId, funcCall.id,
+                true, result, result.error, result.error || result.message, false
+              );
+              results.push({
+                cardId: funcCall.id,
+                success: false,
+                isRejected: false,
+                message: result.error || result.message
+              });
+
+              setPendingFunctionCallResults(prev => [...prev, {
+                functionCallId: funcCall.id,
+                functionName: funcCall.function_name,
+                success: false,
+                isRejected: false,
+                resultMessage: result.error || result.message,
+                appliedAt: new Date()
+              }]);
+            }
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            updateFunctionCallStatus(
+              projectId, chatId, messageId, funcCall.id,
+              true, undefined, errorMessage, errorMessage, false
+            );
+            results.push({
+              cardId: funcCall.id,
+              success: false,
+              isRejected: false,
+              message: errorMessage
+            });
+
+            setPendingFunctionCallResults(prev => [...prev, {
+              functionCallId: funcCall.id,
+              functionName: funcCall.function_name,
+              success: false,
+              isRejected: false,
+              resultMessage: errorMessage,
+              appliedAt: new Date()
+            }]);
+          }
+        } else {
+          // Reject the function call
+          const rejectionMessage = `User rejected: ${FunctionCallService.getFunctionDisplayName(funcCall.function_name)}`;
+          updateFunctionCallStatus(
+            projectId, chatId, messageId, funcCall.id,
+            true, undefined, undefined, rejectionMessage, true // isRejected = true
+          );
+          results.push({
+            cardId: funcCall.id,
+            success: false,
+            isRejected: true,
+            message: rejectionMessage
+          });
+
+          setPendingFunctionCallResults(prev => [...prev, {
+            functionCallId: funcCall.id,
+            functionName: funcCall.function_name,
+            success: false,
+            isRejected: true,
+            resultMessage: rejectionMessage,
+            appliedAt: new Date()
+          }]);
+        }
+      }
+
+      // Update edit cards with results
+      setMessageEditCards(prev => ({
+        ...prev,
+        [messageId]: prev[messageId]?.map(card => {
+          const result = results.find(r => r.cardId === card.id);
+          if (!result) return card;
+
+          return {
+            ...card,
+            isApplied: true,
+            isRejected: result.isRejected,
+            appliedAt: new Date(),
+            title: result.isRejected
+              ? 'Rejected by User'
+              : result.success
+                ? 'Applied'
+                : 'Apply Failed',
+            description: result.message
+          };
+        }) || []
+      }));
+
+      // Mark message as confirmed
+      setConfirmedMessages(prev => ({
+        ...prev,
+        [messageId]: true
+      }));
+    },
+    [
+      projectId,
+      getActiveChatId,
+      functionCallApplicator,
+      updateFunctionCallStatus,
+      setPendingFunctionCallResults,
+      setMessageEditCards,
+      setConfirmedMessages,
+      messageEditCards, // Added for fallback extraction of function calls
+    ]
+  );
+
+  /**
+   * Check if all function calls in a message have been confirmed
+   */
+  const isMessageConfirmed = useCallback(
+    (messageId: string): boolean => {
+      return confirmedMessages[messageId] ?? false;
+    },
+    [confirmedMessages]
   );
 
   const handleFunctionCallProgress = useCallback(
@@ -260,6 +442,9 @@ export function useFunctionCallHandlers(
     setPendingFunctionCallResults,
     handleFunctionCalls,
     handleFunctionCallProgress,
+    handleBatchConfirm,
+    isMessageConfirmed,
+    setConfirmedMessages,
     createFunctionCallApplyHandler,
     createFunctionCallRejectHandler,
   };

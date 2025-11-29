@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import './BatchTranslationModal.css';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { TranslationService } from '../services/translationService';
@@ -10,6 +11,7 @@ interface BatchTranslationModalProps {
   onClose: () => void;
   projectId: string;
   onComplete: () => void;
+  allowedObjectTypes?: string[];  // If provided, only show these types and hide type selector
 }
 
 type ScreenType = 'config' | 'progress' | 'complete';
@@ -22,6 +24,7 @@ interface ObjectTypeSelection {
   lorebook: boolean;
   acts: boolean;
   chapters: boolean;
+  manuscript: boolean;
 }
 
 const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
@@ -29,6 +32,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
   onClose,
   projectId,
   onComplete,
+  allowedObjectTypes,
 }) => {
   const [screen, setScreen] = useState<ScreenType>('config');
   const [selectedTypes, setSelectedTypes] = useState<ObjectTypeSelection>({
@@ -39,6 +43,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
     lorebook: true,
     acts: true,
     chapters: true,
+    manuscript: true,
   });
   const [sourceLanguage, setSourceLanguage] = useState<string>('');
   const [targetLanguage, setTargetLanguage] = useState<string>('');
@@ -51,13 +56,43 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
   const store = useUnifiedObjectStore();
   const settings = useSettingsStore((state) => state.settings);
 
-  // Initialize languages from settings
-  useEffect(() => {
-    if (isOpen && !sourceLanguage) {
-      setSourceLanguage(settings.primaryLanguage);
-      setTargetLanguage(settings.secondaryLanguage || '');
+  // Build available languages list
+  const availableLanguages = useMemo(() => {
+    const languages = [settings.mainLanguage];
+    if (settings.subLanguages && settings.subLanguages.length > 0) {
+      languages.push(...settings.subLanguages);
     }
-  }, [isOpen, settings.primaryLanguage, settings.secondaryLanguage, sourceLanguage]);
+    return languages;
+  }, [settings.mainLanguage, settings.subLanguages]);
+
+  // Initialize languages from settings - detect which direction has objects to translate
+  useEffect(() => {
+    if (isOpen && !sourceLanguage && settings.subLanguages && settings.subLanguages.length > 0) {
+      const allObjects = Object.values(store.objects) as UnifiedObject<any>[];
+
+      // Find the sub language that has the most objects needing translation
+      let bestTargetLanguage = settings.subLanguages[0];
+      let maxObjectsToTranslate = 0;
+
+      settings.subLanguages.forEach((subLang: string) => {
+        let count = 0;
+        allObjects.forEach(obj => {
+          if (obj.metadata?.project_id !== projectId) return;
+          if (!obj.languages?.available.includes(subLang)) {
+            count++;
+          }
+        });
+        if (count > maxObjectsToTranslate) {
+          maxObjectsToTranslate = count;
+          bestTargetLanguage = subLang;
+        }
+      });
+
+      // Default: mainLanguage -> best sub language
+      setSourceLanguage(settings.mainLanguage);
+      setTargetLanguage(bestTargetLanguage);
+    }
+  }, [isOpen, settings.mainLanguage, settings.subLanguages, sourceLanguage, store.objects, projectId]);
 
   // Get objects that need translation
   const objectsToTranslate = useMemo(() => {
@@ -72,15 +107,20 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
       if (obj.languages?.active !== sourceLanguage) return; // Skip if not in source language
 
       const objType = obj.type;
+
+      // If allowedObjectTypes is specified, only include those types
+      if (allowedObjectTypes && !allowedObjectTypes.includes(objType)) return;
+
       let include = false;
 
       if (objType === 'basic_info' && selectedTypes.basicInfo) include = true;
       if (objType === 'character' && selectedTypes.characters) include = true;
       if (objType === 'organization' && selectedTypes.organizations) include = true;
       if (objType === 'location' && selectedTypes.locations) include = true;
-      if (objType === 'lorebook_entry' && selectedTypes.lorebook) include = true;
+      if (objType === 'lorebook' && selectedTypes.lorebook) include = true;
       if (objType === 'act' && selectedTypes.acts) include = true;
       if (objType === 'chapter' && selectedTypes.chapters) include = true;
+      if (objType === 'manuscript' && selectedTypes.manuscript) include = true;
 
       if (include) {
         objects.push({
@@ -92,7 +132,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
     });
 
     return objects;
-  }, [store.objects, projectId, targetLanguage, sourceLanguage, selectedTypes]);
+  }, [store.objects, projectId, targetLanguage, sourceLanguage, selectedTypes, allowedObjectTypes]);
 
   // Reset state when modal closes
   useEffect(() => {
@@ -161,8 +201,8 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay" onClick={handleCancel}>
-      <div className="modal-content batch-translation-modal" onClick={e => e.stopPropagation()}>
+    <div className="batch-translation-modal-overlay" onClick={handleCancel}>
+      <div className="batch-translation-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h2>🌐 Batch Translation</h2>
           <button className="modal-close" onClick={handleCancel}>×</button>
@@ -179,10 +219,9 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
                   onChange={(e) => setSourceLanguage(e.target.value)}
                   className="language-select"
                 >
-                  <option value={settings.primaryLanguage}>{settings.primaryLanguage}</option>
-                  {settings.secondaryLanguage && (
-                    <option value={settings.secondaryLanguage}>{settings.secondaryLanguage}</option>
-                  )}
+                  {availableLanguages.map(lang => (
+                    <option key={lang} value={lang}>{lang}</option>
+                  ))}
                 </select>
                 <button
                   onClick={handleSwapLanguages}
@@ -196,75 +235,87 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
                   onChange={(e) => setTargetLanguage(e.target.value)}
                   className="language-select"
                 >
-                  <option value={settings.primaryLanguage}>{settings.primaryLanguage}</option>
-                  {settings.secondaryLanguage && (
-                    <option value={settings.secondaryLanguage}>{settings.secondaryLanguage}</option>
-                  )}
+                  {availableLanguages
+                    .filter(lang => lang !== sourceLanguage)
+                    .map(lang => (
+                      <option key={lang} value={lang}>{lang}</option>
+                    ))}
                 </select>
               </div>
             </div>
 
-            <div className="form-group">
-              <label>Object Types to Translate</label>
-              <div className="checkbox-group">
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={selectedTypes.basicInfo}
-                    onChange={() => toggleType('basicInfo')}
-                  />
-                  <span>Basic Info</span>
-                </label>
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={selectedTypes.characters}
-                    onChange={() => toggleType('characters')}
-                  />
-                  <span>Characters</span>
-                </label>
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={selectedTypes.organizations}
-                    onChange={() => toggleType('organizations')}
-                  />
-                  <span>Organizations</span>
-                </label>
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={selectedTypes.locations}
-                    onChange={() => toggleType('locations')}
-                  />
-                  <span>Locations</span>
-                </label>
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={selectedTypes.lorebook}
-                    onChange={() => toggleType('lorebook')}
-                  />
-                  <span>Lorebook</span>
-                </label>
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={selectedTypes.acts}
-                    onChange={() => toggleType('acts')}
-                  />
-                  <span>Acts</span>
-                </label>
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={selectedTypes.chapters}
-                    onChange={() => toggleType('chapters')}
-                  />
-                  <span>Chapters</span>
-                </label>
+            {/* Only show type selector when not filtered by allowedObjectTypes */}
+            {!allowedObjectTypes && (
+              <div className="form-group">
+                <label>Object Types to Translate</label>
+                <div className="checkbox-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedTypes.basicInfo}
+                      onChange={() => toggleType('basicInfo')}
+                    />
+                    <span>Basic Info</span>
+                  </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedTypes.characters}
+                      onChange={() => toggleType('characters')}
+                    />
+                    <span>Characters</span>
+                  </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedTypes.organizations}
+                      onChange={() => toggleType('organizations')}
+                    />
+                    <span>Organizations</span>
+                  </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedTypes.locations}
+                      onChange={() => toggleType('locations')}
+                    />
+                    <span>Locations</span>
+                  </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedTypes.lorebook}
+                      onChange={() => toggleType('lorebook')}
+                    />
+                    <span>Lorebook</span>
+                  </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedTypes.acts}
+                      onChange={() => toggleType('acts')}
+                    />
+                    <span>Acts</span>
+                  </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedTypes.chapters}
+                      onChange={() => toggleType('chapters')}
+                    />
+                    <span>Chapters</span>
+                  </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedTypes.manuscript}
+                      onChange={() => toggleType('manuscript')}
+                    />
+                    <span>Manuscript</span>
+                  </label>
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="form-group">
               <label htmlFor="instructions">Additional Instructions (Optional)</label>

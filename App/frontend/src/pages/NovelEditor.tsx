@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { ChatPipeline } from '../chat/ChatPipeline';
 import type { SystemInsertConfig, EditCard } from '../chat/types';
 import { ChatManager, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
@@ -7,9 +7,10 @@ import { DefaultDisplayProcessor } from '../chat/processors/DisplayProcessor';
 import { areEditCardMapsEqual } from '../chat/utils/editCardUtils';
 import { NOVEL_EDITOR_FUNCTIONS } from '../chat/types/functionCalling';
 import { useChatStore } from '../store/chatStore';
+import { useChatUIStore } from '../store/chatUIStore';
 import { useProjectStore } from '../store/projectStore';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
-import { useNovelStore } from '../store/novelStore';
+import { useNovelEditorStore } from '../store/novelEditorStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
 import type { StoryObjects } from '../types/storyObject';
@@ -17,6 +18,8 @@ import type { StoryObjects } from '../types/storyObject';
 import ChatSidebar from '../components/ChatSidebar';
 import ErrorModal from '../components/ErrorModal';
 import SettingsModal from '../components/SettingsModal/SettingsModal';
+import BatchTranslationModal from '../components/BatchTranslationModal';
+import LanguageDropdown from '../components/ui/LanguageDropdown';
 import ChatPanel from './workspace/components/ChatPanel';
 import NovelEditorPanel from './noveleditor/components/NovelEditorPanel';
 
@@ -32,10 +35,12 @@ import './workspace/styles/MessageEdit.css';
 import './workspace/styles/ChatInput.css';
 import './workspace/styles/ChatSidebar.css';
 import './workspace/styles/MessageEditCards.css';
+import '../components/MobileChat.css';
 
 const NovelEditor: React.FC = () =>
 {
     const { projectId } = useParams<{ projectId: string }>();
+    const navigate = useNavigate();
 
     const { getCurrentProject, fetchProjects, projects, isLoading: projectsLoading } = useProjectStore();
     const {
@@ -48,14 +53,54 @@ const NovelEditor: React.FC = () =>
     } = useChatStore();
     const unifiedObjects = useUnifiedObjectStore(state => state.objects);
     const listUnifiedObjects = useUnifiedObjectStore(state => state.listObjects);
-    const fetchChapterContent = useNovelStore(state => state.fetchChapterContent);
-    const getAllChapterContents = useNovelStore(state => state.getAllChapterContents);
-    const getSelectedChapterId = useNovelStore(state => state.getSelectedChapterId);
-    const selectChapter = useNovelStore(state => state.selectChapter);
-    const primaryLanguage = useSettingsStore(state => state.settings.primaryLanguage);
-    const chatFunctionConfig = useSettingsStore(state => state.settings.functionConfigs.chat);
-    const providerCredentials = useSettingsStore(state => state.settings.providerCredentials);
+    // UI state for selected chapter and display language
+    const selectedChapterByProject = useNovelEditorStore(state => state.selectedChapterByProject);
+    const displayLanguageByProject = useNovelEditorStore(state => state.displayLanguageByProject);
+    const getSelectedChapterId = useNovelEditorStore(state => state.getSelectedChapterId);
+    const selectChapter = useNovelEditorStore(state => state.selectChapter);
+    const setDisplayLanguage = useNovelEditorStore(state => state.setDisplayLanguage);
+
+    // Reactive subscription for selectedChapterId
+    const selectedChapterId = selectedChapterByProject[projectId ?? '']
+        ?? localStorage.getItem(`selectedChapter_${projectId ?? ''}`)
+        ?? undefined;
+
+    // Helper to get all manuscripts from unified store
+    const getAllManuscripts = useMemo(() => {
+        return (projId: string) => {
+            const allContent: Record<string, any> = {};
+            Object.values(unifiedObjects).forEach(obj => {
+                if (obj.type === 'manuscript' && obj.metadata?.project_id === projId) {
+                    const chapterId = obj.metadata?.chapter_id as string;
+                    if (chapterId) {
+                        allContent[chapterId] = obj;
+                    }
+                }
+            });
+            return allContent;
+        };
+    }, [unifiedObjects]);
+    const settings = useSettingsStore(state => state.settings);
+    const mainLanguage = settings.mainLanguage;
+    const subLanguages = settings.subLanguages;
+    const chatFunctionConfig = settings.functionConfigs.chat;
+    const providerCredentials = settings.providerCredentials;
     const { currentError, showError, hideError } = useErrorStore();
+    const chatUI = useChatUIStore();
+
+    // Force re-render when crossing desktop/mobile breakpoint
+    const [_isDesktop, setIsDesktop] = useState(() => window.innerWidth > 768);
+    useEffect(() => {
+        const handleResize = () => {
+            const desktop = window.innerWidth > 768;
+            setIsDesktop(prev => {
+                if (prev !== desktop) return desktop;
+                return prev;
+            });
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     const { state: uiState, actions: uiActions } = useNovelEditorState(projectId);
 
@@ -66,9 +111,10 @@ const NovelEditor: React.FC = () =>
         organizations: [],
         locations: [],
         lorebook: [],
-        outline: { acts: [] },
+        outline: null,
     });
     const [isOutlineInitialized, setIsOutlineInitialized] = useState(false);
+    const [showBatchTranslateModal, setShowBatchTranslateModal] = useState(false);
 
     // Fetch projects if not loaded
     useEffect(() => {
@@ -76,6 +122,16 @@ const NovelEditor: React.FC = () =>
             fetchProjects();
         }
     }, [projectId, projects.length, fetchProjects]);
+
+    // Reactive subscription for display language
+    const currentDisplayLanguage = displayLanguageByProject[projectId ?? ''] || mainLanguage;
+
+    // Initialize display language in store from settings
+    useEffect(() => {
+        if (projectId && mainLanguage && !displayLanguageByProject[projectId]) {
+            setDisplayLanguage(projectId, mainLanguage);
+        }
+    }, [projectId, mainLanguage, displayLanguageByProject, setDisplayLanguage]);
 
     const [systemInsertConfig, setSystemInsertConfig] = useState<SystemInsertConfig>(
         ChatPipeline.createDefaultSystemConfig()
@@ -93,6 +149,9 @@ const NovelEditor: React.FC = () =>
         setMessageEditCards,
         handleFunctionCalls,
         handleFunctionCallProgress,
+        handleBatchConfirm,
+        isMessageConfirmed,
+        setConfirmedMessages,
         createFunctionCallApplyHandler,
         createFunctionCallRejectHandler,
     } = functionCallHandlers;
@@ -118,7 +177,7 @@ const NovelEditor: React.FC = () =>
         onError: (error) =>
         {
             console.error('Runtime processing error:', error);
-            showError('Chat Error', 'An error occurred during processing. Please try again.');
+            showError('Chat Error', error.message || 'An error occurred during processing. Please try again.');
         },
         onFunctionCallProgress: (_projId, _chatId, messageId, progressEvents) =>
         {
@@ -133,19 +192,18 @@ const NovelEditor: React.FC = () =>
             {
                 projectId: activeProjectId,
                 getStoryObjects: () => storyObjects,
-                getNovelData: () => getAllChapterContents(activeProjectId),
+                getNovelData: () => getAllManuscripts(activeProjectId),
                 systemInsertConfig,
                 chatPipeline,
-                getIsLoading: () => uiState.isLoading, // Use getter to prevent ChatManager recreation
-                setIsLoading: uiActions.setIsLoading,
+                getIsLoading: () => chatUI.isLoading(activeProjectId),
+                setIsLoading: (loading: boolean) => chatUI.setLoading(activeProjectId, loading),
                 abortControllerRef,
                 getActiveChatId: () =>
                 {
-                    if (uiState.selectedChatId) return uiState.selectedChatId;
                     if (!activeProjectId) return undefined;
                     return getSelectedChatId(activeProjectId);
                 },
-                getConversationLanguage: () => primaryLanguage,
+                getConversationLanguage: () => mainLanguage,
                 aiModel: chatFunctionConfig.model,
                 temperature: chatFunctionConfig.temperature,
                 provider: chatFunctionConfig.provider,
@@ -155,19 +213,18 @@ const NovelEditor: React.FC = () =>
                 mode: 'novelEditor',
                 enablePrefill: chatFunctionConfig.advanced.enablePrefill,
                 thinkingMode: chatFunctionConfig.advanced.thinkingMode,
-                thinkingConfig: chatFunctionConfig.advanced.thinkingConfig,
+                thinkingConfig: chatFunctionConfig.advanced.thinkingConfig as any,
             },
             chatManagerCallbacks
         );
     }, [
         projectId,
         storyObjects,
-        getAllChapterContents,
+        getAllManuscripts,
         systemInsertConfig,
         chatPipeline,
-        uiActions.setIsLoading,
-        uiState.selectedChatId,
-        primaryLanguage,
+        chatUI,
+        mainLanguage,
         chatFunctionConfig,
         providerCredentials,
         getSelectedChatId,
@@ -176,14 +233,12 @@ const NovelEditor: React.FC = () =>
 
     const chatHandlers = useChatHandlers(
         projectId,
-        uiActions,
         chatManager,
         pendingFunctionCallResults,
         () => setPendingFunctionCallResults([])
     );
 
     const currentProject = getCurrentProject();
-    const selectedChapterId = getSelectedChapterId(projectId ?? '');
 
     // Get selected chapter from unified store
     const selectedChapter = useMemo(() => {
@@ -199,7 +254,41 @@ const NovelEditor: React.FC = () =>
         };
     }, [selectedChapterId, unifiedObjects]);
 
-    const hasChapters = storyObjects.outline.acts.some(act => act.chapters.length > 0);
+    const hasChapters = storyObjects.outline?.acts.some(act => act.chapters.length > 0) ?? false;
+
+    // Compute available languages for the language selector
+    const availableLanguages = useMemo(() => {
+        const langs = [mainLanguage];
+        if (subLanguages && subLanguages.length > 0) {
+            langs.push(...subLanguages);
+        }
+        return [...new Set(langs)].filter(Boolean);
+    }, [mainLanguage, subLanguages]);
+
+    // Calculate count of manuscript objects needing translation
+    const objectsNeedingTranslation = useMemo(() => {
+        if (!subLanguages || subLanguages.length === 0 || !projectId) return 0;
+
+        const allObjects = Object.values(unifiedObjects);
+        let count = 0;
+
+        allObjects.forEach((obj: any) => {
+            if (obj.metadata?.project_id !== projectId) return;
+            if (obj.type !== 'manuscript') return;
+
+            // Check if object is missing any sub language translation
+            const availableLangs = obj.languages?.available || [];
+            const needsAnyTranslation = subLanguages.some(
+                (subLang: string) => !availableLangs.includes(subLang)
+            );
+
+            if (needsAnyTranslation) {
+                count++;
+            }
+        });
+
+        return count;
+    }, [unifiedObjects, projectId, subLanguages]);
 
     // Build story objects from unified store when projectId changes
     useEffect(() =>
@@ -276,7 +365,7 @@ const NovelEditor: React.FC = () =>
                             description: entry.data.description || '',
                         })),
                         outline,
-                    });
+                    } as unknown as StoryObjects);
 
                     if (activeProjectId) {
                         const firstActWithChapters = outline.acts.find(act => act.chapters.length > 0);
@@ -328,27 +417,18 @@ const NovelEditor: React.FC = () =>
         });
     }, [projectId, fetchChats, showError]);
 
-    // Fetch chapter content when projectId or selectedChapterId changes
-    useEffect(() =>
-    {
-        if (!projectId || !selectedChapterId) return;
-
-        fetchChapterContent(projectId, selectedChapterId).catch(error =>
-        {
-            console.error('Failed to fetch chapter content:', error);
-            showError('Data Error', 'Failed to load chapter content. Please try again.');
-        });
-    }, [projectId, selectedChapterId, fetchChapterContent, showError]);
+    // Note: Chapter content fetching is handled by NovelEditorPanel via unifiedObjectStore
 
     useEffect(() =>
     {
         if (!projectId) return;
 
-        const chatId = uiState.selectedChatId ?? getSelectedChatId(projectId);
+        const chatId = getSelectedChatId(projectId);
         if (!chatId) return;
 
-        const messages = getMessages(projectId, chatId, primaryLanguage);
+        const messages = getMessages(projectId, chatId, mainLanguage);
         const restored: Record<string, EditCard[]> = {};
+        const restoredConfirmed: Record<string, boolean> = {};
 
         messages.forEach(message =>
         {
@@ -379,6 +459,13 @@ const NovelEditor: React.FC = () =>
                     return card;
                 });
                 restored[message.id] = cards;
+
+                // Check if all function calls in this message have been applied/rejected
+                const allProcessed = cards.every(card => card.isApplied || card.isRejected);
+                if (allProcessed && cards.length > 0)
+                {
+                    restoredConfirmed[message.id] = true;
+                }
             }
         });
 
@@ -386,13 +473,18 @@ const NovelEditor: React.FC = () =>
         {
             setMessageEditCards(restored);
         }
+
+        // Restore confirmed state for messages that were already processed
+        if (Object.keys(restoredConfirmed).length > 0)
+        {
+            setConfirmedMessages(prev => ({ ...prev, ...restoredConfirmed }));
+        }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
         projectId,
-        uiState.selectedChatId,
         getSelectedChatId,
         getMessages,
-        primaryLanguage,
+        mainLanguage,
         displayProcessor,
         storyObjects,
         systemInsertConfig,
@@ -438,15 +530,33 @@ const NovelEditor: React.FC = () =>
                     </div>
                     <div className="novel-editor-controls">
                         <button
-                            className={`chat-toggle-btn mobile-only ${uiState.isChatVisible ? 'active' : ''}`}
+                            className="back-btn mobile-only"
+                            onClick={() => navigate(`/project/${projectId}`)}
+                            title="Back to project"
+                        >
+                            ←
+                        </button>
+                        <button
+                            className={`chat-toggle-btn mobile-only ${chatUI.isChatVisible(projectId ?? '') ? 'active' : ''}`}
                             onClick={() =>
                             {
-                                uiActions.setIsChatVisible(!uiState.isChatVisible);
-                                uiActions.setIsMobileSidebarVisible(false);
+                                chatUI.toggleChatVisible(projectId ?? '');
+                                chatUI.setMobileSidebarVisible(projectId ?? '', false);
                             }}
                         >
                             Chat
                         </button>
+                        {availableLanguages.length > 1 && (
+                            <LanguageDropdown
+                                languages={availableLanguages}
+                                value={currentDisplayLanguage}
+                                onChange={(lang) => setDisplayLanguage(projectId ?? '', lang)}
+                                title="Select display language"
+                                showTranslateAll={subLanguages && subLanguages.length > 0 && objectsNeedingTranslation > 0}
+                                translateCount={objectsNeedingTranslation}
+                                onTranslateAllClick={() => setShowBatchTranslateModal(true)}
+                            />
+                        )}
                         <button
                             className="settings-btn"
                             onClick={() => uiActions.setIsSettingsOpen(true)}
@@ -458,25 +568,23 @@ const NovelEditor: React.FC = () =>
                 </div>
             </div>
 
-            <div className={`novel-editor-content ${uiState.isChatVisible ? 'chat-visible' : ''}`}>
+            <div className={`novel-editor-content ${chatUI.isChatVisible(projectId ?? '') ? 'chat-visible' : ''}`}>
                 <ChatSidebar
                     projectId={projectId ?? ''}
                     onSelectChat={chatHandlers.handleSelectChat}
-                    isMobileVisible={uiState.isMobileSidebarVisible}
-                    isDesktopVisible={uiState.isDesktopChatListVisible}
                 />
 
                 <ChatPanel
                     projectId={projectId ?? ''}
-                    uiState={uiState}
-                    uiActions={uiActions}
                     systemInsertConfig={systemInsertConfig}
                     setSystemInsertConfig={setSystemInsertConfig}
                     chatPipeline={chatPipeline}
                     storyObjects={storyObjects}
-                    novelData={getAllChapterContents(projectId ?? '')}
+                    novelData={getAllManuscripts(projectId ?? '')}
                     messageEditCards={messageEditCards}
                     activeFunctionCalls={activeFunctionCalls}
+                    onBatchConfirm={handleBatchConfirm}
+                    isMessageConfirmed={isMessageConfirmed}
                     onSubmit={chatHandlers.handleSubmit}
                     onStop={chatHandlers.handleStop}
                     onEditMessage={chatHandlers.handleEditMessage}
@@ -494,27 +602,64 @@ const NovelEditor: React.FC = () =>
                     selectedChapterId={selectedChapterId || null}
                     hasChapters={hasChapters}
                     chaptersInitialized={isOutlineInitialized}
-                    uiState={uiState}
-                    uiActions={uiActions}
-                    onToggleSidebar={() => uiActions.setIsChapterSidebarVisible(!uiState.isChapterSidebarVisible)}
                     onSelectChapter={(chapterId) => selectChapter(projectId ?? '', chapterId)}
                 />
             </div>
 
-            {uiState.isChatVisible && (
-                <div className="chat-overlay mobile-only" onClick={() => uiActions.setIsChatVisible(false)} />
+            {chatUI.isChatVisible(projectId ?? '') && (
+                <div className="chat-overlay mobile-only" onClick={() => chatUI.setChatVisible(projectId ?? '', false)} />
             )}
 
-            {uiState.isMobileSidebarVisible && (
-                <div className="sidebar-overlay mobile-only" onClick={() => uiActions.setIsMobileSidebarVisible(false)} />
+            {chatUI.isMobileSidebarVisible(projectId ?? '') && (
+                <div className="sidebar-overlay mobile-only" onClick={() => chatUI.setMobileSidebarVisible(projectId ?? '', false)} />
             )}
 
-            {uiState.isDesktopChatListVisible && (
-                <div className="desktop-chat-overlay desktop-only" onClick={() => uiActions.setIsDesktopChatListVisible(false)} />
+            {chatUI.isDesktopChatListVisible(projectId ?? '') && (
+                <div className="desktop-chat-overlay desktop-only" onClick={() => chatUI.setDesktopChatListVisible(projectId ?? '', false)} />
             )}
+
+            {/* Mobile Footer */}
+            <footer className="mobile-footer">
+                <button
+                    className="footer-back-btn"
+                    onClick={() => navigate(`/project/${projectId}`)}
+                    title="Back to project"
+                >
+                    ←
+                </button>
+                <button
+                    className={`footer-chat-toggle-btn ${chatUI.isChatVisible(projectId ?? '') ? 'active' : ''}`}
+                    onClick={() =>
+                    {
+                        chatUI.toggleChatVisible(projectId ?? '');
+                        chatUI.setMobileSidebarVisible(projectId ?? '', false);
+                    }}
+                >
+                    Chat
+                </button>
+                {availableLanguages.length > 1 && (
+                    <LanguageDropdown
+                        languages={availableLanguages}
+                        value={currentDisplayLanguage}
+                        onChange={(lang) => setDisplayLanguage(projectId ?? '', lang)}
+                        title="Select display language"
+                        showTranslateAll={subLanguages && subLanguages.length > 0 && objectsNeedingTranslation > 0}
+                        translateCount={objectsNeedingTranslation}
+                        onTranslateAllClick={() => setShowBatchTranslateModal(true)}
+                    />
+                )}
+                <button
+                    className="footer-settings-btn"
+                    onClick={() => uiActions.setIsSettingsOpen(true)}
+                    title="Settings"
+                >
+                    ⚙
+                </button>
+            </footer>
 
             <ErrorModal
                 isOpen={!!currentError}
+                type={currentError?.type}
                 title={currentError?.title || ''}
                 message={currentError?.message || ''}
                 onClose={hideError}
@@ -523,6 +668,14 @@ const NovelEditor: React.FC = () =>
             <SettingsModal
                 isOpen={uiState.isSettingsOpen}
                 onClose={() => uiActions.setIsSettingsOpen(false)}
+            />
+
+            <BatchTranslationModal
+                isOpen={showBatchTranslateModal}
+                onClose={() => setShowBatchTranslateModal(false)}
+                projectId={projectId || ''}
+                onComplete={() => setShowBatchTranslateModal(false)}
+                allowedObjectTypes={['manuscript']}
             />
         </div>
     );

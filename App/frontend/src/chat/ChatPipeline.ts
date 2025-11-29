@@ -8,6 +8,7 @@ import type {
   DisplayProcessor
 } from './types';
 import type { FunctionCallSchema } from './types/functionCalling';
+import type { ThinkingConfig } from '../store/settingsStore';
 import { DefaultPreProcessor } from './processors/PreProcessor';
 import { DefaultPostProcessor } from './processors/PostProcessor';
 import { DefaultDisplayProcessor } from './processors/DisplayProcessor';
@@ -70,10 +71,7 @@ export class ChatPipeline {
   novelData?: any,
   enablePrefill?: boolean,
   thinkingMode?: 'off' | 'model' | 'custom',
-  thinkingConfig?: {
-    effort?: 'low' | 'medium' | 'high';
-    maxTokens?: number;
-  }
+  thinkingConfig?: ThinkingConfig
 ): ChatPipelineContext {
   return {
       projectId,

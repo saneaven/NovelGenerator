@@ -330,15 +330,17 @@ export class UserMessageTagManager {
     const message = allMessages[assistantMessageIndex];
     if (message.functionCalls && message.functionCalls.length > 0) {
       // Found nearest assistant message with function calls
-      const appliedFunctionCalls = message.functionCalls.filter(funcCall =>
+      // Include all confirmed function calls (both applied and rejected)
+      const confirmedFunctionCalls = message.functionCalls.filter(funcCall =>
         funcCall.isApplied && funcCall.appliedAt
       );
 
       // Convert to FunctionCallResultSummary format
-      return appliedFunctionCalls.map(funcCall => ({
+      return confirmedFunctionCalls.map(funcCall => ({
         functionCallId: funcCall.id,
         functionName: funcCall.function_name,
         success: this.determineFunctionCallSuccess(funcCall),
+        isRejected: funcCall.isRejected ?? false, // Include rejection status
         resultMessage: this.extractResultMessage(funcCall),
         appliedAt: funcCall.appliedAt!
       }));
@@ -352,12 +354,17 @@ export class UserMessageTagManager {
    * Determine if function call was successful based on stored metadata
    */
   private static determineFunctionCallSuccess(funcCall: any): boolean {
+    // If explicitly rejected by user, it was not successful
+    if (funcCall.isRejected) {
+      return false;
+    }
+
     // If there's an error, it was not successful
     if (funcCall.error) {
       return false;
     }
 
-    // If resultMessage indicates rejection, it was not successful
+    // If resultMessage indicates rejection or failure, it was not successful
     if (funcCall.resultMessage?.includes('rejected') || funcCall.resultMessage?.includes('failed')) {
       return false;
     }
@@ -367,14 +374,19 @@ export class UserMessageTagManager {
       return true;
     }
 
-    // Default: if applied without error, consider successful
-    return funcCall.isApplied;
+    // Default: if applied without error and not rejected, consider successful
+    return funcCall.isApplied && !funcCall.isRejected;
   }
 
   /**
    * Extract appropriate result message from function call metadata
    */
   private static extractResultMessage(funcCall: any): string {
+    // If explicitly rejected, use rejection message
+    if (funcCall.isRejected) {
+      return funcCall.resultMessage || `User rejected ${funcCall.function_name}`;
+    }
+
     // Priority order: resultMessage > error > default success message
     if (funcCall.resultMessage) {
       return funcCall.resultMessage;
