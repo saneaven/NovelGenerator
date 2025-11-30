@@ -9,7 +9,7 @@ import { NOVEL_EDITOR_FUNCTIONS } from '../chat/types/functionCalling';
 import { useChatStore } from '../store/chatStore';
 import { useChatUIStore } from '../store/chatUIStore';
 import { useProjectStore } from '../store/projectStore';
-import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
+import { useUnifiedObjectStore, useStoryObjects } from '../store/unifiedObjectStore';
 import { useNovelEditorStore } from '../store/novelEditorStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
@@ -52,7 +52,7 @@ const NovelEditor: React.FC = () =>
         fetchChats,
     } = useChatStore();
     const unifiedObjects = useUnifiedObjectStore(state => state.objects);
-    const listUnifiedObjects = useUnifiedObjectStore(state => state.listObjects);
+    const listObjects = useUnifiedObjectStore(state => state.listObjects);
     // UI state for selected chapter and display language
     const selectedChapterByProject = useNovelEditorStore(state => state.selectedChapterByProject);
     const displayLanguageByProject = useNovelEditorStore(state => state.displayLanguageByProject);
@@ -104,7 +104,9 @@ const NovelEditor: React.FC = () =>
 
     const { state: uiState, actions: uiActions } = useNovelEditorState(projectId);
 
-    // State to hold story objects built from unified store
+    // Story objects derived from unified store (uses main language for chat context)
+    const storyObjectsFromHook = useStoryObjects(projectId, mainLanguage);
+    // State to hold story objects built from unified store (for UI display)
     const [storyObjects, setStoryObjects] = useState<StoryObjects>({
         basicInfo: null,
         characters: [],
@@ -191,7 +193,8 @@ const NovelEditor: React.FC = () =>
         return new ChatManager(
             {
                 projectId: activeProjectId,
-                getStoryObjects: () => storyObjects,
+                // Use story objects with main language for chat context
+                getStoryObjects: () => storyObjectsFromHook,
                 getNovelData: () => getAllManuscripts(activeProjectId),
                 systemInsertConfig,
                 chatPipeline,
@@ -214,12 +217,13 @@ const NovelEditor: React.FC = () =>
                 enablePrefill: chatFunctionConfig.advanced.enablePrefill,
                 thinkingMode: chatFunctionConfig.advanced.thinkingMode,
                 thinkingConfig: chatFunctionConfig.advanced.thinkingConfig as any,
+                retryConfig: settings.retryConfig,
             },
             chatManagerCallbacks
         );
     }, [
         projectId,
-        storyObjects,
+        storyObjectsFromHook,
         getAllManuscripts,
         systemInsertConfig,
         chatPipeline,
@@ -229,6 +233,7 @@ const NovelEditor: React.FC = () =>
         providerCredentials,
         getSelectedChatId,
         chatManagerCallbacks,
+        settings.retryConfig,
     ]);
 
     const chatHandlers = useChatHandlers(
@@ -277,7 +282,7 @@ const NovelEditor: React.FC = () =>
             if (obj.type !== 'manuscript') return;
 
             // Check if object is missing any sub language translation
-            const availableLangs = obj.languages?.available || [];
+            const availableLangs = Object.keys(obj.data || {});
             const needsAnyTranslation = subLanguages.some(
                 (subLang: string) => !availableLangs.includes(subLang)
             );
@@ -291,6 +296,15 @@ const NovelEditor: React.FC = () =>
     }, [unifiedObjects, projectId, subLanguages]);
 
     // Build story objects from unified store when projectId changes
+    // First fetch main language objects (for chat context), then use them for UI
+    // Helper to get data for a specific language from an object
+    const getDataForLanguage = (obj: any, language: string): Record<string, any> => {
+        if (obj.data[language]) return obj.data[language];
+        const availableLanguages = Object.keys(obj.data);
+        if (availableLanguages.length > 0) return obj.data[availableLanguages[0]];
+        return {};
+    };
+
     useEffect(() =>
     {
         if (!projectId) return;
@@ -301,69 +315,91 @@ const NovelEditor: React.FC = () =>
 
         const buildStoryObjects = async () => {
             try {
+                // Fetch all objects (returns all languages per object)
                 const [basicInfoList, characters, organizations, locations, lorebook, acts, chapters] = await Promise.all([
-                    listUnifiedObjects('basic_info', projectId),
-                    listUnifiedObjects('character', projectId),
-                    listUnifiedObjects('organization', projectId),
-                    listUnifiedObjects('location', projectId),
-                    listUnifiedObjects('lorebook', projectId),
-                    listUnifiedObjects('act', projectId),
-                    listUnifiedObjects('chapter', projectId),
+                    listObjects('basic_info', projectId),
+                    listObjects('character', projectId),
+                    listObjects('organization', projectId),
+                    listObjects('location', projectId),
+                    listObjects('lorebook', projectId),
+                    listObjects('act', projectId),
+                    listObjects('chapter', projectId),
                 ]);
 
-                // Build basic info
-                const basicInfo = basicInfoList.length > 0 ? {
-                    id: basicInfoList[0].id,
-                    title: basicInfoList[0].data.title || '',
-                    logline: basicInfoList[0].data.logline || '',
-                    genre: basicInfoList[0].data.genre || '',
-                } : null;
+                // Build basic info - extract data for mainLanguage
+                const basicInfo = basicInfoList.length > 0 ? (() => {
+                    const data = getDataForLanguage(basicInfoList[0], mainLanguage);
+                    return {
+                        id: basicInfoList[0].id,
+                        title: data.title || '',
+                        logline: data.logline || '',
+                        genre: data.genre || '',
+                    };
+                })() : null;
 
                 // Build outline
                 const outline = {
                     acts: acts
                         .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-                        .map(act => ({
-                            id: act.id,
-                            name: act.data.name || '',
-                            description: act.data.description || '',
-                            order: act.metadata.order || 0,
-                            chapters: chapters
-                                .filter(ch => ch.metadata.act_id === act.id)
-                                .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-                                .map(chapter => ({
-                                    id: chapter.id,
-                                    name: chapter.data.name || '',
-                                    description: chapter.data.description || '',
-                                    order: chapter.metadata.order || 0,
-                                    actId: chapter.metadata.act_id || '',
-                                })),
-                        })),
+                        .map(act => {
+                            const actData = getDataForLanguage(act, mainLanguage);
+                            return {
+                                id: act.id,
+                                name: actData.name || '',
+                                description: actData.description || '',
+                                order: act.metadata.order || 0,
+                                chapters: chapters
+                                    .filter(ch => ch.metadata.act_id === act.id)
+                                    .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+                                    .map(chapter => {
+                                        const chapterData = getDataForLanguage(chapter, mainLanguage);
+                                        return {
+                                            id: chapter.id,
+                                            name: chapterData.name || '',
+                                            description: chapterData.description || '',
+                                            order: chapter.metadata.order || 0,
+                                            actId: chapter.metadata.act_id || '',
+                                        };
+                                    }),
+                            };
+                        }),
                 };
 
                 if (isActive) {
                     setStoryObjects({
                         basicInfo,
-                        characters: characters.map(ch => ({
-                            id: ch.id,
-                            name: ch.data.name || '',
-                            description: ch.data.description || '',
-                        })),
-                        organizations: organizations.map(org => ({
-                            id: org.id,
-                            name: org.data.name || '',
-                            description: org.data.description || '',
-                        })),
-                        locations: locations.map(loc => ({
-                            id: loc.id,
-                            name: loc.data.name || '',
-                            description: loc.data.description || '',
-                        })),
-                        lorebook: lorebook.map(entry => ({
-                            id: entry.id,
-                            name: entry.data.name || '',
-                            description: entry.data.description || '',
-                        })),
+                        characters: characters.map(ch => {
+                            const data = getDataForLanguage(ch, mainLanguage);
+                            return {
+                                id: ch.id,
+                                name: data.name || '',
+                                description: data.description || '',
+                            };
+                        }),
+                        organizations: organizations.map(org => {
+                            const data = getDataForLanguage(org, mainLanguage);
+                            return {
+                                id: org.id,
+                                name: data.name || '',
+                                description: data.description || '',
+                            };
+                        }),
+                        locations: locations.map(loc => {
+                            const data = getDataForLanguage(loc, mainLanguage);
+                            return {
+                                id: loc.id,
+                                name: data.name || '',
+                                description: data.description || '',
+                            };
+                        }),
+                        lorebook: lorebook.map(entry => {
+                            const data = getDataForLanguage(entry, mainLanguage);
+                            return {
+                                id: entry.id,
+                                name: data.name || '',
+                                description: data.description || '',
+                            };
+                        }),
                         outline,
                     } as unknown as StoryObjects);
 
@@ -403,7 +439,7 @@ const NovelEditor: React.FC = () =>
         return () => {
             isActive = false;
         };
-    }, [projectId, listUnifiedObjects, showError, getSelectedChapterId, selectChapter]);
+    }, [projectId, listObjects, mainLanguage, showError, getSelectedChapterId, selectChapter]);
 
     // Fetch chats when projectId changes
     useEffect(() =>

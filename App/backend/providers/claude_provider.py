@@ -128,6 +128,7 @@ class ClaudeProvider(BaseProvider):
         provider_preference: Optional[Dict] = None,
         thinking_config: Optional[Dict] = None,
         thinking_mode: Optional[str] = None,
+        retry_config: Optional[Dict] = None,
     ) -> AsyncGenerator[bytes, None]:
         if not self.validate_config():
             yield self._format_error("Claude API key is required")
@@ -315,6 +316,7 @@ class ClaudeProvider(BaseProvider):
 
         except Exception as exc:  # Broad catch to stream error via SSE
             yield self._format_error(str(exc))
+            yield b"data: [DONE]\n\n"
 
     async def get_models(self) -> Dict:
         """

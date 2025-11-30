@@ -5,6 +5,7 @@ import type {
   ChatPipelineContext
 } from '../types';
 import type { ThinkingDetail, ContentPart } from '../../llm_request/types';
+import { generateTempId } from '../../utils/tempId';
 
 export class DefaultPostProcessor implements PostProcessor {
   process(
@@ -38,7 +39,7 @@ export class DefaultPostProcessor implements PostProcessor {
 
     // Create processed message
     const message: ProcessedChatMessage = {
-      id: crypto.randomUUID(),
+      id: generateTempId(),
       role: 'assistant',
       contentParts,
       timestamp: new Date(),
@@ -61,7 +62,7 @@ export class DefaultPostProcessor implements PostProcessor {
         }
 
         return {
-          id: toolCall.id || crypto.randomUUID(),
+          id: toolCall.id || generateTempId(),
           function_name: toolCall.function?.name || 'unknown',
           arguments: parsedArguments,
           isApplied: false

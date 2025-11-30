@@ -38,8 +38,6 @@ def _load_prompt_file(relative_path: str) -> str:
 # Load all prompts from files
 _WORKSPACE_SYSTEM_PROMPT = _load_prompt_file('systemPrompts/WorkspaceSystemPrompt.md')
 _NOVEL_EDITOR_SYSTEM_PROMPT = _load_prompt_file('systemPrompts/NovelEditorSystemPrompt.md')
-_WORKSPACE_FUNCTION_INSTRUCTIONS = _load_prompt_file('systemPrompts/functionInstructions/workspace.md')
-_NOVEL_EDITOR_FUNCTION_INSTRUCTIONS = _load_prompt_file('systemPrompts/functionInstructions/novelEditor.md')
 _CHAT_PREFILL = _load_prompt_file('prefills/ChatPrefill.md')
 _TRANSLATION_SYSTEM_PROMPT_STORY = _load_prompt_file('systemPrompts/TranslationPrompt.md')
 _TRANSLATION_USER_PROMPT_STORY = _load_prompt_file('userPrompts/TranslationUserPrompt.md')
@@ -63,10 +61,6 @@ DEFAULT_PROMPTS = {
         'systemPrompt': {
             'workspace': _WORKSPACE_SYSTEM_PROMPT,
             'novelEditor': _NOVEL_EDITOR_SYSTEM_PROMPT,
-        },
-        'functionInstructions': {
-            'workspace': _WORKSPACE_FUNCTION_INSTRUCTIONS,
-            'novelEditor': _NOVEL_EDITOR_FUNCTION_INSTRUCTIONS,
         },
         'prefill': _CHAT_PREFILL,
         'userMessageTag': {

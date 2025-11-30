@@ -10,7 +10,8 @@ import { getEditFunctionSchema } from '../chat/types/editFunctionSchemas';
 import { applyEditFunctionCalls } from '../chat/utils/editFunctionApplicator';
 import { LLMRequestManager } from '../chat/sessions/LLMRequestManager';
 import { useLLMTaskStore } from '../store/llmTaskStore';
-import FunctionCallPreviewCard from '../pages/workspace/components/FunctionCallPreviewCard';
+import { generateTempId } from '../utils/tempId';
+import GroupedFunctionCallCard from './functionCall/GroupedFunctionCallCard';
 import './AIEditModal.css';
 
 interface ContextOptions {
@@ -31,18 +32,10 @@ interface AIEditModalProps {
   onResult?: (result?: any) => void | Promise<void>;
 }
 
-const createSessionId = () => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return `ai-edit-${crypto.randomUUID()}`;
-  }
-  return `ai-edit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-};
+const createSessionId = () => `ai-edit-${generateTempId()}`;
 
 const toStoryObjects = (contextData: Record<string, any>): StoryObjects => {
-  const fallbackId = () =>
-    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  const fallbackId = () => generateTempId();
 
   const mapItems = (items?: any[]) =>
     Array.isArray(items)
@@ -178,6 +171,18 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     };
   }, [sessionId, clearSession]);
 
+  // Helper to get object data for main language with fallback
+  const getObjectData = (obj: any): Record<string, any> => {
+    const mainLanguage = settingsStore.settings.mainLanguage;
+    const data = obj.data[mainLanguage];
+    if (data) return data;
+    const availableLanguages = Object.keys(obj.data);
+    if (availableLanguages.length > 0) {
+      return obj.data[availableLanguages[0]];
+    }
+    return {};
+  };
+
   const generateContext = async () => {
     const context: Record<string, any> = {};
 
@@ -187,10 +192,11 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         const basicInfoList = await unifiedStore.listObjects('basic_info', projectId);
         if (basicInfoList.length > 0) {
           const basicInfo = basicInfoList[0];
+          const data = getObjectData(basicInfo);
           context.basicInfo = {
-            title: basicInfo.data.title || '',
-            logline: basicInfo.data.logline || '',
-            genre: basicInfo.data.genre || '',
+            title: data.title || '',
+            logline: data.logline || '',
+            genre: data.genre || '',
           };
         }
       }
@@ -199,11 +205,14 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       if (contextOptions.characters) {
         const characters = await unifiedStore.listObjects('character', projectId);
         if (characters.length > 0) {
-          context.characters = characters.map(char => ({
-            id: char.id,
-            name: char.data.name || '',
-            description: char.data.description || '',
-          }));
+          context.characters = characters.map(char => {
+            const data = getObjectData(char);
+            return {
+              id: char.id,
+              name: data.name || '',
+              description: data.description || '',
+            };
+          });
         }
       }
 
@@ -211,11 +220,14 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       if (contextOptions.organizations) {
         const organizations = await unifiedStore.listObjects('organization', projectId);
         if (organizations.length > 0) {
-          context.organizations = organizations.map(org => ({
-            id: org.id,
-            name: org.data.name || '',
-            description: org.data.description || '',
-          }));
+          context.organizations = organizations.map(org => {
+            const data = getObjectData(org);
+            return {
+              id: org.id,
+              name: data.name || '',
+              description: data.description || '',
+            };
+          });
         }
       }
 
@@ -223,11 +235,14 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       if (contextOptions.locations) {
         const locations = await unifiedStore.listObjects('location', projectId);
         if (locations.length > 0) {
-          context.locations = locations.map(loc => ({
-            id: loc.id,
-            name: loc.data.name || '',
-            description: loc.data.description || '',
-          }));
+          context.locations = locations.map(loc => {
+            const data = getObjectData(loc);
+            return {
+              id: loc.id,
+              name: data.name || '',
+              description: data.description || '',
+            };
+          });
         }
       }
 
@@ -235,11 +250,14 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       if (contextOptions.lorebook) {
         const lorebook = await unifiedStore.listObjects('lorebook', projectId);
         if (lorebook.length > 0) {
-          context.lorebook = lorebook.map(entry => ({
-            id: entry.id,
-            name: entry.data.name || '',
-            description: entry.data.description || '',
-          }));
+          context.lorebook = lorebook.map(entry => {
+            const data = getObjectData(entry);
+            return {
+              id: entry.id,
+              name: data.name || '',
+              description: data.description || '',
+            };
+          });
         }
       }
 
@@ -252,19 +270,25 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
           context.outline = {
             acts: acts
               .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-              .map(act => ({
-                id: act.id,
-                name: act.data.name || '',
-                description: act.data.description || '',
-                chapters: chapters
-                  .filter(ch => ch.metadata.act_id === act.id)
-                  .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-                  .map(chapter => ({
-                    id: chapter.id,
-                    name: chapter.data.name || '',
-                    description: chapter.data.description || '',
-                  })),
-              })),
+              .map(act => {
+                const actData = getObjectData(act);
+                return {
+                  id: act.id,
+                  name: actData.name || '',
+                  description: actData.description || '',
+                  chapters: chapters
+                    .filter(ch => ch.metadata.act_id === act.id)
+                    .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+                    .map(chapter => {
+                      const chapterData = getObjectData(chapter);
+                      return {
+                        id: chapter.id,
+                        name: chapterData.name || '',
+                        description: chapterData.description || '',
+                      };
+                    }),
+                };
+              }),
           };
         }
       }
@@ -526,19 +550,11 @@ e.g., "Make the main character's personality more proactive", "Make the atmosphe
 
           {functionCallProgress.length > 0 && (
             <div className="ai-function-preview">
-              <div className="ai-function-preview-header">
-                <h3>AI Structured Edits</h3>
-                {isProcessing && <span className="status-pill">Streaming</span>}
-              </div>
-              <div className="ai-function-preview-grid">
-                {functionCallProgress.map((progress) => (
-                  <FunctionCallPreviewCard
-                    key={progress.draft.id}
-                    progress={progress}
-                    storyObjects={storyObjectsPreview}
-                  />
-                ))}
-              </div>
+              <GroupedFunctionCallCard
+                mode="streaming"
+                streamingProgress={functionCallProgress}
+                storyObjects={storyObjectsPreview}
+              />
             </div>
           )}
 

@@ -54,8 +54,7 @@ export const buildPreviewFromOperation = (
     operation?.targetName ||
     data?.title ||
     data?.name ||
-    data?.logline ||
-    data?.description;
+    data?.logline;
 
   const summary = data?.description ?? '';
 
@@ -74,7 +73,7 @@ export const buildPreviewFromOperation = (
   };
 };
 
-const resolveOperationData = (operation: any): Record<string, any> | undefined => {
+export const resolveOperationData = (operation: any): Record<string, any> | undefined => {
   if (operation && typeof operation === 'object') {
     if (operation.data && typeof operation.data === 'object') {
       return operation.data;
@@ -92,7 +91,7 @@ export const extractFieldPreviews = (
     return [];
   }
 
-  const preferredKeys = ['name', 'genre', 'logline', 'description', 'content', 'order'];
+  const preferredKeys = ['name', 'description', 'genre', 'logline', 'content', 'order'];
   const seen = new Set<string>();
   const result: FunctionCallOperationFieldPreview[] = [];
 
@@ -164,7 +163,7 @@ export const humanizePreviewKey = (key: string): string => {
     .replace(/^\w/g, (char) => char.toUpperCase());
 };
 
-const stringifySafe = (value: any): string => {
+export const stringifySafe = (value: any): string => {
   try {
     const serialized = JSON.stringify(value, null, 2);
     return serialized.length > 800 ? `${serialized.slice(0, 800)}${ELLIPSIS}` : serialized;

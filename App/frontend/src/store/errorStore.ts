@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { generateTempId } from '../utils/tempId';
 
 export type NotificationType = 'success' | 'error' | 'info';
 
@@ -24,7 +25,7 @@ export const useErrorStore = create<ErrorStore>((set) => ({
   showNotification: (type: NotificationType, title: string, message: string) => {
     set({
       currentError: {
-        id: crypto.randomUUID(),
+        id: generateTempId(),
         type,
         title,
         message
@@ -35,7 +36,7 @@ export const useErrorStore = create<ErrorStore>((set) => ({
   showSuccess: (title: string, message: string) => {
     set({
       currentError: {
-        id: crypto.randomUUID(),
+        id: generateTempId(),
         type: 'success',
         title,
         message
@@ -46,7 +47,7 @@ export const useErrorStore = create<ErrorStore>((set) => ({
   showError: (title: string, message: string) => {
     set({
       currentError: {
-        id: crypto.randomUUID(),
+        id: generateTempId(),
         type: 'error',
         title,
         message
@@ -57,7 +58,7 @@ export const useErrorStore = create<ErrorStore>((set) => ({
   showInfo: (title: string, message: string) => {
     set({
       currentError: {
-        id: crypto.randomUUID(),
+        id: generateTempId(),
         type: 'info',
         title,
         message

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import type { FunctionCallMetadata } from '../../llm_request/types';
@@ -9,8 +9,6 @@ import type {
   EditCard,
   ChatPipelineContext
 } from '../types';
-import { buildOperationPreviewsFromArgs } from '../utils/functionCallPreview';
-import FunctionCallReviewCard from '../../components/functionCall/FunctionCallReviewCard';
 import { FunctionCallService } from '../../pages/workspace/services/FunctionCallService';
 
 marked.setOptions({
@@ -94,45 +92,4 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
   }
 }
 
-export const EditCardComponent: React.FC<{ card: EditCard }> = ({ card }) => {
-  const operationPreviews = useMemo(
-    () => buildOperationPreviewsFromArgs(card.data),
-    [card.data]
-  );
-
-  const actions = !card.isApplied ? (
-    <div className="edit-card-actions">
-      <button className="apply-button" onClick={card.onApply}>
-        Apply
-      </button>
-      <button className="reject-button" onClick={card.onReject}>
-        Reject
-      </button>
-    </div>
-  ) : undefined;
-
-  const footer = card.isApplied ? (
-    <div className="review-card-applied-info">
-      <span className="applied-timestamp">
-        {card.appliedAt ? `Applied at ${new Date(card.appliedAt).toLocaleTimeString()}` : 'Applied'}
-      </span>
-    </div>
-  ) : undefined;
-
-  return (
-    <FunctionCallReviewCard
-      title={card.title}
-      eyebrow={card.isApplied ? 'Applied Function Call' : 'Pending Function Call'}
-      subtitle={card.description}
-      status={card.isApplied ? 'applied' : 'pending'}
-      operations={operationPreviews}
-      placeholder="AI is finalizing the structured preview..."
-      variant="pending"
-      collapsible={operationPreviews.length > 0}
-      defaultOpen={false}
-      actions={actions}
-      footer={footer}
-    />
-  );
-};
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
+import { useSettingsStore } from '../../../store/settingsStore';
 import type { ActObject, ChapterObject, ManuscriptObject, VersionHistoryEntry } from '../../../types/unifiedObject';
 
 interface ChapterSidebarProps {
@@ -18,7 +19,30 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
   onSelectChapter,
 }) => {
   const store = useUnifiedObjectStore();
+  const mainLanguage = useSettingsStore(state => state.settings.mainLanguage);
   const [showVersions, setShowVersions] = useState(false);
+
+  // Helper to get data for language with fallback
+  const getActData = (act: ActObject) => {
+    const data = act.data[mainLanguage];
+    if (data) return data;
+    const available = Object.keys(act.data);
+    return available.length > 0 ? act.data[available[0]] : { name: '', description: '' };
+  };
+
+  const getChapterData = (chapter: ChapterObject) => {
+    const data = chapter.data[mainLanguage];
+    if (data) return data;
+    const available = Object.keys(chapter.data);
+    return available.length > 0 ? chapter.data[available[0]] : { name: '', description: '' };
+  };
+
+  const getManuscriptData = (manuscript: ManuscriptObject) => {
+    const data = manuscript.data[mainLanguage];
+    if (data) return data;
+    const available = Object.keys(manuscript.data);
+    return available.length > 0 ? manuscript.data[available[0]] : { content: '', wordCount: 0 };
+  };
   const [actIds, setActIds] = useState<string[]>([]);
   const [chapterIds, setChapterIds] = useState<string[]>([]);
   const [selectedChapterVersions, setSelectedChapterVersions] = useState<VersionHistoryEntry[]>([]);
@@ -150,7 +174,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
     if (!manuscriptObj) return;
 
     try {
-      await store.activateVersion('manuscript', manuscriptObj.id, versionId);
+      await store.restoreVersion('manuscript', manuscriptObj.id, versionId);
       setActiveVersionId(versionId);
     } catch (error) {
       console.error('Failed to set active version:', error);
@@ -203,16 +227,17 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
           // Chapters View
           acts.map((act, actIndex) => {
             const actChapters = getChaptersForAct(act.id);
+            const actData = getActData(act);
 
             return (
               <div key={act.id} className="act-section">
                 <div className="act-header">
                   <div className="act-info">
                     <h4 className="act-title">
-                      Act {actIndex + 1}: {act.data.name || 'Untitled Act'}
+                      Act {actIndex + 1}: {actData.name || 'Untitled Act'}
                     </h4>
-                    {act.data.description && (
-                      <p className="act-description">{act.data.description}</p>
+                    {actData.description && (
+                      <p className="act-description">{actData.description}</p>
                     )}
                   </div>
                 </div>
@@ -221,8 +246,10 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
                   {actChapters.length > 0 ? (
                     actChapters.map((chapter, chapterIndex) => {
                       const manuscript = getManuscript(chapter.id);
-                      const wordCount = manuscript?.data?.wordCount || 0;
+                      const manuscriptData = manuscript ? getManuscriptData(manuscript) : null;
+                      const wordCount = manuscriptData?.wordCount || 0;
                       const isSelected = selectedChapterId === chapter.id;
+                      const chapterData = getChapterData(chapter);
 
                       return (
                         <div
@@ -236,7 +263,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
                                 Chapter {chapterIndex + 1}
                               </span>
                               <span className="chapter-name">
-                                {chapter.data.name || 'Untitled Chapter'}
+                                {chapterData.name || 'Untitled Chapter'}
                               </span>
                             </div>
                             <div className="chapter-meta">
@@ -245,9 +272,9 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
                               </span>
                             </div>
                           </div>
-                          {chapter.data.description && (
+                          {chapterData.description && (
                             <div className="chapter-description">
-                              {chapter.data.description}
+                              {chapterData.description}
                             </div>
                           )}
                         </div>
@@ -268,7 +295,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
             {selectedManuscript && selectedChapter && (
               <div className="selected-chapter-info">
                 <h4 className="chapter-title">
-                  {selectedChapter.data.name || 'Untitled Chapter'}
+                  {getChapterData(selectedChapter).name || 'Untitled Chapter'}
                 </h4>
                 <p className="version-count">
                   {selectedChapterVersions.length} version{selectedChapterVersions.length !== 1 ? 's' : ''}

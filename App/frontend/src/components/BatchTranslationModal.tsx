@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import './BatchTranslationModal.css';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { TranslationService } from '../services/translationService';
-import type { StoryObjectToTranslate } from '../services/translationService';
+import type { StoryObjectToTranslate, TranslationResult } from '../services/translationService';
 import type { UnifiedObject, ObjectType } from '../types/unifiedObject';
 
 interface BatchTranslationModalProps {
@@ -16,16 +16,27 @@ interface BatchTranslationModalProps {
 
 type ScreenType = 'config' | 'progress' | 'complete';
 
-interface ObjectTypeSelection {
-  basicInfo: boolean;
-  characters: boolean;
-  organizations: boolean;
-  locations: boolean;
-  lorebook: boolean;
-  acts: boolean;
-  chapters: boolean;
-  manuscript: boolean;
+// Tree node for object selection
+interface TranslationTreeNode {
+  id: string;
+  label: string;
+  type: 'category' | 'object';
+  objectType: ObjectType;
+  children?: TranslationTreeNode[];
+  sourceData?: Record<string, any>;
 }
+
+// Category display names and order
+const CATEGORY_CONFIG: Record<string, { label: string; order: number }> = {
+  basic_info: { label: 'Basic Info', order: 0 },
+  character: { label: 'Characters', order: 1 },
+  organization: { label: 'Organizations', order: 2 },
+  location: { label: 'Locations', order: 3 },
+  lorebook: { label: 'Lorebook', order: 4 },
+  act: { label: 'Acts', order: 5 },
+  chapter: { label: 'Chapters', order: 6 },
+  manuscript: { label: 'Manuscript', order: 7 },
+};
 
 const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
   isOpen,
@@ -35,22 +46,19 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
   allowedObjectTypes,
 }) => {
   const [screen, setScreen] = useState<ScreenType>('config');
-  const [selectedTypes, setSelectedTypes] = useState<ObjectTypeSelection>({
-    basicInfo: true,
-    characters: true,
-    organizations: true,
-    locations: true,
-    lorebook: true,
-    acts: true,
-    chapters: true,
-    manuscript: true,
-  });
   const [sourceLanguage, setSourceLanguage] = useState<string>('');
   const [targetLanguage, setTargetLanguage] = useState<string>('');
   const [userInstructions, setUserInstructions] = useState('');
   const [completedIds, setCompletedIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
+  const [partialTranslations, setPartialTranslations] = useState<TranslationResult[]>([]);
+  const [partialError, setPartialError] = useState<string | null>(null);
+  const [isApplying, setIsApplying] = useState(false);
+
+  // Tree selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const store = useUnifiedObjectStore();
@@ -78,7 +86,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
         let count = 0;
         allObjects.forEach(obj => {
           if (obj.metadata?.project_id !== projectId) return;
-          if (!obj.languages?.available.includes(subLang)) {
+          if (!Object.keys(obj.data || {}).includes(subLang)) {
             count++;
           }
         });
@@ -94,45 +102,94 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
     }
   }, [isOpen, settings.mainLanguage, settings.subLanguages, sourceLanguage, store.objects, projectId]);
 
-  // Get objects that need translation
-  const objectsToTranslate = useMemo(() => {
+  // Get all available objects that need translation (before selection filter)
+  const availableObjects = useMemo(() => {
     if (!targetLanguage || !sourceLanguage) return [];
 
-    const objects: StoryObjectToTranslate[] = [];
+    const objects: (StoryObjectToTranslate & { label: string })[] = [];
     const allObjects = Object.values(store.objects) as UnifiedObject<any>[];
 
     allObjects.forEach(obj => {
       if (obj.metadata?.project_id !== projectId) return;
-      if (obj.languages?.available.includes(targetLanguage)) return; // Skip if already translated
-      if (obj.languages?.active !== sourceLanguage) return; // Skip if not in source language
+      if (Object.keys(obj.data || {}).includes(targetLanguage)) return; // Skip if already translated
+      if (!Object.keys(obj.data || {}).includes(sourceLanguage)) return; // Skip if no source language data
 
       const objType = obj.type;
 
       // If allowedObjectTypes is specified, only include those types
       if (allowedObjectTypes && !allowedObjectTypes.includes(objType)) return;
 
-      let include = false;
+      const sourceData = obj.data[sourceLanguage] || obj.data[Object.keys(obj.data)[0]] || {};
+      const label = sourceData.name || sourceData.title || obj.id;
 
-      if (objType === 'basic_info' && selectedTypes.basicInfo) include = true;
-      if (objType === 'character' && selectedTypes.characters) include = true;
-      if (objType === 'organization' && selectedTypes.organizations) include = true;
-      if (objType === 'location' && selectedTypes.locations) include = true;
-      if (objType === 'lorebook' && selectedTypes.lorebook) include = true;
-      if (objType === 'act' && selectedTypes.acts) include = true;
-      if (objType === 'chapter' && selectedTypes.chapters) include = true;
-      if (objType === 'manuscript' && selectedTypes.manuscript) include = true;
-
-      if (include) {
-        objects.push({
-          objectType: objType as ObjectType,
-          objectId: obj.id,
-          sourceData: obj.data,
-        });
-      }
+      objects.push({
+        objectType: objType as ObjectType,
+        objectId: obj.id,
+        sourceData,
+        label,
+      });
     });
 
     return objects;
-  }, [store.objects, projectId, targetLanguage, sourceLanguage, selectedTypes, allowedObjectTypes]);
+  }, [store.objects, projectId, targetLanguage, sourceLanguage, allowedObjectTypes]);
+
+  // Build tree structure from available objects
+  const translationTree = useMemo((): TranslationTreeNode[] => {
+    const grouped: Record<string, (StoryObjectToTranslate & { label: string })[]> = {};
+
+    availableObjects.forEach(obj => {
+      if (!grouped[obj.objectType]) {
+        grouped[obj.objectType] = [];
+      }
+      grouped[obj.objectType].push(obj);
+    });
+
+    const tree: TranslationTreeNode[] = [];
+
+    Object.entries(grouped)
+      .sort((a, b) => {
+        const orderA = CATEGORY_CONFIG[a[0]]?.order ?? 999;
+        const orderB = CATEGORY_CONFIG[b[0]]?.order ?? 999;
+        return orderA - orderB;
+      })
+      .forEach(([type, objects]) => {
+        const config = CATEGORY_CONFIG[type] || { label: type, order: 999 };
+        const categoryNode: TranslationTreeNode = {
+          id: `category:${type}`,
+          label: `${config.label} (${objects.length})`,
+          type: 'category',
+          objectType: type as ObjectType,
+          children: objects.map(obj => ({
+            id: obj.objectId,
+            label: obj.label,
+            type: 'object' as const,
+            objectType: obj.objectType,
+            sourceData: obj.sourceData,
+          })),
+        };
+        tree.push(categoryNode);
+      });
+
+    return tree;
+  }, [availableObjects]);
+
+  // Initialize selectedIds when tree changes (select all by default)
+  useEffect(() => {
+    if (translationTree.length > 0 && selectedIds.size === 0) {
+      const allIds = new Set<string>();
+      translationTree.forEach(category => {
+        category.children?.forEach(child => {
+          allIds.add(child.id);
+        });
+      });
+      setSelectedIds(allIds);
+    }
+  }, [translationTree, selectedIds.size]);
+
+  // Get objects to translate based on selection
+  const objectsToTranslate = useMemo((): StoryObjectToTranslate[] => {
+    return availableObjects.filter(obj => selectedIds.has(obj.objectId));
+  }, [availableObjects, selectedIds]);
 
   // Reset state when modal closes
   useEffect(() => {
@@ -140,7 +197,12 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
       setScreen('config');
       setCompletedIds([]);
       setError(null);
+      setPartialTranslations([]);
+      setPartialError(null);
+      setIsApplying(false);
       setUserInstructions('');
+      setSelectedIds(new Set());
+      setExpandedCategories(new Set());
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
     }
@@ -155,6 +217,8 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
     setScreen('progress');
     setTotalCount(objectsToTranslate.length);
     setError(null);
+    setPartialError(null);
+    setPartialTranslations([]);
 
     try {
       await TranslationService.translateBatch(objectsToTranslate, {
@@ -169,6 +233,11 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
           setError(err.message);
           setScreen('complete');
         },
+        onPartialSuccess: (translations, err) => {
+          // Stay on progress screen with partial results
+          setPartialTranslations(translations);
+          setPartialError(err.message);
+        },
         abortControllerRef,
       });
 
@@ -176,8 +245,12 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
       setScreen('complete');
       onComplete();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Translation failed');
-      setScreen('complete');
+      // If we have partial translations, don't go to complete screen
+      // (the onPartialSuccess callback already handled it)
+      if (partialTranslations.length === 0) {
+        setError(err instanceof Error ? err.message : 'Translation failed');
+        setScreen('complete');
+      }
     }
   };
 
@@ -194,15 +267,101 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
     setTargetLanguage(temp);
   };
 
-  const toggleType = (type: keyof ObjectTypeSelection) => {
-    setSelectedTypes(prev => ({ ...prev, [type]: !prev[type] }));
+  // Tree selection handlers
+  const toggleCategory = useCallback((categoryNode: TranslationTreeNode) => {
+    const childIds = categoryNode.children?.map(c => c.id) || [];
+    const allSelected = childIds.every(id => selectedIds.has(id));
+
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allSelected) {
+        // Deselect all children
+        childIds.forEach(id => next.delete(id));
+      } else {
+        // Select all children
+        childIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  }, [selectedIds]);
+
+  const toggleObject = useCallback((objectId: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(objectId)) {
+        next.delete(objectId);
+      } else {
+        next.add(objectId);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleExpand = useCallback((categoryId: string) => {
+    setExpandedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(categoryId)) {
+        next.delete(categoryId);
+      } else {
+        next.add(categoryId);
+      }
+      return next;
+    });
+  }, []);
+
+  const selectAll = useCallback(() => {
+    const allIds = new Set<string>();
+    translationTree.forEach(category => {
+      category.children?.forEach(child => {
+        allIds.add(child.id);
+      });
+    });
+    setSelectedIds(allIds);
+  }, [translationTree]);
+
+  const deselectAll = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
+  // Get category checkbox state (checked, unchecked, or indeterminate)
+  const getCategoryState = useCallback((category: TranslationTreeNode): 'checked' | 'unchecked' | 'indeterminate' => {
+    const childIds = category.children?.map(c => c.id) || [];
+    if (childIds.length === 0) return 'unchecked';
+
+    const selectedCount = childIds.filter(id => selectedIds.has(id)).length;
+    if (selectedCount === 0) return 'unchecked';
+    if (selectedCount === childIds.length) return 'checked';
+    return 'indeterminate';
+  }, [selectedIds]);
+
+  const handleApplyPartial = async () => {
+    if (partialTranslations.length === 0) return;
+
+    setIsApplying(true);
+    try {
+      await TranslationService.applyPartialTranslations(partialTranslations, targetLanguage);
+      // Move to complete screen with partial success message
+      setPartialError(null);
+      setScreen('complete');
+      onComplete();
+    } catch (err) {
+      setPartialError(err instanceof Error ? err.message : 'Failed to apply translations');
+    } finally {
+      setIsApplying(false);
+    }
+  };
+
+  const handleDiscardPartial = () => {
+    setPartialTranslations([]);
+    setPartialError(null);
+    onClose();
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="batch-translation-modal-overlay" onClick={handleCancel}>
-      <div className="batch-translation-modal" onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={handleCancel}>
+      <div className="modal-content batch-translation-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h2>🌐 Batch Translation</h2>
           <button className="modal-close" onClick={handleCancel}>×</button>
@@ -244,75 +403,64 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
               </div>
             </div>
 
-            {/* Only show type selector when not filtered by allowedObjectTypes */}
-            {!allowedObjectTypes && (
+            {/* Tree-based object selector */}
+            {!allowedObjectTypes && translationTree.length > 0 && (
               <div className="form-group">
-                <label>Object Types to Translate</label>
-                <div className="checkbox-group">
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={selectedTypes.basicInfo}
-                      onChange={() => toggleType('basicInfo')}
-                    />
-                    <span>Basic Info</span>
-                  </label>
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={selectedTypes.characters}
-                      onChange={() => toggleType('characters')}
-                    />
-                    <span>Characters</span>
-                  </label>
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={selectedTypes.organizations}
-                      onChange={() => toggleType('organizations')}
-                    />
-                    <span>Organizations</span>
-                  </label>
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={selectedTypes.locations}
-                      onChange={() => toggleType('locations')}
-                    />
-                    <span>Locations</span>
-                  </label>
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={selectedTypes.lorebook}
-                      onChange={() => toggleType('lorebook')}
-                    />
-                    <span>Lorebook</span>
-                  </label>
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={selectedTypes.acts}
-                      onChange={() => toggleType('acts')}
-                    />
-                    <span>Acts</span>
-                  </label>
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={selectedTypes.chapters}
-                      onChange={() => toggleType('chapters')}
-                    />
-                    <span>Chapters</span>
-                  </label>
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={selectedTypes.manuscript}
-                      onChange={() => toggleType('manuscript')}
-                    />
-                    <span>Manuscript</span>
-                  </label>
+                <div className="tree-header">
+                  <label>Select Objects to Translate</label>
+                  <div className="tree-actions">
+                    <button type="button" className="tree-action-btn" onClick={selectAll}>
+                      Select All
+                    </button>
+                    <button type="button" className="tree-action-btn" onClick={deselectAll}>
+                      Deselect All
+                    </button>
+                  </div>
+                </div>
+                <div className="translation-tree">
+                  {translationTree.map(category => {
+                    const categoryState = getCategoryState(category);
+                    const isExpanded = expandedCategories.has(category.id);
+
+                    return (
+                      <div key={category.id} className="tree-category">
+                        <div className="tree-category-header">
+                          <button
+                            type="button"
+                            className="tree-expand-btn"
+                            onClick={() => toggleExpand(category.id)}
+                          >
+                            {isExpanded ? '▼' : '▶'}
+                          </button>
+                          <label className="tree-category-checkbox">
+                            <input
+                              type="checkbox"
+                              checked={categoryState === 'checked'}
+                              ref={(el) => {
+                                if (el) el.indeterminate = categoryState === 'indeterminate';
+                              }}
+                              onChange={() => toggleCategory(category)}
+                            />
+                            <span>{category.label}</span>
+                          </label>
+                        </div>
+                        {isExpanded && category.children && (
+                          <div className="tree-children">
+                            {category.children.map(child => (
+                              <label key={child.id} className="tree-object-checkbox">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedIds.has(child.id)}
+                                  onChange={() => toggleObject(child.id)}
+                                />
+                                <span>{child.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -329,7 +477,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
             </div>
 
             <div className="translation-summary">
-              <strong>{objectsToTranslate.length}</strong> objects will be translated
+              <strong>{selectedIds.size}</strong> of <strong>{availableObjects.length}</strong> objects selected
             </div>
 
             <div className="modal-actions">
@@ -350,28 +498,49 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
         {/* Progress Screen */}
         {screen === 'progress' && (
           <div className="batch-translation-progress">
+            {/* Inline Error Banner for Partial Success */}
+            {partialError && (
+              <div className="partial-error-banner">
+                <div className="partial-error-header">
+                  <span className="partial-error-icon">⚠️</span>
+                  <span className="partial-error-title">Translation Interrupted</span>
+                </div>
+                <p className="partial-error-message">{partialError}</p>
+                <p className="partial-error-summary">
+                  {partialTranslations.length} of {totalCount} translations were received successfully.
+                </p>
+              </div>
+            )}
+
             <div className="progress-header">
-              <p>Translating {completedIds.length} of {totalCount} objects...</p>
+              <p>
+                {partialError
+                  ? `Received ${partialTranslations.length} of ${totalCount} translations`
+                  : `Translating ${completedIds.length} of ${totalCount} objects...`
+                }
+              </p>
               <div className="progress-bar">
                 <div
-                  className="progress-fill"
+                  className={`progress-fill ${partialError ? 'partial' : ''}`}
                   style={{ width: `${(completedIds.length / totalCount) * 100}%` }}
                 />
               </div>
             </div>
 
             <div className="progress-list">
-              {objectsToTranslate.map(obj => {
+              {objectsToTranslate.map((obj, index) => {
                 const isCompleted = completedIds.includes(obj.objectId);
-                const isCurrent = completedIds.length > 0 && completedIds[completedIds.length - 1] === obj.objectId;
+                const isCurrent = !partialError && completedIds.length > 0 && completedIds[completedIds.length - 1] === obj.objectId;
+                const isFailed = partialError && !isCompleted && index === completedIds.length;
+                const isNotAttempted = partialError && !isCompleted && index > completedIds.length;
 
                 return (
                   <div
                     key={obj.objectId}
-                    className={`progress-item ${isCompleted ? 'completed' : ''} ${isCurrent ? 'current' : ''}`}
+                    className={`progress-item ${isCompleted ? 'completed' : ''} ${isCurrent ? 'current' : ''} ${isFailed ? 'failed' : ''} ${isNotAttempted ? 'not-attempted' : ''}`}
                   >
                     <span className="progress-icon">
-                      {isCompleted ? '✓' : isCurrent ? '⏳' : '⏸'}
+                      {isCompleted ? '✓' : isFailed ? '✗' : isCurrent ? '⏳' : '○'}
                     </span>
                     <span className="progress-label">
                       {obj.objectType}: {obj.sourceData.name || obj.sourceData.title || obj.objectId}
@@ -382,9 +551,24 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
             </div>
 
             <div className="modal-actions">
-              <button onClick={handleCancel} className="btn-secondary">
-                Cancel
-              </button>
+              {partialError ? (
+                <>
+                  <button onClick={handleDiscardPartial} className="btn-secondary">
+                    Discard All
+                  </button>
+                  <button
+                    onClick={handleApplyPartial}
+                    className="btn-primary"
+                    disabled={isApplying || partialTranslations.length === 0}
+                  >
+                    {isApplying ? 'Applying...' : `Apply ${partialTranslations.length} Successful`}
+                  </button>
+                </>
+              ) : (
+                <button onClick={handleCancel} className="btn-secondary">
+                  Cancel
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -397,6 +581,19 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
                 <div className="error-message">
                   <h3>❌ Translation Failed</h3>
                   <p>{error}</p>
+                </div>
+                <div className="modal-actions">
+                  <button onClick={onClose} className="btn-primary">
+                    Close
+                  </button>
+                </div>
+              </>
+            ) : partialTranslations.length > 0 && partialTranslations.length < totalCount ? (
+              <>
+                <div className="partial-success-message">
+                  <h3>⚠️ Partial Translation Applied</h3>
+                  <p>Applied {partialTranslations.length} translations successfully.</p>
+                  <p className="partial-warning">{totalCount - partialTranslations.length} items were not translated.</p>
                 </div>
                 <div className="modal-actions">
                   <button onClick={onClose} className="btn-primary">

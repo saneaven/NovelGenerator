@@ -21,7 +21,7 @@ import {
 import { useSettingsStore } from '../store/settingsStore';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import type { ObjectType } from '../types/unifiedObject';
-import type { FunctionCallMetadata, ContentPart } from '../llm_request/types';
+import type { FunctionCallMetadata, FunctionCallProgress } from '../llm_request/types';
 import { translationService as translationAPI } from '../api/unifiedObjectService';
 
 // ============================================================================
@@ -41,6 +41,7 @@ export interface TranslationOptions {
   userInstructions?: string;
   onProgress?: (completed: string[]) => void;
   onError?: (error: Error) => void;
+  onPartialSuccess?: (translations: TranslationResult[], error: Error) => void;
   abortControllerRef?: MutableRefObject<AbortController | null>;
 }
 
@@ -50,7 +51,7 @@ export interface TranslationStatus {
   error?: string;
 }
 
-interface TranslationResult {
+export interface TranslationResult {
   objectType: string;
   objectId: string;
   [key: string]: any;
@@ -190,6 +191,7 @@ export class TranslationService {
       userInstructions,
       onProgress,
       onError,
+      onPartialSuccess,
       abortControllerRef: providedAbortRef,
     } = options;
 
@@ -228,6 +230,7 @@ export class TranslationService {
 
     const chatPipeline = new ChatPipeline();
     const completed: string[] = [];
+    const collectedTranslations: TranslationResult[] = [];
     const systemInsertConfig = {
       ...ChatPipeline.createDefaultSystemConfig(),
       enabled: true,
@@ -257,23 +260,46 @@ export class TranslationService {
     };
 
     const callbacks: LLMRequestManagerCallbacks = {
-      onStreamUpdate: (contentParts: ContentPart[]) => {
-        // Parse streaming JSON to track progress
-        const textContent = contentParts
-          .filter(p => p.type === 'content')
-          .map(p => p.text)
-          .join('');
+      onStreamUpdate: () => {
+        // Progress tracking is handled by onFunctionCallProgress for function call responses
+      },
+      onFunctionCallProgress: (progressList: FunctionCallProgress[]) => {
+        // Extract IDs and full translation data from streaming function call arguments
+        const newIds: string[] = [];
+        for (const progress of progressList) {
+          const args = progress.draft.parsedArguments;
+          const functionName = progress.draft.functionName;
 
-        // Extract completed object IDs from partial JSON (now uses "id" field)
-        if (textContent.includes('"id"')) {
-          const matches = textContent.match(/"id":\s*"([^"]+)"/g);
-          if (matches && onProgress) {
-            const ids = matches.map(m => m.match(/"id":\s*"([^"]+)"/)?.[1]).filter(Boolean) as string[];
-            const newCompleted = ids.filter(id => !completed.includes(id));
-            if (newCompleted.length > 0) {
-              completed.push(...newCompleted);
-              onProgress([...completed]);
+          if (args?.id && !completed.includes(args.id)) {
+            newIds.push(args.id);
+
+            // Also collect full translation data for partial success handling
+            const objectType = TRANSLATION_FUNCTION_TO_TYPE[functionName];
+            if (objectType && args.id) {
+              const { id, ...data } = args;
+
+              // Check if we already have this translation
+              const existingIndex = collectedTranslations.findIndex(t => t.objectId === id);
+              const translationResult: TranslationResult = {
+                objectType,
+                objectId: id,
+                ...data,
+              };
+
+              if (existingIndex >= 0) {
+                // Update existing (may have more complete data now)
+                collectedTranslations[existingIndex] = translationResult;
+              } else {
+                collectedTranslations.push(translationResult);
+              }
             }
+          }
+        }
+
+        if (newIds.length > 0) {
+          completed.push(...newIds);
+          if (onProgress) {
+            onProgress([...completed]);
           }
         }
       },
@@ -289,6 +315,7 @@ export class TranslationService {
         }
 
         console.log(`Received ${translationCalls.length} translation function calls`);
+        console.log('Function calls:', translationCalls);
 
         // Accumulate translations from individual function calls
         const translations: TranslationResult[] = [];
@@ -357,7 +384,10 @@ export class TranslationService {
         }
       },
       onError: (error: Error) => {
-        if (onError) {
+        // If we have partial translations, call onPartialSuccess instead of onError
+        if (onPartialSuccess && collectedTranslations.length > 0) {
+          onPartialSuccess([...collectedTranslations], error);
+        } else if (onError) {
           onError(error);
         }
       },
@@ -377,6 +407,39 @@ export class TranslationService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Apply partial translations that were collected during a failed batch operation.
+   * This sends the successfully parsed translations to the backend.
+   */
+  static async applyPartialTranslations(
+    translations: TranslationResult[],
+    targetLanguage: string
+  ): Promise<void> {
+    if (translations.length === 0) {
+      throw new Error('No translations to apply');
+    }
+
+    // Prepare batch data for backend
+    const batchData = translations.map(trans => {
+      const { objectType, objectId, ...data } = trans;
+
+      // manuscript인 경우 wordCount 자동 계산
+      if (objectType === 'manuscript' && data.content) {
+        data.wordCount = data.content.split(/\s+/).filter(Boolean).length;
+      }
+
+      return {
+        objectType: objectType as ObjectType,
+        objectId,
+        language: targetLanguage,
+        data,
+      };
+    });
+
+    // Send to backend using unified endpoint
+    await translationAPI.addTranslations(batchData);
   }
 
   /**
@@ -543,3 +606,4 @@ export const translateObjects = TranslationService.translateObjects.bind(Transla
 export const translateSingle = TranslationService.translateSingle.bind(TranslationService);
 export const translateBatch = TranslationService.translateBatch.bind(TranslationService);
 export const translateChatMessage = TranslationService.translateChatMessage.bind(TranslationService);
+export const applyPartialTranslations = TranslationService.applyPartialTranslations.bind(TranslationService);

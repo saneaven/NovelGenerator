@@ -266,11 +266,6 @@
   color: var(--color-error-dark);
 }
 
-.gfcc-operation-description {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-}
-
 /* Operation Previews */
 .gfcc-operation-previews {
   display: flex;
@@ -358,10 +353,6 @@
   font-size: var(--font-size-sm);
 }
 
-.gfcc-preview-subline {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-}
 
 /* Field previews */
 .gfcc-preview-fields {
@@ -543,4 +534,118 @@
 .gfcc-confirmed-rejected {
   color: var(--color-error-dark);
   font-weight: var(--font-weight-medium);
+}
+
+/* ====================== */
+/* Streaming Mode Styles  */
+/* ====================== */
+
+.grouped-function-call-card.streaming {
+  border-left: 3px solid var(--color-brand-accent);
+}
+
+/* Streaming status badges */
+.gfcc-status--collecting {
+  background: var(--color-info-light);
+  color: var(--color-info-dark);
+  border: 1px solid var(--color-info);
+}
+
+.gfcc-status--validating {
+  background: var(--color-warning-light);
+  color: var(--color-warning-dark);
+  border: 1px solid var(--color-warning);
+}
+
+.gfcc-status--ready {
+  background: var(--color-success-light);
+  color: var(--color-success-dark);
+  border: 1px solid var(--color-success);
+}
+
+.gfcc-status--error {
+  background: var(--color-error-light);
+  color: var(--color-error-dark);
+  border: 1px solid var(--color-error);
+}
+
+/* Streaming operation item */
+.gfcc-operation-item.streaming {
+  border-left: 2px solid var(--color-brand-accent);
+  background: var(--color-surface-muted);
+}
+
+.gfcc-operation-item.streaming.status-collecting {
+  border-left-color: var(--color-info);
+}
+
+.gfcc-operation-item.streaming.status-validating {
+  border-left-color: var(--color-warning);
+}
+
+.gfcc-operation-item.streaming.status-ready {
+  border-left-color: var(--color-success);
+}
+
+.gfcc-operation-item.streaming.status-error {
+  border-left-color: var(--color-error);
+}
+
+/* Streaming meta (status + time) */
+.gfcc-streaming-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.gfcc-streaming-status {
+  font-size: var(--font-size-xs);
+  padding: 2px var(--spacing-sm);
+  border-radius: var(--border-radius-full);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.gfcc-streaming-status.status-collecting {
+  background: var(--color-info-light);
+  color: var(--color-info-dark);
+}
+
+.gfcc-streaming-status.status-validating {
+  background: var(--color-warning-light);
+  color: var(--color-warning-dark);
+}
+
+.gfcc-streaming-status.status-ready {
+  background: var(--color-success-light);
+  color: var(--color-success-dark);
+}
+
+.gfcc-streaming-status.status-error {
+  background: var(--color-error-light);
+  color: var(--color-error-dark);
+}
+
+.gfcc-streaming-time {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+/* Streaming error message */
+.gfcc-streaming-error {
+  font-size: var(--font-size-xs);
+  color: var(--color-error-dark);
+  background: var(--color-error-light);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--border-radius-sm);
+  margin-top: var(--spacing-xs);
+}
+
+/* Streaming placeholder */
+.gfcc-streaming-placeholder {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+  font-style: italic;
+  padding: var(--spacing-sm);
+  text-align: center;
 }

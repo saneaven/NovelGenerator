@@ -2,8 +2,8 @@
 
 .ai-edit-modal {
   max-width: 900px;
-  width: 90vw;
-  max-height: 90vh;
+  width: 90dvw;
+  max-height: 90dvh;
   display: flex;
   flex-direction: column;
   border-radius: var(--border-radius-lg);
@@ -468,8 +468,8 @@
 /* Responsive Design */
 @media (max-width: 768px) {
   .ai-edit-modal {
-    max-width: 95vw;
-    max-height: 95vh;
+    max-width: 95dvw;
+    max-height: 95dvh;
   }
 
   .ai-edit-form {

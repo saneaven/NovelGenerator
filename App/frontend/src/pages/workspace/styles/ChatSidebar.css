@@ -249,7 +249,7 @@
         position: fixed;
         top: 0;
         left: 0;
-        height: 100vh;
+        height: 100dvh;
         z-index: var(--z-fixed);
         width: 300px;
         transform: translateX(-100%);

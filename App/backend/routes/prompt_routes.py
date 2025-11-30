@@ -26,7 +26,7 @@ router = APIRouter(prefix="/api/v1/prompts", tags=["prompts"])
 )
 async def get_prompt_without_name(
     function_type: str = Path(..., description="Function type (chat, translation, storyEdit, chapterGen)"),
-    prompt_category: str = Path(..., description="Prompt category (systemPrompt, userPrompt, prefill, functionInstructions, userMessageTag)"),
+    prompt_category: str = Path(..., description="Prompt category (systemPrompt, userPrompt, prefill, userMessageTag)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -137,7 +137,7 @@ async def restore_version_without_name(
 )
 async def get_prompt_with_name(
     function_type: str = Path(..., description="Function type"),
-    prompt_category: str = Path(..., description="Prompt category (systemPrompt, userPrompt, prefill, functionInstructions, userMessageTag)"),
+    prompt_category: str = Path(..., description="Prompt category (systemPrompt, userPrompt, prefill, userMessageTag)"),
     prompt_name: str = Path(..., description="Prompt name (workspace, novelEditor, etc.)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)

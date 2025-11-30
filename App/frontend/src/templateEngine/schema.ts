@@ -17,7 +17,6 @@ export const PROMPT_SCHEMAS = {
       language: { desc: "Output language", example: "Korean" },
       mode: { desc: "Operation mode", example: "novelEditor" as "novelEditor" | "workspace" },
       today: { desc: "Current date", example: "2025-11-22" },
-      functionInstructions: { desc: "Function instructions", example: "..." },
     },
     state: {
       enableThinking: { desc: "Enable thinking process", example: true },
@@ -28,7 +27,7 @@ export const PROMPT_SCHEMAS = {
     context: {
       recentMessages: { desc: "List of recent messages", example: [] as any[] },
       functionResults: { desc: "Function call results", example: [] as any[] },
-      storyContext: { desc: "Simplified story context", example: {} as any },
+      storyContext: { desc: "Story context", example: {} as any },
       novelContent: { desc: "Novel content by acts", example: [] as any[] },
       customSections: { desc: "Custom user sections", example: [] as any[] },
     }

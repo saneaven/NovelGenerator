@@ -17,7 +17,8 @@ class BaseProvider(ABC):
         max_tokens: Optional[int] = None,
         provider_preference: Optional[Dict] = None,
         thinking_config: Optional[Dict] = None,
-        thinking_mode: Optional[str] = None
+        thinking_mode: Optional[str] = None,
+        retry_config: Optional[Dict] = None
     ) -> AsyncGenerator[bytes, None]:
         """
         Stream chat completions from the provider
@@ -31,6 +32,7 @@ class BaseProvider(ABC):
             provider_preference: Provider-specific preferences (e.g., OpenRouter only/ignore)
             thinking_config: Thinking configuration for model-native thinking (mapped to provider-native thinking field)
             thinking_mode: Thinking mode ('off', 'custom', 'model')
+            retry_config: Retry configuration for error handling
 
         Yields:
             SSE-formatted bytes

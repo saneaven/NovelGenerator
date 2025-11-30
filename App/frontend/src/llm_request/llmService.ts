@@ -1,7 +1,27 @@
 import { type ConversationBlock, type ThinkingDetail } from "./types";
-import { type ProviderType, type ProviderConfig, type ProviderPreference, type ThinkingConfig } from "../store/settingsStore";
+import { type ProviderType, type ProviderConfig, type ProviderPreference, type ThinkingConfig, type RetryConfig } from "../store/settingsStore";
 
-const API_BASE = "http://localhost:8000/api/v1";
+const API_BASE = `http://${window.location.hostname}:8000/api/v1`;
+
+/**
+ * Sleep utility for retry delays
+ */
+function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Custom error class that includes HTTP status code for retry decisions
+ */
+class BackendError extends Error {
+    statusCode: number | null;
+
+    constructor(message: string, statusCode: number | null = null) {
+        super(message);
+        this.name = 'BackendError';
+        this.statusCode = statusCode;
+    }
+}
 
 /**
  * Stream chat completions from any provider
@@ -18,13 +38,13 @@ export async function* streamChat(
         providerPreference?: ProviderPreference;
         thinkingConfig?: ThinkingConfig;
         thinkingMode?: 'off' | 'custom' | 'model';
+        retryConfig?: RetryConfig;
     }
 ): AsyncGenerator<string | { content: string | null; tool_calls?: any[]; thinking?: string; thinking_details?: ThinkingDetail[]; thinking_text?: string; thinking_signature?: string }>
 {
     const endpoint = `${API_BASE}/chat/completions/${provider}/stream`;
 
     // Build request body
-    // Convert camelCase to snake_case for backend
     const backendConfig = {
         api_key: providerConfig.apiKey,
         base_url: providerConfig.baseUrl,
@@ -43,149 +63,229 @@ export async function* streamChat(
         requestBody.functions = opts.functions;
     }
 
-    // Add provider preference for OpenRouter
     if (provider === 'openrouter' && opts?.providerPreference)
     {
         requestBody.provider_preference = opts.providerPreference;
     }
 
-    // Thinking config is provider-agnostic; each provider maps what it supports
     if (opts?.thinkingConfig)
     {
         requestBody.thinking_config = opts.thinkingConfig;
     }
 
-    // Add thinking_mode for all providers
     if (opts?.thinkingMode)
     {
         requestBody.thinking_mode = opts.thinkingMode;
     }
 
-    const res = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify(requestBody),
-        signal: opts?.signal,
-    });
+    // Retry configuration
+    const retryConfig = opts?.retryConfig;
+    const maxAttempts = (retryConfig?.enabled && retryConfig?.maxRetries !== undefined)
+        ? retryConfig.maxRetries + 1
+        : 1;
 
-    if (!res.ok || !res.body)
+    let lastError: Error | null = null;
+
+    // Retry loop - wraps ENTIRE request including SSE processing
+    for (let attempt = 0; attempt < maxAttempts; attempt++)
     {
-        const text = await res.text().catch(() => "");
-        const errorMessage = text ? text : `HTTP ${res.status} ${res.statusText}`;
-        throw new Error(`Backend Error (${res.status}): ${errorMessage}`);
-    }
-
-    // SSE frame parser
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let receivedProperTermination = false;
-
-    while (true)
-    {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        // SSE uses empty line (\n\n) to separate frames
-        let sep: number;
-        while ((sep = buffer.indexOf("\n\n")) !== -1)
+        // Don't retry if aborted
+        if (opts?.signal?.aborted)
         {
-            const frame = buffer.slice(0, sep);
-            buffer = buffer.slice(sep + 2);
+            throw new Error("Request aborted");
+        }
 
-            // Ignore comment/ping frames
-            if (!frame || frame.startsWith(":")) continue;
+        let hasYieldedContent = false;
+        let res: Response | null = null;
 
-            // Handle error events
-            if (frame.startsWith("event: error"))
+        try
+        {
+            // 1. Make fetch request
+            res = await fetch(endpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(requestBody),
+                signal: opts?.signal,
+            });
+
+            // 2. Handle HTTP-level errors
+            if (!res.ok || !res.body)
             {
-                const dataMatch = frame.match(/data:\s*(.+)/);
-                if (dataMatch)
-                {
-                    try
-                    {
-                        const errorData = JSON.parse(dataMatch[1]);
-                        throw new Error(`Backend Error: ${errorData.message || 'Unknown error'}`);
-                    } catch (parseError)
-                    {
-                        throw new Error(`Backend Error: ${dataMatch[1]}`);
-                    }
-                }
-                throw new Error('Backend Error: Unknown error occurred');
+                const statusCode = res.status;
+                const text = await res.text().catch(() => "");
+                const errorMessage = text ? text : `HTTP ${res.status} ${res.statusText}`;
+                throw new BackendError(`Backend Error (${statusCode}): ${errorMessage}`, statusCode);
             }
 
-            // Extract data: lines
-            const dataLines = frame
-                .split("\n")
-                .map((l) => l.trim())
-                .filter((l) => l.startsWith("data:"))
-                .map((l) => l.slice(5).trim());
+            // 3. SSE stream processing (INSIDE retry loop)
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+            let receivedProperTermination = false;
 
-            for (const data of dataLines)
+            while (true)
             {
-                if (!data) continue;
-                if (data === "[DONE]") {
-                    receivedProperTermination = true;
+                const { value, done } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+
+                let sep: number;
+                while ((sep = buffer.indexOf("\n\n")) !== -1)
+                {
+                    const frame = buffer.slice(0, sep);
+                    buffer = buffer.slice(sep + 2);
+
+                    if (!frame || frame.startsWith(":")) continue;
+
+                    // Handle SSE error events - extract status code!
+                    if (frame.startsWith("event: error"))
+                    {
+                        const dataMatch = frame.match(/data:\s*(.+)/);
+                        if (dataMatch)
+                        {
+                            try
+                            {
+                                const errorData = JSON.parse(dataMatch[1]);
+                                const statusCode = errorData.status || null;
+                                throw new BackendError(
+                                    `Backend Error: ${errorData.message || 'Unknown error'}`,
+                                    statusCode
+                                );
+                            } catch (parseError)
+                            {
+                                if (parseError instanceof BackendError) throw parseError;
+                                throw new BackendError(`Backend Error: ${dataMatch[1]}`, null);
+                            }
+                        }
+                        throw new BackendError('Backend Error: Unknown error occurred', null);
+                    }
+
+                    // Extract data: lines
+                    const dataLines = frame
+                        .split("\n")
+                        .map((l) => l.trim())
+                        .filter((l) => l.startsWith("data:"))
+                        .map((l) => l.slice(5).trim());
+
+                    for (const data of dataLines)
+                    {
+                        if (!data) continue;
+                        if (data === "[DONE]") {
+                            receivedProperTermination = true;
+                            return;
+                        }
+
+                        try
+                        {
+                            const chunk = JSON.parse(data);
+
+                            // Handle error objects in data frames
+                            if (chunk?.error) {
+                                const errMsg = chunk.error.message || chunk.error.code || JSON.stringify(chunk.error);
+                                const statusCode = chunk.error.status || chunk.error.code || null;
+                                throw new BackendError(`Backend Error: ${errMsg}`, typeof statusCode === 'number' ? statusCode : null);
+                            }
+
+                            const delta = chunk?.choices?.[0]?.delta;
+                            const content: string | undefined = delta?.content;
+                            const tool_calls = delta?.tool_calls;
+                            const thinking_details: ThinkingDetail[] | undefined = delta?.thinking_details;
+                            const thinking_text: string | undefined = delta?.thinking?.text;
+                            const thinking_signature: string | undefined = delta?.thinking?.signature;
+
+                            if (tool_calls || thinking_details || thinking_text || thinking_signature)
+                            {
+                                hasYieldedContent = true;
+                                yield {
+                                    content: null,
+                                    tool_calls,
+                                    thinking_details,
+                                    thinking_text,
+                                    thinking_signature,
+                                };
+                            } else if (content)
+                            {
+                                hasYieldedContent = true;
+                                yield content;
+                            }
+
+                            const finish = chunk?.choices?.[0]?.finish_reason;
+                            if (finish && finish !== null) {
+                                receivedProperTermination = true;
+                                return;
+                            }
+                        } catch (error)
+                        {
+                            if (error instanceof BackendError) throw error;
+                            // If not JSON, yield as-is
+                            hasYieldedContent = true;
+                            yield data;
+                        }
+                    }
+                }
+            }
+
+            // Check if stream ended properly
+            if (!receivedProperTermination) {
+                if (opts?.signal?.aborted) {
                     return;
                 }
-
-                // OpenAI-compatible stream: handle content, tool_calls, and thinking
-                try
-                {
-                    const chunk = JSON.parse(data);
-
-                    // If provider streams error objects inside data frames
-                    if (chunk?.error) {
-                        const errMsg = chunk.error.message || chunk.error.code || JSON.stringify(chunk.error);
-                        throw new Error(`Backend Error: ${errMsg}`);
-                    }
-
-                    const delta = chunk?.choices?.[0]?.delta;
-                    const content: string | undefined = delta?.content;
-                    const tool_calls = delta?.tool_calls;
-                    const thinking_details: ThinkingDetail[] | undefined = delta?.thinking_details;
-                    const thinking_text: string | undefined = delta?.thinking?.text;
-                    const thinking_signature: string | undefined = delta?.thinking?.signature;
-
-                    // Yield tool calls or thinking as object
-                    if (tool_calls || thinking_details || thinking_text || thinking_signature)
-                    {
-                        yield {
-                            content: null,  // Don't send content with thinking to prevent interruption
-                            tool_calls,
-                            thinking_details,
-                            thinking_text,
-                            thinking_signature,
-                        };
-                    } else if (content)
-                    {
-                        yield content;
-                    }
-
-                    const finish = chunk?.choices?.[0]?.finish_reason;
-                    if (finish && finish !== null) {
-                        receivedProperTermination = true;
-                        return;
-                    }
-                } catch (error)
-                {
-                    // If not JSON, yield as-is
-                    yield data;
-                }
+                throw new BackendError('Stream ended unexpectedly without completion signal', null);
             }
+
+            // Success - exit retry loop
+            return;
+
+        }
+        catch (error)
+        {
+            // Don't retry abort errors
+            if (error instanceof Error && (error.name === "AbortError" || opts?.signal?.aborted))
+            {
+                throw error;
+            }
+
+            // Can't retry if we already yielded content (would duplicate)
+            if (hasYieldedContent)
+            {
+                throw error;
+            }
+
+            // Extract status code for retry decision
+            let statusCode: number | null = null;
+            if (error instanceof BackendError)
+            {
+                statusCode = error.statusCode;
+            }
+            else if (error instanceof Error)
+            {
+                const statusMatch = error.message.match(/\((\d+)\)/);
+                statusCode = statusMatch ? parseInt(statusMatch[1]) : null;
+            }
+
+            // Check if retryable
+            const isNetworkError = statusCode === null;
+            const isRetryableStatus = statusCode !== null &&
+                retryConfig?.retryableStatusCodes?.includes(statusCode);
+            const isRetryable = retryConfig?.enabled &&
+                (isNetworkError || isRetryableStatus);
+
+            if (isRetryable && attempt < maxAttempts - 1)
+            {
+                lastError = error instanceof Error ? error : new Error(String(error));
+                console.log(`[Retry] Attempt ${attempt + 1}/${maxAttempts} failed with status ${statusCode}, retrying in ${retryConfig!.retryDelayMs}ms...`);
+                await sleep(retryConfig!.retryDelayMs);
+                continue;
+            }
+
+            throw error;
         }
     }
 
-    // Check if stream ended properly (but not if aborted by user)
-    if (!receivedProperTermination) {
-        // Check if this was an intentional abort - don't throw error in that case
-        if (opts?.signal?.aborted) {
-            return; // Silently end - abort was intentional
-        }
-        throw new Error('Stream ended unexpectedly without completion signal');
+    // If we exhausted all retries
+    if (lastError)
+    {
+        throw lastError;
     }
 }
 
@@ -199,7 +299,6 @@ export async function fetchModels(
 {
     const endpoint = `${API_BASE}/providers/${provider}/models`;
 
-    // Convert camelCase to snake_case for backend
     const backendConfig = {
         api_key: config.apiKey,
         base_url: config.baseUrl,
@@ -208,9 +307,7 @@ export async function fetchModels(
 
     const response = await fetch(endpoint, {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(backendConfig)
     });
 
@@ -232,9 +329,7 @@ export async function fetchProviders(): Promise<any>
 
     const response = await fetch(endpoint, {
         method: "GET",
-        headers: {
-            "Content-Type": "application/json"
-        }
+        headers: { "Content-Type": "application/json" }
     });
 
     if (!response.ok)

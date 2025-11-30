@@ -11,7 +11,6 @@ import type { StoryObjects } from '../../../types/storyObject';
 import type { ChatMessage, FunctionCallProgress } from '../../../llm_request/types';
 import ToggleSwitch from '../../../components/ToggleSwitch';
 import ThinkingDisplay from '../../../components/ThinkingDisplay';
-import FunctionCallPreviewCard from './FunctionCallPreviewCard';
 import GroupedFunctionCallCard from '../../../components/functionCall/GroupedFunctionCallCard';
 import { collapseContentParts } from '../../../chat/utils/contentParts';
 
@@ -299,9 +298,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                     message.chatMessage.role === 'assistant' &&
                     message === displayMessages[displayMessages.length - 1] && (
                         <div className="typing-indicator inline">
-                            <span />
-                            <span />
-                            <span />
+                            <div className="loading-track">
+                                <div className="loading-bar" />
+                            </div>
                         </div>
                     )}
             </div>
@@ -354,14 +353,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                     </div>
                 )}
 
-                {displayMessages.map((message, index) =>
+                {displayMessages.map((message) =>
                 {
-                    const isAssistant = message.chatMessage.role === 'assistant';
                     const isUser = message.chatMessage.role === 'user';
                     const editing = chatUI.getEditing(projectId);
                     const isEditing = editing.messageId === message.chatMessage.id;
                     const processingResult = chatPipeline.processForDisplay(message.chatMessage, displayContext);
-                    const isLastAssistantLoading = isAssistant && index === displayMessages.length - 1 && chatUI.isLoading(projectId);
                     const isTranslating = Boolean(translatingMessages[message.storedMessage.id]);
                     const primaryMessage = message.storedMessage.data[mainLanguage]
                         ? convertToDisplayMessage(message.storedMessage, mainLanguage)
@@ -419,8 +416,27 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                 ) : (
                                     <>
                                         {renderMessageContent(message, processingResult)}
+                                        {activeFunctionCalls[message.chatMessage.id] && activeFunctionCalls[message.chatMessage.id].length > 0 && (
+                                            <div className="message-edit-cards">
+                                                <GroupedFunctionCallCard
+                                                    mode="streaming"
+                                                    streamingProgress={activeFunctionCalls[message.chatMessage.id]}
+                                                    storyObjects={storyObjects}
+                                                />
+                                            </div>
+                                        )}
 
-                                        <div className="message-actions">
+                                        {messageEditCards[message.chatMessage.id] && messageEditCards[message.chatMessage.id].length > 0 && (
+                                            <div className="message-edit-cards">
+                                                <GroupedFunctionCallCard
+                                                    mode={isMessageConfirmed(message.chatMessage.id) ? 'confirmed' : 'pending'}
+                                                    cards={messageEditCards[message.chatMessage.id]}
+                                                    onConfirm={(selections) => onBatchConfirm(message.chatMessage.id, selections)}
+                                                    storyObjects={storyObjects}
+                                                />
+                                            </div>
+                                        )}
+                                                                                <div className="message-actions">
                                             {translationErrors[message.storedMessage.id] && (
                                                 <div className="translation-error">{translationErrors[message.storedMessage.id]}</div>
                                             )}
@@ -482,47 +498,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                     </>
                                 )}
                             </div>
-
-                            {isLastAssistantLoading && (
-                                <div className="typing-indicator inline">
-                                    <span />
-                                    <span />
-                                    <span />
-                                </div>
-                            )}
-
-                            {activeFunctionCalls[message.chatMessage.id] && activeFunctionCalls[message.chatMessage.id].length > 0 && (
-                                <div className="message-edit-cards">
-                                    <div className="function-call-indicator">
-                                        <div className="function-call-indicator-header">
-                                            <div className="function-call-indicator-text">AI is composing function-call arguments…</div>
-                                            <div className="function-call-spinner">
-                                                <div className="spinner" />
-                                            </div>
-                                        </div>
-                                        <div className="function-call-preview">
-                                            {activeFunctionCalls[message.chatMessage.id].map((progress) => (
-                                                <FunctionCallPreviewCard
-                                                    key={progress.draft.id}
-                                                    progress={progress}
-                                                    storyObjects={storyObjects}
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {messageEditCards[message.chatMessage.id] && messageEditCards[message.chatMessage.id].length > 0 && (
-                                <div className="message-edit-cards">
-                                    <GroupedFunctionCallCard
-                                        cards={messageEditCards[message.chatMessage.id]}
-                                        onConfirm={(selections) => onBatchConfirm(message.chatMessage.id, selections)}
-                                        isConfirmed={isMessageConfirmed(message.chatMessage.id)}
-                                        storyObjects={storyObjects}
-                                    />
-                                </div>
-                            )}
                         </div>
                     );
                 })}

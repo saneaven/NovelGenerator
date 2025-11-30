@@ -6,7 +6,7 @@
 .settings-modal-new {
     width: 90%;
     max-width: 900px;
-    max-height: 85vh;
+    max-height: 85dvh;
     display: flex;
     flex-direction: column;
     background: var(--color-surface-base);
@@ -1867,7 +1867,7 @@
     .settings-modal-new {
         width: 100%;
         max-width: 100%;
-        max-height: 100vh;
+        max-height: 100dvh;
         border-radius: 0;
     }
 

@@ -47,15 +47,6 @@ export const PROMPT_TREE: PromptNode[] = [
             category: 'systemPrompt',
             name: 'workspace',
             description: 'Main AI behavior for Workspace conversations'
-          },
-          {
-            id: 'chat-workspace-instructions',
-            label: 'Function Instructions',
-            type: 'prompt',
-            functionType: 'chat',
-            category: 'functionInstructions',
-            name: 'workspace',
-            description: 'Available function calling instructions for Workspace'
           }
         ]
       },
@@ -72,15 +63,6 @@ export const PROMPT_TREE: PromptNode[] = [
             category: 'systemPrompt',
             name: 'novelEditor',
             description: 'Main AI behavior for Novel Editor conversations'
-          },
-          {
-            id: 'chat-noveleditor-instructions',
-            label: 'Function Instructions',
-            type: 'prompt',
-            functionType: 'chat',
-            category: 'functionInstructions',
-            name: 'novelEditor',
-            description: 'Available function calling instructions for Novel Editor'
           }
         ]
       },

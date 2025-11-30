@@ -28,7 +28,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   const errors = useUnifiedObjectStore((state) => state.errors);
   const fetchObject = useUnifiedObjectStore((state) => state.fetchObject);
   const updateObject = useUnifiedObjectStore((state) => state.updateObject);
-  const activateVersion = useUnifiedObjectStore((state) => state.activateVersion);
+  const restoreVersion = useUnifiedObjectStore((state) => state.restoreVersion);
   const listObjects = useUnifiedObjectStore((state) => state.listObjects);
   const createObject = useUnifiedObjectStore((state) => state.createObject);
   const { settings } = useSettingsStore();
@@ -59,18 +59,34 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   const [showRetranslateModal, setShowRetranslateModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Helper to get data for a specific language
+  const getDataForLanguage = useCallback((lang: string): BasicInfoData => {
+    if (!basicInfo) return { title: '', logline: '', genre: '' };
+    const data = basicInfo.data[lang];
+    if (data) return data as BasicInfoData;
+    // Fallback to first available language
+    const availableLanguages = Object.keys(basicInfo.data);
+    if (availableLanguages.length > 0) {
+      return basicInfo.data[availableLanguages[0]] as BasicInfoData;
+    }
+    return { title: '', logline: '', genre: '' };
+  }, [basicInfo]);
+
   // Compute effective display language with fallback
   const { effectiveLanguage, isFallback } = useMemo(() => {
     if (!basicInfo) {
       return { effectiveLanguage: globalDisplayLanguage, isFallback: false };
     }
-    const available = basicInfo.languages.available;
+    const available = Object.keys(basicInfo.data);
     if (available.includes(globalDisplayLanguage)) {
       return { effectiveLanguage: globalDisplayLanguage, isFallback: false };
     }
     // Fallback to any available language
     return { effectiveLanguage: available[0] || globalDisplayLanguage, isFallback: true };
   }, [basicInfo, globalDisplayLanguage]);
+
+  // Get current data for effective language
+  const currentData = useMemo(() => getDataForLanguage(effectiveLanguage), [getDataForLanguage, effectiveLanguage]);
 
   // Fetch basic info ID on mount (you'll need to implement this based on your API)
   const initializeBasicInfo = useCallback(async () => {
@@ -115,19 +131,19 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
     initializeBasicInfo();
   }, [initializeBasicInfo]);
 
-  // Fetch basic info when ID is available or language changes
+  // Fetch basic info when ID is available
   useEffect(() => {
     if (basicInfoId) {
-      fetchObject('basic_info', basicInfoId, globalDisplayLanguage);
+      fetchObject('basic_info', basicInfoId);
     }
-  }, [basicInfoId, fetchObject, globalDisplayLanguage]);
+  }, [basicInfoId, fetchObject]);
 
   // Sync edit form when basic info loads or language changes
   useEffect(() => {
-    if (basicInfo?.data) {
-      setEditFormData(basicInfo.data);
+    if (currentData) {
+      setEditFormData(currentData);
     }
-  }, [basicInfo?.data]);
+  }, [currentData]);
 
   // ============================================================================
   // HANDLERS
@@ -155,9 +171,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   };
 
   const handleCancel = () => {
-    if (basicInfo?.data) {
-      setEditFormData(basicInfo.data);
-    }
+    setEditFormData(currentData);
     setIsEditing(false);
   };
 
@@ -166,9 +180,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   };
 
   const handleEdit = () => {
-    if (basicInfo?.data) {
-      setEditFormData(basicInfo.data);
-    }
+    setEditFormData(currentData);
     setIsEditing(true);
   };
 
@@ -186,24 +198,28 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
       // Build custom user instructions with optional previous translation
       let instructions = userInstructions || '';
 
-      if (includePrevious && basicInfo.languages.available.includes(targetLanguage)) {
+      const availableLanguages = Object.keys(basicInfo.data);
+      if (includePrevious && availableLanguages.includes(targetLanguage)) {
         // Get previous translation data if available
+        const targetData = basicInfo.data[targetLanguage] || {};
         const prevTranslation = `Previous translation for reference:\n${JSON.stringify({
-          title: basicInfo.data.title,
-          logline: basicInfo.data.logline,
-          genre: basicInfo.data.genre,
+          title: targetData.title,
+          logline: targetData.logline,
+          genre: targetData.genre,
         }, null, 2)}`;
         instructions = instructions ? `${instructions}\n\n${prevTranslation}` : prevTranslation;
       }
 
+      // Get source data for the source language
+      const sourceData = basicInfo.data[sourceLanguage] || currentData;
       await TranslationService.translateSingle(
         {
           objectType: 'basic_info',
           objectId: basicInfoId,
           sourceData: {
-            title: basicInfo.data.title,
-            logline: basicInfo.data.logline,
-            genre: basicInfo.data.genre,
+            title: sourceData.title,
+            logline: sourceData.logline,
+            genre: sourceData.genre,
           },
         },
         {
@@ -237,7 +253,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
       if (result.genre !== undefined) updates.genre = result.genre;
 
       await updateObject('basic_info', basicInfoId, {
-        data: { ...basicInfo.data, ...updates },
+        data: { ...currentData, ...updates },
         language: effectiveLanguage,
         user_request: 'AI Edit',
         create_new_version: true,
@@ -253,7 +269,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
     if (!basicInfo || !basicInfoId) return;
 
     try {
-      await activateVersion('basic_info', basicInfoId, versionId);
+      await restoreVersion('basic_info', basicInfoId, versionId);
     } catch (err) {
       console.error('Failed to restore version:', err);
       showError('Restore Error', 'Failed to restore version. Please try again.');
@@ -346,7 +362,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
                 className="mobile-only"
               />
               {settings.defaultSubLanguage &&
-                basicInfo.languages.available.includes(settings.defaultSubLanguage) && (
+                Object.keys(basicInfo.data).includes(settings.defaultSubLanguage) && (
                   <DropdownItem
                     icon="🔄"
                     label="Retranslate"
@@ -406,7 +422,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
             />
           ) : (
             <div className="display-value">
-              {basicInfo.data.title || 'Title not set.'}
+              {currentData.title || 'Title not set.'}
             </div>
           )}
         </div>
@@ -425,7 +441,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
             />
           ) : (
             <div className="display-value">
-              {basicInfo.data.genre || 'Genre not set.'}
+              {currentData.genre || 'Genre not set.'}
             </div>
           )}
         </div>
@@ -444,7 +460,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
             />
           ) : (
             <div className="display-value multiline">
-              {basicInfo.data.logline || 'Logline not set.'}
+              {currentData.logline || 'Logline not set.'}
             </div>
           )}
         </div>
@@ -497,7 +513,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
           defaultSourceLanguage={settings.mainLanguage}
           defaultTargetLanguage={globalDisplayLanguage}
           availableLanguages={[settings.mainLanguage, ...settings.subLanguages]}
-          manuscriptLanguages={basicInfo.languages.available}
+          manuscriptLanguages={Object.keys(basicInfo.data)}
           translationTimestamp={basicInfo.version.created_at || null}
           onRetranslate={handleRetranslate}
           isTranslating={translating[basicInfoId] || false}

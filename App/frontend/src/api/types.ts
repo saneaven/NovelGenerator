@@ -10,7 +10,6 @@ export interface BaseMetadata {
   id: string;
   created_at: string;
   updated_at: string;
-  active_version_id?: string;
 }
 
 export interface LanguageData<T = any> {
@@ -119,7 +118,6 @@ export interface NameDescriptionResponse extends BaseMetadata {
 
 export interface OutlineResponse extends BaseMetadata {
   project_id: string;
-  active_version_id?: string;
   acts: ActResponse[];
 }
 
@@ -195,7 +193,6 @@ export interface ManuscriptVersionResponse {
 export interface ManuscriptResponse {
   id: string;
   chapter_id: string;
-  active_version_id?: string;
   created_at: string;
   updated_at: string;
   versions: ManuscriptVersionResponse[];

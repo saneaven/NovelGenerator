@@ -132,12 +132,13 @@ export const unifiedObjectService = {
   },
 
   /**
-   * Activate a previous version (revert/rollback)
+   * Restore a previous version by creating a NEW version with the restored content.
+   * The restored content becomes the latest version.
    * @param type Object type
    * @param id Object ID
-   * @param versionId Version ID to activate
+   * @param versionId Version ID to restore
    */
-  async activateVersion(
+  async restoreVersion(
     type: ObjectType,
     id: string,
     versionId: string

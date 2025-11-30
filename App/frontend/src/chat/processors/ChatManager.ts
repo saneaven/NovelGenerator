@@ -3,8 +3,9 @@ import type { ChatMessage, FunctionCallMetadata, ContentPart, FunctionCallProgre
 import type { ChatPipelineContext } from '../types';
 import { streamChat } from '../../llm_request/llmService';
 import { ChatPipeline } from '../ChatPipeline';
-import { type ProviderType, type ProviderConfig, type ThinkingConfig } from '../../store/settingsStore';
+import { type ProviderType, type ProviderConfig, type ThinkingConfig, type RetryConfig } from '../../store/settingsStore';
 import { FunctionCallStreamTracker } from '../streaming/FunctionCallStreamTracker';
+import { generateTempId } from '../../utils/tempId';
 
 export interface ChatManagerConfig {
   projectId: string;
@@ -27,6 +28,7 @@ export interface ChatManagerConfig {
   enablePrefill?: boolean; // Enable assistant prefill
   thinkingMode?: 'off' | 'model' | 'custom'; // Thinking mode: off, model-native thinking, or custom prompt-based
   thinkingConfig?: ThinkingConfig;
+  retryConfig?: RetryConfig; // Retry configuration for error handling
 }
 
 export interface ChatManagerCallbacks {
@@ -155,7 +157,7 @@ export class ChatManager {
    */
   private createAssistantMessage(): ChatMessage {
     return {
-      id: crypto.randomUUID(),
+      id: generateTempId(),
       role: 'assistant',
       contentParts: [],
       timestamp: new Date(),
@@ -254,6 +256,7 @@ export class ChatManager {
           providerPreference: this.config.providerPreference,
           thinkingConfig,
           thinkingMode: this.config.thinkingMode,
+          retryConfig: this.config.retryConfig,
         }
       )) {
         if (typeof chunk === 'string') {
@@ -368,7 +371,28 @@ export class ChatManager {
     } catch (error) {
       // Clean up RAF on error
       flushPendingUpdate();
-      throw error;
+
+      // For abort errors, finalize gracefully instead of rethrowing
+      const isAbortError = error instanceof DOMException && error.name === 'AbortError';
+      if (isAbortError || this.isAborted) {
+        // Finalize what we have so far
+        finalizeCurrentBuffer();
+        finalizedToolCalls = toolCallTracker.finalize();
+
+        // Post-processing with partial content
+        await this.finishProcessing(
+          chatId,
+          assistantMessageId,
+          accumulatedContentParts,
+          finalizedToolCalls,
+          accumulatedThinkingDetails,
+          context,
+          language
+        );
+        return;  // Exit gracefully
+      }
+
+      throw error;  // Rethrow for non-abort errors
     }
 
     finalizedToolCalls = toolCallTracker.finalize();

@@ -59,14 +59,14 @@ export class FunctionCallApplicator {
         const basic = existing[0];
         await this.store.updateObject('basic_info', basic.id, {
           data: { title, logline, genre },
-          language: basic.languages.active,
+          language: this.language,
           create_new_version: true,
           user_request: 'AI Edit',
         });
         return this.ok('Updated basic info');
       }
 
-      await this.store.createObject('basic_info', projectId, { title, logline, genre }, this.language);
+      await this.store.createObject('basic_info', projectId, { title, logline, genre }, this.language, undefined, 'AI Edit');
       return this.ok('Created basic info');
     },
 
@@ -75,13 +75,14 @@ export class FunctionCallApplicator {
       if (!id) return this.error('Missing id for update_basic_info');
 
       const object = await this.ensureObject('basic_info', id);
+      const currentData = this.getObjectData(object);
       await this.store.updateObject('basic_info', id, {
         data: {
-          title: title ?? object.data.title,
-          logline: logline ?? object.data.logline,
-          genre: genre ?? object.data.genre,
+          title: title ?? currentData.title,
+          logline: logline ?? currentData.logline,
+          genre: genre ?? currentData.genre,
         },
-        language: object.languages.active,
+        language: this.language,
         create_new_version: true,
         user_request: 'AI Edit',
       });
@@ -135,7 +136,8 @@ export class FunctionCallApplicator {
         projectId,
         { name, description },
         this.language,
-        { order: actOrder }
+        { order: actOrder },
+        'AI Edit'
       );
 
       if (Array.isArray(chapters)) {
@@ -151,7 +153,8 @@ export class FunctionCallApplicator {
               description: ch.description || '',
             },
             this.language,
-            { act_id: newAct.id, order: chapterOrder }
+            { act_id: newAct.id, order: chapterOrder },
+            'AI Edit'
           );
         }
       }
@@ -163,13 +166,14 @@ export class FunctionCallApplicator {
       const { id, name, description } = args || {};
       if (!id) return this.error('Missing id for update_act');
       const object = await this.ensureObject('act', id);
+      const currentData = this.getObjectData(object);
 
       await this.store.updateObject('act', id, {
         data: {
-          name: name ?? object.data.name,
-          description: description ?? object.data.description,
+          name: name ?? currentData.name,
+          description: description ?? currentData.description,
         },
-        language: object.languages.active,
+        language: this.language,
         create_new_version: true,
         user_request: 'AI Edit',
       });
@@ -195,7 +199,8 @@ export class FunctionCallApplicator {
         projectId,
         { name, description },
         this.language,
-        { act_id: actId, order: chapterOrder }
+        { act_id: actId, order: chapterOrder },
+        'AI Edit'
       );
 
       return this.ok(`Created chapter "${name}"`);
@@ -206,13 +211,14 @@ export class FunctionCallApplicator {
       if (!id) return this.error('Missing id for update_chapter');
 
       const object = await this.ensureObject('chapter', id);
+      const currentData = this.getObjectData(object);
 
       await this.store.updateObject('chapter', id, {
         data: {
-          name: name ?? object.data.name,
-          description: description ?? object.data.description,
+          name: name ?? currentData.name,
+          description: description ?? currentData.description,
         },
-        language: object.languages.active,
+        language: this.language,
         create_new_version: true,
         user_request: 'AI Edit',
       });
@@ -233,7 +239,7 @@ export class FunctionCallApplicator {
       return this.error(`Missing name or description for ${type}`);
     }
 
-    await this.store.createObject(type, projectId, { name, description }, this.language);
+    await this.store.createObject(type, projectId, { name, description }, this.language, undefined, 'AI Edit');
     return this.ok(`Created ${type}: ${name}`);
   }
 
@@ -242,12 +248,13 @@ export class FunctionCallApplicator {
     if (!id) return this.error(`Missing id for update_${type}`);
 
     const object = await this.ensureObject(type, id);
+    const currentData = this.getObjectData(object);
     await this.store.updateObject(type, id, {
       data: {
-        name: name ?? object.data.name,
-        description: description ?? object.data.description,
+        name: name ?? currentData.name,
+        description: description ?? currentData.description,
       },
-      language: object.languages.active,
+      language: this.language,
       create_new_version: true,
       user_request: 'AI Edit',
     });
@@ -271,6 +278,17 @@ export class FunctionCallApplicator {
       throw new Error(`${type} with id ${id} not found`);
     }
     return object;
+  }
+
+  // Get object data for mainLanguage with fallback
+  private getObjectData(object: UnifiedObject): Record<string, any> {
+    const data = object.data[this.language];
+    if (data) return data;
+    const availableLanguages = Object.keys(object.data);
+    if (availableLanguages.length > 0) {
+      return object.data[availableLanguages[0]];
+    }
+    return {};
   }
 
   private ok(message: string): EditTagApplicationResult {

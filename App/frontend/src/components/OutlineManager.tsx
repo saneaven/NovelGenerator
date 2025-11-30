@@ -33,7 +33,38 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
   const [showActRetranslateModal, setShowActRetranslateModal] = useState<string | null>(null);
   const [showChapterRetranslateModal, setShowChapterRetranslateModal] = useState<string | null>(null);
 
-  // Load acts and chapters on mount or when language changes
+  // Collapse/expand state - empty Set means all collapsed (default)
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+
+  // Toggle single item expand/collapse
+  const toggleItemExpand = (itemId: string) => {
+    setExpandedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(itemId)) {
+        next.delete(itemId);
+      } else {
+        next.add(itemId);
+      }
+      return next;
+    });
+  };
+
+  // Expand all items (acts and chapters)
+  const expandAll = () => {
+    const allIds = new Set<string>();
+    acts.forEach(act => {
+      allIds.add(act.id);
+      getChaptersForAct(act.id).forEach(chapter => allIds.add(chapter.id));
+    });
+    setExpandedItems(allIds);
+  };
+
+  // Collapse all items
+  const collapseAll = () => {
+    setExpandedItems(new Set());
+  };
+
+  // Load acts and chapters on mount
   useEffect(() => {
     if (!projectId) return;
 
@@ -41,8 +72,8 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
     const loadOutlineData = async () => {
       try {
         await Promise.all([
-          listObjects('act', projectId, globalDisplayLanguage),
-          listObjects('chapter', projectId, globalDisplayLanguage),
+          listObjects('act', projectId),
+          listObjects('chapter', projectId),
         ]);
       } catch (error) {
         if (!isCancelled) {
@@ -55,7 +86,7 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
     return () => {
       isCancelled = true;
     };
-  }, [projectId, listObjects, globalDisplayLanguage]);
+  }, [projectId, listObjects]);
 
   // Get acts and chapters from store
   const acts = useMemo(() => {
@@ -93,7 +124,7 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
 
   // Helper to compute effective display language with fallback
   const getActEffectiveLanguage = (act: ActObject) => {
-    const available = act.languages.available;
+    const available = Object.keys(act.data);
     if (available.includes(globalDisplayLanguage)) {
       return { effectiveLanguage: globalDisplayLanguage, isFallback: false };
     }
@@ -101,11 +132,26 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
   };
 
   const getChapterEffectiveLanguage = (chapter: ChapterObject) => {
-    const available = chapter.languages.available;
+    const available = Object.keys(chapter.data);
     if (available.includes(globalDisplayLanguage)) {
       return { effectiveLanguage: globalDisplayLanguage, isFallback: false };
     }
     return { effectiveLanguage: available[0] || globalDisplayLanguage, isFallback: true };
+  };
+
+  // Helper to get data for a language with fallback
+  const getActData = (act: ActObject, lang: string) => {
+    const data = act.data[lang];
+    if (data) return data;
+    const available = Object.keys(act.data);
+    return available.length > 0 ? act.data[available[0]] : { name: '', description: '' };
+  };
+
+  const getChapterData = (chapter: ChapterObject, lang: string) => {
+    const data = chapter.data[lang];
+    if (data) return data;
+    const available = Object.keys(chapter.data);
+    return available.length > 0 ? chapter.data[available[0]] : { name: '', description: '' };
   };
 
   // ========================================================================
@@ -192,21 +238,24 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
 
       let instructions = userInstructions || '';
 
-      if (includePrevious && act.languages.available.includes(targetLanguage)) {
+      const availableLanguages = Object.keys(act.data);
+      if (includePrevious && availableLanguages.includes(targetLanguage)) {
+        const targetData = act.data[targetLanguage] || {};
         const prevTranslation = `Previous translation for reference:\n${JSON.stringify({
-          name: act.data.name,
-          description: act.data.description,
+          name: targetData.name,
+          description: targetData.description,
         }, null, 2)}`;
         instructions = instructions ? `${instructions}\n\n${prevTranslation}` : prevTranslation;
       }
 
+      const sourceData = act.data[sourceLanguage] || getActData(act, sourceLanguage);
       await TranslationService.translateSingle(
         {
           objectType: 'act',
           objectId: showActRetranslateModal,
           sourceData: {
-            name: act.data.name,
-            description: act.data.description,
+            name: sourceData.name,
+            description: sourceData.description,
           },
         },
         {
@@ -310,21 +359,24 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
 
       let instructions = userInstructions || '';
 
-      if (includePrevious && chapter.languages.available.includes(targetLanguage)) {
+      const availableLanguages = Object.keys(chapter.data);
+      if (includePrevious && availableLanguages.includes(targetLanguage)) {
+        const targetData = chapter.data[targetLanguage] || {};
         const prevTranslation = `Previous translation for reference:\n${JSON.stringify({
-          name: chapter.data.name,
-          description: chapter.data.description,
+          name: targetData.name,
+          description: targetData.description,
         }, null, 2)}`;
         instructions = instructions ? `${instructions}\n\n${prevTranslation}` : prevTranslation;
       }
 
+      const sourceData = chapter.data[sourceLanguage] || getChapterData(chapter, sourceLanguage);
       await TranslationService.translateSingle(
         {
           objectType: 'chapter',
           objectId: showChapterRetranslateModal,
           sourceData: {
-            name: chapter.data.name,
-            description: chapter.data.description,
+            name: sourceData.name,
+            description: sourceData.description,
           },
         },
         {
@@ -410,7 +462,7 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
     if (!showActVersionHistory) return;
 
     try {
-      await store.activateVersion('act', showActVersionHistory, versionId);
+      await store.restoreVersion('act', showActVersionHistory, versionId);
       setShowActVersionHistory(null);
     } catch (error) {
       console.error('Failed to restore version:', error);
@@ -422,7 +474,7 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
     if (!showChapterVersionHistory) return;
 
     try {
-      await store.activateVersion('chapter', showChapterVersionHistory, versionId);
+      await store.restoreVersion('chapter', showChapterVersionHistory, versionId);
       setShowChapterVersionHistory(null);
     } catch (error) {
       console.error('Failed to restore version:', error);
@@ -448,6 +500,20 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
         <h2>Story Outline</h2>
         <div className="header-buttons">
           <button
+            onClick={expandAll}
+            className="collapse-control-btn desktop-only"
+            title="Expand All"
+          >
+            ▼ Expand
+          </button>
+          <button
+            onClick={collapseAll}
+            className="collapse-control-btn desktop-only"
+            title="Collapse All"
+          >
+            ▶ Collapse
+          </button>
+          <button
             onClick={() => setShowAIModal(true)}
             className="ai-edit-button desktop-only"
           >
@@ -467,6 +533,17 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
               </button>
             }
           >
+            <DropdownItem
+              icon="▼"
+              label="Expand All"
+              onClick={expandAll}
+            />
+            <DropdownItem
+              icon="▶"
+              label="Collapse All"
+              onClick={collapseAll}
+            />
+            <DropdownDivider />
             <DropdownItem
               icon="🤖"
               label="AI Edit"
@@ -498,14 +575,22 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
         ) : (
           acts.map((act, actIndex) => {
             const actChapters = getChaptersForAct(act.id);
-            const { isFallback: actIsFallback } = getActEffectiveLanguage(act);
+            const { effectiveLanguage: actEffectiveLang, isFallback: actIsFallback } = getActEffectiveLanguage(act);
+            const actData = getActData(act, actEffectiveLang);
 
             return (
               <div key={act.id} className="act-card">
                 <div className="act-header">
                   <div className="act-title">
+                    <button
+                      className="collapse-toggle"
+                      onClick={() => toggleItemExpand(act.id)}
+                      title={expandedItems.has(act.id) ? 'Collapse' : 'Expand'}
+                    >
+                      {expandedItems.has(act.id) ? '▼' : '▶'}
+                    </button>
                     <span className="act-number">Act {actIndex + 1}</span>
-                    <h3>{act.data.name}</h3>
+                    <h3 onClick={() => toggleItemExpand(act.id)} className="item-name-clickable">{actData.name}</h3>
                     {actIsFallback && <span className="fallback-warning" title={`${globalDisplayLanguage} not available`}>⚠️</span>}
                   </div>
                   <div className="card-actions">
@@ -546,7 +631,7 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
                       />
                       <DropdownDivider className="mobile-only" />
                       {settings.settings.defaultSubLanguage &&
-                        act.languages.available.includes(settings.settings.defaultSubLanguage) && (
+                        Object.keys(act.data).includes(settings.settings.defaultSubLanguage) && (
                           <DropdownItem
                             icon="🔄"
                             label="Retranslate"
@@ -574,20 +659,20 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
 
                 {editingAct === act.id ? (
                   <EditActForm
-                    act={act}
+                    actData={actData}
                     onUpdate={(name, description) => handleUpdateAct(act.id, name, description)}
                     onCancel={() => setEditingAct(null)}
                     onAIEdit={() => setShowActAIModal(act.id)}
                   />
-                ) : (
+                ) : expandedItems.has(act.id) && (
                   <div className="act-content">
                     <p className="act-description">
-                      {act.data.description || 'No description.'}
+                      {actData.description || 'No description.'}
                     </p>
                   </div>
                 )}
 
-                {showAddChapterForm === act.id && (
+                {expandedItems.has(act.id) && showAddChapterForm === act.id && (
                   <AddChapterForm
                     actId={act.id}
                     onAdd={handleAddChapter}
@@ -595,17 +680,25 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
                   />
                 )}
 
-                <div className="chapters-list">
+                {expandedItems.has(act.id) && <div className="chapters-list">
                   {actChapters.map((chapter, chapterIndex) => {
-                    const { isFallback: chapterIsFallback } = getChapterEffectiveLanguage(chapter);
+                    const { effectiveLanguage: chapterEffectiveLang, isFallback: chapterIsFallback } = getChapterEffectiveLanguage(chapter);
+                    const chapterData = getChapterData(chapter, chapterEffectiveLang);
                     return (
                     <div key={chapter.id} className="chapter-card">
                       <div className="chapter-header">
                         <div className="chapter-title">
+                          <button
+                            className="collapse-toggle"
+                            onClick={() => toggleItemExpand(chapter.id)}
+                            title={expandedItems.has(chapter.id) ? 'Collapse' : 'Expand'}
+                          >
+                            {expandedItems.has(chapter.id) ? '▼' : '▶'}
+                          </button>
                           <span className="chapter-number">
                             Chapter {chapterIndex + 1}
                           </span>
-                          <h4>{chapter.data.name}</h4>
+                          <h4 onClick={() => toggleItemExpand(chapter.id)} className="item-name-clickable">{chapterData.name}</h4>
                           {chapterIsFallback && <span className="fallback-warning" title={`${globalDisplayLanguage} not available`}>⚠️</span>}
                         </div>
                         <div className="card-actions">
@@ -631,7 +724,7 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
                               className="mobile-only"
                             />
                             {settings.settings.defaultSubLanguage &&
-                              chapter.languages.available.includes(settings.settings.defaultSubLanguage) && (
+                              Object.keys(chapter.data).includes(settings.settings.defaultSubLanguage) && (
                                 <DropdownItem
                                   icon="🔄"
                                   label="Retranslate"
@@ -659,22 +752,22 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
 
                       {editingChapter === chapter.id ? (
                         <EditChapterForm
-                          chapter={chapter}
+                          chapterData={chapterData}
                           onUpdate={(name, description) => handleUpdateChapter(chapter.id, name, description)}
                           onCancel={() => setEditingChapter(null)}
                           onAIEdit={() => setShowChapterAIModal(chapter.id)}
                         />
-                      ) : (
+                      ) : expandedItems.has(chapter.id) && (
                         <div className="chapter-content">
                           <p className="chapter-description">
-                            {chapter.data.description || 'No description.'}
+                            {chapterData.description || 'No description.'}
                           </p>
                         </div>
                       )}
                     </div>
                     );
                   })}
-                </div>
+                </div>}
               </div>
             );
           })
@@ -749,7 +842,7 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
             defaultSourceLanguage={settings.settings.mainLanguage}
             defaultTargetLanguage={globalDisplayLanguage}
             availableLanguages={availableLanguages}
-            manuscriptLanguages={act?.languages?.available}
+            manuscriptLanguages={act?.data ? Object.keys(act.data) : []}
             translationTimestamp={act?.version?.created_at || null}
             onRetranslate={handleRetranslateAct}
             isTranslating={translating[showActRetranslateModal] || false}
@@ -770,7 +863,7 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
             defaultSourceLanguage={settings.settings.mainLanguage}
             defaultTargetLanguage={globalDisplayLanguage}
             availableLanguages={availableLanguages}
-            manuscriptLanguages={chapter?.languages?.available}
+            manuscriptLanguages={chapter?.data ? Object.keys(chapter.data) : []}
             translationTimestamp={chapter?.version?.created_at || null}
             onRetranslate={handleRetranslateChapter}
             isTranslating={translating[showChapterRetranslateModal] || false}
@@ -844,15 +937,15 @@ const AddActForm: React.FC<AddActFormProps> = ({ onAdd, onCancel }) => {
 // ============================================================================
 
 interface EditActFormProps {
-  act: ActObject;
+  actData: { name: string; description: string };
   onUpdate: (name: string, description: string) => void;
   onCancel: () => void;
   onAIEdit: () => void;
 }
 
-const EditActForm: React.FC<EditActFormProps> = ({ act, onUpdate, onCancel, onAIEdit }) => {
-  const [name, setName] = useState(act.data.name);
-  const [description, setDescription] = useState(act.data.description);
+const EditActForm: React.FC<EditActFormProps> = ({ actData, onUpdate, onCancel, onAIEdit }) => {
+  const [name, setName] = useState(actData.name);
+  const [description, setDescription] = useState(actData.description);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -965,15 +1058,15 @@ const AddChapterForm: React.FC<AddChapterFormProps> = ({ actId, onAdd, onCancel 
 // ============================================================================
 
 interface EditChapterFormProps {
-  chapter: ChapterObject;
+  chapterData: { name: string; description: string };
   onUpdate: (name: string, description: string) => void;
   onCancel: () => void;
   onAIEdit: () => void;
 }
 
-const EditChapterForm: React.FC<EditChapterFormProps> = ({ chapter, onUpdate, onCancel, onAIEdit }) => {
-  const [name, setName] = useState(chapter.data.name);
-  const [description, setDescription] = useState(chapter.data.description);
+const EditChapterForm: React.FC<EditChapterFormProps> = ({ chapterData, onUpdate, onCancel, onAIEdit }) => {
+  const [name, setName] = useState(chapterData.name);
+  const [description, setDescription] = useState(chapterData.description);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1072,7 +1165,7 @@ const ActVersionHistoryModal: React.FC<ActVersionHistoryModalProps> = ({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content version-history-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Act "{act?.data.name || 'Unknown Act'}" Version History</h2>
+          <h2>Act "{(act?.data ? (act.data[globalDisplayLanguage]?.name || act.data[Object.keys(act.data)[0]]?.name) : 'Unknown Act') || 'Unknown Act'}" Version History</h2>
           <button className="modal-close" onClick={onClose}>Close</button>
         </div>
 
@@ -1088,7 +1181,7 @@ const ActVersionHistoryModal: React.FC<ActVersionHistoryModalProps> = ({
               {versions.map((version) => {
                 const isCurrentVersion = act?.version.id === version.id;
                 // Use globalDisplayLanguage with fallback to available languages
-                const availableLanguages = act?.languages.available || [];
+                const availableLanguages = act?.data ? Object.keys(act.data) : [];
                 const effectiveLanguage = availableLanguages.includes(globalDisplayLanguage)
                   ? globalDisplayLanguage
                   : (availableLanguages[0] || 'en');
@@ -1226,7 +1319,7 @@ const ChapterVersionHistoryModal: React.FC<ChapterVersionHistoryModalProps> = ({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content version-history-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Chapter "{chapter?.data.name || 'Unknown Chapter'}" Version History</h2>
+          <h2>Chapter "{(chapter?.data ? (chapter.data[globalDisplayLanguage]?.name || chapter.data[Object.keys(chapter.data)[0]]?.name) : 'Unknown Chapter') || 'Unknown Chapter'}" Version History</h2>
           <button className="modal-close" onClick={onClose}>Close</button>
         </div>
 
@@ -1242,7 +1335,7 @@ const ChapterVersionHistoryModal: React.FC<ChapterVersionHistoryModalProps> = ({
               {versions.map((version) => {
                 const isCurrentVersion = chapter?.version.id === version.id;
                 // Use globalDisplayLanguage with fallback to available languages
-                const availableLanguages = chapter?.languages.available || [];
+                const availableLanguages = chapter?.data ? Object.keys(chapter.data) : [];
                 const effectiveLanguage = availableLanguages.includes(globalDisplayLanguage)
                   ? globalDisplayLanguage
                   : (availableLanguages[0] || 'en');

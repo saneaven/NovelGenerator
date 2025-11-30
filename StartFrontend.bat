@@ -10,7 +10,7 @@ echo =================================
 echo  Start React Application...
 echo =================================
 echo.
-call npm run dev
+call npm run dev -- --host
 
 :: 작업이 끝나면 잠시 대기
 pause

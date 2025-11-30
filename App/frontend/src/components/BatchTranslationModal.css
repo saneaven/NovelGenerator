@@ -1,31 +1,10 @@
 /* Batch Translation Modal - Modern Design (mirrors AIEditModal) */
 
-/* Overlay */
-.batch-translation-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--z-modal);
-  animation: fadeIn var(--transition-base);
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
 /* Modal Container */
 .batch-translation-modal {
   max-width: 700px;
-  width: 90vw;
-  max-height: 90vh;
+  width: 90dvw;
+  max-height: 90dvh;
   display: flex;
   flex-direction: column;
   background: var(--color-surface-base);
@@ -209,6 +188,157 @@
 .batch-translation-modal .checkbox-label:has(input[type="checkbox"]:checked) span {
   color: var(--color-brand-primary-active);
   font-weight: 600;
+}
+
+/* ==================== TREE SELECTION ==================== */
+.tree-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.tree-header > label {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.tree-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.tree-action-btn {
+  padding: var(--spacing-xs) var(--spacing-md);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tree-action-btn:hover {
+  background: var(--color-brand-primary-soft);
+  border-color: var(--color-brand-primary);
+  color: var(--color-brand-primary);
+}
+
+.translation-tree {
+  border: 2px solid var(--color-border-default);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-surface-elevated);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.tree-category {
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+.tree-category:last-child {
+  border-bottom: none;
+}
+
+.tree-category-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--color-surface-subtle);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.tree-category-header:hover {
+  background: var(--color-surface-muted);
+}
+
+.tree-expand-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: color 0.2s ease;
+}
+
+.tree-expand-btn:hover {
+  color: var(--color-brand-primary);
+}
+
+.tree-category-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex: 1;
+  cursor: pointer;
+}
+
+.tree-category-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--color-brand-primary);
+  flex-shrink: 0;
+}
+
+.tree-category-checkbox span {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.tree-children {
+  padding: var(--spacing-sm) var(--spacing-lg) var(--spacing-md);
+  padding-left: calc(var(--spacing-lg) + 24px + var(--spacing-sm));
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  background: var(--color-surface-base);
+}
+
+.tree-object-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.tree-object-checkbox:hover {
+  background: var(--color-surface-subtle);
+}
+
+.tree-object-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--color-brand-primary);
+  flex-shrink: 0;
+}
+
+.tree-object-checkbox span {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-object-checkbox:has(input[type="checkbox"]:checked) span {
+  color: var(--color-text-primary);
+  font-weight: 500;
 }
 
 /* Textarea */
@@ -404,6 +534,89 @@
   font-weight: 600;
 }
 
+/* ==================== PARTIAL ERROR BANNER ==================== */
+.partial-error-banner {
+  background: var(--color-feedback-warning-soft);
+  border: 2px solid var(--color-feedback-warning-base);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+  animation: slideInUp 0.3s ease-out;
+}
+
+.partial-error-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.partial-error-icon {
+  font-size: var(--font-size-xl);
+}
+
+.partial-error-title {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--color-feedback-warning-strong);
+}
+
+.partial-error-message {
+  margin: 0 0 var(--spacing-sm) 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-mono, monospace);
+  background: var(--color-surface-elevated);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius-sm);
+  word-break: break-word;
+}
+
+.partial-error-summary {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+/* Progress fill partial state */
+.progress-fill.partial {
+  background: linear-gradient(90deg, var(--color-feedback-warning-base) 0%, var(--color-feedback-warning-strong) 100%);
+}
+
+.progress-fill.partial::after {
+  animation: none;
+}
+
+/* Failed item */
+.progress-item.failed {
+  background: var(--color-feedback-error-soft);
+  border: 2px solid var(--color-feedback-error-base);
+}
+
+.progress-item.failed .progress-icon {
+  color: var(--color-feedback-error-strong);
+}
+
+.progress-item.failed .progress-label {
+  color: var(--color-feedback-error-strong);
+  font-weight: 500;
+}
+
+/* Not attempted item */
+.progress-item.not-attempted {
+  background: var(--color-surface-subtle);
+  opacity: 0.6;
+}
+
+.progress-item.not-attempted .progress-icon {
+  color: var(--color-text-muted);
+}
+
+.progress-item.not-attempted .progress-label {
+  color: var(--color-text-muted);
+}
+
 /* ==================== COMPLETE SCREEN ==================== */
 .batch-translation-complete {
   flex: 1;
@@ -440,6 +653,38 @@
   margin: 0;
   font-size: var(--font-size-md);
   color: var(--color-text-secondary);
+}
+
+/* Partial Success Message */
+.partial-success-message {
+  text-align: center;
+  padding: var(--spacing-2xl);
+  background: var(--color-feedback-warning-soft);
+  border: 2px solid var(--color-feedback-warning-base);
+  border-radius: var(--border-radius-lg);
+  animation: slideInUp 0.3s ease-out;
+}
+
+.partial-success-message h3 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-size-xl);
+  color: var(--color-feedback-warning-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+}
+
+.partial-success-message p {
+  margin: 0;
+  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+}
+
+.partial-success-message .partial-warning {
+  margin-top: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
 }
 
 /* Error Message */
@@ -547,16 +792,19 @@
 }
 
 /* ==================== RESPONSIVE ==================== */
+
+/* Tablet and small desktop */
 @media (max-width: 768px) {
   .batch-translation-modal {
-    max-width: 95vw;
-    max-height: 95vh;
+    max-width: 95dvw;
+    max-height: 95dvh;
   }
 
   .batch-translation-config,
   .batch-translation-progress,
   .batch-translation-complete {
     padding: var(--spacing-lg);
+    gap: var(--spacing-lg);
   }
 
   .batch-translation-modal .modal-header {
@@ -569,6 +817,7 @@
 
   .language-selector-row {
     flex-direction: column;
+    gap: var(--spacing-sm);
   }
 
   .language-select {
@@ -576,21 +825,32 @@
   }
 
   .swap-languages-btn {
-    width: 100%;
+    align-self: center;
     transform: rotate(90deg);
   }
 
   .batch-translation-modal .checkbox-group {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
 
   .batch-translation-modal .modal-actions {
     flex-direction: column-reverse;
+    gap: var(--spacing-sm);
   }
 
   .batch-translation-modal .modal-actions button {
     width: 100%;
     justify-content: center;
+    padding: var(--spacing-md) var(--spacing-lg);
+  }
+
+  .progress-list {
+    max-height: 250px;
+  }
+
+  .translation-summary {
+    padding: var(--spacing-md);
+    font-size: var(--font-size-sm);
   }
 }
 

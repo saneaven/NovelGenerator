@@ -61,7 +61,33 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   const [showRetranslateModal, setShowRetranslateModal] = useState(false);
   const [retranslateTargetId, setRetranslateTargetId] = useState<string | undefined>(undefined);
 
-  // Fetch list of items from backend when language changes
+  // Collapse/expand state - empty Set means all collapsed (default)
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+
+  // Toggle single item expand/collapse
+  const toggleItemExpand = (itemId: string) => {
+    setExpandedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(itemId)) {
+        next.delete(itemId);
+      } else {
+        next.add(itemId);
+      }
+      return next;
+    });
+  };
+
+  // Expand all items
+  const expandAll = () => {
+    setExpandedItems(new Set(items.map(item => item.id)));
+  };
+
+  // Collapse all items
+  const collapseAll = () => {
+    setExpandedItems(new Set());
+  };
+
+  // Fetch list of items from backend
   useEffect(() => {
     if (!projectId) return;
 
@@ -69,7 +95,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 
     const fetchItems = async () => {
       try {
-        await listObjects(category, projectId, globalDisplayLanguage);
+        await listObjects(category, projectId);
       } catch (error) {
         if (!isCancelled) {
           console.error(`Failed to fetch ${category} list:`, error);
@@ -82,7 +108,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, [projectId, category, listObjects, globalDisplayLanguage]);
+  }, [projectId, category, listObjects]);
 
   // Derive items directly from store so external edits instantly reflect in UI
   const items = useMemo(() => {
@@ -103,11 +129,14 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
         const orderA = a.metadata.order ?? 0;
         const orderB = b.metadata.order ?? 0;
         if (orderA === orderB) {
-          return a.data.name.localeCompare(b.data.name);
+          // Always sort by mainLanguage name (not display language) so order stays consistent
+          const aData = a.data[settings.mainLanguage] || a.data[Object.keys(a.data)[0]] || { name: '' };
+          const bData = b.data[settings.mainLanguage] || b.data[Object.keys(b.data)[0]] || { name: '' };
+          return (aData.name || '').localeCompare(bData.name || '');
         }
         return orderA - orderB;
       });
-  }, [objects, category, projectId]);
+  }, [objects, category, projectId, settings.mainLanguage]);
 
   // ============================================================================
   // CRUD OPERATIONS
@@ -174,12 +203,24 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 
   // Helper to compute effective display language with fallback
   const getEffectiveLanguage = (item: NameDescriptionObject) => {
-    const available = item.languages.available;
+    const available = Object.keys(item.data);
     if (available.includes(globalDisplayLanguage)) {
       return { effectiveLanguage: globalDisplayLanguage, isFallback: false };
     }
     // Fallback to any available language
     return { effectiveLanguage: available[0] || globalDisplayLanguage, isFallback: true };
+  };
+
+  // Helper to get data for a specific language with fallback
+  const getDataForLanguage = (item: NameDescriptionObject, lang: string): NameDescriptionData => {
+    const data = item.data[lang];
+    if (data) return data;
+    // Fallback to first available language
+    const availableLanguages = Object.keys(item.data);
+    if (availableLanguages.length > 0) {
+      return item.data[availableLanguages[0]] || { name: '', description: '' };
+    }
+    return { name: '', description: '' };
   };
 
   const handleRetranslate = async (
@@ -202,21 +243,25 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
       // Build custom user instructions with optional previous translation
       let instructions = userInstructions || '';
 
-      if (includePrevious && item.languages.available.includes(targetLanguage)) {
+      const availableLanguages = Object.keys(item.data);
+      if (includePrevious && availableLanguages.includes(targetLanguage)) {
+        const targetData = item.data[targetLanguage] || {};
         const prevTranslation = `Previous translation for reference:\n${JSON.stringify({
-          name: item.data.name,
-          description: item.data.description,
+          name: targetData.name,
+          description: targetData.description,
         }, null, 2)}`;
         instructions = instructions ? `${instructions}\n\n${prevTranslation}` : prevTranslation;
       }
 
+      // Get source data for the source language
+      const sourceData = item.data[sourceLanguage] || getDataForLanguage(item, sourceLanguage);
       await TranslationService.translateSingle(
         {
           objectType: category,
           objectId: retranslateTargetId,
           sourceData: {
-            name: item.data.name,
-            description: item.data.description,
+            name: sourceData.name,
+            description: sourceData.description,
           },
         },
         {
@@ -227,8 +272,8 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
         }
       );
 
-      // Refresh object to update UI with new translation in current display language
-      await store.fetchObject(category, retranslateTargetId, globalDisplayLanguage);
+      // Refresh object to update UI with new translation
+      await store.fetchObject(category, retranslateTargetId);
 
       showSuccess('Success', `Retranslation complete for ${targetLanguage}`);
       setShowRetranslateModal(false);
@@ -314,7 +359,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     if (!versionHistoryTargetId) return;
 
     try {
-      await store.activateVersion(category, versionHistoryTargetId, versionId);
+      await store.restoreVersion(category, versionHistoryTargetId, versionId);
       console.log('✓ Version restored');
     } catch (error) {
       console.error('Failed to restore version:', error);
@@ -340,6 +385,20 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
         <h2>{title}</h2>
         <div className="header-buttons">
           <button
+            onClick={expandAll}
+            className="collapse-control-btn desktop-only"
+            title="Expand All"
+          >
+            ▼ Expand
+          </button>
+          <button
+            onClick={collapseAll}
+            className="collapse-control-btn desktop-only"
+            title="Collapse All"
+          >
+            ▶ Collapse
+          </button>
+          <button
             onClick={() => handleAIEdit()}
             className="ai-edit-button desktop-only"
             disabled={showAddForm}
@@ -360,6 +419,17 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
               </button>
             }
           >
+            <DropdownItem
+              icon="▼"
+              label="Expand All"
+              onClick={expandAll}
+            />
+            <DropdownItem
+              icon="▶"
+              label="Collapse All"
+              onClick={collapseAll}
+            />
+            <DropdownDivider />
             <DropdownItem
               icon="🤖"
               label="AI Edit All"
@@ -396,11 +466,14 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
             const isEditing = editingItemId === item.id;
             const loading = store.loading[item.id] || false;
 
+            const { effectiveLanguage, isFallback } = getEffectiveLanguage(item);
+            const itemData = getDataForLanguage(item, effectiveLanguage);
+
             return (
               <div key={item.id} className="item-card">
                 {isEditing ? (
                   <EditItemForm
-                    item={item}
+                    itemData={itemData}
                     placeholder={placeholder}
                     onUpdate={(name, desc) => handleUpdate(item.id, name, desc)}
                     onCancel={() => setEditingItemId(null)}
@@ -408,26 +481,24 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
                     disabled={loading}
                   />
                 ) : (
-                  (() => {
-                    const { effectiveLanguage, isFallback } = getEffectiveLanguage(item);
-                    return (
-                      <ItemDisplay
-                        item={item}
-                        loading={loading}
-                        showSecondaryLanguage={Boolean(settings.defaultSubLanguage)}
-                        secondaryLanguage={settings.defaultSubLanguage || undefined}
-                        effectiveLanguage={effectiveLanguage}
-                        isFallback={isFallback}
-                        onEdit={() => setEditingItemId(item.id)}
-                        onDelete={() => handleDelete(item.id)}
-                        onVersionHistory={() => handleShowVersionHistory(item.id)}
-                        onRetranslate={() => {
-                          setRetranslateTargetId(item.id);
-                          setShowRetranslateModal(true);
-                        }}
-                      />
-                    );
-                  })()
+                  <ItemDisplay
+                    item={item}
+                    itemData={itemData}
+                    loading={loading}
+                    showSecondaryLanguage={Boolean(settings.defaultSubLanguage)}
+                    secondaryLanguage={settings.defaultSubLanguage || undefined}
+                    effectiveLanguage={effectiveLanguage}
+                    isFallback={isFallback}
+                    isExpanded={expandedItems.has(item.id)}
+                    onToggleExpand={() => toggleItemExpand(item.id)}
+                    onEdit={() => setEditingItemId(item.id)}
+                    onDelete={() => handleDelete(item.id)}
+                    onVersionHistory={() => handleShowVersionHistory(item.id)}
+                    onRetranslate={() => {
+                      setRetranslateTargetId(item.id);
+                      setShowRetranslateModal(true);
+                    }}
+                  />
                 )}
               </div>
             );
@@ -472,7 +543,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
           defaultSourceLanguage={settings.mainLanguage}
           defaultTargetLanguage={globalDisplayLanguage}
           availableLanguages={[settings.mainLanguage, ...settings.subLanguages]}
-          manuscriptLanguages={store.objects[retranslateTargetId]?.languages?.available}
+          manuscriptLanguages={store.objects[retranslateTargetId]?.data ? Object.keys(store.objects[retranslateTargetId].data) : []}
           translationTimestamp={store.objects[retranslateTargetId]?.version?.created_at || null}
           onRetranslate={handleRetranslate}
           isTranslating={translating[retranslateTargetId] || false}
@@ -550,7 +621,7 @@ const AddItemForm: React.FC<AddItemFormProps> = ({
 
 // Edit Item Form Component
 interface EditItemFormProps {
-  item: NameDescriptionObject;
+  itemData: NameDescriptionData;
   placeholder: { name: string; description: string };
   onUpdate: (name: string, description: string) => void;
   onCancel: () => void;
@@ -559,15 +630,15 @@ interface EditItemFormProps {
 }
 
 const EditItemForm: React.FC<EditItemFormProps> = ({
-  item,
+  itemData,
   placeholder,
   onUpdate,
   onCancel,
   onAIEdit,
   disabled,
 }) => {
-  const [name, setName] = useState(item.data.name);
-  const [description, setDescription] = useState(item.data.description);
+  const [name, setName] = useState(itemData.name);
+  const [description, setDescription] = useState(itemData.description);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -621,11 +692,14 @@ const EditItemForm: React.FC<EditItemFormProps> = ({
 // Item Display Component
 interface ItemDisplayProps {
   item: NameDescriptionObject;
+  itemData: NameDescriptionData;
   loading: boolean;
   showSecondaryLanguage: boolean;
   secondaryLanguage?: string;
   effectiveLanguage: string;
   isFallback: boolean;
+  isExpanded: boolean;
+  onToggleExpand: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onVersionHistory: () => void;
@@ -634,23 +708,34 @@ interface ItemDisplayProps {
 
 const ItemDisplay: React.FC<ItemDisplayProps> = ({
   item,
+  itemData,
   loading,
   showSecondaryLanguage,
   secondaryLanguage,
   effectiveLanguage,
   isFallback,
+  isExpanded,
+  onToggleExpand,
   onEdit,
   onDelete,
   onVersionHistory,
   onRetranslate,
 }) => {
+  const availableLanguages = Object.keys(item.data);
   const hasTranslation = showSecondaryLanguage && secondaryLanguage &&
-    item.languages.available.includes(secondaryLanguage);
+    availableLanguages.includes(secondaryLanguage);
 
   return (
     <div className="item-display">
       <div className="item-header">
-        <h4>{item.data.name}</h4>
+        <button
+          className="collapse-toggle"
+          onClick={onToggleExpand}
+          title={isExpanded ? 'Collapse' : 'Expand'}
+        >
+          {isExpanded ? '▼' : '▶'}
+        </button>
+        <h4 onClick={onToggleExpand} className="item-name-clickable">{itemData.name}</h4>
         <div className="card-actions">
           <button onClick={onEdit} className="card-edit-btn desktop-only" disabled={loading}>
             Edit
@@ -694,21 +779,25 @@ const ItemDisplay: React.FC<ItemDisplayProps> = ({
           </DropdownMenu>
         </div>
       </div>
-      <div className="item-content">
-        <p className="item-description">{item.data.description || 'No description.'}</p>
-      </div>
-      <div className="item-metadata">
-        <span className="item-language">
-          {isFallback && <span className="fallback-warning" title="Selected language not available">⚠️ </span>}
-          🌐 {effectiveLanguage}
-        </span>
-        <span className="version-info">v{item.version.number}</span>
-        {item.metadata.updated_at && (
-          <span className="last-updated">
-            Updated {new Date(item.metadata.updated_at).toLocaleDateString()}
-          </span>
-        )}
-      </div>
+      {isExpanded && (
+        <>
+          <div className="item-content">
+            <p className="item-description">{itemData.description || 'No description.'}</p>
+          </div>
+          <div className="item-metadata">
+            <span className="item-language">
+              {isFallback && <span className="fallback-warning" title="Selected language not available">⚠️ </span>}
+              🌐 {effectiveLanguage}
+            </span>
+            <span className="version-info">v{item.version.number}</span>
+            {item.metadata.updated_at && (
+              <span className="last-updated">
+                Updated {new Date(item.metadata.updated_at).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 };

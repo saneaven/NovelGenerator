@@ -308,41 +308,42 @@
 
 /* ===== Typing Indicator ===== */
 .typing-indicator {
-    display: inline-flex;
-    gap: var(--spacing-xs);
-    margin-left: var(--spacing-sm);
+    display: flex;
     align-items: center;
+    justify-content: center;
+    width: 100%;
+    margin: var(--spacing-sm) 0;
 }
 
-.typing-indicator span {
-    width: 0.5rem;
-    height: 0.5rem;
-    background: currentColor;
-    border-radius: 50%;
-    animation: typing 1.4s infinite;
-    opacity: 0.6;
+.typing-indicator .loading-track {
+    width: 95%;
+    height: 3px;
+    background: var(--color-surface-muted);
+    border-radius: var(--border-radius-full);
+    position: relative;
+    overflow: hidden;
 }
 
-.typing-indicator span:nth-child(2) {
-    animation-delay: 0.2s;
+.typing-indicator .loading-bar {
+    position: absolute;
+    width: 40%;
+    height: 100%;
+    background: var(--color-text-tertiary);
+    border-radius: var(--border-radius-full);
+    animation: slide 2s ease-in-out infinite;
 }
 
-.typing-indicator span:nth-child(3) {
-    animation-delay: 0.4s;
-}
-
-@keyframes typing {
-
-    0%,
-    60%,
-    100% {
-        transform: translateY(0);
-        opacity: 0.6;
+@keyframes slide {
+    0% {
+        left: 0;
     }
 
-    30% {
-        transform: translateY(-0.5rem);
-        opacity: 1;
+    50% {
+        left: 60%;
+    }
+
+    100% {
+        left: 0;
     }
 }
 

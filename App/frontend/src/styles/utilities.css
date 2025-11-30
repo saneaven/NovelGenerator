@@ -628,8 +628,8 @@
     background: var(--color-surface-elevated);
     border-radius: var(--border-radius-xl);
     box-shadow: var(--shadow-2xl);
-    max-width: 90vw;
-    max-height: 90vh;
+    max-width: 90dvw;
+    max-height: 90dvh;
     overflow: hidden;
     animation: slideInUp var(--transition-slow);
 }
@@ -655,7 +655,7 @@
 }
 
 .min-h-screen {
-    min-height: 100vh;
+    min-height: 100dvh;
 }
 
 .overflow-auto {

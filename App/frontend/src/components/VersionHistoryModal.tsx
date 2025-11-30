@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
 import type { ObjectType } from '../types/unifiedObject';
 import './VersionHistoryModal.css';
@@ -45,7 +46,11 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   }, [isOpen, objectId, objectType]);
 
   const currentObject = store.objects[objectId];
-  const currentLanguage = currentObject?.languages?.active || 'en';
+  const settings = useSettingsStore.getState();
+  const availableLangs = currentObject?.data ? Object.keys(currentObject.data) : [];
+  const currentLanguage = availableLangs.includes(settings.settings.mainLanguage)
+    ? settings.settings.mainLanguage
+    : (availableLangs[0] || 'en');
 
   const getTypeDisplayName = (type: ObjectType): string => {
     const names: Record<ObjectType, string> = {
@@ -62,18 +67,18 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   };
 
   const handleRestoreVersion = async (versionId: string) => {
-    if (!confirm('Are you sure you want to restore this version? This will make it the active version.')) {
+    if (!confirm('Are you sure you want to restore this version? This will create a new version with the restored content.')) {
       return;
     }
 
     try {
-      await store.activateVersion(objectType, objectId, versionId);
+      await store.restoreVersion(objectType, objectId, versionId);
 
-      // Reload versions to show updated active status
+      // Reload versions to show the new restored version
       const versionHistory = await store.getVersions(objectType, objectId);
       setVersions(versionHistory.sort((a, b) => b.number - a.number));
 
-      // Notify parent that a new version was activated
+      // Notify parent that a version was restored
       if (onRestoreVersion) {
         onRestoreVersion(versionId);
       }
@@ -189,14 +194,17 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                       <div className="version-info">
                         <div className="version-title">
                           <span className="version-number">Version #{version.number}</span>
-                          {isCurrentVersion && <span className="active-badge">Currently Active</span>}
+                          {isCurrentVersion && <span className="active-badge">Latest</span>}
+                          <span className="version-languages-badge">
+                            {Object.keys(version.data || {}).join(', ') || 'No data'}
+                          </span>
                         </div>
                         <div className="version-metadata">
                           <span className="version-timestamp">
                             {new Date(version.created_at).toLocaleString()}
                           </span>
                           <span className="version-request">
-                            Request: {version.user_request || 'No description'}
+                            {version.user_request || 'No description'}
                           </span>
                         </div>
                       </div>

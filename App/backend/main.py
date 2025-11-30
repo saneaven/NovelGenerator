@@ -144,6 +144,9 @@ async def stream_chat(provider: str, request: ChatCompletionRequest, req: Reques
             # Thinking config is provider-agnostic; each provider maps fields they understand
             thinking_cfg = request.thinking_config.model_dump(exclude_none=True) if request.thinking_config else None
 
+            # Retry config for error handling
+            retry_cfg = request.retry_config.model_dump() if request.retry_config else None
+
             stream = provider_instance.stream_chat(
                 messages=messages,
                 model=request.model,
@@ -152,7 +155,8 @@ async def stream_chat(provider: str, request: ChatCompletionRequest, req: Reques
                 max_tokens=request.max_tokens,
                 provider_preference=provider_pref,
                 thinking_config=thinking_cfg,
-                thinking_mode=request.thinking_mode
+                thinking_mode=request.thinking_mode,
+                retry_config=retry_cfg
             )
 
             try:

@@ -1,5 +1,6 @@
 import type { LanguageData } from './multilingual';
 export type { LanguageData } from './multilingual';
+import { generateTempId } from '../utils/tempId';
 
 // Version history for story objects with language support
 export interface ObjectVersion<T = any> {
@@ -88,9 +89,9 @@ export type StoryObjectByCategory = {
 
 // Utility function to create base metadata
 export const createBaseMetadata = (): BaseMetadata => {
-  const id = crypto.randomUUID();
+  const id = generateTempId();
   const now = new Date();
-  const initialVersionId = crypto.randomUUID();
+  const initialVersionId = generateTempId();
   
   return {
     id,
@@ -111,7 +112,7 @@ export const createBaseMetadata = (): BaseMetadata => {
 export const ensureVersionFields = <T extends BaseMetadata>(obj: T): T => {
   if (!obj.versions || !obj.activeVersionId) {
     const now = new Date();
-    const initialVersionId = crypto.randomUUID();
+    const initialVersionId = generateTempId();
     
     return {
       ...obj,

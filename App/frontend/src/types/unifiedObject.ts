@@ -29,9 +29,22 @@ export interface UnifiedObject<TData = Record<string, any>> {
   id: string;
   type: ObjectType;
   metadata: ObjectMetadata;
-  data: TData;  // Current language data
-  languages: LanguageInfo;
+  data: Record<string, TData>;  // Language-keyed data: { "English": {...}, "Korean": {...} }
+  // languages field removed - use Object.keys(data) for available, settings.mainLanguage for default
   version: VersionInfo;
+}
+
+// Helper functions for working with language-keyed data
+export function getAvailableLanguages<TData>(obj: UnifiedObject<TData>): string[] {
+  return Object.keys(obj.data);
+}
+
+export function getDataForLanguage<TData>(obj: UnifiedObject<TData>, language: string): TData | undefined {
+  return obj.data[language];
+}
+
+export function hasLanguage<TData>(obj: UnifiedObject<TData>, language: string): boolean {
+  return language in obj.data;
 }
 
 // ============================================================================
@@ -52,9 +65,14 @@ export interface ObjectMetadata {
 }
 
 // ============================================================================
-// LANGUAGE INFO
+// LANGUAGE INFO (DEPRECATED - no longer in API response)
 // ============================================================================
 
+/**
+ * @deprecated Languages are now embedded in data field.
+ * Use Object.keys(obj.data) for available languages.
+ * Use settings.mainLanguage for default language.
+ */
 export interface LanguageInfo {
   available: string[];  // All languages this object has
   active: string;       // Currently displayed language

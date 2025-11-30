@@ -17,7 +17,7 @@ from uuid import UUID
 from ..database import get_db
 from ..auth import get_current_user
 from ..models.db_models import User
-from ..models.translation_models import ObjectTranslation, ObjectVersion, ActiveVersion
+from ..models.translation_models import ObjectTranslation, ObjectVersion
 from ..utils.object_type_aliases import normalize_object_type, externalize_object_type
 
 LOREBOOK_TYPE = normalize_object_type('lorebook')
@@ -262,21 +262,18 @@ async def batch_delete_translations(
 
             deleted_count += deleted
 
-            # Also need to remove from version data
-            active_version = db.query(ActiveVersion).filter(
-                ActiveVersion.object_type == object_type,
-                ActiveVersion.object_id == object_id
-            ).first()
+            # Also need to remove from latest version data
+            latest_version = db.query(ObjectVersion).filter(
+                ObjectVersion.object_type == object_type,
+                ObjectVersion.object_id == object_id
+            ).order_by(ObjectVersion.version_number.desc()).first()
 
-            if active_version:
-                version = db.query(ObjectVersion).filter(
-                    ObjectVersion.id == active_version.active_version_id
-                ).first()
-
-                if version and version.data and language in version.data:
-                    version_data = dict(version.data)
+            if latest_version:
+                version_data = latest_version.data or {}
+                if language in version_data:
+                    version_data = dict(version_data)
                     del version_data[language]
-                    version.data = version_data
+                    latest_version.data = version_data
 
         except Exception as e:
             print(f"Error deleting translation for {object_id_str}: {e}")
@@ -315,17 +312,6 @@ async def add_translations(
 
             # Verify object exists
             get_object_or_404(db, object_type, object_id)
-
-            # Check if translation already exists
-            existing = db.query(ObjectTranslation).filter(
-                ObjectTranslation.object_type == object_type,
-                ObjectTranslation.object_id == object_id,
-                ObjectTranslation.language == translation_data.language
-            ).first()
-
-            if existing:
-                # Skip if translation already exists
-                continue
 
             # Create or update version with new language (in-place, don't create new version)
             create_or_update_version(
@@ -439,21 +425,18 @@ async def delete_translation(
     if deleted == 0:
         raise HTTPException(status_code=404, detail=f"Translation not found for language: {language}")
 
-    # Remove from version data
-    active_version = db.query(ActiveVersion).filter(
-        ActiveVersion.object_type == object_type,
-        ActiveVersion.object_id == object_id
-    ).first()
+    # Remove from latest version data
+    latest_version = db.query(ObjectVersion).filter(
+        ObjectVersion.object_type == object_type,
+        ObjectVersion.object_id == object_id
+    ).order_by(ObjectVersion.version_number.desc()).first()
 
-    if active_version:
-        version = db.query(ObjectVersion).filter(
-            ObjectVersion.id == active_version.active_version_id
-        ).first()
-
-        if version and version.data and language in version.data:
-            version_data = dict(version.data)
+    if latest_version:
+        version_data = latest_version.data or {}
+        if language in version_data:
+            version_data = dict(version_data)
             del version_data[language]
-            version.data = version_data
+            latest_version.data = version_data
 
     db.commit()
 

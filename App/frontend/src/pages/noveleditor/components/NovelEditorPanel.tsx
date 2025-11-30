@@ -105,17 +105,22 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const loading = manuscriptId ? (store.loading[manuscriptId] || false) : false;
   const error = manuscriptId ? (store.errors[manuscriptId] || null) : null;
 
+  // Get available languages from manuscript data
+  const manuscriptLanguages = useMemo(() => {
+    if (!manuscript) return [];
+    return Object.keys(manuscript.data);
+  }, [manuscript]);
+
   // Computed: Check if current language translation is missing
   const isMissingTranslation = useMemo(() => {
     if (!manuscript) return false;
-    return !manuscript.languages.available.includes(globalDisplayLanguage);
-  }, [manuscript, globalDisplayLanguage]);
+    return !manuscriptLanguages.includes(globalDisplayLanguage);
+  }, [manuscript, manuscriptLanguages, globalDisplayLanguage]);
 
   // Computed: Available source languages for translation
   const availableSourceLanguages = useMemo(() => {
-    if (!manuscript) return [];
-    return manuscript.languages.available;
-  }, [manuscript]);
+    return manuscriptLanguages;
+  }, [manuscriptLanguages]);
 
   // Compute effective display language with fallback
   // globalDisplayLanguage is now the actual language string (e.g., 'English', 'Korean')
@@ -123,13 +128,24 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     if (!manuscript) {
       return { effectiveLanguage: globalDisplayLanguage || settings.mainLanguage, isFallback: false };
     }
-    const available = manuscript.languages.available;
-    if (available.includes(globalDisplayLanguage)) {
+    if (manuscriptLanguages.includes(globalDisplayLanguage)) {
       return { effectiveLanguage: globalDisplayLanguage, isFallback: false };
     }
     // Fallback to first available or mainLanguage
-    return { effectiveLanguage: available[0] || settings.mainLanguage, isFallback: true };
-  }, [manuscript, globalDisplayLanguage, settings.mainLanguage]);
+    return { effectiveLanguage: manuscriptLanguages[0] || settings.mainLanguage, isFallback: true };
+  }, [manuscript, manuscriptLanguages, globalDisplayLanguage, settings.mainLanguage]);
+
+  // Helper to get manuscript data for a language
+  const getManuscriptData = useCallback((lang: string) => {
+    if (!manuscript) return { content: '', wordCount: 0 };
+    const data = manuscript.data[lang];
+    if (data) return data;
+    // Fallback to first available
+    if (manuscriptLanguages.length > 0) {
+      return manuscript.data[manuscriptLanguages[0]] || { content: '', wordCount: 0 };
+    }
+    return { content: '', wordCount: 0 };
+  }, [manuscript, manuscriptLanguages]);
 
   // Debug logging
   useEffect(() => {
@@ -273,7 +289,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       // Check if it's a "translation not found" error
       if (errorMessage.includes('Translation not found')) {
         // Fetch manuscript without language to get metadata (available languages)
-        // isMissingTranslation will be computed automatically from manuscript.languages.available
+        // isMissingTranslation will be computed automatically from manuscriptLanguages
         store.fetchObject('manuscript', manuscriptId).catch(() => {
           // If even that fails, show real error
           setContentIdError(errorMessage);
@@ -294,10 +310,11 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   // Load content when manuscript changes or language switches
   useEffect(() => {
     if (manuscript?.data && !isUserEditingRef.current) {
-      setContent(manuscript.data.content);
-      setLastSavedContent(manuscript.data.content);
+      const manuscriptData = getManuscriptData(effectiveLanguage);
+      setContent(manuscriptData.content);
+      setLastSavedContent(manuscriptData.content);
     }
-  }, [manuscript?.data]);
+  }, [manuscript?.data, effectiveLanguage, getManuscriptData]);
 
   // Setup periodic snapshot creation
   useEffect(() => {
@@ -445,21 +462,24 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       TranslationService.setTranslationStatus(manuscriptId, { objectId: manuscriptId, isTranslating: true });
 
       let instructions = userInstructions || '';
-      if (includePrevious && manuscript.languages.available.includes(targetLanguage)) {
+      if (includePrevious && manuscriptLanguages.includes(targetLanguage)) {
+        const targetData = manuscript.data[targetLanguage] || {};
         const prevTranslation = `Previous translation for reference:\n${JSON.stringify({
-          content: manuscript.data.content,
-          wordCount: manuscript.data.wordCount,
+          content: targetData.content,
+          wordCount: targetData.wordCount,
         }, null, 2)}`;
         instructions = instructions ? `${instructions}\n\n${prevTranslation}` : prevTranslation;
       }
 
+      // Get source data for the source language
+      const sourceData = manuscript.data[sourceLanguage] || getManuscriptData(sourceLanguage);
       await TranslationService.translateSingle(
         {
           objectType: 'manuscript',
           objectId: manuscriptId,
           sourceData: {
-            content: manuscript.data.content,
-            wordCount: manuscript.data.wordCount,
+            content: sourceData.content,
+            wordCount: sourceData.wordCount,
           },
         },
         {
@@ -684,7 +704,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                   }
                 >
                   {/* Show Translate if current display language doesn't exist, otherwise Retranslate */}
-                  {manuscript?.languages.available.includes(globalDisplayLanguage) ? (
+                  {manuscriptLanguages.includes(globalDisplayLanguage) ? (
                     <DropdownItem
                       icon="🔄"
                       label="Retranslate"
@@ -803,14 +823,14 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
           defaultSourceLanguage={
             isMissingTranslation && availableSourceLanguages.length > 0
               ? availableSourceLanguages[0]
-              : manuscript.languages.available[0] || settings.mainLanguage
+              : manuscriptLanguages[0] || settings.mainLanguage
           }
           defaultTargetLanguage={globalDisplayLanguage}
           availableLanguages={[settings.mainLanguage, ...(settings.subLanguages || [])]}
           manuscriptLanguages={
             isMissingTranslation
               ? availableSourceLanguages
-              : manuscript.languages.available
+              : manuscriptLanguages
           }
           translationTimestamp={manuscript.version?.created_at || null}
           onRetranslate={handleRetranslate}

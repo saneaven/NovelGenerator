@@ -28,7 +28,7 @@ import type {
 // ============================================================================
 
 interface UnifiedObjectStore {
-  // Simple object storage by ID
+  // Single object storage by ID - contains ALL languages per object
   objects: Record<string, UnifiedObject>;
 
   // Loading states
@@ -43,25 +43,26 @@ interface UnifiedObjectStore {
   clearTranslating: (objectId: string) => void;
 
   // CRUD Operations
-  fetchObject: (type: ObjectType, id: string, language?: string) => Promise<void>;
+  fetchObject: (type: ObjectType, id: string) => Promise<void>;
   updateObject: (type: ObjectType, id: string, request: UpdateObjectRequest) => Promise<void>;
   addTranslation: (type: ObjectType, id: string, request: AddTranslationRequest) => Promise<void>;
 
   // Version management
   getVersions: (type: ObjectType, id: string) => Promise<VersionHistoryEntry[]>;
-  activateVersion: (type: ObjectType, id: string, versionId: string) => Promise<void>;
+  restoreVersion: (type: ObjectType, id: string, versionId: string) => Promise<void>;
 
   // Translation management
   deleteTranslation: (type: ObjectType, id: string, language: string) => Promise<void>;
 
   // List & Collection operations
-  listObjects: (type: ObjectType, projectId: string, language?: string) => Promise<UnifiedObject[]>;
+  listObjects: (type: ObjectType, projectId: string) => Promise<UnifiedObject[]>;
   createObject: (
     type: ObjectType,
     projectId: string,
     data: any,
     language: string,
-    metadata?: Record<string, any>
+    metadata?: Record<string, any>,
+    userRequest?: string
   ) => Promise<UnifiedObject>;
   deleteObject: (type: ObjectType, id: string) => Promise<void>;
 
@@ -70,6 +71,9 @@ interface UnifiedObjectStore {
   getManuscriptByChapterId: (chapterId: string) => UnifiedObject | null;
   clearObject: (id: string) => void;
   clearAllObjects: () => void;
+
+  // Language checking utilities
+  getObjectsMissingMainLanguage: (projectId: string, mainLanguage: string) => UnifiedObject[];
 }
 
 // ============================================================================
@@ -104,7 +108,7 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => ({
   // FETCH OBJECT
   // ========================================================================
 
-  fetchObject: async (type: ObjectType, id: string, language?: string) => {
+  fetchObject: async (type: ObjectType, id: string) => {
     // Set loading
     set((state) => ({
       loading: { ...state.loading, [id]: true },
@@ -112,7 +116,8 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => ({
     }));
 
     try {
-      const object = await unifiedObjectService.getObject(type, id, language);
+      // Fetch all languages (no language param = returns all languages)
+      const object = await unifiedObjectService.getObject(type, id);
 
       set((state) => ({
         objects: { ...state.objects, [id]: object },
@@ -166,8 +171,8 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => ({
     try {
       await unifiedObjectService.addTranslation(type, id, request);
 
-      // Refetch object to get updated language info
-      await get().fetchObject(type, id, request.language);
+      // Refetch object to get updated data with all languages
+      await get().fetchObject(type, id);
     } catch (error: any) {
       set((state) => ({
         errors: { ...state.errors, [id]: error.message || 'Failed to add translation' },
@@ -193,22 +198,20 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => ({
     }
   },
 
-  activateVersion: async (type: ObjectType, id: string, versionId: string) => {
+  restoreVersion: async (type: ObjectType, id: string, versionId: string) => {
     set((state) => ({
       loading: { ...state.loading, [id]: true },
       errors: { ...state.errors, [id]: null },
     }));
 
     try {
-      await unifiedObjectService.activateVersion(type, id, versionId);
+      await unifiedObjectService.restoreVersion(type, id, versionId);
 
-      // Refetch object to get updated data
-      const currentObject = get().objects[id];
-      const currentLanguage = currentObject?.languages.active;
-      await get().fetchObject(type, id, currentLanguage);
+      // Refetch object to get updated data with all languages
+      await get().fetchObject(type, id);
     } catch (error: any) {
       set((state) => ({
-        errors: { ...state.errors, [id]: error.message || 'Failed to activate version' },
+        errors: { ...state.errors, [id]: error.message || 'Failed to restore version' },
         loading: { ...state.loading, [id]: false },
       }));
       throw error;
@@ -228,10 +231,8 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => ({
     try {
       await unifiedObjectService.deleteTranslation(type, id, language);
 
-      // Refetch object to get updated language list
-      const currentObject = get().objects[id];
-      const currentLanguage = currentObject?.languages.active;
-      await get().fetchObject(type, id, currentLanguage);
+      // Refetch object to get updated data with all languages
+      await get().fetchObject(type, id);
     } catch (error: any) {
       set((state) => ({
         errors: { ...state.errors, [id]: error.message || 'Failed to delete translation' },
@@ -245,9 +246,10 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => ({
   // LIST & COLLECTION OPERATIONS
   // ========================================================================
 
-  listObjects: async (type: ObjectType, projectId: string, language?: string) => {
+  listObjects: async (type: ObjectType, projectId: string) => {
     try {
-      const response = await unifiedObjectService.listObjects(type, projectId, { language });
+      // Fetch all languages (no language param = returns all languages)
+      const response = await unifiedObjectService.listObjects(type, projectId, {});
 
       // Store all objects in the objects map
       const objectsMap: Record<string, UnifiedObject> = {};
@@ -266,12 +268,12 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => ({
     }
   },
 
-  createObject: async (type: ObjectType, projectId: string, data: any, language: string, metadata?: Record<string, any>) => {
+  createObject: async (type: ObjectType, projectId: string, data: any, language: string, metadata?: Record<string, any>, userRequest: string = 'User Creation') => {
     try {
       const newObject = await unifiedObjectService.createObject(type, projectId, {
         data,
         language,
-        user_request: 'User Creation',
+        user_request: userRequest,
         metadata,
       });
 
@@ -296,7 +298,7 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => ({
     try {
       await unifiedObjectService.deleteObject(type, id);
 
-      // Remove object from store
+      // Remove object from cache
       set((state) => {
         const newObjects = { ...state.objects };
         const newLoading = { ...state.loading };
@@ -354,23 +356,50 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => ({
   clearAllObjects: () => {
     set({ objects: {}, loading: {}, errors: {}, translating: {} });
   },
+
+  // ========================================================================
+  // LANGUAGE CHECKING UTILITIES
+  // ========================================================================
+
+  getObjectsMissingMainLanguage: (projectId: string, mainLanguage: string) => {
+    const objects = get().objects;
+    const missing: UnifiedObject[] = [];
+
+    Object.values(objects).forEach(obj => {
+      // Only check objects for this project
+      if (obj.metadata?.project_id !== projectId) return;
+
+      // Skip manuscript type (they're handled separately in NovelEditor)
+      if (obj.type === 'manuscript') return;
+
+      // Check if main language is NOT in available languages (Object.keys(data))
+      const availableLanguages = Object.keys(obj.data || {});
+      if (!availableLanguages.includes(mainLanguage)) {
+        missing.push(obj);
+      }
+    });
+
+    return missing;
+  },
 }));
 
 // ============================================================================
 // CONVENIENCE HOOKS
 // ============================================================================
 
+import React from 'react';
+
 /**
  * Hook to get a single object with automatic loading state
  */
-export function useObject(type: ObjectType, id: string | null, language?: string) {
+export function useObject(type: ObjectType, id: string | null) {
   const store = useUnifiedObjectStore();
 
   React.useEffect(() => {
     if (id) {
-      store.fetchObject(type, id, language);
+      store.fetchObject(type, id);
     }
-  }, [type, id, language]);
+  }, [type, id]);
 
   if (!id) return { object: null, loading: false, error: null };
 
@@ -384,16 +413,16 @@ export function useObject(type: ObjectType, id: string | null, language?: string
 /**
  * Hook to get multiple objects
  */
-export function useObjects(type: ObjectType, ids: string[], language?: string) {
+export function useObjects(type: ObjectType, ids: string[]) {
   const store = useUnifiedObjectStore();
 
   React.useEffect(() => {
     ids.forEach((id) => {
       if (!store.objects[id]) {
-        store.fetchObject(type, id, language);
+        store.fetchObject(type, id);
       }
     });
-  }, [type, ids, language]);
+  }, [type, ids]);
 
   return {
     objects: ids.map((id) => store.objects[id]).filter(Boolean),
@@ -402,16 +431,10 @@ export function useObjects(type: ObjectType, ids: string[], language?: string) {
   };
 }
 
-import React from 'react';
-
 // ============================================================================
 // STORY OBJECTS HOOK - Reactive derivation from store
 // ============================================================================
 
-/**
- * Hook to derive StoryObjects from unified store cache.
- * Automatically updates when any object in the store changes.
- */
 /**
  * Simplified story objects structure used for chat context.
  * This is a lightweight version without full version history metadata.
@@ -444,7 +467,31 @@ export interface SimplifiedStoryObjects {
   };
 }
 
-export function useStoryObjects(projectId: string | undefined): SimplifiedStoryObjects {
+/**
+ * Helper to get data for a specific language from an object.
+ * Falls back to first available language if requested language not found.
+ */
+function getObjectDataForLanguage(obj: UnifiedObject, language: string): Record<string, any> {
+  // Try requested language first
+  if (obj.data[language]) {
+    return obj.data[language];
+  }
+  // Fallback to first available language
+  const availableLanguages = Object.keys(obj.data);
+  if (availableLanguages.length > 0) {
+    return obj.data[availableLanguages[0]];
+  }
+  return {};
+}
+
+/**
+ * Hook to derive StoryObjects from unified store cache.
+ * Extracts data for the specified language from each object.
+ *
+ * @param projectId - The project ID to filter objects by
+ * @param language - The language to extract data for (uses mainLanguage for chat context)
+ */
+export function useStoryObjects(projectId: string | undefined, language: string): SimplifiedStoryObjects {
   const objects = useUnifiedObjectStore(state => state.objects);
 
   return React.useMemo(() => {
@@ -474,61 +521,82 @@ export function useStoryObjects(projectId: string | undefined): SimplifiedStoryO
     const acts = projectObjects.filter(obj => obj.type === 'act');
     const chapters = projectObjects.filter(obj => obj.type === 'chapter');
 
-    // Build basic info
-    const basicInfo = basicInfoList.length > 0 ? {
-      id: basicInfoList[0].id,
-      title: basicInfoList[0].data.title || '',
-      logline: basicInfoList[0].data.logline || '',
-      genre: basicInfoList[0].data.genre || '',
-    } : null;
+    // Build basic info - extract data for language
+    const basicInfo = basicInfoList.length > 0 ? (() => {
+      const data = getObjectDataForLanguage(basicInfoList[0], language);
+      return {
+        id: basicInfoList[0].id,
+        title: data.title || '',
+        logline: data.logline || '',
+        genre: data.genre || '',
+      };
+    })() : null;
 
     // Build outline with acts and chapters
     const outline = {
       acts: acts
         .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-        .map(act => ({
-          id: act.id,
-          name: act.data.name || '',
-          description: act.data.description || '',
-          order: act.metadata.order || 0,
-          chapters: chapters
-            .filter(ch => ch.metadata.act_id === act.id)
-            .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-            .map(chapter => ({
-              id: chapter.id,
-              name: chapter.data.name || '',
-              description: chapter.data.description || '',
-              order: chapter.metadata.order || 0,
-              actId: chapter.metadata.act_id || '',
-            })),
-        })),
+        .map(act => {
+          const actData = getObjectDataForLanguage(act, language);
+          return {
+            id: act.id,
+            name: actData.name || '',
+            description: actData.description || '',
+            order: act.metadata.order || 0,
+            chapters: chapters
+              .filter(ch => ch.metadata.act_id === act.id)
+              .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+              .map(chapter => {
+                const chapterData = getObjectDataForLanguage(chapter, language);
+                return {
+                  id: chapter.id,
+                  name: chapterData.name || '',
+                  description: chapterData.description || '',
+                  order: chapter.metadata.order || 0,
+                  actId: chapter.metadata.act_id || '',
+                };
+              }),
+          };
+        }),
     };
 
     return {
       basicInfo,
-      characters: characters.map(ch => ({
-        id: ch.id,
-        name: ch.data.name || '',
-        description: ch.data.description || '',
-      })),
-      organizations: organizations.map(org => ({
-        id: org.id,
-        name: org.data.name || '',
-        description: org.data.description || '',
-      })),
-      locations: locations.map(loc => ({
-        id: loc.id,
-        name: loc.data.name || '',
-        description: loc.data.description || '',
-      })),
-      lorebook: lorebook.map(entry => ({
-        id: entry.id,
-        name: entry.data.name || '',
-        description: entry.data.description || '',
-      })),
+      characters: characters.map(ch => {
+        const data = getObjectDataForLanguage(ch, language);
+        return {
+          id: ch.id,
+          name: data.name || '',
+          description: data.description || '',
+        };
+      }),
+      organizations: organizations.map(org => {
+        const data = getObjectDataForLanguage(org, language);
+        return {
+          id: org.id,
+          name: data.name || '',
+          description: data.description || '',
+        };
+      }),
+      locations: locations.map(loc => {
+        const data = getObjectDataForLanguage(loc, language);
+        return {
+          id: loc.id,
+          name: data.name || '',
+          description: data.description || '',
+        };
+      }),
+      lorebook: lorebook.map(entry => {
+        const data = getObjectDataForLanguage(entry, language);
+        return {
+          id: entry.id,
+          name: data.name || '',
+          description: data.description || '',
+        };
+      }),
       outline,
     };
-  }, [objects, projectId]);
+  }, [objects, projectId, language]);
 }
 
 export default useUnifiedObjectStore;

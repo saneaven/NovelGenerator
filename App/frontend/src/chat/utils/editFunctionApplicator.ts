@@ -154,8 +154,7 @@ async function handleEditBasicInfo(
   let basicInfoId: string;
   if (basicInfoList.length > 0) {
     basicInfoId = basicInfoList[0].id;
-    const basicInfo = store.objects[basicInfoId];
-    const language = basicInfo?.languages.active || settings.settings.mainLanguage;
+    const language = settings.settings.mainLanguage;
 
     // Update existing basic info
     await store.updateObject('basic_info', basicInfoId, {
@@ -195,6 +194,7 @@ async function handleEditCharacter(
   args: { id: string; name: string; description: string },
   store: any
 ): Promise<FunctionApplicationResult> {
+  const settings = useSettingsStore.getState();
   const character = store.objects[args.id];
   if (!character) {
     return {
@@ -206,7 +206,7 @@ async function handleEditCharacter(
 
   await store.updateObject('character', args.id, {
     data: { name: args.name, description: args.description },
-    language: character.languages.active,
+    language: settings.settings.mainLanguage,
     create_new_version: true,
     user_request: 'AI Edit',
   });
@@ -223,6 +223,7 @@ async function handleEditOrganization(
   args: { id: string; name: string; description: string },
   store: any
 ): Promise<FunctionApplicationResult> {
+  const settings = useSettingsStore.getState();
   const organization = store.objects[args.id];
   if (!organization) {
     return {
@@ -234,7 +235,7 @@ async function handleEditOrganization(
 
   await store.updateObject('organization', args.id, {
     data: { name: args.name, description: args.description },
-    language: organization.languages.active,
+    language: settings.settings.mainLanguage,
     create_new_version: true,
     user_request: 'AI Edit',
   });
@@ -251,6 +252,7 @@ async function handleEditLocation(
   args: { id: string; name: string; description: string },
   store: any
 ): Promise<FunctionApplicationResult> {
+  const settings = useSettingsStore.getState();
   const location = store.objects[args.id];
   if (!location) {
     return {
@@ -262,7 +264,7 @@ async function handleEditLocation(
 
   await store.updateObject('location', args.id, {
     data: { name: args.name, description: args.description },
-    language: location.languages.active,
+    language: settings.settings.mainLanguage,
     create_new_version: true,
     user_request: 'AI Edit',
   });
@@ -279,6 +281,7 @@ async function handleEditLorebookEntry(
   args: { id: string; name: string; description: string },
   store: any
 ): Promise<FunctionApplicationResult> {
+  const settings = useSettingsStore.getState();
   const entry = store.objects[args.id];
   if (!entry) {
     return {
@@ -290,7 +293,7 @@ async function handleEditLorebookEntry(
 
   await store.updateObject('lorebook', args.id, {
     data: { name: args.name, description: args.description },
-    language: entry.languages.active,
+    language: settings.settings.mainLanguage,
     create_new_version: true,
     user_request: 'AI Edit',
   });
@@ -323,7 +326,7 @@ async function handleEditAct(
       name: args.name,
       description: args.description
     },
-    language: existingAct.languages.active,
+    language: settings.settings.mainLanguage,
     create_new_version: true,
     user_request: 'AI Edit',
   });
@@ -350,7 +353,7 @@ async function handleEditAct(
             name: chapter.name,
             description: chapter.description
           },
-          language: existingChapter.languages.active,
+          language: settings.settings.mainLanguage,
           create_new_version: true,
           user_request: 'AI Edit',
         });
@@ -393,6 +396,7 @@ async function handleEditChapterMetadata(
   args: { id: string; name: string; description: string },
   store: any
 ): Promise<FunctionApplicationResult> {
+  const settings = useSettingsStore.getState();
   const chapter = store.objects[args.id];
   if (!chapter) {
     return {
@@ -407,7 +411,7 @@ async function handleEditChapterMetadata(
       name: args.name,
       description: args.description
     },
-    language: chapter.languages.active,
+    language: settings.settings.mainLanguage,
     create_new_version: true,
     user_request: 'AI Edit',
   });
@@ -446,7 +450,7 @@ async function handleEditOutline(
             name: act.name,
             description: act.description
           },
-          language: existingAct.languages.active,
+          language: settings.settings.mainLanguage,
           create_new_version: true,
           user_request: 'AI Edit',
         });
@@ -472,7 +476,7 @@ async function handleEditOutline(
                   name: chapter.name,
                   description: chapter.description
                 },
-                language: existingChapter.languages.active,
+                language: settings.settings.mainLanguage,
                 create_new_version: true,
                 user_request: 'AI Edit',
               });
@@ -583,7 +587,7 @@ async function handleEditCharactersBatch(
             name: character.name,
             description: character.description
           },
-          language: existingChar.languages.active,
+          language: settings.settings.mainLanguage,
           create_new_version: true,
           user_request: 'AI Edit',
         });
@@ -628,7 +632,7 @@ async function handleEditOrganizationsBatch(
             name: org.name,
             description: org.description
           },
-          language: existingOrg.languages.active,
+          language: settings.settings.mainLanguage,
           create_new_version: true,
           user_request: 'AI Edit',
         });
@@ -672,7 +676,7 @@ async function handleEditLocationsBatch(
             name: location.name,
             description: location.description
           },
-          language: existingLoc.languages.active,
+          language: settings.settings.mainLanguage,
           create_new_version: true,
           user_request: 'AI Edit',
         });
@@ -716,7 +720,7 @@ async function handleEditLorebookBatch(
             name: entry.name,
             description: entry.description
           },
-          language: existingEntry.languages.active,
+          language: settings.settings.mainLanguage,
           create_new_version: true,
           user_request: 'AI Edit',
         });
@@ -771,7 +775,7 @@ async function handleEditActsBatch(
             name: act.name,
             description: act.description
           },
-          language: existingAct.languages.active,
+          language: settings.settings.mainLanguage,
           create_new_version: true,
           user_request: 'AI Edit',
         });
@@ -798,7 +802,7 @@ async function handleEditActsBatch(
                   name: chapter.name,
                   description: chapter.description
                 },
-                language: existingChapter.languages.active,
+                language: settings.settings.mainLanguage,
                 create_new_version: true,
                 user_request: 'AI Edit',
               });
@@ -916,7 +920,7 @@ async function handleEditChaptersBatch(
             name: chapter.name,
             description: chapter.description
           },
-          language: existingChapter.languages.active,
+          language: settings.settings.mainLanguage,
           create_new_version: true,
           user_request: 'AI Edit',
         });

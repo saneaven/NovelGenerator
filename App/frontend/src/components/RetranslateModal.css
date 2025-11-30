@@ -24,8 +24,8 @@
 /* Modal Container */
 .retranslate-modal {
   max-width: 600px;
-  width: 90vw;
-  max-height: 90vh;
+  width: 90dvw;
+  max-height: 90dvh;
   display: flex;
   flex-direction: column;
   background: var(--color-surface-base);
@@ -456,8 +456,8 @@
 /* Responsive Design */
 @media (max-width: 768px) {
   .retranslate-modal {
-    max-width: 95vw;
-    max-height: 95vh;
+    max-width: 95dvw;
+    max-height: 95dvh;
   }
 
   .retranslate-form {

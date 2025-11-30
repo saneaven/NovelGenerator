@@ -7,7 +7,7 @@ import type {
   FunctionCallProgress,
 } from '../../llm_request/types';
 import { streamChat } from '../../llm_request/llmService';
-import type { ProviderConfig, ProviderType, ThinkingConfig } from '../../store/settingsStore';
+import type { ProviderConfig, ProviderType, ThinkingConfig, RetryConfig } from '../../store/settingsStore';
 import { ChatPipeline } from '../ChatPipeline';
 import type {
   ChatPipelineContext,
@@ -15,6 +15,7 @@ import type {
   SystemInsertConfig,
 } from '../types';
 import { FunctionCallStreamTracker } from '../streaming/FunctionCallStreamTracker';
+import { generateTempId } from '../../utils/tempId';
 
 export interface LLMRequestManagerConfig {
   projectId: string;
@@ -32,6 +33,7 @@ export interface LLMRequestManagerConfig {
   enablePrefill?: boolean;
   thinkingMode?: 'off' | 'model' | 'custom';
   thinkingConfig?: ThinkingConfig;
+  retryConfig?: RetryConfig;
   abortControllerRef: MutableRefObject<AbortController | null>;
 }
 
@@ -70,7 +72,7 @@ export class LLMRequestManager {
     const language = options.language;
     const history = options.history ?? [];
     const assistantMessage: ChatMessage = {
-      id: crypto.randomUUID(),
+      id: generateTempId(),
       role: 'assistant',
       contentParts: [],
       timestamp: new Date(),
@@ -136,6 +138,7 @@ export class LLMRequestManager {
           providerPreference: this.config.providerPreference,
           thinkingConfig: this.config.thinkingMode === 'model' ? this.config.thinkingConfig : undefined,
           thinkingMode: this.config.thinkingMode,
+          retryConfig: this.config.retryConfig,
         }
       )) {
         if (typeof chunk === 'string') {

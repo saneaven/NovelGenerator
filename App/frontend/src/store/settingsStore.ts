@@ -53,6 +53,14 @@ export interface ThinkingConfig {
     geminiBudgetTokens?: number;
 }
 
+// Retry configuration for error handling
+export interface RetryConfig {
+    enabled: boolean;                  // Enable/disable retry logic
+    maxRetries: number;                // Number of retry attempts (0-10)
+    retryableStatusCodes: number[];    // HTTP status codes to retry on
+    retryDelayMs: number;              // Delay between retries in ms
+}
+
 // Advanced settings for AI functions
 export interface AdvancedFunctionSettings {
     enablePrefill: boolean;
@@ -86,6 +94,9 @@ export interface Settings {
 
     // Theme settings
     theme: ThemeMode;
+
+    // Retry configuration (global)
+    retryConfig: RetryConfig;
 }
 
 // Default settings
@@ -173,6 +184,14 @@ const defaultSettings: Settings = {
 
     // Default to system theme preference
     theme: 'system',
+
+    // Default retry configuration
+    retryConfig: {
+        enabled: true,
+        maxRetries: 3,
+        retryableStatusCodes: [429, 500, 502, 503, 504],
+        retryDelayMs: 1000,
+    },
 };
 
 // Store interface
@@ -260,6 +279,10 @@ const mergeWithDefaults = (stored: any): Settings => {
         subLanguages: stored.subLanguages ?? defaultSettings.subLanguages,
         defaultSubLanguage: stored.defaultSubLanguage ?? defaultSettings.defaultSubLanguage,
         theme: stored.theme ?? defaultSettings.theme,
+        retryConfig: {
+            ...defaultSettings.retryConfig,
+            ...stored.retryConfig,
+        },
     };
 };
 

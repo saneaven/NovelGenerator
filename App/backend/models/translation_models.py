@@ -141,33 +141,7 @@ class ObjectVersion(Base):
 
 
 # ============================================================================
-# VERSION POINTERS (Active Version Tracking)
+# NOTE: ActiveVersion table has been removed
+# The system now uses MAX(version_number) as the active version
+# See migration 012_drop_active_versions_table.py
 # ============================================================================
-
-class ActiveVersion(Base):
-    """
-    Points to the currently active version for each object.
-    Used to determine which version data is authoritative.
-    """
-    __tablename__ = 'active_versions'
-
-    # Composite primary key
-    object_type = Column(String(50), primary_key=True)
-    object_id = Column(UUID(as_uuid=True), primary_key=True)
-
-    # Pointer to active version
-    active_version_id = Column(UUID(as_uuid=True), ForeignKey('object_versions.id', ondelete='CASCADE'), nullable=False)
-
-    # Timestamp
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-    # Relationships
-    version = relationship("ObjectVersion")
-
-    # Indexes
-    __table_args__ = (
-        Index('ix_active_versions_version_id', 'active_version_id'),
-    )
-
-    def __repr__(self):
-        return f"<ActiveVersion {self.object_type}:{self.object_id} -> {self.active_version_id}>"

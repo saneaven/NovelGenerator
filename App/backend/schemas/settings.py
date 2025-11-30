@@ -97,6 +97,14 @@ class ThemeMode(str, Enum):
     SYSTEM = "system"
 
 
+class RetryConfig(BaseModel):
+    """Retry configuration for error handling"""
+    enabled: bool = True
+    maxRetries: int = Field(default=3, ge=0, le=10)
+    retryableStatusCodes: List[int] = Field(default=[429, 500, 502, 503, 504])
+    retryDelayMs: int = Field(default=1000, ge=100, le=30000)
+
+
 class UserSettingsResponse(BaseModel):
     """User settings response"""
     functionConfigs: Dict[str, FunctionAIConfig]
@@ -105,6 +113,7 @@ class UserSettingsResponse(BaseModel):
     subLanguages: List[str] = []
     defaultSubLanguage: Optional[str] = None
     theme: str = "system"
+    retryConfig: RetryConfig = Field(default_factory=RetryConfig)
 
     class Config:
         from_attributes = True
@@ -118,3 +127,4 @@ class UserSettingsUpdate(BaseModel):
     subLanguages: Optional[List[str]] = None
     defaultSubLanguage: Optional[str] = None
     theme: Optional[str] = None
+    retryConfig: Optional[RetryConfig] = None

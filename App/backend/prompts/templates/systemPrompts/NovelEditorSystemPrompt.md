@@ -26,8 +26,6 @@ Let me analyze the request...
 Your thinking should be thorough but concise. After thinking, provide your response to the user.
 {% endif %}
 
-{{ variable.functionInstructions }}
-
 # Language
 
 Respond in {{ variable.language }}.

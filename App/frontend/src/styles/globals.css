@@ -15,7 +15,7 @@
 /* ===== Root & Body ===== */
 html {
   /* Fluid scaling: 12px at 1920px viewport, 16px at 3840px viewport, 14px at 1440px */
-  font-size: clamp(12px, calc(8px + 0.2083vw), 16px);
+  font-size: clamp(12px, calc(8px + 0.2083dvw), 16px);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -25,14 +25,14 @@ html {
 html,
 body {
   width: 100%;
-  height: 100vh;
+  height: 100dvh;
   overflow-x: hidden;
 }
 
 body {
   margin: 0;
   min-width: 320px;
-  min-height: 100vh;
+  min-height: 100dvh;
   font-family: var(--font-family-base);
   font-size: var(--font-size-base);
   line-height: var(--line-height-normal);
@@ -43,7 +43,7 @@ body {
 
 #root {
   width: 100%;
-  height: 100vh;
+  height: 100dvh;
   isolation: isolate;
 }
 

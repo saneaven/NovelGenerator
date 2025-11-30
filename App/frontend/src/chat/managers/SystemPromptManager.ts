@@ -120,7 +120,7 @@ export class SystemPromptManager {
    */
   private static async getTemplate(
     functionType: 'chat' | 'translation' | 'storyEdit' | 'chapterGen',
-    category: 'systemPrompt' | 'functionInstructions' | 'prefill' | 'userPrompt',
+    category: 'systemPrompt' | 'prefill' | 'userPrompt',
     name?: string
   ): Promise<string> {
     const store = useSettingsStore.getState();
@@ -246,12 +246,10 @@ export class SystemPromptManager {
   private static async generateChatBundle(context: ChatSystemPromptContext = {}): Promise<PromptBundle> {
     const mode = context.mode || 'workspace';
     const systemTemplate = await this.getTemplate('chat', 'systemPrompt', mode);
-    const functionInstructions = await this.buildFunctionInstructions(context);
     const language = this.resolveLanguage(context.outputLanguage);
 
     const data = {
       variable: {
-        functionInstructions,
         language,
         mode,
         today: new Date().toISOString().split('T')[0],
@@ -474,14 +472,6 @@ export class SystemPromptManager {
         renderTemplate(userTemplate, userData),
       ],
     };
-  }
-
-  private static async buildFunctionInstructions(context: ChatSystemPromptContext): Promise<string> {
-    if (!context.mode || !context.functions || context.functions.length === 0) {
-      return '';
-    }
-
-    return await this.getTemplate('chat', 'functionInstructions', context.mode);
   }
 
   private static resolveLanguage(language?: string): string {

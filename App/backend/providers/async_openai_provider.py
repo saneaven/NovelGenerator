@@ -19,7 +19,6 @@ from .thinking_parser import ThinkingStreamParser
 class AsyncOpenAIProvider(BaseProvider):
     """Reusable base class for providers backed by OpenAI-compatible chat completions."""
 
-    max_retries: int = 3
     models_endpoint: str = "/models"
 
     def __init__(self, config: Dict):
@@ -122,15 +121,6 @@ class AsyncOpenAIProvider(BaseProvider):
     ) -> Tuple[Optional[Dict], List[Dict]]:
         return chunk, []
 
-    def _should_retry(self, status: Optional[int], attempt: int) -> bool:
-        if attempt >= self.max_retries - 1:
-            return False
-        if status is None:
-            return True
-        if status >= 500 or status in {408, 409, 429}:
-            return True
-        return False
-
     # ----- Public API -----------------------------------------------------------------
     def _format_sse(self, payload: Dict) -> bytes:
         return f"data: {json.dumps(payload, separators=(',', ':'))}\n\n".encode("utf-8")
@@ -219,6 +209,7 @@ class AsyncOpenAIProvider(BaseProvider):
         provider_preference: Optional[Dict] = None,
         thinking_config: Optional[Dict] = None,
         thinking_mode: Optional[str] = None,
+        retry_config: Optional[Dict] = None,
     ) -> AsyncGenerator[bytes, None]:
         if not self.validate_config():
             yield self._format_error("Invalid provider configuration")
@@ -237,50 +228,46 @@ class AsyncOpenAIProvider(BaseProvider):
 
         parser = ThinkingStreamParser() if thinking_mode == "custom" else None
         last_finish_reason = None
+        stream = None
 
-        for attempt in range(self.max_retries):
-            stream = None
-            try:
-                stream = await client.chat.completions.create(**request_kwargs)
-                async for chunk in stream:
-                    chunk_dict = chunk.model_dump(exclude_none=True)
+        try:
+            stream = await client.chat.completions.create(**request_kwargs)
+            async for chunk in stream:
+                chunk_dict = chunk.model_dump(exclude_none=True)
 
-                    # Track finish_reason from choices
-                    for choice in chunk_dict.get("choices", []):
-                        if choice.get("finish_reason"):
-                            last_finish_reason = choice.get("finish_reason")
+                # Track finish_reason from choices
+                for choice in chunk_dict.get("choices", []):
+                    if choice.get("finish_reason"):
+                        last_finish_reason = choice.get("finish_reason")
 
-                    chunk_dict, extra_chunks = self._mutate_chunk(chunk_dict, thinking_mode)
+                chunk_dict, extra_chunks = self._mutate_chunk(chunk_dict, thinking_mode)
 
-                    chunk_dict, parser_chunks = self._apply_thinking_parser(chunk_dict, parser)
-                    extra_chunks.extend(parser_chunks)
+                chunk_dict, parser_chunks = self._apply_thinking_parser(chunk_dict, parser)
+                extra_chunks.extend(parser_chunks)
 
-                    if chunk_dict and self._has_meaningful_payload(chunk_dict):
-                        yield self._format_sse(chunk_dict)
+                if chunk_dict and self._has_meaningful_payload(chunk_dict):
+                    yield self._format_sse(chunk_dict)
 
-                    for extra in extra_chunks:
-                        if self._has_meaningful_payload(extra):
-                            yield self._format_sse(extra)
+                for extra in extra_chunks:
+                    if self._has_meaningful_payload(extra):
+                        yield self._format_sse(extra)
 
-                break
-
-            except (APIConnectionError, RateLimitError, AuthenticationError, BadRequestError, APIStatusError) as exc:
-                status = getattr(exc, "status_code", None)
-                if self._should_retry(status, attempt):
-                    continue
-                yield self._format_error(str(exc), status)
-                return
-            except OpenAIError as exc:
-                yield self._format_error(str(exc), getattr(exc, "status_code", None))
-                return
-            except Exception as exc:
-                yield self._format_error(str(exc))
-                return
-            finally:
-                if stream is not None:
-                    await stream.close()
-        else:
+        except (APIConnectionError, RateLimitError, AuthenticationError, BadRequestError, APIStatusError) as exc:
+            status = getattr(exc, "status_code", None)
+            yield self._format_error(str(exc), status)
+            yield b"data: [DONE]\n\n"
             return
+        except OpenAIError as exc:
+            yield self._format_error(str(exc), getattr(exc, "status_code", None))
+            yield b"data: [DONE]\n\n"
+            return
+        except Exception as exc:
+            yield self._format_error(str(exc))
+            yield b"data: [DONE]\n\n"
+            return
+        finally:
+            if stream is not None:
+                await stream.close()
 
         for final_chunk in self._finalize_parser(parser):
             yield self._format_sse(final_chunk)

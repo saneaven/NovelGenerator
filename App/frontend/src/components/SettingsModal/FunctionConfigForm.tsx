@@ -192,20 +192,20 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
         <h4 className="section-title">Advanced Settings</h4>
 
         <div className="advanced-options">
-          <div className={`checkbox-field ${config.provider === 'openai' || config.provider === 'gemini' ? 'disabled' : ''}`}>
+          <div className={`checkbox-field ${config.provider === 'openai' ? 'disabled' : ''}`}>
             <label className="checkbox-label">
               <input
                 type="checkbox"
                 checked={config.advanced.enablePrefill}
                 onChange={(e) => handleAdvancedChange('enablePrefill', e.target.checked)}
-                disabled={config.provider === 'openai' || config.provider === 'gemini'}
+                disabled={config.provider === 'openai'}
               />
               <div className="checkbox-content">
                 <span className="checkbox-title">Enable Assistant Prefill</span>
                 <span className="checkbox-description">
-                  {config.provider === 'openai' || config.provider === 'gemini'
-                    ? `${config.provider === 'openai' ? 'OpenAI' : 'Gemini'} does not support assistant prefill`
-                    : 'Pre-fill the assistant\'s response to guide output format (Anthropic models only)'}
+                  {config.provider === 'openai'
+                    ? 'OpenAI does not support assistant prefill'
+                    : 'Pre-fill the assistant\'s response to guide output format'}
                 </span>
               </div>
             </label>

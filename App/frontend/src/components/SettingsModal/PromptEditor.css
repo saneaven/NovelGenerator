@@ -194,7 +194,7 @@
 .version-history-modal {
     width: 90%;
     max-width: 1000px;
-    max-height: 85vh;
+    max-height: 85dvh;
     background: var(--color-surface-base);
 }
 
@@ -213,7 +213,7 @@
     flex: 1;
     max-width: 350px;
     overflow-y: auto;
-    max-height: calc(85vh - 200px);
+    max-height: calc(85dvh - 200px);
     padding-right: var(--spacing-md);
 }
 

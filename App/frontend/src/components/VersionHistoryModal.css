@@ -2,8 +2,8 @@
 
 .version-history-modal {
   max-width: 800px;
-  width: 90vw;
-  max-height: 85vh;
+  width: 90dvw;
+  max-height: 85dvh;
   display: flex;
   flex-direction: column;
   border-radius: var(--border-radius-lg);
@@ -236,6 +236,24 @@
 .active-badge::before {
   content: '✓';
   font-size: var(--font-size-sm);
+}
+
+.version-languages-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-md);
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--border-radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+}
+
+.version-languages-badge::before {
+  content: '🌐';
+  font-size: var(--font-size-xs);
 }
 
 /* Version Metadata */
@@ -518,8 +536,8 @@
 /* Responsive Design */
 @media (max-width: 768px) {
   .version-history-modal {
-    max-width: 95vw;
-    max-height: 90vh;
+    max-width: 95dvw;
+    max-height: 90dvh;
   }
 
   .version-history-content {

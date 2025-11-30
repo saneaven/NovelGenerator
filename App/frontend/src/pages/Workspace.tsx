@@ -97,7 +97,7 @@ const Workspace: React.FC = () =>
             if (obj.metadata?.project_id !== projectId) return;
 
             // Check if object is missing any sub language translation
-            const availableLangs = obj.languages?.available || [];
+            const availableLangs = Object.keys(obj.data || {});
             const needsAnyTranslation = settings.subLanguages.some(
                 (subLang: string) => !availableLangs.includes(subLang)
             );
@@ -125,8 +125,8 @@ const Workspace: React.FC = () =>
         setShowBatchTranslateModal(false);
     };
 
-    // Derive story objects reactively from unified store
-    const storyObjects = useStoryObjects(projectId);
+    // Derive story objects reactively from unified store (always uses main language for chat context)
+    const storyObjects = useStoryObjects(projectId, mainLanguage);
 
     // Fetch projects if not loaded
     useEffect(() => {
@@ -192,6 +192,7 @@ const Workspace: React.FC = () =>
         return new ChatManager(
             {
                 projectId: activeProjectId,
+                // Use story objects with main language for chat context
                 getStoryObjects: () => storyObjects,
                 systemInsertConfig,
                 chatPipeline,
@@ -214,6 +215,7 @@ const Workspace: React.FC = () =>
                 enablePrefill: chatFunctionConfig.advanced.enablePrefill,
                 thinkingMode: chatFunctionConfig.advanced.thinkingMode,
                 thinkingConfig: chatFunctionConfig.advanced.thinkingConfig,
+                retryConfig: settings.retryConfig,
             },
             chatManagerCallbacks
         );
@@ -222,12 +224,14 @@ const Workspace: React.FC = () =>
         storyObjects,
         systemInsertConfig,
         chatPipeline,
-        chatUI,
+        // Note: chatUI is intentionally excluded - it's accessed via closures and
+        // including it causes ChatManager recreation during streaming state changes
         mainLanguage,
         chatFunctionConfig,
         providerCredentials,
         getSelectedChatId,
         chatManagerCallbacks,
+        settings.retryConfig,
     ]);
 
     const chatHandlers = useChatHandlers(
@@ -240,13 +244,14 @@ const Workspace: React.FC = () =>
     const currentProject = getCurrentProject();
 
     // Populate unified store cache when projectId changes
-    // The useStoryObjects hook will reactively derive storyObjects from the cache
+    // Fetches all objects with all languages
     useEffect(() =>
     {
         if (!projectId) return;
 
         const populateStoreCache = async () => {
             try {
+                // Fetch all objects (returns all languages per object)
                 await Promise.all([
                     listObjects('basic_info', projectId),
                     listObjects('character', projectId),

@@ -88,12 +88,12 @@ function convertToLegacyFormat(
     // If no version history provided, create single version from current data
     const currentData: Record<string, { content: string; wordCount: number }> = {};
 
-    // Add current language data
-    unifiedObj.languages.available.forEach((lang) => {
-      if (lang === unifiedObj.languages.active) {
+    // Add current language data (unifiedObj.data is now language-keyed)
+    Object.entries(unifiedObj.data).forEach(([lang, data]) => {
+      if (data && typeof data === 'object') {
         currentData[lang] = {
-          content: unifiedObj.data.content || '',
-          wordCount: unifiedObj.data.wordCount || 0,
+          content: (data as ManuscriptData).content || '',
+          wordCount: (data as ManuscriptData).wordCount || 0,
         };
       }
     });
@@ -111,7 +111,6 @@ function convertToLegacyFormat(
   return {
     id: unifiedObj.id,
     chapter_id: unifiedObj.metadata.chapter_id!,
-    active_version_id: unifiedObj.version.id,
     created_at: unifiedObj.metadata.created_at,
     updated_at: unifiedObj.metadata.updated_at,
     versions,
@@ -246,8 +245,8 @@ export const novelService = {
       throw new Error(`No manuscript found for chapter ${chapterId}`);
     }
 
-    // Activate version
-    await unifiedObjectService.activateVersion('manuscript', manuscriptId, versionId);
+    // Restore version (creates a new version with the restored content)
+    await unifiedObjectService.restoreVersion('manuscript', manuscriptId, versionId);
 
     // Get updated object
     const unifiedObj = await unifiedObjectService.getObject<ManuscriptData>(

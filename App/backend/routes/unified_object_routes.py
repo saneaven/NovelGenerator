@@ -23,7 +23,7 @@ from ..models.db_models import (
     User, BasicInfo, Character, Organization, Location, LorebookEntry,
     Act, Chapter, Manuscript, Outline
 )
-from ..models.translation_models import ObjectTranslation, ObjectVersion, ActiveVersion
+from ..models.translation_models import ObjectTranslation, ObjectVersion
 from ..utils.object_type_aliases import normalize_object_type, externalize_object_type
 
 LOREBOOK_TYPE = normalize_object_type('lorebook')
@@ -41,8 +41,8 @@ class UnifiedObjectResponse(BaseModel):
     id: str
     type: str
     metadata: Dict[str, Any]  # project_id, created_at, updated_at, order (if applicable)
-    data: Dict[str, Any]  # Current language data from object_translations
-    languages: Dict[str, Any]  # available, active, default
+    data: Dict[str, Any]  # Language-keyed data: {"English": {...}, "Korean": {...}}
+    # languages field removed - use Object.keys(data) for available, settings.mainLanguage for default
     version: Dict[str, Any]  # id, number, created_at
 
     class Config:
@@ -185,19 +185,17 @@ def get_object_metadata(obj: Any, object_type: str) -> Dict[str, Any]:
     return metadata
 
 
-def get_active_version_info(db: Session, object_type: str, object_id: UUID) -> Optional[Dict[str, Any]]:
-    """Get active version information"""
-    active_version = db.query(ActiveVersion).filter(
-        ActiveVersion.object_type == object_type,
-        ActiveVersion.object_id == object_id
-    ).first()
+def get_latest_version(db: Session, object_type: str, object_id: UUID) -> Optional[ObjectVersion]:
+    """Get the latest version (highest version_number) for an object"""
+    return db.query(ObjectVersion).filter(
+        ObjectVersion.object_type == object_type,
+        ObjectVersion.object_id == object_id
+    ).order_by(ObjectVersion.version_number.desc()).first()
 
-    if not active_version:
-        return None
 
-    version = db.query(ObjectVersion).filter(
-        ObjectVersion.id == active_version.active_version_id
-    ).first()
+def get_latest_version_info(db: Session, object_type: str, object_id: UUID) -> Optional[Dict[str, Any]]:
+    """Get latest version information (replaces get_latest_version_info)"""
+    version = get_latest_version(db, object_type, object_id)
 
     if not version:
         return None
@@ -246,28 +244,25 @@ def create_or_update_version(
     new_data: Dict[str, Any],
     user_request: str,
     user_id: UUID,
-    create_new: bool = True,
-    reset_other_languages: bool = True
+    create_new: bool = True
 ) -> ObjectVersion:
-    """Create new version or update existing one"""
+    """Create new version or update existing one.
 
-    # Get current active version
-    active_version_ptr = db.query(ActiveVersion).filter(
-        ActiveVersion.object_type == object_type,
-        ActiveVersion.object_id == object_id
-    ).first()
+    Behavior:
+    - Latest version is always determined by MAX(version_number)
+    - When create_new=True: creates a new version with only the edited language (translations become stale)
+    - When create_new=False: updates existing latest version in-place, preserving other languages (for translations)
+    """
 
-    current_version = None
-    if active_version_ptr:
-        current_version = db.query(ObjectVersion).filter(
-            ObjectVersion.id == active_version_ptr.active_version_id
-        ).first()
+    # Get current latest version
+    current_version = get_latest_version(db, object_type, object_id)
 
-    # Determine if we should carry over translations from the previous version
+    # Carry forward existing languages only when updating existing version (not creating new)
+    # This ensures translations preserve the original language while user edits start fresh
     carry_forward_languages = (
         current_version is not None
         and current_version.data
-        and not reset_other_languages
+        and not create_new
     )
 
     # Merge language data
@@ -293,22 +288,9 @@ def create_or_update_version(
         db.add(new_version)
         db.flush()
 
-        # Update active version pointer
-        if active_version_ptr:
-            active_version_ptr.active_version_id = new_version.id
-            active_version_ptr.updated_at = datetime.utcnow()
-        else:
-            active_version_ptr = ActiveVersion(
-                object_type=object_type,
-                object_id=object_id,
-                active_version_id=new_version.id,
-                updated_at=datetime.utcnow()
-            )
-            db.add(active_version_ptr)
-
         return new_version
     else:
-        # Update existing version in-place (for novel editor continuous typing)
+        # Update existing version in-place (for translations or novel editor continuous typing)
         current_version.data = version_data
         db.flush()
         return current_version
@@ -357,13 +339,15 @@ def update_translation_cache(
 async def get_object(
     object_type: str,
     object_id: UUID,
-    language: Optional[str] = Query(None),
+    language: Optional[str] = Query(None, description="Optional: return only this language. Default: return all languages."),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get object in specified language.
-    If language not specified, returns active language.
+    Get object with language data.
+
+    Default (no language param): Returns ALL languages in data field.
+    With ?language=X: Returns only that language in data field.
     """
     object_type = normalize_object_type(object_type)
 
@@ -373,31 +357,39 @@ async def get_object(
     # Get metadata
     metadata = get_object_metadata(obj, object_type)
 
-    # Get language info
-    languages = get_available_languages(db, object_type, object_id)
+    # Get latest version (contains all languages)
+    latest_version = get_latest_version(db, object_type, object_id)
+    if not latest_version:
+        raise HTTPException(status_code=500, detail="No version found for this object")
 
-    # Determine which language to return
-    requested_language = language or languages['active']
-    if not requested_language:
+    version_data = latest_version.data or {}
+
+    if not version_data:
         raise HTTPException(status_code=404, detail="No translations available for this object")
 
-    # Get translation data
-    data = get_translation_data(db, object_type, object_id, requested_language)
-    if not data:
-        raise HTTPException(status_code=404, detail=f"Translation not found for language: {requested_language}")
+    # Determine response data based on language parameter
+    if language:
+        # Single language mode: return only requested language
+        if language not in version_data:
+            raise HTTPException(status_code=404, detail=f"Translation not found for language: {language}")
+        response_data = {language: version_data[language]}
+    else:
+        # Default mode: return ALL languages
+        response_data = version_data
 
     # Get version info
-    version = get_active_version_info(db, object_type, object_id)
-    if not version:
-        raise HTTPException(status_code=500, detail="No active version found")
+    version_info = {
+        'id': str(latest_version.id),
+        'number': latest_version.version_number,
+        'created_at': latest_version.created_at.isoformat() if latest_version.created_at else None
+    }
 
     return UnifiedObjectResponse(
         id=str(object_id),
         type=externalize_object_type(object_type),
         metadata=metadata,
-        data=data,
-        languages=languages,
-        version=version
+        data=response_data,
+        version=version_info
     )
 
 
@@ -412,22 +404,33 @@ async def update_object(
     """
     Update object in specified language.
     Creates new version and updates translation cache.
+
+    Edit Restriction: If creating a new version, the language being edited
+    must exist in the latest version. Otherwise, return 400 error.
     """
     object_type = normalize_object_type(object_type)
 
     # Verify object exists
     obj = get_object_or_404(db, object_type, object_id)
 
+    # Get the latest version
+    latest_version = get_latest_version(db, object_type, object_id)
+
+    # Edit restriction check: if creating new version, language must be in latest version
+    if request.create_new_version and latest_version:
+        version_data = latest_version.data or {}
+        if request.language not in version_data:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot edit. Language '{request.language}' is not in the latest version (v{latest_version.version_number}). Translate first."
+            )
+
     # Update object's updated_at timestamp
     obj.updated_at = datetime.utcnow()
 
-    # Determine whether this update should reset other translations
-    # Reset other languages for any user edit (not translations) so that editing in one
-    # language doesn't carry forward stale data from other languages
-    is_translation_request = 'translation' in (request.user_request or '').lower()
-    reset_other_languages = bool(request.create_new_version and not is_translation_request)
-
     # Create or update version
+    # - create_new=True: New version with only edited language (translations become stale)
+    # - create_new=False: Update existing version, preserving other languages (for translations)
     version = create_or_update_version(
         db=db,
         object_type=object_type,
@@ -436,11 +439,10 @@ async def update_object(
         new_data=request.data,
         user_request=request.user_request or "User Edit",
         user_id=current_user.id,
-        create_new=request.create_new_version,
-        reset_other_languages=reset_other_languages
+        create_new=request.create_new_version
     )
 
-    # Update translation cache
+    # Update translation cache for this language only
     update_translation_cache(
         db=db,
         object_type=object_type,
@@ -450,17 +452,12 @@ async def update_object(
         is_active=True  # Mark as active when updated
     )
 
-    # Remove or deactivate other languages depending on whether we reset them in this version
-    other_languages_query = db.query(ObjectTranslation).filter(
+    # Deactivate other languages (but DO NOT delete them - they stay at their old versions)
+    db.query(ObjectTranslation).filter(
         ObjectTranslation.object_type == object_type,
         ObjectTranslation.object_id == object_id,
         ObjectTranslation.language != request.language
-    )
-
-    if reset_other_languages:
-        other_languages_query.delete()
-    else:
-        other_languages_query.update({'is_active': False})
+    ).update({'is_active': False})
 
     db.commit()
 
@@ -600,7 +597,7 @@ async def get_versions(
 
 
 @router.patch("/objects/{object_type}/{object_id}/versions/{version_id}/activate")
-async def activate_version(
+async def restore_version(
     object_type: str,
     object_id: UUID,
     version_id: UUID,
@@ -608,53 +605,55 @@ async def activate_version(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Activate a previous version (revert/rollback).
-    Rebuilds translation cache from version data.
+    Restore a previous version by creating a NEW version with the restored content.
+    The restored content becomes the latest version.
+    This is NOT a pointer change - it creates a new version entry.
     """
     object_type = normalize_object_type(object_type)
 
     # Verify object exists
     obj = get_object_or_404(db, object_type, object_id)
 
-    # Verify version exists
-    version = db.query(ObjectVersion).filter(
+    # Verify version to restore exists
+    version_to_restore = db.query(ObjectVersion).filter(
         ObjectVersion.id == version_id,
         ObjectVersion.object_type == object_type,
         ObjectVersion.object_id == object_id
     ).first()
 
-    if not version:
+    if not version_to_restore:
         raise HTTPException(status_code=404, detail="Version not found")
 
-    # Update active version pointer
-    active_version_ptr = db.query(ActiveVersion).filter(
-        ActiveVersion.object_type == object_type,
-        ActiveVersion.object_id == object_id
-    ).first()
+    # Get current latest version to determine next version number
+    latest_version = get_latest_version(db, object_type, object_id)
+    next_version_number = (latest_version.version_number + 1) if latest_version else 1
 
-    if active_version_ptr:
-        active_version_ptr.active_version_id = version.id
-        active_version_ptr.updated_at = datetime.utcnow()
-    else:
-        active_version_ptr = ActiveVersion(
-            object_type=object_type,
-            object_id=object_id,
-            active_version_id=version.id,
-            updated_at=datetime.utcnow()
-        )
-        db.add(active_version_ptr)
+    # Create a NEW version with the restored content
+    new_version = ObjectVersion(
+        id=uuid4(),
+        object_type=object_type,
+        object_id=object_id,
+        version_number=next_version_number,
+        data=version_to_restore.data,  # Copy the data from the version to restore
+        user_request=f"Restored from v{version_to_restore.version_number}",
+        created_by=current_user.id,
+        created_at=datetime.utcnow()
+    )
+    db.add(new_version)
+    db.flush()
 
-    # Rebuild translation cache from version data
+    # Rebuild translation cache from restored version data
     # First, delete all existing translations
     db.query(ObjectTranslation).filter(
         ObjectTranslation.object_type == object_type,
         ObjectTranslation.object_id == object_id
     ).delete()
 
-    # Create translation entries for each language in version
-    if version.data and isinstance(version.data, dict):
+    # Create translation entries for each language in the restored version
+    restored_data = version_to_restore.data or {}
+    if isinstance(restored_data, dict):
         first_language = None
-        for language, language_data in version.data.items():
+        for language, language_data in restored_data.items():
             if not first_language:
                 first_language = language
 
@@ -669,7 +668,10 @@ async def activate_version(
 
     db.commit()
 
-    return {"message": f"Version {version.version_number} activated", "version_id": str(version.id)}
+    return {
+        "message": f"Restored v{version_to_restore.version_number} as new v{next_version_number}",
+        "version_id": str(new_version.id)
+    }
 
 
 # ============================================================================
@@ -680,7 +682,7 @@ async def activate_version(
 async def list_objects(
     project_id: UUID,
     object_type: str,
-    language: Optional[str] = Query(None),
+    language: Optional[str] = Query(None, description="Optional: return only this language. Default: return all languages."),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -688,7 +690,9 @@ async def list_objects(
 ):
     """
     List all objects of a specific type for a project.
-    Returns objects with data in the specified language (or first available).
+
+    Default (no language param): Returns ALL languages in data field for each object.
+    With ?language=X: Returns only that language in data field.
     """
     object_type = normalize_object_type(object_type)
     response_type = externalize_object_type(object_type)
@@ -745,44 +749,44 @@ async def list_objects(
     result_objects = []
     for core_obj in core_objects:
         try:
-            # Get language info
-            languages = get_available_languages(db, object_type, core_obj.id)
+            # Get latest version (contains all languages)
+            latest_version = get_latest_version(db, object_type, core_obj.id)
 
-            if not languages['available']:
-                continue  # Skip objects with no translations
+            if not latest_version:
+                continue  # Skip if no version
 
-            # Determine which language to return
-            requested_language = language or languages['active'] or languages['available'][0]
+            version_data = latest_version.data or {}
 
-            # Get translation data
-            data = get_translation_data(db, object_type, core_obj.id, requested_language)
+            if not version_data:
+                continue  # Skip objects with no language data
 
-            if not data:
-                # Try first available language
-                if languages['available']:
-                    requested_language = languages['available'][0]
-                    data = get_translation_data(db, object_type, core_obj.id, requested_language)
-
-                if not data:
-                    continue  # Skip if still no data
+            # Determine response data based on language parameter
+            if language:
+                # Single language mode: return only requested language
+                if language not in version_data:
+                    continue  # Skip if requested language not available
+                response_data = {language: version_data[language]}
+            else:
+                # Default mode: return ALL languages
+                response_data = version_data
 
             # Get metadata
             metadata = get_object_metadata(core_obj, object_type)
 
             # Get version info
-            version = get_active_version_info(db, object_type, core_obj.id)
-
-            if not version:
-                continue  # Skip if no version
+            version_info = {
+                'id': str(latest_version.id),
+                'number': latest_version.version_number,
+                'created_at': latest_version.created_at.isoformat() if latest_version.created_at else None
+            }
 
             # Build unified object
             unified_obj = UnifiedObjectResponse(
                 id=str(core_obj.id),
                 type=response_type,
                 metadata=metadata,
-                data=data,
-                languages=languages,
-                version=version
+                data=response_data,
+                version=version_info
             )
 
             result_objects.append(unified_obj)
@@ -938,7 +942,7 @@ async def create_object(
     db.add(core_obj)
     db.flush()
 
-    # Create initial version
+    # Create initial version (no ActiveVersion pointer needed - latest is always active)
     version_id = uuid4()
     version = ObjectVersion(
         id=version_id,
@@ -951,15 +955,6 @@ async def create_object(
         created_at=datetime.utcnow()
     )
     db.add(version)
-
-    # Create active version pointer
-    active_version = ActiveVersion(
-        object_type=object_type,
-        object_id=object_id,
-        active_version_id=version_id,
-        updated_at=datetime.utcnow()
-    )
-    db.add(active_version)
 
     # Create translation cache
     translation = ObjectTranslation(
@@ -1033,13 +1028,7 @@ async def delete_object(
         ObjectVersion.object_id == object_id
     ).delete()
 
-    # 3. Delete active version pointer
-    db.query(ActiveVersion).filter(
-        ActiveVersion.object_type == object_type,
-        ActiveVersion.object_id == object_id
-    ).delete()
-
-    # 4. Delete core object
+    # 3. Delete core object
     db.delete(obj)
 
     db.commit()

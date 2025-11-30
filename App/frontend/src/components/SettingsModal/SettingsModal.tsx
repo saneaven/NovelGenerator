@@ -6,6 +6,7 @@ import GeneralPanel from './GeneralPanel';
 import LanguagePanel from './LanguagePanel';
 import PromptsTemplatesPanel from './PromptsTemplatesPanel';
 import ThemePanel from './ThemePanel';
+import AdvancedPanel from './AdvancedPanel';
 import './SettingsModal.css';
 
 interface SettingsModalProps {
@@ -13,7 +14,7 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-type MainTab = 'credentials' | 'general' | 'prompts' | 'language' | 'theme';
+type MainTab = 'credentials' | 'general' | 'prompts' | 'language' | 'theme' | 'advanced';
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const settingsStore = useSettingsStore();
@@ -97,6 +98,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             <span className="tab-icon">🎨</span>
             <span className="tab-label">Theme</span>
           </button>
+          <button
+            className={`main-tab ${mainTab === 'advanced' ? 'active' : ''}`}
+            onClick={() => setMainTab('advanced')}
+          >
+            <span className="tab-icon">🔧</span>
+            <span className="tab-label">Advanced</span>
+          </button>
         </div>
 
         {/* Panel Content */}
@@ -158,6 +166,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           )}
 
           {mainTab === 'prompts' && <PromptsTemplatesPanel />}
+
+          {mainTab === 'advanced' && (
+            <AdvancedPanel
+              retryConfig={localSettings.retryConfig}
+              onRetryConfigChange={(config) =>
+                setLocalSettings(prev => ({ ...prev, retryConfig: config }))
+              }
+            />
+          )}
         </div>
 
         {/* Footer */}

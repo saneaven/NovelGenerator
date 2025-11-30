@@ -79,6 +79,14 @@ class UserSettings(Base):
     # Theme settings
     theme = Column(String(20), default='system', nullable=False)
 
+    # Retry configuration (global)
+    retry_config = Column(JSONB, nullable=False, server_default="""{
+        "enabled": true,
+        "maxRetries": 3,
+        "retryableStatusCodes": [429, 500, 502, 503, 504],
+        "retryDelayMs": 1000
+    }""")
+
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -99,7 +107,7 @@ class PromptVersion(Base):
 
     # Prompt identification
     function_type = Column(String(50), nullable=False)  # 'chat', 'translation', 'storyEdit', 'chapterGen'
-    prompt_category = Column(String(50), nullable=False)  # 'systemPrompt', 'functionInstructions', 'prefill', 'userMessageTag'
+    prompt_category = Column(String(50), nullable=False)  # 'systemPrompt', 'prefill', 'userMessageTag'
     prompt_name = Column(String(50), nullable=True)  # 'workspace', 'novelEditor', etc (nullable for single prompts)
 
     # Version data

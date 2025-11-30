@@ -1,15 +1,18 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import type { EditCard } from '../../chat/types';
-import type { FunctionCallOperationPreview } from '../../llm_request/types';
+import type { FunctionCallOperationPreview, FunctionCallProgress } from '../../llm_request/types';
 import type { StoryObjects } from '../../types/storyObject';
 import { buildOperationPreviewsFromArgs } from '../../chat/utils/functionCallPreview';
 import { resolveStoryObjectName, parseFunctionName } from '../../chat/utils/objectNameResolver';
 import './GroupedFunctionCallCard.css';
 
+type CardMode = 'streaming' | 'pending' | 'confirmed';
+
 interface GroupedFunctionCallCardProps {
-  cards: EditCard[];
-  onConfirm: (selections: Record<string, boolean>) => Promise<void>;
-  isConfirmed: boolean;
+  mode: CardMode;
+  cards?: EditCard[];
+  streamingProgress?: FunctionCallProgress[];
+  onConfirm?: (selections: Record<string, boolean>) => Promise<void>;
   storyObjects: StoryObjects;
 }
 
@@ -44,12 +47,34 @@ const humanize = (value?: string) => {
     .replace(/^\w/g, (char) => char.toUpperCase());
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  collecting: 'Collecting',
+  validating: 'Validating',
+  ready: 'Ready',
+  error: 'Error',
+};
+
+const formatRelativeTime = (timestamp: number) => {
+  const diff = Date.now() - timestamp;
+  if (Number.isNaN(diff)) return '';
+  if (diff < 5_000) return 'Just now';
+  if (diff < 60_000) return `${Math.round(diff / 1000)}s ago`;
+  if (diff < 3_600_000) return `${Math.round(diff / 60_000)}m ago`;
+  const date = new Date(timestamp);
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
 const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
-  cards,
+  mode,
+  cards = [],
+  streamingProgress = [],
   onConfirm,
-  isConfirmed,
   storyObjects,
 }) => {
+  const isStreaming = mode === 'streaming';
+  const isConfirmed = mode === 'confirmed';
+  const isPending = mode === 'pending';
+
   // Initialize selections: all cards selected by default
   const [selections, setSelections] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
@@ -61,6 +86,7 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
 
   // Sync selections when cards change (e.g., streaming adds new cards)
   useEffect(() => {
+    if (isStreaming) return; // No selections in streaming mode
     setSelections(prev => {
       const updated = { ...prev };
       let hasChanges = false;
@@ -72,22 +98,25 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
       });
       return hasChanges ? updated : prev;
     });
-  }, [cards]);
+  }, [cards, isStreaming]);
 
   const [isConfirming, setIsConfirming] = useState(false);
 
-  // Collapsible state: expanded by default when pending, collapsed when confirmed
+  // Collapsible state: expanded by default when streaming or pending, collapsed when confirmed
   const [isExpanded, setIsExpanded] = useState(!isConfirmed);
 
-  // Update expanded state when isConfirmed changes
+  // Update expanded state when mode changes
   useEffect(() => {
     if (isConfirmed) {
       setIsExpanded(false);
+    } else {
+      setIsExpanded(true);
     }
   }, [isConfirmed]);
 
-  // Build previews for each card and enrich with resolved names
+  // Build previews for each card and enrich with resolved names (for pending/confirmed modes)
   const cardsWithPreviews: CardWithPreview[] = useMemo(() => {
+    if (isStreaming) return [];
     return cards.map(card => {
       const rawPreviews = buildOperationPreviewsFromArgs(card.data);
 
@@ -118,7 +147,36 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
         previews: enrichedPreviews,
       };
     });
-  }, [cards, storyObjects]);
+  }, [cards, storyObjects, isStreaming]);
+
+  // Build streaming previews (for streaming mode)
+  const streamingPreviews = useMemo(() => {
+    if (!isStreaming) return [];
+    return streamingProgress.map(progress => {
+      const functionName = progress.draft.functionName;
+      const parsed = functionName ? parseFunctionName(functionName) : undefined;
+
+      // Enrich operation previews with resolved names
+      const enrichedPreviews = (progress.operationPreviews ?? []).map(preview => {
+        const objectType = preview.type || parsed?.objectType;
+        const action = preview.action || parsed?.action;
+        const objectId = preview.id;
+
+        return {
+          ...preview,
+          type: objectType,
+          action,
+          targetName: preview.targetName ?? resolveStoryObjectName(storyObjects, objectType, objectId),
+        };
+      });
+
+      return {
+        progress,
+        functionName: functionName || `Function #${progress.draft.index + 1}`,
+        previews: enrichedPreviews,
+      };
+    });
+  }, [streamingProgress, storyObjects, isStreaming]);
 
   // Calculate selection counts
   const { selectedCount, rejectedCount } = useMemo(() => {
@@ -161,7 +219,7 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
   }, [cards, isConfirmed]);
 
   const handleConfirm = useCallback(async () => {
-    if (isConfirming || isConfirmed) return;
+    if (isConfirming || isConfirmed || !onConfirm) return;
     setIsConfirming(true);
     try {
       await onConfirm(selections);
@@ -170,12 +228,26 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
     }
   }, [selections, onConfirm, isConfirming, isConfirmed]);
 
-  if (cards.length === 0) {
+  // Empty check based on mode
+  if (isStreaming && streamingProgress.length === 0) {
+    return null;
+  }
+  if (!isStreaming && cards.length === 0) {
     return null;
   }
 
-  const statusLabel = isConfirmed ? 'Confirmed' : 'Pending';
-  const cardClassName = `grouped-function-call-card ${isConfirmed ? 'confirmed' : 'pending'}`;
+  // Get streaming status for header
+  const streamingStatus = isStreaming && streamingProgress.length > 0
+    ? streamingProgress[0].status
+    : undefined;
+
+  const statusLabel = isStreaming
+    ? (STATUS_LABELS[streamingStatus ?? 'collecting'] ?? 'Streaming')
+    : isConfirmed
+      ? 'Confirmed'
+      : 'Pending';
+
+  const cardClassName = `grouped-function-call-card ${mode}`;
 
   const handleToggleExpand = useCallback(() => {
     setIsExpanded(prev => !prev);
@@ -186,12 +258,18 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
       <div className="gfcc-header" onClick={handleToggleExpand} role="button" tabIndex={0}>
         <div className="gfcc-header-text">
           <div className="gfcc-eyebrow">
-            {isConfirmed ? 'Confirmed Function Calls' : 'Pending Function Calls'}
+            {isStreaming
+              ? 'Streaming Function Calls'
+              : isConfirmed
+                ? 'Confirmed Function Calls'
+                : 'Pending Function Calls'}
           </div>
           <div className="gfcc-title">
-            {isConfirmed
-              ? `Changes applied`
-              : 'AI wants to make the following changes'}
+            {isStreaming
+              ? 'AI is generating changes...'
+              : isConfirmed
+                ? 'Changes applied'
+                : 'AI wants to make the following changes'}
           </div>
         </div>
         <div className="gfcc-meta">
@@ -207,7 +285,49 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
       {isExpanded && (
         <div className="gfcc-content">
           <div className="gfcc-operation-list">
-            {cardsWithPreviews.map(({ card, previews }) => {
+            {/* Streaming mode: render streaming previews */}
+            {isStreaming && streamingPreviews.map(({ progress, functionName, previews }) => (
+              <div
+                key={progress.draft.id}
+                className={`gfcc-operation-item streaming status-${progress.status}`}
+              >
+                <div className="gfcc-operation-content">
+                  <div className="gfcc-operation-header">
+                    <span className="gfcc-operation-title">{functionName}</span>
+                    <span className="gfcc-streaming-meta">
+                      <span className={`gfcc-streaming-status status-${progress.status}`}>
+                        {STATUS_LABELS[progress.status] ?? progress.status}
+                      </span>
+                      {progress.updatedAt && (
+                        <span className="gfcc-streaming-time">
+                          {formatRelativeTime(progress.updatedAt)}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  {progress.error && (
+                    <div className="gfcc-streaming-error">
+                      Unable to parse JSON yet. The AI may still be streaming.
+                    </div>
+                  )}
+                  {previews.length > 0 && (
+                    <div className="gfcc-operation-previews">
+                      {previews.map((preview, idx) => (
+                        <OperationPreviewRow key={preview.key || idx} preview={preview} />
+                      ))}
+                    </div>
+                  )}
+                  {previews.length === 0 && !progress.error && (
+                    <div className="gfcc-streaming-placeholder">
+                      Waiting for the AI to stream structured arguments...
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {/* Pending/Confirmed mode: render cards with previews */}
+            {!isStreaming && cardsWithPreviews.map(({ card, previews }) => {
               // Always use boolean to keep checkbox controlled (undefined would make it uncontrolled)
               const isSelected = isConfirmed
                 ? (card.isApplied && !card.isRejected)
@@ -243,9 +363,6 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
                         </span>
                       )}
                     </div>
-                    {card.description && (
-                      <div className="gfcc-operation-description">{card.description}</div>
-                    )}
                     {previews.length > 0 && (
                       <div className="gfcc-operation-previews">
                         {previews.map((preview, idx) => (
@@ -259,7 +376,8 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
             })}
           </div>
 
-          {!isConfirmed && (
+          {/* Footer only for pending mode */}
+          {isPending && (
             <div className="gfcc-footer">
               <div className="gfcc-summary">
                 <span className="gfcc-summary-selected">{selectedCount} selected</span>
@@ -320,7 +438,6 @@ interface OperationPreviewRowProps {
 const OperationPreviewRow: React.FC<OperationPreviewRowProps> = ({ preview }) => {
   const actionLabel = preview.action ? ACTION_LABELS[preview.action] ?? humanize(preview.action) : 'Action';
   const typeLabel = preview.type ? TYPE_LABELS[preview.type] ?? humanize(preview.type) : '';
-  const subline = preview.summary || '';
 
   return (
     <div className="gfcc-preview-row">
@@ -331,15 +448,13 @@ const OperationPreviewRow: React.FC<OperationPreviewRowProps> = ({ preview }) =>
         {typeLabel && <span className="gfcc-preview-type">{typeLabel}</span>}
       </div>
 
-      {/* Show "Applies to: Name" for updates/deletes */}
-      {preview.targetName && (
+      {/* Show "Applies to: Name" for updates/deletes (not for create) */}
+      {preview.targetName && preview.action !== 'create' && (
         <div className="gfcc-preview-target">
           <span className="gfcc-target-label">Applies to:</span>
           <span className="gfcc-target-name">{preview.targetName}</span>
         </div>
       )}
-
-      {subline && <div className="gfcc-preview-subline">{subline}</div>}
       {preview.fields && preview.fields.length > 0 && (
         <div className="gfcc-preview-fields">
           {preview.fields.map((field) => (

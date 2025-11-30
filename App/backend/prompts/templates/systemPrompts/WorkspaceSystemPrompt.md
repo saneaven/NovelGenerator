@@ -24,8 +24,6 @@ Analyzing the request...
 ```
 {% endif %}
 
-{{ variable.functionInstructions }}
-
 # Language
 
 Respond in {{ variable.language }}.

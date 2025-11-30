@@ -11,7 +11,8 @@ from ..schemas.settings import (
     UserSettingsUpdate,
     FunctionAIConfig,
     ProviderCredentials,
-    AIFunctionType
+    AIFunctionType,
+    RetryConfig
 )
 
 router = APIRouter(prefix="/api/v1/settings", tags=["settings"])
@@ -91,13 +92,22 @@ async def get_user_settings(
         db.commit()
         db.refresh(settings)
 
+    # Handle retry_config with default fallback for existing records
+    retry_config_dict = getattr(settings, 'retry_config', None) or {
+        "enabled": True,
+        "maxRetries": 3,
+        "retryableStatusCodes": [429, 500, 502, 503, 504],
+        "retryDelayMs": 1000
+    }
+
     return UserSettingsResponse(
         functionConfigs=settings.function_configs,
         providerCredentials=settings.provider_credentials,
         mainLanguage=settings.main_language,
         subLanguages=settings.sub_languages or [],
         defaultSubLanguage=settings.default_sub_language,
-        theme=settings.theme
+        theme=settings.theme,
+        retryConfig=retry_config_dict  # type: ignore
     )
 
 
@@ -150,8 +160,19 @@ async def update_user_settings(
     if update_data.theme is not None:
         settings.theme = update_data.theme
 
+    if update_data.retryConfig is not None:
+        settings.retry_config = update_data.retryConfig.model_dump()  # type: ignore
+
     db.commit()
     db.refresh(settings)
+
+    # Handle retry_config with default fallback
+    retry_config_dict = getattr(settings, 'retry_config', None) or {
+        "enabled": True,
+        "maxRetries": 3,
+        "retryableStatusCodes": [429, 500, 502, 503, 504],
+        "retryDelayMs": 1000
+    }
 
     return UserSettingsResponse(
         functionConfigs=settings.function_configs,
@@ -159,7 +180,8 @@ async def update_user_settings(
         mainLanguage=settings.main_language,
         subLanguages=settings.sub_languages or [],
         defaultSubLanguage=settings.default_sub_language,
-        theme=settings.theme
+        theme=settings.theme,
+        retryConfig=retry_config_dict  # type: ignore
     )
 
 
@@ -190,13 +212,22 @@ async def update_function_config(
     db.commit()
     db.refresh(settings)
 
+    # Handle retry_config with default fallback
+    retry_config_dict = getattr(settings, 'retry_config', None) or {
+        "enabled": True,
+        "maxRetries": 3,
+        "retryableStatusCodes": [429, 500, 502, 503, 504],
+        "retryDelayMs": 1000
+    }
+
     return UserSettingsResponse(
         functionConfigs=settings.function_configs,
         providerCredentials=settings.provider_credentials,
         mainLanguage=settings.main_language,
         subLanguages=settings.sub_languages or [],
         defaultSubLanguage=settings.default_sub_language,
-        theme=settings.theme
+        theme=settings.theme,
+        retryConfig=retry_config_dict  # type: ignore
     )
 
 
@@ -216,6 +247,14 @@ async def sync_settings_from_client(
         UserSettings.user_id == current_user.id
     ).first()
 
+    # Default retry config
+    default_retry_config = {
+        "enabled": True,
+        "maxRetries": 3,
+        "retryableStatusCodes": [429, 500, 502, 503, 504],
+        "retryDelayMs": 1000
+    }
+
     if not settings:
         # Create new settings from client data
         settings = UserSettings(
@@ -225,18 +264,20 @@ async def sync_settings_from_client(
             main_language=client_settings.get('mainLanguage', 'English'),
             sub_languages=client_settings.get('subLanguages', []),
             default_sub_language=client_settings.get('defaultSubLanguage'),
-            theme=client_settings.get('theme', 'system')
+            theme=client_settings.get('theme', 'system'),
+            retry_config=client_settings.get('retryConfig', default_retry_config)
         )
         db.add(settings)
     else:
         # Update existing settings
-        settings.function_configs = client_settings.get('functionConfigs', settings.function_configs)
-        settings.provider_credentials = client_settings.get('providerCredentials', settings.provider_credentials)
-        settings.provider_preferences = client_settings.get('providerPreferences', settings.provider_preferences)
-        settings.main_language = client_settings.get('mainLanguage', settings.main_language)
-        settings.sub_languages = client_settings.get('subLanguages', settings.sub_languages)
-        settings.default_sub_language = client_settings.get('defaultSubLanguage', settings.default_sub_language)
-        settings.theme = client_settings.get('theme', settings.theme)
+        settings.function_configs = client_settings.get('functionConfigs', settings.function_configs)  # type: ignore
+        settings.provider_credentials = client_settings.get('providerCredentials', settings.provider_credentials)  # type: ignore
+        settings.provider_preferences = client_settings.get('providerPreferences', settings.provider_preferences)  # type: ignore
+        settings.main_language = client_settings.get('mainLanguage', settings.main_language)  # type: ignore
+        settings.sub_languages = client_settings.get('subLanguages', settings.sub_languages)  # type: ignore
+        settings.default_sub_language = client_settings.get('defaultSubLanguage', settings.default_sub_language)  # type: ignore
+        settings.theme = client_settings.get('theme', settings.theme)  # type: ignore
+        settings.retry_config = client_settings.get('retryConfig', settings.retry_config or default_retry_config)  # type: ignore
 
     db.commit()
     db.refresh(settings)

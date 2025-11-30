@@ -32,6 +32,14 @@ class ThinkingConfig(BaseModel):
     gemini_thinking_level: Optional[Literal["low", "high"]] = Field(default=None, alias="geminiThinkingLevel")
     gemini_budget_tokens: Optional[int] = Field(default=None, alias="geminiBudgetTokens")
 
+
+class RetryConfig(BaseModel):
+    """Retry configuration for error handling"""
+    enabled: bool = True
+    max_retries: int = Field(default=3, ge=0, le=10, alias="max_retries")
+    retryable_status_codes: List[int] = Field(default=[429, 500, 502, 503, 504], alias="retryable_status_codes")
+    retry_delay_ms: int = Field(default=1000, ge=100, le=30000, alias="retry_delay_ms")
+
 class ContentPart(BaseModel):
     """A part of message content (content or thinking)"""
     type: Literal["content", "thinking"]
@@ -55,3 +63,4 @@ class ChatCompletionRequest(BaseModel):
     provider_preference: Optional[ProviderPreference] = None
     thinking_mode: Optional[Literal["off", "custom", "model"]] = "off"
     thinking_config: Optional[ThinkingConfig] = None
+    retry_config: Optional[RetryConfig] = None
