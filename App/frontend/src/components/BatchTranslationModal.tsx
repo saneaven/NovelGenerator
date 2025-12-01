@@ -106,7 +106,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
   const availableObjects = useMemo(() => {
     if (!targetLanguage || !sourceLanguage) return [];
 
-    const objects: (StoryObjectToTranslate & { label: string })[] = [];
+    const objects: (StoryObjectToTranslate & { label: string; order?: number })[] = [];
     const allObjects = Object.values(store.objects) as UnifiedObject<any>[];
 
     allObjects.forEach(obj => {
@@ -127,15 +127,21 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
         objectId: obj.id,
         sourceData,
         label,
+        order: obj.metadata.order,
       });
     });
 
-    return objects;
+    // Sort by order for acts and chapters (objects without order will be at the end)
+    return objects.sort((a, b) => {
+      const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
+      const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
+      return orderA - orderB;
+    });
   }, [store.objects, projectId, targetLanguage, sourceLanguage, allowedObjectTypes]);
 
   // Build tree structure from available objects
   const translationTree = useMemo((): TranslationTreeNode[] => {
-    const grouped: Record<string, (StoryObjectToTranslate & { label: string })[]> = {};
+    const grouped: Record<string, (StoryObjectToTranslate & { label: string; order?: number })[]> = {};
 
     availableObjects.forEach(obj => {
       if (!grouped[obj.objectType]) {
@@ -159,13 +165,15 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
           label: `${config.label} (${objects.length})`,
           type: 'category',
           objectType: type as ObjectType,
-          children: objects.map(obj => ({
-            id: obj.objectId,
-            label: obj.label,
-            type: 'object' as const,
-            objectType: obj.objectType,
-            sourceData: obj.sourceData,
-          })),
+          children: objects
+            .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER))
+            .map(obj => ({
+              id: obj.objectId,
+              label: obj.label,
+              type: 'object' as const,
+              objectType: obj.objectType,
+              sourceData: obj.sourceData,
+            })),
         };
         tree.push(categoryNode);
       });

@@ -152,6 +152,7 @@ async def stream_chat(provider: str, request: ChatCompletionRequest, req: Reques
                 model=request.model,
                 temperature=request.temperature,
                 functions=request.functions,
+                tool_choice=request.tool_choice,
                 max_tokens=request.max_tokens,
                 provider_preference=provider_pref,
                 thinking_config=thinking_cfg,

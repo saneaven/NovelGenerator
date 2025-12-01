@@ -29,6 +29,7 @@ export interface LLMRequestManagerConfig {
   temperature?: number;
   providerPreference?: any;
   functions?: any[];
+  toolChoice?: 'auto' | 'required' | 'none';
   mode: 'novelEditor' | 'workspace';
   enablePrefill?: boolean;
   thinkingMode?: 'off' | 'model' | 'custom';
@@ -133,6 +134,7 @@ export class LLMRequestManager {
         {
           signal: this.config.abortControllerRef.current.signal,
           functions,
+          toolChoice: this.config.toolChoice,
           model: this.config.aiModel,
           temperature: this.config.temperature,
           providerPreference: this.config.providerPreference,

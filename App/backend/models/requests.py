@@ -58,6 +58,7 @@ class ChatCompletionRequest(BaseModel):
     model: str = "gpt-4"
     temperature: float = Field(default=0.7, ge=0, le=2)
     functions: Optional[List[Dict]] = None
+    tool_choice: Optional[Literal["auto", "required", "none"]] = None
     max_tokens: Optional[int] = None
     config: ProviderConfig = Field(default_factory=ProviderConfig)
     provider_preference: Optional[ProviderPreference] = None

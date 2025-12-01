@@ -13,7 +13,7 @@ from openai import (
 )
 
 from .base import BaseProvider
-from .thinking_parser import ThinkingStreamParser
+from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
 
 
 class AsyncOpenAIProvider(BaseProvider):
@@ -61,6 +61,7 @@ class AsyncOpenAIProvider(BaseProvider):
         model: str,
         temperature: float,
         functions: Optional[List[Dict]],
+        tool_choice: Optional[str],
         max_tokens: Optional[int],
         provider_preference: Optional[Dict],
         thinking_config: Optional[Dict],
@@ -86,7 +87,7 @@ class AsyncOpenAIProvider(BaseProvider):
 
         if functions:
             request["tools"] = [{"type": "function", "function": fn} for fn in functions]
-            request["tool_choice"] = "auto"
+            request["tool_choice"] = tool_choice or "auto"
 
         extra_body = self._build_extra_body(provider_preference, thinking_config, model)
         if extra_body:
@@ -205,6 +206,7 @@ class AsyncOpenAIProvider(BaseProvider):
         model: str,
         temperature: float = 0.7,
         functions: Optional[List[Dict]] = None,
+        tool_choice: Optional[str] = None,
         max_tokens: Optional[int] = None,
         provider_preference: Optional[Dict] = None,
         thinking_config: Optional[Dict] = None,
@@ -221,12 +223,15 @@ class AsyncOpenAIProvider(BaseProvider):
             model,
             temperature,
             functions,
+            tool_choice,
             max_tokens,
             provider_preference,
             thinking_config,
         )
 
-        parser = ThinkingStreamParser() if thinking_mode == "custom" else None
+        # Check if prefill has unclosed <thinking> tag - parser should start inside thinking block
+        prefill_has_thinking = has_unclosed_thinking_tag(messages) if thinking_mode == "custom" else False
+        parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking) if thinking_mode == "custom" else None
         last_finish_reason = None
         stream = None
 

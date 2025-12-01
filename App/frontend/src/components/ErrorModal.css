@@ -104,6 +104,38 @@
   font-size: 14px;
 }
 
+.error-detail {
+  margin-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 8px;
+}
+
+.error-detail summary {
+  cursor: pointer;
+  color: #6b7280;
+  font-size: 12px;
+  user-select: none;
+}
+
+.error-detail summary:hover {
+  color: #374151;
+}
+
+.error-detail-content {
+  margin-top: 8px;
+  padding: 8px;
+  background: #f3f4f6;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 11px;
+  overflow-x: auto;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #374151;
+}
+
 .error-modal-footer {
   padding: 12px 24px 20px;
   display: flex;
@@ -194,6 +226,23 @@
   
   .error-close-btn:hover {
     background-color: #374151;
+    color: #d1d5db;
+  }
+
+  .error-detail {
+    border-top-color: #374151;
+  }
+
+  .error-detail summary {
+    color: #9ca3af;
+  }
+
+  .error-detail summary:hover {
+    color: #d1d5db;
+  }
+
+  .error-detail-content {
+    background: #111827;
     color: #d1d5db;
   }
 }

@@ -13,13 +13,15 @@ function sleep(ms: number): Promise<void> {
 /**
  * Custom error class that includes HTTP status code for retry decisions
  */
-class BackendError extends Error {
+export class BackendError extends Error {
     statusCode: number | null;
+    detail: string | null;
 
-    constructor(message: string, statusCode: number | null = null) {
+    constructor(message: string, statusCode: number | null = null, detail: string | null = null) {
         super(message);
         this.name = 'BackendError';
         this.statusCode = statusCode;
+        this.detail = detail;
     }
 }
 
@@ -35,6 +37,7 @@ export async function* streamChat(
         temperature?: number;
         model?: string;
         functions?: any[];
+        toolChoice?: 'auto' | 'required' | 'none';
         providerPreference?: ProviderPreference;
         thinkingConfig?: ThinkingConfig;
         thinkingMode?: 'off' | 'custom' | 'model';
@@ -61,6 +64,11 @@ export async function* streamChat(
     if (opts?.functions)
     {
         requestBody.functions = opts.functions;
+    }
+
+    if (opts?.toolChoice)
+    {
+        requestBody.tool_choice = opts.toolChoice;
     }
 
     if (provider === 'openrouter' && opts?.providerPreference)
@@ -97,6 +105,9 @@ export async function* streamChat(
 
         let hasYieldedContent = false;
         let res: Response | null = null;
+        // Track last frame and streamBuffer for debugging (outside try so accessible in catch)
+        let lastFrame: string | null = null;
+        let streamBuffer = "";
 
         try
         {
@@ -120,22 +131,24 @@ export async function* streamChat(
             // 3. SSE stream processing (INSIDE retry loop)
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
-            let buffer = "";
             let receivedProperTermination = false;
 
             while (true)
             {
                 const { value, done } = await reader.read();
                 if (done) break;
-                buffer += decoder.decode(value, { stream: true });
+                streamBuffer += decoder.decode(value, { stream: true });
 
                 let sep: number;
-                while ((sep = buffer.indexOf("\n\n")) !== -1)
+                while ((sep = streamBuffer.indexOf("\n\n")) !== -1)
                 {
-                    const frame = buffer.slice(0, sep);
-                    buffer = buffer.slice(sep + 2);
+                    const frame = streamBuffer.slice(0, sep);
+                    streamBuffer = streamBuffer.slice(sep + 2);
 
                     if (!frame || frame.startsWith(":")) continue;
+
+                    // Track last frame for debugging
+                    lastFrame = frame;
 
                     // Handle SSE error events - extract status code!
                     if (frame.startsWith("event: error"))
@@ -230,7 +243,11 @@ export async function* streamChat(
                 if (opts?.signal?.aborted) {
                     return;
                 }
-                throw new BackendError('Stream ended unexpectedly without completion signal', null);
+                // Include last frame and remaining streamBuffer for debugging
+                const debugInfo = lastFrame
+                    ? `Last frame:\n${lastFrame}${streamBuffer ? `\n\nRemaining streamBuffer:\n${streamBuffer}` : ''}`
+                    : (streamBuffer ? `Remaining streamBuffer:\n${streamBuffer}` : null);
+                throw new BackendError('Stream ended unexpectedly without completion signal', null, debugInfo);
             }
 
             // Success - exit retry loop
@@ -245,10 +262,20 @@ export async function* streamChat(
                 throw error;
             }
 
+            // Helper to wrap error with debug info
+            const wrapWithDebugInfo = (err: unknown): Error => {
+                if (err instanceof BackendError) return err;
+                const debugInfo = lastFrame
+                    ? `Last frame:\n${lastFrame}${streamBuffer ? `\n\nRemaining buffer:\n${streamBuffer}` : ''}`
+                    : (streamBuffer ? `Remaining buffer:\n${streamBuffer}` : null);
+                const message = err instanceof Error ? err.message : String(err);
+                return new BackendError(message, null, debugInfo);
+            };
+
             // Can't retry if we already yielded content (would duplicate)
             if (hasYieldedContent)
             {
-                throw error;
+                throw wrapWithDebugInfo(error);
             }
 
             // Extract status code for retry decision
@@ -278,7 +305,7 @@ export async function* streamChat(
                 continue;
             }
 
-            throw error;
+            throw wrapWithDebugInfo(error);
         }
     }
 

@@ -5,7 +5,7 @@ from anthropic import AsyncAnthropic
 
 from .base import BaseProvider
 from .registry import ProviderRegistry
-from .thinking_parser import ThinkingStreamParser
+from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
 
 
 @ProviderRegistry.register
@@ -118,12 +118,20 @@ class ClaudeProvider(BaseProvider):
     # ------------------------------------------------------------------ #
     # Streaming
     # ------------------------------------------------------------------ #
+    # Mapping from unified tool_choice to Anthropic's format
+    TOOL_CHOICE_MAP = {
+        "auto": {"type": "auto"},
+        "required": {"type": "any"},
+        "none": {"type": "none"},
+    }
+
     async def stream_chat(
         self,
         messages: List[Dict],
         model: str,
         temperature: float = 0.7,
         functions: Optional[List[Dict]] = None,
+        tool_choice: Optional[str] = None,
         max_tokens: Optional[int] = None,
         provider_preference: Optional[Dict] = None,
         thinking_config: Optional[Dict] = None,
@@ -161,9 +169,11 @@ class ClaudeProvider(BaseProvider):
                     "input_schema": fn.get("parameters") or {},
                 })
             request["tools"] = tools
-            request["tool_choice"] = {"type": "auto"}
+            request["tool_choice"] = self.TOOL_CHOICE_MAP.get(tool_choice or "auto", {"type": "auto"})
 
-        parser = ThinkingStreamParser() if thinking_mode == "custom" else None
+        # Check if prefill has unclosed <thinking> tag - parser should start inside thinking block
+        prefill_has_thinking = has_unclosed_thinking_tag(messages) if thinking_mode == "custom" else False
+        parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking) if thinking_mode == "custom" else None
 
         # Track content block meta by index
         block_meta: Dict[int, Dict[str, Optional[str]]] = {}

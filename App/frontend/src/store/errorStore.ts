@@ -8,13 +8,14 @@ interface Notification {
   type: NotificationType;
   title: string;
   message: string;
+  detail?: string | null;
 }
 
 interface ErrorStore {
   currentError: Notification | null;
-  showNotification: (type: NotificationType, title: string, message: string) => void;
+  showNotification: (type: NotificationType, title: string, message: string, detail?: string | null) => void;
   showSuccess: (title: string, message: string) => void;
-  showError: (title: string, message: string) => void;
+  showError: (title: string, message: string, detail?: string | null) => void;
   showInfo: (title: string, message: string) => void;
   hideError: () => void;
 }
@@ -22,13 +23,14 @@ interface ErrorStore {
 export const useErrorStore = create<ErrorStore>((set) => ({
   currentError: null,
 
-  showNotification: (type: NotificationType, title: string, message: string) => {
+  showNotification: (type: NotificationType, title: string, message: string, detail?: string | null) => {
     set({
       currentError: {
         id: generateTempId(),
         type,
         title,
-        message
+        message,
+        detail
       }
     });
   },
@@ -44,13 +46,14 @@ export const useErrorStore = create<ErrorStore>((set) => ({
     });
   },
 
-  showError: (title: string, message: string) => {
+  showError: (title: string, message: string, detail?: string | null) => {
     set({
       currentError: {
         id: generateTempId(),
         type: 'error',
         title,
-        message
+        message,
+        detail
       }
     });
   },

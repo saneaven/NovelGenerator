@@ -412,10 +412,12 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
           temperature: storyEditConfig.temperature,
           providerPreference: storyEditConfig.providerPreference,
           functions: [functionSchema],
+          toolChoice: 'required',
           mode: 'workspace',
           enablePrefill: storyEditConfig.advanced.enablePrefill,
           thinkingMode: storyEditConfig.advanced.thinkingMode as any,
           thinkingConfig: storyEditConfig.advanced.thinkingConfig,
+          retryConfig: settingsStore.settings.retryConfig,
           abortControllerRef,
         },
         {

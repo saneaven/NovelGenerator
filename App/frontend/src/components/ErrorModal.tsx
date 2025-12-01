@@ -7,6 +7,7 @@ interface ErrorModalProps {
   type?: NotificationType;
   title: string;
   message: string;
+  detail?: string | null;
   onClose: () => void;
 }
 
@@ -21,6 +22,7 @@ const ErrorModal: React.FC<ErrorModalProps> = ({
   type = 'error',
   title,
   message,
+  detail,
   onClose
 }) => {
   if (!isOpen) return null;
@@ -61,6 +63,12 @@ const ErrorModal: React.FC<ErrorModalProps> = ({
 
         <div className="error-modal-body">
           <p className="error-message">{message}</p>
+          {detail && (
+            <details className="error-detail">
+              <summary>Show Detail</summary>
+              <pre className="error-detail-content">{detail}</pre>
+            </details>
+          )}
         </div>
 
         <div className="error-modal-footer">

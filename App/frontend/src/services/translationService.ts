@@ -252,10 +252,12 @@ export class TranslationService {
       temperature: translationConfig.temperature,
       providerPreference: translationConfig.providerPreference,
       functions: TRANSLATION_FUNCTIONS,
+      toolChoice: 'required',
       mode: 'workspace',
       enablePrefill: translationConfig.advanced.enablePrefill,
       thinkingMode: translationConfig.advanced.thinkingMode as any,
       thinkingConfig: translationConfig.advanced.thinkingConfig,
+      retryConfig: settingsStore.settings.retryConfig,
       abortControllerRef,
     };
 
@@ -520,10 +522,12 @@ export class TranslationService {
       temperature: translationConfig.temperature,
       providerPreference: translationConfig.providerPreference,
       functions: [TRANSLATE_CHAT_MESSAGE_FUNCTION],
+      toolChoice: 'required',
       mode: 'workspace',
       enablePrefill: translationConfig.advanced.enablePrefill,
       thinkingMode: translationConfig.advanced.thinkingMode as any,
       thinkingConfig: translationConfig.advanced.thinkingConfig,
+      retryConfig: settingsStore.settings.retryConfig,
       abortControllerRef,
     };
 

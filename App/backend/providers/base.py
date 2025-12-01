@@ -14,6 +14,7 @@ class BaseProvider(ABC):
         model: str,
         temperature: float = 0.7,
         functions: Optional[List[Dict]] = None,
+        tool_choice: Optional[str] = None,
         max_tokens: Optional[int] = None,
         provider_preference: Optional[Dict] = None,
         thinking_config: Optional[Dict] = None,
@@ -28,6 +29,7 @@ class BaseProvider(ABC):
             model: Model identifier
             temperature: Temperature for generation
             functions: Optional function calling schemas
+            tool_choice: Tool choice mode ('auto', 'required', 'none')
             max_tokens: Maximum tokens to generate
             provider_preference: Provider-specific preferences (e.g., OpenRouter only/ignore)
             thinking_config: Thinking configuration for model-native thinking (mapped to provider-native thinking field)

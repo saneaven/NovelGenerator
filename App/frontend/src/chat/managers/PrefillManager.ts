@@ -205,13 +205,20 @@ export class PrefillManager {
       variable: {
         language,
         mode,
+        today: new Date().toISOString().split('T')[0],
+      },
+      state: {
         enableThinking: advancedSettings.thinkingMode !== 'off',
+        enableCustomThinking: advancedSettings.thinkingMode === 'custom',
         enablePrefill: advancedSettings.enablePrefill,
+        hasFunctions: context.hasFunctions || false,
       },
       context: {
-        hasFunctions: context.hasFunctions || false,
-        today: new Date().toISOString().split('T')[0],
-        recentMessages: []
+        recentMessages: [],
+        functionResults: [],
+        storyContext: {},
+        novelContent: [],
+        customSections: [],
       }
     };
 
@@ -232,17 +239,21 @@ export class PrefillManager {
 
     const data = {
       variable: {
-        categoryName,
         language,
-        editScope: scope,
         category,
+        categoryName,
+        editScope: scope,
+        targetId: '',
+        userRequest: '',
+      },
+      state: {
         enableThinking: advancedSettings.thinkingMode !== 'off',
+        enableCustomThinking: advancedSettings.thinkingMode === 'custom',
         enablePrefill: advancedSettings.enablePrefill,
       },
       context: {
-        currentData: {}, // Placeholder, will be filled by actual data if available
-        userRequest: '',
-        relatedContext: {}
+        currentData: {},
+        contextData: {},
       }
     };
 
@@ -261,16 +272,18 @@ export class PrefillManager {
 
     const data = {
       variable: {
-        chapterName,
         language,
+        chapterName,
+        currentContent: '',
+        userRequest: '',
+      },
+      state: {
         enableThinking: advancedSettings.thinkingMode !== 'off',
+        enableCustomThinking: advancedSettings.thinkingMode === 'custom',
         enablePrefill: advancedSettings.enablePrefill,
       },
       context: {
-        content: '',
-        userRequest: '',
-        previousChapterSummary: '',
-        worldInfo: ''
+        contextData: {},
       }
     };
 
@@ -298,14 +311,18 @@ export class PrefillManager {
       variable: {
         sourceLanguage,
         targetLanguage,
+        objectCount: translationType === 'chat' ? undefined : (context.objectCount ?? 1),
+        userInstructions: '',
         dataTypeName,
+        sourceContent: '',
+      },
+      state: {
         enableThinking: advancedSettings.thinkingMode !== 'off',
+        enableCustomThinking: advancedSettings.thinkingMode === 'custom',
         enablePrefill: advancedSettings.enablePrefill,
-        objectCount: translationType === 'chat' ? undefined : (context.objectCount ?? 1)
       },
       context: {
-        content: translationType === 'chat' ? '' : '',
-        sourceThinking: ''
+        objectsArray: [],
       }
     };
 

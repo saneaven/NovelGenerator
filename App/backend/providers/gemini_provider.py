@@ -6,7 +6,7 @@ from google.genai import types, errors
 
 from .base import BaseProvider
 from .registry import ProviderRegistry
-from .thinking_parser import ThinkingStreamParser
+from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
 
 
 @ProviderRegistry.register
@@ -152,12 +152,20 @@ class GeminiProvider(BaseProvider):
     # ------------------------------------------------------------------ #
     # Streaming
     # ------------------------------------------------------------------ #
+    # Mapping from unified tool_choice to Gemini's FunctionCallingConfigMode
+    TOOL_CHOICE_MODE_MAP = {
+        "auto": types.FunctionCallingConfigMode.AUTO,
+        "required": types.FunctionCallingConfigMode.ANY,
+        "none": types.FunctionCallingConfigMode.NONE,
+    }
+
     async def stream_chat(
         self,
         messages: List[Dict],
         model: str,
         temperature: float = 0.7,
         functions: Optional[List[Dict]] = None,
+        tool_choice: Optional[str] = None,
         max_tokens: Optional[int] = None,
         provider_preference: Optional[Dict] = None,
         thinking_config: Optional[Dict] = None,
@@ -205,14 +213,17 @@ class GeminiProvider(BaseProvider):
                 tool = types.Tool(function_declarations=function_declarations)
                 config_dict["tools"] = [tool]
 
+            mode = self.TOOL_CHOICE_MODE_MAP.get(tool_choice or "auto", types.FunctionCallingConfigMode.AUTO)
             config_dict["tool_config"] = {
-                "function_calling_config": {"mode": types.FunctionCallingConfigMode.AUTO}
+                "function_calling_config": {"mode": mode}
             }
 
         # Convert to the SDK's strongly-typed config to avoid schema mismatches at runtime.
         config = types.GenerateContentConfig.model_validate(config_dict)
 
-        parser = ThinkingStreamParser() if thinking_mode == "custom" else None
+        # Check if prefill has unclosed <thinking> tag - parser should start inside thinking block
+        prefill_has_thinking = has_unclosed_thinking_tag(messages) if thinking_mode == "custom" else False
+        parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking) if thinking_mode == "custom" else None
         tool_call_counter = 0
         stream = None
 

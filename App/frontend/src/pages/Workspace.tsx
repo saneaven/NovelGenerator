@@ -24,6 +24,7 @@ import StoryPanel from './workspace/components/StoryPanel';
 import { useWorkspaceState } from './workspace/hooks/useWorkspaceState';
 import { useChatHandlers } from './workspace/hooks/useChatHandlers';
 import { useFunctionCallHandlers } from './workspace/hooks/useFunctionCallHandlers';
+import { BackendError } from '../llm_request/llmService';
 
 import './Workspace.css';
 import './workspace/styles/ChatPanel.css';
@@ -178,7 +179,8 @@ const Workspace: React.FC = () =>
         onError: (error) =>
         {
             console.error('Runtime processing error:', error);
-            showError('Chat Error', error.message || 'An error occurred during processing. Please try again.');
+            const detail = error instanceof BackendError ? error.detail : null;
+            showError('Chat Error', error.message || 'An error occurred during processing. Please try again.', detail);
         },
         onFunctionCallProgress: (_projId, _chatId, messageId, progressEvents) =>
         {
@@ -530,6 +532,7 @@ const Workspace: React.FC = () =>
                 type={currentError?.type}
                 title={currentError?.title || ''}
                 message={currentError?.message || ''}
+                detail={currentError?.detail}
                 onClose={hideError}
             />
 

@@ -1,5 +1,33 @@
 """Stateful parser for extracting <thinking> tags from streaming content"""
 
+from typing import List, Dict
+
+
+def has_unclosed_thinking_tag(messages: List[Dict]) -> bool:
+    """
+    Check if the last assistant message has an unclosed <thinking> tag.
+    Used to determine if parser should start inside a thinking block (e.g., when prefill contains <thinking>).
+    """
+    for msg in reversed(messages):
+        if msg.get("role") == "assistant":
+            content = ""
+            # Handle both string content and content parts
+            msg_content = msg.get("content")
+            if isinstance(msg_content, str):
+                content = msg_content
+            elif isinstance(msg_content, list):
+                for part in msg_content:
+                    if isinstance(part, dict) and part.get("type") == "text":
+                        content += part.get("text", "")
+
+            if content:
+                last_open = content.rfind("<thinking>")
+                last_close = content.rfind("</thinking>")
+                return last_open > last_close
+            break
+    return False
+
+
 class ThinkingStreamParser:
     """
     Stateful parser that extracts <thinking>...</thinking> tags from streaming content.
@@ -9,11 +37,12 @@ class ThinkingStreamParser:
     - Multiple thinking blocks in sequence
     - Partial tags at chunk edges
     - Preserves order of content and thinking blocks
+    - Can start inside a thinking block (for prefill with <thinking>)
     """
 
-    def __init__(self):
+    def __init__(self, inside_thinking: bool = False):
         self.buffer = ""
-        self.inside_thinking = False
+        self.inside_thinking = inside_thinking  # Can start inside thinking block (e.g., prefill has <thinking>)
         self.thinking_accumulator = ""  # Accumulate to find </thinking> tag
 
     def process_chunk(self, content_chunk: str) -> tuple[str, str]:
