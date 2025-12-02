@@ -57,6 +57,17 @@ class NameDescriptionResponse(BaseMetadata):
     project_id: UUID
     name: Optional[str]
     description: Optional[str]
+    # Image prompts (stored on base object, not versioned)
+    image_prompt: Optional[str] = None
+    image_prompt_positive: Optional[str] = None
+    image_prompt_negative: Optional[str] = None
+
+
+class ImagePromptUpdate(BaseModel):
+    """Update image prompts for a story object"""
+    image_prompt: Optional[str] = None
+    image_prompt_positive: Optional[str] = None
+    image_prompt_negative: Optional[str] = None
 
 
 # ============================================================================

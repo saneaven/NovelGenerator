@@ -241,6 +241,38 @@ export const PROMPT_TREE: PromptNode[] = [
         description: 'Template for chapter generation responses'
       }
     ]
+  },
+  {
+    id: 'imageprompt',
+    label: 'Image Prompt',
+    icon: '🎨',
+    type: 'category',
+    children: [
+      {
+        id: 'imageprompt-system',
+        label: 'System Prompt',
+        type: 'prompt',
+        functionType: 'imagePrompt',
+        category: 'systemPrompt',
+        description: 'Instructions for AI-assisted image prompt generation'
+      },
+      {
+        id: 'imageprompt-user',
+        label: 'User Prompt',
+        type: 'prompt',
+        functionType: 'imagePrompt',
+        category: 'userPrompt',
+        description: 'Auto-generated user message with story context for image prompt generation'
+      },
+      {
+        id: 'imageprompt-prefill',
+        label: 'Prefill Template',
+        type: 'prompt',
+        functionType: 'imagePrompt',
+        category: 'prefill',
+        description: 'Template for image prompt generation responses'
+      }
+    ]
   }
 ];
 

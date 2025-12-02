@@ -1,8 +1,10 @@
 import asyncio
+from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from .models.requests import ChatCompletionRequest, ProviderConfig
 from .providers.registry import ProviderRegistry
 from .providers.openrouter import OpenRouterProvider
@@ -10,6 +12,7 @@ from .providers.custom import CustomOpenAIProvider
 from .providers.claude_provider import ClaudeProvider
 from .providers.gemini_provider import GeminiProvider
 from .providers.openai_provider import OpenAIProvider
+from .providers.xai_provider import XAIProvider
 
 # Import database API routes
 from .routes.auth_routes import router as auth_router
@@ -21,6 +24,9 @@ from .routes.prompt_routes import router as prompt_router
 # New unified translation system routes
 from .routes.unified_object_routes import router as unified_object_router
 from .routes.translation_routes import router as translation_router
+
+# Asset management routes
+from .routes.asset_routes import router as asset_router
 
 load_dotenv()
 
@@ -40,6 +46,14 @@ app.include_router(prompt_router)
 # Include new unified translation system routers
 app.include_router(unified_object_router, prefix="/api/v1", tags=["objects"])
 app.include_router(translation_router, prefix="/api/v1", tags=["translations"])
+
+# Include asset management router
+app.include_router(asset_router)
+
+# Mount static files for asset storage
+storage_path = Path(__file__).parent / "storage" / "assets"
+storage_path.mkdir(parents=True, exist_ok=True)
+app.mount("/storage/assets", StaticFiles(directory=str(storage_path)), name="assets")
 
 app.add_middleware(
     CORSMiddleware,
@@ -171,6 +185,12 @@ async def stream_chat(provider: str, request: ChatCompletionRequest, req: Reques
                 print("Stream cancelled due to client disconnect")
                 raise  # Re-raise to let FastAPI handle cleanup
             finally:
+                # Always yield [DONE] to signal proper termination
+                # This prevents "incomplete chunked read" errors on the frontend
+                try:
+                    yield b"data: [DONE]\n\n"
+                except Exception:
+                    pass  # Connection may already be closed
                 # Ensure generator is closed
                 if hasattr(stream, 'aclose'):
                     await stream.aclose()

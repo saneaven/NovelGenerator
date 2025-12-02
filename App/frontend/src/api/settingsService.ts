@@ -8,6 +8,8 @@ export interface SettingsSyncResponse {
     subLanguages: string[];
     defaultSubLanguage: string | null;
     theme: string;
+    retryConfig: Settings['retryConfig'];
+    imageGenConfig: Settings['imageGenConfig'];
 }
 
 export const settingsService = {

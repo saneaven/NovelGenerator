@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { ChatPipeline } from '../chat/ChatPipeline';
+import { LLMRequestPipeline } from '../chat/LLMRequestPipeline';
 import type { SystemInsertConfig, EditCard } from '../chat/types';
 import { ChatManager, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
 import { DefaultDisplayProcessor } from '../chat/processors/DisplayProcessor';
@@ -137,9 +137,9 @@ const Workspace: React.FC = () =>
     }, [projectId, projects.length, fetchProjects]);
 
     const [systemInsertConfig, setSystemInsertConfig] = useState<SystemInsertConfig>(
-        ChatPipeline.createDefaultSystemConfig()
+        LLMRequestPipeline.createDefaultSystemConfig()
     );
-    const chatPipeline = useMemo(() => new ChatPipeline(), []);
+    const chatPipeline = useMemo(() => new LLMRequestPipeline(), []);
     const displayProcessor = useMemo(() => new DefaultDisplayProcessor(), []);
     const abortControllerRef = useRef<AbortController | null>(null);
 

@@ -6,8 +6,10 @@ import type { FunctionType, PromptCategory } from '../types/prompts';
 import { getPromptKey } from '../types/prompts';
 
 // Types
-export type ProviderType = 'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom';
-export type AIFunctionType = 'chat' | 'translation' | 'storyEdit' | 'chapterGen';
+export type ProviderType = 'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom' | 'xai';
+export type AIFunctionType = 'chat' | 'translation' | 'storyEdit' | 'chapterGen' | 'imagePrompt';
+export type ImageProviderType = 'openai' | 'gemini' | 'xai' | 'novelai';
+export type PromptType = 'natural' | 'tag_based';
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 // Generic provider config (for API requests)
@@ -34,6 +36,12 @@ export interface ProviderCredentials {
     custom: {
         baseUrl: string;
         apiKey?: string;
+    };
+    xai: {
+        apiKey: string;
+    };
+    novelai: {
+        apiKey: string;  // JWT access token
     };
 }
 
@@ -77,6 +85,67 @@ export interface FunctionAIConfig {
     advanced: AdvancedFunctionSettings;
 }
 
+// Custom image style for natural language providers (prefix/postfix)
+export interface NaturalImageStyle {
+    id: string;
+    name: string;
+    prefix: string;   // Prepended to prompt
+    postfix: string;  // Appended to prompt
+}
+
+// Custom image style for tag-based providers (additional tags)
+export interface TagBasedImageStyle {
+    id: string;
+    name: string;
+    positiveTags: string;  // Tags appended to positive prompt
+    negativeTags: string;  // Tags appended to negative prompt
+}
+
+// Legacy alias for backwards compatibility during migration
+export type CustomImageStyle = NaturalImageStyle;
+
+// NovelAI-specific settings
+export interface NovelAIImageSettings {
+    sampler: string;
+    steps: number;
+    scale: number;        // CFG Scale
+    noise_schedule: string;
+}
+
+// OpenAI-specific settings
+export interface OpenAIImageSettings {
+    quality: 'standard' | 'hd';
+    style: 'natural' | 'vivid';
+}
+
+// Gemini-specific settings (uses aspect_ratio + image_size, not pixel dimensions)
+export interface GeminiImageSettings {
+    aspect_ratio: string;     // "1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16", "21:9"
+    image_resolution: string; // "1K", "2K", "4K"
+}
+
+// Image generation configuration
+export interface ImageGenConfig {
+    provider: ImageProviderType;
+    model: string;
+    size: string;
+
+    // Separate custom styles per prompt type
+    naturalStyles: NaturalImageStyle[];      // For OpenAI, Gemini, xAI
+    tagBasedStyles: TagBasedImageStyle[];    // For NovelAI
+    selectedNaturalStyleId: string | null;
+    selectedTagBasedStyleId: string | null;
+
+    // Legacy field for backwards compatibility
+    customStyles?: NaturalImageStyle[];
+    selectedStyleId?: string | null;
+
+    // Per-provider settings
+    openaiSettings: OpenAIImageSettings;
+    geminiSettings: GeminiImageSettings;
+    novelaiSettings: NovelAIImageSettings;
+}
+
 // Main settings interface
 export interface Settings {
     // Shared provider credentials
@@ -86,6 +155,9 @@ export interface Settings {
     functionConfigs: {
         [K in AIFunctionType]: FunctionAIConfig;
     };
+
+    // Image generation configuration
+    imageGenConfig: ImageGenConfig;
 
     // Language settings
     mainLanguage: string;
@@ -116,6 +188,12 @@ const defaultSettings: Settings = {
         },
         custom: {
             baseUrl: '',
+            apiKey: '',
+        },
+        xai: {
+            apiKey: '',
+        },
+        novelai: {
             apiKey: '',
         },
     },
@@ -176,6 +254,49 @@ const defaultSettings: Settings = {
                 },
             },
         },
+
+        // Image Prompt: AI-assisted prompt generation for images
+        imagePrompt: {
+            provider: 'openrouter',
+            model: 'gpt-4o-mini',
+            temperature: 0.7,
+            advanced: {
+                enablePrefill: false,
+                thinkingMode: 'off',
+                thinkingConfig: {
+                    effort: 'medium',
+                },
+            },
+        },
+    },
+
+    // Image generation defaults
+    imageGenConfig: {
+        provider: 'openai',
+        model: 'gpt-image-1',
+        size: '1024x1024',
+
+        // Separate styles per prompt type
+        naturalStyles: [],
+        tagBasedStyles: [],
+        selectedNaturalStyleId: null,
+        selectedTagBasedStyleId: null,
+
+        // Per-provider settings
+        openaiSettings: {
+            quality: 'standard',
+            style: 'natural',
+        },
+        geminiSettings: {
+            aspect_ratio: '1:1',
+            image_resolution: '2K',
+        },
+        novelaiSettings: {
+            sampler: 'k_euler_ancestral',
+            steps: 28,
+            scale: 6,
+            noise_schedule: 'karras',
+        },
     },
 
     mainLanguage: 'English',
@@ -221,6 +342,9 @@ interface SettingsStore {
     // Getters
     getFunctionConfig: (functionType: AIFunctionType) => FunctionAIConfig;
     getProviderConfig: (provider: ProviderType) => any;
+
+    // Image generation config setters
+    setImageGenConfig: (config: Partial<ImageGenConfig>) => void;
 
     // Language setters
     setMainLanguage: (language: string) => void;
@@ -274,6 +398,28 @@ const mergeWithDefaults = (stored: any): Settings => {
         functionConfigs: {
             ...defaultSettings.functionConfigs,
             ...migratedFunctionConfigs,
+        },
+        imageGenConfig: {
+            ...defaultSettings.imageGenConfig,
+            ...stored.imageGenConfig,
+            // Migrate legacy customStyles to naturalStyles if needed
+            naturalStyles: stored.imageGenConfig?.naturalStyles ?? stored.imageGenConfig?.customStyles ?? [],
+            tagBasedStyles: stored.imageGenConfig?.tagBasedStyles ?? [],
+            selectedNaturalStyleId: stored.imageGenConfig?.selectedNaturalStyleId ?? stored.imageGenConfig?.selectedStyleId ?? null,
+            selectedTagBasedStyleId: stored.imageGenConfig?.selectedTagBasedStyleId ?? null,
+            // Ensure provider settings exist
+            openaiSettings: {
+                ...defaultSettings.imageGenConfig.openaiSettings,
+                ...stored.imageGenConfig?.openaiSettings,
+            },
+            geminiSettings: {
+                ...defaultSettings.imageGenConfig.geminiSettings,
+                ...stored.imageGenConfig?.geminiSettings,
+            },
+            novelaiSettings: {
+                ...defaultSettings.imageGenConfig.novelaiSettings,
+                ...stored.imageGenConfig?.novelaiSettings,
+            },
         },
         mainLanguage: stored.mainLanguage ?? defaultSettings.mainLanguage,
         subLanguages: stored.subLanguages ?? defaultSettings.subLanguages,
@@ -436,6 +582,19 @@ export const useSettingsStore = create<SettingsStore>()(
 
             getProviderConfig: (provider) => {
                 return get().settings.providerCredentials[provider];
+            },
+
+            // Image generation config
+            setImageGenConfig: (config) => {
+                set((state) => ({
+                    settings: {
+                        ...state.settings,
+                        imageGenConfig: {
+                            ...state.settings.imageGenConfig,
+                            ...config,
+                        },
+                    },
+                }));
             },
 
             // Language setters

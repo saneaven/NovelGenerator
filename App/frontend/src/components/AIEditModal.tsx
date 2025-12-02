@@ -5,7 +5,7 @@ import type { ObjectType } from '../types/unifiedObject';
 import type { FunctionCallMetadata } from '../llm_request/types';
 import type { StoryObjects } from '../types/storyObject';
 import { createEmptyStoryObjects } from '../types/storyObject';
-import { ChatPipeline } from '../chat/ChatPipeline';
+import { LLMRequestPipeline } from '../chat/LLMRequestPipeline';
 import { getEditFunctionSchema } from '../chat/types/editFunctionSchemas';
 import { applyEditFunctionCalls } from '../chat/utils/editFunctionApplicator';
 import { LLMRequestManager } from '../chat/sessions/LLMRequestManager';
@@ -405,7 +405,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
           projectId,
           getStoryObjects,
           systemInsertConfig,
-          chatPipeline: new ChatPipeline(),
+          chatPipeline: new LLMRequestPipeline(),
           provider: storyEditConfig.provider,
           providerConfig,
           aiModel: storyEditConfig.model,

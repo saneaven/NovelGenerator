@@ -4,9 +4,10 @@ import { useChatUIStore } from '../../../store/chatUIStore';
 import { useProjectStore } from '../../../store/projectStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
+import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import type { SystemInsertConfig, EditCard } from '../../../chat/types';
 import { TranslationService } from '../../../services/translationService';
-import { ChatPipeline } from '../../../chat/ChatPipeline';
+import { LLMRequestPipeline } from '../../../chat/LLMRequestPipeline';
 import type { StoryObjects } from '../../../types/storyObject';
 import type { ChatMessage, FunctionCallProgress } from '../../../llm_request/types';
 import ToggleSwitch from '../../../components/ToggleSwitch';
@@ -19,7 +20,7 @@ interface ChatPanelProps
     projectId: string;
     systemInsertConfig: SystemInsertConfig;
     setSystemInsertConfig: (config: SystemInsertConfig | ((prev: SystemInsertConfig) => SystemInsertConfig)) => void;
-    chatPipeline: ChatPipeline;
+    chatPipeline: LLMRequestPipeline;
     storyObjects: StoryObjects;
     novelData?: Record<string, unknown>;
     messageEditCards: Record<string, EditCard[]>;
@@ -75,6 +76,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     const { getCurrentProject } = useProjectStore();
     const { settings } = useSettingsStore();
     const { showError } = useErrorStore();
+    const novelEditorStore = useNovelEditorStore();
+
+    // Check if editor has unsaved changes (only relevant in novelEditor mode)
+    const hasUnsavedChanges = mode === 'novelEditor'
+        ? novelEditorStore.getHasUnsavedChanges(projectId)
+        : false;
 
     const mainLanguage = settings.mainLanguage;
     const defaultSubLanguage = settings.defaultSubLanguage;
@@ -138,7 +145,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
     const displayContext = useMemo(() =>
     {
-        return ChatPipeline.createContext(
+        return LLMRequestPipeline.createContext(
             projectId,
             storyObjects,
             mode,
@@ -433,6 +440,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                                     cards={messageEditCards[message.chatMessage.id]}
                                                     onConfirm={(selections) => onBatchConfirm(message.chatMessage.id, selections)}
                                                     storyObjects={storyObjects}
+                                                    isApplyDisabled={hasUnsavedChanges}
+                                                    applyDisabledReason={hasUnsavedChanges ? "Save your changes first - unsaved work will be overwritten" : undefined}
                                                 />
                                             </div>
                                         )}

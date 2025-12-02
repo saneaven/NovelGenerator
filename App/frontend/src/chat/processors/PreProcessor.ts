@@ -3,7 +3,7 @@ import type {
   PreProcessor,
   PreProcessingResult,
   ProcessedChatMessage,
-  ChatPipelineContext
+  LLMRequestPipelineContext
 } from '../types';
 import type { FunctionCallSchema } from '../types/functionCalling';
 import { UserMessageTagManager } from '../managers/UserMessageTagManager';
@@ -14,14 +14,15 @@ import {
   type ChatSystemPromptContext,
   type TranslationPromptContext,
   type StoryObjectEditPromptContext,
-  type ChapterEditPromptContext
+  type ChapterEditPromptContext,
+  type ImagePromptContext
 } from '../managers/SystemPromptManager';
 import { PrefillManager, PrefillType, type ChatAssistantPrefillContext, type TranslationPrefillContext } from '../managers/PrefillManager';
 
 export class DefaultPreProcessor implements PreProcessor {
   async process(
     messages: ChatMessage[],
-    context: ChatPipelineContext,
+    context: LLMRequestPipelineContext,
     conversationLanguage?: string,
     functions?: FunctionCallSchema[]
   ): Promise<PreProcessingResult> {
@@ -107,7 +108,7 @@ export class DefaultPreProcessor implements PreProcessor {
   }
 
   private async generatePromptBundle(
-    context: ChatPipelineContext,
+    context: LLMRequestPipelineContext,
     conversationLanguage?: string,
     functions?: FunctionCallSchema[]
   ): Promise<PromptBundle> {
@@ -158,6 +159,15 @@ export class DefaultPreProcessor implements PreProcessor {
           promptContext as ChapterEditPromptContext
         );
 
+      case 'imagePrompt':
+        if (!promptContext) {
+          throw new Error('Image prompt requires promptContext to be set');
+        }
+        return await SystemPromptManager.generatePromptBundle(
+          PromptType.IMAGE_PROMPT,
+          promptContext as ImagePromptContext
+        );
+
       default:
         console.warn(`Unknown prompt type: ${promptType}, falling back to chat`);
         // Fallback to chat
@@ -173,7 +183,7 @@ export class DefaultPreProcessor implements PreProcessor {
     }
   }
 
-  private async generatePrefill(context: ChatPipelineContext, conversationLanguage?: string, functions?: FunctionCallSchema[]): Promise<string> {
+  private async generatePrefill(context: LLMRequestPipelineContext, conversationLanguage?: string, functions?: FunctionCallSchema[]): Promise<string> {
     const promptType = context.systemInsertConfig.promptType || 'chat';
 
     if (promptType === 'translation') {
@@ -204,7 +214,7 @@ export class DefaultPreProcessor implements PreProcessor {
     return await PrefillManager.generatePrefill(PrefillType.CHAT_ASSISTANT, prefillContext);
   }
 
-  private processAssistantMessage(_context: ChatPipelineContext, messageIndex: number, allMessages: ChatMessage[]): ProcessedChatMessage {
+  private processAssistantMessage(_context: LLMRequestPipelineContext, messageIndex: number, allMessages: ChatMessage[]): ProcessedChatMessage {
     const message = allMessages[messageIndex];
 
     // Extract text from contentParts
@@ -225,7 +235,7 @@ export class DefaultPreProcessor implements PreProcessor {
 
     return processed;
   }
-  private async processUserMessage(context: ChatPipelineContext, messageIndex: number, allMessages: ChatMessage[], conversationLanguage?: string): Promise<ProcessedChatMessage> {
+  private async processUserMessage(context: LLMRequestPipelineContext, messageIndex: number, allMessages: ChatMessage[], conversationLanguage?: string): Promise<ProcessedChatMessage> {
     const message = allMessages[messageIndex];
 
     // Extract text from contentParts
@@ -248,7 +258,7 @@ export class DefaultPreProcessor implements PreProcessor {
   }
 
 
-  private async addSystemInfo(processedContent: string, context: ChatPipelineContext, messageIndex: number, allMessages: ChatMessage[], conversationLanguage?: string): Promise<string> {
+  private async addSystemInfo(processedContent: string, context: LLMRequestPipelineContext, messageIndex: number, allMessages: ChatMessage[], conversationLanguage?: string): Promise<string> {
     // Pass message index and all messages to UserMessageTagManager to find nearest assistant function calls
     return await UserMessageTagManager.buildSystemTag(
       processedContent,

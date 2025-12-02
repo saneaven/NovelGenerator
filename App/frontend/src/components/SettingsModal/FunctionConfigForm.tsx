@@ -110,6 +110,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
             <option value="gemini">Gemini</option>
             <option value="claude">Claude</option>
             <option value="openrouter">OpenRouter</option>
+            <option value="xai">xAI (Grok)</option>
             <option value="custom">Custom Endpoint</option>
           </select>
           <p className="field-hint">
@@ -117,6 +118,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
             {config.provider === 'gemini' && 'Google Gemini with thought summaries'}
             {config.provider === 'claude' && 'Anthropic Claude with extended thinking'}
             {config.provider === 'openrouter' && 'Access to 100+ AI models via OpenRouter'}
+            {config.provider === 'xai' && 'xAI Grok models for text generation'}
             {config.provider === 'custom' && 'Use your own OpenAI-compatible endpoint'}
           </p>
         </div>

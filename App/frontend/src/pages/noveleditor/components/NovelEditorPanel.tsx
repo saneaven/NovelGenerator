@@ -34,9 +34,13 @@ import { useErrorStore } from '../../../store/errorStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import NovelChapterAIEditModal from '../../../components/NovelChapterAIEditModal';
 import RetranslateModal from '../../../components/RetranslateModal';
+import { AssetManagerModal } from '../../../components/AssetManager';
+import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
 import { TranslationService } from '../../../services/translationService';
 import type { ManuscriptObject } from '../../../types/unifiedObject';
+import type { Asset } from '../../../api/assetService';
+import { API_BASE_URL } from '../../../api/client';
 import ChapterSidebar from './ChapterSidebar';
 
 interface NovelEditorPanelProps {
@@ -71,6 +75,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const { settings } = useSettingsStore();
   const { showError, showSuccess } = useErrorStore();
   const editorStore = useNovelEditorStore();
+  // Get stable action references to avoid infinite loops in effects
+  const setHasUnsavedChangesAction = useNovelEditorStore((state) => state.setHasUnsavedChanges);
 
   // Get UI state from store
   const isChapterSidebarVisible = editorStore.isChapterSidebarVisible(projectId);
@@ -82,6 +88,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const [contentIdError, setContentIdError] = useState<string | null>(null);
   const [isAIEditModalOpen, setIsAIEditModalOpen] = useState(false);
   const [showRetranslateModal, setShowRetranslateModal] = useState(false);
+  const [showAssetModal, setShowAssetModal] = useState(false);
+  const [cursorContext, setCursorContext] = useState<{ before: string; after: string }>({ before: '', after: '' });
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isToolbarExpanded, setIsToolbarExpanded] = useState(true);
 
@@ -95,8 +103,11 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   // Refs
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const snapshotIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const isUserEditingRef = useRef(false);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const editorRef = useRef<RichTextEditorRef>(null);
+  // Track if baseline has been set for current editor instance
+  // This ensures we compare normalized content vs normalized content (not DB format)
+  const baselineSetRef = useRef(false);
 
   // Get manuscript from store
   const manuscript = manuscriptId
@@ -139,27 +150,17 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const getManuscriptData = useCallback((lang: string) => {
     if (!manuscript) return { content: '', wordCount: 0 };
     const data = manuscript.data[lang];
-    if (data) return data;
+    if (data) {
+      return data;
+    }
     // Fallback to first available
     if (manuscriptLanguages.length > 0) {
-      return manuscript.data[manuscriptLanguages[0]] || { content: '', wordCount: 0 };
+      const fallbackData = manuscript.data[manuscriptLanguages[0]];
+      return fallbackData || { content: '', wordCount: 0 };
     }
     return { content: '', wordCount: 0 };
   }, [manuscript, manuscriptLanguages]);
 
-  // Debug logging
-  useEffect(() => {
-    if (manuscriptId) {
-      console.log('📊 Store state for manuscript:', {
-        manuscriptId,
-        hasObject: !!manuscript,
-        loading,
-        error,
-        objectType: manuscript?.type,
-        objectKeys: manuscript ? Object.keys(manuscript) : [],
-      });
-    }
-  }, [manuscriptId, manuscript, loading, error]);
 
   // Find existing manuscript
   const existingManuscript = useMemo(() => {
@@ -178,6 +179,20 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   const hasUnsavedChanges = content !== lastSavedContent;
 
+  // Generate editor key - changes trigger editor remount for external content updates
+  // This replaces the fragile isSettingContentRef approach with React's key mechanism
+  const editorKey = useMemo(() => {
+    if (!manuscript) return 'loading';
+    return `${manuscriptId}-${manuscript.version?.number ?? 0}-${effectiveLanguage}`;
+  }, [manuscriptId, manuscript?.version?.number, effectiveLanguage]);
+
+  // Compute initial content INLINE during render (not in an effect!)
+  // This ensures the value is ready BEFORE the editor mounts with a new key
+  const initialContent = useMemo(() => {
+    if (!manuscript?.data || editorKey === 'loading') return '';
+    return getManuscriptData(effectiveLanguage).content;
+  }, [manuscript?.data, editorKey, effectiveLanguage, getManuscriptData]);
+
   // ============================================================================
   // EFFECTS
   // ============================================================================
@@ -189,7 +204,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     const resolveManuscriptId = async () => {
       if (!projectId || !selectedChapterId) {
         if (!isActive) return;
-        console.log('⚠️ No projectId or selectedChapterId, clearing state');
         setManuscriptId(null);
         setContentIdError(null);
         setIsResolvingContentId(false);
@@ -198,35 +212,29 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
       if (existingManuscript) {
         if (!isActive) return;
-        console.log('✅ Found existing manuscript in store:', existingManuscript.id);
         setManuscriptId(existingManuscript.id);
         setContentIdError(null);
         setIsResolvingContentId(false);
         return;
       }
 
-      console.log('🔄 Resolving manuscript ID for chapter:', selectedChapterId);
       setIsResolvingContentId(true);
       setContentIdError(null);
 
       try {
-        console.log('📡 Listing manuscript objects...');
         const manuscripts = await store.listObjects('manuscript', projectId);
         if (!isActive) return;
 
-        console.log(`📋 Found ${manuscripts.length} manuscript objects`);
         const matchingManuscript = manuscripts.find(
           (m) => m.metadata?.chapter_id === selectedChapterId
         );
 
         if (matchingManuscript) {
-          console.log('✅ Found matching manuscript:', matchingManuscript.id);
           setManuscriptId(matchingManuscript.id);
           return;
         }
 
         // Create new manuscript if it doesn't exist
-        console.log('➕ Creating new manuscript...');
         const primaryLanguage = settings.mainLanguage || 'en';
         const createdManuscript = await store.createObject(
           'manuscript',
@@ -240,10 +248,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         );
 
         if (!isActive) return;
-        console.log('✅ Created new manuscript:', createdManuscript.id);
         setManuscriptId(createdManuscript.id);
       } catch (err) {
-        console.error('❌ Failed to resolve manuscript ID:', err);
         if (!isActive) return;
         setManuscriptId(null);
         setContentIdError('Failed to load or create manuscript.');
@@ -272,8 +278,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   useEffect(() => {
     if (!manuscriptId) return;
 
-    console.log('🔍 Fetching manuscript:', manuscriptId, 'language:', globalDisplayLanguage);
-
     // Set a timeout to prevent infinite loading
     loadingTimeoutRef.current = setTimeout(() => {
       if (!manuscript && loading) {
@@ -282,21 +286,11 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       }
     }, 10000); // 10 second timeout
 
-    store.fetchObject('manuscript', manuscriptId, globalDisplayLanguage).catch(err => {
-      console.error('❌ Failed to fetch manuscript:', err);
-      const errorMessage = err.message || 'Unknown error';
-
-      // Check if it's a "translation not found" error
-      if (errorMessage.includes('Translation not found')) {
-        // Fetch manuscript without language to get metadata (available languages)
-        // isMissingTranslation will be computed automatically from manuscriptLanguages
-        store.fetchObject('manuscript', manuscriptId).catch(() => {
-          // If even that fails, show real error
-          setContentIdError(errorMessage);
-        });
-      } else {
-        setContentIdError(errorMessage);
-      }
+    // Fetch without language parameter - API returns all languages
+    // effectiveLanguage (with fallback logic) will pick the right content
+    store.fetchObject('manuscript', manuscriptId).catch(err => {
+      console.error('Failed to fetch manuscript:', err);
+      setContentIdError(err.message || 'Failed to load manuscript');
     });
 
     return () => {
@@ -304,17 +298,18 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         clearTimeout(loadingTimeoutRef.current);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [manuscriptId, globalDisplayLanguage]); // store는 stable하므로 dependency에서 제거
+  }, [manuscriptId]); // Only re-fetch when manuscriptId changes
 
-  // Load content when manuscript changes or language switches
+  // Reset baseline flag when editor remounts (editorKey changes)
+  // The actual content/lastSavedContent will be set by handleContentChange on first onChange
   useEffect(() => {
-    if (manuscript?.data && !isUserEditingRef.current) {
-      const manuscriptData = getManuscriptData(effectiveLanguage);
-      setContent(manuscriptData.content);
-      setLastSavedContent(manuscriptData.content);
-    }
-  }, [manuscript?.data, effectiveLanguage, getManuscriptData]);
+    baselineSetRef.current = false;
+  }, [editorKey]);
+
+  // Sync hasUnsavedChanges to the store for cross-component access
+  useEffect(() => {
+    setHasUnsavedChangesAction(projectId, hasUnsavedChanges);
+  }, [projectId, hasUnsavedChanges, setHasUnsavedChangesAction]);
 
   // Setup periodic snapshot creation
   useEffect(() => {
@@ -372,8 +367,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       });
 
       setLastSavedContent(content);
-      isUserEditingRef.current = false;
-      console.log('✓ Auto-saved (in-place)');
     } catch (err) {
       console.error('Auto-save failed:', err);
       // Don't show error for auto-save failures, just log
@@ -407,8 +400,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
         setLastSavedContent(content);
         setLastSnapshotTime(Date.now());
-        isUserEditingRef.current = false;
-        console.log('✓ Manual save (new version)');
       } catch (err) {
         console.error('Manual save failed:', err);
         showError('Save Error', 'Failed to save. Please try again.');
@@ -425,10 +416,19 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   // ============================================================================
 
   const handleContentChange = useCallback(
-    (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const newContent = event.target.value;
+    (newContent: string) => {
+      // First onChange after editor mount: set baseline
+      // This ensures we compare normalized content vs normalized content
+      // (TipTap normalizes whitespace during markdown→HTML→markdown conversion)
+      if (!baselineSetRef.current) {
+        baselineSetRef.current = true;
+        setContent(newContent);
+        setLastSavedContent(newContent); // Both set to normalized format
+        return; // Don't trigger auto-save on baseline init
+      }
+
+      // Subsequent changes: normal behavior
       setContent(newContent);
-      isUserEditingRef.current = true;
 
       // Clear existing auto-save timeout
       if (autoSaveTimeoutRef.current) {
@@ -442,6 +442,23 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     },
     [handleAutoSave]
   );
+
+  // Handle image selection from AssetManagerModal
+  const handleImageSelect = useCallback((asset: Asset) => {
+    if (editorRef.current) {
+      editorRef.current.insertImage(`${API_BASE_URL}${asset.file_url}`, asset.name);
+    }
+    setShowAssetModal(false);
+  }, []);
+
+  // Handle opening asset modal - capture cursor context first
+  const handleOpenAssetModal = useCallback(() => {
+    if (editorRef.current) {
+      const context = editorRef.current.getTextAroundCursor();
+      setCursorContext(context);
+    }
+    setShowAssetModal(true);
+  }, []);
 
   const handleAIEditComplete = useCallback(() => {
     // Reload the manuscript after AI edit
@@ -490,10 +507,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         }
       );
 
-      // Reset editing ref before refetch so useEffect can update content
-      // isMissingTranslation will be computed automatically after fetch
-      isUserEditingRef.current = false;
-      await store.fetchObject('manuscript', manuscriptId, globalDisplayLanguage);
+      // Refetch to get the updated translation
+      await store.fetchObject('manuscript', manuscriptId);
       showSuccess('Success', `Retranslation complete for ${targetLanguage}`);
       setShowRetranslateModal(false);
     } catch (err) {
@@ -517,7 +532,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
       // Re-fetch to get the new translation
       // isMissingTranslation will be computed automatically after fetch
-      await store.fetchObject('manuscript', manuscriptId, globalDisplayLanguage);
+      await store.fetchObject('manuscript', manuscriptId);
     } catch (err) {
       console.error('Failed to create new translation:', err);
       showError('Error', 'Failed to create new content. Please try again.');
@@ -581,7 +596,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
           className="toolbar-btn"
           style={{ marginTop: '1rem' }}
           onClick={() => {
-            console.log('🔄 Manual retry - refetching manuscript');
             if (manuscriptId) {
               store.fetchObject('manuscript', manuscriptId);
             }
@@ -742,12 +756,14 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
           {/* Editor */}
           <div className={`editor-content ${isMissingTranslation ? 'disabled' : ''}`}>
-            <textarea
-              className="novel-textarea"
-              value={isMissingTranslation ? '' : content}
+            <RichTextEditor
+              key={editorKey}
+              ref={editorRef}
+              initialContent={isMissingTranslation ? '' : initialContent}
               onChange={handleContentChange}
               placeholder="Start writing your chapter..."
               disabled={isSaving || isMissingTranslation}
+              onImageButtonClick={handleOpenAssetModal}
             />
             {/* Missing Translation Overlay */}
             {isMissingTranslation && (
@@ -837,6 +853,23 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
           isTranslating={translating[manuscriptId] || false}
         />
       )}
+
+      {/* Asset Manager Modal for Image Insertion */}
+      <AssetManagerModal
+        isOpen={showAssetModal}
+        onClose={() => setShowAssetModal(false)}
+        onSelect={handleImageSelect}
+        title="Insert Image"
+        chapterContext={selectedChapter ? {
+          chapterId: selectedChapter.id,
+          chapterName: selectedChapter.name,
+          chapterDescription: selectedChapter.description,
+          actId: selectedChapter.actId,
+          selectedText: null,
+          scenePreContext: cursorContext.before,
+          scenePostContext: cursorContext.after,
+        } : undefined}
+      />
     </>
   );
 };

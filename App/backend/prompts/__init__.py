@@ -53,6 +53,8 @@ _CHAPTER_EDIT_USER_PROMPT = _load_prompt_file('userPrompts/ChapterEditUserPrompt
 _CHAPTER_EDIT_PREFILL = _load_prompt_file('prefills/ChapterEditPrefill.md')
 _LAST_USER_MESSAGE_TAG = _load_prompt_file('userMessageSystemPrompts/LastUserMessageTag.md')
 _NON_LAST_USER_MESSAGE_TAG = _load_prompt_file('userMessageSystemPrompts/NonLastUserMessageTag.md')
+_IMAGE_PROMPT_GEN_SYSTEM_PROMPT = _load_prompt_file('systemPrompts/ImagePromptGenSystemPrompt.md')
+_IMAGE_PROMPT_GEN_USER_PROMPT = _load_prompt_file('userPrompts/ImagePromptGenUserPrompt.md')
 
 # Default prompts structure
 # Format matches the frontend structure: {function_type: {category: {name?: content}}}
@@ -91,6 +93,10 @@ DEFAULT_PROMPTS = {
         'systemPrompt': _CHAPTER_EDIT_SYSTEM_PROMPT,
         'userPrompt': _CHAPTER_EDIT_USER_PROMPT,
         'prefill': _CHAPTER_EDIT_PREFILL,
+    },
+    'imagePrompt': {
+        'systemPrompt': _IMAGE_PROMPT_GEN_SYSTEM_PROMPT,
+        'userPrompt': _IMAGE_PROMPT_GEN_USER_PROMPT,
     },
 }
 

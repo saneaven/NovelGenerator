@@ -30,6 +30,7 @@ interface NovelEditorUIState {
   // Editor state per project
   editorContentByProject: Record<string, string>;
   isSavingByProject: Record<string, boolean>;
+  hasUnsavedChangesByProject: Record<string, boolean>;
 
   // Display preferences per project
   displayLanguageByProject: Record<string, string>;
@@ -58,6 +59,8 @@ interface NovelEditorActions {
   getEditorContent: (projectId: string) => string;
   setIsSaving: (projectId: string, saving: boolean) => void;
   getIsSaving: (projectId: string) => boolean;
+  setHasUnsavedChanges: (projectId: string, hasChanges: boolean) => void;
+  getHasUnsavedChanges: (projectId: string) => boolean;
 
   // Display preferences
   setDisplayLanguage: (projectId: string, language: string) => void;
@@ -80,6 +83,7 @@ const initialState: NovelEditorUIState = {
   isSettingsOpen: false,
   editorContentByProject: {},
   isSavingByProject: {},
+  hasUnsavedChangesByProject: {},
   displayLanguageByProject: {},
   activeStoryTabByProject: {},
 };
@@ -196,6 +200,19 @@ export const useNovelEditorStore = create<NovelEditorStore>()((set, get) => ({
     return get().isSavingByProject[projectId] ?? false;
   },
 
+  setHasUnsavedChanges: (projectId: string, hasChanges: boolean) => {
+    set((state) => ({
+      hasUnsavedChangesByProject: {
+        ...state.hasUnsavedChangesByProject,
+        [projectId]: hasChanges,
+      },
+    }));
+  },
+
+  getHasUnsavedChanges: (projectId: string) => {
+    return get().hasUnsavedChangesByProject[projectId] ?? false;
+  },
+
   // Display preferences
   setDisplayLanguage: (projectId: string, language: string) => {
     set((state) => ({
@@ -232,6 +249,7 @@ export const useNovelEditorStore = create<NovelEditorStore>()((set, get) => ({
       delete newState.chatVisibleByProject[projectId];
       delete newState.editorContentByProject[projectId];
       delete newState.isSavingByProject[projectId];
+      delete newState.hasUnsavedChangesByProject[projectId];
       delete newState.displayLanguageByProject[projectId];
       delete newState.activeStoryTabByProject[projectId];
       return newState;

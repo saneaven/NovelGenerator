@@ -1,8 +1,8 @@
 import type { MutableRefObject } from 'react';
 import type { ChatMessage, FunctionCallMetadata, ContentPart, FunctionCallProgress } from '../../llm_request/types';
-import type { ChatPipelineContext } from '../types';
+import type { LLMRequestPipelineContext } from '../types';
 import { streamChat } from '../../llm_request/llmService';
-import { ChatPipeline } from '../ChatPipeline';
+import { LLMRequestPipeline } from '../LLMRequestPipeline';
 import { type ProviderType, type ProviderConfig, type ThinkingConfig, type RetryConfig } from '../../store/settingsStore';
 import { FunctionCallStreamTracker } from '../streaming/FunctionCallStreamTracker';
 import { generateTempId } from '../../utils/tempId';
@@ -12,7 +12,7 @@ export interface ChatManagerConfig {
   getStoryObjects: () => any; // Changed from static value to function
   getNovelData?: () => any; // Novel content access function
   systemInsertConfig: any;
-  chatPipeline: ChatPipeline;
+  chatPipeline: LLMRequestPipeline;
   getIsLoading: () => boolean; // Changed to getter to prevent recreating ChatManager on loading state changes
   setIsLoading: (loading: boolean) => void;
   abortControllerRef: MutableRefObject<AbortController | null>;
@@ -172,7 +172,7 @@ export class ChatManager {
     const chatHistory = this.callbacks.onGetChatHistory(this.config.projectId, chatId, language);
 
     // Create pipeline context with fresh storyObjects and novel data
-    const context = ChatPipeline.createContext(
+    const context = LLMRequestPipeline.createContext(
       this.config.projectId,
       this.config.getStoryObjects(),
       this.config.mode,
@@ -418,7 +418,7 @@ export class ChatManager {
     contentParts: ContentPart[],
     toolCalls: any[],
     thinkingDetails: any[] | undefined,
-    context: ChatPipelineContext,
+    context: LLMRequestPipelineContext,
     _language: string
   ): Promise<void> {
     // Post-process the final AI response with contentParts

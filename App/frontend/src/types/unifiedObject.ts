@@ -62,6 +62,10 @@ export interface ObjectMetadata {
   chapter_id?: string;
   // Structural data
   order?: number;  // For acts and chapters
+  // Image prompts (for story objects: character, location, organization, lorebook)
+  image_prompt?: string | null;  // Natural language prompt
+  image_prompt_positive?: string | null;  // Tag-based positive (NovelAI)
+  image_prompt_negative?: string | null;  // Tag-based negative (NovelAI)
 }
 
 // ============================================================================

@@ -23,6 +23,7 @@ from ..models.db_models import (
     User, BasicInfo, Character, Organization, Location, LorebookEntry,
     Act, Chapter, Manuscript, Outline
 )
+from ..schemas.story_objects import ImagePromptUpdate
 from ..models.translation_models import ObjectTranslation, ObjectVersion
 from ..utils.object_type_aliases import normalize_object_type, externalize_object_type
 
@@ -146,6 +147,10 @@ def get_object_metadata(obj: Any, object_type: str) -> Dict[str, Any]:
         metadata['project_id'] = str(obj.project_id)
     elif object_type in ['character', 'organization', 'location', LOREBOOK_TYPE]:
         metadata['project_id'] = str(obj.project_id)
+        # Include image prompt fields for story objects that support them
+        metadata['image_prompt'] = getattr(obj, 'image_prompt', None)
+        metadata['image_prompt_positive'] = getattr(obj, 'image_prompt_positive', None)
+        metadata['image_prompt_negative'] = getattr(obj, 'image_prompt_negative', None)
     elif object_type == 'act':
         outline = getattr(obj, 'outline', None)
         if not outline:
@@ -1055,3 +1060,52 @@ async def update_manuscript_inplace(
     Used during continuous typing in novel editor to avoid version spam.
     """
     return await update_object('manuscript', object_id, request, db, current_user)
+
+
+# ============================================================================
+# IMAGE PROMPT MANAGEMENT
+# ============================================================================
+
+@router.patch("/objects/{object_type}/{object_id}/image-prompt")
+async def update_image_prompt(
+    object_type: str,
+    object_id: UUID,
+    request: ImagePromptUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update image prompts for a story object.
+    These are stored directly on the object (not versioned).
+    Supports both natural language prompts and tag-based prompts (NovelAI).
+    """
+    object_type = normalize_object_type(object_type)
+
+    # Only allow for story objects that support images
+    allowed_types = ['character', 'organization', 'location', LOREBOOK_TYPE]
+    if object_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Image prompts not supported for {object_type}"
+        )
+
+    # Get object
+    obj = get_object_or_404(db, object_type, object_id)
+
+    # Update image prompt fields
+    if request.image_prompt is not None:
+        obj.image_prompt = request.image_prompt
+    if request.image_prompt_positive is not None:
+        obj.image_prompt_positive = request.image_prompt_positive
+    if request.image_prompt_negative is not None:
+        obj.image_prompt_negative = request.image_prompt_negative
+
+    obj.updated_at = datetime.utcnow()
+    db.commit()
+
+    return {
+        "success": True,
+        "image_prompt": obj.image_prompt,
+        "image_prompt_positive": obj.image_prompt_positive,
+        "image_prompt_negative": obj.image_prompt_negative
+    }

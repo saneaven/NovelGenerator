@@ -8,3 +8,4 @@ export { authService } from './authService';
 export { projectService } from './projectService';
 export { chatService } from './chatService';
 export { novelService } from './novelService';
+export { assetService } from './assetService';

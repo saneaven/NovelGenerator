@@ -43,7 +43,7 @@ interface UnifiedObjectStore {
   clearTranslating: (objectId: string) => void;
 
   // CRUD Operations
-  fetchObject: (type: ObjectType, id: string) => Promise<void>;
+  fetchObject: (type: ObjectType, id: string, language?: string) => Promise<void>;
   updateObject: (type: ObjectType, id: string, request: UpdateObjectRequest) => Promise<void>;
   addTranslation: (type: ObjectType, id: string, request: AddTranslationRequest) => Promise<void>;
 
@@ -74,6 +74,17 @@ interface UnifiedObjectStore {
 
   // Language checking utilities
   getObjectsMissingMainLanguage: (projectId: string, mainLanguage: string) => UnifiedObject[];
+
+  // Image prompt management
+  updateImagePrompt: (
+    type: ObjectType,
+    id: string,
+    prompts: {
+      image_prompt?: string;
+      image_prompt_positive?: string;
+      image_prompt_negative?: string;
+    }
+  ) => Promise<void>;
 }
 
 // ============================================================================
@@ -108,7 +119,7 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => ({
   // FETCH OBJECT
   // ========================================================================
 
-  fetchObject: async (type: ObjectType, id: string) => {
+  fetchObject: async (type: ObjectType, id: string, language?: string) => {
     // Set loading
     set((state) => ({
       loading: { ...state.loading, [id]: true },
@@ -116,8 +127,8 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => ({
     }));
 
     try {
-      // Fetch all languages (no language param = returns all languages)
-      const object = await unifiedObjectService.getObject(type, id);
+      // Fetch object (optionally for a specific language)
+      const object = await unifiedObjectService.getObject(type, id, language);
 
       set((state) => ({
         objects: { ...state.objects, [id]: object },
@@ -380,6 +391,58 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => ({
     });
 
     return missing;
+  },
+
+  // ========================================================================
+  // IMAGE PROMPT MANAGEMENT
+  // ========================================================================
+
+  updateImagePrompt: async (
+    type: ObjectType,
+    id: string,
+    prompts: {
+      image_prompt?: string;
+      image_prompt_positive?: string;
+      image_prompt_negative?: string;
+    }
+  ) => {
+    set((state) => ({
+      loading: { ...state.loading, [id]: true },
+      errors: { ...state.errors, [id]: null },
+    }));
+
+    try {
+      const result = await unifiedObjectService.updateImagePrompt(type, id, prompts);
+
+      // Update the object in the store with the new image prompts
+      set((state) => {
+        const existingObject = state.objects[id];
+        if (existingObject) {
+          return {
+            objects: {
+              ...state.objects,
+              [id]: {
+                ...existingObject,
+                metadata: {
+                  ...existingObject.metadata,
+                  image_prompt: result.image_prompt,
+                  image_prompt_positive: result.image_prompt_positive,
+                  image_prompt_negative: result.image_prompt_negative,
+                },
+              },
+            },
+            loading: { ...state.loading, [id]: false },
+          };
+        }
+        return { loading: { ...state.loading, [id]: false } };
+      });
+    } catch (error: any) {
+      set((state) => ({
+        errors: { ...state.errors, [id]: error.message || 'Failed to update image prompt' },
+        loading: { ...state.loading, [id]: false },
+      }));
+      throw error;
+    }
   },
 }));
 

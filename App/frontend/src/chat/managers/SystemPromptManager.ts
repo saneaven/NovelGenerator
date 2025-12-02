@@ -12,6 +12,7 @@ const PROMPT_TYPE = {
   STORY_OBJECT_EDIT: 'story_object_edit',
   CHAPTER_EDIT: 'chapter_edit',
   TRANSLATION: 'translation',
+  IMAGE_PROMPT: 'image_prompt',
 } as const;
 
 export type PromptType = typeof PROMPT_TYPE[keyof typeof PROMPT_TYPE];
@@ -105,6 +106,26 @@ export type TranslationPromptContext =
   | StoryTranslationPromptContext
   | ChatTranslationPromptContext;
 
+/**
+ * Context for image prompt generation
+ */
+export interface ImagePromptContext extends BasePromptContext {
+  userRequest: string;
+  promptMode: 'natural' | 'positive' | 'negative';
+  // Object info (one of these will be set based on object type)
+  characterInfo?: string | null;
+  locationInfo?: string | null;
+  organizationInfo?: string | null;
+  lorebookInfo?: string | null;
+  // Scene context
+  scenePreContext?: string | null;
+  scenePostContext?: string | null;
+  // Saved prompts from object
+  currentPrompt?: string | null;
+  currentPromptPositive?: string | null;
+  currentPromptNegative?: string | null;
+}
+
 export interface PromptBundle {
   systemPrompt: string;
   userPrompts: string[];
@@ -119,7 +140,7 @@ export class SystemPromptManager {
    * Load a prompt template from store or fallback to bundled default
    */
   private static async getTemplate(
-    functionType: 'chat' | 'translation' | 'storyEdit' | 'chapterGen',
+    functionType: 'chat' | 'translation' | 'storyEdit' | 'chapterGen' | 'imagePrompt',
     category: 'systemPrompt' | 'prefill' | 'userPrompt',
     name?: string
   ): Promise<string> {
@@ -157,6 +178,7 @@ export class SystemPromptManager {
   static generatePromptBundle(type: typeof PromptType.STORY_OBJECT_EDIT, context: StoryObjectEditPromptContext): Promise<PromptBundle>;
   static generatePromptBundle(type: typeof PromptType.CHAPTER_EDIT, context: ChapterEditPromptContext): Promise<PromptBundle>;
   static generatePromptBundle(type: typeof PromptType.TRANSLATION, context: TranslationPromptContext): Promise<PromptBundle>;
+  static generatePromptBundle(type: typeof PromptType.IMAGE_PROMPT, context: ImagePromptContext): Promise<PromptBundle>;
   static async generatePromptBundle(type: PromptType, context?: unknown): Promise<PromptBundle> {
     switch (type) {
       case PromptType.CHAT_SYSTEM:
@@ -167,6 +189,8 @@ export class SystemPromptManager {
         return this.generateChapterEditBundle(context as ChapterEditPromptContext);
       case PromptType.TRANSLATION:
         return this.generateTranslationBundle(context as TranslationPromptContext);
+      case PromptType.IMAGE_PROMPT:
+        return this.generateImagePromptBundle(context as ImagePromptContext);
       default:
         throw new Error(`Unknown prompt type: ${type}`);
     }
@@ -464,6 +488,55 @@ export class SystemPromptManager {
       context: {
         objectsArray,  // Array goes in context, use {{ context.objectsArray | json }} in template
       }
+    };
+
+    return {
+      systemPrompt: renderTemplate(systemTemplate, systemData),
+      userPrompts: [
+        renderTemplate(userTemplate, userData),
+      ],
+    };
+  }
+
+  private static async generateImagePromptBundle(context: ImagePromptContext): Promise<PromptBundle> {
+    const [systemTemplate, userTemplate] = await Promise.all([
+      this.getTemplate('imagePrompt', 'systemPrompt'),
+      this.getTemplate('imagePrompt', 'userPrompt'),
+    ]);
+
+    const systemData = {
+      variable: {},
+      state: {},
+      context: {}
+    };
+
+    const userData = {
+      variable: {
+        userRequest: context.userRequest,
+        characterInfo: context.characterInfo,
+        locationInfo: context.locationInfo,
+        organizationInfo: context.organizationInfo,
+        lorebookInfo: context.lorebookInfo,
+        scenePreContext: context.scenePreContext,
+        scenePostContext: context.scenePostContext,
+        currentPrompt: context.currentPrompt,
+        currentPromptPositive: context.currentPromptPositive,
+        currentPromptNegative: context.currentPromptNegative,
+        promptMode: context.promptMode,
+      },
+      state: {
+        isCharacterRequest: !!context.characterInfo,
+        isLocationRequest: !!context.locationInfo,
+        isOrganizationRequest: !!context.organizationInfo,
+        isLorebookRequest: !!context.lorebookInfo,
+        isSceneRequest: !!(context.scenePreContext || context.scenePostContext),
+        hasCurrentPrompt: !!(context.currentPrompt || context.currentPromptPositive),
+        hasUserRequest: !!context.userRequest?.trim(),
+        isNaturalPrompt: context.promptMode === 'natural',
+        isPositivePrompt: context.promptMode === 'positive',
+        isNegativePrompt: context.promptMode === 'negative',
+      },
+      context: {}
     };
 
     return {

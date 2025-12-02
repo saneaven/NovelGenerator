@@ -1,0 +1,362 @@
+/* ========================================
+   IMAGE GENERATION PANEL STYLES
+   ======================================== */
+
+.image-generation-panel {
+    background: var(--color-surface-elevated);
+    border-radius: var(--border-radius-lg);
+    border: 1px solid var(--color-border-default);
+    overflow: hidden;
+}
+
+.image-generation-panel .panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: var(--color-surface-subtle);
+    border-bottom: 1px solid var(--color-border-default);
+}
+
+.image-generation-panel .panel-header h3 {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+}
+
+.image-generation-panel .close-button {
+    background: none;
+    border: none;
+    font-size: var(--font-size-xl);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    transition: color var(--transition-base);
+}
+
+.image-generation-panel .close-button:hover {
+    color: var(--color-text-primary);
+}
+
+.image-generation-panel .panel-body {
+    padding: var(--spacing-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+}
+
+.image-generation-panel .form-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.image-generation-panel .form-field label {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.image-generation-panel .form-row {
+    display: flex;
+    gap: var(--spacing-md);
+}
+
+.image-generation-panel .form-row .form-field {
+    flex: 1;
+}
+
+.image-generation-panel .prompt-input-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.image-generation-panel .prompt-input {
+    width: 100%;
+    padding: var(--spacing-md);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-md);
+    background: var(--color-surface-base);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    resize: vertical;
+    min-height: 80px;
+    font-family: var(--font-family-base);
+    transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.image-generation-panel .ai-assist-button {
+    align-self: flex-start;
+    padding: var(--spacing-xs) var(--spacing-md);
+    background: var(--color-surface-subtle);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-md);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    transition: all var(--transition-base);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.image-generation-panel .ai-assist-button:hover {
+    background: var(--color-brand-primary);
+    color: var(--color-text-inverse);
+    border-color: var(--color-brand-primary);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+
+.image-generation-panel .prompt-input:focus {
+    outline: none;
+    border-color: var(--color-brand-primary);
+    box-shadow: var(--shadow-focus-primary);
+}
+
+.image-generation-panel .prompt-input::placeholder {
+    color: var(--color-text-muted);
+}
+
+.image-generation-panel .config-select {
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-md);
+    background: var(--color-surface-base);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: border-color var(--transition-base);
+}
+
+.image-generation-panel .config-select:focus {
+    outline: none;
+    border-color: var(--color-brand-primary);
+    box-shadow: var(--shadow-focus-primary);
+}
+
+.image-generation-panel .error-message {
+    padding: var(--spacing-md);
+    background: var(--color-feedback-error-soft);
+    border: 1px solid var(--color-feedback-error-base);
+    border-radius: var(--border-radius-md);
+    color: var(--color-feedback-error-base);
+    font-size: var(--font-size-sm);
+}
+
+.image-generation-panel .panel-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: var(--spacing-sm);
+}
+
+.image-generation-panel .generate-button {
+    padding: var(--spacing-md) var(--spacing-xl);
+    background: var(--color-brand-primary);
+    color: var(--color-text-inverse);
+    border: none;
+    border-radius: var(--border-radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    transition: background var(--transition-base), transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.image-generation-panel .generate-button:hover:not(:disabled) {
+    background: var(--color-brand-primary-hover);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.image-generation-panel .generate-button:disabled {
+    opacity: var(--opacity-disabled);
+    cursor: not-allowed;
+}
+
+/* Style Preview Box */
+.image-generation-panel .style-preview-box {
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--color-surface-subtle);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-md);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+}
+
+.image-generation-panel .style-preview-box .preview-label {
+    font-weight: var(--font-weight-medium);
+    margin-right: var(--spacing-xs);
+}
+
+.image-generation-panel .style-preview-box .preview-text {
+    font-family: var(--font-mono);
+    word-break: break-all;
+}
+
+.image-generation-panel .style-preview-box .preview-text em {
+    color: var(--color-brand-primary);
+    font-style: normal;
+}
+
+.image-generation-panel .style-preview-box .prefix,
+.image-generation-panel .style-preview-box .postfix {
+    color: var(--color-text-muted);
+}
+
+/* ========================================
+   PROMPT TABS (for tag-based providers)
+   ======================================== */
+
+.image-generation-panel .prompt-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: var(--spacing-xs);
+}
+
+.image-generation-panel .prompt-tab {
+    flex: 1;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--color-surface-subtle);
+    border: 1px solid var(--color-border-default);
+    border-bottom: none;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    transition: all var(--transition-base);
+}
+
+.image-generation-panel .prompt-tab:first-child {
+    border-radius: var(--border-radius-md) 0 0 0;
+}
+
+.image-generation-panel .prompt-tab:last-child {
+    border-radius: 0 var(--border-radius-md) 0 0;
+    border-left: none;
+}
+
+.image-generation-panel .prompt-tab:hover:not(.active) {
+    background: var(--color-surface-base);
+    color: var(--color-text-primary);
+}
+
+.image-generation-panel .prompt-tab.active {
+    background: var(--color-surface-base);
+    color: var(--color-brand-primary);
+    border-color: var(--color-brand-primary);
+    border-bottom: 1px solid var(--color-surface-base);
+    position: relative;
+    z-index: 1;
+}
+
+/* Connect tabs to textarea */
+.image-generation-panel .prompt-tabs + .prompt-input-wrapper .prompt-input {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    margin-top: -1px;
+}
+
+/* ========================================
+   CONFIG INPUT (for number fields)
+   ======================================== */
+
+.image-generation-panel .config-input {
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-md);
+    background: var(--color-surface-base);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    transition: border-color var(--transition-base);
+}
+
+.image-generation-panel .config-input:focus {
+    outline: none;
+    border-color: var(--color-brand-primary);
+    box-shadow: var(--shadow-focus-primary);
+}
+
+/* ========================================
+   NOVELAI SETTINGS SECTION
+   ======================================== */
+
+.image-generation-panel .novelai-settings {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    background: var(--color-surface-subtle);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-md);
+}
+
+.image-generation-panel .provider-settings {
+    padding: var(--spacing-md);
+    background: var(--color-surface-subtle);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-md);
+}
+
+/* ========================================
+   TAG-BASED STYLE PREVIEW
+   ======================================== */
+
+.image-generation-panel .style-preview-box.tag-based {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.image-generation-panel .style-preview-box .tag-preview-rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.image-generation-panel .style-preview-box .tag-row {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+}
+
+.image-generation-panel .style-preview-box .tag-indicator {
+    font-weight: var(--font-weight-bold);
+    min-width: 16px;
+    text-align: center;
+}
+
+.image-generation-panel .style-preview-box .tag-indicator.positive {
+    color: var(--color-success-base);
+}
+
+.image-generation-panel .style-preview-box .tag-indicator.negative {
+    color: var(--color-danger-base);
+}
+
+.image-generation-panel .style-preview-box .tag-text {
+    font-family: var(--font-mono);
+    word-break: break-all;
+    color: var(--color-text-primary);
+}
+
+/* ========================================
+   SAVED PROMPT INDICATOR
+   ======================================== */
+
+.image-generation-panel .saved-prompt-indicator {
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--color-feedback-info-soft, rgba(99, 102, 241, 0.1));
+    border: 1px solid var(--color-brand-primary);
+    border-radius: var(--border-radius-md);
+    color: var(--color-brand-primary);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+}

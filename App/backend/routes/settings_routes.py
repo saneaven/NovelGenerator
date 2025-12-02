@@ -12,7 +12,8 @@ from ..schemas.settings import (
     FunctionAIConfig,
     ProviderCredentials,
     AIFunctionType,
-    RetryConfig
+    RetryConfig,
+    ImageGenConfig
 )
 
 router = APIRouter(prefix="/api/v1/settings", tags=["settings"])
@@ -100,6 +101,20 @@ async def get_user_settings(
         "retryDelayMs": 1000
     }
 
+    # Handle image_gen_config with default fallback for existing records
+    image_gen_config_dict = getattr(settings, 'image_gen_config', None) or {
+        "provider": "openai",
+        "model": "gpt-image-1",
+        "size": "1024x1024",
+        "naturalStyles": [],
+        "tagBasedStyles": [],
+        "selectedNaturalStyleId": None,
+        "selectedTagBasedStyleId": None,
+        "openaiSettings": {"quality": "standard", "style": "natural"},
+        "geminiSettings": {"aspect_ratio": "1:1", "image_resolution": "2K"},
+        "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"}
+    }
+
     return UserSettingsResponse(
         functionConfigs=settings.function_configs,
         providerCredentials=settings.provider_credentials,
@@ -107,7 +122,8 @@ async def get_user_settings(
         subLanguages=settings.sub_languages or [],
         defaultSubLanguage=settings.default_sub_language,
         theme=settings.theme,
-        retryConfig=retry_config_dict  # type: ignore
+        retryConfig=retry_config_dict,  # type: ignore
+        imageGenConfig=image_gen_config_dict  # type: ignore
     )
 
 
@@ -163,6 +179,9 @@ async def update_user_settings(
     if update_data.retryConfig is not None:
         settings.retry_config = update_data.retryConfig.model_dump()  # type: ignore
 
+    if update_data.imageGenConfig is not None:
+        settings.image_gen_config = update_data.imageGenConfig.model_dump()  # type: ignore
+
     db.commit()
     db.refresh(settings)
 
@@ -174,6 +193,20 @@ async def update_user_settings(
         "retryDelayMs": 1000
     }
 
+    # Handle image_gen_config with default fallback
+    image_gen_config_dict = getattr(settings, 'image_gen_config', None) or {
+        "provider": "openai",
+        "model": "gpt-image-1",
+        "size": "1024x1024",
+        "naturalStyles": [],
+        "tagBasedStyles": [],
+        "selectedNaturalStyleId": None,
+        "selectedTagBasedStyleId": None,
+        "openaiSettings": {"quality": "standard", "style": "natural"},
+        "geminiSettings": {"aspect_ratio": "1:1", "image_resolution": "2K"},
+        "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"}
+    }
+
     return UserSettingsResponse(
         functionConfigs=settings.function_configs,
         providerCredentials=settings.provider_credentials,
@@ -181,7 +214,8 @@ async def update_user_settings(
         subLanguages=settings.sub_languages or [],
         defaultSubLanguage=settings.default_sub_language,
         theme=settings.theme,
-        retryConfig=retry_config_dict  # type: ignore
+        retryConfig=retry_config_dict,  # type: ignore
+        imageGenConfig=image_gen_config_dict  # type: ignore
     )
 
 
@@ -220,6 +254,20 @@ async def update_function_config(
         "retryDelayMs": 1000
     }
 
+    # Handle image_gen_config with default fallback
+    image_gen_config_dict = getattr(settings, 'image_gen_config', None) or {
+        "provider": "openai",
+        "model": "gpt-image-1",
+        "size": "1024x1024",
+        "naturalStyles": [],
+        "tagBasedStyles": [],
+        "selectedNaturalStyleId": None,
+        "selectedTagBasedStyleId": None,
+        "openaiSettings": {"quality": "standard", "style": "natural"},
+        "geminiSettings": {"aspect_ratio": "1:1", "image_resolution": "2K"},
+        "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"}
+    }
+
     return UserSettingsResponse(
         functionConfigs=settings.function_configs,
         providerCredentials=settings.provider_credentials,
@@ -227,7 +275,8 @@ async def update_function_config(
         subLanguages=settings.sub_languages or [],
         defaultSubLanguage=settings.default_sub_language,
         theme=settings.theme,
-        retryConfig=retry_config_dict  # type: ignore
+        retryConfig=retry_config_dict,  # type: ignore
+        imageGenConfig=image_gen_config_dict  # type: ignore
     )
 
 
@@ -255,6 +304,20 @@ async def sync_settings_from_client(
         "retryDelayMs": 1000
     }
 
+    # Default image gen config
+    default_image_gen_config = {
+        "provider": "openai",
+        "model": "gpt-image-1",
+        "size": "1024x1024",
+        "naturalStyles": [],
+        "tagBasedStyles": [],
+        "selectedNaturalStyleId": None,
+        "selectedTagBasedStyleId": None,
+        "openaiSettings": {"quality": "standard", "style": "natural"},
+        "geminiSettings": {"aspect_ratio": "1:1", "image_resolution": "2K"},
+        "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"}
+    }
+
     if not settings:
         # Create new settings from client data
         settings = UserSettings(
@@ -265,7 +328,8 @@ async def sync_settings_from_client(
             sub_languages=client_settings.get('subLanguages', []),
             default_sub_language=client_settings.get('defaultSubLanguage'),
             theme=client_settings.get('theme', 'system'),
-            retry_config=client_settings.get('retryConfig', default_retry_config)
+            retry_config=client_settings.get('retryConfig', default_retry_config),
+            image_gen_config=client_settings.get('imageGenConfig', default_image_gen_config)
         )
         db.add(settings)
     else:
@@ -278,6 +342,7 @@ async def sync_settings_from_client(
         settings.default_sub_language = client_settings.get('defaultSubLanguage', settings.default_sub_language)  # type: ignore
         settings.theme = client_settings.get('theme', settings.theme)  # type: ignore
         settings.retry_config = client_settings.get('retryConfig', settings.retry_config or default_retry_config)  # type: ignore
+        settings.image_gen_config = client_settings.get('imageGenConfig', settings.image_gen_config or default_image_gen_config)  # type: ignore
 
     db.commit()
     db.refresh(settings)

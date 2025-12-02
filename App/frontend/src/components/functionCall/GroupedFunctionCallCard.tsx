@@ -14,6 +14,8 @@ interface GroupedFunctionCallCardProps {
   streamingProgress?: FunctionCallProgress[];
   onConfirm?: (selections: Record<string, boolean>) => Promise<void>;
   storyObjects: StoryObjects;
+  isApplyDisabled?: boolean;
+  applyDisabledReason?: string;
 }
 
 interface CardWithPreview {
@@ -70,6 +72,8 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
   streamingProgress = [],
   onConfirm,
   storyObjects,
+  isApplyDisabled = false,
+  applyDisabledReason,
 }) => {
   const isStreaming = mode === 'streaming';
   const isConfirmed = mode === 'confirmed';
@@ -385,19 +389,22 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
                   <span className="gfcc-summary-rejected">, {rejectedCount} will be rejected</span>
                 )}
               </div>
+              {isApplyDisabled && applyDisabledReason && (
+                <div className="gfcc-warning">{applyDisabledReason}</div>
+              )}
               <div className="gfcc-actions">
                 <div className="gfcc-bulk-actions">
                   <button
                     className="gfcc-btn gfcc-btn--text"
                     onClick={handleSelectAll}
-                    disabled={isConfirming || selectedCount === cards.length}
+                    disabled={isConfirming || isApplyDisabled || selectedCount === cards.length}
                   >
                     Select All
                   </button>
                   <button
                     className="gfcc-btn gfcc-btn--text"
                     onClick={handleDeselectAll}
-                    disabled={isConfirming || rejectedCount === cards.length}
+                    disabled={isConfirming || isApplyDisabled || rejectedCount === cards.length}
                   >
                     Deselect All
                   </button>
@@ -405,7 +412,7 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
                 <button
                   className="gfcc-btn gfcc-btn--primary"
                   onClick={handleConfirm}
-                  disabled={isConfirming}
+                  disabled={isConfirming || isApplyDisabled}
                 >
                   {isConfirming ? 'Confirming...' : 'Confirm Changes'}
                 </button>

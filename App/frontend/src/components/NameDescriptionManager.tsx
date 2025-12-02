@@ -10,12 +10,16 @@ import { useParams } from 'react-router-dom';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
+import { useAssetStore } from '../store/assetStore';
 import AIEditModal from './AIEditModal';
 import VersionHistoryModal from './VersionHistoryModal';
 import RetranslateModal from './RetranslateModal';
+import { AssetManagerModal } from './AssetManager';
 import { DropdownMenu, DropdownItem, DropdownDivider } from './ui/DropdownMenu';
 import { TranslationService } from '../services/translationService';
 import type { UnifiedObject, ObjectType } from '../types/unifiedObject';
+import type { Asset } from '../api/assetService';
+import { API_BASE_URL } from '../api/client';
 
 interface NameDescriptionData {
   name: string;
@@ -60,6 +64,14 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   const [versionHistoryTargetId, setVersionHistoryTargetId] = useState<string | undefined>(undefined);
   const [showRetranslateModal, setShowRetranslateModal] = useState(false);
   const [retranslateTargetId, setRetranslateTargetId] = useState<string | undefined>(undefined);
+  const [showAssetModal, setShowAssetModal] = useState(false);
+  const [assetTargetId, setAssetTargetId] = useState<string | undefined>(undefined);
+
+  // Asset store for story object images
+  const {
+    fetchStoryObjectAssets,
+    getMainAsset,
+  } = useAssetStore();
 
   // Collapse/expand state - empty Set means all collapsed (default)
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
@@ -137,6 +149,16 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
         return orderA - orderB;
       });
   }, [objects, category, projectId, settings.mainLanguage]);
+
+  // Fetch story object assets when items change
+  useEffect(() => {
+    if (!projectId || items.length === 0) return;
+
+    // Fetch assets for all items
+    items.forEach((item) => {
+      fetchStoryObjectAssets(projectId, category, item.id);
+    });
+  }, [projectId, category, items, fetchStoryObjectAssets]);
 
   // ============================================================================
   // CRUD OPERATIONS
@@ -368,6 +390,24 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   };
 
   // ============================================================================
+  // ASSET MANAGEMENT
+  // ============================================================================
+
+  const handleOpenAssetModal = (itemId: string) => {
+    setAssetTargetId(itemId);
+    setShowAssetModal(true);
+  };
+
+  const handleAssetModalClose = () => {
+    // Refresh assets when modal closes (in case images were added/changed)
+    if (projectId && assetTargetId) {
+      fetchStoryObjectAssets(projectId, category, assetTargetId);
+    }
+    setShowAssetModal(false);
+    setAssetTargetId(undefined);
+  };
+
+  // ============================================================================
   // RENDER
   // ============================================================================
 
@@ -490,6 +530,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
                     effectiveLanguage={effectiveLanguage}
                     isFallback={isFallback}
                     isExpanded={expandedItems.has(item.id)}
+                    mainAsset={getMainAsset(category, item.id)}
                     onToggleExpand={() => toggleItemExpand(item.id)}
                     onEdit={() => setEditingItemId(item.id)}
                     onDelete={() => handleDelete(item.id)}
@@ -498,6 +539,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
                       setRetranslateTargetId(item.id);
                       setShowRetranslateModal(true);
                     }}
+                    onImageClick={() => handleOpenAssetModal(item.id)}
                   />
                 )}
               </div>
@@ -547,6 +589,16 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
           translationTimestamp={store.objects[retranslateTargetId]?.version?.created_at || null}
           onRetranslate={handleRetranslate}
           isTranslating={translating[retranslateTargetId] || false}
+        />
+      )}
+
+      {assetTargetId && (
+        <AssetManagerModal
+          isOpen={showAssetModal}
+          onClose={handleAssetModalClose}
+          objectType={category}
+          objectId={assetTargetId}
+          title={`Images for ${singularName}`}
         />
       )}
     </div>
@@ -699,11 +751,13 @@ interface ItemDisplayProps {
   effectiveLanguage: string;
   isFallback: boolean;
   isExpanded: boolean;
+  mainAsset: Asset | null;
   onToggleExpand: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onVersionHistory: () => void;
   onRetranslate: () => void;
+  onImageClick: () => void;
 }
 
 const ItemDisplay: React.FC<ItemDisplayProps> = ({
@@ -715,27 +769,47 @@ const ItemDisplay: React.FC<ItemDisplayProps> = ({
   effectiveLanguage,
   isFallback,
   isExpanded,
+  mainAsset,
   onToggleExpand,
   onEdit,
   onDelete,
   onVersionHistory,
   onRetranslate,
+  onImageClick,
 }) => {
   const availableLanguages = Object.keys(item.data);
   const hasTranslation = showSecondaryLanguage && secondaryLanguage &&
     availableLanguages.includes(secondaryLanguage);
 
   return (
-    <div className="item-display">
-      <div className="item-header">
-        <button
-          className="collapse-toggle"
-          onClick={onToggleExpand}
-          title={isExpanded ? 'Collapse' : 'Expand'}
-        >
-          {isExpanded ? '▼' : '▶'}
-        </button>
-        <h4 onClick={onToggleExpand} className="item-name-clickable">{itemData.name}</h4>
+    <div className="item-display item-display-with-image">
+      {/* Image Placeholder */}
+      <button
+        className="item-image-placeholder"
+        onClick={onImageClick}
+        title={mainAsset ? 'Change image' : 'Add image'}
+      >
+        {mainAsset ? (
+          <img
+            src={`${API_BASE_URL}${mainAsset.thumbnail_url || mainAsset.file_url}`}
+            alt={mainAsset.name}
+            className="item-image"
+          />
+        ) : (
+          <span className="image-placeholder-icon">+</span>
+        )}
+      </button>
+
+      <div className="item-content-wrapper">
+        <div className="item-header">
+          <button
+            className="collapse-toggle"
+            onClick={onToggleExpand}
+            title={isExpanded ? 'Collapse' : 'Expand'}
+          >
+            {isExpanded ? '▼' : '▶'}
+          </button>
+          <h4 onClick={onToggleExpand} className="item-name-clickable">{itemData.name}</h4>
         <div className="card-actions">
           <button onClick={onEdit} className="card-edit-btn desktop-only" disabled={loading}>
             Edit
@@ -777,27 +851,28 @@ const ItemDisplay: React.FC<ItemDisplayProps> = ({
               disabled={loading}
             />
           </DropdownMenu>
+          </div>
         </div>
-      </div>
-      {isExpanded && (
-        <>
-          <div className="item-content">
-            <p className="item-description">{itemData.description || 'No description.'}</p>
-          </div>
-          <div className="item-metadata">
-            <span className="item-language">
-              {isFallback && <span className="fallback-warning" title="Selected language not available">⚠️ </span>}
-              🌐 {effectiveLanguage}
-            </span>
-            <span className="version-info">v{item.version.number}</span>
-            {item.metadata.updated_at && (
-              <span className="last-updated">
-                Updated {new Date(item.metadata.updated_at).toLocaleDateString()}
+        {isExpanded && (
+          <>
+            <div className="item-content">
+              <p className="item-description">{itemData.description || 'No description.'}</p>
+            </div>
+            <div className="item-metadata">
+              <span className="item-language">
+                {isFallback && <span className="fallback-warning" title="Selected language not available">⚠️ </span>}
+                🌐 {effectiveLanguage}
               </span>
-            )}
-          </div>
-        </>
-      )}
+              <span className="version-info">v{item.version.number}</span>
+              {item.metadata.updated_at && (
+                <span className="last-updated">
+                  Updated {new Date(item.metadata.updated_at).toLocaleDateString()}
+                </span>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 };

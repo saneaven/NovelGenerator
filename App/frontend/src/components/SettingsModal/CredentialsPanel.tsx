@@ -140,6 +140,66 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
         </div>
       </div>
 
+      {/* xAI (Grok) */}
+      <div className="credential-card">
+        <div className="credential-header">
+          <div className="credential-icon">𝕏</div>
+          <h3>xAI (Grok)</h3>
+        </div>
+        <div className="credential-body">
+          <div className="form-field">
+            <label>API Key</label>
+            <input
+              type="password"
+              value={credentials.xai?.apiKey || ''}
+              onChange={(e) =>
+                onChange({
+                  ...credentials,
+                  xai: { apiKey: e.target.value },
+                })
+              }
+              placeholder="xai-..."
+              className="credential-input"
+            />
+            <p className="field-hint">
+              Get your API key from{' '}
+              <a href="https://console.x.ai/" target="_blank" rel="noopener noreferrer">
+                console.x.ai
+              </a>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* NovelAI */}
+      <div className="credential-card">
+        <div className="credential-header">
+          <div className="credential-icon">N</div>
+          <h3>NovelAI</h3>
+        </div>
+        <div className="credential-body">
+          <div className="form-field">
+            <label>Access Token</label>
+            <input
+              type="password"
+              value={credentials.novelai?.apiKey || ''}
+              onChange={(e) =>
+                onChange({
+                  ...credentials,
+                  novelai: { apiKey: e.target.value },
+                })
+              }
+              placeholder="eyJ..."
+              className="credential-input"
+            />
+            <p className="field-hint">
+              Your NovelAI JWT access token. Get it from your browser's developer tools
+              while logged in to NovelAI (look for 'auth_token' in local storage).
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Custom Endpoint */}
       <div className="credential-card">
         <div className="credential-header">

@@ -8,9 +8,9 @@ import type {
 } from '../../llm_request/types';
 import { streamChat } from '../../llm_request/llmService';
 import type { ProviderConfig, ProviderType, ThinkingConfig, RetryConfig } from '../../store/settingsStore';
-import { ChatPipeline } from '../ChatPipeline';
+import { LLMRequestPipeline } from '../LLMRequestPipeline';
 import type {
-  ChatPipelineContext,
+  LLMRequestPipelineContext,
   ProcessedChatMessage,
   SystemInsertConfig,
 } from '../types';
@@ -22,7 +22,7 @@ export interface LLMRequestManagerConfig {
   getStoryObjects: () => any;
   getNovelData?: () => any;
   systemInsertConfig: SystemInsertConfig;
-  chatPipeline: ChatPipeline;
+  chatPipeline: LLMRequestPipeline;
   provider: ProviderType;
   providerConfig: ProviderConfig;
   aiModel?: string;
@@ -84,7 +84,7 @@ export class LLMRequestManager {
       ? [...history, userMessage, assistantMessage]
       : [...history, assistantMessage];
 
-    const context = ChatPipeline.createContext(
+    const context = LLMRequestPipeline.createContext(
       this.config.projectId,
       this.config.getStoryObjects(),
       this.config.mode,
@@ -247,7 +247,7 @@ export class LLMRequestManager {
     contentParts: ContentPart[],
     toolCalls: any[],
     thinkingDetails: any[] | undefined,
-    context: ChatPipelineContext,
+    context: LLMRequestPipelineContext,
     _language: string
   ): Promise<void> {
     const finalResponse = toolCalls.length > 0 || thinkingDetails

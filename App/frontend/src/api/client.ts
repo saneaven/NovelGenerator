@@ -2,7 +2,7 @@
  * Base API client with authentication and error handling
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`;
+export const API_BASE_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`;
 
 export class ApiError extends Error {
   status: number;
@@ -144,6 +144,50 @@ class ApiClient {
 
   async delete<T>(path: string, customHeaders?: Record<string, string>): Promise<T> {
     return this.request<T>('DELETE', path, undefined, customHeaders);
+  }
+
+  async postFormData<T>(path: string, formData: FormData): Promise<T> {
+    const url = `${this.baseURL}${path}`;
+
+    const headers: HeadersInit = {};
+    if (this.authToken) {
+      headers['Authorization'] = `Bearer ${this.authToken}`;
+    }
+    // Don't set Content-Type - browser will set it with boundary for multipart/form-data
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+
+      if (response.status === 204) {
+        return undefined as T;
+      }
+
+      const responseData = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        let errorMessage = responseData?.detail || response.statusText || 'Request failed';
+        if (Array.isArray(errorMessage)) {
+          errorMessage = errorMessage.map(err =>
+            typeof err === 'object' ? `${err.loc?.join('.')}: ${err.msg}` : String(err)
+          ).join(', ');
+        }
+        throw new ApiError(errorMessage, response.status, responseData);
+      }
+
+      return responseData as T;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(
+        error instanceof Error ? error.message : 'Network error',
+        0
+      );
+    }
   }
 }
 

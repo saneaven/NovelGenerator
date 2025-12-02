@@ -1,6 +1,6 @@
 import type { ChatMessage } from '../llm_request/types';
 import type {
-  ChatPipelineContext,
+  LLMRequestPipelineContext,
   SystemInsertConfig,
   ProcessedChatMessage,
   PreProcessor,
@@ -13,7 +13,7 @@ import { DefaultPreProcessor } from './processors/PreProcessor';
 import { DefaultPostProcessor } from './processors/PostProcessor';
 import { DefaultDisplayProcessor } from './processors/DisplayProcessor';
 
-export class ChatPipeline {
+export class LLMRequestPipeline {
   private preProcessor: PreProcessor;
   private postProcessor: PostProcessor;
   private displayProcessor: DisplayProcessor;
@@ -31,7 +31,7 @@ export class ChatPipeline {
   // Pre-process messages before sending to AI
   async preProcess(
     messages: ChatMessage[],
-    context: ChatPipelineContext,
+    context: LLMRequestPipelineContext,
     conversationLanguage?: string,
     functions?: FunctionCallSchema[]
   ) {
@@ -41,13 +41,13 @@ export class ChatPipeline {
   // Post-process AI response
   postProcess(
     aiResponse: string | { content: string | null; tool_calls?: any[] },
-    context: ChatPipelineContext
+    context: LLMRequestPipelineContext
   ) {
     return this.postProcessor.process(aiResponse, context);
   }
 
   // Process message for display
-  processForDisplay(message: ProcessedChatMessage, context: ChatPipelineContext) {
+  processForDisplay(message: ProcessedChatMessage, context: LLMRequestPipelineContext) {
     return this.displayProcessor.process(message, context);
   }
 
@@ -72,7 +72,7 @@ export class ChatPipeline {
   enablePrefill?: boolean,
   thinkingMode?: 'off' | 'model' | 'custom',
   thinkingConfig?: ThinkingConfig
-): ChatPipelineContext {
+): LLMRequestPipelineContext {
   return {
       projectId,
       storyObjects,

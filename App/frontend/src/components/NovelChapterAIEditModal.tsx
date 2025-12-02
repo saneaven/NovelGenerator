@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import type { FunctionCallMetadata, ContentPart } from '../llm_request/types';
-import { ChatPipeline } from '../chat/ChatPipeline';
+import { LLMRequestPipeline } from '../chat/LLMRequestPipeline';
 import { NOVEL_EDITOR_FUNCTIONS } from '../chat/types/functionCalling';
 import { LLMRequestManager } from '../chat/sessions/LLMRequestManager';
 import type { ManuscriptObject } from '../types/unifiedObject';
@@ -267,7 +267,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         getStoryObjects,
         getNovelData,
         systemInsertConfig,
-        chatPipeline: new ChatPipeline(),
+        chatPipeline: new LLMRequestPipeline(),
         provider: chapterGenConfig.provider,
         providerConfig,
         aiModel: chapterGenConfig.model,

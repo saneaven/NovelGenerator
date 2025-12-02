@@ -11,6 +11,7 @@ class ProviderType(str, Enum):
     CLAUDE = "claude"
     OPENROUTER = "openrouter"
     CUSTOM = "custom"
+    XAI = "xai"
 
 
 class AIFunctionType(str, Enum):
@@ -81,6 +82,11 @@ class OpenAICredentials(BaseModel):
     apiKey: str = ""
 
 
+class XAICredentials(BaseModel):
+    """xAI (Grok) credentials"""
+    apiKey: str = ""
+
+
 class ProviderCredentials(BaseModel):
     """All provider credentials"""
     openai: OpenAICredentials = Field(default_factory=OpenAICredentials)
@@ -88,6 +94,7 @@ class ProviderCredentials(BaseModel):
     claude: ClaudeCredentials = Field(default_factory=ClaudeCredentials)
     openrouter: OpenRouterCredentials = Field(default_factory=OpenRouterCredentials)
     custom: CustomCredentials = Field(default_factory=CustomCredentials)
+    xai: XAICredentials = Field(default_factory=XAICredentials)
 
 
 class ThemeMode(str, Enum):
@@ -105,6 +112,57 @@ class RetryConfig(BaseModel):
     retryDelayMs: int = Field(default=1000, ge=100, le=30000)
 
 
+# Image generation settings schemas
+class NaturalImageStyle(BaseModel):
+    """Custom image style for natural language providers (prefix/postfix)"""
+    id: str
+    name: str
+    prefix: str = ""
+    postfix: str = ""
+
+
+class TagBasedImageStyle(BaseModel):
+    """Custom image style for tag-based providers (additional tags)"""
+    id: str
+    name: str
+    positiveTags: str = ""
+    negativeTags: str = ""
+
+
+class OpenAIImageSettings(BaseModel):
+    """OpenAI-specific image settings"""
+    quality: str = "standard"
+    style: str = "natural"
+
+
+class GeminiImageSettings(BaseModel):
+    """Gemini-specific image settings (uses aspect_ratio + image_size)"""
+    aspect_ratio: str = "1:1"
+    image_resolution: str = "2K"
+
+
+class NovelAIImageSettings(BaseModel):
+    """NovelAI-specific image settings"""
+    sampler: str = "k_euler_ancestral"
+    steps: int = 28
+    scale: float = 6.0
+    noise_schedule: str = "karras"
+
+
+class ImageGenConfig(BaseModel):
+    """Image generation configuration"""
+    provider: str = "openai"
+    model: str = "gpt-image-1"
+    size: str = "1024x1024"
+    naturalStyles: List[NaturalImageStyle] = []
+    tagBasedStyles: List[TagBasedImageStyle] = []
+    selectedNaturalStyleId: Optional[str] = None
+    selectedTagBasedStyleId: Optional[str] = None
+    openaiSettings: OpenAIImageSettings = Field(default_factory=OpenAIImageSettings)
+    geminiSettings: GeminiImageSettings = Field(default_factory=GeminiImageSettings)
+    novelaiSettings: NovelAIImageSettings = Field(default_factory=NovelAIImageSettings)
+
+
 class UserSettingsResponse(BaseModel):
     """User settings response"""
     functionConfigs: Dict[str, FunctionAIConfig]
@@ -114,6 +172,7 @@ class UserSettingsResponse(BaseModel):
     defaultSubLanguage: Optional[str] = None
     theme: str = "system"
     retryConfig: RetryConfig = Field(default_factory=RetryConfig)
+    imageGenConfig: ImageGenConfig = Field(default_factory=ImageGenConfig)
 
     class Config:
         from_attributes = True
@@ -128,3 +187,4 @@ class UserSettingsUpdate(BaseModel):
     defaultSubLanguage: Optional[str] = None
     theme: Optional[str] = None
     retryConfig: Optional[RetryConfig] = None
+    imageGenConfig: Optional[ImageGenConfig] = None

@@ -7,7 +7,7 @@ import type {
   DisplayProcessingResult,
   ProcessedChatMessage,
   EditCard,
-  ChatPipelineContext
+  LLMRequestPipelineContext
 } from '../types';
 import { FunctionCallService } from '../../pages/workspace/services/FunctionCallService';
 
@@ -19,7 +19,7 @@ marked.setOptions({
 export class DefaultDisplayProcessor implements DisplayProcessor {
   process(
     message: ProcessedChatMessage,
-    _context: ChatPipelineContext
+    _context: LLMRequestPipelineContext
   ): DisplayProcessingResult {
     let editCards: EditCard[] = [];
 

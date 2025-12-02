@@ -238,6 +238,34 @@ export const unifiedObjectService = {
       `/api/v1/objects/${type}/${id}`
     );
   },
+
+  /**
+   * Update image prompts for a story object
+   * @param type Object type (character, location, organization, lorebook)
+   * @param id Object ID
+   * @param prompts Image prompt data
+   */
+  async updateImagePrompt(
+    type: ObjectType,
+    id: string,
+    prompts: {
+      image_prompt?: string;
+      image_prompt_positive?: string;
+      image_prompt_negative?: string;
+    }
+  ): Promise<{
+    success: boolean;
+    image_prompt: string | null;
+    image_prompt_positive: string | null;
+    image_prompt_negative: string | null;
+  }> {
+    return apiClient.patch<{
+      success: boolean;
+      image_prompt: string | null;
+      image_prompt_positive: string | null;
+      image_prompt_negative: string | null;
+    }>(`/api/v1/objects/${type}/${id}/image-prompt`, prompts);
+  },
 };
 
 // ============================================================================

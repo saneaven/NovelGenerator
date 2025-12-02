@@ -68,7 +68,8 @@ class UserSettings(Base):
         "gemini": {"apiKey": ""},
         "claude": {"apiKey": ""},
         "openrouter": {"apiKey": ""},
-        "custom": {"baseUrl": "", "apiKey": ""}
+        "custom": {"baseUrl": "", "apiKey": ""},
+        "xai": {"apiKey": ""}
     }""")
 
     # Language settings
@@ -85,6 +86,20 @@ class UserSettings(Base):
         "maxRetries": 3,
         "retryableStatusCodes": [429, 500, 502, 503, 504],
         "retryDelayMs": 1000
+    }""")
+
+    # Image generation configuration
+    image_gen_config = Column(JSONB, nullable=False, server_default="""{
+        "provider": "openai",
+        "model": "gpt-image-1",
+        "size": "1024x1024",
+        "naturalStyles": [],
+        "tagBasedStyles": [],
+        "selectedNaturalStyleId": null,
+        "selectedTagBasedStyleId": null,
+        "openaiSettings": {"quality": "standard", "style": "natural"},
+        "geminiSettings": {"aspect_ratio": "1:1", "image_resolution": "2K"},
+        "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"}
     }""")
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -150,6 +165,7 @@ class Project(Base):
     lorebook_entries = relationship("LorebookEntry", back_populates="project", cascade="all, delete-orphan")
     outline = relationship("Outline", back_populates="project", uselist=False, cascade="all, delete-orphan")
     chats = relationship("Chat", back_populates="project", cascade="all, delete-orphan")
+    assets = relationship("Asset", back_populates="project", cascade="all, delete-orphan")
 
 
 # ============================================================================
@@ -181,6 +197,11 @@ class Character(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
 
+    # Image prompt fields (stored on base object, not versioned)
+    image_prompt = Column(Text, nullable=True)  # Natural language prompt
+    image_prompt_positive = Column(Text, nullable=True)  # NovelAI positive tags
+    image_prompt_negative = Column(Text, nullable=True)  # NovelAI negative tags
+
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -194,6 +215,11 @@ class Organization(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    # Image prompt fields (stored on base object, not versioned)
+    image_prompt = Column(Text, nullable=True)  # Natural language prompt
+    image_prompt_positive = Column(Text, nullable=True)  # NovelAI positive tags
+    image_prompt_negative = Column(Text, nullable=True)  # NovelAI negative tags
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -209,6 +235,11 @@ class Location(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
 
+    # Image prompt fields (stored on base object, not versioned)
+    image_prompt = Column(Text, nullable=True)  # Natural language prompt
+    image_prompt_positive = Column(Text, nullable=True)  # NovelAI positive tags
+    image_prompt_negative = Column(Text, nullable=True)  # NovelAI negative tags
+
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -222,6 +253,11 @@ class LorebookEntry(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    # Image prompt fields (stored on base object, not versioned)
+    image_prompt = Column(Text, nullable=True)  # Natural language prompt
+    image_prompt_positive = Column(Text, nullable=True)  # NovelAI positive tags
+    image_prompt_negative = Column(Text, nullable=True)  # NovelAI negative tags
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -389,3 +425,99 @@ class ChatMessage(Base):
 
     # Relationships
     chat = relationship("Chat", back_populates="messages")
+
+
+# ============================================================================
+# ASSET MANAGEMENT
+# ============================================================================
+
+class Asset(Base):
+    """Stores individual image assets for the project"""
+    __tablename__ = 'assets'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    name = Column(String(255), nullable=False)
+    file_path = Column(String(500), nullable=False)  # Local storage path
+    thumbnail_path = Column(String(500), nullable=True)
+    mime_type = Column(String(50), default='image/png', nullable=False)
+
+    # Generation metadata - prompts are stored separately by type
+    # Natural language providers (OpenAI, Gemini, xAI): use generation_prompt only
+    # Tag-based providers (NovelAI): use generation_positive_prompt and generation_negative_prompt only
+    generation_prompt = Column(Text, nullable=True)  # Natural language prompt (OpenAI, Gemini, xAI)
+    generation_positive_prompt = Column(Text, nullable=True)  # Positive prompt for tag-based (NovelAI)
+    generation_negative_prompt = Column(Text, nullable=True)  # Negative prompt for tag-based (NovelAI)
+    generation_provider = Column(String(50), nullable=True)  # 'openai', 'gemini', 'xai', 'novelai'
+    generation_model = Column(String(100), nullable=True)
+    generation_settings = Column(JSONB, nullable=True)  # Provider-specific settings (sampler, steps, etc.)
+
+    # Image dimensions
+    width = Column(Integer, nullable=True)
+    height = Column(Integer, nullable=True)
+    file_size = Column(Integer, nullable=True)  # In bytes
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Relationships
+    project = relationship("Project", back_populates="assets")
+    story_object_assets = relationship("StoryObjectAsset", back_populates="asset", cascade="all, delete-orphan")
+    manuscript_images = relationship("ManuscriptImage", back_populates="asset", cascade="all, delete-orphan")
+
+
+class StoryObjectAsset(Base):
+    """Links assets to story objects (characters, locations)"""
+    __tablename__ = 'story_object_assets'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    # Polymorphic reference to story object
+    object_type = Column(String(50), nullable=False)  # 'character', 'location'
+    object_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+
+    asset_id = Column(UUID(as_uuid=True), ForeignKey('assets.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    is_main = Column(Boolean, default=False, nullable=False)  # Main image shown in placeholder
+    display_order = Column(Integer, default=0, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    asset = relationship("Asset", back_populates="story_object_assets")
+
+    __table_args__ = (
+        Index('idx_story_object_asset', 'object_type', 'object_id'),
+    )
+
+
+class ManuscriptImage(Base):
+    """Images embedded in manuscript content at specific positions"""
+    __tablename__ = 'manuscript_images'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    manuscript_id = Column(UUID(as_uuid=True), ForeignKey('manuscripts.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    position = Column(Integer, nullable=False)  # Character position in text content
+
+    # Image source - either direct asset or story object reference
+    source_type = Column(String(20), nullable=False)  # 'asset' or 'story_object'
+    asset_id = Column(UUID(as_uuid=True), ForeignKey('assets.id', ondelete='SET NULL'), nullable=True)
+
+    # If source_type is 'story_object', reference the object
+    story_object_type = Column(String(50), nullable=True)  # 'character', 'location'
+    story_object_id = Column(UUID(as_uuid=True), nullable=True)
+
+    # Generation metadata (for images generated specifically for this insertion)
+    generation_prompt = Column(Text, nullable=True)
+
+    # Display settings
+    display_width = Column(Integer, default=400, nullable=False)
+    caption = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Relationships
+    asset = relationship("Asset", back_populates="manuscript_images")

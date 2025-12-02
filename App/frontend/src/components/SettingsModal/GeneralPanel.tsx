@@ -9,6 +9,7 @@ interface GeneralPanelProps {
     translation: FunctionAIConfig;
     storyEdit: FunctionAIConfig;
     chapterGen: FunctionAIConfig;
+    imagePrompt: FunctionAIConfig;
   };
   credentials: ProviderCredentials;
   activeFunction: AIFunctionType;
@@ -21,6 +22,7 @@ const FUNCTION_LABELS = {
   translation: { icon: '🌐', label: 'Translation' },
   storyEdit: { icon: '✏️', label: 'Story Edit' },
   chapterGen: { icon: '📝', label: 'Chapter Gen' },
+  imagePrompt: { icon: '🎨', label: 'Image Prompt' },
 };
 
 const FUNCTION_DESCRIPTIONS = {
@@ -28,6 +30,7 @@ const FUNCTION_DESCRIPTIONS = {
   translation: 'Accurate language translation with context preservation',
   storyEdit: 'Structured editing and refinement of story elements',
   chapterGen: 'Creative generation of novel chapters and narrative content',
+  imagePrompt: 'AI-assisted generation of detailed image prompts from story context',
 };
 
 const GeneralPanel: React.FC<GeneralPanelProps> = ({

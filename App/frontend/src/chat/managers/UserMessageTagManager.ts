@@ -1,5 +1,5 @@
 import type { ChatMessage, FunctionCallResultSummary } from '../../llm_request/types';
-import type { ChatPipelineContext } from '../types';
+import type { LLMRequestPipelineContext } from '../types';
 import { findLastUserMessageIdx } from '../processors/ChatManager';
 import { renderTemplate } from '../../templateEngine/engine';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -96,7 +96,7 @@ export class UserMessageTagManager {
    */
   static async buildSystemTag(
     userMessageContent: string,
-    context: ChatPipelineContext,
+    context: LLMRequestPipelineContext,
     messageIndex: number,
     allMessages: ChatMessage[],
     outputLanguage?: string

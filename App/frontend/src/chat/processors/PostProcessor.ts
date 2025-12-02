@@ -2,7 +2,7 @@ import type {
   PostProcessor,
   PostProcessingResult,
   ProcessedChatMessage,
-  ChatPipelineContext
+  LLMRequestPipelineContext
 } from '../types';
 import type { ThinkingDetail, ContentPart } from '../../llm_request/types';
 import { generateTempId } from '../../utils/tempId';
@@ -10,7 +10,7 @@ import { generateTempId } from '../../utils/tempId';
 export class DefaultPostProcessor implements PostProcessor {
   process(
     aiResponse: any,
-    _context: ChatPipelineContext
+    _context: LLMRequestPipelineContext
   ): PostProcessingResult {
     let contentParts: ContentPart[];
     let tool_calls: any[] | undefined;

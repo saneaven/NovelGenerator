@@ -5,6 +5,7 @@ import type {
   TranslationPromptContext,
   StoryObjectEditPromptContext,
   ChapterEditPromptContext,
+  ImagePromptContext,
 } from './managers/SystemPromptManager';
 import type { ThinkingConfig } from '../store/settingsStore';
 
@@ -21,8 +22,8 @@ export interface SystemInsertConfig {
   includeStoryObjects: boolean;
   includeNovelContent: boolean;
   // Prompt type category - all prompts are treated uniformly as categories
-  promptType?: 'chat' | 'translation' | 'story_object_edit' | 'chapter_edit';
-  promptContext?: ChatSystemPromptContext | TranslationPromptContext | StoryObjectEditPromptContext | ChapterEditPromptContext;
+  promptType?: 'chat' | 'translation' | 'story_object_edit' | 'chapter_edit' | 'imagePrompt';
+  promptContext?: ChatSystemPromptContext | TranslationPromptContext | StoryObjectEditPromptContext | ChapterEditPromptContext | ImagePromptContext;
 }
 
 // Pipeline processing interfaces
@@ -57,8 +58,8 @@ export interface EditCard {
   onReject?: () => void; // Optional - not needed when using grouped card
 }
 
-// Chat pipeline context
-export interface ChatPipelineContext {
+// LLM request pipeline context
+export interface LLMRequestPipelineContext {
   projectId: string;
   storyObjects: any; // Simplified story objects from store
   systemInsertConfig: SystemInsertConfig;
@@ -73,7 +74,7 @@ export interface ChatPipelineContext {
 export interface PreProcessor {
   process(
     messages: ChatMessage[],
-    context: ChatPipelineContext,
+    context: LLMRequestPipelineContext,
     conversationLanguage?: string,
     functions?: FunctionCallSchema[]
   ): Promise<PreProcessingResult>;
@@ -82,13 +83,13 @@ export interface PreProcessor {
 export interface PostProcessor {
   process(
     aiResponse: string | { content: string | null; tool_calls?: any[] },
-    context: ChatPipelineContext
+    context: LLMRequestPipelineContext
   ): PostProcessingResult;
 }
 
 export interface DisplayProcessor {
   process(
     message: ProcessedChatMessage,
-    context: ChatPipelineContext
+    context: LLMRequestPipelineContext
   ): DisplayProcessingResult;
 }

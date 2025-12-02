@@ -1,4 +1,4 @@
-import type { ChatPipelineContext } from '../types';
+import type { LLMRequestPipelineContext } from '../types';
 import type { FunctionCallResultSummary, ChatMessage } from '../../llm_request/types';
 import { findLastUserMessageIdx } from '../processors/ChatManager';
 
@@ -19,7 +19,7 @@ export class SystemTagManager {
    */
   static buildSystemTag(
     processingContent: string,
-    context: ChatPipelineContext,
+    context: LLMRequestPipelineContext,
     messageIndex: number,
     allMessages: ChatMessage[]
   ): string 
@@ -70,11 +70,11 @@ export class SystemTagManager {
   }
 
   // Individual checker functions
-  private static shouldIncludeStoryContext(context: ChatPipelineContext, storyObjects?: any): boolean {
+  private static shouldIncludeStoryContext(context: LLMRequestPipelineContext, storyObjects?: any): boolean {
     return !!(context.systemInsertConfig.includeStoryObjects && storyObjects);
   }
 
-  private static shouldIncludeNovelContent(context: ChatPipelineContext, novelData?: any): boolean {
+  private static shouldIncludeNovelContent(context: LLMRequestPipelineContext, novelData?: any): boolean {
     return !!(context.systemInsertConfig.includeNovelContent && novelData);
   }
 

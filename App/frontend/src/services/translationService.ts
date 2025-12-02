@@ -10,7 +10,7 @@
 
 import type { MutableRefObject } from 'react';
 import type { LanguageData } from '../types/multilingual';
-import { ChatPipeline } from '../chat/ChatPipeline';
+import { LLMRequestPipeline } from '../chat/LLMRequestPipeline';
 import { LLMRequestManager, type LLMRequestManagerConfig, type LLMRequestManagerCallbacks } from '../chat/sessions/LLMRequestManager';
 import {
   TRANSLATION_FUNCTIONS,
@@ -228,11 +228,11 @@ export class TranslationService {
       providedAbortRef.current = abortController;
     }
 
-    const chatPipeline = new ChatPipeline();
+    const chatPipeline = new LLMRequestPipeline();
     const completed: string[] = [];
     const collectedTranslations: TranslationResult[] = [];
     const systemInsertConfig = {
-      ...ChatPipeline.createDefaultSystemConfig(),
+      ...LLMRequestPipeline.createDefaultSystemConfig(),
       enabled: true,
       includeProjectInfo: false,
       includeStoryObjects: false,
@@ -486,9 +486,9 @@ export class TranslationService {
       providedAbortRef.current = abortController;
     }
 
-    const chatPipeline = new ChatPipeline();
+    const chatPipeline = new LLMRequestPipeline();
     const systemInsertConfig = {
-      ...ChatPipeline.createDefaultSystemConfig(),
+      ...LLMRequestPipeline.createDefaultSystemConfig(),
       enabled: true,
       includeProjectInfo: false,
       includeStoryObjects: false,

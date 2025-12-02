@@ -7,6 +7,7 @@ import LanguagePanel from './LanguagePanel';
 import PromptsTemplatesPanel from './PromptsTemplatesPanel';
 import ThemePanel from './ThemePanel';
 import AdvancedPanel from './AdvancedPanel';
+import ImageGenPanel from './ImageGenPanel';
 import './SettingsModal.css';
 
 interface SettingsModalProps {
@@ -14,7 +15,7 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-type MainTab = 'credentials' | 'general' | 'prompts' | 'language' | 'theme' | 'advanced';
+type MainTab = 'credentials' | 'general' | 'imageGen' | 'prompts' | 'language' | 'theme' | 'advanced';
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const settingsStore = useSettingsStore();
@@ -78,6 +79,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             <span className="tab-label">General</span>
           </button>
           <button
+            className={`main-tab ${mainTab === 'imageGen' ? 'active' : ''}`}
+            onClick={() => setMainTab('imageGen')}
+          >
+            <span className="tab-icon">🖼️</span>
+            <span className="tab-label">Image Gen</span>
+          </button>
+          <button
             className={`main-tab ${mainTab === 'prompts' ? 'active' : ''}`}
             onClick={() => setMainTab('prompts')}
           >
@@ -132,6 +140,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                     [functionType]: config,
                   },
                 })
+              }
+            />
+          )}
+
+          {mainTab === 'imageGen' && (
+            <ImageGenPanel
+              config={localSettings.imageGenConfig}
+              onChange={(config) =>
+                setLocalSettings({ ...localSettings, imageGenConfig: config })
               }
             />
           )}

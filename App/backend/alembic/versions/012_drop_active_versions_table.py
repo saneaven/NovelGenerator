@@ -33,3 +33,4 @@ def downgrade():
         sa.Column('updated_at', sa.DateTime(), nullable=False),
     )
     op.create_index('ix_active_versions_version_id', 'active_versions', ['active_version_id'])
+    

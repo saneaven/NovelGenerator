@@ -243,7 +243,13 @@ export async function* streamChat(
                 if (opts?.signal?.aborted) {
                     return;
                 }
-                // Include last frame and remaining streamBuffer for debugging
+                // If we've already yielded meaningful content, gracefully accept the stream
+                // This handles network hiccups where [DONE] was lost but content was received
+                if (hasYieldedContent) {
+                    console.warn('Stream ended without [DONE] signal, but content was received. Accepting response.');
+                    return;
+                }
+                // Only throw if no content was received
                 const debugInfo = lastFrame
                     ? `Last frame:\n${lastFrame}${streamBuffer ? `\n\nRemaining streamBuffer:\n${streamBuffer}` : ''}`
                     : (streamBuffer ? `Remaining streamBuffer:\n${streamBuffer}` : null);
