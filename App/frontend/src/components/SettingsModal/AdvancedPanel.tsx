@@ -5,11 +5,15 @@ import './AdvancedPanel.css';
 interface AdvancedPanelProps {
     retryConfig: RetryConfig;
     onRetryConfigChange: (config: RetryConfig) => void;
+    nativeOutputMode: boolean;
+    onNativeOutputModeChange: (enabled: boolean) => void;
 }
 
 const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
     retryConfig,
     onRetryConfigChange,
+    nativeOutputMode,
+    onNativeOutputModeChange,
 }) => {
     const [newErrorCode, setNewErrorCode] = useState('');
 
@@ -183,6 +187,27 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                     <li><strong>503:</strong> Service Unavailable</li>
                     <li><strong>504:</strong> Gateway Timeout</li>
                 </ul>
+            </div>
+
+            {/* Native Output Mode */}
+            <div className="advanced-settings-card">
+                <h3>Native Output Mode</h3>
+                <div className="form-field">
+                    <label className="toggle-label">
+                        <input
+                            type="checkbox"
+                            checked={nativeOutputMode}
+                            onChange={(e) => onNativeOutputModeChange(e.target.checked)}
+                            className="toggle-input"
+                        />
+                        <span className="toggle-switch"></span>
+                        <span className="toggle-text">Enable native output mode</span>
+                    </label>
+                    <p className="field-hint">
+                        When enabled, AI features (except chat) will output raw text instead of using function calls.
+                        This can improve compatibility with some models but may reduce structured output reliability.
+                    </p>
+                </div>
             </div>
         </div>
     );

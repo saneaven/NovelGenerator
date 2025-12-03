@@ -1,7 +1,7 @@
 """Asset management routes"""
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session
-from typing import Optional, List
+from typing import Optional, List, Dict, Any, cast
 from uuid import UUID, uuid4
 from datetime import datetime
 
@@ -17,6 +17,7 @@ from ..schemas.assets import (
 )
 from ..services.storage_service import storage_service
 from ..image_providers.registry import ImageProviderRegistry
+from ..image_providers.base import ReferenceImageData
 
 # Import providers to register them
 from ..image_providers import openai_image, gemini_image, xai_image, novelai_image
@@ -39,6 +40,7 @@ def _asset_to_response(asset: Asset) -> AssetResponse:
         generation_provider=asset.generation_provider,
         generation_model=asset.generation_model,
         generation_settings=asset.generation_settings,
+        generation_reference_objects=cast(Optional[List[Dict[str, Any]]], asset.generation_reference_objects),
         width=asset.width,
         height=asset.height,
         file_size=asset.file_size,
@@ -66,7 +68,8 @@ async def list_image_providers():
                 supported_sizes=p["supported_sizes"],
                 supported_qualities=p["supported_qualities"],
                 supported_styles=p["supported_styles"],
-                settings_schema=p.get("settings_schema")
+                settings_schema=p.get("settings_schema"),
+                supports_image_input=p.get("supports_image_input", False)
             )
             for p in providers
         ]
@@ -122,6 +125,27 @@ async def generate_image(
                 error="Invalid provider configuration"
             )
 
+        # Load reference images if provided and provider supports image input
+        reference_image_data: Optional[List[ReferenceImageData]] = None
+        if request.reference_images and provider.supports_image_input():
+            reference_image_data = []
+            for ref_img in request.reference_images:
+                # Load image from storage using asset_id
+                ref_asset = db.query(Asset).filter(
+                    Asset.id == UUID(ref_img.asset_id),
+                    Asset.project_id == project_id
+                ).first()
+                if ref_asset:
+                    try:
+                        image_bytes = storage_service.read_asset_file(str(ref_asset.file_path))
+                        reference_image_data.append(ReferenceImageData(
+                            image_data=image_bytes,
+                            strength=ref_img.strength
+                        ))
+                    except FileNotFoundError:
+                        # Skip missing files
+                        pass
+
         # Generate image
         result = await provider.generate_image(
             prompt=request.prompt,
@@ -132,6 +156,7 @@ async def generate_image(
             positive_prompt=request.positive_prompt,
             negative_prompt=request.negative_prompt,
             provider_settings=request.provider_settings,
+            reference_images=reference_image_data,
         )
 
         if not result.success:
@@ -164,6 +189,14 @@ async def generate_image(
         # Store prompts separately based on provider type:
         # - Natural language (OpenAI, Gemini, xAI): generation_prompt only
         # - Tag-based (NovelAI): generation_positive_prompt + generation_negative_prompt only
+        # Convert reference_objects to list of dicts for JSONB storage
+        ref_objects_data = None
+        if request.reference_objects:
+            ref_objects_data = [
+                {"id": obj.id, "type": obj.type, "name": obj.name}
+                for obj in request.reference_objects
+            ]
+
         asset = Asset(
             id=uuid4(),
             project_id=project_id,
@@ -177,6 +210,7 @@ async def generate_image(
             generation_provider=request.provider,
             generation_model=request.model,
             generation_settings=request.provider_settings,
+            generation_reference_objects=ref_objects_data,  # Story objects used during generation
             width=width or result.width,
             height=height or result.height,
             file_size=file_size

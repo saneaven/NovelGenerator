@@ -169,6 +169,9 @@ export interface Settings {
 
     // Retry configuration (global)
     retryConfig: RetryConfig;
+
+    // Native output mode - skip function calling and output raw text/XML
+    nativeOutputMode: boolean;
 }
 
 // Default settings
@@ -313,6 +316,9 @@ const defaultSettings: Settings = {
         retryableStatusCodes: [429, 500, 502, 503, 504],
         retryDelayMs: 1000,
     },
+
+    // Native output mode disabled by default
+    nativeOutputMode: false,
 };
 
 // Store interface
@@ -355,6 +361,9 @@ interface SettingsStore {
 
     // Theme setter
     setTheme: (theme: ThemeMode) => void;
+
+    // Native output mode setter
+    setNativeOutputMode: (enabled: boolean) => void;
 
     // Prompt methods
     loadPrompt: (functionType: FunctionType, category: PromptCategory, name?: string) => Promise<string>;
@@ -429,6 +438,7 @@ const mergeWithDefaults = (stored: any): Settings => {
             ...defaultSettings.retryConfig,
             ...stored.retryConfig,
         },
+        nativeOutputMode: stored.nativeOutputMode ?? defaultSettings.nativeOutputMode,
     };
 };
 
@@ -664,6 +674,13 @@ export const useSettingsStore = create<SettingsStore>()(
             setTheme: (theme) => {
                 set((state) => ({
                     settings: { ...state.settings, theme },
+                }));
+            },
+
+            // Native output mode setter
+            setNativeOutputMode: (enabled) => {
+                set((state) => ({
+                    settings: { ...state.settings, nativeOutputMode: enabled },
                 }));
             },
 

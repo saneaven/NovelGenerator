@@ -3,18 +3,9 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { LLMRequestManager } from '../../chat/sessions/LLMRequestManager';
 import { LLMRequestPipeline } from '../../chat/LLMRequestPipeline';
-import type { ImagePromptContext } from '../../chat/managers/SystemPromptManager';
+import type { ObjectImagePromptContext } from '../../chat/managers/SystemPromptManager';
+import { OBJECT_IMAGE_PROMPT_FUNCTION } from '../../chat/types/imagePromptFunctionSchemas';
 import './ImagePromptBuilderModal.css';
-
-interface ChapterContext {
-    chapterId: string;
-    chapterName: string;
-    chapterDescription: string;
-    actId: string;
-    selectedText: string | null;
-    scenePreContext?: string;
-    scenePostContext?: string;
-}
 
 interface TargetObject {
     id: string;
@@ -28,9 +19,8 @@ interface ImagePromptBuilderModalProps {
     isOpen: boolean;
     onClose: () => void;
     onPromptGenerated: (prompt: string) => void;
-    chapterContext?: ChapterContext;
-    objectType?: string;
-    objectId?: string;
+    objectType: 'character' | 'location' | 'organization' | 'lorebook';
+    objectId: string;
     /** Which type of prompt is being generated: natural (OpenAI/Gemini/xAI), positive tags, or negative tags (NovelAI) */
     promptMode?: PromptMode;
 }
@@ -39,7 +29,6 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
     isOpen,
     onClose,
     onPromptGenerated,
-    chapterContext,
     objectType,
     objectId,
     promptMode = 'natural',
@@ -57,13 +46,6 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
 
     const abortControllerRef = useRef<AbortController | null>(null);
     const taskRunnerRef = useRef<LLMRequestManager | null>(null);
-
-    // Auto-compute request types based on props
-    const isCharacterRequest = objectType === 'character';
-    const isLocationRequest = objectType === 'location';
-    const isOrganizationRequest = objectType === 'organization';
-    const isLorebookRequest = objectType === 'lorebrook';
-    const isSceneRequest = !!(chapterContext?.scenePreContext || chapterContext?.scenePostContext);
 
     // Get the object data directly for proper dependency tracking
     const objectData = objectId ? unifiedStore.objects[objectId] : null;
@@ -99,39 +81,36 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
         }
     }, [isOpen]);
 
-    // Helper function to get object info string
-    const getObjectInfo = useCallback((): string | null => {
-        if (!targetObject) return null;
-        return `**${targetObject.name}**\n${targetObject.description}`;
-    }, [targetObject]);
-
     // Get context type label for header
     const getContextTypeLabel = (): string => {
-        if (isCharacterRequest) return 'Character';
-        if (isLocationRequest) return 'Location';
-        if (isOrganizationRequest) return 'Organization';
-        if (isLorebookRequest) return 'Lorebook Entry';
-        if (isSceneRequest) return 'Scene';
-        return '';
+        switch (objectType) {
+            case 'character': return 'Character';
+            case 'location': return 'Location';
+            case 'organization': return 'Organization';
+            case 'lorebook': return 'Lorebook Entry';
+            default: return '';
+        }
     };
 
-    // Build ImagePromptContext for the pipeline
-    const buildImagePromptContext = useCallback((): ImagePromptContext => {
-        const objectInfo = getObjectInfo();
+    // Get native output mode setting
+    const isNativeOutput = settings.nativeOutputMode;
+
+    // Build ObjectImagePromptContext for the pipeline
+    const buildObjectImagePromptContext = useCallback((): ObjectImagePromptContext => {
+        const objectInfo = targetObject
+            ? `**${targetObject.name}**\n${targetObject.description}`
+            : '';
         return {
             userRequest,
             promptMode,
-            characterInfo: isCharacterRequest ? objectInfo : null,
-            locationInfo: isLocationRequest ? objectInfo : null,
-            organizationInfo: isOrganizationRequest ? objectInfo : null,
-            lorebookInfo: isLorebookRequest ? objectInfo : null,
-            scenePreContext: isSceneRequest ? chapterContext?.scenePreContext : null,
-            scenePostContext: isSceneRequest ? chapterContext?.scenePostContext : null,
+            objectType,
+            objectInfo,
             currentPrompt: savedPrompts?.natural || null,
             currentPromptPositive: savedPrompts?.positive || null,
             currentPromptNegative: savedPrompts?.negative || null,
+            isNativeOutput,
         };
-    }, [userRequest, promptMode, isCharacterRequest, isLocationRequest, isOrganizationRequest, isLorebookRequest, isSceneRequest, chapterContext, savedPrompts, getObjectInfo]);
+    }, [userRequest, promptMode, objectType, targetObject, savedPrompts, isNativeOutput]);
 
     const handleGenerate = useCallback(async () => {
         setIsGenerating(true);
@@ -142,17 +121,17 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
         const providerConfig = settings.providerCredentials[imagePromptConfig.provider];
 
         try {
-            // Build systemInsertConfig for imagePrompt type
+            // Build systemInsertConfig for objectImagePrompt type
             const systemInsertConfig = {
                 enabled: true,
                 includeProjectInfo: false,
                 includeStoryObjects: false,
                 includeNovelContent: false,
-                promptType: 'imagePrompt' as const,
-                promptContext: buildImagePromptContext(),
+                promptType: 'objectImagePrompt' as const,
+                promptContext: buildObjectImagePromptContext(),
             };
 
-            // Create LLMRequestManager
+            // Create LLMRequestManager - conditionally use function calling based on native output mode
             taskRunnerRef.current = new LLMRequestManager(
                 {
                     projectId: '', // Not needed for image prompt generation
@@ -167,23 +146,67 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
                     enablePrefill: false,
                     retryConfig: settings.retryConfig,
                     abortControllerRef,
+                    // Function calling configuration - skip when in native output mode
+                    functions: isNativeOutput ? undefined : [OBJECT_IMAGE_PROMPT_FUNCTION],
+                    toolChoice: isNativeOutput ? undefined : 'required',
                 },
                 {
                     onStreamUpdate: (contentParts) => {
-                        // Extract text content from contentParts
+                        // Show streaming text as progress indicator
                         const text = contentParts
                             .filter(part => part.type === 'content')
                             .map(part => part.text)
                             .join('');
-                        setGeneratedPrompt(text);
+                        if (text) {
+                            // Native mode: always update (continuous streaming)
+                            // Function mode: only show intermediate content before function call
+                            if (isNativeOutput) {
+                                setGeneratedPrompt(text);
+                            }
+                        }
+                    },
+                    onFunctionCalls: isNativeOutput ? undefined : async (functionCalls) => {
+                        // Handle the function call response
+                        const call = functionCalls.find(c => c.function_name === 'generate_object_image_prompt');
+                        if (call && call.arguments) {
+                            try {
+                                // Arguments may be string or already parsed
+                                const args = typeof call.arguments === 'string'
+                                    ? JSON.parse(call.arguments)
+                                    : call.arguments;
+                                if (args.prompt) {
+                                    setGeneratedPrompt(args.prompt);
+                                }
+                            } catch (e) {
+                                console.error('Failed to parse function call arguments:', e);
+                                setError('Failed to parse generated prompt. Please try again.');
+                            }
+                        }
                     },
                     onFinalMessage: (message) => {
+                        // In native mode, use text content directly
+                        // In function mode, this is a fallback if no function call was made
                         const text = message.contentParts
-                            .filter(part => part.type === 'content')
+                            ?.filter(part => part.type === 'content')
                             .map(part => part.text)
-                            .join('');
-                        if (!text.trim()) {
-                            setError('AI generated an empty response. Please try again.');
+                            .join('') || '';
+
+                        if (isNativeOutput) {
+                            // Native mode: use raw text output
+                            if (text.trim()) {
+                                setGeneratedPrompt(text.trim());
+                            } else {
+                                setError('AI did not generate a prompt. Please try again.');
+                            }
+                        } else {
+                            // Function mode: fallback if no function call was made
+                            if (!message.functionCalls?.length) {
+                                if (text.trim()) {
+                                    setGeneratedPrompt(text);
+                                } else {
+                                    setError('AI did not generate a prompt. Please try again.');
+                                }
+                            }
                         }
                     },
                     onError: (err) => {
@@ -209,7 +232,7 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
             setIsGenerating(false);
             taskRunnerRef.current = null;
         }
-    }, [settings, buildImagePromptContext]);
+    }, [settings, buildObjectImagePromptContext, generatedPrompt, isNativeOutput]);
 
     const handleCancel = () => {
         taskRunnerRef.current?.abort();
@@ -229,7 +252,6 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
     if (!isOpen) return null;
 
     const contextLabel = getContextTypeLabel();
-    const hasContext = contextLabel !== '';
 
     return (
         <div className="modal-overlay" onClick={handleCancel}>
@@ -241,14 +263,12 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
 
                 <div className="modal-body">
                     {/* Context indicator - shows what object we're generating for */}
-                    {hasContext && (
-                        <div className="context-indicator">
-                            <span className="context-type">{contextLabel}:</span>
-                            <span className="context-name">
-                                {targetObject?.name || (isSceneRequest ? 'Scene from editor' : 'Loading...')}
-                            </span>
-                        </div>
-                    )}
+                    <div className="context-indicator">
+                        <span className="context-type">{contextLabel}:</span>
+                        <span className="context-name">
+                            {targetObject?.name || 'Loading...'}
+                        </span>
+                    </div>
 
                     {/* User Request */}
                     <div className="form-group">
@@ -262,35 +282,6 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
                             disabled={isGenerating}
                         />
                     </div>
-
-                    {/* Scene context info - auto-shown when scene context is available */}
-                    {isSceneRequest && (
-                        <div className="form-group scene-context-info">
-                            <label>Scene Context (auto-captured from cursor)</label>
-                            <div className="scene-context-preview">
-                                {chapterContext?.scenePreContext && (
-                                    <div className="context-preview-item">
-                                        <span className="preview-label">Before:</span>
-                                        <span className="preview-text">
-                                            {chapterContext.scenePreContext.length > 100
-                                                ? `...${chapterContext.scenePreContext.slice(-100)}`
-                                                : chapterContext.scenePreContext}
-                                        </span>
-                                    </div>
-                                )}
-                                {chapterContext?.scenePostContext && (
-                                    <div className="context-preview-item">
-                                        <span className="preview-label">After:</span>
-                                        <span className="preview-text">
-                                            {chapterContext.scenePostContext.length > 100
-                                                ? `${chapterContext.scenePostContext.slice(0, 100)}...`
-                                                : chapterContext.scenePostContext}
-                                        </span>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
 
                     {/* Generate Button */}
                     <div className="generate-section">

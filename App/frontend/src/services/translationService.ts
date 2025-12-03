@@ -20,9 +20,11 @@ import {
 } from '../chat/types/translationFunctionSchemas';
 import { useSettingsStore } from '../store/settingsStore';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
+import { useNovelEditorStore } from '../store/novelEditorStore';
 import type { ObjectType } from '../types/unifiedObject';
 import type { FunctionCallMetadata, FunctionCallProgress } from '../llm_request/types';
 import { translationService as translationAPI } from '../api/unifiedObjectService';
+import { parseJsonOutput, parseStreamingItems, extractRawContent, type ParsedItem } from '../utils/nativeOutputParser';
 
 // ============================================================================
 // TYPES
@@ -43,6 +45,10 @@ export interface TranslationOptions {
   onError?: (error: Error) => void;
   onPartialSuccess?: (translations: TranslationResult[], error: Error) => void;
   abortControllerRef?: MutableRefObject<AbortController | null>;
+  /** Raw streaming content callback (native mode only) */
+  onStreamContent?: (content: string) => void;
+  /** Parsed items during streaming (native mode only) */
+  onStreamParsed?: (items: ParsedItem[]) => void;
 }
 
 export interface TranslationStatus {
@@ -193,6 +199,8 @@ export class TranslationService {
       onError,
       onPartialSuccess,
       abortControllerRef: providedAbortRef,
+      onStreamContent,
+      onStreamParsed,
     } = options;
 
     if (objects.length === 0) {
@@ -202,6 +210,7 @@ export class TranslationService {
     const settingsStore = useSettingsStore.getState();
     const translationConfig = settingsStore.getFunctionConfig('translation');
     const providerConfig = settingsStore.getProviderConfig(translationConfig.provider);
+    const isNativeOutput = settingsStore.settings.nativeOutputMode;
 
     // Prepare objects array for prompt
     const objectsArray = objects.map(obj => ({
@@ -220,6 +229,7 @@ export class TranslationService {
       enablePrefill: translationConfig.advanced.enablePrefill,
       enableThinking: false,
       enableCustomThinking: false,
+      isNativeOutput,
     };
 
     const abortController = new AbortController();
@@ -241,6 +251,78 @@ export class TranslationService {
       promptType: 'translation' as const,
     };
 
+    // Native output handler for JSON parsing
+    const handleNativeOutput = async (text: string) => {
+      const cleanedText = extractRawContent(text);
+      const parsedItems = parseJsonOutput(cleanedText);
+
+      if (parsedItems.length === 0) {
+        throw new Error('AI did not return valid JSON output for translation.');
+      }
+
+      // Map parsed items to translations using the original objects array for objectType
+      const translations: TranslationResult[] = [];
+      for (const item of parsedItems) {
+        if (!item.id) continue;
+
+        // Find the original object to get its type
+        const originalObj = objects.find(o => o.objectId === item.id);
+        if (!originalObj) {
+          console.warn(`Could not find original object for id: ${item.id}`);
+          continue;
+        }
+
+        const translationData: Record<string, any> = {};
+        if (item.name !== undefined) translationData.name = item.name;
+        if (item.description !== undefined) translationData.description = item.description;
+        if (item.content !== undefined) {
+          translationData.content = item.content;
+          // Calculate word count for manuscript
+          if (originalObj.objectType === 'manuscript') {
+            translationData.wordCount = item.content.split(/\s+/).filter(Boolean).length;
+          }
+        }
+
+        translations.push({
+          objectType: originalObj.objectType,
+          objectId: item.id,
+          ...translationData,
+        });
+
+        // Report progress
+        if (onProgress) {
+          onProgress(translations.map(t => t.objectId));
+        }
+      }
+
+      if (translations.length === 0) {
+        throw new Error('No valid translations parsed from AI output');
+      }
+
+      // Prepare batch data for backend
+      const batchData = translations.map(trans => {
+        const { objectType, objectId, ...data } = trans;
+        return {
+          objectType: objectType as ObjectType,
+          objectId,
+          language: targetLanguage,
+          data,
+        };
+      });
+
+      // Send to backend using unified endpoint
+      await translationAPI.addTranslations(batchData);
+
+      // Update display language to show translated content immediately
+      const { setDisplayLanguage } = useNovelEditorStore.getState();
+      setDisplayLanguage(projectId, targetLanguage);
+
+      // Final progress update
+      if (onProgress) {
+        onProgress(translations.map(t => t.objectId));
+      }
+    };
+
     const llmConfig: LLMRequestManagerConfig = {
       projectId,
       getStoryObjects: () => createEmptyStoryObjects(),
@@ -251,8 +333,8 @@ export class TranslationService {
       aiModel: translationConfig.model,
       temperature: translationConfig.temperature,
       providerPreference: translationConfig.providerPreference,
-      functions: TRANSLATION_FUNCTIONS,
-      toolChoice: 'required',
+      functions: isNativeOutput ? undefined : TRANSLATION_FUNCTIONS,
+      toolChoice: isNativeOutput ? undefined : 'required',
       mode: 'workspace',
       enablePrefill: translationConfig.advanced.enablePrefill,
       thinkingMode: translationConfig.advanced.thinkingMode as any,
@@ -262,10 +344,27 @@ export class TranslationService {
     };
 
     const callbacks: LLMRequestManagerCallbacks = {
-      onStreamUpdate: () => {
-        // Progress tracking is handled by onFunctionCallProgress for function call responses
+      onStreamUpdate: (contentParts) => {
+        // In native mode, pass streaming content to callbacks
+        if (isNativeOutput) {
+          const text = contentParts
+            .filter(part => part.type === 'content')
+            .map(part => part.text)
+            .join('');
+          if (text) {
+            // Pass raw content
+            if (onStreamContent) onStreamContent(text);
+
+            // Parse and pass structured items
+            if (onStreamParsed) {
+              const items = parseStreamingItems(text);
+              if (items.length > 0) onStreamParsed(items);
+            }
+          }
+        }
+        // Function mode: progress is tracked via onFunctionCallProgress
       },
-      onFunctionCallProgress: (progressList: FunctionCallProgress[]) => {
+      onFunctionCallProgress: isNativeOutput ? undefined : (progressList: FunctionCallProgress[]) => {
         // Extract IDs and full translation data from streaming function call arguments
         const newIds: string[] = [];
         for (const progress of progressList) {
@@ -305,7 +404,7 @@ export class TranslationService {
           }
         }
       },
-      onFunctionCalls: async (functionCalls: FunctionCallMetadata[]) => {
+      onFunctionCalls: isNativeOutput ? undefined : async (functionCalls: FunctionCallMetadata[]) => {
         // Filter for translation function calls only
         const translationCalls = functionCalls.filter(
           fc => TRANSLATION_FUNCTION_NAMES.has(fc.function_name)
@@ -315,9 +414,6 @@ export class TranslationService {
           console.error('Available function calls:', functionCalls.map(fc => fc.function_name));
           throw new Error('AI did not call any translation functions');
         }
-
-        console.log(`Received ${translationCalls.length} translation function calls`);
-        console.log('Function calls:', translationCalls);
 
         // Accumulate translations from individual function calls
         const translations: TranslationResult[] = [];
@@ -380,11 +476,34 @@ export class TranslationService {
         // Send to backend using unified endpoint
         await translationAPI.addTranslations(batchData);
 
+        // Update display language to show translated content immediately
+        const { setDisplayLanguage } = useNovelEditorStore.getState();
+        setDisplayLanguage(projectId, targetLanguage);
+
         // Final progress update
         if (onProgress) {
           onProgress(translations.map(t => t.objectId));
         }
       },
+      onFinalMessage: isNativeOutput ? async (message) => {
+        const text = message.contentParts
+          ?.filter(part => part.type === 'content')
+          .map(part => part.text)
+          .join('') || '';
+        if (text.trim()) {
+          try {
+            await handleNativeOutput(text.trim());
+          } catch (err) {
+            if (onError) {
+              onError(err instanceof Error ? err : new Error('Failed to parse translation output'));
+            }
+          }
+        } else {
+          if (onError) {
+            onError(new Error('AI did not generate any translation output'));
+          }
+        }
+      } : undefined,
       onError: (error: Error) => {
         // If we have partial translations, call onPartialSuccess instead of onError
         if (onPartialSuccess && collectedTranslations.length > 0) {
@@ -468,6 +587,7 @@ export class TranslationService {
     const settingsStore = useSettingsStore.getState();
     const translationConfig = settingsStore.getFunctionConfig('translation');
     const providerConfig = settingsStore.getProviderConfig(translationConfig.provider);
+    const isNativeOutput = settingsStore.settings.nativeOutputMode;
 
     const promptContext = {
       translationType: 'chat' as const,
@@ -478,6 +598,7 @@ export class TranslationService {
       enablePrefill: translationConfig.advanced.enablePrefill,
       enableThinking: false,
       enableCustomThinking: false,
+      isNativeOutput,
     };
 
     const abortController = new AbortController();
@@ -521,8 +642,8 @@ export class TranslationService {
       aiModel: translationConfig.model,
       temperature: translationConfig.temperature,
       providerPreference: translationConfig.providerPreference,
-      functions: [TRANSLATE_CHAT_MESSAGE_FUNCTION],
-      toolChoice: 'required',
+      functions: isNativeOutput ? undefined : [TRANSLATE_CHAT_MESSAGE_FUNCTION],
+      toolChoice: isNativeOutput ? undefined : 'required',
       mode: 'workspace',
       enablePrefill: translationConfig.advanced.enablePrefill,
       thinkingMode: translationConfig.advanced.thinkingMode as any,
@@ -533,7 +654,7 @@ export class TranslationService {
 
     const callbacks: LLMRequestManagerCallbacks = {
       onStreamUpdate: () => {},
-      onFunctionCalls: async (functionCalls: FunctionCallMetadata[]) => {
+      onFunctionCalls: isNativeOutput ? undefined : async (functionCalls: FunctionCallMetadata[]) => {
         const translationCall = functionCalls.find(fc => fc.function_name === TRANSLATE_CHAT_MESSAGE_FUNCTION.name);
         if (!translationCall) {
           rejectTranslation(new Error('AI did not call translate_chat_message function'));
@@ -557,6 +678,18 @@ export class TranslationService {
           rejectTranslation(err instanceof Error ? err : new Error('Failed to parse translation result'));
         }
       },
+      onFinalMessage: isNativeOutput ? (message) => {
+        const text = message.contentParts
+          ?.filter(part => part.type === 'content')
+          .map(part => part.text)
+          .join('') || '';
+        if (text.trim()) {
+          // For chat translation, use raw text directly (no XML parsing needed)
+          resolveTranslation({ content: extractRawContent(text.trim()) });
+        } else {
+          rejectTranslation(new Error('AI did not generate any translation'));
+        }
+      } : undefined,
       onError: (error: Error) => {
         rejectTranslation(error);
       },

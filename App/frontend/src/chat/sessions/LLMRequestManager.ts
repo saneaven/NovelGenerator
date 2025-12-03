@@ -267,7 +267,16 @@ export class LLMRequestManager {
     this.callbacks.onFinalMessage?.(processedMessage);
 
     if (processedMessage.functionCalls && processedMessage.functionCalls.length > 0) {
+      console.log('LLMRequestManager: Calling onFunctionCalls callback', {
+        functionCallsCount: processedMessage.functionCalls.length,
+        functionCalls: processedMessage.functionCalls.map(fc => ({
+          function_name: fc.function_name,
+          hasArguments: !!fc.arguments
+        }))
+      });
       await this.callbacks.onFunctionCalls?.(processedMessage.functionCalls);
+    } else {
+      console.log('LLMRequestManager: No function calls to process');
     }
   }
 }

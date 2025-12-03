@@ -190,6 +190,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               onRetryConfigChange={(config) =>
                 setLocalSettings(prev => ({ ...prev, retryConfig: config }))
               }
+              nativeOutputMode={localSettings.nativeOutputMode}
+              onNativeOutputModeChange={(enabled) =>
+                setLocalSettings(prev => ({ ...prev, nativeOutputMode: enabled }))
+              }
             />
           )}
         </div>

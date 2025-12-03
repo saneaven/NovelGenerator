@@ -4,6 +4,7 @@ import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { TranslationService } from '../services/translationService';
 import type { StoryObjectToTranslate, TranslationResult } from '../services/translationService';
+import type { ParsedItem } from '../utils/nativeOutputParser';
 import type { UnifiedObject, ObjectType } from '../types/unifiedObject';
 
 interface BatchTranslationModalProps {
@@ -55,6 +56,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
   const [partialTranslations, setPartialTranslations] = useState<TranslationResult[]>([]);
   const [partialError, setPartialError] = useState<string | null>(null);
   const [isApplying, setIsApplying] = useState(false);
+  const [streamItems, setStreamItems] = useState<ParsedItem[]>([]);
 
   // Tree selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -208,6 +210,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
       setPartialTranslations([]);
       setPartialError(null);
       setIsApplying(false);
+      setStreamItems([]);
       setUserInstructions('');
       setSelectedIds(new Set());
       setExpandedCategories(new Set());
@@ -227,6 +230,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
     setError(null);
     setPartialError(null);
     setPartialTranslations([]);
+    setStreamItems([]);
 
     try {
       await TranslationService.translateBatch(objectsToTranslate, {
@@ -245,6 +249,9 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
           // Stay on progress screen with partial results
           setPartialTranslations(translations);
           setPartialError(err.message);
+        },
+        onStreamParsed: (items) => {
+          setStreamItems(items);
         },
         abortControllerRef,
       });
@@ -557,6 +564,21 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
                 );
               })}
             </div>
+
+            {/* Streaming preview for native mode */}
+            {streamItems.length > 0 && (
+              <div className="streaming-translations-preview">
+                <h4>Translating...</h4>
+                {streamItems.map((item, idx) => (
+                  <div key={item.id || idx} className="streaming-item">
+                    <strong>{item.name || item.id}</strong>
+                    {item.description && (
+                      <p>{item.description.length > 100 ? `${item.description.slice(0, 100)}...` : item.description}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="modal-actions">
               {partialError ? (

@@ -15,7 +15,8 @@ import {
   type TranslationPromptContext,
   type StoryObjectEditPromptContext,
   type ChapterEditPromptContext,
-  type ImagePromptContext
+  type ObjectImagePromptContext,
+  type SceneImagePromptContext
 } from '../managers/SystemPromptManager';
 import { PrefillManager, PrefillType, type ChatAssistantPrefillContext, type TranslationPrefillContext } from '../managers/PrefillManager';
 
@@ -159,13 +160,22 @@ export class DefaultPreProcessor implements PreProcessor {
           promptContext as ChapterEditPromptContext
         );
 
-      case 'imagePrompt':
+      case 'objectImagePrompt':
         if (!promptContext) {
-          throw new Error('Image prompt requires promptContext to be set');
+          throw new Error('Object image prompt requires promptContext to be set');
         }
         return await SystemPromptManager.generatePromptBundle(
-          PromptType.IMAGE_PROMPT,
-          promptContext as ImagePromptContext
+          PromptType.OBJECT_IMAGE_PROMPT,
+          promptContext as ObjectImagePromptContext
+        );
+
+      case 'sceneImagePrompt':
+        if (!promptContext) {
+          throw new Error('Scene image prompt requires promptContext to be set');
+        }
+        return await SystemPromptManager.generatePromptBundle(
+          PromptType.SCENE_IMAGE_PROMPT,
+          promptContext as SceneImagePromptContext
         );
 
       default:

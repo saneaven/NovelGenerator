@@ -8,6 +8,19 @@ from datetime import datetime
 # IMAGE GENERATION
 # ============================================================================
 
+class ReferenceImage(BaseModel):
+    """Reference image for image-to-image generation"""
+    asset_id: str
+    strength: float = 0.7  # How much to use this reference (0-1)
+
+
+class ReferenceObject(BaseModel):
+    """Reference object used during generation (stored in metadata)"""
+    id: str
+    type: str  # 'character', 'location', 'organization', 'lorebook'
+    name: str
+
+
 class ImageGenerationRequest(BaseModel):
     """Request to generate an image"""
     # API key for the image provider (sent in request body for consistency with LLM endpoints)
@@ -34,6 +47,12 @@ class ImageGenerationRequest(BaseModel):
     enhancement_provider: Optional[str] = None
     enhancement_model: Optional[str] = None
 
+    # Reference images for image-to-image generation (OpenAI GPT-Image, Gemini)
+    reference_images: Optional[List[ReferenceImage]] = None
+
+    # Reference objects used (stored in Asset metadata)
+    reference_objects: Optional[List[ReferenceObject]] = None
+
 
 class ImageGenerationResponse(BaseModel):
     """Response from image generation"""
@@ -54,6 +73,7 @@ class ImageProviderInfo(BaseModel):
     supported_qualities: List[str]
     supported_styles: List[str]
     settings_schema: Optional[Dict[str, Any]] = None  # Provider-specific settings schema
+    supports_image_input: bool = False  # Whether provider supports image-to-image generation
 
 
 class ImageProvidersResponse(BaseModel):
@@ -96,6 +116,7 @@ class AssetResponse(BaseModel):
     generation_provider: Optional[str] = None
     generation_model: Optional[str] = None
     generation_settings: Optional[Dict[str, Any]] = None  # Provider-specific settings
+    generation_reference_objects: Optional[List[Dict[str, Any]]] = None  # Story objects referenced
     width: Optional[int] = None
     height: Optional[int] = None
     file_size: Optional[int] = None

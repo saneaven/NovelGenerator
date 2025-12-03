@@ -5,6 +5,13 @@ from dataclasses import dataclass
 
 
 @dataclass
+class ReferenceImageData:
+    """Reference image for image-to-image generation"""
+    image_data: bytes  # Raw image bytes
+    strength: float = 0.7  # How much to use this reference (0-1)
+
+
+@dataclass
 class ImageGenerationResult:
     """Result of an image generation request"""
     success: bool
@@ -46,6 +53,7 @@ class BaseImageProvider(ABC):
         positive_prompt: Optional[str] = None,
         negative_prompt: Optional[str] = None,
         provider_settings: Optional[Dict] = None,
+        reference_images: Optional[List['ReferenceImageData']] = None,
     ) -> ImageGenerationResult:
         """
         Generate an image from a text prompt
@@ -60,6 +68,7 @@ class BaseImageProvider(ABC):
             positive_prompt: Positive tags for tag-based providers
             negative_prompt: Negative tags for tag-based providers
             provider_settings: Provider-specific settings (e.g., sampler, steps)
+            reference_images: List of reference images for image-to-image generation
 
         Returns:
             ImageGenerationResult with image data or error
@@ -129,3 +138,10 @@ class BaseImageProvider(ABC):
         Returns None if no additional settings are needed.
         """
         return None
+
+    def supports_image_input(self) -> bool:
+        """
+        Return True if this provider supports image-to-image generation.
+        Override in subclasses that support reference images.
+        """
+        return False

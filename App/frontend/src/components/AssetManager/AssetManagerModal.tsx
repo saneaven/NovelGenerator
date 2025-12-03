@@ -9,6 +9,17 @@ import './AssetManagerModal.css';
 
 type TabType = 'library' | 'upload' | 'generate' | 'prompt';
 
+// Settings to pass to ImageGenerationPanel for regeneration
+export interface RegenerateSettings {
+    provider: string;
+    model: string;
+    prompt?: string;
+    positive_prompt?: string;
+    negative_prompt?: string;
+    size?: string;
+    settings?: Record<string, any>;
+}
+
 interface ChapterContext {
     chapterId: string;
     chapterName: string;
@@ -62,6 +73,8 @@ const AssetManagerModal: React.FC<AssetManagerModalProps> = ({
     const [assetName, setAssetName] = useState('');
     const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
     const [editingName, setEditingName] = useState('');
+    const [detailAsset, setDetailAsset] = useState<Asset | null>(null);
+    const [regenerateSettings, setRegenerateSettings] = useState<RegenerateSettings | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Picker mode: onSelect provided, just browse all assets
@@ -174,6 +187,70 @@ const AssetManagerModal: React.FC<AssetManagerModalProps> = ({
         // Show success modal with the generated asset
         setSuccessModalAsset(asset);
         setAssetName('Generated Image');
+        // Clear regenerate settings after generation
+        setRegenerateSettings(null);
+    };
+
+    // Handle clicking on an asset to show details
+    const handleAssetClick = (asset: Asset) => {
+        setDetailAsset(asset);
+    };
+
+    // Handle regenerate with same settings
+    const handleRegenerateWithSettings = (asset: Asset) => {
+        if (!asset.generation_provider) return;
+
+        const settings: RegenerateSettings = {
+            provider: asset.generation_provider,
+            model: asset.generation_model || '',
+            prompt: asset.generation_prompt || undefined,
+            positive_prompt: asset.generation_positive_prompt || undefined,
+            negative_prompt: asset.generation_negative_prompt || undefined,
+            settings: asset.generation_settings || undefined,
+        };
+
+        // Extract size from generation_settings if available
+        if (asset.generation_settings?.size) {
+            settings.size = asset.generation_settings.size;
+        } else if (asset.width && asset.height) {
+            settings.size = `${asset.width}x${asset.height}`;
+        }
+
+        setRegenerateSettings(settings);
+        setDetailAsset(null);
+        setActiveTab('generate');
+    };
+
+    // Format file size for display
+    const formatFileSize = (bytes: number | null): string => {
+        if (!bytes) return 'Unknown';
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    };
+
+    // Format date for display
+    const formatDate = (dateStr: string): string => {
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    };
+
+    // Get provider display name
+    const getProviderDisplayName = (provider: string | null): string => {
+        if (!provider) return 'Unknown';
+        const names: Record<string, string> = {
+            openai: 'OpenAI',
+            gemini: 'Google Gemini',
+            xai: 'xAI (Grok)',
+            novelai: 'NovelAI',
+        };
+        return names[provider] || provider;
     };
 
     const handleSuccessModalSave = async () => {
@@ -229,18 +306,23 @@ const AssetManagerModal: React.FC<AssetManagerModalProps> = ({
                     >
                         Upload
                     </button>
-                    <button
-                        className={`tab-button ${activeTab === 'generate' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('generate')}
-                    >
-                        Generate
-                    </button>
-                    <button
-                        className={`tab-button ${activeTab === 'prompt' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('prompt')}
-                    >
-                        Prompt
-                    </button>
+                    {/* Generate and Prompt tabs only show in management mode (not picker mode) */}
+                    {!isPickerMode && (
+                        <>
+                            <button
+                                className={`tab-button ${activeTab === 'generate' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('generate')}
+                            >
+                                Generate
+                            </button>
+                            <button
+                                className={`tab-button ${activeTab === 'prompt' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('prompt')}
+                            >
+                                Prompt
+                            </button>
+                        </>
+                    )}
                 </div>
 
                 <div className="asset-modal-content">
@@ -267,12 +349,12 @@ const AssetManagerModal: React.FC<AssetManagerModalProps> = ({
 
                             <div className="asset-grid">
                                 {isPickerMode ? (
-                                    // Picker mode: show all assets, click to select
+                                    // Picker mode: show all assets, click to view details
                                     (filteredAssets as Asset[]).map((asset) => (
                                         <div
                                             key={asset.id}
                                             className="asset-item clickable"
-                                            onClick={() => onSelect?.(asset)}
+                                            onClick={() => handleAssetClick(asset)}
                                         >
                                             <div className="asset-thumbnail">
                                                 <img
@@ -289,11 +371,12 @@ const AssetManagerModal: React.FC<AssetManagerModalProps> = ({
                                         </div>
                                     ))
                                 ) : (
-                                    // Management mode: show linked assets with actions
+                                    // Management mode: show linked assets, click to view details
                                     (filteredAssets as StoryObjectAsset[]).map((link) => (
                                         <div
                                             key={link.id}
-                                            className={`asset-item ${link.is_main ? 'main' : ''}`}
+                                            className={`asset-item clickable ${link.is_main ? 'main' : ''}`}
+                                            onClick={() => handleAssetClick(link.asset)}
                                         >
                                             {link.is_main && <span className="main-badge">★</span>}
                                             <div className="asset-thumbnail">
@@ -397,18 +480,20 @@ const AssetManagerModal: React.FC<AssetManagerModalProps> = ({
                         </div>
                     )}
 
-                    {activeTab === 'generate' && (
+                    {/* Generate and Prompt tabs only render in management mode */}
+                    {!isPickerMode && activeTab === 'generate' && (
                         <div className="generate-tab">
                             <ImageGenerationPanel
                                 onImageGenerated={handleImageGenerated}
                                 chapterContext={chapterContext}
                                 objectType={objectType}
                                 objectId={objectId}
+                                initialSettings={regenerateSettings}
                             />
                         </div>
                     )}
 
-                    {activeTab === 'prompt' && (
+                    {!isPickerMode && activeTab === 'prompt' && (
                         <div className="prompt-tab">
                             <ImagePromptManager
                                 objectType={objectType}
@@ -458,6 +543,137 @@ const AssetManagerModal: React.FC<AssetManagerModalProps> = ({
                             </button>
                             <button className="save-button" onClick={handleSuccessModalSave}>
                                 Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Asset Detail Modal */}
+            {detailAsset && (
+                <div className="asset-detail-overlay" onClick={() => setDetailAsset(null)}>
+                    <div className="asset-detail-modal" onClick={(e) => e.stopPropagation()}>
+                        <div className="asset-detail-header">
+                            <h3>Image Details</h3>
+                            <button className="close-button" onClick={() => setDetailAsset(null)}>
+                                &times;
+                            </button>
+                        </div>
+                        <div className="asset-detail-body">
+                            <div className="asset-detail-image">
+                                <img
+                                    src={`${API_BASE_URL}${detailAsset.file_url}`}
+                                    alt={detailAsset.name}
+                                />
+                            </div>
+                            <div className="asset-detail-info">
+                                <div className="asset-detail-section">
+                                    <h4>Basic Info</h4>
+                                    <div className="detail-row">
+                                        <span className="detail-label">Name</span>
+                                        <span className="detail-value">{detailAsset.name}</span>
+                                    </div>
+                                    {detailAsset.width && detailAsset.height && (
+                                        <div className="detail-row">
+                                            <span className="detail-label">Dimensions</span>
+                                            <span className="detail-value">{detailAsset.width} × {detailAsset.height}</span>
+                                        </div>
+                                    )}
+                                    <div className="detail-row">
+                                        <span className="detail-label">File Size</span>
+                                        <span className="detail-value">{formatFileSize(detailAsset.file_size)}</span>
+                                    </div>
+                                    <div className="detail-row">
+                                        <span className="detail-label">Created</span>
+                                        <span className="detail-value">{formatDate(detailAsset.created_at)}</span>
+                                    </div>
+                                </div>
+
+                                {/* Generation Info - only show if image was generated */}
+                                {detailAsset.generation_provider && (
+                                    <div className="asset-detail-section">
+                                        <h4>Generation Info</h4>
+                                        <div className="detail-row">
+                                            <span className="detail-label">Provider</span>
+                                            <span className="detail-value">{getProviderDisplayName(detailAsset.generation_provider)}</span>
+                                        </div>
+                                        {detailAsset.generation_model && (
+                                            <div className="detail-row">
+                                                <span className="detail-label">Model</span>
+                                                <span className="detail-value">{detailAsset.generation_model}</span>
+                                            </div>
+                                        )}
+
+                                        {/* Natural language prompt */}
+                                        {detailAsset.generation_prompt && (
+                                            <div className="detail-row vertical">
+                                                <span className="detail-label">Prompt</span>
+                                                <div className="detail-prompt-box">
+                                                    {detailAsset.generation_prompt}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Tag-based prompts (NovelAI) */}
+                                        {detailAsset.generation_positive_prompt && (
+                                            <div className="detail-row vertical">
+                                                <span className="detail-label">Positive Prompt</span>
+                                                <div className="detail-prompt-box positive">
+                                                    {detailAsset.generation_positive_prompt}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {detailAsset.generation_negative_prompt && (
+                                            <div className="detail-row vertical">
+                                                <span className="detail-label">Negative Prompt</span>
+                                                <div className="detail-prompt-box negative">
+                                                    {detailAsset.generation_negative_prompt}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Provider-specific settings */}
+                                        {detailAsset.generation_settings && Object.keys(detailAsset.generation_settings).length > 0 && (
+                                            <div className="detail-row vertical">
+                                                <span className="detail-label">Settings</span>
+                                                <div className="detail-settings-list">
+                                                    {Object.entries(detailAsset.generation_settings).map(([key, value]) => (
+                                                        <div key={key} className="setting-item">
+                                                            <span className="setting-key">{key}:</span>
+                                                            <span className="setting-value">{String(value)}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="asset-detail-footer">
+                            {/* Regenerate button - only show if generation info exists */}
+                            {detailAsset.generation_provider && (
+                                <button
+                                    className="regenerate-button"
+                                    onClick={() => handleRegenerateWithSettings(detailAsset)}
+                                >
+                                    Regenerate with These Settings
+                                </button>
+                            )}
+                            {/* Select button - only in picker mode */}
+                            {isPickerMode && (
+                                <button
+                                    className="select-button"
+                                    onClick={() => {
+                                        onSelect?.(detailAsset);
+                                        setDetailAsset(null);
+                                    }}
+                                >
+                                    Select
+                                </button>
+                            )}
+                            <button className="cancel-button" onClick={() => setDetailAsset(null)}>
+                                Close
                             </button>
                         </div>
                     </div>

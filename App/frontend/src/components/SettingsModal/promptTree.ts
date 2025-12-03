@@ -249,28 +249,73 @@ export const PROMPT_TREE: PromptNode[] = [
     type: 'category',
     children: [
       {
-        id: 'imageprompt-system',
-        label: 'System Prompt',
-        type: 'prompt',
-        functionType: 'imagePrompt',
-        category: 'systemPrompt',
-        description: 'Instructions for AI-assisted image prompt generation'
+        id: 'imageprompt-object',
+        label: 'Object Prompt',
+        type: 'category',
+        defaultExpanded: true,
+        children: [
+          {
+            id: 'imageprompt-object-system',
+            label: 'System Prompt',
+            type: 'prompt',
+            functionType: 'imagePrompt',
+            category: 'systemPrompt',
+            name: 'object',
+            description: 'Instructions for generating prompts for story object images'
+          },
+          {
+            id: 'imageprompt-object-user',
+            label: 'User Prompt',
+            type: 'prompt',
+            functionType: 'imagePrompt',
+            category: 'userPrompt',
+            name: 'object',
+            description: 'Template for object image prompt requests'
+          },
+          {
+            id: 'imageprompt-object-prefill',
+            label: 'Prefill Template',
+            type: 'prompt',
+            functionType: 'imagePrompt',
+            category: 'prefill',
+            name: 'object',
+            description: 'Template for object image prompt responses'
+          }
+        ]
       },
       {
-        id: 'imageprompt-user',
-        label: 'User Prompt',
-        type: 'prompt',
-        functionType: 'imagePrompt',
-        category: 'userPrompt',
-        description: 'Auto-generated user message with story context for image prompt generation'
-      },
-      {
-        id: 'imageprompt-prefill',
-        label: 'Prefill Template',
-        type: 'prompt',
-        functionType: 'imagePrompt',
-        category: 'prefill',
-        description: 'Template for image prompt generation responses'
+        id: 'imageprompt-scene',
+        label: 'Scene Prompt',
+        type: 'category',
+        children: [
+          {
+            id: 'imageprompt-scene-system',
+            label: 'System Prompt',
+            type: 'prompt',
+            functionType: 'imagePrompt',
+            category: 'systemPrompt',
+            name: 'scene',
+            description: 'Instructions for generating scene image prompts with object selection'
+          },
+          {
+            id: 'imageprompt-scene-user',
+            label: 'User Prompt',
+            type: 'prompt',
+            functionType: 'imagePrompt',
+            category: 'userPrompt',
+            name: 'scene',
+            description: 'Template for scene image prompt requests with available objects'
+          },
+          {
+            id: 'imageprompt-scene-prefill',
+            label: 'Prefill Template',
+            type: 'prompt',
+            functionType: 'imagePrompt',
+            category: 'prefill',
+            name: 'scene',
+            description: 'Template for scene image prompt responses'
+          }
+        ]
       }
     ]
   }

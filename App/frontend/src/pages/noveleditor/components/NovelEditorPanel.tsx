@@ -35,9 +35,11 @@ import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import NovelChapterAIEditModal from '../../../components/NovelChapterAIEditModal';
 import RetranslateModal from '../../../components/RetranslateModal';
 import { AssetManagerModal } from '../../../components/AssetManager';
+import SceneImageGeneratorModal from '../../../components/ImageGeneration/SceneImageGeneratorModal';
 import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
 import { TranslationService } from '../../../services/translationService';
+import { useAssetStore } from '../../../store/assetStore';
 import type { ManuscriptObject } from '../../../types/unifiedObject';
 import type { Asset } from '../../../api/assetService';
 import { API_BASE_URL } from '../../../api/client';
@@ -89,9 +91,13 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const [isAIEditModalOpen, setIsAIEditModalOpen] = useState(false);
   const [showRetranslateModal, setShowRetranslateModal] = useState(false);
   const [showAssetModal, setShowAssetModal] = useState(false);
+  const [showImageGeneratorModal, setShowImageGeneratorModal] = useState(false);
   const [cursorContext, setCursorContext] = useState<{ before: string; after: string }>({ before: '', after: '' });
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isToolbarExpanded, setIsToolbarExpanded] = useState(true);
+
+  // Asset store for uploading images
+  const { uploadAsset } = useAssetStore();
 
   // Editor state
   const [content, setContent] = useState('');
@@ -451,13 +457,44 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     setShowAssetModal(false);
   }, []);
 
-  // Handle opening asset modal - capture cursor context first
-  const handleOpenAssetModal = useCallback(() => {
+  // Handle file upload from ImageInsertMenu drag-drop
+  const handleFileUpload = useCallback(async (file: File) => {
+    if (!projectId) return;
+
+    try {
+      const asset = await uploadAsset(projectId, file, file.name);
+      if (asset && editorRef.current) {
+        editorRef.current.insertImage(`${API_BASE_URL}${asset.file_url}`, asset.name);
+      }
+    } catch (err) {
+      console.error('Failed to upload image:', err);
+      showError('Upload Error', 'Failed to upload image. Please try again.');
+    }
+  }, [projectId, uploadAsset, showError]);
+
+  // Handle browse assets - opens AssetManagerModal in picker mode
+  const handleBrowseAssets = useCallback(() => {
     if (editorRef.current) {
       const context = editorRef.current.getTextAroundCursor();
       setCursorContext(context);
     }
     setShowAssetModal(true);
+  }, []);
+
+  // Handle generate image - opens SceneImageGeneratorModal
+  const handleGenerateImage = useCallback(() => {
+    if (editorRef.current) {
+      const context = editorRef.current.getTextAroundCursor();
+      setCursorContext(context);
+    }
+    setShowImageGeneratorModal(true);
+  }, []);
+
+  // Handle generated image from SceneImageGeneratorModal
+  const handleImageGenerated = useCallback((asset: Asset) => {
+    if (editorRef.current) {
+      editorRef.current.insertImage(`${API_BASE_URL}${asset.file_url}`, asset.name);
+    }
   }, []);
 
   const handleAIEditComplete = useCallback(() => {
@@ -763,7 +800,9 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
               onChange={handleContentChange}
               placeholder="Start writing your chapter..."
               disabled={isSaving || isMissingTranslation}
-              onImageButtonClick={handleOpenAssetModal}
+              onFileUpload={handleFileUpload}
+              onBrowseAssets={handleBrowseAssets}
+              onGenerateImage={handleGenerateImage}
             />
             {/* Missing Translation Overlay */}
             {isMissingTranslation && (
@@ -854,21 +893,23 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         />
       )}
 
-      {/* Asset Manager Modal for Image Insertion */}
+      {/* Asset Manager Modal for browsing/selecting existing images */}
       <AssetManagerModal
         isOpen={showAssetModal}
         onClose={() => setShowAssetModal(false)}
         onSelect={handleImageSelect}
-        title="Insert Image"
-        chapterContext={selectedChapter ? {
-          chapterId: selectedChapter.id,
-          chapterName: selectedChapter.name,
-          chapterDescription: selectedChapter.description,
-          actId: selectedChapter.actId,
-          selectedText: null,
-          scenePreContext: cursorContext.before,
-          scenePostContext: cursorContext.after,
-        } : undefined}
+        title="Select Image"
+      />
+
+      {/* Scene Image Generator Modal */}
+      <SceneImageGeneratorModal
+        isOpen={showImageGeneratorModal}
+        onClose={() => setShowImageGeneratorModal(false)}
+        onImageGenerated={handleImageGenerated}
+        sceneContext={{
+          preContext: cursorContext.before,
+          postContext: cursorContext.after,
+        }}
       />
     </>
   );

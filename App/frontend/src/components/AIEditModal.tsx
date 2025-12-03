@@ -11,6 +11,7 @@ import { applyEditFunctionCalls } from '../chat/utils/editFunctionApplicator';
 import { LLMRequestManager } from '../chat/sessions/LLMRequestManager';
 import { useLLMTaskStore } from '../store/llmTaskStore';
 import { generateTempId } from '../utils/tempId';
+import { parseJsonOutput, extractRawContent } from '../utils/nativeOutputParser';
 import GroupedFunctionCallCard from './functionCall/GroupedFunctionCallCard';
 import './AIEditModal.css';
 
@@ -374,6 +375,8 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       setStoryObjectsPreview(toStoryObjects(contextData));
       const currentData = await getCurrentData();
 
+      const isNativeOutput = settingsStore.settings.nativeOutputMode;
+
       const getStoryObjects = () => ({
         basicInfo: null,
         characters: [],
@@ -396,8 +399,46 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
           userRequest: userRequest.trim(),
           enablePrefill: storyEditConfig.advanced.enablePrefill,
           enableThinking: storyEditConfig.advanced.thinkingMode !== 'off',
+          isNativeOutput,
         },
         promptType: 'story_object_edit' as const,
+      };
+
+      // Native output handler for single/batch edits
+      const handleNativeOutput = async (text: string) => {
+        const cleanedText = extractRawContent(text);
+
+        // Parse JSON array output (used for both single and batch edits)
+        const parsedItems = parseJsonOutput(cleanedText);
+        if (parsedItems.length === 0) {
+          updateSession(sessionId, {
+            status: 'error',
+            error: 'AI did not return valid JSON output.',
+          });
+          return;
+        }
+
+        // Apply each parsed item
+        for (const item of parsedItems) {
+          if (!item.id) continue;
+          try {
+            await unifiedStore.updateObject(category, item.id, {
+              data: {
+                name: item.name,
+                description: item.description,
+              },
+              language: settingsStore.settings.mainLanguage,
+              create_new_version: true,
+              user_request: userRequest.trim(),
+            });
+          } catch (err) {
+            console.error(`Failed to update object ${item.id}:`, err);
+          }
+        }
+
+        updateSession(sessionId, { status: 'success', error: undefined });
+        onResult?.();
+        onClose();
       };
 
       taskRunnerRef.current = new LLMRequestManager(
@@ -411,8 +452,8 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
           aiModel: storyEditConfig.model,
           temperature: storyEditConfig.temperature,
           providerPreference: storyEditConfig.providerPreference,
-          functions: [functionSchema],
-          toolChoice: 'required',
+          functions: isNativeOutput ? undefined : [functionSchema],
+          toolChoice: isNativeOutput ? undefined : 'required',
           mode: 'workspace',
           enablePrefill: storyEditConfig.advanced.enablePrefill,
           thinkingMode: storyEditConfig.advanced.thinkingMode as any,
@@ -422,11 +463,28 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         },
         {
           onStreamUpdate: (contentParts) => setContentParts(sessionId, contentParts),
-          onFunctionCallProgress: (progress) => setFunctionCallProgress(sessionId, progress),
-          onFunctionCalls: handleFunctionCallResults,
-          onFinalMessage: (message) => {
-            if (!message.functionCalls || message.functionCalls.length === 0) {
-              updateSession(sessionId, { status: 'success', error: undefined });
+          onFunctionCallProgress: isNativeOutput ? undefined : (progress) => setFunctionCallProgress(sessionId, progress),
+          onFunctionCalls: isNativeOutput ? undefined : handleFunctionCallResults,
+          onFinalMessage: async (message) => {
+            if (isNativeOutput) {
+              // Native mode: extract text and apply directly
+              const text = message.contentParts
+                ?.filter(part => part.type === 'content')
+                .map(part => part.text)
+                .join('') || '';
+              if (text.trim()) {
+                await handleNativeOutput(text.trim());
+              } else {
+                updateSession(sessionId, {
+                  status: 'error',
+                  error: 'AI did not generate any output.',
+                });
+              }
+            } else {
+              // Function mode: success if no function calls pending
+              if (!message.functionCalls || message.functionCalls.length === 0) {
+                updateSession(sessionId, { status: 'success', error: undefined });
+              }
             }
           },
           onError: (err) => {

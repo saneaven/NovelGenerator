@@ -215,6 +215,24 @@ class StorageService:
         """Get the full file path for a relative storage path"""
         return self.base_path / relative_path
 
+    def read_asset_file(self, relative_path: str) -> bytes:
+        """
+        Read an asset file and return its bytes.
+
+        Args:
+            relative_path: Relative path from storage base (e.g., "originals/filename.png")
+
+        Returns:
+            Raw file bytes
+
+        Raises:
+            FileNotFoundError: If the file doesn't exist
+        """
+        full_path = self.base_path / relative_path
+        if not full_path.exists():
+            raise FileNotFoundError(f"Asset file not found: {relative_path}")
+        return full_path.read_bytes()
+
     def delete_file(self, relative_path: str) -> bool:
         """Delete a file from storage"""
         file_path = self.base_path / relative_path

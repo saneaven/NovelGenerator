@@ -6,6 +6,7 @@ import { LLMRequestPipeline } from '../chat/LLMRequestPipeline';
 import { NOVEL_EDITOR_FUNCTIONS } from '../chat/types/functionCalling';
 import { LLMRequestManager } from '../chat/sessions/LLMRequestManager';
 import type { ManuscriptObject } from '../types/unifiedObject';
+import { extractRawContent } from '../utils/nativeOutputParser';
 
 interface NovelContextOptions {
   basicInfo: boolean;
@@ -223,6 +224,8 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
       // Generate context
       const contextData = await generateNovelContext();
 
+      const isNativeOutput = settingsStore.settings.nativeOutputMode;
+
       const getStoryObjects = () => ({
         basicInfo: null,
         characters: [],
@@ -244,6 +247,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
           enablePrefill: chapterGenConfig.advanced.enablePrefill,
           enableThinking: chapterGenConfig.advanced.thinkingMode !== 'off',
           userRequest,
+          isNativeOutput,
         },
         promptType: 'chapter_edit' as const,
       };
@@ -262,6 +266,34 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         return allContent;
       };
 
+      // Native output handler
+      const handleNativeOutput = async (text: string) => {
+        const cleanedContent = extractRawContent(text);
+
+        // Find the manuscript object and update via unified store
+        const manuscriptObj = unifiedStore.getManuscriptByChapterId(chapterId);
+        if (!manuscriptObj) {
+          setError(`Manuscript not found for chapter ${chapterId}`);
+          return;
+        }
+
+        const wordCount = cleanedContent.trim().split(/\s+/).filter(Boolean).length;
+        await unifiedStore.updateObject('manuscript', manuscriptObj.id, {
+          data: {
+            content: cleanedContent,
+            wordCount,
+          },
+          language: settingsStore.settings.mainLanguage,
+          create_new_version: true,
+          user_request: 'AI Generated Content',
+        });
+
+        if (onResult) {
+          onResult();
+        }
+        onClose();
+      };
+
       const taskRunnerConfig = {
         projectId,
         getStoryObjects,
@@ -273,7 +305,8 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         aiModel: chapterGenConfig.model,
         temperature: chapterGenConfig.temperature,
         providerPreference: chapterGenConfig.providerPreference,
-        functions: NOVEL_EDITOR_FUNCTIONS,
+        functions: isNativeOutput ? undefined : NOVEL_EDITOR_FUNCTIONS,
+        toolChoice: isNativeOutput ? undefined : undefined, // NOVEL_EDITOR_FUNCTIONS doesn't require toolChoice
         mode: 'novelEditor' as const,
         enablePrefill: chapterGenConfig.advanced.enablePrefill,
         thinkingMode: chapterGenConfig.advanced.thinkingMode as any,
@@ -289,7 +322,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
             .join('');
           setStreamContent(textContent);
         },
-        onFunctionCalls: async (functionCalls: FunctionCallMetadata[]) => {
+        onFunctionCalls: isNativeOutput ? undefined : async (functionCalls: FunctionCallMetadata[]) => {
           try {
             const updateCall = functionCalls.find((fc) => fc.function_name === 'update_manuscript');
             if (!updateCall) {
@@ -328,6 +361,17 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
             setError(err instanceof Error ? err.message : 'Failed to apply chapter content update');
           }
         },
+        onFinalMessage: isNativeOutput ? async (message) => {
+          const text = message.contentParts
+            ?.filter(part => part.type === 'content')
+            .map(part => part.text)
+            .join('') || '';
+          if (text.trim()) {
+            await handleNativeOutput(text.trim());
+          } else {
+            setError('AI did not generate any content.');
+          }
+        } : undefined,
         onError: (err) => {
           setError(err.message);
         },

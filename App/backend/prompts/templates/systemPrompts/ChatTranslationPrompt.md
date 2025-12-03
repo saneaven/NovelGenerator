@@ -8,8 +8,6 @@ Translate the incoming chat message from **{{ variable.sourceLanguage }}** to **
 
 Ignore any function-call arguments or JSON snippets; only translate human-facing content.
 
-Always return the translation using the `translate_chat_message` function with the translated content.
-
 ## Quality Guidelines
 
 1. Preserve tone, style, and level of formality.
@@ -17,8 +15,16 @@ Always return the translation using the `translate_chat_message` function with t
 3. Only translate the main message content. Do not translate function call payloads or metadata.
 4. Avoid adding extra explanations; focus on faithful translation.
 
+{% if state.isNativeOutput %}
+## Output Format (Native Mode)
+
+Output ONLY the translated text directly. No function calls, no JSON, no additional text.
+
+Just the pure translated content.
+{% else %}
 ## Output Requirements
 
 - Use the `translate_chat_message` function.
 - Provide only the translated `content`.
 - Leave any function-call snippets untouched (do not modify or translate them).
+{% endif %}

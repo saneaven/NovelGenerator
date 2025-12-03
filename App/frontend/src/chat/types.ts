@@ -5,7 +5,8 @@ import type {
   TranslationPromptContext,
   StoryObjectEditPromptContext,
   ChapterEditPromptContext,
-  ImagePromptContext,
+  ObjectImagePromptContext,
+  SceneImagePromptContext,
 } from './managers/SystemPromptManager';
 import type { ThinkingConfig } from '../store/settingsStore';
 
@@ -22,8 +23,8 @@ export interface SystemInsertConfig {
   includeStoryObjects: boolean;
   includeNovelContent: boolean;
   // Prompt type category - all prompts are treated uniformly as categories
-  promptType?: 'chat' | 'translation' | 'story_object_edit' | 'chapter_edit' | 'imagePrompt';
-  promptContext?: ChatSystemPromptContext | TranslationPromptContext | StoryObjectEditPromptContext | ChapterEditPromptContext | ImagePromptContext;
+  promptType?: 'chat' | 'translation' | 'story_object_edit' | 'chapter_edit' | 'objectImagePrompt' | 'sceneImagePrompt';
+  promptContext?: ChatSystemPromptContext | TranslationPromptContext | StoryObjectEditPromptContext | ChapterEditPromptContext | ObjectImagePromptContext | SceneImagePromptContext;
 }
 
 // Pipeline processing interfaces

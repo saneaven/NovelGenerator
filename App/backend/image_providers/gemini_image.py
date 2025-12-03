@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 from google import genai
 from google.genai import types, errors
 
-from .base import BaseImageProvider, ImageGenerationResult
+from .base import BaseImageProvider, ImageGenerationResult, ReferenceImageData
 from .registry import ImageProviderRegistry
 
 
@@ -48,6 +48,10 @@ class GeminiImageProvider(BaseImageProvider):
     def get_supported_styles(self) -> List[str]:
         return ["natural"]
 
+    def supports_image_input(self) -> bool:
+        """Gemini supports multimodal input including images"""
+        return True
+
     async def get_models(self) -> Dict:
         """Return available Gemini image models"""
         return {
@@ -68,6 +72,7 @@ class GeminiImageProvider(BaseImageProvider):
         positive_prompt: Optional[str] = None,
         negative_prompt: Optional[str] = None,
         provider_settings: Optional[Dict] = None,
+        reference_images: Optional[List[ReferenceImageData]] = None,
     ) -> ImageGenerationResult:
         """Generate image using Gemini API"""
         if not self._client:
@@ -106,10 +111,38 @@ class GeminiImageProvider(BaseImageProvider):
                 image_config=image_config,
             )
 
+            # Build content - either multimodal with reference images or text-only
+            if reference_images and len(reference_images) > 0:
+                # Build multimodal content with reference images first, then prompt
+                content_parts: List[types.Part] = []
+
+                for ref_image in reference_images:
+                    # Detect mime type from image data (default to png)
+                    mime_type = "image/png"
+                    if ref_image.image_data[:3] == b'\xff\xd8\xff':
+                        mime_type = "image/jpeg"
+                    elif ref_image.image_data[:4] == b'RIFF' and ref_image.image_data[8:12] == b'WEBP':
+                        mime_type = "image/webp"
+
+                    # Add image part
+                    content_parts.append(
+                        types.Part.from_bytes(
+                            data=ref_image.image_data,
+                            mime_type=mime_type
+                        )
+                    )
+
+                # Add text prompt at the end
+                content_parts.append(types.Part.from_text(text=prompt))
+                contents = content_parts
+            else:
+                # Text-only prompt
+                contents = prompt
+
             # Generate content with image modality
             response = await client.aio.models.generate_content(
                 model=model,
-                contents=prompt,
+                contents=contents,
                 config=config,
             )
 

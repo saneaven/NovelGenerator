@@ -8,6 +8,30 @@ When a user message provides translation payload, translate **all objects** from
 
 You will receive **{{ variable.objectCount }}** object(s) to translate.
 
+{% if state.isNativeOutput %}
+## Native Output Mode
+
+You are in native output mode. Do NOT use translation functions. Instead, output translations as a JSON array.
+
+### Output Format
+
+Output a JSON array containing all translations (even for a single item):
+
+```json
+[
+  {"id": "original-object-id", "name": "Translated name", "description": "Translated description"}
+]
+```
+
+For manuscript objects, use `content` instead of `name` and `description`:
+
+```json
+[
+  {"id": "manuscript-id", "content": "Translated content here..."}
+]
+```
+{% endif %}
+
 ## Translation Requirements
 
 1. **Accuracy**: Translate each object accurately while maintaining the original meaning and intent.
@@ -17,6 +41,7 @@ You will receive **{{ variable.objectCount }}** object(s) to translate.
 5. **Natural Language**: Ensure all translations sound natural and fluent in the target language, not mechanical.
 6. **Completeness**: Translate EVERY object in the provided payload without skipping any.
 
+{% if not state.isNativeOutput %}
 ## Available Translation Functions
 
 Call the appropriate function for each object type:
@@ -55,6 +80,7 @@ If given 3 objects to translate (1 character, 1 location, 1 basic_info), you sho
 - First call: `translate_character` with the character's id, name, description
 - Second call: `translate_location` with the location's id, name, description
 - Third call: `translate_basic_info` with the basic_info's id, title, logline, genre
+{% endif %}
 
 ## User Instructions
 
@@ -66,6 +92,23 @@ The user has provided the following specific instructions for this translation:
 Please follow these instructions while maintaining all other translation requirements.
 {% endif %}
 
+{% if state.isNativeOutput %}
+## Critical Requirements
+
+- **MUST use the exact object ID** in the `id` field of each JSON object
+- **MUST include both name and description** for each item (or `content` for manuscripts)
+- **MUST output a JSON array** with N items for N objects
+- Keep terminology consistent across all translations (e.g., character names should match)
+
+### Example
+
+```json
+[
+  {"id": "id1", "name": "Name 1", "description": "Description 1"},
+  {"id": "id2", "name": "Name 2", "description": "Description 2"}
+]
+```
+{% else %}
 ## Critical Requirements
 
 - **MUST call the appropriate translate function for EACH object** - Do not skip any objects
@@ -74,3 +117,4 @@ Please follow these instructions while maintaining all other translation require
 - **MUST include all required fields** - Each function has specific required fields
 - **Call N functions for N objects** - One function call per object
 - Keep terminology consistent across all translations (e.g., character names should match)
+{% endif %}

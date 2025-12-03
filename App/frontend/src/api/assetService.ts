@@ -5,6 +5,13 @@
 import apiClient from './client';
 
 // Types
+// Reference object stored in asset metadata
+export interface ReferenceObjectData {
+    id: string;
+    type: string;  // 'character', 'location', 'organization', 'lorebook'
+    name: string;
+}
+
 export interface Asset {
     id: string;
     project_id: string;
@@ -19,6 +26,7 @@ export interface Asset {
     generation_provider: string | null;
     generation_model: string | null;
     generation_settings: Record<string, any> | null;  // Provider-specific settings
+    generation_reference_objects: ReferenceObjectData[] | null;  // Story objects referenced during generation
     width: number | null;
     height: number | null;
     file_size: number | null;
@@ -59,6 +67,20 @@ export interface ImageProvider {
     supported_qualities: string[];
     supported_styles: string[];
     settings_schema: Record<string, any> | null;
+    supports_image_input: boolean;  // Whether provider supports image-to-image generation
+}
+
+// Reference image for image-to-image generation
+export interface ReferenceImage {
+    asset_id: string;
+    strength: number;  // 0-1, how much to use this reference
+}
+
+// Reference object for generation (stored in metadata)
+export interface ReferenceObject {
+    id: string;
+    type: string;  // 'character', 'location', 'organization', 'lorebook'
+    name: string;
 }
 
 export interface ImageGenerationRequest {
@@ -77,6 +99,12 @@ export interface ImageGenerationRequest {
 
     // Provider-specific settings (e.g., sampler/steps for NovelAI, aspect_ratio/resolution for Gemini)
     provider_settings?: Record<string, any>;
+
+    // Reference images for image-to-image generation (OpenAI GPT-Image, Gemini)
+    reference_images?: ReferenceImage[];
+
+    // Reference objects used (stored in Asset metadata)
+    reference_objects?: ReferenceObject[];
 }
 
 export interface ImageGenerationResponse {

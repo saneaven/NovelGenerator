@@ -18,13 +18,25 @@ Let me analyze this chapter edit request:
 </thinking>
 ```
 
+{% if state.isNativeOutput %}
+After your thinking, output the edited chapter content directly.
+{% else %}
 After your thinking, use the `update_manuscript` function to provide the edited content.
+{% endif %}
 {% endif %}
 
 ## Language
 
 Respond in {{ variable.language }}.
 
+{% if state.isNativeOutput %}
+## Native Output Mode
+
+You are in native output mode. Do NOT use the `update_manuscript` function.
+
+Output the complete edited chapter content directly. No function calls, no special formatting. Just the pure chapter content text.
+
+{% else %}
 ## Task Overview
 
 A user message will supply the chapter's current content, the broader project context, and the requested edits.
@@ -36,3 +48,4 @@ A user message will supply the chapter's current content, the broader project co
 3. Preserve the existing narrative voice and writing style unless the user specifies otherwise.
 4. Ensure the revision flows with the broader story structure and pacing principles.
 5. After calling the function, provide a brief summary of the key changes you made in your text response.
+{% endif %}

@@ -4,16 +4,21 @@
  * Features:
  * - Rich text editing with basic formatting
  * - Inline image support
- * - Integration with AssetManagerModal
+ * - Image insert menu with drag-drop, browse, and generate options
  * - Native markdown support via @tiptap/markdown
  */
 
-import { useEffect, useCallback, useImperativeHandle, forwardRef, useRef } from 'react';
+import { useEffect, useCallback, useImperativeHandle, forwardRef, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
+import { Table } from '@tiptap/extension-table';
+import { TableRow } from '@tiptap/extension-table-row';
+import { TableCell } from '@tiptap/extension-table-cell';
+import { TableHeader } from '@tiptap/extension-table-header';
 import { Markdown } from '@tiptap/markdown';
+import ImageInsertMenu from './ImageInsertMenu';
 import './RichTextEditor.css';
 
 export interface RichTextEditorRef {
@@ -29,6 +34,11 @@ interface RichTextEditorProps {
   onChange: (markdown: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  // Image insert menu callbacks
+  onFileUpload?: (file: File) => void;
+  onBrowseAssets?: () => void;
+  onGenerateImage?: () => void;
+  // Legacy prop for backwards compatibility
   onImageButtonClick?: () => void;
 }
 
@@ -37,6 +47,9 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   onChange,
   placeholder = 'Start writing...',
   disabled = false,
+  onFileUpload,
+  onBrowseAssets,
+  onGenerateImage,
   onImageButtonClick,
 }, ref) => {
   // Use ref to hold onChange callback (prevents stale closure in onCreate)
@@ -46,12 +59,43 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     onChangeRef.current = onChange;
   }, [onChange]);
 
+  // Heading dropdown state
+  const [headingDropdownOpen, setHeadingDropdownOpen] = useState(false);
+  const headingDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Table dropdown state
+  const [tableDropdownOpen, setTableDropdownOpen] = useState(false);
+  const [tableRows, setTableRows] = useState(3);
+  const [tableCols, setTableCols] = useState(3);
+  const tableDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Image insert menu state
+  const [imageMenuOpen, setImageMenuOpen] = useState(false);
+  const imageButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Check if new image menu should be used (all callbacks provided)
+  const useImageMenu = !!(onFileUpload && onBrowseAssets && onGenerateImage);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (headingDropdownRef.current && !headingDropdownRef.current.contains(e.target as Node)) {
+        setHeadingDropdownOpen(false);
+      }
+      if (tableDropdownRef.current && !tableDropdownRef.current.contains(e.target as Node)) {
+        setTableDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        // Disable heading as we want simple text for novels
-        heading: false,
-        // Keep paragraph, bold, italic, etc.
+        heading: {
+          levels: [1, 2, 3, 4, 5, 6],
+        },
       }),
       Image.configure({
         inline: true,
@@ -63,6 +107,12 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
       Placeholder.configure({
         placeholder,
       }),
+      Table.configure({
+        resizable: false,
+      }),
+      TableRow,
+      TableCell,
+      TableHeader,
       Markdown,
     ],
     content: initialContent, // Markdown content - parsed by Markdown extension
@@ -72,9 +122,18 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     // This prevents false "unsaved changes" on page load
     // See: https://github.com/ueberdosis/tiptap/issues/2583
     onCreate: ({ editor }) => {
+      // Handle general content changes
       editor.on('update', ({ editor: updatedEditor }) => {
         // Use the official getMarkdown() method added by Markdown extension
         const markdown = updatedEditor.getMarkdown();
+        onChangeRef.current(markdown);
+      });
+
+      // Handle node/mark deletions (including images)
+      // The 'delete' event fires specifically when content is deleted
+      // This ensures image deletions trigger onChange even if 'update' doesn't fire
+      editor.on('delete', () => {
+        const markdown = editor.getMarkdown();
         onChangeRef.current(markdown);
       });
     },
@@ -130,6 +189,58 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     <div className={`rich-text-editor ${disabled ? 'disabled' : ''}`}>
       {/* Toolbar */}
       <div className="editor-format-toolbar">
+        {/* Heading Dropdown */}
+        <div className="heading-dropdown" ref={headingDropdownRef}>
+          <button
+            type="button"
+            onClick={() => setHeadingDropdownOpen(!headingDropdownOpen)}
+            className={`format-btn heading-dropdown-trigger ${
+              editor.isActive('heading') ? 'active' : ''
+            }`}
+            disabled={disabled}
+            title="Heading"
+          >
+            {editor.isActive('heading', { level: 1 }) ? 'H1' :
+             editor.isActive('heading', { level: 2 }) ? 'H2' :
+             editor.isActive('heading', { level: 3 }) ? 'H3' :
+             editor.isActive('heading', { level: 4 }) ? 'H4' :
+             editor.isActive('heading', { level: 5 }) ? 'H5' :
+             editor.isActive('heading', { level: 6 }) ? 'H6' : '¶'}
+            <span className="dropdown-arrow">▾</span>
+          </button>
+          {headingDropdownOpen && (
+            <div className="heading-dropdown-menu">
+              <button
+                type="button"
+                className={`heading-dropdown-item ${!editor.isActive('heading') ? 'active' : ''}`}
+                onClick={() => {
+                  editor.chain().focus().setParagraph().run();
+                  setHeadingDropdownOpen(false);
+                }}
+              >
+                <span className="heading-label">¶</span>
+                <span>Paragraph</span>
+              </button>
+              {([1, 2, 3, 4, 5, 6] as const).map((level) => (
+                <button
+                  key={level}
+                  type="button"
+                  className={`heading-dropdown-item ${editor.isActive('heading', { level }) ? 'active' : ''}`}
+                  onClick={() => {
+                    editor.chain().focus().toggleHeading({ level }).run();
+                    setHeadingDropdownOpen(false);
+                  }}
+                >
+                  <span className="heading-label">H{level}</span>
+                  <span>Heading {level}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="toolbar-divider" />
+
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleBold().run()}
@@ -178,14 +289,70 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
         >
           —
         </button>
+        {/* Table Dropdown */}
+        <div className="table-dropdown" ref={tableDropdownRef}>
+          <button
+            type="button"
+            onClick={() => setTableDropdownOpen(!tableDropdownOpen)}
+            className={`format-btn ${editor.isActive('table') ? 'active' : ''}`}
+            disabled={disabled}
+            title="Insert table"
+          >
+            ⊞
+          </button>
+          {tableDropdownOpen && (
+            <div className="table-dropdown-menu">
+              <div className="table-size-inputs">
+                <label>
+                  <span>Rows</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={tableRows}
+                    onChange={(e) => setTableRows(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
+                  />
+                </label>
+                <label>
+                  <span>Cols</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={tableCols}
+                    onChange={(e) => setTableCols(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+                  />
+                </label>
+              </div>
+              <button
+                type="button"
+                className="table-insert-btn"
+                onClick={() => {
+                  editor.chain().focus().insertTable({ rows: tableRows, cols: tableCols, withHeaderRow: true }).run();
+                  setTableDropdownOpen(false);
+                }}
+              >
+                Insert Table
+              </button>
+            </div>
+          )}
+        </div>
 
         <div className="toolbar-divider" />
 
-        {onImageButtonClick && (
+        {/* Image button with menu or legacy click handler */}
+        {(useImageMenu || onImageButtonClick) && (
           <button
+            ref={imageButtonRef}
             type="button"
-            onClick={onImageButtonClick}
-            className="format-btn image-btn"
+            onClick={() => {
+              if (useImageMenu) {
+                setImageMenuOpen(!imageMenuOpen);
+              } else if (onImageButtonClick) {
+                onImageButtonClick();
+              }
+            }}
+            className={`format-btn image-btn ${imageMenuOpen ? 'active' : ''}`}
             disabled={disabled}
             title="Insert image"
           >
@@ -193,6 +360,18 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
           </button>
         )}
       </div>
+
+      {/* Image Insert Menu */}
+      {useImageMenu && (
+        <ImageInsertMenu
+          isOpen={imageMenuOpen}
+          onClose={() => setImageMenuOpen(false)}
+          onUpload={onFileUpload}
+          onBrowseFiles={onBrowseAssets}
+          onGenerateImage={onGenerateImage}
+          anchorRef={imageButtonRef}
+        />
+      )}
 
       {/* Editor Content */}
       <EditorContent editor={editor} className="editor-content-wrapper" />

@@ -45,6 +45,7 @@ export const PROMPT_SCHEMAS = {
       enableThinking: { desc: "Enable thinking process", example: true },
       enablePrefill: { desc: "Enable prefill", example: true },
       enableCustomThinking: { desc: "Enable custom thinking", example: false },
+      isNativeOutput: { desc: "Native output mode (no function calls, use XML format)", example: false },
     },
     context: {
       objectsArray: { desc: "Array of objects to translate", example: [] as Record<string, any>[] },
@@ -63,6 +64,8 @@ export const PROMPT_SCHEMAS = {
       enableThinking: { desc: "Enable thinking process", example: true },
       enablePrefill: { desc: "Enable prefill", example: true },
       enableCustomThinking: { desc: "Enable custom thinking", example: false },
+      isNativeOutput: { desc: "Native output mode (no function calls)", example: false },
+      isBatchEdit: { desc: "Whether editing multiple items", example: false },
     },
     context: {
       currentData: {
@@ -86,9 +89,49 @@ export const PROMPT_SCHEMAS = {
       enableThinking: { desc: "Enable thinking process", example: true },
       enablePrefill: { desc: "Enable prefill", example: true },
       enableCustomThinking: { desc: "Enable custom thinking", example: false },
+      isNativeOutput: { desc: "Native output mode (no function calls)", example: false },
     },
     context: {
       contextData: { desc: "World setting info", example: { world: "Magic" } as Record<string, any> }
+    }
+  },
+  objectImagePrompt: {
+    variable: {
+      objectType: { desc: "Type of object", example: "character" as "character" | "location" | "organization" | "lorebook" },
+      objectInfo: { desc: "Object name and description", example: "Character: John Doe" },
+      userRequest: { desc: "User's request", example: "Make it more detailed" },
+      currentPrompt: { desc: "Current natural language prompt", example: "A tall man with blue eyes" },
+      currentPromptPositive: { desc: "Current positive tags", example: "blue eyes, tall" },
+      currentPromptNegative: { desc: "Current negative tags", example: "blurry, low quality" },
+      promptMode: { desc: "Prompt mode", example: "natural" as "natural" | "positive" | "negative" },
+    },
+    state: {
+      isNaturalPrompt: { desc: "Natural language mode", example: true },
+      isPositivePrompt: { desc: "Positive tags mode", example: false },
+      isNegativePrompt: { desc: "Negative tags mode", example: false },
+      hasUserRequest: { desc: "Has user request", example: true },
+      hasCurrentPrompt: { desc: "Has current prompt", example: false },
+      isNativeOutput: { desc: "Native output mode (no function calls)", example: false },
+    },
+    context: {}
+  },
+  sceneImagePrompt: {
+    variable: {
+      scenePreContext: { desc: "Scene pre-context", example: "The hero enters the dark cave..." },
+      scenePostContext: { desc: "Scene post-context", example: "He finds the treasure chest." },
+      userRequest: { desc: "User's request", example: "Focus on the treasure" },
+      promptMode: { desc: "Prompt mode", example: "natural" as "natural" | "positive" | "negative" },
+    },
+    state: {
+      isNaturalPrompt: { desc: "Natural language mode", example: true },
+      isPositivePrompt: { desc: "Positive tags mode", example: false },
+      isNegativePrompt: { desc: "Negative tags mode", example: false },
+      hasUserRequest: { desc: "Has user request", example: true },
+      hasAvailableObjects: { desc: "Has available reference objects", example: true },
+      isNativeOutput: { desc: "Native output mode (no function calls)", example: false },
+    },
+    context: {
+      availableObjects: { desc: "Available reference objects", example: [] as any[] },
     }
   }
 } as const;
@@ -110,9 +153,11 @@ export type ChatData = ExtractSchema<typeof PROMPT_SCHEMAS['chat']>;
 export type TranslationData = ExtractSchema<typeof PROMPT_SCHEMAS['translation']>;
 export type StoryObjectEditData = ExtractSchema<typeof PROMPT_SCHEMAS['storyObjectEdit']>;
 export type ChapterEditData = ExtractSchema<typeof PROMPT_SCHEMAS['chapterEdit']>;
+export type ObjectImagePromptData = ExtractSchema<typeof PROMPT_SCHEMAS['objectImagePrompt']>;
+export type SceneImagePromptData = ExtractSchema<typeof PROMPT_SCHEMAS['sceneImagePrompt']>;
 
 // Union type for all possible data
-export type PromptData = ChatData | TranslationData | StoryObjectEditData | ChapterEditData;
+export type PromptData = ChatData | TranslationData | StoryObjectEditData | ChapterEditData | ObjectImagePromptData | SceneImagePromptData;
 
 /**
  * Helper to get schema for a specific prompt type

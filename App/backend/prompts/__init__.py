@@ -53,8 +53,12 @@ _CHAPTER_EDIT_USER_PROMPT = _load_prompt_file('userPrompts/ChapterEditUserPrompt
 _CHAPTER_EDIT_PREFILL = _load_prompt_file('prefills/ChapterEditPrefill.md')
 _LAST_USER_MESSAGE_TAG = _load_prompt_file('userMessageSystemPrompts/LastUserMessageTag.md')
 _NON_LAST_USER_MESSAGE_TAG = _load_prompt_file('userMessageSystemPrompts/NonLastUserMessageTag.md')
-_IMAGE_PROMPT_GEN_SYSTEM_PROMPT = _load_prompt_file('systemPrompts/ImagePromptGenSystemPrompt.md')
-_IMAGE_PROMPT_GEN_USER_PROMPT = _load_prompt_file('userPrompts/ImagePromptGenUserPrompt.md')
+_OBJECT_IMAGE_PROMPT_SYSTEM_PROMPT = _load_prompt_file('systemPrompts/ObjectImagePromptSystemPrompt.md')
+_OBJECT_IMAGE_PROMPT_USER_PROMPT = _load_prompt_file('userPrompts/ObjectImagePromptUserPrompt.md')
+_OBJECT_IMAGE_PROMPT_PREFILL = _load_prompt_file('prefills/ObjectImagePromptPrefill.md')
+_SCENE_IMAGE_PROMPT_SYSTEM_PROMPT = _load_prompt_file('systemPrompts/SceneImagePromptSystemPrompt.md')
+_SCENE_IMAGE_PROMPT_USER_PROMPT = _load_prompt_file('userPrompts/SceneImagePromptUserPrompt.md')
+_SCENE_IMAGE_PROMPT_PREFILL = _load_prompt_file('prefills/SceneImagePromptPrefill.md')
 
 # Default prompts structure
 # Format matches the frontend structure: {function_type: {category: {name?: content}}}
@@ -95,8 +99,18 @@ DEFAULT_PROMPTS = {
         'prefill': _CHAPTER_EDIT_PREFILL,
     },
     'imagePrompt': {
-        'systemPrompt': _IMAGE_PROMPT_GEN_SYSTEM_PROMPT,
-        'userPrompt': _IMAGE_PROMPT_GEN_USER_PROMPT,
+        'systemPrompt': {
+            'object': _OBJECT_IMAGE_PROMPT_SYSTEM_PROMPT,
+            'scene': _SCENE_IMAGE_PROMPT_SYSTEM_PROMPT,
+        },
+        'userPrompt': {
+            'object': _OBJECT_IMAGE_PROMPT_USER_PROMPT,
+            'scene': _SCENE_IMAGE_PROMPT_USER_PROMPT,
+        },
+        'prefill': {
+            'object': _OBJECT_IMAGE_PROMPT_PREFILL,
+            'scene': _SCENE_IMAGE_PROMPT_PREFILL,
+        },
     },
 }
 

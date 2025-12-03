@@ -452,6 +452,7 @@ class Asset(Base):
     generation_provider = Column(String(50), nullable=True)  # 'openai', 'gemini', 'xai', 'novelai'
     generation_model = Column(String(100), nullable=True)
     generation_settings = Column(JSONB, nullable=True)  # Provider-specific settings (sampler, steps, etc.)
+    generation_reference_objects = Column(JSONB, nullable=True)  # Story objects referenced during generation
 
     # Image dimensions
     width = Column(Integer, nullable=True)

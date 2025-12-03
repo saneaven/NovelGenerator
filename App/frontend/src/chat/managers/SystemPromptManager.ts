@@ -12,7 +12,8 @@ const PROMPT_TYPE = {
   STORY_OBJECT_EDIT: 'story_object_edit',
   CHAPTER_EDIT: 'chapter_edit',
   TRANSLATION: 'translation',
-  IMAGE_PROMPT: 'image_prompt',
+  OBJECT_IMAGE_PROMPT: 'object_image_prompt',
+  SCENE_IMAGE_PROMPT: 'scene_image_prompt',
 } as const;
 
 export type PromptType = typeof PROMPT_TYPE[keyof typeof PROMPT_TYPE];
@@ -48,6 +49,7 @@ export interface StoryObjectEditPromptContext extends BasePromptContext {
   enablePrefill?: boolean;
   enableThinking?: boolean;
   enableCustomThinking?: boolean;
+  isNativeOutput?: boolean;
 }
 
 /**
@@ -61,6 +63,7 @@ export interface ChapterEditPromptContext extends BasePromptContext {
   enablePrefill?: boolean;
   enableThinking?: boolean;
   enableCustomThinking?: boolean;
+  isNativeOutput?: boolean;
 }
 
 /**
@@ -86,6 +89,7 @@ export interface StoryTranslationPromptContext extends BasePromptContext {
   enablePrefill?: boolean;
   enableThinking?: boolean;
   enableCustomThinking?: boolean;
+  isNativeOutput?: boolean;
 }
 
 /**
@@ -100,6 +104,7 @@ export interface ChatTranslationPromptContext extends BasePromptContext {
   enablePrefill?: boolean;
   enableThinking?: boolean;
   enableCustomThinking?: boolean;
+  isNativeOutput?: boolean;
 }
 
 export type TranslationPromptContext =
@@ -107,23 +112,44 @@ export type TranslationPromptContext =
   | ChatTranslationPromptContext;
 
 /**
- * Context for image prompt generation
+ * Reference object data for image generation
  */
-export interface ImagePromptContext extends BasePromptContext {
+export interface ImageReferenceObject {
+  id: string;
+  type: 'character' | 'location' | 'organization' | 'lorebook';
+  name: string;
+  description?: string;
+  appearance?: string;  // For characters
+  visualDescription?: string;  // For locations/orgs
+}
+
+/**
+ * Context for object image prompt generation (character, location, organization, lorebook)
+ * Used with function calling to generate structured prompt output
+ */
+export interface ObjectImagePromptContext extends BasePromptContext {
   userRequest: string;
   promptMode: 'natural' | 'positive' | 'negative';
-  // Object info (one of these will be set based on object type)
-  characterInfo?: string | null;
-  locationInfo?: string | null;
-  organizationInfo?: string | null;
-  lorebookInfo?: string | null;
-  // Scene context
-  scenePreContext?: string | null;
-  scenePostContext?: string | null;
-  // Saved prompts from object
+  objectType: 'character' | 'location' | 'organization' | 'lorebook';
+  objectInfo: string;  // Formatted object name + description
   currentPrompt?: string | null;
   currentPromptPositive?: string | null;
   currentPromptNegative?: string | null;
+  isNativeOutput?: boolean;
+}
+
+/**
+ * Context for scene image prompt generation
+ * Used with function calling to generate prompt + reference object IDs
+ */
+export interface SceneImagePromptContext extends BasePromptContext {
+  userRequest: string;
+  promptMode: 'natural' | 'positive' | 'negative';
+  scenePreContext: string;
+  scenePostContext: string;
+  // ALL story objects available for selection by the LLM
+  availableObjects: ImageReferenceObject[];
+  isNativeOutput?: boolean;
 }
 
 export interface PromptBundle {
@@ -178,7 +204,8 @@ export class SystemPromptManager {
   static generatePromptBundle(type: typeof PromptType.STORY_OBJECT_EDIT, context: StoryObjectEditPromptContext): Promise<PromptBundle>;
   static generatePromptBundle(type: typeof PromptType.CHAPTER_EDIT, context: ChapterEditPromptContext): Promise<PromptBundle>;
   static generatePromptBundle(type: typeof PromptType.TRANSLATION, context: TranslationPromptContext): Promise<PromptBundle>;
-  static generatePromptBundle(type: typeof PromptType.IMAGE_PROMPT, context: ImagePromptContext): Promise<PromptBundle>;
+  static generatePromptBundle(type: typeof PromptType.OBJECT_IMAGE_PROMPT, context: ObjectImagePromptContext): Promise<PromptBundle>;
+  static generatePromptBundle(type: typeof PromptType.SCENE_IMAGE_PROMPT, context: SceneImagePromptContext): Promise<PromptBundle>;
   static async generatePromptBundle(type: PromptType, context?: unknown): Promise<PromptBundle> {
     switch (type) {
       case PromptType.CHAT_SYSTEM:
@@ -189,8 +216,10 @@ export class SystemPromptManager {
         return this.generateChapterEditBundle(context as ChapterEditPromptContext);
       case PromptType.TRANSLATION:
         return this.generateTranslationBundle(context as TranslationPromptContext);
-      case PromptType.IMAGE_PROMPT:
-        return this.generateImagePromptBundle(context as ImagePromptContext);
+      case PromptType.OBJECT_IMAGE_PROMPT:
+        return this.generateObjectImagePromptBundle(context as ObjectImagePromptContext);
+      case PromptType.SCENE_IMAGE_PROMPT:
+        return this.generateSceneImagePromptBundle(context as SceneImagePromptContext);
       default:
         throw new Error(`Unknown prompt type: ${type}`);
     }
@@ -307,6 +336,8 @@ export class SystemPromptManager {
     const editScope = targetId ? 'a specific item' : 'the entire category';
     const language = this.resolveLanguage(outputLanguage);
 
+    const isBatchEdit = !targetId; // Batch edit when no specific target ID
+
     const systemData = {
       variable: {
         categoryName,
@@ -317,6 +348,8 @@ export class SystemPromptManager {
         enableThinking: context.enableThinking ?? false,
         enableCustomThinking: context.enableCustomThinking ?? false,
         enablePrefill: context.enablePrefill ?? false,
+        isNativeOutput: context.isNativeOutput ?? false,
+        isBatchEdit,
       },
       context: {}
     };
@@ -327,7 +360,10 @@ export class SystemPromptManager {
         targetId: targetId ?? '',
         userRequest: userRequest || '',
       },
-      state: {},
+      state: {
+        isNativeOutput: context.isNativeOutput ?? false,
+        isBatchEdit,
+      },
       context: {
         contextData,
         currentData,
@@ -361,6 +397,7 @@ export class SystemPromptManager {
         enableThinking: context.enableThinking ?? false,
         enableCustomThinking: context.enableCustomThinking ?? false,
         enablePrefill: context.enablePrefill ?? false,
+        isNativeOutput: context.isNativeOutput ?? false,
       },
       context: {}
     };
@@ -410,11 +447,13 @@ export class SystemPromptManager {
         variable: {
           sourceLanguage,
           targetLanguage,
+          objectCount: 1,
         },
         state: {
           enableThinking: chatContext.enableThinking ?? false,
           enableCustomThinking: chatContext.enableCustomThinking ?? false,
           enablePrefill: chatContext.enablePrefill ?? false,
+          isNativeOutput: chatContext.isNativeOutput ?? false,
         },
         context: {}
       };
@@ -426,7 +465,9 @@ export class SystemPromptManager {
           sourceContent,
           userInstructions: userInstructions || '',
         },
-        state: {},
+        state: {
+          isNativeOutput: chatContext.isNativeOutput ?? false,
+        },
         context: {}
       };
 
@@ -473,6 +514,7 @@ export class SystemPromptManager {
         enableThinking: storyContext.enableThinking ?? false,
         enableCustomThinking: storyContext.enableCustomThinking ?? false,
         enablePrefill: storyContext.enablePrefill ?? false,
+        isNativeOutput: storyContext.isNativeOutput ?? false,
       },
       context: {}
     };
@@ -484,7 +526,9 @@ export class SystemPromptManager {
         objectCount,
         userInstructions: userInstructions || '',
       },
-      state: {},
+      state: {
+        isNativeOutput: storyContext.isNativeOutput ?? false,
+      },
       context: {
         objectsArray,  // Array goes in context, use {{ context.objectsArray | json }} in template
       }
@@ -498,45 +542,87 @@ export class SystemPromptManager {
     };
   }
 
-  private static async generateImagePromptBundle(context: ImagePromptContext): Promise<PromptBundle> {
+  /**
+   * Generate prompt bundle for object image prompts (character, location, organization, lorebook)
+   */
+  private static async generateObjectImagePromptBundle(context: ObjectImagePromptContext): Promise<PromptBundle> {
     const [systemTemplate, userTemplate] = await Promise.all([
-      this.getTemplate('imagePrompt', 'systemPrompt'),
-      this.getTemplate('imagePrompt', 'userPrompt'),
+      this.getTemplate('imagePrompt', 'systemPrompt', 'object'),
+      this.getTemplate('imagePrompt', 'userPrompt', 'object'),
     ]);
 
     const systemData = {
       variable: {},
-      state: {},
+      state: {
+        isNativeOutput: context.isNativeOutput ?? false,
+      },
       context: {}
     };
 
     const userData = {
       variable: {
+        objectType: context.objectType,
+        objectInfo: context.objectInfo,
         userRequest: context.userRequest,
-        characterInfo: context.characterInfo,
-        locationInfo: context.locationInfo,
-        organizationInfo: context.organizationInfo,
-        lorebookInfo: context.lorebookInfo,
-        scenePreContext: context.scenePreContext,
-        scenePostContext: context.scenePostContext,
         currentPrompt: context.currentPrompt,
         currentPromptPositive: context.currentPromptPositive,
         currentPromptNegative: context.currentPromptNegative,
         promptMode: context.promptMode,
       },
       state: {
-        isCharacterRequest: !!context.characterInfo,
-        isLocationRequest: !!context.locationInfo,
-        isOrganizationRequest: !!context.organizationInfo,
-        isLorebookRequest: !!context.lorebookInfo,
-        isSceneRequest: !!(context.scenePreContext || context.scenePostContext),
-        hasCurrentPrompt: !!(context.currentPrompt || context.currentPromptPositive),
-        hasUserRequest: !!context.userRequest?.trim(),
         isNaturalPrompt: context.promptMode === 'natural',
         isPositivePrompt: context.promptMode === 'positive',
         isNegativePrompt: context.promptMode === 'negative',
+        hasUserRequest: !!context.userRequest?.trim(),
+        hasCurrentPrompt: !!(context.currentPrompt || context.currentPromptPositive),
+        isNativeOutput: context.isNativeOutput ?? false,
       },
       context: {}
+    };
+
+    return {
+      systemPrompt: renderTemplate(systemTemplate, systemData),
+      userPrompts: [
+        renderTemplate(userTemplate, userData),
+      ],
+    };
+  }
+
+  /**
+   * Generate prompt bundle for scene image prompts
+   */
+  private static async generateSceneImagePromptBundle(context: SceneImagePromptContext): Promise<PromptBundle> {
+    const [systemTemplate, userTemplate] = await Promise.all([
+      this.getTemplate('imagePrompt', 'systemPrompt', 'scene'),
+      this.getTemplate('imagePrompt', 'userPrompt', 'scene'),
+    ]);
+
+    const systemData = {
+      variable: {},
+      state: {
+        isNativeOutput: context.isNativeOutput ?? false,
+      },
+      context: {}
+    };
+
+    const userData = {
+      variable: {
+        scenePreContext: context.scenePreContext,
+        scenePostContext: context.scenePostContext,
+        userRequest: context.userRequest,
+        promptMode: context.promptMode,
+      },
+      state: {
+        isNaturalPrompt: context.promptMode === 'natural',
+        isPositivePrompt: context.promptMode === 'positive',
+        isNegativePrompt: context.promptMode === 'negative',
+        hasUserRequest: !!context.userRequest?.trim(),
+        hasAvailableObjects: context.availableObjects && context.availableObjects.length > 0,
+        isNativeOutput: context.isNativeOutput ?? false,
+      },
+      context: {
+        availableObjects: context.availableObjects || [],
+      }
     };
 
     return {

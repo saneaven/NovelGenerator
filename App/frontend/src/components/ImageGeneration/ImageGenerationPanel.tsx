@@ -17,12 +17,24 @@ interface ChapterContext {
     scenePostContext?: string;
 }
 
+// Settings passed from asset detail for regeneration
+interface RegenerateSettings {
+    provider: string;
+    model: string;
+    prompt?: string;
+    positive_prompt?: string;
+    negative_prompt?: string;
+    size?: string;
+    settings?: Record<string, any>;
+}
+
 interface ImageGenerationPanelProps {
     onImageGenerated?: (asset: Asset) => void;
     onClose?: () => void;
     chapterContext?: ChapterContext;
     objectType?: string;
     objectId?: string;
+    initialSettings?: RegenerateSettings | null;
 }
 
 // Provider prompt types
@@ -45,8 +57,6 @@ const PROVIDER_LABELS: Record<ImageProviderType, string> = {
 const MODEL_OPTIONS: Record<ImageProviderType, { id: string; name: string }[]> = {
     openai: [
         { id: 'gpt-image-1', name: 'GPT Image 1' },
-        { id: 'dall-e-3', name: 'DALL-E 3' },
-        { id: 'dall-e-2', name: 'DALL-E 2' },
     ],
     gemini: [
         { id: 'gemini-3-pro-image-preview', name: 'Gemini 3 Pro Image Preview' },
@@ -87,9 +97,10 @@ const NOVELAI_NOISE_SCHEDULES = ['native', 'karras', 'exponential', 'polyexponen
 const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
     onImageGenerated,
     onClose,
-    chapterContext,
+    // chapterContext is no longer used - ImagePromptBuilderModal now only supports object prompts
     objectType,
     objectId,
+    initialSettings,
 }) => {
     const { currentProjectId } = useProjectStore();
     const { isGenerating, error, fetchImageProviders, generateImage, clearError } = useAssetStore();
@@ -152,6 +163,51 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
     useEffect(() => {
         fetchImageProviders();
     }, [fetchImageProviders]);
+
+    // Apply initial settings when regenerating from asset detail
+    useEffect(() => {
+        if (!initialSettings) return;
+
+        // Set provider and model
+        if (initialSettings.provider) {
+            setProvider(initialSettings.provider as ImageProviderType);
+        }
+        if (initialSettings.model) {
+            setModel(initialSettings.model);
+        }
+
+        // Set prompts
+        if (initialSettings.prompt) {
+            setPrompt(initialSettings.prompt);
+        }
+        if (initialSettings.positive_prompt) {
+            setPositivePrompt(initialSettings.positive_prompt);
+        }
+        if (initialSettings.negative_prompt) {
+            setNegativePrompt(initialSettings.negative_prompt);
+        }
+
+        // Set size
+        if (initialSettings.size) {
+            setSize(initialSettings.size);
+        }
+
+        // Apply provider-specific settings
+        if (initialSettings.settings) {
+            const s = initialSettings.settings;
+            // OpenAI settings
+            if (s.quality) setOpenaiQuality(s.quality);
+            if (s.style) setOpenaiStyle(s.style);
+            // NovelAI settings
+            if (s.sampler) setNovelaiSampler(s.sampler);
+            if (s.steps) setNovelaiSteps(s.steps);
+            if (s.scale) setNovelaiScale(s.scale);
+            if (s.noise_schedule) setNovelaiNoiseSchedule(s.noise_schedule);
+            // Gemini settings
+            if (s.aspect_ratio) setGeminiAspectRatio(s.aspect_ratio);
+            if (s.image_resolution) setGeminiResolution(s.image_resolution);
+        }
+    }, [initialSettings]);
 
     // Auto-load saved prompts from object metadata
     useEffect(() => {
@@ -680,16 +736,17 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                 </div>
             </div>
 
-            {/* AI Prompt Builder Modal */}
-            <ImagePromptBuilderModal
-                isOpen={showPromptBuilder}
-                onClose={() => setShowPromptBuilder(false)}
-                onPromptGenerated={handlePromptBuilderGenerated}
-                chapterContext={chapterContext}
-                objectType={objectType}
-                objectId={objectId}
-                promptMode={isTagBased ? activePromptTab : 'natural'}
-            />
+            {/* AI Prompt Builder Modal - only render when object context is available */}
+            {showPromptBuilder && objectType && objectId && (
+                <ImagePromptBuilderModal
+                    isOpen={showPromptBuilder}
+                    onClose={() => setShowPromptBuilder(false)}
+                    onPromptGenerated={handlePromptBuilderGenerated}
+                    objectType={objectType as 'character' | 'location' | 'organization' | 'lorebook'}
+                    objectId={objectId}
+                    promptMode={isTagBased ? activePromptTab : 'natural'}
+                />
+            )}
         </div>
     );
 };
