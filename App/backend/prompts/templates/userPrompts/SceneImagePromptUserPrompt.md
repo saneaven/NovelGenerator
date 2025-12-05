@@ -26,16 +26,16 @@ The image will be inserted at the cursor position in the novel. Here is the surr
 {{ variable.userRequest }}
 {% endif %}
 
-{% if state.hasAvailableObjects %}
-## Available Story Objects
+{% if state.hasSelectedObjects %}
+## Story Object Context
 
-Review these objects and select the ones relevant to this scene. Include their IDs in your response.
+The following objects are relevant to this scene. Use their descriptions and saved image prompts (if available) to inform your generated prompt:
 
-{% for obj in context.availableObjects %}
+{% for obj in context.selectedObjects %}
 ### {{ obj.type | capitalize }}: {{ obj.name }}
-- **ID**: `{{ obj.id }}`
-{% if obj.description %}
-- **Description**: {{ obj.description }}
+{{ obj.description }}
+{% if obj.imagePrompt %}
+**Saved Image Prompt:** {{ obj.imagePrompt }}
 {% endif %}
 
 {% endfor %}
@@ -43,6 +43,7 @@ Review these objects and select the ones relevant to this scene. Include their I
 
 ---
 
-Call the `generate_scene_image_prompt` function with:
-1. Your generated prompt
-2. The IDs of relevant objects from the list above (as `reference_object_ids` array)
+Generate an image prompt based on the scene context above.
+{% if state.hasSelectedObjects %}
+Use the saved image prompts as reference for visual details when available.
+{% endif %}

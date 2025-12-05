@@ -115,13 +115,13 @@ const Workspace: React.FC = () =>
     const handleBatchTranslateComplete = () => {
         // Refresh objects after batch translation
         if (projectId) {
-            listObjects('basic_info', projectId, uiState.globalDisplayLanguage);
-            listObjects('character', projectId, uiState.globalDisplayLanguage);
-            listObjects('organization', projectId, uiState.globalDisplayLanguage);
-            listObjects('location', projectId, uiState.globalDisplayLanguage);
-            listObjects('lorebook', projectId, uiState.globalDisplayLanguage);
-            listObjects('act', projectId, uiState.globalDisplayLanguage);
-            listObjects('chapter', projectId, uiState.globalDisplayLanguage);
+            listObjects('basic_info', projectId);
+            listObjects('character', projectId);
+            listObjects('organization', projectId);
+            listObjects('location', projectId);
+            listObjects('lorebook', projectId);
+            listObjects('act', projectId);
+            listObjects('chapter', projectId);
         }
         setShowBatchTranslateModal(false);
     };
@@ -188,6 +188,9 @@ const Workspace: React.FC = () =>
         },
     }), [updateMessageContentLocal, updateMessage, handleFunctionCalls, addMessage, getMessages, showError, handleFunctionCallProgress]);
 
+    // Session ID for chat streaming toast
+    const chatSessionId = projectId ? `chat-${projectId}` : undefined;
+
     const chatManager = useMemo(() =>
     {
         const activeProjectId = projectId ?? '';
@@ -218,6 +221,7 @@ const Workspace: React.FC = () =>
                 thinkingMode: chatFunctionConfig.advanced.thinkingMode,
                 thinkingConfig: chatFunctionConfig.advanced.thinkingConfig,
                 retryConfig: settings.retryConfig,
+                sessionId: chatSessionId,
             },
             chatManagerCallbacks
         );
@@ -234,6 +238,7 @@ const Workspace: React.FC = () =>
         getSelectedChatId,
         chatManagerCallbacks,
         settings.retryConfig,
+        chatSessionId,
     ]);
 
     const chatHandlers = useChatHandlers(
@@ -525,6 +530,7 @@ const Workspace: React.FC = () =>
                 onClose={() => setShowBatchTranslateModal(false)}
                 projectId={projectId || ''}
                 onComplete={handleBatchTranslateComplete}
+                allowedObjectTypes={['basic_info', 'character', 'organization', 'location', 'lorebook', 'act', 'chapter']}
             />
 
             <ErrorModal

@@ -113,13 +113,13 @@ export const ensureVersionFields = <T extends BaseMetadata>(obj: T): T => {
   if (!obj.versions || !obj.activeVersionId) {
     const now = new Date();
     const initialVersionId = generateTempId();
-    
+
     return {
       ...obj,
       versions: obj.versions || [{
         versionId: initialVersionId,
         timestamp: now,
-        userRequest: 'Legacy data migration',
+        userRequest: 'Initial version',
         data: obj,
         isActive: true,
       }],

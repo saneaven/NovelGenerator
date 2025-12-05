@@ -8,8 +8,8 @@
     height: 100%;
     width: 100%;
     background: var(--color-surface-base);
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--border-radius-lg);
+    border: none;
+    border-radius: 0;
     overflow: hidden;
 }
 
@@ -77,6 +77,92 @@
     height: 20px;
     background: var(--color-border-default);
     margin: 0 var(--spacing-xs);
+}
+
+/* Toolbar spacer - pushes actions to the right */
+.toolbar-spacer {
+    flex: 1;
+    min-width: var(--spacing-md);
+}
+
+/* Toolbar actions container - right side */
+.toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.toolbar-actions .action-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-md);
+    background: var(--color-surface-base);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    transition: all var(--transition-base);
+    white-space: nowrap;
+}
+
+.toolbar-actions .action-btn:hover:not(:disabled) {
+    background: var(--color-surface-hover);
+    border-color: var(--color-border-medium);
+}
+
+.toolbar-actions .action-btn:disabled {
+    opacity: var(--opacity-disabled);
+    cursor: not-allowed;
+}
+
+.toolbar-actions .action-btn.ai-edit-btn {
+    background: var(--gradient-accent);
+    color: var(--color-text-inverse);
+    border-color: var(--color-primary-main);
+}
+
+.toolbar-actions .action-btn.ai-edit-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, var(--color-primary-main), var(--color-brand-primary-active));
+}
+
+.toolbar-actions .action-btn.save-btn {
+    background: var(--gradient-secondary);
+    color: var(--color-text-inverse);
+    border-color: var(--color-brand-secondary);
+}
+
+.toolbar-actions .action-btn.save-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, var(--color-brand-secondary) 0%, var(--color-brand-secondary-hover) 100%);
+}
+
+.toolbar-actions .more-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-md);
+    background: var(--color-surface-base);
+    color: var(--color-text-tertiary);
+    cursor: pointer;
+    transition: all var(--transition-base);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: 1px;
+}
+
+.toolbar-actions .more-button:hover:not(:disabled) {
+    background: var(--color-surface-hover);
+    border-color: var(--color-border-medium);
+    color: var(--color-text-secondary);
+}
+
+.toolbar-actions .more-button:disabled {
+    opacity: var(--opacity-disabled);
+    cursor: not-allowed;
 }
 
 /* ===== Heading Dropdown ===== */
@@ -398,5 +484,19 @@
 
     .tiptap-editor-content {
         font-size: var(--font-size-base);
+    }
+
+    /* Hide action buttons on mobile - merge into More Actions */
+    .toolbar-actions .action-btn {
+        display: none;
+    }
+
+    /* Keep only the more button visible on mobile */
+    .toolbar-actions .more-button {
+        display: flex;
+    }
+
+    .toolbar-spacer {
+        flex: 1;
     }
 }

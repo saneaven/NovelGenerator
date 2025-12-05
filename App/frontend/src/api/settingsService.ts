@@ -10,6 +10,7 @@ export interface SettingsSyncResponse {
     theme: string;
     retryConfig: Settings['retryConfig'];
     imageGenConfig: Settings['imageGenConfig'];
+    nativeOutputMode: boolean;
 }
 
 export const settingsService = {

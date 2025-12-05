@@ -35,6 +35,14 @@
   transform-origin: top left;
 }
 
+/* Portal-based dropdown (positioned via inline styles) */
+.dropdown-menu.portal {
+  top: auto;
+  right: auto;
+  left: auto;
+  margin-top: 0;
+}
+
 @keyframes dropdownIn {
   from {
     opacity: 0;

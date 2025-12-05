@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { assetService } from '../api/assetService';
-import type { Asset, StoryObjectAsset, ImageProvider, ImageGenerationRequest } from '../api/assetService';
+import type { Asset, StoryObjectAsset, ImageProvider } from '../api/assetService';
 
 interface AssetStore {
     // State
@@ -8,7 +8,6 @@ interface AssetStore {
     storyObjectAssets: Map<string, StoryObjectAsset[]>;
     imageProviders: ImageProvider[];
     isLoading: boolean;
-    isGenerating: boolean;
     error: string | null;
 
     // Actions
@@ -17,13 +16,8 @@ interface AssetStore {
     deleteAsset: (projectId: string, assetId: string) => Promise<void>;
     updateAsset: (projectId: string, assetId: string, name: string) => Promise<void>;
 
-    // Image generation
+    // Image providers (for checking capabilities)
     fetchImageProviders: () => Promise<void>;
-    generateImage: (
-        projectId: string,
-        request: ImageGenerationRequest,
-        apiKey: string
-    ) => Promise<Asset | null>;
 
     // Story object assets
     fetchStoryObjectAssets: (projectId: string, objectType: string, objectId: string) => Promise<void>;
@@ -61,7 +55,6 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
     storyObjectAssets: new Map(),
     imageProviders: [],
     isLoading: false,
-    isGenerating: false,
     error: null,
 
     fetchAssets: async (projectId: string) => {
@@ -135,35 +128,6 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
             set({ imageProviders: providers });
         } catch (error) {
             console.error('Failed to fetch image providers:', error);
-        }
-    },
-
-    generateImage: async (projectId: string, request: ImageGenerationRequest, apiKey: string) => {
-        set({ isGenerating: true, error: null });
-        try {
-            const response = await assetService.generateImage(projectId, request, apiKey);
-            if (!response.success) {
-                throw new Error(response.error || 'Image generation failed');
-            }
-
-            // Fetch the new asset
-            if (response.asset_id) {
-                const newAsset = await assetService.getAsset(projectId, response.asset_id);
-                set((state) => ({
-                    assets: [newAsset, ...state.assets],
-                    isGenerating: false,
-                }));
-                return newAsset;
-            }
-
-            set({ isGenerating: false });
-            return null;
-        } catch (error) {
-            set({
-                isGenerating: false,
-                error: error instanceof Error ? error.message : 'Failed to generate image',
-            });
-            throw error;
         }
     },
 

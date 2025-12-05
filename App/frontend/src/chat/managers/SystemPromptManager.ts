@@ -121,6 +121,23 @@ export interface ImageReferenceObject {
   description?: string;
   appearance?: string;  // For characters
   visualDescription?: string;  // For locations/orgs
+  metadata?: {
+    image_prompt?: string;
+    image_prompt_positive?: string;
+    image_prompt_negative?: string;
+  };
+}
+
+/**
+ * Selected object context for scene image prompt generation
+ * Contains full object info + saved image prompt based on promptMode
+ */
+export interface SelectedObjectContext {
+  id: string;
+  type: string;
+  name: string;
+  description: string;
+  imagePrompt?: string;  // Saved image prompt from metadata (based on current promptMode)
 }
 
 /**
@@ -140,15 +157,15 @@ export interface ObjectImagePromptContext extends BasePromptContext {
 
 /**
  * Context for scene image prompt generation
- * Used with function calling to generate prompt + reference object IDs
+ * User selects which objects to include; no AI auto-selection
  */
 export interface SceneImagePromptContext extends BasePromptContext {
   userRequest: string;
   promptMode: 'natural' | 'positive' | 'negative';
   scenePreContext: string;
   scenePostContext: string;
-  // ALL story objects available for selection by the LLM
-  availableObjects: ImageReferenceObject[];
+  // User-selected objects with full context (including saved image prompts)
+  selectedObjects: SelectedObjectContext[];
   isNativeOutput?: boolean;
 }
 
@@ -617,11 +634,11 @@ export class SystemPromptManager {
         isPositivePrompt: context.promptMode === 'positive',
         isNegativePrompt: context.promptMode === 'negative',
         hasUserRequest: !!context.userRequest?.trim(),
-        hasAvailableObjects: context.availableObjects && context.availableObjects.length > 0,
+        hasSelectedObjects: context.selectedObjects && context.selectedObjects.length > 0,
         isNativeOutput: context.isNativeOutput ?? false,
       },
       context: {
-        availableObjects: context.availableObjects || [],
+        selectedObjects: context.selectedObjects || [],
       }
     };
 

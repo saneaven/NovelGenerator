@@ -85,9 +85,9 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                 objectType as ObjectType,
                 objectId,
                 {
-                    image_prompt: naturalPrompt || undefined,
-                    image_prompt_positive: positivePrompt || undefined,
-                    image_prompt_negative: negativePrompt || undefined,
+                    image_prompt: naturalPrompt,
+                    image_prompt_positive: positivePrompt,
+                    image_prompt_negative: negativePrompt,
                 }
             );
             setHasChanges(false);
@@ -303,7 +303,7 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                 isOpen={showPromptBuilder}
                 onClose={() => setShowPromptBuilder(false)}
                 onPromptGenerated={handlePromptGenerated}
-                objectType={objectType}
+                objectType={objectType as 'character' | 'location' | 'organization' | 'lorebook'}
                 objectId={objectId}
                 promptMode={activeTab}
             />

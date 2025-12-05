@@ -16,22 +16,12 @@ export class DefaultPostProcessor implements PostProcessor {
     let tool_calls: any[] | undefined;
     let thinking_details: ThinkingDetail[] | undefined;
 
-    // Handle different response formats
-    if (typeof aiResponse === 'string') {
-      // Legacy: plain string content
-      contentParts = [{type: 'content', text: aiResponse}];
-    } else if (aiResponse.contentParts) {
-      // NEW: Already structured contentParts from ChatManager
+    // Extract contentParts from response
+    if (aiResponse.contentParts) {
       contentParts = aiResponse.contentParts;
       tool_calls = aiResponse.tool_calls;
       thinking_details = aiResponse.thinking_details;
-    } else if (aiResponse.content) {
-      // Fallback: old format with plain content
-      contentParts = [{type: 'content', text: aiResponse.content}];
-      tool_calls = aiResponse.tool_calls;
-      thinking_details = aiResponse.thinking_details;
     } else {
-      // No content at all
       contentParts = [];
       tool_calls = aiResponse.tool_calls;
       thinking_details = aiResponse.thinking_details;

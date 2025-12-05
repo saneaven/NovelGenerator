@@ -1,12 +1,14 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
-import type { FunctionCallMetadata, ContentPart } from '../llm_request/types';
+import { useLLMTaskStore } from '../store/llmTaskStore';
+import type { FunctionCallMetadata } from '../llm_request/types';
 import { LLMRequestPipeline } from '../chat/LLMRequestPipeline';
 import { NOVEL_EDITOR_FUNCTIONS } from '../chat/types/functionCalling';
 import { LLMRequestManager } from '../chat/sessions/LLMRequestManager';
 import type { ManuscriptObject } from '../types/unifiedObject';
 import { extractRawContent } from '../utils/nativeOutputParser';
+import { useLLMToast } from '../hooks/useLLMToast';
 
 interface NovelContextOptions {
   basicInfo: boolean;
@@ -25,6 +27,8 @@ interface NovelChapterAIEditModalProps {
   chapterId: string;
   chapterName: string;
   onResult?: () => void;
+  defaultUserRequest?: string;
+  defaultContextOptions?: NovelContextOptions;
 }
 
 const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
@@ -34,20 +38,45 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
   chapterId,
   chapterName,
   onResult,
+  defaultUserRequest,
+  defaultContextOptions,
 }) => {
-  const [userRequest, setUserRequest] = useState('');
-  const [contextOptions, setContextOptions] = useState<NovelContextOptions>({
-    basicInfo: true,
-    characters: true,
-    organizations: true,
-    locations: true,
-    lorebook: true,
-    outline: true,
-    allNovelContent: true,
-  });
+  const [userRequest, setUserRequest] = useState(defaultUserRequest || '');
+  const [contextOptions, setContextOptions] = useState<NovelContextOptions>(
+    defaultContextOptions || {
+      basicInfo: true,
+      characters: true,
+      organizations: true,
+      locations: true,
+      lorebook: true,
+      outline: true,
+      allNovelContent: true,
+    }
+  );
   const [isProcessing, setIsProcessing] = useState(false);
-  const [streamContent, setStreamContent] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // Session ID for toast and streaming
+  const sessionId = `chapter-edit-${chapterId}`;
+
+  // Toast notification for LLM requests
+  const { startTask, completeSuccess, completeError, completeCancelled } = useLLMToast({
+    sessionId,
+    taskType: 'chapter-edit',
+    label: `AI Edit: ${chapterName}`,
+  });
+
+  // Get streaming content from store
+  const getSessionById = useLLMTaskStore((state) => state.getSessionById);
+  const setContentParts = useLLMTaskStore((state) => state.setContentParts);
+  const session = getSessionById(sessionId);
+  const streamContent = useMemo(() => {
+    if (!session?.contentParts || session.contentParts.length === 0) return '';
+    return session.contentParts
+      .filter((p) => p.type === 'content')
+      .map((p) => p.text)
+      .join('');
+  }, [session?.contentParts]);
 
   const unifiedStore = useUnifiedObjectStore();
   const settingsStore = useSettingsStore();
@@ -60,29 +89,31 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
     if (!manuscriptObj || !manuscriptObj.data) {
       return null;
     }
+    // Access data for the main language, with fallback to first available
+    const mainLanguage = settingsStore.settings.mainLanguage;
+    const langData = manuscriptObj.data[mainLanguage] || Object.values(manuscriptObj.data)[0];
+    if (!langData) {
+      return null;
+    }
     return {
-      content: manuscriptObj.data.content || '',
-      wordCount: manuscriptObj.data.wordCount || 0,
+      content: langData.content || '',
+      wordCount: langData.wordCount || 0,
     };
   };
 
   useEffect(() => {
     if (!isOpen) {
+      // Reset form state but DON'T abort running requests
+      // Request continues in background, toast shows progress
       setUserRequest('');
-      setStreamContent('');
       setError(null);
       setIsProcessing(false);
-      taskRunnerRef.current?.abort();
-      taskRunnerRef.current = null;
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-      }
     }
   }, [isOpen, projectId]);
 
   const generateNovelContext = async (): Promise<Record<string, any>> => {
     const context: Record<string, any> = {};
+    const mainLanguage = settingsStore.settings.mainLanguage;
 
     try {
       // Basic Info
@@ -90,10 +121,11 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         const basicInfoList = await unifiedStore.listObjects('basic_info', projectId);
         if (basicInfoList.length > 0) {
           const basicInfo = basicInfoList[0];
+          const langData = basicInfo.data[mainLanguage] || Object.values(basicInfo.data)[0];
           context.basicInfo = {
-            title: basicInfo.data.title || '',
-            logline: basicInfo.data.logline || '',
-            genre: basicInfo.data.genre || '',
+            title: langData?.title || '',
+            logline: langData?.logline || '',
+            genre: langData?.genre || '',
           };
         }
       }
@@ -102,11 +134,14 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
       if (contextOptions.characters) {
         const characters = await unifiedStore.listObjects('character', projectId);
         if (characters.length > 0) {
-          context.characters = characters.map(char => ({
-            id: char.id,
-            name: char.data.name || '',
-            description: char.data.description || '',
-          }));
+          context.characters = characters.map(char => {
+            const langData = char.data[mainLanguage] || Object.values(char.data)[0];
+            return {
+              id: char.id,
+              name: langData?.name || '',
+              description: langData?.description || '',
+            };
+          });
         }
       }
 
@@ -114,11 +149,14 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
       if (contextOptions.organizations) {
         const organizations = await unifiedStore.listObjects('organization', projectId);
         if (organizations.length > 0) {
-          context.organizations = organizations.map(org => ({
-            id: org.id,
-            name: org.data.name || '',
-            description: org.data.description || '',
-          }));
+          context.organizations = organizations.map(org => {
+            const langData = org.data[mainLanguage] || Object.values(org.data)[0];
+            return {
+              id: org.id,
+              name: langData?.name || '',
+              description: langData?.description || '',
+            };
+          });
         }
       }
 
@@ -126,11 +164,14 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
       if (contextOptions.locations) {
         const locations = await unifiedStore.listObjects('location', projectId);
         if (locations.length > 0) {
-          context.locations = locations.map(loc => ({
-            id: loc.id,
-            name: loc.data.name || '',
-            description: loc.data.description || '',
-          }));
+          context.locations = locations.map(loc => {
+            const langData = loc.data[mainLanguage] || Object.values(loc.data)[0];
+            return {
+              id: loc.id,
+              name: langData?.name || '',
+              description: langData?.description || '',
+            };
+          });
         }
       }
 
@@ -138,11 +179,14 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
       if (contextOptions.lorebook) {
         const lorebook = await unifiedStore.listObjects('lorebook', projectId);
         if (lorebook.length > 0) {
-          context.lorebook = lorebook.map(entry => ({
-            id: entry.id,
-            name: entry.data.name || '',
-            description: entry.data.description || '',
-          }));
+          context.lorebook = lorebook.map(entry => {
+            const langData = entry.data[mainLanguage] || Object.values(entry.data)[0];
+            return {
+              id: entry.id,
+              name: langData?.name || '',
+              description: langData?.description || '',
+            };
+          });
         }
       }
 
@@ -155,19 +199,25 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
           context.outline = {
             acts: acts
               .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-              .map(act => ({
-                id: act.id,
-                name: act.data.name || '',
-                description: act.data.description || '',
-                chapters: chapters
-                  .filter(ch => ch.metadata.act_id === act.id)
-                  .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-                  .map(chapter => ({
-                    id: chapter.id,
-                    name: chapter.data.name || '',
-                    description: chapter.data.description || '',
-                  })),
-              })),
+              .map(act => {
+                const actLangData = act.data[mainLanguage] || Object.values(act.data)[0];
+                return {
+                  id: act.id,
+                  name: actLangData?.name || '',
+                  description: actLangData?.description || '',
+                  chapters: chapters
+                    .filter(ch => ch.metadata.act_id === act.id)
+                    .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+                    .map(chapter => {
+                      const chapterLangData = chapter.data[mainLanguage] || Object.values(chapter.data)[0];
+                      return {
+                        id: chapter.id,
+                        name: chapterLangData?.name || '',
+                        description: chapterLangData?.description || '',
+                      };
+                    }),
+                };
+              }),
           };
         }
       }
@@ -186,11 +236,13 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
           if (!contentChapterId) return;
           const chapterInfo = chapterMap.get(contentChapterId);
           if (chapterInfo) {
+            const chapterLangData = chapterInfo.data[mainLanguage] || Object.values(chapterInfo.data)[0];
+            const manuscriptLangData = manuscriptObj.data[mainLanguage] || Object.values(manuscriptObj.data)[0];
             novelContent[contentChapterId] = {
-              chapterName: chapterInfo.data.name || '',
-              chapterDescription: chapterInfo.data.description || '',
-              content: manuscriptObj.data?.content || '',
-              wordCount: manuscriptObj.data?.wordCount ?? 0,
+              chapterName: chapterLangData?.name || '',
+              chapterDescription: chapterLangData?.description || '',
+              content: manuscriptLangData?.content || '',
+              wordCount: manuscriptLangData?.wordCount ?? 0,
             };
           }
         });
@@ -211,8 +263,26 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
     if (!userRequest.trim() || isProcessing) return;
 
     setIsProcessing(true);
-    setStreamContent('');
+    setContentParts(sessionId, []);
     setError(null);
+
+    // Start toast notification with retry context
+    startTask({
+      taskType: 'chapter-edit',
+      modalProps: {
+        projectId,
+        chapterId,
+        chapterName,
+        onResult,
+      },
+      formState: {
+        userRequest,
+        contextOptions,
+      },
+    });
+
+    // Auto-close modal - request continues in background, toast shows progress
+    onClose();
 
     try {
       const chapterGenConfig = settingsStore.getFunctionConfig('chapterGen');
@@ -273,7 +343,9 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         // Find the manuscript object and update via unified store
         const manuscriptObj = unifiedStore.getManuscriptByChapterId(chapterId);
         if (!manuscriptObj) {
-          setError(`Manuscript not found for chapter ${chapterId}`);
+          const errorMsg = `Manuscript not found for chapter ${chapterId}`;
+          setError(errorMsg);
+          completeError(errorMsg);
           return;
         }
 
@@ -288,10 +360,11 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
           user_request: 'AI Generated Content',
         });
 
+        completeSuccess();
         if (onResult) {
           onResult();
         }
-        onClose();
+        // Modal already closed - no need to call onClose()
       };
 
       const taskRunnerConfig = {
@@ -312,21 +385,18 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         thinkingMode: chapterGenConfig.advanced.thinkingMode as any,
         thinkingConfig: chapterGenConfig.advanced.thinkingConfig as any,
         abortControllerRef,
+        sessionId,
       };
 
       taskRunnerRef.current = new LLMRequestManager(taskRunnerConfig, {
-        onStreamUpdate: (contentParts: ContentPart[]) => {
-          const textContent = contentParts
-            .filter((p) => p.type === 'content')
-            .map((p) => p.text)
-            .join('');
-          setStreamContent(textContent);
-        },
+        onStreamUpdate: () => {}, // Store is now updated by LLMRequestManager internally
         onFunctionCalls: isNativeOutput ? undefined : async (functionCalls: FunctionCallMetadata[]) => {
           try {
             const updateCall = functionCalls.find((fc) => fc.function_name === 'update_manuscript');
             if (!updateCall) {
-              setError('AI did not call update_manuscript function');
+              const errorMsg = 'AI did not call update_manuscript function';
+              setError(errorMsg);
+              completeError(errorMsg);
               return;
             }
 
@@ -337,7 +407,9 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
             // Find the manuscript object and update via unified store
             const manuscriptObj = unifiedStore.getManuscriptByChapterId(args.chapterId);
             if (!manuscriptObj) {
-              setError(`Manuscript not found for chapter ${args.chapterId}`);
+              const errorMsg = `Manuscript not found for chapter ${args.chapterId}`;
+              setError(errorMsg);
+              completeError(errorMsg);
               return;
             }
 
@@ -352,13 +424,16 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
               user_request: 'AI Generated Content',
             });
 
+            completeSuccess();
             if (onResult) {
               onResult();
             }
-            onClose();
+            // Modal already closed - no need to call onClose()
           } catch (err) {
             console.error('Function application error:', err);
-            setError(err instanceof Error ? err.message : 'Failed to apply chapter content update');
+            const errorMsg = err instanceof Error ? err.message : 'Failed to apply chapter content update';
+            setError(errorMsg);
+            completeError(errorMsg);
           }
         },
         onFinalMessage: isNativeOutput ? async (message) => {
@@ -369,11 +444,14 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
           if (text.trim()) {
             await handleNativeOutput(text.trim());
           } else {
-            setError('AI did not generate any content.');
+            const errorMsg = 'AI did not generate any content.';
+            setError(errorMsg);
+            completeError(errorMsg);
           }
         } : undefined,
         onError: (err) => {
           setError(err.message);
+          completeError(err.message);
         },
       });
 
@@ -388,11 +466,15 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
     } catch (err) {
       if (err instanceof Error) {
         if (err.name === 'AbortError') {
+          completeCancelled();
           return;
         }
         setError(err.message);
+        completeError(err.message);
       } else {
-        setError('An unknown error occurred.');
+        const errorMsg = 'An unknown error occurred.';
+        setError(errorMsg);
+        completeError(errorMsg);
       }
     } finally {
       setIsProcessing(false);
@@ -401,13 +483,8 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
     }
   };
 
-  const handleCancel = () => {
-    taskRunnerRef.current?.abort();
-    taskRunnerRef.current = null;
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
+  // Just close modal - don't abort (request continues in background)
+  const handleClose = () => {
     onClose();
   };
 
@@ -428,7 +505,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
           <div className="chapter-info">
             <span className="chapter-name">{chapterName}</span>
           </div>
-          <button className="modal-close" onClick={handleCancel}>×</button>
+          <button className="modal-close" onClick={handleClose}>×</button>
         </div>
 
         <form onSubmit={handleSubmit} className="ai-edit-form">
@@ -536,9 +613,8 @@ e.g., "Make the dialogue more natural and add more emotional depth to the conver
           <div className="form-actions">
             <button
               type="button"
-              onClick={handleCancel}
+              onClick={handleClose}
               className="cancel-button"
-              disabled={isProcessing}
             >
               Cancel
             </button>

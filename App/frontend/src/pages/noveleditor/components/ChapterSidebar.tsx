@@ -333,6 +333,11 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
                           </span>
                         </div>
                       </div>
+                      <div className="version-languages">
+                        {Object.keys(version.data).map(lang => (
+                          <span key={lang} className="lang-badge">{lang}</span>
+                        ))}
+                      </div>
                       <div className="version-description">
                         {version.user_request || 'No description'}
                       </div>

@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 
 import httpx
 
-from .base import BaseImageProvider, ImageGenerationResult
+from .base import BaseImageProvider, ImageGenerationResult, ReferenceImageData
 from .registry import ImageProviderRegistry
 
 
@@ -121,6 +121,7 @@ class NovelAIImageProvider(BaseImageProvider):
         positive_prompt: Optional[str] = None,
         negative_prompt: Optional[str] = None,
         provider_settings: Optional[Dict] = None,
+        reference_images: Optional[List[ReferenceImageData]] = None,
     ) -> ImageGenerationResult:
         """Generate image using NovelAI API"""
         if not self.api_key:

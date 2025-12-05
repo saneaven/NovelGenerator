@@ -5,6 +5,7 @@ import { useProjectStore } from '../../../store/projectStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
+import { useLLMTaskStore } from '../../../store/llmTaskStore';
 import type { SystemInsertConfig, EditCard } from '../../../chat/types';
 import { TranslationService } from '../../../services/translationService';
 import { LLMRequestPipeline } from '../../../chat/LLMRequestPipeline';
@@ -77,6 +78,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     const { settings } = useSettingsStore();
     const { showError } = useErrorStore();
     const novelEditorStore = useNovelEditorStore();
+    const taskStore = useLLMTaskStore();
 
     // Check if editor has unsaved changes (only relevant in novelEditor mode)
     const hasUnsavedChanges = mode === 'novelEditor'
@@ -235,11 +237,17 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             return;
         }
 
+        // Generate toast session ID for this translation
+        const toastSessionId = `chat-translation-${message.id}`;
+
         try
         {
             setTranslatingMessages(prev => ({ ...prev, [message.id]: true }));
             setTranslationErrors(prev => ({ ...prev, [message.id]: null }));
             TranslationService.setTranslationStatus(message.id, { objectId: message.id, isTranslating: true });
+
+            // Start toast notification
+            taskStore.setRunning(toastSessionId, 'Chat Translation', 'chat-translation');
 
             const translationResult = await TranslationService.translateChatMessage(
                 {
@@ -271,6 +279,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
             await addTranslatedMessage(projectId, selectedChatId, message.id, translatedData, targetLanguage);
 
+            // Mark toast as success
+            taskStore.setSuccess(toastSessionId);
+
             // Auto-switch to show translation after successful translate
             setMessageLanguageView(prev => ({
                 ...prev,
@@ -281,6 +292,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred during translation.';
             setTranslationErrors(prev => ({ ...prev, [message.id]: errorMessage }));
             showError('Translation Failed', errorMessage);
+            // Mark toast as error
+            taskStore.setTaskError(toastSessionId, errorMessage);
         } finally
         {
             setTranslatingMessages(prev => ({ ...prev, [message.id]: false }));

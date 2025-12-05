@@ -2,7 +2,7 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
 from uuid import UUID
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 
 class LanguageData(BaseModel):
@@ -27,7 +27,6 @@ class BaseMetadata(BaseModel):
     id: UUID
     createdAt: datetime = Field(alias='created_at')
     updatedAt: datetime = Field(alias='updated_at')
-    activeVersionId: Optional[UUID] = Field(None, alias='active_version_id')
 
     class Config:
         from_attributes = True

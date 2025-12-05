@@ -47,7 +47,6 @@ const AssetManagerModal: React.FC<AssetManagerModalProps> = ({
     objectType,
     objectId,
     title = 'Asset Manager',
-    chapterContext,
     onSelect,
 }) => {
     const { currentProjectId } = useProjectStore();
@@ -485,7 +484,6 @@ const AssetManagerModal: React.FC<AssetManagerModalProps> = ({
                         <div className="generate-tab">
                             <ImageGenerationPanel
                                 onImageGenerated={handleImageGenerated}
-                                chapterContext={chapterContext}
                                 objectType={objectType}
                                 objectId={objectId}
                                 initialSettings={regenerateSettings}
@@ -493,7 +491,7 @@ const AssetManagerModal: React.FC<AssetManagerModalProps> = ({
                         </div>
                     )}
 
-                    {!isPickerMode && activeTab === 'prompt' && (
+                    {!isPickerMode && activeTab === 'prompt' && objectType && objectId && (
                         <div className="prompt-tab">
                             <ImagePromptManager
                                 objectType={objectType}

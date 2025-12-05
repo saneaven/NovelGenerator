@@ -20,7 +20,7 @@ export interface NovelEditorUIState {
   isSettingsOpen: boolean;
   editorContent: string;
   isSaving: boolean;
-  activeStoryTab: 'basicInfo' | 'characters' | 'organizations' | 'locations' | 'lorebook' | 'outline'; // For compatibility with Workspace
+  activeStoryTab: 'basicInfo' | 'characters' | 'organizations' | 'locations' | 'lorebook' | 'outline';
 }
 
 export interface NovelEditorUIActions {
@@ -42,7 +42,7 @@ export interface NovelEditorUIActions {
   setIsSettingsOpen: (open: boolean) => void;
   setEditorContent: (content: string) => void;
   setIsSaving: (saving: boolean) => void;
-  setActiveStoryTab: (tab: 'basicInfo' | 'characters' | 'organizations' | 'locations' | 'lorebook' | 'outline') => void; // For compatibility with Workspace
+  setActiveStoryTab: (tab: 'basicInfo' | 'characters' | 'organizations' | 'locations' | 'lorebook' | 'outline') => void;
 }
 
 const createInitialState = (): NovelEditorUIState => ({
@@ -64,7 +64,7 @@ const createInitialState = (): NovelEditorUIState => ({
   isSettingsOpen: false,
   editorContent: '',
   isSaving: false,
-  activeStoryTab: 'basicInfo', // For compatibility with Workspace
+  activeStoryTab: 'basicInfo',
 });
 
 export const useNovelEditorState = (projectId?: string) => {

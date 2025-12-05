@@ -5,6 +5,7 @@ import { LLMRequestManager } from '../../chat/sessions/LLMRequestManager';
 import { LLMRequestPipeline } from '../../chat/LLMRequestPipeline';
 import type { ObjectImagePromptContext } from '../../chat/managers/SystemPromptManager';
 import { OBJECT_IMAGE_PROMPT_FUNCTION } from '../../chat/types/imagePromptFunctionSchemas';
+import { useLLMToast } from '../../hooks/useLLMToast';
 import './ImagePromptBuilderModal.css';
 
 interface TargetObject {
@@ -23,6 +24,7 @@ interface ImagePromptBuilderModalProps {
     objectId: string;
     /** Which type of prompt is being generated: natural (OpenAI/Gemini/xAI), positive tags, or negative tags (NovelAI) */
     promptMode?: PromptMode;
+    defaultUserRequest?: string;
 }
 
 const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
@@ -32,12 +34,23 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
     objectType,
     objectId,
     promptMode = 'natural',
+    defaultUserRequest,
 }) => {
     const { settings } = useSettingsStore();
     const unifiedStore = useUnifiedObjectStore();
 
     // Main input
-    const [userRequest, setUserRequest] = useState('');
+    const [userRequest, setUserRequest] = useState(defaultUserRequest || '');
+
+    // Session ID for toast and streaming
+    const sessionId = `image-prompt-${objectId}`;
+
+    // Toast notification for LLM requests
+    const { startTask, completeSuccess, completeError } = useLLMToast({
+        sessionId,
+        taskType: 'image-prompt',
+        label: 'Image Prompt Generation',
+    });
 
     // Generation state
     const [isGenerating, setIsGenerating] = useState(false);
@@ -72,7 +85,7 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
         };
     }, [objectId, objectData]);
 
-    // Reset on close
+    // Reset form state on close but DON'T abort running requests
     useEffect(() => {
         if (!isOpen) {
             setUserRequest('');
@@ -117,6 +130,23 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
         setError(null);
         setGeneratedPrompt('');
 
+        // Start toast notification with retry context
+        startTask({
+            taskType: 'image-prompt',
+            modalProps: {
+                objectType,
+                objectId,
+                onPromptGenerated,
+                promptMode,
+            },
+            formState: {
+                userRequest,
+            },
+        });
+
+        // Auto-close modal - request continues in background, toast shows progress
+        onClose();
+
         const imagePromptConfig = settings.functionConfigs.imagePrompt;
         const providerConfig = settings.providerCredentials[imagePromptConfig.provider];
 
@@ -143,28 +173,18 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
                     aiModel: imagePromptConfig.model,
                     temperature: imagePromptConfig.temperature,
                     mode: 'workspace',
-                    enablePrefill: false,
+                    enablePrefill: imagePromptConfig.advanced.enablePrefill,
+                    thinkingMode: imagePromptConfig.advanced.thinkingMode,
+                    thinkingConfig: imagePromptConfig.advanced.thinkingConfig,
                     retryConfig: settings.retryConfig,
                     abortControllerRef,
                     // Function calling configuration - skip when in native output mode
                     functions: isNativeOutput ? undefined : [OBJECT_IMAGE_PROMPT_FUNCTION],
                     toolChoice: isNativeOutput ? undefined : 'required',
+                    sessionId,
                 },
                 {
-                    onStreamUpdate: (contentParts) => {
-                        // Show streaming text as progress indicator
-                        const text = contentParts
-                            .filter(part => part.type === 'content')
-                            .map(part => part.text)
-                            .join('');
-                        if (text) {
-                            // Native mode: always update (continuous streaming)
-                            // Function mode: only show intermediate content before function call
-                            if (isNativeOutput) {
-                                setGeneratedPrompt(text);
-                            }
-                        }
-                    },
+                    onStreamUpdate: () => {}, // Store is now updated by LLMRequestManager internally
                     onFunctionCalls: isNativeOutput ? undefined : async (functionCalls) => {
                         // Handle the function call response
                         const call = functionCalls.find(c => c.function_name === 'generate_object_image_prompt');
@@ -175,11 +195,15 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
                                     ? JSON.parse(call.arguments)
                                     : call.arguments;
                                 if (args.prompt) {
-                                    setGeneratedPrompt(args.prompt);
+                                    // Modal already closed - call callback directly
+                                    onPromptGenerated(args.prompt);
+                                    completeSuccess();
                                 }
                             } catch (e) {
                                 console.error('Failed to parse function call arguments:', e);
-                                setError('Failed to parse generated prompt. Please try again.');
+                                const errorMsg = 'Failed to parse generated prompt. Please try again.';
+                                setError(errorMsg);
+                                completeError(errorMsg);
                             }
                         }
                     },
@@ -194,25 +218,38 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
                         if (isNativeOutput) {
                             // Native mode: use raw text output
                             if (text.trim()) {
-                                setGeneratedPrompt(text.trim());
+                                // Modal already closed - call callback directly
+                                onPromptGenerated(text.trim());
+                                completeSuccess();
                             } else {
-                                setError('AI did not generate a prompt. Please try again.');
+                                const errorMsg = 'AI did not generate a prompt. Please try again.';
+                                setError(errorMsg);
+                                completeError(errorMsg);
                             }
                         } else {
                             // Function mode: fallback if no function call was made
                             if (!message.functionCalls?.length) {
                                 if (text.trim()) {
-                                    setGeneratedPrompt(text);
+                                    // Modal already closed - call callback directly
+                                    onPromptGenerated(text.trim());
+                                    completeSuccess();
                                 } else {
-                                    setError('AI did not generate a prompt. Please try again.');
+                                    const errorMsg = 'AI did not generate a prompt. Please try again.';
+                                    setError(errorMsg);
+                                    completeError(errorMsg);
                                 }
                             }
                         }
                     },
                     onError: (err) => {
-                        if (err.name === 'AbortError') return;
+                        if (err.name === 'AbortError') {
+                            // Request was aborted - no action needed
+                            return;
+                        }
                         console.error('Failed to generate image prompt:', err);
-                        setError(err.message || 'Failed to generate prompt');
+                        const errorMsg = err.message || 'Failed to generate prompt';
+                        setError(errorMsg);
+                        completeError(errorMsg);
                     },
                 }
             );
@@ -224,23 +261,21 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
             });
         } catch (err) {
             if (err instanceof Error && err.name === 'AbortError') {
+                // Request was aborted - no action needed
                 return;
             }
             console.error('Failed to generate image prompt:', err);
-            setError(err instanceof Error ? err.message : 'Failed to generate prompt');
+            const errorMsg = err instanceof Error ? err.message : 'Failed to generate prompt';
+            setError(errorMsg);
+            completeError(errorMsg);
         } finally {
             setIsGenerating(false);
             taskRunnerRef.current = null;
         }
-    }, [settings, buildObjectImagePromptContext, generatedPrompt, isNativeOutput]);
+    }, [settings, buildObjectImagePromptContext, isNativeOutput, startTask, objectType, objectId, onPromptGenerated, promptMode, userRequest, completeSuccess, completeError, onClose]);
 
-    const handleCancel = () => {
-        taskRunnerRef.current?.abort();
-        taskRunnerRef.current = null;
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
-            abortControllerRef.current = null;
-        }
+    // Just close modal - don't abort (request continues in background)
+    const handleClose = () => {
         onClose();
     };
 
@@ -254,11 +289,11 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
     const contextLabel = getContextTypeLabel();
 
     return (
-        <div className="modal-overlay" onClick={handleCancel}>
+        <div className="modal-overlay" onClick={handleClose}>
             <div className="modal-content image-prompt-builder-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
                     <h2>AI-Assisted Image Prompt Generator</h2>
-                    <button className="modal-close" onClick={handleCancel}>&times;</button>
+                    <button className="modal-close" onClick={handleClose}>&times;</button>
                 </div>
 
                 <div className="modal-body">
@@ -315,7 +350,7 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
 
                 {/* Footer */}
                 <div className="modal-footer">
-                    <button onClick={handleCancel} className="btn-secondary" disabled={isGenerating}>
+                    <button onClick={handleClose} className="btn-secondary" disabled={isGenerating}>
                         Cancel
                     </button>
                     <button

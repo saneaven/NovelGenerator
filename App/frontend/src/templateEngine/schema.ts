@@ -54,7 +54,6 @@ export const PROMPT_SCHEMAS = {
   storyObjectEdit: {
     variable: {
       language: { desc: "Output language", example: "Korean" },
-      category: { desc: "Category key", example: "character" },
       categoryName: { desc: "Category display name", example: "Character" },
       editScope: { desc: "Edit scope", example: "item" as "item" | "list" },
       targetId: { desc: "Target ID", example: "123" },
@@ -127,11 +126,11 @@ export const PROMPT_SCHEMAS = {
       isPositivePrompt: { desc: "Positive tags mode", example: false },
       isNegativePrompt: { desc: "Negative tags mode", example: false },
       hasUserRequest: { desc: "Has user request", example: true },
-      hasAvailableObjects: { desc: "Has available reference objects", example: true },
+      hasSelectedObjects: { desc: "Has selected reference objects", example: true },
       isNativeOutput: { desc: "Native output mode (no function calls)", example: false },
     },
     context: {
-      availableObjects: { desc: "Available reference objects", example: [] as any[] },
+      selectedObjects: { desc: "Selected reference objects", example: [] as any[] },
     }
   }
 } as const;

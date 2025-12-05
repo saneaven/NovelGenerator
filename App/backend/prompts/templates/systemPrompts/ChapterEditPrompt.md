@@ -2,7 +2,7 @@
 
 You are assisting with revisions to chapter **{{ variable.chapterName }}** of a novel.
 
-{% if state.enableThinking %}
+{% if state.enableCustomThinking %}
 ## Thinking Guidelines
 
 Before editing, analyze the chapter using thinking blocks:

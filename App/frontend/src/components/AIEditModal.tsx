@@ -12,6 +12,7 @@ import { LLMRequestManager } from '../chat/sessions/LLMRequestManager';
 import { useLLMTaskStore } from '../store/llmTaskStore';
 import { generateTempId } from '../utils/tempId';
 import { parseJsonOutput, extractRawContent } from '../utils/nativeOutputParser';
+import { useLLMToast } from '../hooks/useLLMToast';
 import GroupedFunctionCallCard from './functionCall/GroupedFunctionCallCard';
 import './AIEditModal.css';
 
@@ -31,9 +32,27 @@ interface AIEditModalProps {
   projectId: string;
   targetId?: string;
   onResult?: (result?: any) => void | Promise<void>;
+  /** Default user request for retry */
+  defaultUserRequest?: string;
+  /** Default context options for retry */
+  defaultContextOptions?: ContextOptions;
 }
 
 const createSessionId = () => `ai-edit-${generateTempId()}`;
+
+const getCategoryDisplayName = (cat: string): string => {
+  const names: Record<string, string> = {
+    basic_info: 'Basic Info',
+    character: 'Character',
+    organization: 'Organization',
+    location: 'Location',
+    lorebook: 'Lorebook',
+    outline: 'Outline',
+    act: 'Act',
+    chapter: 'Chapter',
+  };
+  return names[cat] || cat;
+};
 
 const toStoryObjects = (contextData: Record<string, any>): StoryObjects => {
   const fallbackId = () => generateTempId();
@@ -99,16 +118,20 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   projectId,
   targetId,
   onResult,
+  defaultUserRequest,
+  defaultContextOptions,
 }) => {
-  const [userRequest, setUserRequest] = useState('');
-  const [contextOptions, setContextOptions] = useState<ContextOptions>({
-    basicInfo: true,
-    characters: true,
-    organizations: true,
-    locations: true,
-    lorebook: true,
-    outline: true,
-  });
+  const [userRequest, setUserRequest] = useState(defaultUserRequest ?? '');
+  const [contextOptions, setContextOptions] = useState<ContextOptions>(
+    defaultContextOptions ?? {
+      basicInfo: true,
+      characters: true,
+      organizations: true,
+      locations: true,
+      lorebook: true,
+      outline: true,
+    }
+  );
 
   const unifiedStore = useUnifiedObjectStore();
   const settingsStore = useSettingsStore();
@@ -119,6 +142,17 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     sessionIdRef.current = createSessionId();
   }
   const sessionId = sessionIdRef.current;
+
+  // Toast notification integration
+  const categoryDisplayName = getCategoryDisplayName(category);
+  const editTypeText = targetId ? 'Item' : 'All';
+  const toastLabel = `AI ${categoryDisplayName} ${editTypeText} Edit`;
+
+  const { startTask, completeSuccess, completeError, completeCancelled } = useLLMToast({
+    taskType: 'ai-edit',
+    label: toastLabel,
+    sessionId,
+  });
 
   const session = useLLMTaskStore(useCallback((state) => state.sessions[sessionId], [sessionId]));
   const initializeSession = useLLMTaskStore((state) => state.initializeSession);
@@ -149,16 +183,11 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       return;
     }
 
+    // Reset form state but DON'T abort running requests
+    // Request continues in background, toast shows progress
     setUserRequest('');
-    taskRunnerRef.current?.abort();
-    taskRunnerRef.current = null;
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    clearSession(sessionId);
     setStoryObjectsPreview(createEmptyStoryObjects());
-  }, [isOpen, sessionId, initializeSession, updateSession, clearSession]);
+  }, [isOpen, sessionId, initializeSession, updateSession]);
 
   useEffect(() => {
     return () => {
@@ -327,10 +356,12 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   const handleFunctionCallResults = useCallback(
     async (functionCalls: FunctionCallMetadata[]) => {
       if (!functionCalls || functionCalls.length === 0) {
+        const errorMsg = 'AI response did not include structured edits to apply.';
         updateSession(sessionId, {
           status: 'error',
-          error: 'AI response did not include structured edits to apply.',
+          error: errorMsg,
         });
+        completeError(errorMsg);
         return;
       }
 
@@ -339,25 +370,30 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         const failedResults = results.filter((result) => !result.success);
 
         if (failedResults.length > 0) {
+          const errorMsg = `Failed to apply some edits: ${failedResults.map(r => r.error || r.message).join(', ')}`;
           updateSession(sessionId, {
             status: 'error',
-            error: `Failed to apply some edits: ${failedResults.map(r => r.error || r.message).join(', ')}`,
+            error: errorMsg,
           });
+          completeError(errorMsg);
           return;
         }
 
         updateSession(sessionId, { status: 'success', error: undefined });
+        completeSuccess();
         onResult?.();
-        onClose();
+        // Modal already closed - no need to call onClose()
       } catch (err) {
         console.error('Function application error:', err);
+        const errorMsg = err instanceof Error ? err.message : 'Failed to apply edits';
         updateSession(sessionId, {
           status: 'error',
-          error: err instanceof Error ? err.message : 'Failed to apply edits',
+          error: errorMsg,
         });
+        completeError(errorMsg);
       }
     },
-    [projectId, sessionId, updateSession, onResult, onClose]
+    [projectId, sessionId, updateSession, onResult, completeSuccess, completeError]
   );
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -366,6 +402,24 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
 
     updateSession(sessionId, { status: 'running', error: undefined });
     setContentParts(sessionId, []);
+
+    // Start toast notification with retry context
+    startTask({
+      taskType: 'ai-edit',
+      modalProps: {
+        category,
+        projectId,
+        targetId,
+        onResult,
+      },
+      formState: {
+        userRequest: userRequest.trim(),
+        contextOptions,
+      },
+    });
+
+    // Auto-close modal - request continues in background, toast shows progress
+    onClose();
 
     try {
       const storyEditConfig = settingsStore.getFunctionConfig('storyEdit');
@@ -411,10 +465,12 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         // Parse JSON array output (used for both single and batch edits)
         const parsedItems = parseJsonOutput(cleanedText);
         if (parsedItems.length === 0) {
+          const errorMsg = 'AI did not return valid JSON output.';
           updateSession(sessionId, {
             status: 'error',
-            error: 'AI did not return valid JSON output.',
+            error: errorMsg,
           });
+          completeError(errorMsg);
           return;
         }
 
@@ -437,8 +493,9 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         }
 
         updateSession(sessionId, { status: 'success', error: undefined });
+        completeSuccess();
         onResult?.();
-        onClose();
+        // Modal already closed - no need to call onClose()
       };
 
       taskRunnerRef.current = new LLMRequestManager(
@@ -460,9 +517,10 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
           thinkingConfig: storyEditConfig.advanced.thinkingConfig,
           retryConfig: settingsStore.settings.retryConfig,
           abortControllerRef,
+          sessionId,
         },
         {
-          onStreamUpdate: (contentParts) => setContentParts(sessionId, contentParts),
+          onStreamUpdate: () => {}, // Store is now updated by LLMRequestManager internally
           onFunctionCallProgress: isNativeOutput ? undefined : (progress) => setFunctionCallProgress(sessionId, progress),
           onFunctionCalls: isNativeOutput ? undefined : handleFunctionCallResults,
           onFinalMessage: async (message) => {
@@ -475,20 +533,24 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
               if (text.trim()) {
                 await handleNativeOutput(text.trim());
               } else {
+                const errorMsg = 'AI did not generate any output.';
                 updateSession(sessionId, {
                   status: 'error',
-                  error: 'AI did not generate any output.',
+                  error: errorMsg,
                 });
+                completeError(errorMsg);
               }
             } else {
               // Function mode: success if no function calls pending
               if (!message.functionCalls || message.functionCalls.length === 0) {
                 updateSession(sessionId, { status: 'success', error: undefined });
+                completeSuccess();
               }
             }
           },
           onError: (err) => {
             updateSession(sessionId, { status: 'error', error: err.message });
+            completeError(err.message);
           },
         }
       );
@@ -503,24 +565,22 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
         updateSession(sessionId, { status: 'cancelled' });
+        completeCancelled();
         return;
       }
+      const errorMsg = err instanceof Error ? err.message : 'An unknown error occurred.';
       updateSession(sessionId, {
         status: 'error',
-        error: err instanceof Error ? err.message : 'An unknown error occurred.',
+        error: errorMsg,
       });
+      completeError(errorMsg);
     } finally {
       taskRunnerRef.current = null;
     }
   };
 
-  const handleCancel = () => {
-    taskRunnerRef.current?.abort();
-    taskRunnerRef.current = null;
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
+  // Just close modal - don't abort (request continues in background)
+  const handleClose = () => {
     onClose();
   };
 
@@ -531,31 +591,14 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     }));
   };
 
-  const getCategoryDisplayName = (cat: string): string => {
-    const names: Record<string, string> = {
-      basic_info: 'Basic Info',
-      character: 'Character',
-      organization: 'Organization',
-      location: 'Location',
-      lorebook: 'Lorebook',
-      outline: 'Outline',
-      act: 'Act',
-      chapter: 'Chapter',
-    };
-    return names[cat] || cat;
-  };
-
   if (!isOpen) return null;
-
-  const categoryDisplayName = getCategoryDisplayName(category);
-  const editTypeText = targetId ? 'Item' : 'All';
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content ai-edit-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h2>🤖 AI {categoryDisplayName} {editTypeText} Edit</h2>
-          <button className="modal-close" onClick={handleCancel}>×</button>
+          <button className="modal-close" onClick={handleClose}>×</button>
         </div>
 
         <form onSubmit={handleSubmit} className="ai-edit-form">
@@ -628,9 +671,8 @@ e.g., "Make the main character's personality more proactive", "Make the atmosphe
           <div className="form-actions">
             <button
               type="button"
-              onClick={handleCancel}
+              onClick={handleClose}
               className="cancel-button"
-              disabled={isProcessing}
             >
               Cancel
             </button>

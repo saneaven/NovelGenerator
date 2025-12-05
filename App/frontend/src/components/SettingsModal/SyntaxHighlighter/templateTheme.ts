@@ -74,7 +74,7 @@ export const templateEditorTheme = EditorView.theme({
   },
 
   '.cm-activeLine': {
-    backgroundColor: 'var(--color-surface-base)',
+    backgroundColor: 'none',
     outline: '1px solid var(--color-border-subtle)',
   },
 

@@ -20,7 +20,7 @@ interface GeneralPanelProps {
 const FUNCTION_LABELS = {
   chat: { icon: '💬', label: 'Chat' },
   translation: { icon: '🌐', label: 'Translation' },
-  storyEdit: { icon: '✏️', label: 'Story Edit' },
+  storyEdit: { icon: '✏️', label: 'Object Edit' },
   chapterGen: { icon: '📝', label: 'Chapter Gen' },
   imagePrompt: { icon: '🎨', label: 'Image Prompt' },
 };

@@ -222,8 +222,9 @@ class GeminiProvider(BaseProvider):
         config = types.GenerateContentConfig.model_validate(config_dict)
 
         # Check if prefill has unclosed <thinking> tag - parser should start inside thinking block
+        # Always parse <thinking> tags from text content to prevent leakage into regular content
         prefill_has_thinking = has_unclosed_thinking_tag(messages) if thinking_mode == "custom" else False
-        parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking) if thinking_mode == "custom" else None
+        parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking)
         tool_call_counter = 0
         stream = None
 

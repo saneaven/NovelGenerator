@@ -85,9 +85,9 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
       isApplied: funcCall.isApplied,
       isRejected: funcCall.isRejected,
       data: funcCall.arguments,
-      functionCall: funcCall, // Include reference to full function call metadata
-      onApply: () => {}, // wired later (for legacy EditCardComponent)
-      onReject: () => {}, // wired later (for legacy EditCardComponent)
+      functionCall: funcCall,
+      onApply: () => {},
+      onReject: () => {},
     }));
   }
 }

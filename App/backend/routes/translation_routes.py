@@ -82,7 +82,7 @@ async def get_project_translation_status(
     # Get all object types for this project
     from ..models.db_models import (
         BasicInfo, Character, Organization, Location, LorebookEntry,
-        Act, Chapter
+        Act, Chapter, Manuscript, Outline
     )
 
     object_types = {
@@ -93,6 +93,7 @@ async def get_project_translation_status(
         LOREBOOK_TYPE: LorebookEntry,
         'act': Act,
         'chapter': Chapter,
+        'manuscript': Manuscript,
     }
 
     status_list = []
@@ -112,8 +113,10 @@ async def get_project_translation_status(
             query = query.join(Outline).filter(Outline.project_id == project_id)
         elif object_type == 'chapter':
             # Chapters belong to acts which belong to outlines which belong to projects
-            from ..models.db_models import Outline
             query = query.join(Act).join(Outline).filter(Outline.project_id == project_id)
+        elif object_type == 'manuscript':
+            # Manuscripts belong to chapters which belong to acts which belong to outlines
+            query = query.join(Chapter).join(Act).join(Outline).filter(Outline.project_id == project_id)
 
         objects = query.all()
 
@@ -158,7 +161,7 @@ async def get_language_coverage(
     # Get all object IDs in the project
     from ..models.db_models import (
         BasicInfo, Character, Organization, Location, LorebookEntry,
-        Act, Chapter, Outline
+        Act, Chapter, Outline, Manuscript
     )
 
     object_ids = set()
@@ -193,6 +196,12 @@ async def get_language_coverage(
         for act in acts:
             chapters = db.query(Chapter).filter(Chapter.act_id == act.id).all()
             object_ids.update([(str(c.id), 'chapter') for c in chapters])
+
+            # Manuscripts (through chapters)
+            for chapter in chapters:
+                manuscript = db.query(Manuscript).filter(Manuscript.chapter_id == chapter.id).first()
+                if manuscript:
+                    object_ids.add((str(manuscript.id), 'manuscript'))
 
     total_objects = len(object_ids)
 

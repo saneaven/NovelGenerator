@@ -40,6 +40,8 @@ interface RichTextEditorProps {
   onGenerateImage?: () => void;
   // Legacy prop for backwards compatibility
   onImageButtonClick?: () => void;
+  // Toolbar action props (optional - for integration with NovelEditorPanel)
+  toolbarActions?: React.ReactNode;
 }
 
 const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
@@ -51,6 +53,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   onBrowseAssets,
   onGenerateImage,
   onImageButtonClick,
+  toolbarActions,
 }, ref) => {
   // Use ref to hold onChange callback (prevents stale closure in onCreate)
   // See: https://tiptap.dev/docs/editor/api/events
@@ -113,15 +116,22 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
       TableRow,
       TableCell,
       TableHeader,
-      Markdown,
+      Markdown.configure({
+        markedOptions: { gfm: true },
+      }),
     ],
-    content: initialContent, // Markdown content - parsed by Markdown extension
-    contentType: 'markdown', // Tell TipTap to parse content as markdown
+    content: '', // Start empty - markdown content set in onCreate
     editable: !disabled,
     // Bind onUpdate AFTER editor is initialized via onCreate
     // This prevents false "unsaved changes" on page load
     // See: https://github.com/ueberdosis/tiptap/issues/2583
     onCreate: ({ editor }) => {
+      // Set markdown content AFTER editor is created
+      // The contentType option in useEditor doesn't work properly with @tiptap/markdown
+      if (initialContent) {
+        editor.commands.setContent(initialContent, { contentType: 'markdown' });
+      }
+
       // Handle general content changes
       editor.on('update', ({ editor: updatedEditor }) => {
         // Use the official getMarkdown() method added by Markdown extension
@@ -358,6 +368,16 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
           >
             🖼️
           </button>
+        )}
+
+        {/* Toolbar Actions - right side (passed from parent) */}
+        {toolbarActions && (
+          <>
+            <div className="toolbar-spacer" />
+            <div className="toolbar-actions">
+              {toolbarActions}
+            </div>
+          </>
         )}
       </div>
 

@@ -8,6 +8,7 @@ import type {
 } from '../../llm_request/types';
 import { streamChat } from '../../llm_request/llmService';
 import type { ProviderConfig, ProviderType, ThinkingConfig, RetryConfig } from '../../store/settingsStore';
+import { useLLMTaskStore } from '../../store/llmTaskStore';
 import { LLMRequestPipeline } from '../LLMRequestPipeline';
 import type {
   LLMRequestPipelineContext,
@@ -16,6 +17,7 @@ import type {
 } from '../types';
 import { FunctionCallStreamTracker } from '../streaming/FunctionCallStreamTracker';
 import { generateTempId } from '../../utils/tempId';
+import { throttle } from '../../utils/throttle';
 
 export interface LLMRequestManagerConfig {
   projectId: string;
@@ -36,6 +38,8 @@ export interface LLMRequestManagerConfig {
   thinkingConfig?: ThinkingConfig;
   retryConfig?: RetryConfig;
   abortControllerRef: MutableRefObject<AbortController | null>;
+  /** Session ID for updating llmTaskStore with streaming content */
+  sessionId?: string;
 }
 
 export interface LLMRequestManagerCallbacks {
@@ -120,8 +124,19 @@ export class LLMRequestManager {
       }
     };
 
+    // Throttle llmTaskStore updates to prevent excessive re-renders (~60fps)
+    const throttledStoreUpdate = this.config.sessionId
+      ? throttle(
+          (parts: ContentPart[]) => {
+            useLLMTaskStore.getState().setContentParts(this.config.sessionId!, parts);
+          },
+          16
+        )
+      : null;
+
     const emitUpdate = (nextParts: ContentPart[]) => {
       this.callbacks.onStreamUpdate(nextParts);
+      throttledStoreUpdate?.(nextParts);
     };
 
     const thinkingType: ContentPartType = 'thinking';
@@ -212,6 +227,8 @@ export class LLMRequestManager {
         }
       }
 
+      // Flush any pending throttled updates before finalizing
+      throttledStoreUpdate?.flush();
       finalizeCurrentBuffer();
       emitUpdate([...collectedContentParts]);
       finalizedToolCalls = toolCallTracker.finalize();

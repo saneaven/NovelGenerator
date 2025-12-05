@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import './DropdownMenu.css';
 
 interface DropdownMenuProps {
@@ -13,12 +14,42 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
   align = 'right',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Calculate position when opening
+  useEffect(() => {
+    if (isOpen && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const menuWidth = 160; // Approximate menu width
+      const menuHeight = 200; // Approximate menu height
+      const viewportHeight = window.innerHeight;
+      const spaceBelow = viewportHeight - rect.bottom;
+      const spaceAbove = rect.top;
+
+      // Flip up if not enough space below but enough above
+      const shouldFlipUp = spaceBelow < menuHeight && spaceAbove > menuHeight;
+
+      setMenuPosition({
+        top: shouldFlipUp
+          ? rect.top + window.scrollY - menuHeight - 4
+          : rect.bottom + window.scrollY + 4,
+        left: align === 'right'
+          ? rect.right + window.scrollX - menuWidth
+          : rect.left + window.scrollX,
+      });
+    }
+  }, [isOpen, align]);
 
   // Close on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const clickedTrigger = triggerRef.current?.contains(target);
+      const clickedMenu = menuRef.current?.contains(target);
+
+      if (!clickedTrigger && !clickedMenu) {
         setIsOpen(false);
       }
     };
@@ -49,13 +80,31 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
     };
   }, [isOpen]);
 
+  // Close on scroll
+  useEffect(() => {
+    if (isOpen) {
+      const handleScroll = () => setIsOpen(false);
+      window.addEventListener('scroll', handleScroll, true);
+      return () => window.removeEventListener('scroll', handleScroll, true);
+    }
+  }, [isOpen]);
+
   return (
-    <div className="dropdown-container" ref={containerRef}>
-      <div onClick={() => setIsOpen(!isOpen)} className="dropdown-trigger">
+    <div className="dropdown-container">
+      <div ref={triggerRef} onClick={() => setIsOpen(!isOpen)} className="dropdown-trigger">
         {trigger}
       </div>
-      {isOpen && (
-        <div className={`dropdown-menu ${align}`}>
+      {isOpen && ReactDOM.createPortal(
+        <div
+          ref={menuRef}
+          className={`dropdown-menu portal ${align}`}
+          style={{
+            position: 'absolute',
+            top: menuPosition.top,
+            left: menuPosition.left,
+            zIndex: 9999,
+          }}
+        >
           {React.Children.map(children, (child) => {
             if (React.isValidElement(child)) {
               return React.cloneElement(child as React.ReactElement<{ onClick?: () => void }>, {
@@ -70,7 +119,8 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
             }
             return child;
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -22,7 +22,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useNovelEditorStore } from '../store/novelEditorStore';
 import type { ObjectType } from '../types/unifiedObject';
-import type { FunctionCallMetadata, FunctionCallProgress } from '../llm_request/types';
+import type { FunctionCallMetadata, FunctionCallProgress, ContentPart } from '../llm_request/types';
 import { translationService as translationAPI } from '../api/unifiedObjectService';
 import { parseJsonOutput, parseStreamingItems, extractRawContent, type ParsedItem } from '../utils/nativeOutputParser';
 
@@ -49,6 +49,12 @@ export interface TranslationOptions {
   onStreamContent?: (content: string) => void;
   /** Parsed items during streaming (native mode only) */
   onStreamParsed?: (items: ParsedItem[]) => void;
+  /** Content parts callback (includes thinking) */
+  onStreamUpdate?: (contentParts: ContentPart[]) => void;
+  /** Function call progress callback (function calling mode only) */
+  onFunctionCallProgress?: (progressList: FunctionCallProgress[]) => void;
+  /** Session ID for updating llmTaskStore with streaming content */
+  sessionId?: string;
 }
 
 export interface TranslationStatus {
@@ -201,6 +207,8 @@ export class TranslationService {
       abortControllerRef: providedAbortRef,
       onStreamContent,
       onStreamParsed,
+      onStreamUpdate,
+      onFunctionCallProgress: onFunctionCallProgressCallback,
     } = options;
 
     if (objects.length === 0) {
@@ -341,10 +349,14 @@ export class TranslationService {
       thinkingConfig: translationConfig.advanced.thinkingConfig,
       retryConfig: settingsStore.settings.retryConfig,
       abortControllerRef,
+      sessionId: options.sessionId,
     };
 
     const callbacks: LLMRequestManagerCallbacks = {
       onStreamUpdate: (contentParts) => {
+        // Always pass content parts to user callback (for thinking display etc.)
+        if (onStreamUpdate) onStreamUpdate(contentParts);
+
         // In native mode, pass streaming content to callbacks
         if (isNativeOutput) {
           const text = contentParts
@@ -365,6 +377,8 @@ export class TranslationService {
         // Function mode: progress is tracked via onFunctionCallProgress
       },
       onFunctionCallProgress: isNativeOutput ? undefined : (progressList: FunctionCallProgress[]) => {
+        // Pass to user callback
+        if (onFunctionCallProgressCallback) onFunctionCallProgressCallback(progressList);
         // Extract IDs and full translation data from streaming function call arguments
         const newIds: string[] = [];
         for (const progress of progressList) {

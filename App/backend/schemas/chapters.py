@@ -2,7 +2,7 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
 from uuid import UUID
-from typing import Optional, Dict, Any, List
+from typing import Dict, Any, List
 
 
 class ManuscriptCreate(BaseModel):
@@ -38,7 +38,6 @@ class ManuscriptResponse(BaseModel):
     """Manuscript response"""
     id: UUID
     chapter_id: UUID
-    active_version_id: Optional[UUID]
     created_at: datetime
     updated_at: datetime
     versions: List[ManuscriptVersionResponse] = []

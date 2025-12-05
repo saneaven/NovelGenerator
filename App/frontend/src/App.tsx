@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { useSettingsStore } from './store/settingsStore';
 import { useTheme } from './hooks/useTheme';
+import { ToastContainer } from './components/Toast';
 import './App.css';
 
 function App() {
@@ -33,6 +34,7 @@ function App() {
       <main className="main-content">
         <Outlet />
       </main>
+      <ToastContainer />
     </div>
   );
 }

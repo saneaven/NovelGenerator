@@ -495,23 +495,23 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
         />
       )}
 
-      <div className="items-list">
-        {items.length === 0 ? (
-          <div className="empty-state">
-            <p>No {pluralName} found.</p>
-            <p>Try adding a new {singularName}!</p>
-          </div>
-        ) : (
-          items.map((item) => {
+      {items.length === 0 ? (
+        <div className="empty-state">
+          <p>No {pluralName} found.</p>
+          <p>Try adding a new {singularName}!</p>
+        </div>
+      ) : (
+        <div className="story-cards-grid">
+          {items.map((item) => {
             const isEditing = editingItemId === item.id;
             const loading = store.loading[item.id] || false;
 
             const { effectiveLanguage, isFallback } = getEffectiveLanguage(item);
             const itemData = getDataForLanguage(item, effectiveLanguage);
 
-            return (
-              <div key={item.id} className="item-card">
-                {isEditing ? (
+            if (isEditing) {
+              return (
+                <div key={item.id} className="item-card">
                   <EditItemForm
                     itemData={itemData}
                     placeholder={placeholder}
@@ -520,33 +520,36 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
                     onAIEdit={() => handleAIEdit(item.id)}
                     disabled={loading}
                   />
-                ) : (
-                  <ItemDisplay
-                    item={item}
-                    itemData={itemData}
-                    loading={loading}
-                    showSecondaryLanguage={Boolean(settings.defaultSubLanguage)}
-                    secondaryLanguage={settings.defaultSubLanguage || undefined}
-                    effectiveLanguage={effectiveLanguage}
-                    isFallback={isFallback}
-                    isExpanded={expandedItems.has(item.id)}
-                    mainAsset={getMainAsset(category, item.id)}
-                    onToggleExpand={() => toggleItemExpand(item.id)}
-                    onEdit={() => setEditingItemId(item.id)}
-                    onDelete={() => handleDelete(item.id)}
-                    onVersionHistory={() => handleShowVersionHistory(item.id)}
-                    onRetranslate={() => {
-                      setRetranslateTargetId(item.id);
-                      setShowRetranslateModal(true);
-                    }}
-                    onImageClick={() => handleOpenAssetModal(item.id)}
-                  />
-                )}
-              </div>
+                </div>
+              );
+            }
+
+            return (
+              <ItemDisplay
+                key={item.id}
+                item={item}
+                itemData={itemData}
+                loading={loading}
+                showSecondaryLanguage={Boolean(settings.defaultSubLanguage)}
+                secondaryLanguage={settings.defaultSubLanguage || undefined}
+                effectiveLanguage={effectiveLanguage}
+                isFallback={isFallback}
+                isExpanded={expandedItems.has(item.id)}
+                mainAsset={getMainAsset(category, item.id)}
+                onToggleExpand={() => toggleItemExpand(item.id)}
+                onEdit={() => setEditingItemId(item.id)}
+                onDelete={() => handleDelete(item.id)}
+                onVersionHistory={() => handleShowVersionHistory(item.id)}
+                onRetranslate={() => {
+                  setRetranslateTargetId(item.id);
+                  setShowRetranslateModal(true);
+                }}
+                onImageClick={() => handleOpenAssetModal(item.id)}
+              />
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
 
       <AIEditModal
         isOpen={showAIModal}
@@ -782,98 +785,112 @@ const ItemDisplay: React.FC<ItemDisplayProps> = ({
     availableLanguages.includes(secondaryLanguage);
 
   return (
-    <div className="item-display item-display-with-image">
-      {/* Image Placeholder */}
-      <button
-        className="item-image-placeholder"
-        onClick={onImageClick}
-        title={mainAsset ? 'Change image' : 'Add image'}
-      >
-        {mainAsset ? (
+    <article
+      className="story-card"
+      data-expanded={isExpanded}
+      data-has-image={Boolean(mainAsset)}
+    >
+      {/* Image - Only render if exists (use original, not thumbnail) */}
+      {mainAsset && (
+        <div className="story-card__image-container">
           <img
-            src={`${API_BASE_URL}${mainAsset.thumbnail_url || mainAsset.file_url}`}
-            alt={mainAsset.name}
-            className="item-image"
+            src={`${API_BASE_URL}${mainAsset.file_url}`}
+            alt={itemData.name}
+            className="story-card__image"
+            loading="lazy"
           />
-        ) : (
-          <span className="image-placeholder-icon">+</span>
-        )}
-      </button>
+        </div>
+      )}
 
-      <div className="item-content-wrapper">
-        <div className="item-header">
-          <button
-            className="collapse-toggle"
+      {/* Content */}
+      <div className="story-card__content">
+        {/* Header */}
+        <header className="story-card__header">
+          <h4
+            className="story-card__title"
             onClick={onToggleExpand}
-            title={isExpanded ? 'Collapse' : 'Expand'}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && onToggleExpand()}
           >
-            {isExpanded ? '▼' : '▶'}
-          </button>
-          <h4 onClick={onToggleExpand} className="item-name-clickable">{itemData.name}</h4>
-        <div className="card-actions">
-          <button onClick={onEdit} className="card-edit-btn desktop-only" disabled={loading}>
-            Edit
-          </button>
-          <DropdownMenu
-            trigger={
-              <button className="more-button" disabled={loading} title="More actions">
-                •••
-              </button>
-            }
+            {itemData.name}
+          </h4>
+          <button
+            className="story-card__expand-toggle"
+            onClick={onToggleExpand}
+            aria-expanded={isExpanded}
+            aria-label={isExpanded ? 'Collapse' : 'Expand'}
           >
-            <DropdownItem
-              icon="✏️"
-              label="Edit"
-              onClick={onEdit}
-              disabled={loading}
-              className="mobile-only"
-            />
-            {hasTranslation && (
+            {isExpanded ? '▲' : '▼'}
+          </button>
+          <div className="story-card__actions">
+            <DropdownMenu
+              trigger={
+                <button className="more-button" disabled={loading} title="More actions">
+                  •••
+                </button>
+              }
+            >
               <DropdownItem
-                icon="🔄"
-                label="Retranslate"
-                onClick={onRetranslate}
+                icon="✏️"
+                label="Edit"
+                onClick={onEdit}
                 disabled={loading}
               />
-            )}
-            <DropdownItem
-              icon="📚"
-              label="History"
-              onClick={onVersionHistory}
-              disabled={loading}
-            />
-            <DropdownDivider />
-            <DropdownItem
-              icon="🗑️"
-              label="Delete"
-              onClick={onDelete}
-              variant="danger"
-              disabled={loading}
-            />
-          </DropdownMenu>
+              <DropdownItem
+                icon="🖼️"
+                label="Image"
+                onClick={onImageClick}
+                disabled={loading}
+              />
+              {hasTranslation && (
+                <DropdownItem
+                  icon="🔄"
+                  label="Retranslate"
+                  onClick={onRetranslate}
+                  disabled={loading}
+                />
+              )}
+              <DropdownItem
+                icon="📚"
+                label="History"
+                onClick={onVersionHistory}
+                disabled={loading}
+              />
+              <DropdownDivider />
+              <DropdownItem
+                icon="🗑️"
+                label="Delete"
+                onClick={onDelete}
+                variant="danger"
+                disabled={loading}
+              />
+            </DropdownMenu>
           </div>
-        </div>
-        {isExpanded && (
-          <>
-            <div className="item-content">
-              <p className="item-description">{itemData.description || 'No description.'}</p>
+        </header>
+
+        {/* Expandable Description */}
+        <div className="story-card__description-wrapper">
+          <div className="story-card__description-inner">
+            <div className="story-card__description">
+              <p>{itemData.description || 'No description.'}</p>
             </div>
-            <div className="item-metadata">
-              <span className="item-language">
-                {isFallback && <span className="fallback-warning" title="Selected language not available">⚠️ </span>}
-                🌐 {effectiveLanguage}
+            <footer className="story-card__metadata">
+              <span className="story-card__language">
+                {isFallback && <span className="story-card__fallback-warning" title="Selected language not available">!</span>}
+                {effectiveLanguage}
               </span>
-              <span className="version-info">v{item.version.number}</span>
+              <span className="story-card__version">v{item.version.number}</span>
               {item.metadata.updated_at && (
-                <span className="last-updated">
-                  Updated {new Date(item.metadata.updated_at).toLocaleDateString()}
+                <span className="story-card__updated">
+                  {new Date(item.metadata.updated_at).toLocaleDateString()}
                 </span>
               )}
-            </div>
-          </>
-        )}
+            </footer>
+          </div>
+        </div>
       </div>
-    </div>
+    </article>
   );
 };
 

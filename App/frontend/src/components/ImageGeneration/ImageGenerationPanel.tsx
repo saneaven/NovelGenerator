@@ -1,21 +1,23 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useAssetStore } from '../../store/assetStore';
-import { useSettingsStore, type ImageProviderType } from '../../store/settingsStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import {
+    useImageGeneration,
+    PROVIDER_LABELS,
+    MODEL_OPTIONS,
+    SIZE_OPTIONS,
+    GEMINI_ASPECT_RATIOS,
+    GEMINI_RESOLUTIONS,
+    NOVELAI_SAMPLERS,
+    NOVELAI_NOISE_SCHEDULES,
+    PROVIDER_PROMPT_TYPES,
+    type ImageProviderType,
+    type ImageGenerationRequest,
+} from '../../imageGeneration';
 import type { Asset } from '../../api/assetService';
-import ImagePromptBuilderModal, { type PromptMode } from './ImagePromptBuilderModal';
+import ImagePromptBuilderModal from './ImagePromptBuilderModal';
 import './ImageGenerationPanel.css';
-
-interface ChapterContext {
-    chapterId: string;
-    chapterName: string;
-    chapterDescription: string;
-    actId: string;
-    selectedText: string | null;
-    scenePreContext?: string;
-    scenePostContext?: string;
-}
 
 // Settings passed from asset detail for regeneration
 interface RegenerateSettings {
@@ -31,81 +33,54 @@ interface RegenerateSettings {
 interface ImageGenerationPanelProps {
     onImageGenerated?: (asset: Asset) => void;
     onClose?: () => void;
-    chapterContext?: ChapterContext;
     objectType?: string;
     objectId?: string;
     initialSettings?: RegenerateSettings | null;
 }
 
-// Provider prompt types
-type PromptType = 'natural' | 'tag_based';
-
-const PROVIDER_PROMPT_TYPES: Record<ImageProviderType, PromptType> = {
-    openai: 'natural',
-    gemini: 'natural',
-    xai: 'natural',
-    novelai: 'tag_based',
-};
-
-const PROVIDER_LABELS: Record<ImageProviderType, string> = {
-    openai: 'OpenAI (DALL-E / GPT-Image)',
-    gemini: 'Gemini',
-    xai: 'xAI (Grok)',
-    novelai: 'NovelAI',
-};
-
-const MODEL_OPTIONS: Record<ImageProviderType, { id: string; name: string }[]> = {
-    openai: [
-        { id: 'gpt-image-1', name: 'GPT Image 1' },
-    ],
-    gemini: [
-        { id: 'gemini-3-pro-image-preview', name: 'Gemini 3 Pro Image Preview' },
-        { id: 'gemini-2.0-flash-preview-image-generation', name: 'Gemini 2.0 Flash Image' },
-    ],
-    xai: [
-        { id: 'grok-2-image', name: 'Grok 2 Image' },
-        { id: 'grok-2-image-1212', name: 'Grok 2 Image 1212' },
-    ],
-    novelai: [
-        { id: 'nai-diffusion-4-5-full', name: 'NAI Diffusion V4.5 Full' },
-        { id: 'nai-diffusion-4-5-curated', name: 'NAI Diffusion V4.5 Curated' },
-    ],
-};
-
-const SIZE_OPTIONS: Record<ImageProviderType, string[]> = {
-    openai: ['1024x1024', '1024x1792', '1792x1024'],
-    gemini: [],  // Gemini uses aspect_ratio + resolution separately
-    xai: ['1024x1024', '1024x1792', '1792x1024'],
-    novelai: ['1024x1024', '1216x832', '832x1216', '1472x704', '704x1472'],
-};
-
-// Gemini-specific options (uses aspect_ratio + image_size, not pixel dimensions)
-const GEMINI_ASPECT_RATIOS = ['1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16', '21:9'];
-const GEMINI_RESOLUTIONS = ['1K', '2K', '4K'];
-
-const NOVELAI_SAMPLERS = [
-    'k_euler_ancestral',
-    'k_euler',
-    'k_dpmpp_2s_ancestral',
-    'k_dpmpp_2m',
-    'k_dpmpp_sde',
-    'ddim_v3',
-];
-
-const NOVELAI_NOISE_SCHEDULES = ['native', 'karras', 'exponential', 'polyexponential'];
-
 const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
     onImageGenerated,
     onClose,
-    // chapterContext is no longer used - ImagePromptBuilderModal now only supports object prompts
     objectType,
     objectId,
     initialSettings,
 }) => {
     const { currentProjectId } = useProjectStore();
-    const { isGenerating, error, fetchImageProviders, generateImage, clearError } = useAssetStore();
     const { settings } = useSettingsStore();
     const { objects, getObject } = useUnifiedObjectStore();
+
+    // Use the new image generation hook
+    const { generate, isGenerating, error } = useImageGeneration({
+        taskType: 'object-image',
+        onComplete: (result) => {
+            if (result.asset && onImageGenerated) {
+                // Transform to Asset format for callback
+                const asset: Asset = {
+                    id: result.asset.id,
+                    project_id: result.asset.projectId,
+                    name: result.asset.name,
+                    file_path: result.asset.filePath,
+                    thumbnail_path: result.asset.thumbnailPath,
+                    mime_type: result.asset.mimeType,
+                    generation_prompt: result.asset.generationPrompt,
+                    generation_positive_prompt: result.asset.generationPositivePrompt,
+                    generation_negative_prompt: result.asset.generationNegativePrompt,
+                    generation_provider: result.asset.generationProvider,
+                    generation_model: result.asset.generationModel,
+                    generation_settings: result.asset.generationSettings as Record<string, any> | null,
+                    generation_reference_objects: null,
+                    width: result.asset.width,
+                    height: result.asset.height,
+                    file_size: result.asset.fileSize,
+                    created_at: result.asset.createdAt,
+                    updated_at: result.asset.updatedAt,
+                    file_url: result.asset.fileUrl,
+                    thumbnail_url: result.asset.thumbnailUrl,
+                };
+                onImageGenerated(asset);
+            }
+        },
+    });
 
     // Get saved prompts from object metadata
     const savedPrompts = useMemo(() => {
@@ -132,19 +107,19 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
     const [model, setModel] = useState(settings.imageGenConfig.model);
     const [size, setSize] = useState(settings.imageGenConfig.size);
 
-    // Gemini-specific settings (aspect ratio + resolution instead of size)
+    // Gemini-specific settings
     const [geminiAspectRatio, setGeminiAspectRatio] = useState(settings.imageGenConfig.geminiSettings.aspect_ratio);
     const [geminiResolution, setGeminiResolution] = useState(settings.imageGenConfig.geminiSettings.image_resolution);
 
     // Provider-specific settings
-    const [openaiQuality, setOpenaiQuality] = useState(settings.imageGenConfig.openaiSettings.quality);
-    const [openaiStyle, setOpenaiStyle] = useState(settings.imageGenConfig.openaiSettings.style);
+    const [openaiQuality, setOpenaiQuality] = useState<'standard' | 'hd'>(settings.imageGenConfig.openaiSettings.quality);
+    const [openaiStyle, setOpenaiStyle] = useState<'natural' | 'vivid'>(settings.imageGenConfig.openaiSettings.style);
     const [novelaiSampler, setNovelaiSampler] = useState(settings.imageGenConfig.novelaiSettings.sampler);
     const [novelaiSteps, setNovelaiSteps] = useState(settings.imageGenConfig.novelaiSettings.steps);
     const [novelaiScale, setNovelaiScale] = useState(settings.imageGenConfig.novelaiSettings.scale);
     const [novelaiNoiseSchedule, setNovelaiNoiseSchedule] = useState(settings.imageGenConfig.novelaiSettings.noise_schedule);
 
-    // Style selection (separate for natural vs tag-based)
+    // Style selection
     const [selectedNaturalStyleId, setSelectedNaturalStyleId] = useState<string | null>(
         settings.imageGenConfig.selectedNaturalStyleId
     );
@@ -160,23 +135,16 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
     const naturalStyles = settings.imageGenConfig.naturalStyles || [];
     const tagBasedStyles = settings.imageGenConfig.tagBasedStyles || [];
 
-    useEffect(() => {
-        fetchImageProviders();
-    }, [fetchImageProviders]);
-
     // Apply initial settings when regenerating from asset detail
     useEffect(() => {
         if (!initialSettings) return;
 
-        // Set provider and model
         if (initialSettings.provider) {
             setProvider(initialSettings.provider as ImageProviderType);
         }
         if (initialSettings.model) {
             setModel(initialSettings.model);
         }
-
-        // Set prompts
         if (initialSettings.prompt) {
             setPrompt(initialSettings.prompt);
         }
@@ -186,24 +154,18 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
         if (initialSettings.negative_prompt) {
             setNegativePrompt(initialSettings.negative_prompt);
         }
-
-        // Set size
         if (initialSettings.size) {
             setSize(initialSettings.size);
         }
 
-        // Apply provider-specific settings
         if (initialSettings.settings) {
             const s = initialSettings.settings;
-            // OpenAI settings
             if (s.quality) setOpenaiQuality(s.quality);
             if (s.style) setOpenaiStyle(s.style);
-            // NovelAI settings
             if (s.sampler) setNovelaiSampler(s.sampler);
             if (s.steps) setNovelaiSteps(s.steps);
             if (s.scale) setNovelaiScale(s.scale);
             if (s.noise_schedule) setNovelaiNoiseSchedule(s.noise_schedule);
-            // Gemini settings
             if (s.aspect_ratio) setGeminiAspectRatio(s.aspect_ratio);
             if (s.image_resolution) setGeminiResolution(s.image_resolution);
         }
@@ -226,6 +188,7 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
         }
     }, [objectId, provider, savedPrompts?.natural, savedPrompts?.positive, savedPrompts?.negative]);
 
+    // Reset model/size when provider changes
     useEffect(() => {
         if (isInitialMount.current) {
             isInitialMount.current = false;
@@ -241,21 +204,6 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
         }
     }, [provider]);
 
-    const getApiKey = (): string => {
-        switch (provider) {
-            case 'openai':
-                return settings.providerCredentials.openai.apiKey;
-            case 'gemini':
-                return settings.providerCredentials.gemini.apiKey;
-            case 'xai':
-                return settings.providerCredentials.xai?.apiKey || '';
-            case 'novelai':
-                return settings.providerCredentials.novelai?.apiKey || '';
-            default:
-                return '';
-        }
-    };
-
     const getCurrentNaturalStyle = () => {
         if (!selectedNaturalStyleId) return null;
         return naturalStyles.find((s) => s.id === selectedNaturalStyleId) || null;
@@ -269,107 +217,50 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
     const handleGenerate = async () => {
         if (!currentProjectId) return;
 
-        const apiKey = getApiKey();
-        if (!apiKey) {
-            alert(`Please configure your ${PROVIDER_LABELS[provider]} API key in Settings > Credentials`);
-            return;
-        }
-
-        try {
-            clearError();
-
-            if (isTagBased) {
-                // Tag-based generation (NovelAI)
-                if (!positivePrompt.trim()) {
-                    alert('Please enter a positive prompt');
-                    return;
-                }
-
-                let finalPositive = positivePrompt.trim();
-                let finalNegative = negativePrompt.trim();
-
-                // Apply tag-based style
-                const tagStyle = getCurrentTagBasedStyle();
-                if (tagStyle) {
-                    if (tagStyle.positiveTags) {
-                        finalPositive = `${finalPositive}, ${tagStyle.positiveTags}`;
-                    }
-                    if (tagStyle.negativeTags) {
-                        finalNegative = finalNegative
-                            ? `${finalNegative}, ${tagStyle.negativeTags}`
-                            : tagStyle.negativeTags;
-                    }
-                }
-
-                const asset = await generateImage(
-                    currentProjectId,
-                    {
-                        positive_prompt: finalPositive,
-                        negative_prompt: finalNegative || undefined,
-                        provider,
-                        model,
-                        size,
-                        provider_settings: {
-                            sampler: novelaiSampler,
-                            steps: novelaiSteps,
-                            scale: novelaiScale,
-                            noise_schedule: novelaiNoiseSchedule,
-                        },
-                    },
-                    apiKey
-                );
-
-                if (asset && onImageGenerated) {
-                    onImageGenerated(asset);
-                }
-            } else {
-                // Natural language generation (OpenAI, Gemini, xAI)
-                if (!prompt.trim()) {
-                    alert('Please enter a prompt');
-                    return;
-                }
-
-                let finalPrompt = prompt.trim();
-                const naturalStyle = getCurrentNaturalStyle();
-                if (naturalStyle) {
-                    finalPrompt = `${naturalStyle.prefix}${finalPrompt}${naturalStyle.postfix}`;
-                }
-
-                const requestParams: any = {
-                    prompt: finalPrompt,
-                    provider,
-                    model,
-                    size: provider === 'gemini' ? undefined : size,
-                };
-
-                // Add OpenAI-specific settings
-                if (provider === 'openai') {
-                    requestParams.quality = openaiQuality;
-                    requestParams.style = openaiStyle;
-                }
-
-                // Add Gemini-specific settings through provider_settings
-                if (provider === 'gemini') {
-                    requestParams.provider_settings = {
-                        aspect_ratio: geminiAspectRatio,
-                        image_resolution: geminiResolution,
-                    };
-                }
-
-                const asset = await generateImage(currentProjectId, requestParams, apiKey);
-
-                if (asset && onImageGenerated) {
-                    onImageGenerated(asset);
-                }
+        if (isTagBased) {
+            if (!positivePrompt.trim()) {
+                alert('Please enter a positive prompt');
+                return;
             }
-        } catch (err) {
-            // Error handled in store
+
+            const request: ImageGenerationRequest = {
+                positivePrompt: positivePrompt.trim(),
+                negativePrompt: negativePrompt.trim() || undefined,
+                provider,
+                model,
+                size,
+                styleId: selectedTagBasedStyleId,
+                sampler: novelaiSampler,
+                steps: novelaiSteps,
+                scale: novelaiScale,
+                noiseSchedule: novelaiNoiseSchedule,
+            };
+
+            await generate(request);
+        } else {
+            if (!prompt.trim()) {
+                alert('Please enter a prompt');
+                return;
+            }
+
+            const request: ImageGenerationRequest = {
+                prompt: prompt.trim(),
+                provider,
+                model,
+                size: provider === 'gemini' ? undefined : size,
+                styleId: selectedNaturalStyleId,
+                quality: provider === 'openai' ? openaiQuality : undefined,
+                style: provider === 'openai' ? openaiStyle : undefined,
+                aspectRatio: provider === 'gemini' ? geminiAspectRatio : undefined,
+                resolution: provider === 'gemini' ? geminiResolution : undefined,
+            };
+
+            await generate(request);
         }
     };
 
     const handlePromptBuilderGenerated = (generatedPrompt: string) => {
         if (isTagBased) {
-            // For tag-based, set based on current active tab
             if (activePromptTab === 'negative') {
                 setNegativePrompt(generatedPrompt);
             } else {
@@ -509,7 +400,6 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
 
                 {/* Size and Style Selection */}
                 <div className="form-row">
-                    {/* Gemini uses aspect ratio + resolution instead of size */}
                     {provider === 'gemini' ? (
                         <>
                             <div className="form-field">
@@ -558,7 +448,6 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                         </div>
                     )}
 
-                    {/* Style selector based on prompt type */}
                     {!isTagBased && (
                         <div className="form-field">
                             <label>Style</label>
@@ -736,7 +625,7 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                 </div>
             </div>
 
-            {/* AI Prompt Builder Modal - only render when object context is available */}
+            {/* AI Prompt Builder Modal */}
             {showPromptBuilder && objectType && objectId && (
                 <ImagePromptBuilderModal
                     isOpen={showPromptBuilder}

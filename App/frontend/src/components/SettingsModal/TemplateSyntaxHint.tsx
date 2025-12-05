@@ -26,12 +26,16 @@ function buildTooltip(desc: string, example: any): string {
     return `${desc}\nExample: ${JSON.stringify(example)}`;
 }
 
-function getSchemaKey(functionType: string): PromptType | null {
+function getSchemaKey(functionType: string, name?: string): PromptType | null {
     switch (functionType) {
         case 'chat': return 'chat';
         case 'translation': return 'translation';
         case 'storyEdit': return 'storyObjectEdit';
         case 'chapterGen': return 'chapterEdit';
+        case 'imagePrompt':
+            if (name === 'object') return 'objectImagePrompt';
+            if (name === 'scene') return 'sceneImagePrompt';
+            return null;
         default: return null;
     }
 }
@@ -80,7 +84,7 @@ const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode })
 
     const schema = useMemo(() => {
         if (!selectedNode || selectedNode.type !== 'prompt') return null;
-        const key = getSchemaKey(selectedNode.functionType || '');
+        const key = getSchemaKey(selectedNode.functionType || '', selectedNode.name);
         return key ? PROMPT_SCHEMAS[key] : null;
     }, [selectedNode]);
 

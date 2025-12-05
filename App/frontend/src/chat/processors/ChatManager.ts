@@ -4,6 +4,7 @@ import type { LLMRequestPipelineContext } from '../types';
 import { streamChat } from '../../llm_request/llmService';
 import { LLMRequestPipeline } from '../LLMRequestPipeline';
 import { type ProviderType, type ProviderConfig, type ThinkingConfig, type RetryConfig } from '../../store/settingsStore';
+import { useLLMTaskStore } from '../../store/llmTaskStore';
 import { FunctionCallStreamTracker } from '../streaming/FunctionCallStreamTracker';
 import { generateTempId } from '../../utils/tempId';
 
@@ -29,6 +30,8 @@ export interface ChatManagerConfig {
   thinkingMode?: 'off' | 'model' | 'custom'; // Thinking mode: off, model-native thinking, or custom prompt-based
   thinkingConfig?: ThinkingConfig;
   retryConfig?: RetryConfig; // Retry configuration for error handling
+  /** Session ID for updating llmTaskStore with streaming content */
+  sessionId?: string;
 }
 
 export interface ChatManagerCallbacks {
@@ -74,6 +77,11 @@ export class ChatManager {
     this.config.setIsLoading(true);
     this.isStreaming = true;
 
+    // Start toast notification if sessionId is provided
+    if (this.config.sessionId) {
+      useLLMTaskStore.getState().setRunning(this.config.sessionId, 'AI Response', 'chat');
+    }
+
     try {
       // Add user message in the conversation language
       await this.callbacks.onAddMessage(this.config.projectId, chatId, userMessage, language);
@@ -85,15 +93,28 @@ export class ChatManager {
       // Start streaming with the backend-generated message ID
       await this.startStreaming(chatId, assistantMessageId, language);
 
+      // Mark toast as success
+      if (this.config.sessionId) {
+        useLLMTaskStore.getState().setSuccess(this.config.sessionId);
+      }
+
     } catch (error) {
       // Don't show error for intentional abort
       const isAbortError = error instanceof DOMException && error.name === 'AbortError';
       if (isAbortError || this.isAborted) {
         console.log('Stream aborted by user');
-        // Don't call onError - this was intentional
+        // Mark as cancelled for aborted streams
+        if (this.config.sessionId) {
+          useLLMTaskStore.getState().setCancelled(this.config.sessionId);
+        }
       } else {
         console.error('LLM request processing error:', error);
         this.callbacks.onError(error instanceof Error ? error : new Error(String(error)));
+        // Mark toast as error
+        if (this.config.sessionId) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          useLLMTaskStore.getState().setTaskError(this.config.sessionId, errorMessage);
+        }
       }
     } finally {
       this.config.setIsLoading(false);
@@ -125,6 +146,11 @@ export class ChatManager {
     this.config.setIsLoading(true);
     this.isStreaming = true;
 
+    // Start toast notification if sessionId is provided
+    if (this.config.sessionId) {
+      useLLMTaskStore.getState().setRunning(this.config.sessionId, 'AI Response', 'chat');
+    }
+
     try {
       // Create new AI response message
       const assistantMessage = this.createAssistantMessage();
@@ -133,15 +159,28 @@ export class ChatManager {
       // Start streaming with the backend-generated message ID
       await this.startStreaming(chatId, assistantMessageId, language);
 
+      // Mark toast as success
+      if (this.config.sessionId) {
+        useLLMTaskStore.getState().setSuccess(this.config.sessionId);
+      }
+
     } catch (error) {
       // Don't show error for intentional abort
       const isAbortError = error instanceof DOMException && error.name === 'AbortError';
       if (isAbortError || this.isAborted) {
         console.log('Stream aborted by user');
-        // Don't call onError - this was intentional
+        // Mark as cancelled for aborted streams
+        if (this.config.sessionId) {
+          useLLMTaskStore.getState().setCancelled(this.config.sessionId);
+        }
       } else {
         console.error('LLM request processing error:', error);
         this.callbacks.onError(error instanceof Error ? error : new Error(String(error)));
+        // Mark toast as error
+        if (this.config.sessionId) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          useLLMTaskStore.getState().setTaskError(this.config.sessionId, errorMessage);
+        }
       }
     } finally {
       this.config.setIsLoading(false);
@@ -222,6 +261,10 @@ export class ChatManager {
         rafId = requestAnimationFrame(() => {
           if (pendingUpdate !== null) {
             this.callbacks.onUpdateMessage(this.config.projectId, chatId, assistantMessageId, pendingUpdate, language);
+            // Update llmTaskStore inside RAF to prevent excessive updates
+            if (this.config.sessionId) {
+              useLLMTaskStore.getState().setContentParts(this.config.sessionId, pendingUpdate);
+            }
             pendingUpdate = null;
           }
           rafId = null;
@@ -236,6 +279,10 @@ export class ChatManager {
       }
       if (pendingUpdate !== null) {
         this.callbacks.onUpdateMessage(this.config.projectId, chatId, assistantMessageId, pendingUpdate, language);
+        // Also flush llmTaskStore update
+        if (this.config.sessionId) {
+          useLLMTaskStore.getState().setContentParts(this.config.sessionId, pendingUpdate);
+        }
         pendingUpdate = null;
       }
     };
@@ -352,7 +399,7 @@ export class ChatManager {
             }
           }
 
-          // Store thinking_details metadata (with backward compatibility)
+          // Store thinking_details metadata
           const thinkingDetails = (chunk as any).thinking_details;
           if (thinkingDetails) {
             if (!accumulatedThinkingDetails) {

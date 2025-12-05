@@ -1092,13 +1092,13 @@ async def update_image_prompt(
     # Get object
     obj = get_object_or_404(db, object_type, object_id)
 
-    # Update image prompt fields
+    # Update image prompt fields (empty string clears the field)
     if request.image_prompt is not None:
-        obj.image_prompt = request.image_prompt
+        obj.image_prompt = request.image_prompt if request.image_prompt else None
     if request.image_prompt_positive is not None:
-        obj.image_prompt_positive = request.image_prompt_positive
+        obj.image_prompt_positive = request.image_prompt_positive if request.image_prompt_positive else None
     if request.image_prompt_negative is not None:
-        obj.image_prompt_negative = request.image_prompt_negative
+        obj.image_prompt_negative = request.image_prompt_negative if request.image_prompt_negative else None
 
     obj.updated_at = datetime.utcnow()
     db.commit()

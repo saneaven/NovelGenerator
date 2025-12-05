@@ -134,6 +134,36 @@
   background: var(--color-brand-primary-hover);
 }
 
+/* Prompt Tabs (for tag-based providers like NovelAI) */
+.scene-image-generator-modal .prompt-tabs {
+  display: flex;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-sm);
+}
+
+.scene-image-generator-modal .prompt-tab {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.scene-image-generator-modal .prompt-tab:hover {
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+}
+
+.scene-image-generator-modal .prompt-tab.active {
+  background: var(--color-brand-primary);
+  border-color: var(--color-brand-primary);
+  color: white;
+}
+
 /* Prompt Input */
 .prompt-input-wrapper {
   position: relative;
@@ -157,7 +187,7 @@
   border-color: var(--color-brand-primary);
 }
 
-.ai-assist-btn {
+.scene-image-generator-modal .ai-assist-btn {
   position: absolute;
   right: 8px;
   top: 8px;
@@ -171,7 +201,7 @@
   transition: all var(--transition-fast);
 }
 
-.ai-assist-btn:hover {
+.scene-image-generator-modal .ai-assist-btn:hover {
   background: var(--color-brand-primary);
   border-color: var(--color-brand-primary);
 }
@@ -390,6 +420,116 @@
 .config-select:focus {
   outline: none;
   border-color: var(--color-brand-primary);
+}
+
+.config-input {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-sm);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.config-input:focus {
+  outline: none;
+  border-color: var(--color-brand-primary);
+}
+
+/* Provider-specific Settings */
+.provider-settings {
+  margin-top: var(--spacing-sm);
+}
+
+.novelai-settings {
+  margin-top: var(--spacing-sm);
+}
+
+.novelai-settings .form-row {
+  margin-bottom: var(--spacing-sm);
+}
+
+.novelai-settings .form-row:last-child {
+  margin-bottom: 0;
+}
+
+/* Style Preview Box */
+.style-preview-box {
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  margin-top: var(--spacing-md);
+  font-size: var(--font-size-sm);
+}
+
+.style-preview-box .preview-label {
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  margin-right: var(--spacing-sm);
+}
+
+.style-preview-box .preview-text {
+  color: var(--color-text-primary);
+}
+
+.style-preview-box .prefix {
+  color: var(--color-brand-primary);
+}
+
+.style-preview-box .postfix {
+  color: var(--color-brand-primary);
+}
+
+.style-preview-box em {
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+/* Tag-Based Style Preview */
+.style-preview-box.tag-based {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.style-preview-box.tag-based .preview-label {
+  margin-bottom: var(--spacing-xs);
+}
+
+.tag-preview-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.tag-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+}
+
+.tag-indicator {
+  font-weight: 700;
+  font-size: var(--font-size-sm);
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.tag-indicator.positive {
+  color: var(--color-feedback-success-base);
+}
+
+.tag-indicator.negative {
+  color: var(--color-feedback-error-base);
+}
+
+.tag-text {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  word-break: break-word;
 }
 
 /* Error Message */

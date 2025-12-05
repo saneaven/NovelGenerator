@@ -69,21 +69,6 @@ export interface ObjectMetadata {
 }
 
 // ============================================================================
-// LANGUAGE INFO (DEPRECATED - no longer in API response)
-// ============================================================================
-
-/**
- * @deprecated Languages are now embedded in data field.
- * Use Object.keys(obj.data) for available languages.
- * Use settings.mainLanguage for default language.
- */
-export interface LanguageInfo {
-  available: string[];  // All languages this object has
-  active: string;       // Currently displayed language
-  default: string;      // Default/primary language
-}
-
-// ============================================================================
 // VERSION INFO
 // ============================================================================
 

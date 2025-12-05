@@ -87,6 +87,11 @@ class XAICredentials(BaseModel):
     apiKey: str = ""
 
 
+class NovelAICredentials(BaseModel):
+    """NovelAI credentials"""
+    apiKey: str = ""
+
+
 class ProviderCredentials(BaseModel):
     """All provider credentials"""
     openai: OpenAICredentials = Field(default_factory=OpenAICredentials)
@@ -95,6 +100,7 @@ class ProviderCredentials(BaseModel):
     openrouter: OpenRouterCredentials = Field(default_factory=OpenRouterCredentials)
     custom: CustomCredentials = Field(default_factory=CustomCredentials)
     xai: XAICredentials = Field(default_factory=XAICredentials)
+    novelai: NovelAICredentials = Field(default_factory=NovelAICredentials)
 
 
 class ThemeMode(str, Enum):
@@ -173,6 +179,7 @@ class UserSettingsResponse(BaseModel):
     theme: str = "system"
     retryConfig: RetryConfig = Field(default_factory=RetryConfig)
     imageGenConfig: ImageGenConfig = Field(default_factory=ImageGenConfig)
+    nativeOutputMode: bool = False
 
     class Config:
         from_attributes = True
@@ -188,3 +195,4 @@ class UserSettingsUpdate(BaseModel):
     theme: Optional[str] = None
     retryConfig: Optional[RetryConfig] = None
     imageGenConfig: Optional[ImageGenConfig] = None
+    nativeOutputMode: Optional[bool] = None

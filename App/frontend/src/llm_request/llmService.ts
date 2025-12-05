@@ -296,8 +296,15 @@ export async function* streamChat(
                 statusCode = statusMatch ? parseInt(statusMatch[1]) : null;
             }
 
-            // Check if retryable
-            const isNetworkError = statusCode === null;
+            // Check if retryable - only retry on actual network errors, not all null status codes
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            const isNetworkError = statusCode === null && (
+                errorMsg.includes('Failed to fetch') ||
+                errorMsg.includes('NetworkError') ||
+                errorMsg.includes('ECONNREFUSED') ||
+                errorMsg.includes('ETIMEDOUT') ||
+                errorMsg.includes('network')
+            );
             const isRetryableStatus = statusCode !== null &&
                 retryConfig?.retryableStatusCodes?.includes(statusCode);
             const isRetryable = retryConfig?.enabled &&
@@ -306,7 +313,7 @@ export async function* streamChat(
             if (isRetryable && attempt < maxAttempts - 1)
             {
                 lastError = error instanceof Error ? error : new Error(String(error));
-                console.log(`[Retry] Attempt ${attempt + 1}/${maxAttempts} failed with status ${statusCode}, retrying in ${retryConfig!.retryDelayMs}ms...`);
+                console.log(`[Retry] Attempt ${attempt + 1}/${maxAttempts} failed: ${errorMsg} (status: ${statusCode}), retrying in ${retryConfig!.retryDelayMs}ms...`);
                 await sleep(retryConfig!.retryDelayMs);
                 continue;
             }

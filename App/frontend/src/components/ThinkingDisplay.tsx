@@ -77,4 +77,4 @@ const ThinkingDisplay: React.FC<ThinkingDisplayProps> = ({
   );
 };
 
-export default ThinkingDisplay;
+export default React.memo(ThinkingDisplay);

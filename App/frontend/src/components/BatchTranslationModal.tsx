@@ -2,10 +2,13 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import './BatchTranslationModal.css';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useLLMTaskStore } from '../store/llmTaskStore';
 import { TranslationService } from '../services/translationService';
 import type { StoryObjectToTranslate, TranslationResult } from '../services/translationService';
 import type { ParsedItem } from '../utils/nativeOutputParser';
 import type { UnifiedObject, ObjectType } from '../types/unifiedObject';
+import ThinkingDisplay from './ThinkingDisplay';
+import { useLLMToast } from '../hooks/useLLMToast';
 
 interface BatchTranslationModalProps {
   isOpen: boolean;
@@ -13,6 +16,9 @@ interface BatchTranslationModalProps {
   projectId: string;
   onComplete: () => void;
   allowedObjectTypes?: string[];  // If provided, only show these types and hide type selector
+  defaultSourceLanguage?: string;
+  defaultTargetLanguage?: string;
+  defaultUserInstructions?: string;
 }
 
 type ScreenType = 'config' | 'progress' | 'complete';
@@ -45,26 +51,58 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
   projectId,
   onComplete,
   allowedObjectTypes,
+  defaultSourceLanguage,
+  defaultTargetLanguage,
+  defaultUserInstructions,
 }) => {
   const [screen, setScreen] = useState<ScreenType>('config');
-  const [sourceLanguage, setSourceLanguage] = useState<string>('');
-  const [targetLanguage, setTargetLanguage] = useState<string>('');
-  const [userInstructions, setUserInstructions] = useState('');
+  const [sourceLanguage, setSourceLanguage] = useState<string>(defaultSourceLanguage || '');
+  const [targetLanguage, setTargetLanguage] = useState<string>(defaultTargetLanguage || '');
+  const [userInstructions, setUserInstructions] = useState(defaultUserInstructions || '');
   const [completedIds, setCompletedIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
   const [partialTranslations, setPartialTranslations] = useState<TranslationResult[]>([]);
   const [partialError, setPartialError] = useState<string | null>(null);
   const [isApplying, setIsApplying] = useState(false);
-  const [streamItems, setStreamItems] = useState<ParsedItem[]>([]);
+  const [_streamItems, setStreamItems] = useState<ParsedItem[]>([]);
+
+  // Currently streaming translation item (partial JSON parsed)
+  const [currentStreamingItem, setCurrentStreamingItem] = useState<{
+    objectType: string;
+    objectId: string;
+    sourceName: string;
+    partialData: Record<string, any>;
+  } | null>(null);
 
   // Tree selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const toastSessionIdRef = useRef<string>(`batch-translation-${Date.now()}`);
   const store = useUnifiedObjectStore();
   const settings = useSettingsStore((state) => state.settings);
+
+  // Generate new session ID when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      toastSessionIdRef.current = `batch-translation-${Date.now()}`;
+    }
+  }, [isOpen]);
+
+  // Toast notification for LLM requests
+  const { startTask, updateProgress, completeSuccess, completeError } = useLLMToast({
+    sessionId: toastSessionIdRef.current,
+    taskType: 'batch-translation',
+    label: 'Batch Translation',
+  });
+
+  // Get streaming content from store
+  const getSessionById = useLLMTaskStore((state) => state.getSessionById);
+  const setContentParts = useLLMTaskStore((state) => state.setContentParts);
+  const session = getSessionById(toastSessionIdRef.current);
+  const contentParts = session?.contentParts || [];
 
   // Build available languages list
   const availableLanguages = useMemo(() => {
@@ -211,6 +249,8 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
       setPartialError(null);
       setIsApplying(false);
       setStreamItems([]);
+      setContentParts(toastSessionIdRef.current, []);
+      setCurrentStreamingItem(null);
       setUserInstructions('');
       setSelectedIds(new Set());
       setExpandedCategories(new Set());
@@ -225,12 +265,31 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
       return;
     }
 
-    setScreen('progress');
     setTotalCount(objectsToTranslate.length);
     setError(null);
     setPartialError(null);
     setPartialTranslations([]);
     setStreamItems([]);
+    setContentParts(toastSessionIdRef.current, []);
+    setCurrentStreamingItem(null);
+
+    // Start toast notification with retry context
+    startTask({
+      taskType: 'batch-translation',
+      modalProps: {
+        projectId,
+        onComplete,
+        allowedObjectTypes,
+      },
+      formState: {
+        sourceLanguage,
+        targetLanguage,
+        userInstructions,
+      },
+    });
+
+    // Auto-close modal - request continues in background, toast shows progress
+    onClose();
 
     try {
       await TranslationService.translateBatch(objectsToTranslate, {
@@ -238,41 +297,90 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
         sourceLanguage,
         targetLanguage,
         userInstructions: userInstructions.trim() || undefined,
+        sessionId: toastSessionIdRef.current,
         onProgress: (completed) => {
           setCompletedIds(completed);
+          // Update toast progress
+          updateProgress(completed.length, objectsToTranslate.length);
+          // Clear current streaming item when it's completed
+          setCurrentStreamingItem(prev => {
+            if (prev && completed.includes(prev.objectId)) {
+              return null;
+            }
+            return prev;
+          });
         },
         onError: (err) => {
           setError(err.message);
-          setScreen('complete');
+          completeError(err.message);
+          // Modal already closed - error shown in toast
         },
         onPartialSuccess: (translations, err) => {
-          // Stay on progress screen with partial results
+          // Partial success - toast will show error, apply what we got
           setPartialTranslations(translations);
           setPartialError(err.message);
+          // Try to apply partial translations automatically
+          TranslationService.applyPartialTranslations(translations, targetLanguage)
+            .then(() => onComplete())
+            .catch(console.error);
         },
         onStreamParsed: (items) => {
           setStreamItems(items);
+          // Update current streaming item from parsed items
+          if (items.length > 0) {
+            const lastItem = items[items.length - 1];
+            if (lastItem.id) {
+              const matchingObj = objectsToTranslate.find(o => o.objectId === lastItem.id);
+              if (matchingObj) {
+                setCurrentStreamingItem({
+                  objectType: matchingObj.objectType,
+                  objectId: lastItem.id,
+                  sourceName: matchingObj.sourceData.name || matchingObj.sourceData.title || matchingObj.objectId,
+                  partialData: lastItem
+                });
+              }
+            }
+          }
+        },
+        onStreamUpdate: () => {}, // Store is now updated by LLMRequestManager internally
+        onFunctionCallProgress: (progressList) => {
+          // Update current streaming item from function call progress
+          if (progressList.length > 0) {
+            const last = progressList[progressList.length - 1];
+            const args = last.draft.parsedArguments;
+            if (args?.id) {
+              const matchingObj = objectsToTranslate.find(o => o.objectId === args.id);
+              if (matchingObj) {
+                setCurrentStreamingItem({
+                  objectType: matchingObj.objectType,
+                  objectId: args.id,
+                  sourceName: matchingObj.sourceData.name || matchingObj.sourceData.title || matchingObj.objectId,
+                  partialData: args
+                });
+              }
+            }
+          }
         },
         abortControllerRef,
       });
 
       // Success
-      setScreen('complete');
+      completeSuccess();
       onComplete();
+      // Modal already closed - success shown in toast
     } catch (err) {
-      // If we have partial translations, don't go to complete screen
-      // (the onPartialSuccess callback already handled it)
+      // If we have partial translations, they're already applied in onPartialSuccess
       if (partialTranslations.length === 0) {
-        setError(err instanceof Error ? err.message : 'Translation failed');
-        setScreen('complete');
+        const errorMsg = err instanceof Error ? err.message : 'Translation failed';
+        setError(errorMsg);
+        completeError(errorMsg);
+        // Modal already closed - error shown in toast
       }
     }
   };
 
-  const handleCancel = () => {
-    if (screen === 'progress') {
-      abortControllerRef.current?.abort();
-    }
+  // Just close modal - don't abort (request continues in background)
+  const handleClose = () => {
     onClose();
   };
 
@@ -375,11 +483,11 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay" onClick={handleCancel}>
+    <div className="modal-overlay" onClick={handleClose}>
       <div className="modal-content batch-translation-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h2>🌐 Batch Translation</h2>
-          <button className="modal-close" onClick={handleCancel}>×</button>
+          <button className="modal-close" onClick={handleClose}>×</button>
         </div>
 
         {/* Configuration Screen */}
@@ -419,7 +527,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
             </div>
 
             {/* Tree-based object selector */}
-            {!allowedObjectTypes && translationTree.length > 0 && (
+            {translationTree.length > 0 && (
               <div className="form-group">
                 <div className="tree-header">
                   <label>Select Objects to Translate</label>
@@ -496,7 +604,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
             </div>
 
             <div className="modal-actions">
-              <button onClick={handleCancel} className="btn-secondary">
+              <button onClick={handleClose} className="btn-secondary">
                 Cancel
               </button>
               <button
@@ -527,11 +635,12 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
               </div>
             )}
 
+            {/* Progress Header with Bar */}
             <div className="progress-header">
               <p>
                 {partialError
                   ? `Received ${partialTranslations.length} of ${totalCount} translations`
-                  : `Translating ${completedIds.length} of ${totalCount} objects...`
+                  : `Progress: ${completedIds.length} / ${totalCount} completed`
                 }
               </p>
               <div className="progress-bar">
@@ -542,43 +651,94 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
               </div>
             </div>
 
-            <div className="progress-list">
-              {objectsToTranslate.map((obj, index) => {
-                const isCompleted = completedIds.includes(obj.objectId);
-                const isCurrent = !partialError && completedIds.length > 0 && completedIds[completedIds.length - 1] === obj.objectId;
-                const isFailed = partialError && !isCompleted && index === completedIds.length;
-                const isNotAttempted = partialError && !isCompleted && index > completedIds.length;
+            {/* Thinking Display */}
+            {contentParts.some(p => p.type === 'thinking') && (
+              <ThinkingDisplay
+                messageId="batch-translation"
+                contentParts={contentParts}
+                displayMode="separate"
+                isStreaming={true}
+              />
+            )}
 
-                return (
-                  <div
-                    key={obj.objectId}
-                    className={`progress-item ${isCompleted ? 'completed' : ''} ${isCurrent ? 'current' : ''} ${isFailed ? 'failed' : ''} ${isNotAttempted ? 'not-attempted' : ''}`}
-                  >
-                    <span className="progress-icon">
-                      {isCompleted ? '✓' : isFailed ? '✗' : isCurrent ? '⏳' : '○'}
-                    </span>
-                    <span className="progress-label">
-                      {obj.objectType}: {obj.sourceData.name || obj.sourceData.title || obj.objectId}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Streaming preview for native mode */}
-            {streamItems.length > 0 && (
-              <div className="streaming-translations-preview">
-                <h4>Translating...</h4>
-                {streamItems.map((item, idx) => (
-                  <div key={item.id || idx} className="streaming-item">
-                    <strong>{item.name || item.id}</strong>
-                    {item.description && (
-                      <p>{item.description.length > 100 ? `${item.description.slice(0, 100)}...` : item.description}</p>
-                    )}
-                  </div>
-                ))}
+            {/* Currently Translating Card - Shows actual streaming content */}
+            {currentStreamingItem && !partialError && (
+              <div className="current-translation-card">
+                <div className="current-translation-header">
+                  <span className="streaming-dot"></span>
+                  Currently Translating: {currentStreamingItem.objectType}
+                </div>
+                <div className="current-translation-source">
+                  {currentStreamingItem.sourceName}
+                </div>
+                <div className="current-translation-content">
+                  {currentStreamingItem.partialData.name && (
+                    <div className="translation-field">
+                      <span className="field-label">name:</span>
+                      <span className="field-value">{currentStreamingItem.partialData.name}</span>
+                    </div>
+                  )}
+                  {currentStreamingItem.partialData.description && (
+                    <div className="translation-field">
+                      <span className="field-label">description:</span>
+                      <span className="field-value streaming-text">
+                        {currentStreamingItem.partialData.description}
+                        <span className="cursor">█</span>
+                      </span>
+                    </div>
+                  )}
+                  {currentStreamingItem.partialData.content && (
+                    <div className="translation-field">
+                      <span className="field-label">content:</span>
+                      <span className="field-value streaming-text">
+                        {currentStreamingItem.partialData.content.length > 500
+                          ? `${currentStreamingItem.partialData.content.slice(0, 500)}...`
+                          : currentStreamingItem.partialData.content}
+                        <span className="cursor">█</span>
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
+
+            {/* Completed Section */}
+            {completedIds.length > 0 && (
+              <div className="completed-section">
+                <div className="section-header">Completed ({completedIds.length})</div>
+                <div className="completed-list">
+                  {objectsToTranslate
+                    .filter(obj => completedIds.includes(obj.objectId))
+                    .map(obj => (
+                      <div key={obj.objectId} className="completed-item">
+                        ✓ {obj.objectType}: {obj.sourceData.name || obj.sourceData.title || obj.objectId}
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Pending Section */}
+            {(() => {
+              const pendingObjects = objectsToTranslate.filter(
+                obj => !completedIds.includes(obj.objectId) && obj.objectId !== currentStreamingItem?.objectId
+              );
+              const pendingCount = pendingObjects.length;
+              if (pendingCount === 0) return null;
+              return (
+                <div className="pending-section">
+                  <div className="section-header">Pending ({pendingCount})</div>
+                  <div className="pending-list compact">
+                    {pendingObjects.slice(0, 5).map(obj => (
+                      <span key={obj.objectId} className="pending-item">
+                        ○ {obj.sourceData.name || obj.sourceData.title || obj.objectId}
+                      </span>
+                    ))}
+                    {pendingCount > 5 && <span className="more-indicator">+{pendingCount - 5} more</span>}
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="modal-actions">
               {partialError ? (
@@ -595,7 +755,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
                   </button>
                 </>
               ) : (
-                <button onClick={handleCancel} className="btn-secondary">
+                <button onClick={handleClose} className="btn-secondary">
                   Cancel
                 </button>
               )}

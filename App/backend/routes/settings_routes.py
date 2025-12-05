@@ -78,11 +78,13 @@ async def get_user_settings(
                 }
             },
             provider_credentials={
+                'openai': {'apiKey': ''},
+                'gemini': {'apiKey': ''},
+                'claude': {'apiKey': ''},
                 'openrouter': {'apiKey': ''},
                 'custom': {'baseUrl': '', 'apiKey': ''},
-                'claude': {'apiKey': ''},
-                'gemini': {'apiKey': '', 'baseUrl': None},
-                'openai': {'apiKey': ''}
+                'xai': {'apiKey': ''},
+                'novelai': {'apiKey': ''}
             },
             provider_preferences={},
             main_language='English',
@@ -123,7 +125,8 @@ async def get_user_settings(
         defaultSubLanguage=settings.default_sub_language,
         theme=settings.theme,
         retryConfig=retry_config_dict,  # type: ignore
-        imageGenConfig=image_gen_config_dict  # type: ignore
+        imageGenConfig=image_gen_config_dict,  # type: ignore
+        nativeOutputMode=settings.native_output_mode
     )
 
 
@@ -182,6 +185,9 @@ async def update_user_settings(
     if update_data.imageGenConfig is not None:
         settings.image_gen_config = update_data.imageGenConfig.model_dump()  # type: ignore
 
+    if update_data.nativeOutputMode is not None:
+        settings.native_output_mode = update_data.nativeOutputMode  # type: ignore
+
     db.commit()
     db.refresh(settings)
 
@@ -215,7 +221,8 @@ async def update_user_settings(
         defaultSubLanguage=settings.default_sub_language,
         theme=settings.theme,
         retryConfig=retry_config_dict,  # type: ignore
-        imageGenConfig=image_gen_config_dict  # type: ignore
+        imageGenConfig=image_gen_config_dict,  # type: ignore
+        nativeOutputMode=settings.native_output_mode
     )
 
 
@@ -276,7 +283,8 @@ async def update_function_config(
         defaultSubLanguage=settings.default_sub_language,
         theme=settings.theme,
         retryConfig=retry_config_dict,  # type: ignore
-        imageGenConfig=image_gen_config_dict  # type: ignore
+        imageGenConfig=image_gen_config_dict,  # type: ignore
+        nativeOutputMode=settings.native_output_mode
     )
 
 
@@ -329,7 +337,8 @@ async def sync_settings_from_client(
             default_sub_language=client_settings.get('defaultSubLanguage'),
             theme=client_settings.get('theme', 'system'),
             retry_config=client_settings.get('retryConfig', default_retry_config),
-            image_gen_config=client_settings.get('imageGenConfig', default_image_gen_config)
+            image_gen_config=client_settings.get('imageGenConfig', default_image_gen_config),
+            native_output_mode=client_settings.get('nativeOutputMode', False)
         )
         db.add(settings)
     else:
@@ -343,6 +352,7 @@ async def sync_settings_from_client(
         settings.theme = client_settings.get('theme', settings.theme)  # type: ignore
         settings.retry_config = client_settings.get('retryConfig', settings.retry_config or default_retry_config)  # type: ignore
         settings.image_gen_config = client_settings.get('imageGenConfig', settings.image_gen_config or default_image_gen_config)  # type: ignore
+        settings.native_output_mode = client_settings.get('nativeOutputMode', settings.native_output_mode)  # type: ignore
 
     db.commit()
     db.refresh(settings)

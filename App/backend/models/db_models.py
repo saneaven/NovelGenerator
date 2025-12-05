@@ -48,13 +48,7 @@ class UserSettings(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, unique=True)
 
-    # DEPRECATED: Keep for backward compatibility during migration
-    active_provider = Column(String(50), default='openrouter')
-    ai_model = Column(String(100), default='gpt-5-mini')
-    providers_config = Column(JSONB, server_default='{}')
-    provider_preferences = Column(JSONB, server_default='{}')
-
-    # NEW: Function-based configuration (provider, model, temperature, advanced settings per function)
+    # Function-based configuration (provider, model, temperature, advanced settings per function)
     function_configs = Column(JSONB, nullable=False, server_default="""{
         "chat": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
         "translation": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.2, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
@@ -69,7 +63,8 @@ class UserSettings(Base):
         "claude": {"apiKey": ""},
         "openrouter": {"apiKey": ""},
         "custom": {"baseUrl": "", "apiKey": ""},
-        "xai": {"apiKey": ""}
+        "xai": {"apiKey": ""},
+        "novelai": {"apiKey": ""}
     }""")
 
     # Language settings
@@ -101,6 +96,9 @@ class UserSettings(Base):
         "geminiSettings": {"aspect_ratio": "1:1", "image_resolution": "2K"},
         "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"}
     }""")
+
+    # Native output mode - use raw LLM output instead of function calling
+    native_output_mode = Column(Boolean, default=False, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -317,32 +315,6 @@ class Chapter(Base):
     # Relationships
     act = relationship("Act", back_populates="chapters")
     manuscript = relationship("Manuscript", back_populates="chapter", uselist=False, cascade="all, delete-orphan")
-
-
-# ============================================================================
-# VERSION HISTORY (for Story Objects)
-# ============================================================================
-
-class StoryObjectVersion(Base):
-    """Version history for all story objects with multilingual support"""
-    __tablename__ = 'story_object_versions'
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    object_id = Column(UUID(as_uuid=True), nullable=False, index=True)
-    object_type = Column(String(50), nullable=False, index=True)
-
-    user_request = Column(Text)
-    is_active = Column(Boolean, default=False, nullable=False)
-
-    # Multilingual data stored as JSONB
-    # Format: { "English": { "name": "...", "description": "..." }, "Korean": {...} }
-    data = Column(JSONB, nullable=False)
-
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
-
-    __table_args__ = (
-        Index('idx_version_object_type', 'object_id', 'object_type'),
-    )
 
 
 # ============================================================================

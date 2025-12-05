@@ -1,20 +1,24 @@
 /**
  * Novel/Manuscript service
- * Now using unified object system
+ * Uses unified object system
  */
 
 import { unifiedObjectService } from './unifiedObjectService';
 import type {
   ManuscriptCreate,
   ManuscriptUpdate,
-  ManuscriptResponse,
-  ManuscriptVersionResponse,
 } from './types';
 import type {
   UnifiedObject,
   ManuscriptData,
   VersionHistoryEntry,
 } from '../types/unifiedObject';
+
+// Response type for manuscript operations
+export interface ManuscriptWithVersions {
+  object: UnifiedObject<ManuscriptData>;
+  versions: VersionHistoryEntry[];
+}
 
 // ============================================================================
 // HELPER: Find manuscript ID from chapter ID
@@ -32,7 +36,7 @@ async function findManuscriptId(
     const result = await unifiedObjectService.listObjects<ManuscriptData>(
       'manuscript',
       projectId,
-      { page_size: 100 } // backend limit is 100 per request
+      { page_size: 100 }
     );
 
     const contentObj = result.objects.find(
@@ -47,77 +51,6 @@ async function findManuscriptId(
 }
 
 // ============================================================================
-// CONVERSION: Unified Object → Old Response Format
-// ============================================================================
-
-/**
- * Convert UnifiedObject to ManuscriptResponse format
- * This maintains backward compatibility with existing code
- */
-function convertToLegacyFormat(
-  unifiedObj: UnifiedObject<ManuscriptData>,
-  versionHistory?: VersionHistoryEntry[]
-): ManuscriptResponse {
-  // Convert version history to old format
-  const versions: ManuscriptVersionResponse[] = [];
-
-  if (versionHistory && versionHistory.length > 0) {
-    versionHistory.forEach((version) => {
-      const languageData: Record<string, { content: string; wordCount: number }> = {};
-
-      // Convert version.data from {language: {content, wordCount}} format
-      Object.entries(version.data).forEach(([lang, data]: [string, any]) => {
-        if (data && typeof data === 'object') {
-          languageData[lang] = {
-            content: data.content || '',
-            wordCount: data.wordCount || 0,
-          };
-        }
-      });
-
-      versions.push({
-        id: version.id,
-        manuscript_id: unifiedObj.id,
-        userRequest: version.user_request || 'No description',
-        is_active: version.id === unifiedObj.version.id,
-        data: languageData,
-        timestamp: version.created_at,
-      });
-    });
-  } else {
-    // If no version history provided, create single version from current data
-    const currentData: Record<string, { content: string; wordCount: number }> = {};
-
-    // Add current language data (unifiedObj.data is now language-keyed)
-    Object.entries(unifiedObj.data).forEach(([lang, data]) => {
-      if (data && typeof data === 'object') {
-        currentData[lang] = {
-          content: (data as ManuscriptData).content || '',
-          wordCount: (data as ManuscriptData).wordCount || 0,
-        };
-      }
-    });
-
-    versions.push({
-      id: unifiedObj.version.id,
-      manuscript_id: unifiedObj.id,
-      userRequest: 'Current version',
-      is_active: true,
-      data: currentData,
-      timestamp: unifiedObj.version.created_at,
-    });
-  }
-
-  return {
-    id: unifiedObj.id,
-    chapter_id: unifiedObj.metadata.chapter_id!,
-    created_at: unifiedObj.metadata.created_at,
-    updated_at: unifiedObj.metadata.updated_at,
-    versions,
-  };
-}
-
-// ============================================================================
 // PUBLIC API
 // ============================================================================
 
@@ -129,15 +62,13 @@ export const novelService = {
     projectId: string,
     chapterId: string,
     data: ManuscriptCreate
-  ): Promise<ManuscriptResponse> {
-    // Count words
+  ): Promise<ManuscriptWithVersions> {
     const wordCount = data.content
       .trim()
       .split(/\s+/)
       .filter((word) => word.length > 0).length;
 
-    // Create using unified API
-    const unifiedObj = await unifiedObjectService.createObject<ManuscriptData>(
+    const object = await unifiedObjectService.createObject<ManuscriptData>(
       'manuscript',
       projectId,
       {
@@ -153,11 +84,9 @@ export const novelService = {
       }
     );
 
-    // Get version history
-    const versions = await unifiedObjectService.getVersions('manuscript', unifiedObj.id);
+    const versions = await unifiedObjectService.getVersions('manuscript', object.id);
 
-    // Convert to legacy format
-    return convertToLegacyFormat(unifiedObj, versions);
+    return { object, versions };
   },
 
   /**
@@ -166,25 +95,21 @@ export const novelService = {
   async getManuscript(
     projectId: string,
     chapterId: string
-  ): Promise<ManuscriptResponse> {
-    // Find manuscript ID
+  ): Promise<ManuscriptWithVersions> {
     const manuscriptId = await findManuscriptId(projectId, chapterId);
 
     if (!manuscriptId) {
       throw new Error(`No manuscript found for chapter ${chapterId}`);
     }
 
-    // Get object
-    const unifiedObj = await unifiedObjectService.getObject<ManuscriptData>(
+    const object = await unifiedObjectService.getObject<ManuscriptData>(
       'manuscript',
       manuscriptId
     );
 
-    // Get version history
     const versions = await unifiedObjectService.getVersions('manuscript', manuscriptId);
 
-    // Convert to legacy format
-    return convertToLegacyFormat(unifiedObj, versions);
+    return { object, versions };
   },
 
   /**
@@ -194,22 +119,19 @@ export const novelService = {
     projectId: string,
     chapterId: string,
     data: ManuscriptUpdate
-  ): Promise<ManuscriptResponse> {
-    // Find manuscript ID
+  ): Promise<ManuscriptWithVersions> {
     const manuscriptId = await findManuscriptId(projectId, chapterId);
 
     if (!manuscriptId) {
       throw new Error(`No manuscript found for chapter ${chapterId}`);
     }
 
-    // Count words
     const wordCount = data.content
       .trim()
       .split(/\s+/)
       .filter((word) => word.length > 0).length;
 
-    // Update using unified API
-    const unifiedObj = await unifiedObjectService.updateObject<ManuscriptData>(
+    const object = await unifiedObjectService.updateObject<ManuscriptData>(
       'manuscript',
       manuscriptId,
       {
@@ -219,15 +141,13 @@ export const novelService = {
         },
         language: data.language || 'en',
         user_request: data.userRequest,
-        create_new_version: data.create_new_version !== false, // Default true
+        create_new_version: data.create_new_version !== false,
       }
     );
 
-    // Get version history
     const versions = await unifiedObjectService.getVersions('manuscript', manuscriptId);
 
-    // Convert to legacy format
-    return convertToLegacyFormat(unifiedObj, versions);
+    return { object, versions };
   },
 
   /**
@@ -237,33 +157,27 @@ export const novelService = {
     projectId: string,
     chapterId: string,
     versionId: string
-  ): Promise<ManuscriptResponse> {
-    // Find manuscript ID
+  ): Promise<ManuscriptWithVersions> {
     const manuscriptId = await findManuscriptId(projectId, chapterId);
 
     if (!manuscriptId) {
       throw new Error(`No manuscript found for chapter ${chapterId}`);
     }
 
-    // Restore version (creates a new version with the restored content)
     await unifiedObjectService.restoreVersion('manuscript', manuscriptId, versionId);
 
-    // Get updated object
-    const unifiedObj = await unifiedObjectService.getObject<ManuscriptData>(
+    const object = await unifiedObjectService.getObject<ManuscriptData>(
       'manuscript',
       manuscriptId
     );
 
-    // Get version history
     const versions = await unifiedObjectService.getVersions('manuscript', manuscriptId);
 
-    // Convert to legacy format
-    return convertToLegacyFormat(unifiedObj, versions);
+    return { object, versions };
   },
 
   /**
    * Helper: Get manuscript ID from chapter ID
-   * Useful for components that need the manuscript ID directly
    */
   async getManuscriptId(projectId: string, chapterId: string): Promise<string | null> {
     return findManuscriptId(projectId, chapterId);

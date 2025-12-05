@@ -1,28 +1,25 @@
 /**
  * NovelEditorPanel - Novel Writing Interface
  *
- * Complete redesign with the following features:
- * 
  * Core Features:
  * - Rich text editor for chapter content
- * - Auto-save with debouncing (2s delay, in-place updates)
- * - Manual save creates version snapshots
+ * - Auto-cache to localStorage (persists across refresh, no backend calls)
+ * - Manual save creates version snapshots (backend call)
  * - Word count tracking
  * - Save status indicators
- * 
+ *
  * AI Features:
  * - AI Edit modal for content improvement
  * - Chat integration for AI assistance
  * - Function calling for AI-generated content
- * 
+ *
  * Translation Features:
  * - Multi-language support
  * - Language switcher
- * - AI translation
- * 
+ * - AI translation (via Batch Translation)
+ *
  * Version Management:
- * - Automatic snapshots every 5 minutes (if changes exist)
- * - Manual version creation
+ * - Manual version creation via Save Snapshot button
  * - Version history sidebar
  * - Version restoration
  */
@@ -62,7 +59,11 @@ interface NovelEditorPanelProps {
 
 // Constants
 const AUTO_SAVE_DELAY = 2000; // 2 seconds
-const SNAPSHOT_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const CACHE_KEY_PREFIX = 'novel_editor_cache_';
+
+// Helper to get localStorage cache key for manuscript content
+const getCacheKey = (manuscriptId: string, language: string) =>
+  `${CACHE_KEY_PREFIX}${manuscriptId}_${language}`;
 
 const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   projectId,
@@ -94,7 +95,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const [showImageGeneratorModal, setShowImageGeneratorModal] = useState(false);
   const [cursorContext, setCursorContext] = useState<{ before: string; after: string }>({ before: '', after: '' });
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
-  const [isToolbarExpanded, setIsToolbarExpanded] = useState(true);
 
   // Asset store for uploading images
   const { uploadAsset } = useAssetStore();
@@ -102,13 +102,11 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   // Editor state
   const [content, setContent] = useState('');
   const [lastSavedContent, setLastSavedContent] = useState('');
-  const [lastSnapshotTime, setLastSnapshotTime] = useState(Date.now());
   const [isSaving, setIsSaving] = useState(false);
   const [savingType, setSavingType] = useState<'auto' | 'manual' | null>(null);
 
   // Refs
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const snapshotIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const editorRef = useRef<RichTextEditorRef>(null);
   // Track if baseline has been set for current editor instance
@@ -312,37 +310,41 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     baselineSetRef.current = false;
   }, [editorKey]);
 
+  // Restore content from localStorage cache if available and newer than server data
+  useEffect(() => {
+    if (!manuscriptId || !effectiveLanguage || !manuscript) return;
+
+    const cacheKey = getCacheKey(manuscriptId, effectiveLanguage);
+    const cached = localStorage.getItem(cacheKey);
+
+    if (cached) {
+      try {
+        const { content: cachedContent, savedAt } = JSON.parse(cached);
+        const serverUpdatedAt = new Date(manuscript.version?.created_at || 0).getTime();
+
+        // Only restore if cache is newer than server data
+        if (savedAt > serverUpdatedAt) {
+          setContent(cachedContent);
+          // Don't set lastSavedContent - this keeps hasUnsavedChanges true
+          // so user knows there's unsaved work
+        }
+      } catch (err) {
+        console.error('Failed to restore from cache:', err);
+        localStorage.removeItem(cacheKey);
+      }
+    }
+  }, [manuscriptId, effectiveLanguage, manuscript?.version?.created_at]);
+
   // Sync hasUnsavedChanges to the store for cross-component access
   useEffect(() => {
     setHasUnsavedChangesAction(projectId, hasUnsavedChanges);
   }, [projectId, hasUnsavedChanges, setHasUnsavedChangesAction]);
-
-  // Setup periodic snapshot creation
-  useEffect(() => {
-    if (!manuscriptId) return;
-
-    // Create snapshot every 5 minutes if there are changes
-    snapshotIntervalRef.current = setInterval(() => {
-      if (hasUnsavedChanges) {
-        handleManualSave('Automatic Snapshot');
-      }
-    }, SNAPSHOT_INTERVAL);
-
-    return () => {
-      if (snapshotIntervalRef.current) {
-        clearInterval(snapshotIntervalRef.current);
-      }
-    };
-  }, [manuscriptId, hasUnsavedChanges]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (autoSaveTimeoutRef.current) {
         clearTimeout(autoSaveTimeoutRef.current);
-      }
-      if (snapshotIntervalRef.current) {
-        clearInterval(snapshotIntervalRef.current);
       }
     };
   }, []);
@@ -352,35 +354,25 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   // ============================================================================
 
   /**
-   * Auto-save: Debounced, in-place update (no version created)
+   * Auto-save: Save to localStorage only (NO backend call)
    * Called on every keystroke after debounce delay
    */
-  const handleAutoSave = useCallback(async () => {
-    if (!manuscript || !manuscriptId || !hasUnsavedChanges) return;
+  const handleAutoSave = useCallback(() => {
+    if (!manuscriptId || !hasUnsavedChanges) return;
 
-    setIsSaving(true);
-    setSavingType('auto');
-
+    // Save to localStorage only - NO backend API call
+    const cacheKey = getCacheKey(manuscriptId, effectiveLanguage);
     try {
-      await store.updateObject('manuscript', manuscriptId, {
-        data: {
-          content,
-          wordCount,
-        },
-        language: effectiveLanguage,
-        user_request: 'Auto-save',
-        create_new_version: false, // IN-PLACE UPDATE - No version spam!
-      });
-
+      localStorage.setItem(cacheKey, JSON.stringify({
+        content,
+        wordCount,
+        savedAt: Date.now(),
+      }));
       setLastSavedContent(content);
     } catch (err) {
-      console.error('Auto-save failed:', err);
-      // Don't show error for auto-save failures, just log
-    } finally {
-      setIsSaving(false);
-      setSavingType(null);
+      console.error('localStorage save failed:', err);
     }
-  }, [manuscript, manuscriptId, content, wordCount, hasUnsavedChanges, store, effectiveLanguage]);
+  }, [manuscriptId, content, wordCount, hasUnsavedChanges, effectiveLanguage]);
 
   /**
    * Manual save: Creates version snapshot
@@ -405,7 +397,10 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         });
 
         setLastSavedContent(content);
-        setLastSnapshotTime(Date.now());
+
+        // Clear localStorage cache after successful save
+        const cacheKey = getCacheKey(manuscriptId, effectiveLanguage);
+        localStorage.removeItem(cacheKey);
       } catch (err) {
         console.error('Manual save failed:', err);
         showError('Save Error', 'Failed to save. Please try again.');
@@ -680,116 +675,54 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
               <div className="editor-info">
                 <div className="editor-title-row">
                   <h2 className="editor-chapter-title">{selectedChapter.name}</h2>
-                  {selectedChapter.description && (
+
+                  {/* Status Info - Save status + Word count (stacked vertically) */}
+                  <div className="editor-status-info">
+                    <div className="save-status">
+                      {isSaving && savingType === 'auto' && <span className="saving-indicator">💾 Auto-saving...</span>}
+                      {isSaving && savingType === 'manual' && <span className="saving-indicator">💾 Saving...</span>}
+                      {!isSaving && hasUnsavedChanges && <span className="unsaved-indicator">● Unsaved</span>}
+                      {!isSaving && !hasUnsavedChanges && <span className="saved-indicator">✓ Saved</span>}
+                    </div>
+                    <div className="word-count">
+                      <span>{wordCount.toLocaleString()} words</span>
+                    </div>
+                  </div>
+
+                  {/* Fallback Warning */}
+                  {isFallback && (
+                    <span className="fallback-warning" title={`${globalDisplayLanguage} not available, showing ${effectiveLanguage}`}>
+                      ⚠️ {effectiveLanguage}
+                    </span>
+                  )}
+
+                  {/* Sidebar Toggle Button */}
+                  <button
+                    onClick={() => editorStore.setChapterSidebarVisible(projectId, !isChapterSidebarVisible)}
+                    className="header-btn sidebar-toggle-btn"
+                    title="Toggle chapter list"
+                  >
+                    ☰
+                  </button>
+                </div>
+
+                {/* Collapsible Description */}
+                {selectedChapter.description && (
+                  <div className={`editor-chapter-description-wrapper ${isDescriptionExpanded ? 'expanded' : ''}`}>
                     <button
-                      className="description-toggle-btn-inline mobile-only"
+                      className="description-toggle-btn"
                       onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
                       aria-expanded={isDescriptionExpanded}
                       title={isDescriptionExpanded ? 'Hide description' : 'Show description'}
                     >
-                      {isDescriptionExpanded ? '▲' : '▼'}
+                      {isDescriptionExpanded ? '▲ Hide description' : '▼ Show description'}
                     </button>
-                  )}
-                </div>
-                {selectedChapter.description && (
-                  <div className={`editor-chapter-description-wrapper ${isDescriptionExpanded ? 'expanded' : ''}`}>
                     <p className="editor-chapter-description">{selectedChapter.description}</p>
                   </div>
                 )}
               </div>
             </div>
           )}
-
-          {/* Toolbar */}
-          <div className={`editor-toolbar-wrapper ${isToolbarExpanded ? 'expanded' : 'collapsed'}`}>
-            <div className="editor-toolbar">
-              {/* Save Status */}
-              <div className="save-status">
-                {isSaving && savingType === 'auto' && <span className="saving-indicator">💾 Auto-saving...</span>}
-                {isSaving && savingType === 'manual' && <span className="saving-indicator">💾 Saving...</span>}
-                {!isSaving && hasUnsavedChanges && <span className="unsaved-indicator">● Unsaved changes</span>}
-                {!isSaving && !hasUnsavedChanges && <span className="saved-indicator">✓ Saved</span>}
-              </div>
-
-              {/* Word Count */}
-              <div className="stat-item">
-                <span className="stat-value">{wordCount.toLocaleString()} words</span>
-              </div>
-
-              <div className="toolbar-info" />
-
-              {/* Fallback Warning */}
-              {isFallback && (
-                <span className="fallback-warning" title={`${globalDisplayLanguage} not available, showing ${effectiveLanguage}`}>
-                  ⚠️ {effectiveLanguage}
-                </span>
-              )}
-
-              {/* AI Edit Button */}
-              <button
-                onClick={() => setIsAIEditModalOpen(true)}
-                className="toolbar-btn ai-edit-btn"
-                disabled={isSaving || !selectedChapter}
-                title="AI Edit Chapter"
-              >
-                🤖 AI Edit
-              </button>
-
-              {/* Manual Save Button */}
-              <button
-                onClick={() => handleManualSave('Manual Save')}
-                className="toolbar-btn save-btn"
-                disabled={isSaving || !hasUnsavedChanges}
-                title="Create version snapshot (Ctrl+S)"
-              >
-                💾 Save Snapshot
-              </button>
-
-              {/* More Actions Dropdown - show when there are sub languages */}
-              {settings.subLanguages && settings.subLanguages.length > 0 && (
-                <DropdownMenu
-                  trigger={
-                    <button className="more-button" disabled={isSaving} title="More actions">
-                      •••
-                    </button>
-                  }
-                >
-                  {/* Show Translate if current display language doesn't exist, otherwise Retranslate */}
-                  {manuscriptLanguages.includes(globalDisplayLanguage) ? (
-                    <DropdownItem
-                      icon="🔄"
-                      label="Retranslate"
-                      onClick={() => setShowRetranslateModal(true)}
-                      disabled={isSaving}
-                    />
-                  ) : (
-                    <DropdownItem
-                      icon="🌐"
-                      label="Translate"
-                      onClick={() => setShowRetranslateModal(true)}
-                      disabled={isSaving || !manuscript}
-                    />
-                  )}
-                </DropdownMenu>
-              )}
-
-              <div className="toolbar-separator" />
-              <button
-                onClick={() => editorStore.setChapterSidebarVisible(projectId, !isChapterSidebarVisible)}
-                className="toolbar-btn sidebar-toggle-btn"
-                title="Toggle chapter list"
-              >
-                ☰
-              </button>
-            </div>
-            <button
-              className="toolbar-collapse-btn mobile-only"
-              onClick={() => setIsToolbarExpanded(!isToolbarExpanded)}
-              aria-expanded={isToolbarExpanded}
-            >
-              {isToolbarExpanded ? '▲ Hide Toolbar' : '▼ Show Toolbar'}
-            </button>
-          </div>
 
           {/* Editor */}
           <div className={`editor-content ${isMissingTranslation ? 'disabled' : ''}`}>
@@ -803,6 +736,57 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
               onFileUpload={handleFileUpload}
               onBrowseAssets={handleBrowseAssets}
               onGenerateImage={handleGenerateImage}
+              toolbarActions={
+                <>
+                  {/* AI Edit Button */}
+                  <button
+                    onClick={() => setIsAIEditModalOpen(true)}
+                    className="action-btn ai-edit-btn"
+                    disabled={isSaving || !selectedChapter}
+                    title="AI Edit Chapter"
+                  >
+                    🤖 AI Edit
+                  </button>
+
+                  {/* Manual Save Button */}
+                  <button
+                    onClick={() => handleManualSave('Manual Save')}
+                    className="action-btn save-btn"
+                    disabled={isSaving || !hasUnsavedChanges}
+                    title="Create version snapshot (Ctrl+S)"
+                  >
+                    💾 Save
+                  </button>
+
+                  {/* More Actions Dropdown - show when there are sub languages */}
+                  {settings.subLanguages && settings.subLanguages.length > 0 && (
+                    <DropdownMenu
+                      trigger={
+                        <button className="more-button" disabled={isSaving} title="More actions">
+                          •••
+                        </button>
+                      }
+                    >
+                      {/* Show Translate if current display language doesn't exist, otherwise Retranslate */}
+                      {manuscriptLanguages.includes(globalDisplayLanguage) ? (
+                        <DropdownItem
+                          icon="🔄"
+                          label="Retranslate"
+                          onClick={() => setShowRetranslateModal(true)}
+                          disabled={isSaving}
+                        />
+                      ) : (
+                        <DropdownItem
+                          icon="🌐"
+                          label="Translate"
+                          onClick={() => setShowRetranslateModal(true)}
+                          disabled={isSaving || !manuscript}
+                        />
+                      )}
+                    </DropdownMenu>
+                  )}
+                </>
+              }
             />
             {/* Missing Translation Overlay */}
             {isMissingTranslation && (
@@ -837,11 +821,9 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
               <span>Language: {effectiveLanguage}</span>
               <span>•</span>
               <span>Version: {manuscript.version.number}</span>
-              <span>•</span>
-              <span>Last snapshot: {new Date(lastSnapshotTime).toLocaleTimeString()}</span>
             </div>
             <div className="editor-footer-notice">
-              💡 Auto-saves every {AUTO_SAVE_DELAY / 1000}s | Snapshots every {SNAPSHOT_INTERVAL / 60000}m
+              💡 Auto-cached locally • Click Save to create version
             </div>
           </div>
         </div>
