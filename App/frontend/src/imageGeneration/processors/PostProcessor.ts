@@ -36,6 +36,7 @@ export async function postProcess(
                 filePath: asset.file_path,
                 thumbnailPath: asset.thumbnail_path,
                 mimeType: asset.mime_type,
+                assetType: asset.asset_type,
                 generationPrompt: asset.generation_prompt,
                 generationPositivePrompt: asset.generation_positive_prompt,
                 generationNegativePrompt: asset.generation_negative_prompt,

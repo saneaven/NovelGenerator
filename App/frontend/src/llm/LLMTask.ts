@@ -2,11 +2,10 @@ import type {
   ChatMessage,
   ContentPart,
   ContentPartType,
-  FunctionCallMetadata,
   ConversationBlock,
 } from './requestTypes';
 import { streamLLM } from './llmService';
-import { useSettingsStore } from '../store/settingsStore';
+import { useSettingsStore, type AIFunctionType } from '../store/settingsStore';
 import { useLLMTaskStore } from '../store/llmTaskStore';
 import { FunctionCallStreamTracker } from '../chat/streaming/FunctionCallStreamTracker';
 import { PromptManager } from './PromptManager';
@@ -14,9 +13,24 @@ import type {
   LLMTaskConfig,
   LLMTaskCallbacks,
   LLMTaskResult,
-  PromptContext,
   PromptBundle,
+  LLMTaskModeType,
 } from './types';
+import { LLMTaskMode } from './types';
+
+/**
+ * Map LLMTaskMode to AIFunctionType for settings lookup
+ */
+const MODE_TO_FUNCTION_TYPE: Record<LLMTaskModeType, AIFunctionType> = {
+  [LLMTaskMode.CHAT_WORKSPACE]: 'chat',
+  [LLMTaskMode.CHAT_NOVEL_EDITOR]: 'chat',
+  [LLMTaskMode.STORY_OBJECT_EDIT]: 'storyObjectEdit',
+  [LLMTaskMode.CHAPTER_EDIT]: 'chapterGen',
+  [LLMTaskMode.TRANSLATION]: 'translation',
+  [LLMTaskMode.CHAT_TRANSLATION]: 'translation',
+  [LLMTaskMode.OBJECT_IMAGE_PROMPT]: 'imagePrompt',
+  [LLMTaskMode.SCENE_IMAGE_PROMPT]: 'imagePrompt',
+};
 
 /**
  * LLMTask - Core streaming class with RAF throttling
@@ -57,13 +71,19 @@ export class LLMTask {
 
     try {
       // 1. Get provider/model config (from settings or overrides)
-      const settings = useSettingsStore.getState();
-      const provider = this.config.provider ?? settings.provider;
-      const providerConfig = this.config.providerConfig ?? settings.providerConfig;
-      const model = this.config.model ?? settings.aiModel;
-      const temperature = this.config.temperature ?? settings.temperature;
-      const thinkingMode = this.config.thinkingMode ?? settings.thinkingMode;
-      const thinkingConfig = this.config.thinkingConfig ?? settings.thinkingConfig;
+      const settingsStore = useSettingsStore.getState();
+      const { settings, getProviderConfig } = settingsStore;
+
+      // Get function type for this mode to lookup settings
+      const functionType = MODE_TO_FUNCTION_TYPE[this.config.mode];
+      const functionConfig = settings.functionConfigs[functionType];
+
+      const provider = this.config.provider ?? functionConfig.provider;
+      const providerConfig = this.config.providerConfig ?? getProviderConfig(provider);
+      const model = this.config.model ?? functionConfig.model;
+      const temperature = this.config.temperature ?? functionConfig.temperature;
+      const thinkingMode = this.config.thinkingMode ?? functionConfig.advanced.thinkingMode;
+      const thinkingConfig = this.config.thinkingConfig ?? functionConfig.advanced.thinkingConfig;
       const retryConfig = this.config.retryConfig ?? settings.retryConfig;
 
       // 2. Generate prompt bundle
@@ -108,25 +128,6 @@ export class LLMTask {
           this.pendingParts.push({ type: currentPartType, text: currentBuffer });
           currentBuffer = '';
           currentPartType = null;
-        }
-      };
-
-      const scheduleUpdate = () => {
-        if (this.rafId === null) {
-          this.rafId = requestAnimationFrame(() => {
-            this.rafId = null;
-
-            // Update callback
-            this.callbacks.onUpdate([...this.pendingParts]);
-
-            // Update llmTaskStore (for toast)
-            if (this.config.sessionId) {
-              useLLMTaskStore.getState().setContentParts(
-                this.config.sessionId,
-                [...this.pendingParts]
-              );
-            }
-          });
         }
       };
 
@@ -291,7 +292,7 @@ export class LLMTask {
         functionCalls,
       });
 
-      this.callbacks.onComplete(result);
+      await this.callbacks.onComplete(result);
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
 
@@ -392,8 +393,8 @@ export class LLMTask {
    */
   private getMessageText(msg: ChatMessage): string {
     return msg.contentParts
-      .filter(p => p.type === 'content')
-      .map(p => p.text)
+      .filter((p: ContentPart) => p.type === 'content')
+      .map((p: ContentPart) => p.text)
       .join('');
   }
 }

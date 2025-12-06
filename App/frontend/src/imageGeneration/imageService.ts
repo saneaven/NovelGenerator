@@ -151,6 +151,7 @@ interface AssetResponse {
     file_path: string;
     thumbnail_path: string | null;
     mime_type: string;
+    asset_type: 'scene' | 'object' | null;
     generation_prompt: string | null;
     generation_positive_prompt: string | null;
     generation_negative_prompt: string | null;

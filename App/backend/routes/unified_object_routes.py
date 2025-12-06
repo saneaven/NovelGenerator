@@ -198,6 +198,15 @@ def get_latest_version(db: Session, object_type: str, object_id: UUID) -> Option
     ).order_by(ObjectVersion.version_number.desc()).first()
 
 
+def get_version_by_number(db: Session, object_type: str, object_id: UUID, version_number: int) -> Optional[ObjectVersion]:
+    """Get a specific version by version number"""
+    return db.query(ObjectVersion).filter(
+        ObjectVersion.object_type == object_type,
+        ObjectVersion.object_id == object_id,
+        ObjectVersion.version_number == version_number
+    ).first()
+
+
 def get_latest_version_info(db: Session, object_type: str, object_id: UUID) -> Optional[Dict[str, Any]]:
     """Get latest version information (replaces get_latest_version_info)"""
     version = get_latest_version(db, object_type, object_id)
@@ -249,7 +258,8 @@ def create_or_update_version(
     new_data: Dict[str, Any],
     user_request: str,
     user_id: UUID,
-    create_new: bool = True
+    create_new: bool = True,
+    target_version_number: Optional[int] = None
 ) -> ObjectVersion:
     """Create new version or update existing one.
 
@@ -257,21 +267,35 @@ def create_or_update_version(
     - Latest version is always determined by MAX(version_number)
     - When create_new=True: creates a new version with only the edited language (translations become stale)
     - When create_new=False: updates existing latest version in-place, preserving other languages (for translations)
+    - When target_version_number is provided: updates that specific version instead of latest (for translations)
     """
 
     # Get current latest version
     current_version = get_latest_version(db, object_type, object_id)
 
+    # If target_version_number is specified, get that specific version instead
+    target_version = None
+    if target_version_number is not None and not create_new:
+        target_version = get_version_by_number(db, object_type, object_id, target_version_number)
+        if not target_version:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Version {target_version_number} not found for {object_type}/{object_id}"
+            )
+
+    # Determine which version to update
+    version_to_update = target_version if target_version else current_version
+
     # Carry forward existing languages only when updating existing version (not creating new)
     # This ensures translations preserve the original language while user edits start fresh
     carry_forward_languages = (
-        current_version is not None
-        and current_version.data
+        version_to_update is not None
+        and version_to_update.data
         and not create_new
     )
 
     # Merge language data
-    version_data = dict(current_version.data) if carry_forward_languages else {}
+    version_data = dict(version_to_update.data) if carry_forward_languages and version_to_update else {}
     version_data[language] = new_data
 
     if create_new or not current_version:
@@ -296,9 +320,9 @@ def create_or_update_version(
         return new_version
     else:
         # Update existing version in-place (for translations or novel editor continuous typing)
-        current_version.data = version_data
+        version_to_update.data = version_data
         db.flush()
-        return current_version
+        return version_to_update
 
 
 def update_translation_cache(

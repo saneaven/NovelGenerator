@@ -1,5 +1,5 @@
 import type { MutableRefObject } from 'react';
-import type { ContentPart, ChatMessage, FunctionCallMetadata, FunctionCallProgress, FunctionCallResultSummary } from './requestTypes';
+import type { ContentPart, FunctionCallMetadata, FunctionCallProgress, FunctionCallResultSummary } from './requestTypes';
 import type { ProviderConfig, ProviderType, ThinkingConfig, RetryConfig } from '../store/settingsStore';
 import type { FunctionCallSchema } from './schemas/functionCalling';
 import type { StoryObjectCategory } from '../types/storyObject';
@@ -183,7 +183,7 @@ export interface LLMTaskResult {
  */
 export interface LLMTaskCallbacks {
   onUpdate: (parts: ContentPart[]) => void;
-  onComplete: (result: LLMTaskResult) => void;
+  onComplete: (result: LLMTaskResult) => void | Promise<void>;
   onError: (error: Error) => void;
   onFunctionProgress?: (progress: FunctionCallProgress[]) => void;
 }

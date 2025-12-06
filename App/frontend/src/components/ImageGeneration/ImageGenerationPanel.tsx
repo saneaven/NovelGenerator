@@ -62,6 +62,7 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                     file_path: result.asset.filePath,
                     thumbnail_path: result.asset.thumbnailPath,
                     mime_type: result.asset.mimeType,
+                    asset_type: result.asset.assetType,
                     generation_prompt: result.asset.generationPrompt,
                     generation_positive_prompt: result.asset.generationPositivePrompt,
                     generation_negative_prompt: result.asset.generationNegativePrompt,

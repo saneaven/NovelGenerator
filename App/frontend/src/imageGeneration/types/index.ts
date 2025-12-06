@@ -133,6 +133,7 @@ export interface ProcessedImageResult {
         filePath: string;
         thumbnailPath: string | null;
         mimeType: string;
+        assetType: 'scene' | 'object' | null;
         generationPrompt: string | null;
         generationPositivePrompt: string | null;
         generationNegativePrompt: string | null;

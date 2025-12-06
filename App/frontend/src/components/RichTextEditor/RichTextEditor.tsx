@@ -8,23 +8,26 @@
  * - Native markdown support via @tiptap/markdown
  */
 
-import { useEffect, useCallback, useImperativeHandle, forwardRef, useRef, useState } from 'react';
+import { useEffect, useCallback, useImperativeHandle, forwardRef, useRef, useState, useMemo } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
 import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
 import { Markdown } from '@tiptap/markdown';
+import ImageWithOverlay from './extensions/ImageWithOverlay';
+import { IMAGE_OVERLAY_STORAGE_KEY, type ImageOverlayCallbacks } from './extensions/ImageNodeView';
 import ImageInsertMenu from './ImageInsertMenu';
+import type { Asset } from '../../api/assetService';
 import './RichTextEditor.css';
 
 export interface RichTextEditorRef {
   getHTML: () => string;
   getText: () => string;
   insertImage: (src: string, alt?: string) => void;
+  updateImageSrc: (oldSrc: string, newSrc: string, newAlt?: string) => boolean;
   focus: () => void;
   getTextAroundCursor: () => { before: string; after: string };
 }
@@ -41,6 +44,11 @@ interface RichTextEditorProps {
   onManageSceneAssets?: () => void;
   // Toolbar action props (optional - for integration with NovelEditorPanel)
   toolbarActions?: React.ReactNode;
+  // Image overlay callbacks (for replace, regenerate actions)
+  projectId?: string;
+  onReplaceImage?: (currentSrc: string) => void;
+  onRegenerateImage?: (asset: Asset, imageBounds: DOMRect) => void;
+  getAssetByUrl?: (src: string) => Promise<Asset | null>;
 }
 
 const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
@@ -53,6 +61,10 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   onGenerateImage,
   onManageSceneAssets,
   toolbarActions,
+  projectId,
+  onReplaceImage,
+  onRegenerateImage,
+  getAssetByUrl,
 }, ref) => {
   // Use ref to hold onChange callback (prevents stale closure in onCreate)
   // See: https://tiptap.dev/docs/editor/api/events
@@ -78,6 +90,14 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   // Check if new image menu should be used (all callbacks provided)
   const useImageMenu = !!(onFileUpload && onBrowseAssets && onGenerateImage);
 
+  // Memoize image overlay callbacks to prevent unnecessary re-renders
+  const imageOverlayCallbacks = useMemo<ImageOverlayCallbacks>(() => ({
+    projectId,
+    onReplace: onReplaceImage,
+    onRegenerate: onRegenerateImage,
+    getAssetByUrl,
+  }), [projectId, onReplaceImage, onRegenerateImage, getAssetByUrl]);
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -99,7 +119,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
           levels: [1, 2, 3, 4, 5, 6],
         },
       }),
-      Image.configure({
+      ImageWithOverlay.configure({
         inline: true,
         allowBase64: true,
         HTMLAttributes: {
@@ -133,7 +153,12 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
 
       // Handle general content changes
       editor.on('update', ({ editor: updatedEditor }) => {
-        // Use the official getMarkdown() method added by Markdown extension
+        // Use TipTap's built-in isEmpty check - more reliable than string matching
+        // Fixes issue where empty editor returns <p></p> instead of empty string
+        if (updatedEditor.isEmpty) {
+          onChangeRef.current('');
+          return;
+        }
         const markdown = updatedEditor.getMarkdown();
         onChangeRef.current(markdown);
       });
@@ -142,6 +167,10 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
       // The 'delete' event fires specifically when content is deleted
       // This ensures image deletions trigger onChange even if 'update' doesn't fire
       editor.on('delete', () => {
+        if (editor.isEmpty) {
+          onChangeRef.current('');
+          return;
+        }
         const markdown = editor.getMarkdown();
         onChangeRef.current(markdown);
       });
@@ -160,11 +189,44 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     }
   }, [disabled, editor]);
 
+  // Update image overlay callbacks in editor storage when they change
+  useEffect(() => {
+    if (editor) {
+      // Use type assertion - TipTap storage is dynamically typed per extension
+      // Store directly at the key that ImageNodeView expects
+      (editor.storage as unknown as Record<string, unknown>)[IMAGE_OVERLAY_STORAGE_KEY] = imageOverlayCallbacks;
+    }
+  }, [editor, imageOverlayCallbacks]);
+
   // Insert image at cursor
   const insertImage = useCallback((src: string, alt?: string) => {
     if (editor) {
       editor.chain().focus().setImage({ src, alt: alt || '' }).run();
     }
+  }, [editor]);
+
+  // Update an existing image's src by finding it in the document
+  const updateImageSrc = useCallback((oldSrc: string, newSrc: string, newAlt?: string): boolean => {
+    if (!editor) return false;
+
+    let found = false;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'image' && node.attrs.src === oldSrc) {
+        const attrs: Record<string, string> = { src: newSrc };
+        if (newAlt !== undefined) {
+          attrs.alt = newAlt;
+        }
+        editor.chain()
+          .setNodeSelection(pos)
+          .updateAttributes('image', attrs)
+          .run();
+        found = true;
+        return false; // Stop iteration
+      }
+      return true; // Continue iteration
+    });
+
+    return found;
   }, [editor]);
 
   // Get text before and after cursor position
@@ -186,9 +248,10 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     getHTML: () => editor?.getHTML() || '',
     getText: () => editor?.getText() || '',
     insertImage,
+    updateImageSrc,
     focus: () => editor?.chain().focus().run(),
     getTextAroundCursor,
-  }), [editor, insertImage, getTextAroundCursor]);
+  }), [editor, insertImage, updateImageSrc, getTextAroundCursor]);
 
   if (!editor) {
     return <div className="rich-text-editor loading">Loading editor...</div>;

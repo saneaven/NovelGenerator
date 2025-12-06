@@ -34,11 +34,13 @@ import RetranslateModal from '../../../components/RetranslateModal';
 import { AssetManagerModal, SceneAssetManagerModal } from '../../../components/AssetManager';
 import SceneImageGeneratorModal from '../../../components/ImageGeneration/SceneImageGeneratorModal';
 import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
+import RegenerationComparisonOverlay from '../../../components/RichTextEditor/RegenerationComparisonOverlay';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
 import { TranslationService } from '../../../services/translationService';
 import { useAssetStore } from '../../../store/assetStore';
+import { assetService, type Asset } from '../../../api/assetService';
 import type { ManuscriptObject } from '../../../types/unifiedObject';
-import type { Asset } from '../../../api/assetService';
+import type { InitialGenerationSettings } from '../../../components/ImageGeneration/SceneImageGeneratorModal';
 import { API_BASE_URL } from '../../../api/client';
 import ChapterSidebar from './ChapterSidebar';
 
@@ -96,6 +98,18 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const [showSceneAssetManagerModal, setShowSceneAssetManagerModal] = useState(false);
   const [cursorContext, setCursorContext] = useState<{ before: string; after: string }>({ before: '', after: '' });
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+
+  // Image overlay regeneration state
+  const [regenerateAsset, setRegenerateAsset] = useState<Asset | null>(null);
+  const [pendingRegenerationBounds, setPendingRegenerationBounds] = useState<DOMRect | null>(null);
+  const [regenerationComparison, setRegenerationComparison] = useState<{
+    originalSrc: string;
+    originalAsset: Asset;
+    newAsset: Asset;
+    position: DOMRect;
+  } | null>(null);
+  // Image replace state
+  const [replaceImageSrc, setReplaceImageSrc] = useState<string | null>(null);
 
   // Asset store for uploading images
   const { uploadAsset } = useAssetStore();
@@ -447,11 +461,28 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   // Handle image selection from AssetManagerModal
   const handleImageSelect = useCallback((asset: Asset) => {
+    const newSrc = `${API_BASE_URL}${asset.file_url}`;
+
+    // If we're replacing an existing image
+    if (replaceImageSrc && editorRef.current) {
+      // Use the editor's updateImageSrc method to replace the image
+      const updated = editorRef.current.updateImageSrc(replaceImageSrc, newSrc, asset.name);
+
+      if (!updated) {
+        console.warn('Failed to find and update image:', { from: replaceImageSrc, to: newSrc });
+      }
+
+      setReplaceImageSrc(null);
+      setShowAssetModal(false);
+      return;
+    }
+
+    // Normal insert at cursor
     if (editorRef.current) {
-      editorRef.current.insertImage(`${API_BASE_URL}${asset.file_url}`, asset.name);
+      editorRef.current.insertImage(newSrc, asset.name);
     }
     setShowAssetModal(false);
-  }, []);
+  }, [replaceImageSrc]);
 
   // Handle file upload from ImageInsertMenu drag-drop
   const handleFileUpload = useCallback(async (file: File) => {
@@ -493,9 +524,148 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   // Handle generated image from SceneImageGeneratorModal
   const handleImageGenerated = useCallback((asset: Asset) => {
+    // If we're in regeneration mode, show comparison UI instead of auto-inserting
+    if (regenerateAsset && pendingRegenerationBounds) {
+      setRegenerationComparison({
+        originalSrc: `${API_BASE_URL}${regenerateAsset.file_url}`,
+        originalAsset: regenerateAsset,
+        newAsset: asset,
+        position: pendingRegenerationBounds,
+      });
+      setShowImageGeneratorModal(false);
+      return;
+    }
+
+    // Normal generation - insert at cursor
     if (editorRef.current) {
       editorRef.current.insertImage(`${API_BASE_URL}${asset.file_url}`, asset.name);
     }
+  }, [regenerateAsset, pendingRegenerationBounds]);
+
+  // Handle replace image from overlay - opens AssetManagerModal
+  const handleReplaceImage = useCallback((currentSrc: string) => {
+    setReplaceImageSrc(currentSrc);
+    setShowAssetModal(true);
+  }, []);
+
+  // Handle regenerate image from overlay - opens SceneImageGeneratorModal with settings
+  const handleRegenerateImage = useCallback((asset: Asset, imageBounds: DOMRect) => {
+    setRegenerateAsset(asset);
+    setPendingRegenerationBounds(imageBounds);
+    // Get cursor context for scene context
+    if (editorRef.current) {
+      const context = editorRef.current.getTextAroundCursor();
+      setCursorContext(context);
+    }
+    setShowImageGeneratorModal(true);
+  }, []);
+
+  // Get asset by URL for ImageNodeView overlay
+  const getAssetByUrl = useCallback(async (src: string): Promise<Asset | null> => {
+    if (!projectId) return null;
+    return assetService.getAssetByUrl(projectId, src);
+  }, [projectId]);
+
+  // Convert Asset to InitialGenerationSettings for regeneration
+  const getInitialSettings = useCallback((asset: Asset): InitialGenerationSettings => {
+    const settings: InitialGenerationSettings = {};
+
+    // Natural language prompt
+    if (asset.generation_prompt) {
+      settings.prompt = asset.generation_prompt;
+    }
+
+    // Tag-based prompts (NovelAI)
+    if (asset.generation_positive_prompt) {
+      settings.positivePrompt = asset.generation_positive_prompt;
+    }
+    if (asset.generation_negative_prompt) {
+      settings.negativePrompt = asset.generation_negative_prompt;
+    }
+
+    // Provider and model
+    if (asset.generation_provider) {
+      settings.provider = asset.generation_provider as InitialGenerationSettings['provider'];
+    }
+    if (asset.generation_model) {
+      settings.model = asset.generation_model;
+    }
+
+    // Provider-specific settings from generation_settings JSON
+    const genSettings = asset.generation_settings as Record<string, unknown> | null;
+    if (genSettings) {
+      // Size
+      if (typeof genSettings.size === 'string') {
+        settings.size = genSettings.size;
+      }
+
+      // Gemini settings
+      if (typeof genSettings.aspect_ratio === 'string') {
+        settings.geminiAspectRatio = genSettings.aspect_ratio;
+      }
+      if (typeof genSettings.image_resolution === 'string') {
+        settings.geminiResolution = genSettings.image_resolution;
+      }
+
+      // OpenAI settings
+      if (genSettings.quality === 'standard' || genSettings.quality === 'hd') {
+        settings.openaiQuality = genSettings.quality;
+      }
+      if (genSettings.style === 'natural' || genSettings.style === 'vivid') {
+        settings.openaiStyle = genSettings.style;
+      }
+
+      // NovelAI settings
+      if (typeof genSettings.sampler === 'string') {
+        settings.novelaiSampler = genSettings.sampler;
+      }
+      if (typeof genSettings.steps === 'number') {
+        settings.novelaiSteps = genSettings.steps;
+      }
+      if (typeof genSettings.scale === 'number') {
+        settings.novelaiScale = genSettings.scale;
+      }
+      if (typeof genSettings.noise_schedule === 'string') {
+        settings.novelaiNoiseSchedule = genSettings.noise_schedule;
+      }
+
+      // Style IDs
+      if (typeof genSettings.natural_style_id === 'string') {
+        settings.selectedNaturalStyleId = genSettings.natural_style_id;
+      }
+      if (typeof genSettings.tag_based_style_id === 'string') {
+        settings.selectedTagBasedStyleId = genSettings.tag_based_style_id;
+      }
+    }
+
+    return settings;
+  }, []);
+
+  // Handle use regenerated image - replace original with new in editor
+  const handleUseRegeneratedImage = useCallback(() => {
+    if (!regenerationComparison || !editorRef.current) return;
+
+    const { originalSrc, newAsset } = regenerationComparison;
+    const newSrc = `${API_BASE_URL}${newAsset.file_url}`;
+
+    // Use the editor's updateImageSrc method to replace the image
+    const updated = editorRef.current.updateImageSrc(originalSrc, newSrc, newAsset.name);
+
+    if (!updated) {
+      console.warn('Failed to find and update image:', { originalSrc, newSrc });
+    }
+
+    // Clear comparison state
+    setRegenerationComparison(null);
+    setRegenerateAsset(null);
+    setPendingRegenerationBounds(null);
+  }, [regenerationComparison]);
+
+  // Handle discard regenerated image - keep original, new stays in library
+  const handleDiscardRegeneratedImage = useCallback(() => {
+    setRegenerationComparison(null);
+    setRegenerateAsset(null);
+    setPendingRegenerationBounds(null);
   }, []);
 
   const handleAIEditComplete = useCallback(() => {
@@ -555,7 +725,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     } finally {
       TranslationService.clearTranslationStatus(manuscriptId);
     }
-  }, [manuscript, manuscriptId, projectId, store, globalDisplayLanguage, showError]);
+  }, [manuscript, manuscriptId, projectId, store, globalDisplayLanguage, showError, showSuccess]);
 
   // Handle "Write from scratch" - create new translation with empty content
   const handleWriteFromScratch = useCallback(async () => {
@@ -743,6 +913,10 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
               onBrowseAssets={handleBrowseAssets}
               onGenerateImage={handleGenerateImage}
               onManageSceneAssets={handleManageSceneAssets}
+              projectId={projectId}
+              onReplaceImage={handleReplaceImage}
+              onRegenerateImage={handleRegenerateImage}
+              getAssetByUrl={getAssetByUrl}
               toolbarActions={
                 <>
                   {/* AI Edit Button */}
@@ -765,17 +939,33 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                     💾 Save
                   </button>
 
-                  {/* More Actions Dropdown - show when there are sub languages */}
-                  {settings.subLanguages && settings.subLanguages.length > 0 && (
-                    <DropdownMenu
-                      trigger={
-                        <button className="more-button" disabled={isSaving} title="More actions">
-                          •••
-                        </button>
-                      }
-                    >
-                      {/* Show Translate if current display language doesn't exist, otherwise Retranslate */}
-                      {manuscriptLanguages.includes(globalDisplayLanguage) ? (
+                  {/* More Actions Dropdown - contains mobile-hidden actions */}
+                  <DropdownMenu
+                    trigger={
+                      <button className="more-button" disabled={isSaving} title="More actions">
+                        •••
+                      </button>
+                    }
+                  >
+                    {/* AI Edit - accessible via dropdown on mobile */}
+                    <DropdownItem
+                      icon="🤖"
+                      label="AI Edit"
+                      onClick={() => setIsAIEditModalOpen(true)}
+                      disabled={isSaving || !selectedChapter}
+                      className="mobile-only-item"
+                    />
+                    {/* Save - accessible via dropdown on mobile */}
+                    <DropdownItem
+                      icon="💾"
+                      label="Save"
+                      onClick={() => handleManualSave('Manual Save')}
+                      disabled={isSaving || !hasUnsavedChanges}
+                      className="mobile-only-item"
+                    />
+                    {/* Show Translate/Retranslate only when sub languages exist */}
+                    {settings.subLanguages && settings.subLanguages.length > 0 && (
+                      manuscriptLanguages.includes(globalDisplayLanguage) ? (
                         <DropdownItem
                           icon="🔄"
                           label="Retranslate"
@@ -789,9 +979,9 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                           onClick={() => setShowRetranslateModal(true)}
                           disabled={isSaving || !manuscript}
                         />
-                      )}
-                    </DropdownMenu>
-                  )}
+                      )
+                    )}
+                  </DropdownMenu>
                 </>
               }
             />
@@ -893,12 +1083,18 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       {/* Scene Image Generator Modal */}
       <SceneImageGeneratorModal
         isOpen={showImageGeneratorModal}
-        onClose={() => setShowImageGeneratorModal(false)}
+        onClose={() => {
+          setShowImageGeneratorModal(false);
+          setRegenerateAsset(null);
+          setPendingRegenerationBounds(null);
+        }}
         onImageGenerated={handleImageGenerated}
         sceneContext={{
           preContext: cursorContext.before,
           postContext: cursorContext.after,
         }}
+        initialSettings={regenerateAsset ? getInitialSettings(regenerateAsset) : undefined}
+        mode={regenerateAsset ? 'regenerate' : 'generate'}
       />
 
       {/* Scene Asset Manager Modal */}
@@ -906,6 +1102,16 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         isOpen={showSceneAssetManagerModal}
         onClose={() => setShowSceneAssetManagerModal(false)}
       />
+
+      {/* Regeneration Comparison Overlay */}
+      {regenerationComparison && (
+        <RegenerationComparisonOverlay
+          newAsset={regenerationComparison.newAsset}
+          position={regenerationComparison.position}
+          onUse={handleUseRegeneratedImage}
+          onDiscard={handleDiscardRegeneratedImage}
+        />
+      )}
     </>
   );
 };

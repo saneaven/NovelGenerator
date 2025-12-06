@@ -9,7 +9,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import { assetService, type Asset, type StoryObjectAsset } from '../../api/assetService';
+import { assetService, type Asset } from '../../api/assetService';
 import { API_BASE_URL } from '../../api/client';
 import './ReferenceImagePickerModal.css';
 
@@ -73,7 +73,7 @@ const ReferenceImagePickerModal: React.FC<ReferenceImagePickerModalProps> = ({
 
           for (const obj of objects) {
             // Get object name from data
-            const mainLanguage = settings?.main_language || 'English';
+            const mainLanguage = settings?.mainLanguage || 'English';
             const langData = obj.data[mainLanguage] || Object.values(obj.data)[0];
             const objectName = langData?.name || 'Unnamed';
 
@@ -110,7 +110,7 @@ const ReferenceImagePickerModal: React.FC<ReferenceImagePickerModalProps> = ({
     };
 
     loadAllAssets();
-  }, [isOpen, currentProjectId, listObjects, settings?.main_language]);
+  }, [isOpen, currentProjectId, listObjects, settings?.mainLanguage]);
 
   // Get display groups based on active tab and search
   const displayGroups = useMemo(() => {

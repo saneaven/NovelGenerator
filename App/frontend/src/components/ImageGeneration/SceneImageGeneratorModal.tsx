@@ -49,11 +49,38 @@ interface ReferenceImageItem {
     thumbnailUrl: string;
 }
 
+// Initial settings for regeneration mode - pre-fill form with existing asset's settings
+export interface InitialGenerationSettings {
+    prompt?: string;
+    positivePrompt?: string;
+    negativePrompt?: string;
+    provider?: ImageProviderType;
+    model?: string;
+    size?: string;
+    // Gemini
+    geminiAspectRatio?: string;
+    geminiResolution?: string;
+    // OpenAI
+    openaiQuality?: 'standard' | 'hd';
+    openaiStyle?: 'natural' | 'vivid';
+    // NovelAI
+    novelaiSampler?: string;
+    novelaiSteps?: number;
+    novelaiScale?: number;
+    novelaiNoiseSchedule?: string;
+    // Styles
+    selectedNaturalStyleId?: string | null;
+    selectedTagBasedStyleId?: string | null;
+}
+
 interface SceneImageGeneratorModalProps {
     isOpen: boolean;
     onClose: () => void;
     onImageGenerated: (asset: Asset) => void;
     sceneContext?: SceneContext;
+    // For regeneration mode - pre-fill with existing asset's settings
+    initialSettings?: InitialGenerationSettings;
+    mode?: 'generate' | 'regenerate';
 }
 
 const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
@@ -61,6 +88,8 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
     onClose,
     onImageGenerated,
     sceneContext,
+    initialSettings,
+    mode = 'generate',
 }) => {
     const { currentProjectId } = useProjectStore();
     const { settings } = useSettingsStore();
@@ -290,9 +319,33 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
         await generate(request);
     };
 
-    // Reset form when modal closes
+    // Apply initialSettings when modal opens in regenerate mode
+    useEffect(() => {
+        if (isOpen && initialSettings) {
+            // Apply all provided settings
+            if (initialSettings.prompt !== undefined) setPrompt(initialSettings.prompt);
+            if (initialSettings.positivePrompt !== undefined) setPositivePrompt(initialSettings.positivePrompt);
+            if (initialSettings.negativePrompt !== undefined) setNegativePrompt(initialSettings.negativePrompt);
+            if (initialSettings.provider !== undefined) setProvider(initialSettings.provider);
+            if (initialSettings.model !== undefined) setModel(initialSettings.model);
+            if (initialSettings.size !== undefined) setSize(initialSettings.size);
+            if (initialSettings.geminiAspectRatio !== undefined) setGeminiAspectRatio(initialSettings.geminiAspectRatio);
+            if (initialSettings.geminiResolution !== undefined) setGeminiResolution(initialSettings.geminiResolution);
+            if (initialSettings.openaiQuality !== undefined) setOpenaiQuality(initialSettings.openaiQuality);
+            if (initialSettings.openaiStyle !== undefined) setOpenaiStyle(initialSettings.openaiStyle);
+            if (initialSettings.novelaiSampler !== undefined) setNovelaiSampler(initialSettings.novelaiSampler);
+            if (initialSettings.novelaiSteps !== undefined) setNovelaiSteps(initialSettings.novelaiSteps);
+            if (initialSettings.novelaiScale !== undefined) setNovelaiScale(initialSettings.novelaiScale);
+            if (initialSettings.novelaiNoiseSchedule !== undefined) setNovelaiNoiseSchedule(initialSettings.novelaiNoiseSchedule);
+            if (initialSettings.selectedNaturalStyleId !== undefined) setSelectedNaturalStyleId(initialSettings.selectedNaturalStyleId);
+            if (initialSettings.selectedTagBasedStyleId !== undefined) setSelectedTagBasedStyleId(initialSettings.selectedTagBasedStyleId);
+        }
+    }, [isOpen, initialSettings]);
+
+    // Reset form when modal closes (only if not in regenerate mode, or always reset prompts)
     useEffect(() => {
         if (!isOpen) {
+            // Always reset prompts and reference images when closing
             setPrompt('');
             setPositivePrompt('');
             setNegativePrompt('');
@@ -310,7 +363,7 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
         <div className="scene-image-generator-overlay" onClick={onClose}>
             <div className="scene-image-generator-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
-                    <h2>Generate Scene Image</h2>
+                    <h2>{mode === 'regenerate' ? 'Regenerate Image' : 'Generate Scene Image'}</h2>
                     <button className="close-btn" onClick={onClose}>&times;</button>
                 </div>
 
@@ -695,7 +748,11 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
                         onClick={handleGenerate}
                         disabled={isGenerating || !(isTagBased ? positivePrompt.trim() : prompt.trim())}
                     >
-                        {isGenerating ? 'Generating...' : 'Generate Image'}
+                        {isGenerating
+                            ? 'Generating...'
+                            : mode === 'regenerate'
+                            ? 'Regenerate'
+                            : 'Generate Image'}
                     </button>
                 </div>
 

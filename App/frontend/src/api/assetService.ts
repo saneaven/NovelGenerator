@@ -225,6 +225,28 @@ export const assetService = {
     },
 
     /**
+     * Find an asset by its file URL
+     * Used to look up asset metadata from image src in editor
+     */
+    async getAssetByUrl(projectId: string, fileUrl: string): Promise<Asset | null> {
+        try {
+            // Extract path from full URL (e.g., "http://localhost:8000/storage/assets/xxx.png" -> "/storage/assets/xxx.png")
+            let urlPath: string;
+            try {
+                urlPath = new URL(fileUrl).pathname;
+            } catch {
+                // If not a valid URL, assume it's already a path
+                urlPath = fileUrl;
+            }
+
+            const assets = await this.listAssets(projectId);
+            return assets.find((a) => a.file_url === urlPath) || null;
+        } catch {
+            return null;
+        }
+    },
+
+    /**
      * Update asset metadata
      */
     async updateAsset(projectId: string, assetId: string, name: string): Promise<Asset> {

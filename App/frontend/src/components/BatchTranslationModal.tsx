@@ -166,6 +166,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
         objectType: objType as ObjectType,
         objectId: obj.id,
         sourceData,
+        versionNumber: obj.version?.number,
         label,
         order: obj.metadata.order,
       });

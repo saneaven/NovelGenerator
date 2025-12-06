@@ -355,6 +355,7 @@ export const translationService = {
       objectId: string;
       language: string;
       data: Record<string, any>;
+      targetVersionNumber?: number;
     }>
   ): Promise<{ success: boolean; translated_count: number; message: string }> {
     return apiClient.post<{ success: boolean; translated_count: number; message: string }>(
@@ -365,6 +366,7 @@ export const translationService = {
           object_id: t.objectId,
           language: t.language,
           data: t.data,
+          target_version_number: t.targetVersionNumber,
         })),
         user_request: 'Translation',
       }

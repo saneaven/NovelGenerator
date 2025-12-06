@@ -15,7 +15,6 @@ import {
 } from '../llm/schemas/translationFunctions';
 import { useSettingsStore } from '../store/settingsStore';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
-import { useNovelEditorStore } from '../store/novelEditorStore';
 import type { ObjectType } from '../types/unifiedObject';
 import type { FunctionCallMetadata, FunctionCallProgress, ContentPart } from '../llm/requestTypes';
 import { translationService as translationAPI } from '../api/unifiedObjectService';
@@ -26,6 +25,7 @@ export interface StoryObjectToTranslate {
   objectType: ObjectType;
   objectId: string;
   sourceData: Record<string, any>;
+  versionNumber?: number;
 }
 
 export interface TranslationOptions {
@@ -53,6 +53,7 @@ export interface TranslationStatus {
 export interface TranslationResult {
   objectType: string;
   objectId: string;
+  versionNumber?: number;
   [key: string]: any;
 }
 
@@ -191,6 +192,7 @@ export class TranslationService {
         translations.push({
           objectType: originalObj.objectType,
           objectId: item.id,
+          versionNumber: originalObj.versionNumber,
           ...translationData,
         });
 
@@ -202,12 +204,12 @@ export class TranslationService {
       }
 
       const batchData = translations.map(trans => {
-        const { objectType, objectId, ...data } = trans;
-        return { objectType: objectType as ObjectType, objectId, language: targetLanguage, data };
+        const { objectType, objectId, versionNumber, ...data } = trans;
+        return { objectType: objectType as ObjectType, objectId, language: targetLanguage, data, targetVersionNumber: versionNumber };
       });
 
       await translationAPI.addTranslations(batchData);
-      useNovelEditorStore.getState().setDisplayLanguage(projectId, targetLanguage);
+      // Note: setDisplayLanguage is now handled by caller after data refresh
       onProgress?.(translations.map(t => t.objectId));
     };
 
@@ -232,7 +234,8 @@ export class TranslationService {
           data.wordCount = data.content.split(/\s+/).filter(Boolean).length;
         }
 
-        translations.push({ objectType, objectId: id, ...data });
+        const originalObj = objects.find(o => o.objectId === id);
+        translations.push({ objectType, objectId: id, versionNumber: originalObj?.versionNumber, ...data });
         onProgress?.(translations.map(t => t.objectId));
       }
 
@@ -241,12 +244,12 @@ export class TranslationService {
       }
 
       const batchData = translations.map(trans => {
-        const { objectType, objectId, ...data } = trans;
-        return { objectType: objectType as ObjectType, objectId, language: targetLanguage, data };
+        const { objectType, objectId, versionNumber, ...data } = trans;
+        return { objectType: objectType as ObjectType, objectId, language: targetLanguage, data, targetVersionNumber: versionNumber };
       });
 
       await translationAPI.addTranslations(batchData);
-      useNovelEditorStore.getState().setDisplayLanguage(projectId, targetLanguage);
+      // Note: setDisplayLanguage is now handled by caller after data refresh
       onProgress?.(translations.map(t => t.objectId));
     };
 
@@ -334,8 +337,9 @@ export class TranslationService {
               const objectType = TRANSLATION_FUNCTION_TO_TYPE[functionName];
               if (objectType && args.id) {
                 const { id, ...data } = args;
+                const originalObj = objects.find(o => o.objectId === id);
                 const existingIndex = collectedTranslations.findIndex(t => t.objectId === id);
-                const translationResult: TranslationResult = { objectType, objectId: id, ...data };
+                const translationResult: TranslationResult = { objectType, objectId: id, versionNumber: originalObj?.versionNumber, ...data };
 
                 if (existingIndex >= 0) {
                   collectedTranslations[existingIndex] = translationResult;
@@ -371,11 +375,11 @@ export class TranslationService {
     }
 
     const batchData = translations.map(trans => {
-      const { objectType, objectId, ...data } = trans;
+      const { objectType, objectId, versionNumber, ...data } = trans;
       if (objectType === 'manuscript' && data.content) {
         data.wordCount = data.content.split(/\s+/).filter(Boolean).length;
       }
-      return { objectType: objectType as ObjectType, objectId, language: targetLanguage, data };
+      return { objectType: objectType as ObjectType, objectId, language: targetLanguage, data, targetVersionNumber: versionNumber };
     });
 
     await translationAPI.addTranslations(batchData);

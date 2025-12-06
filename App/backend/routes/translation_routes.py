@@ -48,6 +48,7 @@ class TranslationData(BaseModel):
     object_id: str
     language: str
     data: Dict[str, Any]
+    target_version_number: Optional[int] = None
 
 
 class AddTranslationsRequest(BaseModel):
@@ -323,6 +324,7 @@ async def add_translations(
             get_object_or_404(db, object_type, object_id)
 
             # Create or update version with new language (in-place, don't create new version)
+            # If target_version_number is provided, update that specific version instead of latest
             create_or_update_version(
                 db=db,
                 object_type=object_type,
@@ -331,7 +333,8 @@ async def add_translations(
                 new_data=translation_data.data,
                 user_request=request.user_request,
                 user_id=current_user.id,
-                create_new=False
+                create_new=False,
+                target_version_number=translation_data.target_version_number
             )
 
             # Update translation cache (don't set as active - keep current active language)
