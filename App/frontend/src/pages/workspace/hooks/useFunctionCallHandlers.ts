@@ -4,7 +4,7 @@ import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { FunctionCallApplicator } from '../../../chat/utils/functionCallApplicator';
 import { FunctionCallService } from '../services/FunctionCallService';
-import type { FunctionCallMetadata, FunctionCallResultSummary, FunctionCallProgress } from '../../../llm_request/types';
+import type { FunctionCallMetadata, FunctionCallResultSummary, FunctionCallProgress } from '../../../llm/requestTypes';
 import type { EditCard } from '../../../chat/types';
 
 export function useFunctionCallHandlers(

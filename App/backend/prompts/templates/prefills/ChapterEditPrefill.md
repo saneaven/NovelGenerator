@@ -1,1 +1,0 @@
-I'll help you edit the chapter "{{ variable.chapterName }}". My response will be in {{ variable.language }}.

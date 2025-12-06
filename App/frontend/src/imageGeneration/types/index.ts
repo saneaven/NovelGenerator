@@ -29,6 +29,23 @@ export interface ReferenceObject {
     name: string;
 }
 
+/**
+ * Extended reference object data for image generation with full context
+ */
+export interface ImageReferenceObject {
+    id: string;
+    type: 'character' | 'location' | 'organization' | 'lorebook';
+    name: string;
+    description?: string;
+    appearance?: string;  // For characters
+    visualDescription?: string;  // For locations/orgs
+    metadata?: {
+        image_prompt?: string;
+        image_prompt_positive?: string;
+        image_prompt_negative?: string;
+    };
+}
+
 // Request types
 export interface ImageGenerationRequest {
     // Natural language prompt (OpenAI, Gemini, xAI)
@@ -67,6 +84,9 @@ export interface ImageGenerationRequest {
 
     // Story object references (for metadata)
     referenceObjects?: ReferenceObject[];
+
+    // Asset type for categorization ('scene' from SceneImageGeneratorModal, 'object' from AssetManager)
+    assetType?: 'scene' | 'object';
 }
 
 // Processed request (after PreProcessor)
@@ -84,6 +104,7 @@ export interface ProcessedImageRequest {
     provider_settings?: Record<string, unknown>;
     reference_images?: Array<{ asset_id: string; strength: number }>;
     reference_objects?: Array<{ id: string; type: string; name: string }>;
+    asset_type?: 'scene' | 'object';
 }
 
 // Progress tracking

@@ -8,9 +8,9 @@ import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useLLMTaskStore } from '../../../store/llmTaskStore';
 import type { SystemInsertConfig, EditCard } from '../../../chat/types';
 import { TranslationService } from '../../../services/translationService';
-import { LLMRequestPipeline } from '../../../chat/LLMRequestPipeline';
+import { DefaultDisplayProcessor } from '../../../chat/processors/DisplayProcessor';
 import type { StoryObjects } from '../../../types/storyObject';
-import type { ChatMessage, FunctionCallProgress } from '../../../llm_request/types';
+import type { ChatMessage, FunctionCallProgress } from '../../../llm/requestTypes';
 import ToggleSwitch from '../../../components/ToggleSwitch';
 import ThinkingDisplay from '../../../components/ThinkingDisplay';
 import GroupedFunctionCallCard from '../../../components/functionCall/GroupedFunctionCallCard';
@@ -21,7 +21,6 @@ interface ChatPanelProps
     projectId: string;
     systemInsertConfig: SystemInsertConfig;
     setSystemInsertConfig: (config: SystemInsertConfig | ((prev: SystemInsertConfig) => SystemInsertConfig)) => void;
-    chatPipeline: LLMRequestPipeline;
     storyObjects: StoryObjects;
     novelData?: Record<string, unknown>;
     messageEditCards: Record<string, EditCard[]>;
@@ -53,7 +52,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     projectId,
     systemInsertConfig,
     setSystemInsertConfig,
-    chatPipeline,
     storyObjects,
     novelData,
     messageEditCards,
@@ -72,6 +70,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 }) =>
 {
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const displayProcessor = useMemo(() => new DefaultDisplayProcessor(), []);
     const { convertToDisplayMessage, addTranslatedMessage } = useChatStore();
     const chatUI = useChatUIStore();
     const { getCurrentProject } = useProjectStore();
@@ -145,16 +144,14 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         }
     }, [storedMessages, chatUI.isLoading(projectId)]);
 
-    const displayContext = useMemo(() =>
-    {
-        return LLMRequestPipeline.createContext(
-            projectId,
-            storyObjects,
-            mode,
-            systemInsertConfig,
-            novelData
-        );
-    }, [projectId, storyObjects, mode, systemInsertConfig, novelData]);
+    // Display context for the display processor (context is unused but kept for type compatibility)
+    const displayContext = useMemo(() => ({
+        projectId,
+        storyObjects,
+        systemInsertConfig,
+        mode,
+        novelData,
+    }), [projectId, storyObjects, mode, systemInsertConfig, novelData]);
 
     const resolveDisplayInfo = useCallback(
         (message: StoredChatMessage): DisplayMessageInfo =>
@@ -378,7 +375,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                     const isUser = message.chatMessage.role === 'user';
                     const editing = chatUI.getEditing(projectId);
                     const isEditing = editing.messageId === message.chatMessage.id;
-                    const processingResult = chatPipeline.processForDisplay(message.chatMessage, displayContext);
+                    const processingResult = displayProcessor.process(message.chatMessage as any, displayContext as any);
                     const isTranslating = Boolean(translatingMessages[message.storedMessage.id]);
                     const primaryMessage = message.storedMessage.data[mainLanguage]
                         ? convertToDisplayMessage(message.storedMessage, mainLanguage)

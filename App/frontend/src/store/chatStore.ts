@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { chatService, type ChatResponse, type ChatMessageResponse } from '../api';
-import { type ChatMessage, type FunctionCallMetadata, type ContentPart, type Role } from '../llm_request/types';
+import { type ChatMessage, type FunctionCallMetadata, type ContentPart, type Role } from '../llm/requestTypes';
 import { type LanguageData } from '../types/multilingual';
 
 // Language-specific content for chat messages

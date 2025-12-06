@@ -47,6 +47,33 @@ export const PROMPT_TREE: PromptNode[] = [
             category: 'systemPrompt',
             name: 'workspace',
             description: 'Main AI behavior for Workspace conversations'
+          },
+          {
+            id: 'chat-workspace-user',
+            label: 'User Prompt',
+            type: 'prompt',
+            functionType: 'chat',
+            category: 'userPrompt',
+            name: 'workspace',
+            description: 'Template for the last user message in chat'
+          },
+          {
+            id: 'chat-workspace-nonlast',
+            label: 'Non-Last User Prompt',
+            type: 'prompt',
+            functionType: 'chat',
+            category: 'nonLastUserPrompt',
+            name: 'workspace',
+            description: 'Template for previous user messages in chat history'
+          },
+          {
+            id: 'chat-workspace-prefill',
+            label: 'Prefill Template',
+            type: 'prompt',
+            functionType: 'chat',
+            category: 'prefill',
+            name: 'workspace',
+            description: 'AI response starter for Workspace mode'
           }
         ]
       },
@@ -63,39 +90,33 @@ export const PROMPT_TREE: PromptNode[] = [
             category: 'systemPrompt',
             name: 'novelEditor',
             description: 'Main AI behavior for Novel Editor conversations'
-          }
-        ]
-      },
-      {
-        id: 'chat-prefill',
-        label: 'Prefill Template',
-        type: 'prompt',
-        functionType: 'chat',
-        category: 'prefill',
-        description: 'AI response starter template'
-      },
-      {
-        id: 'chat-user-system',
-        label: 'User System Message',
-        type: 'category',
-        children: [
-          {
-            id: 'chat-user-system-lastmessage',
-            label: 'Last User Message Tag',
-            type: 'prompt',
-            functionType: 'chat',
-            category: 'userMessageTag',
-            name: 'lastMessage',
-            description: 'Wrapping format for the most recent user message in chat history'
           },
           {
-            id: 'chat-user-system-nonlastmessage',
-            label: 'Other Messages Tag',
+            id: 'chat-noveleditor-user',
+            label: 'User Prompt',
             type: 'prompt',
             functionType: 'chat',
-            category: 'userMessageTag',
-            name: 'nonLastMessage',
-            description: 'Wrapping format for previous user messages in chat history'
+            category: 'userPrompt',
+            name: 'novelEditor',
+            description: 'Template for the last user message in novel editor chat'
+          },
+          {
+            id: 'chat-noveleditor-nonlast',
+            label: 'Non-Last User Prompt',
+            type: 'prompt',
+            functionType: 'chat',
+            category: 'nonLastUserPrompt',
+            name: 'novelEditor',
+            description: 'Template for previous user messages in novel editor chat history'
+          },
+          {
+            id: 'chat-noveleditor-prefill',
+            label: 'Prefill Template',
+            type: 'prompt',
+            functionType: 'chat',
+            category: 'prefill',
+            name: 'novelEditor',
+            description: 'AI response starter for Novel Editor mode'
           }
         ]
       }
@@ -179,34 +200,34 @@ export const PROMPT_TREE: PromptNode[] = [
     ]
   },
   {
-    id: 'storyedit',
-    label: 'Story Edit',
+    id: 'storyobjectedit',
+    label: 'Story Object Edit',
     icon: '✏️',
     type: 'category',
     children: [
       {
-        id: 'storyedit-system',
+        id: 'storyobjectedit-system',
         label: 'System Prompt',
         type: 'prompt',
-        functionType: 'storyEdit',
+        functionType: 'storyObjectEdit',
         category: 'systemPrompt',
         description: 'Instructions for story object editing behavior'
       },
       {
-        id: 'storyedit-user',
+        id: 'storyobjectedit-user',
         label: 'User Prompt',
         type: 'prompt',
-        functionType: 'storyEdit',
+        functionType: 'storyObjectEdit',
         category: 'userPrompt',
         description: 'Auto-generated user message that delivers object context and current data'
       },
       {
-        id: 'storyedit-prefill',
+        id: 'storyobjectedit-prefill',
         label: 'Prefill Template',
         type: 'prompt',
-        functionType: 'storyEdit',
+        functionType: 'storyObjectEdit',
         category: 'prefill',
-        description: 'Template for story edit responses'
+        description: 'Template for story object edit responses'
       }
     ]
   },

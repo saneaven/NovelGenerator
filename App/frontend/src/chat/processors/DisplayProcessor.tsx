@@ -1,7 +1,7 @@
 import React from 'react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import type { FunctionCallMetadata } from '../../llm_request/types';
+import type { FunctionCallMetadata } from '../../llm/requestTypes';
 import type {
   DisplayProcessor,
   DisplayProcessingResult,

@@ -1,4 +1,4 @@
-import type { FunctionCallMetadata } from '../../../llm_request/types';
+import type { FunctionCallMetadata } from '../../../llm/requestTypes';
 import type { UnifiedObject, UpdateObjectRequest } from '../../../types/unifiedObject';
 
 export interface NovelEditorFunctionCallResult {

@@ -1,6 +1,4 @@
-// Export all LLM request pipeline related functionality
+// Export chat-related functionality
 export * from './types';
-export * from './LLMRequestPipeline';
-export * from './processors/PreProcessor';
-export * from './processors/PostProcessor';
+export * from './processors/ChatManager';
 export * from './processors/DisplayProcessor';

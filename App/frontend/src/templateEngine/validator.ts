@@ -18,7 +18,8 @@ export interface VariableWarning {
  * Maps FunctionType to PromptType (schema type)
  */
 export function mapFunctionTypeToSchemaType(
-  functionType: FunctionType
+  functionType: FunctionType,
+  name?: string
 ): PromptType | null {
   // Map function types to schema types
   switch (functionType) {
@@ -26,10 +27,12 @@ export function mapFunctionTypeToSchemaType(
       return 'chat';
     case 'translation':
       return 'translation';
-    case 'storyEdit':
+    case 'storyObjectEdit':
       return 'storyObjectEdit';
     case 'chapterGen':
       return 'chapterEdit';
+    case 'imagePrompt':
+      return name === 'scene' ? 'sceneImagePrompt' : 'objectImagePrompt';
     default:
       return null;
   }

@@ -18,7 +18,7 @@ interface BatchTranslationModalProps {
   allowedObjectTypes?: string[];  // If provided, only show these types and hide type selector
   defaultSourceLanguage?: string;
   defaultTargetLanguage?: string;
-  defaultUserInstructions?: string;
+  defaultUserInput?: string;
 }
 
 type ScreenType = 'config' | 'progress' | 'complete';
@@ -53,12 +53,12 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
   allowedObjectTypes,
   defaultSourceLanguage,
   defaultTargetLanguage,
-  defaultUserInstructions,
+  defaultUserInput,
 }) => {
   const [screen, setScreen] = useState<ScreenType>('config');
   const [sourceLanguage, setSourceLanguage] = useState<string>(defaultSourceLanguage || '');
   const [targetLanguage, setTargetLanguage] = useState<string>(defaultTargetLanguage || '');
-  const [userInstructions, setUserInstructions] = useState(defaultUserInstructions || '');
+  const [userInput, setUserInput] = useState(defaultUserInput || '');
   const [completedIds, setCompletedIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
@@ -251,7 +251,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
       setStreamItems([]);
       setContentParts(toastSessionIdRef.current, []);
       setCurrentStreamingItem(null);
-      setUserInstructions('');
+      setUserInput('');
       setSelectedIds(new Set());
       setExpandedCategories(new Set());
       abortControllerRef.current?.abort();
@@ -284,7 +284,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
       formState: {
         sourceLanguage,
         targetLanguage,
-        userInstructions,
+        userInput,
       },
     });
 
@@ -296,7 +296,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
         projectId,
         sourceLanguage,
         targetLanguage,
-        userInstructions: userInstructions.trim() || undefined,
+        userInput: userInput.trim() || undefined,
         sessionId: toastSessionIdRef.current,
         onProgress: (completed) => {
           setCompletedIds(completed);
@@ -592,8 +592,8 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
               <label htmlFor="instructions">Additional Instructions (Optional)</label>
               <textarea
                 id="instructions"
-                value={userInstructions}
-                onChange={(e) => setUserInstructions(e.target.value)}
+                value={userInput}
+                onChange={(e) => setUserInput(e.target.value)}
                 placeholder="e.g., Maintain formal tone, Use specific terminology..."
                 rows={3}
               />

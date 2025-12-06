@@ -24,7 +24,7 @@ def upgrade() -> None:
                   server_default="""{
                       "chat": {"provider": "copilot", "model": "gpt-4o-mini", "temperature": 0.7},
                       "translation": {"provider": "copilot", "model": "gpt-4o", "temperature": 0.2},
-                      "storyEdit": {"provider": "copilot", "model": "gpt-4o", "temperature": 0.3},
+                      "storyObjectEdit": {"provider": "copilot", "model": "gpt-4o", "temperature": 0.3},
                       "chapterGen": {"provider": "copilot", "model": "gpt-4o", "temperature": 0.7}
                   }"""))
 
@@ -50,7 +50,7 @@ def upgrade() -> None:
             function_configs = jsonb_build_object(
                 'chat', jsonb_build_object('provider', active_provider, 'model', ai_model, 'temperature', 0.7),
                 'translation', jsonb_build_object('provider', active_provider, 'model', ai_model, 'temperature', 0.2),
-                'storyEdit', jsonb_build_object('provider', active_provider, 'model', ai_model, 'temperature', 0.3),
+                'storyObjectEdit', jsonb_build_object('provider', active_provider, 'model', ai_model, 'temperature', 0.3),
                 'chapterGen', jsonb_build_object('provider', active_provider, 'model', ai_model, 'temperature', 0.7)
             ),
             provider_credentials = jsonb_build_object(

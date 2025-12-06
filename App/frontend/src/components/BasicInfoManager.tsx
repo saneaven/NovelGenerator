@@ -188,7 +188,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
     sourceLanguage: string,
     targetLanguage: string,
     includePrevious: boolean,
-    userInstructions: string
+    userInput: string
   ) => {
     if (!basicInfo || !basicInfoId || !projectId) return;
 
@@ -196,7 +196,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
       TranslationService.setTranslationStatus(basicInfoId, { objectId: basicInfoId, isTranslating: true });
 
       // Build custom user instructions with optional previous translation
-      let instructions = userInstructions || '';
+      let instructions = userInput || '';
 
       const availableLanguages = Object.keys(basicInfo.data);
       if (includePrevious && availableLanguages.includes(targetLanguage)) {
@@ -226,7 +226,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
           projectId,
           sourceLanguage,
           targetLanguage,
-          userInstructions: instructions || undefined,
+          userInput: instructions || undefined,
         }
       );
 

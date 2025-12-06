@@ -223,7 +223,7 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
     sourceLanguage: string,
     targetLanguage: string,
     includePrevious: boolean,
-    userInstructions: string
+    userInput: string
   ) => {
     if (!projectId || !showActRetranslateModal) return;
 
@@ -236,7 +236,7 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
         isTranslating: true,
       });
 
-      let instructions = userInstructions || '';
+      let instructions = userInput || '';
 
       const availableLanguages = Object.keys(act.data);
       if (includePrevious && availableLanguages.includes(targetLanguage)) {
@@ -262,7 +262,7 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
           projectId,
           sourceLanguage,
           targetLanguage,
-          userInstructions: instructions || undefined,
+          userInput: instructions || undefined,
         }
       );
 
@@ -344,7 +344,7 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
     sourceLanguage: string,
     targetLanguage: string,
     includePrevious: boolean,
-    userInstructions: string
+    userInput: string
   ) => {
     if (!projectId || !showChapterRetranslateModal) return;
 
@@ -357,7 +357,7 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
         isTranslating: true,
       });
 
-      let instructions = userInstructions || '';
+      let instructions = userInput || '';
 
       const availableLanguages = Object.keys(chapter.data);
       if (includePrevious && availableLanguages.includes(targetLanguage)) {
@@ -383,7 +383,7 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
           projectId,
           sourceLanguage,
           targetLanguage,
-          userInstructions: instructions || undefined,
+          userInput: instructions || undefined,
         }
       );
 

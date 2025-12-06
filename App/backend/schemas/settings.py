@@ -18,7 +18,7 @@ class AIFunctionType(str, Enum):
     """AI function types"""
     CHAT = "chat"
     TRANSLATION = "translation"
-    STORY_EDIT = "storyEdit"
+    STORY_OBJECT_EDIT = "storyObjectEdit"
     CHAPTER_GEN = "chapterGen"
 
 

@@ -31,7 +31,7 @@ import { useErrorStore } from '../../../store/errorStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import NovelChapterAIEditModal from '../../../components/NovelChapterAIEditModal';
 import RetranslateModal from '../../../components/RetranslateModal';
-import { AssetManagerModal } from '../../../components/AssetManager';
+import { AssetManagerModal, SceneAssetManagerModal } from '../../../components/AssetManager';
 import SceneImageGeneratorModal from '../../../components/ImageGeneration/SceneImageGeneratorModal';
 import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
@@ -93,6 +93,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const [showRetranslateModal, setShowRetranslateModal] = useState(false);
   const [showAssetModal, setShowAssetModal] = useState(false);
   const [showImageGeneratorModal, setShowImageGeneratorModal] = useState(false);
+  const [showSceneAssetManagerModal, setShowSceneAssetManagerModal] = useState(false);
   const [cursorContext, setCursorContext] = useState<{ before: string; after: string }>({ before: '', after: '' });
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
@@ -485,6 +486,11 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     setShowImageGeneratorModal(true);
   }, []);
 
+  // Handle manage scene assets - opens SceneAssetManagerModal
+  const handleManageSceneAssets = useCallback(() => {
+    setShowSceneAssetManagerModal(true);
+  }, []);
+
   // Handle generated image from SceneImageGeneratorModal
   const handleImageGenerated = useCallback((asset: Asset) => {
     if (editorRef.current) {
@@ -503,14 +509,14 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     sourceLanguage: string,
     targetLanguage: string,
     includePrevious: boolean,
-    userInstructions: string
+    userInput: string
   ) => {
     if (!manuscript || !manuscriptId) return;
 
     try {
       TranslationService.setTranslationStatus(manuscriptId, { objectId: manuscriptId, isTranslating: true });
 
-      let instructions = userInstructions || '';
+      let instructions = userInput || '';
       if (includePrevious && manuscriptLanguages.includes(targetLanguage)) {
         const targetData = manuscript.data[targetLanguage] || {};
         const prevTranslation = `Previous translation for reference:\n${JSON.stringify({
@@ -535,7 +541,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
           projectId,
           sourceLanguage,
           targetLanguage,
-          userInstructions: instructions || undefined,
+          userInput: instructions || undefined,
         }
       );
 
@@ -736,6 +742,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
               onFileUpload={handleFileUpload}
               onBrowseAssets={handleBrowseAssets}
               onGenerateImage={handleGenerateImage}
+              onManageSceneAssets={handleManageSceneAssets}
               toolbarActions={
                 <>
                   {/* AI Edit Button */}
@@ -892,6 +899,12 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
           preContext: cursorContext.before,
           postContext: cursorContext.after,
         }}
+      />
+
+      {/* Scene Asset Manager Modal */}
+      <SceneAssetManagerModal
+        isOpen={showSceneAssetManagerModal}
+        onClose={() => setShowSceneAssetManagerModal(false)}
       />
     </>
   );

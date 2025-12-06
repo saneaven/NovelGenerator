@@ -74,7 +74,7 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
     const validateContent = async (text: string) =>
     {
         // Map functionType to schema type for variable validation
-        const schemaType = mapFunctionTypeToSchemaType(functionType);
+        const schemaType = mapFunctionTypeToSchemaType(functionType, name);
 
         // Perform validation (with variable checking if schema type is available)
         const result = await validateTemplate(text, schemaType || undefined);

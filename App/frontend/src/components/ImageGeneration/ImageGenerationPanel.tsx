@@ -234,6 +234,8 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                 steps: novelaiSteps,
                 scale: novelaiScale,
                 noiseSchedule: novelaiNoiseSchedule,
+                // Asset type for story object images
+                assetType: 'object',
             };
 
             await generate(request);
@@ -253,6 +255,8 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                 style: provider === 'openai' ? openaiStyle : undefined,
                 aspectRatio: provider === 'gemini' ? geminiAspectRatio : undefined,
                 resolution: provider === 'gemini' ? geminiResolution : undefined,
+                // Asset type for story object images
+                assetType: 'object',
             };
 
             await generate(request);

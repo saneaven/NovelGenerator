@@ -56,7 +56,7 @@ async def get_user_settings(
                         'thinkingConfig': {'effort': 'medium'}
                     }
                 },
-                'storyEdit': {
+                'storyObjectEdit': {
                     'provider': 'openrouter',
                     'model': 'gpt-4o',
                     'temperature': 0.3,

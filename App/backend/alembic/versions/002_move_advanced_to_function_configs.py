@@ -45,7 +45,7 @@ def upgrade() -> None:
                         'enableThinking', COALESCE(enable_thinking, false)
                     )
                 ),
-                '{storyEdit,advanced}',
+                '{storyObjectEdit,advanced}',
                 jsonb_build_object(
                     'enablePrefill', COALESCE(enable_prefill, false),
                     'enableThinking', COALESCE(enable_thinking, false)
@@ -79,7 +79,7 @@ def upgrade() -> None:
             "temperature": 0.2,
             "advanced": {"enablePrefill": false, "enableThinking": false}
         },
-        "storyEdit": {
+        "storyObjectEdit": {
             "provider": "copilot",
             "model": "gpt-4o",
             "temperature": 0.3,
@@ -128,7 +128,7 @@ def downgrade() -> None:
         SET function_configs = jsonb_build_object(
             'chat', function_configs->'chat' - 'advanced',
             'translation', function_configs->'translation' - 'advanced',
-            'storyEdit', function_configs->'storyEdit' - 'advanced',
+            'storyObjectEdit', function_configs->'storyObjectEdit' - 'advanced',
             'chapterGen', function_configs->'chapterGen' - 'advanced'
         )
         WHERE function_configs IS NOT NULL
@@ -139,6 +139,6 @@ def downgrade() -> None:
                     server_default="""{
         "chat": {"provider": "copilot", "model": "gpt-4o-mini", "temperature": 0.7},
         "translation": {"provider": "copilot", "model": "gpt-4o", "temperature": 0.2},
-        "storyEdit": {"provider": "copilot", "model": "gpt-4o", "temperature": 0.3},
+        "storyObjectEdit": {"provider": "copilot", "model": "gpt-4o", "temperature": 0.3},
         "chapterGen": {"provider": "copilot", "model": "gpt-4o", "temperature": 0.7}
     }""")

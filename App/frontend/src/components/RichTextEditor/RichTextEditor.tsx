@@ -38,8 +38,7 @@ interface RichTextEditorProps {
   onFileUpload?: (file: File) => void;
   onBrowseAssets?: () => void;
   onGenerateImage?: () => void;
-  // Legacy prop for backwards compatibility
-  onImageButtonClick?: () => void;
+  onManageSceneAssets?: () => void;
   // Toolbar action props (optional - for integration with NovelEditorPanel)
   toolbarActions?: React.ReactNode;
 }
@@ -52,7 +51,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   onFileUpload,
   onBrowseAssets,
   onGenerateImage,
-  onImageButtonClick,
+  onManageSceneAssets,
   toolbarActions,
 }, ref) => {
   // Use ref to hold onChange callback (prevents stale closure in onCreate)
@@ -350,18 +349,12 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
 
         <div className="toolbar-divider" />
 
-        {/* Image button with menu or legacy click handler */}
-        {(useImageMenu || onImageButtonClick) && (
+        {/* Image button with menu */}
+        {useImageMenu && (
           <button
             ref={imageButtonRef}
             type="button"
-            onClick={() => {
-              if (useImageMenu) {
-                setImageMenuOpen(!imageMenuOpen);
-              } else if (onImageButtonClick) {
-                onImageButtonClick();
-              }
-            }}
+            onClick={() => setImageMenuOpen(!imageMenuOpen)}
             className={`format-btn image-btn ${imageMenuOpen ? 'active' : ''}`}
             disabled={disabled}
             title="Insert image"
@@ -389,6 +382,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
           onUpload={onFileUpload}
           onBrowseFiles={onBrowseAssets}
           onGenerateImage={onGenerateImage}
+          onManageSceneAssets={onManageSceneAssets}
           anchorRef={imageButtonRef}
         />
       )}

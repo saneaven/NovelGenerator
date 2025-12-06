@@ -53,6 +53,9 @@ class ImageGenerationRequest(BaseModel):
     # Reference objects used (stored in Asset metadata)
     reference_objects: Optional[List[ReferenceObject]] = None
 
+    # Asset type for categorization ('scene', 'object', or None)
+    asset_type: Optional[str] = None
+
 
 class ImageGenerationResponse(BaseModel):
     """Response from image generation"""
@@ -109,6 +112,7 @@ class AssetResponse(BaseModel):
     file_path: str
     thumbnail_path: Optional[str] = None
     mime_type: str
+    asset_type: Optional[str] = None  # 'scene', 'object', or null
     # Prompts stored separately by provider type
     generation_prompt: Optional[str] = None  # Natural language prompt (OpenAI, Gemini, xAI)
     generation_positive_prompt: Optional[str] = None  # Positive prompt for tag-based (NovelAI)
@@ -224,3 +228,71 @@ class ManuscriptImageUpdateRequest(BaseModel):
     position: Optional[int] = None
     display_width: Optional[int] = None
     caption: Optional[str] = None
+
+
+# ============================================================================
+# CHAPTER ASSETS (Scene Asset Usage Tracking)
+# ============================================================================
+
+class ChapterInfo(BaseModel):
+    """Minimal chapter info for usage display"""
+    id: str
+    name: str
+    act_name: Optional[str] = None
+
+
+class ChapterAssetCreate(BaseModel):
+    """Request to link a scene asset to a chapter"""
+    asset_id: str
+
+
+class ChapterAssetResponse(BaseModel):
+    """Response for chapter asset link"""
+    id: str
+    chapter_id: str
+    asset_id: str
+    created_at: datetime
+    asset: AssetResponse
+
+    class Config:
+        from_attributes = True
+
+
+class ChapterAssetsResponse(BaseModel):
+    """Response for listing chapter assets"""
+    assets: List[ChapterAssetResponse]
+
+
+class SceneAssetResponse(BaseModel):
+    """Scene asset with chapter usage information"""
+    id: str
+    project_id: str
+    name: str
+    file_path: str
+    thumbnail_path: Optional[str] = None
+    mime_type: str
+    asset_type: Optional[str] = None
+    generation_prompt: Optional[str] = None
+    generation_positive_prompt: Optional[str] = None
+    generation_negative_prompt: Optional[str] = None
+    generation_provider: Optional[str] = None
+    generation_model: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    file_size: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+    file_url: str
+    thumbnail_url: Optional[str] = None
+    # Chapter usage info
+    used_in_chapters: List[ChapterInfo] = []
+    usage_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class SceneAssetsResponse(BaseModel):
+    """Response for listing scene assets with usage info"""
+    assets: List[SceneAssetResponse]
+    total: int

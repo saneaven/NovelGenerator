@@ -1,7 +1,7 @@
 import type {
   FunctionCallOperationFieldPreview,
   FunctionCallOperationPreview,
-} from '../../llm_request/types';
+} from '../../llm/requestTypes';
 import { isIdField } from './objectNameResolver';
 
 const ELLIPSIS = '...';

@@ -1,11 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { LLMRequestPipeline } from '../chat/LLMRequestPipeline';
 import type { SystemInsertConfig, EditCard } from '../chat/types';
 import { ChatManager, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
 import { DefaultDisplayProcessor } from '../chat/processors/DisplayProcessor';
 import { areEditCardMapsEqual } from '../chat/utils/editCardUtils';
-import { NOVEL_EDITOR_FUNCTIONS } from '../chat/types/functionCalling';
+import { NOVEL_EDITOR_FUNCTIONS } from '../llm/schemas/functionCalling';
 import { useChatStore } from '../store/chatStore';
 import { useChatUIStore } from '../store/chatUIStore';
 import { useProjectStore } from '../store/projectStore';
@@ -135,10 +134,12 @@ const NovelEditor: React.FC = () =>
         }
     }, [projectId, mainLanguage, displayLanguageByProject, setDisplayLanguage]);
 
-    const [systemInsertConfig, setSystemInsertConfig] = useState<SystemInsertConfig>(
-        LLMRequestPipeline.createDefaultSystemConfig()
-    );
-    const chatPipeline = useMemo(() => new LLMRequestPipeline(), []);
+    const [systemInsertConfig, setSystemInsertConfig] = useState<SystemInsertConfig>({
+        enabled: true,
+        includeProjectInfo: true,
+        includeStoryObjects: true,
+        includeNovelContent: false,
+    });
     const displayProcessor = useMemo(() => new DefaultDisplayProcessor(), []);
     const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -187,17 +188,17 @@ const NovelEditor: React.FC = () =>
         },
     }), [updateMessageContentLocal, updateMessage, handleFunctionCalls, addMessage, getMessages, showError, handleFunctionCallProgress]);
 
+    // Session ID for chat streaming toast
+    const chatSessionId = projectId ? `novel-chat-${projectId}` : undefined;
+
     const chatManager = useMemo(() =>
     {
         const activeProjectId = projectId ?? '';
         return new ChatManager(
             {
                 projectId: activeProjectId,
-                // Use story objects with main language for chat context
                 getStoryObjects: () => storyObjectsFromHook,
                 getNovelData: () => getAllManuscripts(activeProjectId),
-                systemInsertConfig,
-                chatPipeline,
                 getIsLoading: () => chatUI.isLoading(activeProjectId),
                 setIsLoading: (loading: boolean) => chatUI.setLoading(activeProjectId, loading),
                 abortControllerRef,
@@ -211,13 +212,14 @@ const NovelEditor: React.FC = () =>
                 temperature: chatFunctionConfig.temperature,
                 provider: chatFunctionConfig.provider,
                 providerConfig: providerCredentials[chatFunctionConfig.provider],
-                providerPreference: chatFunctionConfig.providerPreference,
                 functions: NOVEL_EDITOR_FUNCTIONS,
                 mode: 'novelEditor',
                 enablePrefill: chatFunctionConfig.advanced.enablePrefill,
                 thinkingMode: chatFunctionConfig.advanced.thinkingMode,
                 thinkingConfig: chatFunctionConfig.advanced.thinkingConfig as any,
                 retryConfig: settings.retryConfig,
+                sessionId: chatSessionId,
+                getPendingFunctionCallResults: () => pendingFunctionCallResults,
             },
             chatManagerCallbacks
         );
@@ -225,15 +227,16 @@ const NovelEditor: React.FC = () =>
         projectId,
         storyObjectsFromHook,
         getAllManuscripts,
-        systemInsertConfig,
-        chatPipeline,
-        chatUI,
+        // Note: chatUI is intentionally excluded - it's accessed via closures and
+        // including it causes ChatManager recreation during streaming state changes
+        // pendingFunctionCallResults is also excluded - accessed via getter function
         mainLanguage,
         chatFunctionConfig,
         providerCredentials,
         getSelectedChatId,
         chatManagerCallbacks,
         settings.retryConfig,
+        chatSessionId,
     ]);
 
     const chatHandlers = useChatHandlers(
@@ -472,12 +475,12 @@ const NovelEditor: React.FC = () =>
 
         messages.forEach(message =>
         {
-            const processed = displayProcessor.process(message, {
+            const processed = displayProcessor.process(message as any, {
                 projectId,
                 storyObjects,
                 systemInsertConfig,
                 mode: 'novelEditor',
-            });
+            } as any);
 
             if (processed.editCards.length > 0)
             {
@@ -618,7 +621,6 @@ const NovelEditor: React.FC = () =>
                     projectId={projectId ?? ''}
                     systemInsertConfig={systemInsertConfig}
                     setSystemInsertConfig={setSystemInsertConfig}
-                    chatPipeline={chatPipeline}
                     storyObjects={storyObjects}
                     novelData={getAllManuscripts(projectId ?? '')}
                     messageEditCards={messageEditCards}

@@ -1,5 +1,5 @@
-export type FunctionType = 'chat' | 'translation' | 'storyEdit' | 'chapterGen' | 'imagePrompt';
-export type PromptCategory = 'systemPrompt' | 'prefill' | 'userMessageTag' | 'userPrompt';
+export type FunctionType = 'chat' | 'translation' | 'storyObjectEdit' | 'chapterGen' | 'imagePrompt';
+export type PromptCategory = 'systemPrompt' | 'userPrompt' | 'nonLastUserPrompt' | 'prefill';
 
 /**
  * Get prompt key for cache lookup

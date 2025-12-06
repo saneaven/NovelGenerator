@@ -14,9 +14,10 @@ type VariableDef<T> = {
 export const PROMPT_SCHEMAS = {
   chat: {
     variable: {
-      language: { desc: "Output language", example: "Korean" },
+      mainLanguage: { desc: "Main language for responses", example: "Korean" },
       mode: { desc: "Operation mode", example: "novelEditor" as "novelEditor" | "workspace" },
       today: { desc: "Current date", example: "2025-11-22" },
+      userInput: { desc: "User's chat message", example: "Help me write a scene" },
     },
     state: {
       enableThinking: { desc: "Enable thinking process", example: true },
@@ -25,19 +26,97 @@ export const PROMPT_SCHEMAS = {
       hasFunctions: { desc: "Whether functions are available", example: true },
     },
     context: {
-      recentMessages: { desc: "List of recent messages", example: [] as any[] },
-      functionResults: { desc: "Function call results", example: [] as any[] },
-      storyContext: { desc: "Story context", example: {} as any },
-      novelContent: { desc: "Novel content by acts", example: [] as any[] },
-      customSections: { desc: "Custom user sections", example: [] as any[] },
+      storyContext: {
+        desc: "Full story objects - template author chooses which fields to use. Contains: basicInfo (id, createdAt, updatedAt, title, logline, genre), characters/organizations/locations/lorebook (id, createdAt, updatedAt, name, description), acts (id, createdAt, updatedAt, name, description, chapters[]), chapters (id, createdAt, updatedAt, name, description, actId)",
+        example: {
+          basicInfo: {
+            id: "abc123",
+            createdAt: "2025-01-01T00:00:00Z",
+            updatedAt: "2025-01-02T00:00:00Z",
+            title: "The Last Kingdom",
+            logline: "A warrior's journey to reclaim his homeland",
+            genre: "Fantasy"
+          },
+          characters: [{
+            id: "char1",
+            createdAt: "2025-01-01T00:00:00Z",
+            updatedAt: "2025-01-02T00:00:00Z",
+            name: "Uhtred",
+            description: "A Saxon lord raised by Danes..."
+          }],
+          organizations: [{
+            id: "org1",
+            createdAt: "2025-01-01T00:00:00Z",
+            updatedAt: "2025-01-02T00:00:00Z",
+            name: "The Saxon Army",
+            description: "King Alfred's military force..."
+          }],
+          locations: [{
+            id: "loc1",
+            createdAt: "2025-01-01T00:00:00Z",
+            updatedAt: "2025-01-02T00:00:00Z",
+            name: "Bebbanburg",
+            description: "A fortress on the northern coast..."
+          }],
+          lorebook: [{
+            id: "lore1",
+            createdAt: "2025-01-01T00:00:00Z",
+            updatedAt: "2025-01-02T00:00:00Z",
+            name: "Dane Law",
+            description: "The legal system of the Danish settlers..."
+          }],
+          acts: [{
+            id: "act1",
+            createdAt: "2025-01-01T00:00:00Z",
+            updatedAt: "2025-01-02T00:00:00Z",
+            name: "Act 1: The Fall",
+            description: "Uhtred loses his birthright...",
+            chapters: [{
+              id: "ch1",
+              createdAt: "2025-01-01T00:00:00Z",
+              updatedAt: "2025-01-02T00:00:00Z",
+              name: "Chapter 1: The Raid",
+              description: "Danish raiders attack Bebbanburg...",
+              actId: "act1"
+            }]
+          }]
+        } as Record<string, any> | null
+      },
+      novelContent: {
+        desc: "Novel manuscripts keyed by chapter ID. Each manuscript has: id, content, wordCount",
+        example: {
+          "ch1": {
+            id: "ms1",
+            content: "The longships appeared at dawn...",
+            wordCount: 1500
+          },
+          "ch2": {
+            id: "ms2",
+            content: "Uhtred watched the flames...",
+            wordCount: 2000
+          }
+        } as Record<string, any> | null
+      },
+      functionResults: {
+        desc: "Previous function call results (applied/rejected/failed). Each result has: functionCallId, functionName, success, isRejected, resultMessage, appliedAt",
+        example: [{
+          functionCallId: "fc1",
+          functionName: "update_manuscript",
+          success: true,
+          isRejected: false,
+          resultMessage: "Applied successfully",
+          appliedAt: "2025-01-02T00:00:00Z"
+        }] as any[]
+      },
     }
   },
   translation: {
     variable: {
+      userInput: { desc: "User's translation request", example: "Translate naturally" },
+      today: { desc: "Current date", example: "2025-11-22" },
       sourceLanguage: { desc: "Source language", example: "English" },
       targetLanguage: { desc: "Target language", example: "Korean" },
       objectCount: { desc: "Number of objects", example: 1 },
-      userInstructions: { desc: "User instructions", example: "Translate nicely" },
       dataTypeName: { desc: "Human-friendly data type label", example: "Chat Message" },
       sourceContent: { desc: "Source chat content", example: "Hello there" },
     },
@@ -53,11 +132,12 @@ export const PROMPT_SCHEMAS = {
   },
   storyObjectEdit: {
     variable: {
-      language: { desc: "Output language", example: "Korean" },
+      mainLanguage: { desc: "Main language for responses", example: "Korean" },
+      today: { desc: "Current date", example: "2025-11-22" },
       categoryName: { desc: "Category display name", example: "Character" },
       editScope: { desc: "Edit scope", example: "item" as "item" | "list" },
       targetId: { desc: "Target ID", example: "123" },
-      userRequest: { desc: "User's modification request", example: "Change age to 21" },
+      userInput: { desc: "User's modification request", example: "Change age to 21" },
     },
     state: {
       enableThinking: { desc: "Enable thinking process", example: true },
@@ -79,10 +159,11 @@ export const PROMPT_SCHEMAS = {
   },
   chapterEdit: {
     variable: {
-      language: { desc: "Output language", example: "Korean" },
+      mainLanguage: { desc: "Main language for responses", example: "Korean" },
+      today: { desc: "Current date", example: "2025-11-22" },
       chapterName: { desc: "Chapter title", example: "Chapter 1" },
       currentContent: { desc: "Current chapter content", example: "Once upon a time..." },
-      userRequest: { desc: "User's request", example: "Make it darker" },
+      userInput: { desc: "User's request", example: "Make it darker" },
     },
     state: {
       enableThinking: { desc: "Enable thinking process", example: true },
@@ -96,19 +177,24 @@ export const PROMPT_SCHEMAS = {
   },
   objectImagePrompt: {
     variable: {
+      mainLanguage: { desc: "Main language for responses", example: "Korean" },
+      today: { desc: "Current date", example: "2025-11-22" },
       objectType: { desc: "Type of object", example: "character" as "character" | "location" | "organization" | "lorebook" },
       objectInfo: { desc: "Object name and description", example: "Character: John Doe" },
-      userRequest: { desc: "User's request", example: "Make it more detailed" },
+      userInput: { desc: "User's request", example: "Make it more detailed" },
       currentPrompt: { desc: "Current natural language prompt", example: "A tall man with blue eyes" },
       currentPromptPositive: { desc: "Current positive tags", example: "blue eyes, tall" },
       currentPromptNegative: { desc: "Current negative tags", example: "blurry, low quality" },
       promptMode: { desc: "Prompt mode", example: "natural" as "natural" | "positive" | "negative" },
     },
     state: {
+      enableThinking: { desc: "Enable thinking process", example: true },
+      enablePrefill: { desc: "Enable prefill", example: true },
+      enableCustomThinking: { desc: "Enable custom thinking", example: false },
       isNaturalPrompt: { desc: "Natural language mode", example: true },
       isPositivePrompt: { desc: "Positive tags mode", example: false },
       isNegativePrompt: { desc: "Negative tags mode", example: false },
-      hasUserRequest: { desc: "Has user request", example: true },
+      hasUserInput: { desc: "Has user input", example: true },
       hasCurrentPrompt: { desc: "Has current prompt", example: false },
       isNativeOutput: { desc: "Native output mode (no function calls)", example: false },
     },
@@ -116,16 +202,21 @@ export const PROMPT_SCHEMAS = {
   },
   sceneImagePrompt: {
     variable: {
+      mainLanguage: { desc: "Main language for responses", example: "Korean" },
+      today: { desc: "Current date", example: "2025-11-22" },
       scenePreContext: { desc: "Scene pre-context", example: "The hero enters the dark cave..." },
       scenePostContext: { desc: "Scene post-context", example: "He finds the treasure chest." },
-      userRequest: { desc: "User's request", example: "Focus on the treasure" },
+      userInput: { desc: "User's request", example: "Focus on the treasure" },
       promptMode: { desc: "Prompt mode", example: "natural" as "natural" | "positive" | "negative" },
     },
     state: {
+      enableThinking: { desc: "Enable thinking process", example: true },
+      enablePrefill: { desc: "Enable prefill", example: true },
+      enableCustomThinking: { desc: "Enable custom thinking", example: false },
       isNaturalPrompt: { desc: "Natural language mode", example: true },
       isPositivePrompt: { desc: "Positive tags mode", example: false },
       isNegativePrompt: { desc: "Negative tags mode", example: false },
-      hasUserRequest: { desc: "Has user request", example: true },
+      hasUserInput: { desc: "Has user input", example: true },
       hasSelectedObjects: { desc: "Has selected reference objects", example: true },
       isNativeOutput: { desc: "Native output mode (no function calls)", example: false },
     },

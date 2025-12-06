@@ -99,7 +99,7 @@ const ToastErrorModal: React.FC<ToastErrorModalProps> = ({
             allowedObjectTypes={modalProps.allowedObjectTypes}
             defaultSourceLanguage={formState?.sourceLanguage}
             defaultTargetLanguage={formState?.targetLanguage}
-            defaultUserInstructions={formState?.userInstructions}
+            defaultUserInput={formState?.userInput}
           />
         );
 

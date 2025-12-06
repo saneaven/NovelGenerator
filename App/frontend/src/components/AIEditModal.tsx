@@ -2,17 +2,15 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import type { ObjectType } from '../types/unifiedObject';
-import type { FunctionCallMetadata } from '../llm_request/types';
-import type { StoryObjects } from '../types/storyObject';
+import type { FunctionCallMetadata } from '../llm/requestTypes';
+import type { StoryObjects, StoryObjectCategory } from '../types/storyObject';
 import { createEmptyStoryObjects } from '../types/storyObject';
-import { LLMRequestPipeline } from '../chat/LLMRequestPipeline';
-import { getEditFunctionSchema } from '../chat/types/editFunctionSchemas';
 import { applyEditFunctionCalls } from '../chat/utils/editFunctionApplicator';
-import { LLMRequestManager } from '../chat/sessions/LLMRequestManager';
 import { useLLMTaskStore } from '../store/llmTaskStore';
 import { generateTempId } from '../utils/tempId';
 import { parseJsonOutput, extractRawContent } from '../utils/nativeOutputParser';
 import { useLLMToast } from '../hooks/useLLMToast';
+import { LLMTask, LLMTaskMode, type StoryObjectEditPromptContext } from '../llm';
 import GroupedFunctionCallCard from './functionCall/GroupedFunctionCallCard';
 import './AIEditModal.css';
 
@@ -32,9 +30,7 @@ interface AIEditModalProps {
   projectId: string;
   targetId?: string;
   onResult?: (result?: any) => void | Promise<void>;
-  /** Default user request for retry */
   defaultUserRequest?: string;
-  /** Default context options for retry */
   defaultContextOptions?: ContextOptions;
 }
 
@@ -67,9 +63,7 @@ const toStoryObjects = (contextData: Record<string, any>): StoryObjects => {
       : [];
 
   const mapOutline = (outlineData?: any) => {
-    if (!outlineData) {
-      return { acts: [] };
-    }
+    if (!outlineData) return { acts: [] };
 
     const acts = Array.isArray(outlineData.acts)
       ? outlineData.acts.map((act: any) => ({
@@ -136,14 +130,10 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   const unifiedStore = useUnifiedObjectStore();
   const settingsStore = useSettingsStore();
   const abortControllerRef = useRef<AbortController | null>(null);
-  const taskRunnerRef = useRef<LLMRequestManager | null>(null);
-  const sessionIdRef = useRef<string | undefined>(undefined);
-  if (!sessionIdRef.current) {
-    sessionIdRef.current = createSessionId();
-  }
+  const taskRef = useRef<LLMTask | null>(null);
+  const sessionIdRef = useRef<string>(createSessionId());
   const sessionId = sessionIdRef.current;
 
-  // Toast notification integration
   const categoryDisplayName = getCategoryDisplayName(category);
   const editTypeText = targetId ? 'Item' : 'All';
   const toastLabel = `AI ${categoryDisplayName} ${editTypeText} Edit`;
@@ -157,7 +147,6 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   const session = useLLMTaskStore(useCallback((state) => state.sessions[sessionId], [sessionId]));
   const initializeSession = useLLMTaskStore((state) => state.initializeSession);
   const updateSession = useLLMTaskStore((state) => state.updateSession);
-  const setContentParts = useLLMTaskStore((state) => state.setContentParts);
   const setFunctionCallProgress = useLLMTaskStore((state) => state.setFunctionCallProgress);
   const clearSession = useLLMTaskStore((state) => state.clearSession);
   const [storyObjectsPreview, setStoryObjectsPreview] = useState<StoryObjects>(createEmptyStoryObjects());
@@ -165,9 +154,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   const isProcessing = session?.status === 'running';
   const sessionError = session?.error ?? null;
   const streamContent = useMemo(() => {
-    if (!session?.contentParts || session.contentParts.length === 0) {
-      return '';
-    }
+    if (!session?.contentParts?.length) return '';
     return session.contentParts
       .filter((part) => part.type === 'content')
       .map((part) => part.text)
@@ -180,147 +167,93 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     if (isOpen) {
       initializeSession(sessionId);
       updateSession(sessionId, { status: 'idle', error: undefined });
-      return;
+    } else {
+      setUserRequest('');
+      setStoryObjectsPreview(createEmptyStoryObjects());
     }
-
-    // Reset form state but DON'T abort running requests
-    // Request continues in background, toast shows progress
-    setUserRequest('');
-    setStoryObjectsPreview(createEmptyStoryObjects());
   }, [isOpen, sessionId, initializeSession, updateSession]);
 
   useEffect(() => {
     return () => {
-      taskRunnerRef.current?.abort();
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-      }
+      taskRef.current?.abort();
       clearSession(sessionId);
-      setStoryObjectsPreview(createEmptyStoryObjects());
     };
   }, [sessionId, clearSession]);
 
-  // Helper to get object data for main language with fallback
   const getObjectData = (obj: any): Record<string, any> => {
     const mainLanguage = settingsStore.settings.mainLanguage;
     const data = obj.data[mainLanguage];
     if (data) return data;
     const availableLanguages = Object.keys(obj.data);
-    if (availableLanguages.length > 0) {
-      return obj.data[availableLanguages[0]];
-    }
-    return {};
+    return availableLanguages.length > 0 ? obj.data[availableLanguages[0]] : {};
   };
 
-  const generateContext = async () => {
+  const generateContext = async (): Promise<Record<string, any>> => {
     const context: Record<string, any> = {};
 
     try {
-      // Basic Info
       if (contextOptions.basicInfo) {
         const basicInfoList = await unifiedStore.listObjects('basic_info', projectId);
         if (basicInfoList.length > 0) {
-          const basicInfo = basicInfoList[0];
-          const data = getObjectData(basicInfo);
-          context.basicInfo = {
-            title: data.title || '',
-            logline: data.logline || '',
-            genre: data.genre || '',
-          };
+          const data = getObjectData(basicInfoList[0]);
+          context.basicInfo = { title: data.title || '', logline: data.logline || '', genre: data.genre || '' };
         }
       }
 
-      // Characters
       if (contextOptions.characters) {
         const characters = await unifiedStore.listObjects('character', projectId);
-        if (characters.length > 0) {
-          context.characters = characters.map(char => {
-            const data = getObjectData(char);
-            return {
-              id: char.id,
-              name: data.name || '',
-              description: data.description || '',
-            };
-          });
-        }
+        context.characters = characters.map(char => {
+          const data = getObjectData(char);
+          return { id: char.id, name: data.name || '', description: data.description || '' };
+        });
       }
 
-      // Organizations
       if (contextOptions.organizations) {
         const organizations = await unifiedStore.listObjects('organization', projectId);
-        if (organizations.length > 0) {
-          context.organizations = organizations.map(org => {
-            const data = getObjectData(org);
-            return {
-              id: org.id,
-              name: data.name || '',
-              description: data.description || '',
-            };
-          });
-        }
+        context.organizations = organizations.map(org => {
+          const data = getObjectData(org);
+          return { id: org.id, name: data.name || '', description: data.description || '' };
+        });
       }
 
-      // Locations
       if (contextOptions.locations) {
         const locations = await unifiedStore.listObjects('location', projectId);
-        if (locations.length > 0) {
-          context.locations = locations.map(loc => {
-            const data = getObjectData(loc);
-            return {
-              id: loc.id,
-              name: data.name || '',
-              description: data.description || '',
-            };
-          });
-        }
+        context.locations = locations.map(loc => {
+          const data = getObjectData(loc);
+          return { id: loc.id, name: data.name || '', description: data.description || '' };
+        });
       }
 
-      // Lorebook
       if (contextOptions.lorebook) {
         const lorebook = await unifiedStore.listObjects('lorebook', projectId);
-        if (lorebook.length > 0) {
-          context.lorebook = lorebook.map(entry => {
-            const data = getObjectData(entry);
-            return {
-              id: entry.id,
-              name: data.name || '',
-              description: data.description || '',
-            };
-          });
-        }
+        context.lorebook = lorebook.map(entry => {
+          const data = getObjectData(entry);
+          return { id: entry.id, name: data.name || '', description: data.description || '' };
+        });
       }
 
-      // Outline
       if (contextOptions.outline) {
         const acts = await unifiedStore.listObjects('act', projectId);
         const chapters = await unifiedStore.listObjects('chapter', projectId);
-
-        if (acts.length > 0) {
-          context.outline = {
-            acts: acts
-              .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-              .map(act => {
-                const actData = getObjectData(act);
-                return {
-                  id: act.id,
-                  name: actData.name || '',
-                  description: actData.description || '',
-                  chapters: chapters
-                    .filter(ch => ch.metadata.act_id === act.id)
-                    .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-                    .map(chapter => {
-                      const chapterData = getObjectData(chapter);
-                      return {
-                        id: chapter.id,
-                        name: chapterData.name || '',
-                        description: chapterData.description || '',
-                      };
-                    }),
-                };
-              }),
-          };
-        }
+        context.outline = {
+          acts: acts
+            .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+            .map(act => {
+              const actData = getObjectData(act);
+              return {
+                id: act.id,
+                name: actData.name || '',
+                description: actData.description || '',
+                chapters: chapters
+                  .filter(ch => ch.metadata.act_id === act.id)
+                  .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+                  .map(chapter => {
+                    const chapterData = getObjectData(chapter);
+                    return { id: chapter.id, name: chapterData.name || '', description: chapterData.description || '' };
+                  }),
+              };
+            }),
+        };
       }
     } catch (err) {
       console.error('Error generating context:', err);
@@ -336,31 +269,24 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         try {
           await unifiedStore.fetchObject(category, targetId);
           return unifiedStore.objects[targetId];
-        } catch (err) {
-          console.error('Failed to fetch target object:', err);
+        } catch {
           return null;
         }
       }
       return object;
-    } else {
-      try {
-        const objects = await unifiedStore.listObjects(category, projectId);
-        return objects;
-      } catch (err) {
-        console.error('Failed to list objects:', err);
-        return [];
-      }
+    }
+    try {
+      return await unifiedStore.listObjects(category, projectId);
+    } catch {
+      return [];
     }
   };
 
   const handleFunctionCallResults = useCallback(
     async (functionCalls: FunctionCallMetadata[]) => {
-      if (!functionCalls || functionCalls.length === 0) {
+      if (!functionCalls?.length) {
         const errorMsg = 'AI response did not include structured edits to apply.';
-        updateSession(sessionId, {
-          status: 'error',
-          error: errorMsg,
-        });
+        updateSession(sessionId, { status: 'error', error: errorMsg });
         completeError(errorMsg);
         return;
       }
@@ -371,10 +297,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
 
         if (failedResults.length > 0) {
           const errorMsg = `Failed to apply some edits: ${failedResults.map(r => r.error || r.message).join(', ')}`;
-          updateSession(sessionId, {
-            status: 'error',
-            error: errorMsg,
-          });
+          updateSession(sessionId, { status: 'error', error: errorMsg });
           completeError(errorMsg);
           return;
         }
@@ -382,18 +305,46 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         updateSession(sessionId, { status: 'success', error: undefined });
         completeSuccess();
         onResult?.();
-        // Modal already closed - no need to call onClose()
       } catch (err) {
-        console.error('Function application error:', err);
         const errorMsg = err instanceof Error ? err.message : 'Failed to apply edits';
-        updateSession(sessionId, {
-          status: 'error',
-          error: errorMsg,
-        });
+        updateSession(sessionId, { status: 'error', error: errorMsg });
         completeError(errorMsg);
       }
     },
     [projectId, sessionId, updateSession, onResult, completeSuccess, completeError]
+  );
+
+  const handleNativeOutput = useCallback(
+    async (text: string) => {
+      const cleanedText = extractRawContent(text);
+      const parsedItems = parseJsonOutput(cleanedText);
+
+      if (parsedItems.length === 0) {
+        const errorMsg = 'AI did not return valid JSON output.';
+        updateSession(sessionId, { status: 'error', error: errorMsg });
+        completeError(errorMsg);
+        return;
+      }
+
+      for (const item of parsedItems) {
+        if (!item.id) continue;
+        try {
+          await unifiedStore.updateObject(category, item.id, {
+            data: { name: item.name, description: item.description },
+            language: settingsStore.settings.mainLanguage,
+            create_new_version: true,
+            user_request: userRequest.trim(),
+          });
+        } catch (err) {
+          console.error(`Failed to update object ${item.id}:`, err);
+        }
+      }
+
+      updateSession(sessionId, { status: 'success', error: undefined });
+      completeSuccess();
+      onResult?.();
+    },
+    [category, sessionId, unifiedStore, settingsStore, userRequest, updateSession, completeSuccess, completeError, onResult]
   );
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -401,167 +352,85 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     if (!userRequest.trim() || isProcessing) return;
 
     updateSession(sessionId, { status: 'running', error: undefined });
-    setContentParts(sessionId, []);
 
-    // Start toast notification with retry context
     startTask({
       taskType: 'ai-edit',
-      modalProps: {
-        category,
-        projectId,
-        targetId,
-        onResult,
-      },
-      formState: {
-        userRequest: userRequest.trim(),
-        contextOptions,
-      },
+      modalProps: { category, projectId, targetId, onResult },
+      formState: { userRequest: userRequest.trim(), contextOptions },
     });
 
-    // Auto-close modal - request continues in background, toast shows progress
     onClose();
 
     try {
-      const storyEditConfig = settingsStore.getFunctionConfig('storyEdit');
-      const providerConfig = settingsStore.getProviderConfig(storyEditConfig.provider);
-      const functionSchema = getEditFunctionSchema(category, !!targetId);
+      const storyObjectEditConfig = settingsStore.getFunctionConfig('storyObjectEdit');
+      const providerConfig = settingsStore.getProviderConfig(storyObjectEditConfig.provider);
+      const isNativeOutput = settingsStore.settings.nativeOutputMode;
+
       const contextData = await generateContext();
       setStoryObjectsPreview(toStoryObjects(contextData));
       const currentData = await getCurrentData();
 
-      const isNativeOutput = settingsStore.settings.nativeOutputMode;
-
-      const getStoryObjects = () => ({
-        basicInfo: null,
-        characters: [],
-        organizations: [],
-        locations: [],
-        lorebook: [],
-        outline: { acts: [] },
-      });
-
-      const systemInsertConfig = {
-        enabled: true,
-        includeProjectInfo: true,
-        includeStoryObjects: true,
-        includeNovelContent: false,
-        promptContext: {
-          category,
-          targetId,
-          contextData,
-          currentData,
-          userRequest: userRequest.trim(),
-          enablePrefill: storyEditConfig.advanced.enablePrefill,
-          enableThinking: storyEditConfig.advanced.thinkingMode !== 'off',
-          isNativeOutput,
-        },
-        promptType: 'story_object_edit' as const,
+      const promptContext: StoryObjectEditPromptContext = {
+        userInput: userRequest.trim(),
+        category: category as StoryObjectCategory,
+        targetId,
+        contextData,
+        currentData,
+        isNativeOutput,
+        outputLanguage: settingsStore.settings.mainLanguage,
+        enablePrefill: storyObjectEditConfig.advanced.enablePrefill,
+        enableThinking: storyObjectEditConfig.advanced.thinkingMode === 'model',
+        enableCustomThinking: storyObjectEditConfig.advanced.thinkingMode === 'custom',
       };
 
-      // Native output handler for single/batch edits
-      const handleNativeOutput = async (text: string) => {
-        const cleanedText = extractRawContent(text);
-
-        // Parse JSON array output (used for both single and batch edits)
-        const parsedItems = parseJsonOutput(cleanedText);
-        if (parsedItems.length === 0) {
-          const errorMsg = 'AI did not return valid JSON output.';
-          updateSession(sessionId, {
-            status: 'error',
-            error: errorMsg,
-          });
-          completeError(errorMsg);
-          return;
-        }
-
-        // Apply each parsed item
-        for (const item of parsedItems) {
-          if (!item.id) continue;
-          try {
-            await unifiedStore.updateObject(category, item.id, {
-              data: {
-                name: item.name,
-                description: item.description,
-              },
-              language: settingsStore.settings.mainLanguage,
-              create_new_version: true,
-              user_request: userRequest.trim(),
-            });
-          } catch (err) {
-            console.error(`Failed to update object ${item.id}:`, err);
-          }
-        }
-
-        updateSession(sessionId, { status: 'success', error: undefined });
-        completeSuccess();
-        onResult?.();
-        // Modal already closed - no need to call onClose()
-      };
-
-      taskRunnerRef.current = new LLMRequestManager(
+      taskRef.current = new LLMTask(
         {
+          mode: LLMTaskMode.STORY_OBJECT_EDIT,
           projectId,
-          getStoryObjects,
-          systemInsertConfig,
-          chatPipeline: new LLMRequestPipeline(),
-          provider: storyEditConfig.provider,
-          providerConfig,
-          aiModel: storyEditConfig.model,
-          temperature: storyEditConfig.temperature,
-          providerPreference: storyEditConfig.providerPreference,
-          functions: isNativeOutput ? undefined : [functionSchema],
-          toolChoice: isNativeOutput ? undefined : 'required',
-          mode: 'workspace',
-          enablePrefill: storyEditConfig.advanced.enablePrefill,
-          thinkingMode: storyEditConfig.advanced.thinkingMode as any,
-          thinkingConfig: storyEditConfig.advanced.thinkingConfig,
-          retryConfig: settingsStore.settings.retryConfig,
+          promptContext,
           abortControllerRef,
           sessionId,
+          provider: storyObjectEditConfig.provider,
+          providerConfig,
+          model: storyObjectEditConfig.model,
+          temperature: storyObjectEditConfig.temperature,
+          thinkingMode: storyObjectEditConfig.advanced.thinkingMode as any,
+          thinkingConfig: storyObjectEditConfig.advanced.thinkingConfig,
+          retryConfig: settingsStore.settings.retryConfig,
         },
         {
-          onStreamUpdate: () => {}, // Store is now updated by LLMRequestManager internally
-          onFunctionCallProgress: isNativeOutput ? undefined : (progress) => setFunctionCallProgress(sessionId, progress),
-          onFunctionCalls: isNativeOutput ? undefined : handleFunctionCallResults,
-          onFinalMessage: async (message) => {
+          onUpdate: () => {},
+          onComplete: async (result) => {
             if (isNativeOutput) {
-              // Native mode: extract text and apply directly
-              const text = message.contentParts
-                ?.filter(part => part.type === 'content')
+              const text = result.contentParts
+                .filter(part => part.type === 'content')
                 .map(part => part.text)
-                .join('') || '';
+                .join('');
               if (text.trim()) {
                 await handleNativeOutput(text.trim());
               } else {
                 const errorMsg = 'AI did not generate any output.';
-                updateSession(sessionId, {
-                  status: 'error',
-                  error: errorMsg,
-                });
+                updateSession(sessionId, { status: 'error', error: errorMsg });
                 completeError(errorMsg);
               }
             } else {
-              // Function mode: success if no function calls pending
-              if (!message.functionCalls || message.functionCalls.length === 0) {
-                updateSession(sessionId, { status: 'success', error: undefined });
-                completeSuccess();
-              }
+              await handleFunctionCallResults(result.functionCalls);
             }
           },
           onError: (err) => {
-            updateSession(sessionId, { status: 'error', error: err.message });
-            completeError(err.message);
+            if (err.name === 'AbortError') {
+              updateSession(sessionId, { status: 'cancelled' });
+              completeCancelled();
+            } else {
+              updateSession(sessionId, { status: 'error', error: err.message });
+              completeError(err.message);
+            }
           },
+          onFunctionProgress: isNativeOutput ? undefined : (progress) => setFunctionCallProgress(sessionId, progress),
         }
       );
 
-      await taskRunnerRef.current.run(
-        null,
-        {
-          history: [],
-          language: settingsStore.settings.mainLanguage,
-        }
-      );
+      await taskRef.current.run();
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
         updateSession(sessionId, { status: 'cancelled' });
@@ -569,26 +438,15 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         return;
       }
       const errorMsg = err instanceof Error ? err.message : 'An unknown error occurred.';
-      updateSession(sessionId, {
-        status: 'error',
-        error: errorMsg,
-      });
+      updateSession(sessionId, { status: 'error', error: errorMsg });
       completeError(errorMsg);
     } finally {
-      taskRunnerRef.current = null;
+      taskRef.current = null;
     }
   };
 
-  // Just close modal - don't abort (request continues in background)
-  const handleClose = () => {
-    onClose();
-  };
-
   const toggleContextOption = (option: keyof ContextOptions) => {
-    setContextOptions(prev => ({
-      ...prev,
-      [option]: !prev[option],
-    }));
+    setContextOptions(prev => ({ ...prev, [option]: !prev[option] }));
   };
 
   if (!isOpen) return null;
@@ -597,8 +455,8 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content ai-edit-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>🤖 AI {categoryDisplayName} {editTypeText} Edit</h2>
-          <button className="modal-close" onClick={handleClose}>×</button>
+          <h2>AI {categoryDisplayName} {editTypeText} Edit</h2>
+          <button className="modal-close" onClick={onClose}>x</button>
         </div>
 
         <form onSubmit={handleSubmit} className="ai-edit-form">
@@ -608,8 +466,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
               id="user-request"
               value={userRequest}
               onChange={(e) => setUserRequest(e.target.value)}
-              placeholder={`Enter your edit request for the ${categoryDisplayName} ${editTypeText}.
-e.g., "Make the main character's personality more proactive", "Make the atmosphere of all locations darker"`}
+              placeholder={`Enter your edit request for the ${categoryDisplayName} ${editTypeText}.`}
               rows={4}
               required
               disabled={isProcessing}
@@ -627,9 +484,7 @@ e.g., "Make the main character's personality more proactive", "Make the atmosphe
                     onChange={() => toggleContextOption(key as keyof ContextOptions)}
                     disabled={isProcessing}
                   />
-                  <span className="checkbox-text">
-                    {getCategoryDisplayName(key)}
-                  </span>
+                  <span className="checkbox-text">{getCategoryDisplayName(key)}</span>
                 </label>
               ))}
             </div>
@@ -638,11 +493,7 @@ e.g., "Make the main character's personality more proactive", "Make the atmosphe
             </p>
           </div>
 
-          {sessionError && (
-            <div className="error-message">
-              {sessionError}
-            </div>
-          )}
+          {sessionError && <div className="error-message">{sessionError}</div>}
 
           {showStreamingPlaceholder && (
             <div className="ai-streaming-placeholder">
@@ -669,18 +520,8 @@ e.g., "Make the main character's personality more proactive", "Make the atmosphe
           )}
 
           <div className="form-actions">
-            <button
-              type="button"
-              onClick={handleClose}
-              className="cancel-button"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="submit-button"
-              disabled={!userRequest.trim() || isProcessing}
-            >
+            <button type="button" onClick={onClose} className="cancel-button">Cancel</button>
+            <button type="submit" className="submit-button" disabled={!userRequest.trim() || isProcessing}>
               {isProcessing ? 'AI Processing...' : 'Request AI Edit'}
             </button>
           </div>

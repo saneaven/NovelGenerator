@@ -124,3 +124,19 @@
 .action-label {
   flex: 1;
 }
+
+/* Action divider (between action buttons) */
+.image-insert-action-divider {
+  height: 1px;
+  background: var(--color-border-default);
+  margin: var(--spacing-xs) 0;
+}
+
+.image-insert-action-btn.manage {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.image-insert-action-btn.manage:hover {
+  color: var(--color-text-primary);
+}

@@ -249,7 +249,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     sourceLanguage: string,
     targetLanguage: string,
     includePrevious: boolean,
-    userInstructions: string
+    userInput: string
   ) => {
     if (!projectId || !retranslateTargetId) return;
 
@@ -263,7 +263,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
       });
 
       // Build custom user instructions with optional previous translation
-      let instructions = userInstructions || '';
+      let instructions = userInput || '';
 
       const availableLanguages = Object.keys(item.data);
       if (includePrevious && availableLanguages.includes(targetLanguage)) {
@@ -290,7 +290,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
           projectId,
           sourceLanguage,
           targetLanguage,
-          userInstructions: instructions || undefined,
+          userInput: instructions || undefined,
         }
       );
 

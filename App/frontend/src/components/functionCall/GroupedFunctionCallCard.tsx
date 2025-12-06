@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import type { EditCard } from '../../chat/types';
-import type { FunctionCallOperationPreview, FunctionCallProgress } from '../../llm_request/types';
+import type { FunctionCallOperationPreview, FunctionCallProgress } from '../../llm/requestTypes';
 import type { StoryObjects } from '../../types/storyObject';
 import { buildOperationPreviewsFromArgs } from '../../chat/utils/functionCallPreview';
 import { resolveStoryObjectName, parseFunctionName } from '../../chat/utils/objectNameResolver';

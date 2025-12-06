@@ -7,13 +7,15 @@ from datetime import datetime
 
 from ..database import get_db
 from ..auth import get_current_user
-from ..models.db_models import User, Project, Asset, StoryObjectAsset, ManuscriptImage, Manuscript
+from ..models.db_models import User, Project, Asset, StoryObjectAsset, ManuscriptImage, Manuscript, ChapterAsset, Chapter, Act
 from ..schemas.assets import (
     AssetResponse, AssetListResponse, AssetUpdateRequest,
     StoryObjectAssetCreate, StoryObjectAssetResponse, StoryObjectAssetsResponse, SetMainAssetRequest,
     ManuscriptImageCreate, ManuscriptImageResponse, ManuscriptImagesResponse, ManuscriptImageUpdateRequest,
     ImageGenerationRequest, ImageGenerationResponse,
-    ImageProvidersResponse, ImageProviderInfo, ImageModelsResponse
+    ImageProvidersResponse, ImageProviderInfo, ImageModelsResponse,
+    ChapterAssetCreate, ChapterAssetResponse, ChapterAssetsResponse,
+    SceneAssetResponse, SceneAssetsResponse, ChapterInfo
 )
 from ..services.storage_service import storage_service
 from ..image_providers.registry import ImageProviderRegistry
@@ -27,27 +29,56 @@ router = APIRouter(prefix="/api/v1/assets", tags=["assets"])
 
 def _asset_to_response(asset: Asset) -> AssetResponse:
     """Convert Asset model to response schema"""
+    # Cast all SQLAlchemy Column types to their Python types for type checker
     return AssetResponse(
         id=str(asset.id),
         project_id=str(asset.project_id),
-        name=asset.name,
-        file_path=asset.file_path,
-        thumbnail_path=asset.thumbnail_path,
-        mime_type=asset.mime_type,
-        generation_prompt=asset.generation_prompt,
-        generation_positive_prompt=asset.generation_positive_prompt,
-        generation_negative_prompt=asset.generation_negative_prompt,
-        generation_provider=asset.generation_provider,
-        generation_model=asset.generation_model,
-        generation_settings=asset.generation_settings,
+        name=cast(str, asset.name),
+        file_path=cast(str, asset.file_path),
+        thumbnail_path=cast(Optional[str], asset.thumbnail_path),
+        mime_type=cast(str, asset.mime_type),
+        asset_type=cast(Optional[str], asset.asset_type),
+        generation_prompt=cast(Optional[str], asset.generation_prompt),
+        generation_positive_prompt=cast(Optional[str], asset.generation_positive_prompt),
+        generation_negative_prompt=cast(Optional[str], asset.generation_negative_prompt),
+        generation_provider=cast(Optional[str], asset.generation_provider),
+        generation_model=cast(Optional[str], asset.generation_model),
+        generation_settings=cast(Optional[Dict[str, Any]], asset.generation_settings),
         generation_reference_objects=cast(Optional[List[Dict[str, Any]]], asset.generation_reference_objects),
-        width=asset.width,
-        height=asset.height,
-        file_size=asset.file_size,
-        created_at=asset.created_at,
-        updated_at=asset.updated_at,
-        file_url=f"/storage/assets/{asset.file_path}",
-        thumbnail_url=f"/storage/assets/{asset.thumbnail_path}" if asset.thumbnail_path else None
+        width=cast(Optional[int], asset.width),
+        height=cast(Optional[int], asset.height),
+        file_size=cast(Optional[int], asset.file_size),
+        created_at=cast(datetime, asset.created_at),
+        updated_at=cast(datetime, asset.updated_at),
+        file_url=f"/storage/assets/{cast(str, asset.file_path)}",
+        thumbnail_url=f"/storage/assets/{cast(str, asset.thumbnail_path)}" if asset.thumbnail_path is not None else None
+    )
+
+
+def _asset_to_scene_response(asset: Asset, used_in_chapters: List[ChapterInfo]) -> SceneAssetResponse:
+    """Convert Asset model to SceneAssetResponse with chapter usage info"""
+    return SceneAssetResponse(
+        id=str(asset.id),
+        project_id=str(asset.project_id),
+        name=cast(str, asset.name),
+        file_path=cast(str, asset.file_path),
+        thumbnail_path=cast(Optional[str], asset.thumbnail_path),
+        mime_type=cast(str, asset.mime_type),
+        asset_type=cast(Optional[str], asset.asset_type),
+        generation_prompt=cast(Optional[str], asset.generation_prompt),
+        generation_positive_prompt=cast(Optional[str], asset.generation_positive_prompt),
+        generation_negative_prompt=cast(Optional[str], asset.generation_negative_prompt),
+        generation_provider=cast(Optional[str], asset.generation_provider),
+        generation_model=cast(Optional[str], asset.generation_model),
+        width=cast(Optional[int], asset.width),
+        height=cast(Optional[int], asset.height),
+        file_size=cast(Optional[int], asset.file_size),
+        created_at=cast(datetime, asset.created_at),
+        updated_at=cast(datetime, asset.updated_at),
+        file_url=f"/storage/assets/{cast(str, asset.file_path)}",
+        thumbnail_url=f"/storage/assets/{cast(str, asset.thumbnail_path)}" if asset.thumbnail_path is not None else None,
+        used_in_chapters=used_in_chapters,
+        usage_count=len(used_in_chapters)
     )
 
 
@@ -204,6 +235,7 @@ async def generate_image(
             file_path=file_path,
             thumbnail_path=thumb_path,
             mime_type=mime_type,
+            asset_type=request.asset_type,  # 'scene', 'object', or None - passed from frontend
             generation_prompt=request.prompt,  # Natural language only
             generation_positive_prompt=request.positive_prompt,  # Tag-based only
             generation_negative_prompt=request.negative_prompt,  # Tag-based only
@@ -237,6 +269,58 @@ async def generate_image(
 
 
 # ============================================================================
+# SCENE ASSETS (must be before generic /{asset_id} routes)
+# ============================================================================
+
+@router.get("/{project_id}/scene", response_model=SceneAssetsResponse)
+async def list_scene_assets(
+    project_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """List all scene assets with chapter usage information"""
+    # Verify project ownership
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Get all scene assets
+    assets = db.query(Asset).filter(
+        Asset.project_id == project_id,
+        Asset.asset_type == 'scene'
+    ).order_by(Asset.created_at.desc()).all()
+
+    # Build response with chapter usage
+    responses = []
+    for asset in assets:
+        # Get chapters using this asset
+        chapter_links = db.query(ChapterAsset).filter(
+            ChapterAsset.asset_id == asset.id
+        ).all()
+
+        used_in_chapters = []
+        for link in chapter_links:
+            chapter = db.query(Chapter).filter(Chapter.id == link.chapter_id).first()
+            if chapter:
+                # Get act info for chapter name context
+                act = db.query(Act).filter(Act.id == chapter.act_id).first()
+                # Get chapter name from object_translations if available
+                # For now, use a placeholder - in production, join with translations
+                used_in_chapters.append(ChapterInfo(
+                    id=str(chapter.id),
+                    name=f"Chapter {chapter.order + 1}",  # Fallback name
+                    act_name=f"Act {act.order + 1}" if act else None
+                ))
+
+        responses.append(_asset_to_scene_response(asset, used_in_chapters))
+
+    return SceneAssetsResponse(assets=responses, total=len(responses))
+
+
+# ============================================================================
 # ASSET CRUD
 # ============================================================================
 
@@ -267,6 +351,7 @@ async def upload_asset(
     project_id: UUID,
     file: UploadFile = File(...),
     name: Optional[str] = Form(None),
+    asset_type: Optional[str] = Form(None),  # 'scene', 'object', or None
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -282,6 +367,10 @@ async def upload_asset(
     allowed_types = {"image/png", "image/jpeg", "image/gif", "image/webp"}
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail="Invalid file type. Allowed: PNG, JPEG, GIF, WebP")
+
+    # Validate asset_type if provided
+    if asset_type and asset_type not in ('scene', 'object'):
+        raise HTTPException(status_code=400, detail="Invalid asset_type. Allowed: 'scene', 'object'")
 
     # Read file content
     content = await file.read()
@@ -301,6 +390,7 @@ async def upload_asset(
         file_path=file_path,
         thumbnail_path=thumb_path,
         mime_type=mime_type,
+        asset_type=asset_type,
         width=width,
         height=height,
         file_size=file_size
@@ -780,3 +870,132 @@ async def delete_manuscript_image(
     db.commit()
 
     return {"success": True}
+
+
+# ============================================================================
+# CHAPTER ASSETS
+# ============================================================================
+
+@router.post("/{project_id}/chapter/{chapter_id}", response_model=ChapterAssetResponse)
+async def link_asset_to_chapter(
+    project_id: UUID,
+    chapter_id: UUID,
+    request: ChapterAssetCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Link a scene asset to a chapter"""
+    # Verify project ownership
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Verify asset exists and belongs to project
+    asset = db.query(Asset).filter(
+        Asset.id == UUID(request.asset_id),
+        Asset.project_id == project_id
+    ).first()
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    # Check if link already exists
+    existing = db.query(ChapterAsset).filter(
+        ChapterAsset.chapter_id == chapter_id,
+        ChapterAsset.asset_id == UUID(request.asset_id)
+    ).first()
+    if existing:
+        # Return existing link instead of error
+        return ChapterAssetResponse(
+            id=str(existing.id),
+            chapter_id=str(existing.chapter_id),
+            asset_id=str(existing.asset_id),
+            created_at=cast(datetime, existing.created_at),
+            asset=_asset_to_response(asset)
+        )
+
+    # Create link
+    link = ChapterAsset(
+        id=uuid4(),
+        chapter_id=chapter_id,
+        asset_id=UUID(request.asset_id)
+    )
+    db.add(link)
+    db.commit()
+    db.refresh(link)
+
+    return ChapterAssetResponse(
+        id=str(link.id),
+        chapter_id=str(link.chapter_id),
+        asset_id=str(link.asset_id),
+        created_at=cast(datetime, link.created_at),
+        asset=_asset_to_response(asset)
+    )
+
+
+@router.delete("/{project_id}/chapter/{chapter_id}/{asset_id}")
+async def unlink_asset_from_chapter(
+    project_id: UUID,
+    chapter_id: UUID,
+    asset_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Remove asset link from a chapter"""
+    # Verify project ownership
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    link = db.query(ChapterAsset).filter(
+        ChapterAsset.chapter_id == chapter_id,
+        ChapterAsset.asset_id == asset_id
+    ).first()
+    if not link:
+        raise HTTPException(status_code=404, detail="Link not found")
+
+    db.delete(link)
+    db.commit()
+
+    return {"success": True}
+
+
+@router.get("/{project_id}/chapter/{chapter_id}/assets", response_model=ChapterAssetsResponse)
+async def get_chapter_assets(
+    project_id: UUID,
+    chapter_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get all assets linked to a chapter"""
+    # Verify project ownership
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Get all linked assets
+    links = db.query(ChapterAsset).filter(
+        ChapterAsset.chapter_id == chapter_id
+    ).order_by(ChapterAsset.created_at).all()
+
+    responses = []
+    for link in links:
+        asset = db.query(Asset).filter(Asset.id == link.asset_id).first()
+        if asset:
+            responses.append(ChapterAssetResponse(
+                id=str(link.id),
+                chapter_id=str(link.chapter_id),
+                asset_id=str(link.asset_id),
+                created_at=cast(datetime, link.created_at),
+                asset=_asset_to_response(asset)
+            ))
+
+    return ChapterAssetsResponse(assets=responses)

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { ContentPart } from '../llm_request/types';
+import type { ContentPart } from '../llm/requestTypes';
 import './ThinkingDisplay.css';
 
 interface ThinkingDisplayProps {

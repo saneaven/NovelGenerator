@@ -16,6 +16,7 @@ interface ImageInsertMenuProps {
   onUpload: (file: File) => void;
   onBrowseFiles: () => void;
   onGenerateImage: () => void;
+  onManageSceneAssets?: () => void;
   anchorRef: React.RefObject<HTMLElement | null>;
 }
 
@@ -25,6 +26,7 @@ export function ImageInsertMenu({
   onUpload,
   onBrowseFiles,
   onGenerateImage,
+  onManageSceneAssets,
   anchorRef,
 }: ImageInsertMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -120,6 +122,12 @@ export function ImageInsertMenu({
     onClose();
   }, [onGenerateImage, onClose]);
 
+  // Handle manage scene assets button click
+  const handleManageClick = useCallback(() => {
+    onManageSceneAssets?.();
+    onClose();
+  }, [onManageSceneAssets, onClose]);
+
   if (!isOpen) return null;
 
   return (
@@ -170,6 +178,19 @@ export function ImageInsertMenu({
           <span className="action-icon">✨</span>
           <span className="action-label">Generate with AI</span>
         </button>
+        {onManageSceneAssets && (
+          <>
+            <div className="image-insert-action-divider" />
+            <button
+              type="button"
+              className="image-insert-action-btn manage"
+              onClick={handleManageClick}
+            >
+              <span className="action-icon">📂</span>
+              <span className="action-label">Manage Scene Assets</span>
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

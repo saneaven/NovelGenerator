@@ -12,6 +12,8 @@ export interface ReferenceObjectData {
     name: string;
 }
 
+export type AssetType = 'scene' | 'object' | null;
+
 export interface Asset {
     id: string;
     project_id: string;
@@ -19,6 +21,7 @@ export interface Asset {
     file_path: string;
     thumbnail_path: string | null;
     mime_type: string;
+    asset_type: AssetType;  // 'scene', 'object', or null
     // Prompts stored separately by provider type
     generation_prompt: string | null;  // Natural language prompt (OpenAI, Gemini, xAI)
     generation_positive_prompt: string | null;  // Positive prompt for tag-based (NovelAI)
@@ -55,6 +58,35 @@ export interface StoryObjectAsset {
 export interface StoryObjectAssetsResponse {
     assets: StoryObjectAsset[];
     main_asset: StoryObjectAsset | null;
+}
+
+// Chapter Asset types (for scene asset tracking)
+export interface ChapterInfo {
+    id: string;
+    name: string;
+    act_name: string | null;
+}
+
+export interface ChapterAsset {
+    id: string;
+    chapter_id: string;
+    asset_id: string;
+    created_at: string;
+    asset: Asset;
+}
+
+export interface ChapterAssetsResponse {
+    assets: ChapterAsset[];
+}
+
+export interface SceneAsset extends Omit<Asset, 'generation_settings' | 'generation_reference_objects'> {
+    used_in_chapters: ChapterInfo[];
+    usage_count: number;
+}
+
+export interface SceneAssetsResponse {
+    assets: SceneAsset[];
+    total: number;
 }
 
 export type PromptType = 'natural' | 'tag_based';
@@ -105,6 +137,9 @@ export interface ImageGenerationRequest {
 
     // Reference objects used (stored in Asset metadata)
     reference_objects?: ReferenceObject[];
+
+    // Asset type for categorization ('scene' from SceneImageGeneratorModal, 'object' from AssetManager)
+    asset_type?: 'scene' | 'object';
 }
 
 export interface ImageGenerationResponse {
@@ -165,11 +200,19 @@ export const assetService = {
     /**
      * Upload an image asset
      */
-    async uploadAsset(projectId: string, file: File, name?: string): Promise<Asset> {
+    async uploadAsset(
+        projectId: string,
+        file: File,
+        name?: string,
+        assetType?: 'scene' | 'object'
+    ): Promise<Asset> {
         const formData = new FormData();
         formData.append('file', file);
         if (name) {
             formData.append('name', name);
+        }
+        if (assetType) {
+            formData.append('asset_type', assetType);
         }
         return apiClient.postFormData<Asset>(`/api/v1/assets/${projectId}/upload`, formData);
     },
@@ -252,6 +295,53 @@ export const assetService = {
     ): Promise<void> {
         await apiClient.delete<void>(
             `/api/v1/assets/${projectId}/object/${objectType}/${objectId}/${linkId}`
+        );
+    },
+
+    // Scene Assets
+
+    /**
+     * List all scene assets with chapter usage information
+     */
+    async listSceneAssets(projectId: string): Promise<SceneAssetsResponse> {
+        return apiClient.get<SceneAssetsResponse>(`/api/v1/assets/${projectId}/scene`);
+    },
+
+    // Chapter Assets
+
+    /**
+     * Get all assets linked to a chapter
+     */
+    async getChapterAssets(projectId: string, chapterId: string): Promise<ChapterAssetsResponse> {
+        return apiClient.get<ChapterAssetsResponse>(
+            `/api/v1/assets/${projectId}/chapter/${chapterId}/assets`
+        );
+    },
+
+    /**
+     * Link an asset to a chapter
+     */
+    async linkAssetToChapter(
+        projectId: string,
+        chapterId: string,
+        assetId: string
+    ): Promise<ChapterAsset> {
+        return apiClient.post<ChapterAsset>(
+            `/api/v1/assets/${projectId}/chapter/${chapterId}`,
+            { asset_id: assetId }
+        );
+    },
+
+    /**
+     * Unlink an asset from a chapter
+     */
+    async unlinkAssetFromChapter(
+        projectId: string,
+        chapterId: string,
+        assetId: string
+    ): Promise<void> {
+        await apiClient.delete<void>(
+            `/api/v1/assets/${projectId}/chapter/${chapterId}/${assetId}`
         );
     },
 };

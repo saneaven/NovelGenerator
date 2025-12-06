@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { type FunctionAIConfig, type ProviderType, type AIFunctionType, type ProviderCredentials } from '../store/settingsStore';
-import { fetchModels } from '../llm_request/llmService';
+import { fetchModels } from '../llm/llmService';
 
 interface FunctionMetadata {
     label: string;

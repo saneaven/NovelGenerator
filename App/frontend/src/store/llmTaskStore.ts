@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ContentPart, FunctionCallProgress } from '../llm_request/types';
+import type { ContentPart, FunctionCallProgress } from '../llm/requestTypes';
 
 export type TaskSessionStatus = 'idle' | 'running' | 'success' | 'error' | 'cancelled';
 

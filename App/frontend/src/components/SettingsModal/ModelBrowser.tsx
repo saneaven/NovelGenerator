@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { ProviderType, ProviderPreference, ProviderCredentials } from '../../store/settingsStore';
-import { fetchModels, fetchModelEndpoints } from '../../llm_request/llmService';
+import { fetchModels, fetchModelEndpoints } from '../../llm/llmService';
 
 interface ModelBrowserProps {
   provider: ProviderType;

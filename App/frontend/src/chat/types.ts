@@ -1,93 +1,63 @@
-import type { ConversationBlock, ChatMessage, ContentPart, FunctionCallMetadata } from '../llm_request/types';
-import type { FunctionCallSchema } from './types/functionCalling';
-import type {
-  ChatSystemPromptContext,
-  TranslationPromptContext,
-  StoryObjectEditPromptContext,
-  ChapterEditPromptContext,
-  ObjectImagePromptContext,
-  SceneImagePromptContext,
-} from './managers/SystemPromptManager';
-import type { ThinkingConfig } from '../store/settingsStore';
+import type { ChatMessage, ContentPart, FunctionCallMetadata } from '../llm/requestTypes';
 
-// Extend existing ChatMessage for pipeline processing
+/**
+ * Extended ChatMessage for display processing
+ */
 export interface ProcessedChatMessage extends ChatMessage {
   originalContent?: string;
   originalContentParts?: ContentPart[];
 }
 
-// System insertion mode for AI context
+/**
+ * System insert configuration for chat context
+ */
 export interface SystemInsertConfig {
   enabled: boolean;
   includeProjectInfo: boolean;
   includeStoryObjects: boolean;
   includeNovelContent: boolean;
-  // Prompt type category - all prompts are treated uniformly as categories
-  promptType?: 'chat' | 'translation' | 'story_object_edit' | 'chapter_edit' | 'objectImagePrompt' | 'sceneImagePrompt';
-  promptContext?: ChatSystemPromptContext | TranslationPromptContext | StoryObjectEditPromptContext | ChapterEditPromptContext | ObjectImagePromptContext | SceneImagePromptContext;
 }
 
-// Pipeline processing interfaces
-export interface PreProcessingResult {
-  conversationBlocks: ConversationBlock[];
-  processedMessages: ProcessedChatMessage[];
-  functions?: FunctionCallSchema[]; // For OpenAI function calling
-}
-
-export interface PostProcessingResult {
-  message: ProcessedChatMessage;
-}
-
+/**
+ * Result of display processing
+ */
 export interface DisplayProcessingResult {
   displayContent: React.ReactNode;
   editCards: EditCard[];
 }
 
-// Edit card for display
+/**
+ * Edit card for displaying function call results
+ */
 export interface EditCard {
   id: string;
   type: string | 'system';
   title: string;
   description: string;
   isApplied: boolean;
-  isRejected?: boolean; // True if user explicitly rejected this card
+  isRejected?: boolean;
   data: any;
-  editTagData?: any; // Store the full edit tag data for direct access
-  appliedAt?: Date; // When the card was applied
-  functionCall?: FunctionCallMetadata; // Reference to the original function call metadata
-  onApply?: () => void; // Optional - not needed when using grouped card
-  onReject?: () => void; // Optional - not needed when using grouped card
+  editTagData?: any;
+  appliedAt?: Date;
+  functionCall?: FunctionCallMetadata;
+  onApply?: () => void;
+  onReject?: () => void;
 }
 
-// LLM request pipeline context
+/**
+ * Context for display processing (simplified - most fields unused)
+ */
 export interface LLMRequestPipelineContext {
   projectId: string;
-  storyObjects: any; // Simplified story objects from store
+  storyObjects: any;
   systemInsertConfig: SystemInsertConfig;
-  novelData?: any; // Novel content data
-  mode: 'novelEditor' | 'workspace'; // Explicit mode distinction
-  enablePrefill?: boolean; // Enable assistant prefill at the end
-  thinkingMode?: 'off' | 'model' | 'custom'; // Thinking mode: off, model-native thinking, or custom prompt-based
-  thinkingConfig?: ThinkingConfig;
+  novelData?: any;
+  mode: 'novelEditor' | 'workspace';
 }
 
-// Pipeline processor interfaces
-export interface PreProcessor {
-  process(
-    messages: ChatMessage[],
-    context: LLMRequestPipelineContext,
-    conversationLanguage?: string,
-    functions?: FunctionCallSchema[]
-  ): Promise<PreProcessingResult>;
-}
-
-export interface PostProcessor {
-  process(
-    aiResponse: string | { content: string | null; tool_calls?: any[] },
-    context: LLMRequestPipelineContext
-  ): PostProcessingResult;
-}
-
+/**
+ * Display processor interface
+ */
 export interface DisplayProcessor {
   process(
     message: ProcessedChatMessage,

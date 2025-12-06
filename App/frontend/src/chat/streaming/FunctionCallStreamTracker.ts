@@ -4,8 +4,8 @@ import type {
   FunctionCallOperationPreview,
   FunctionCallProgress,
   FunctionCallProgressStatus,
-} from '../../llm_request/types';
-import type { FunctionCallSchema } from '../types/functionCalling';
+} from '../../llm/requestTypes';
+import type { FunctionCallSchema } from '../../llm/schemas/functionCalling';
 import { buildPreviewFromOperation } from '../utils/functionCallPreview';
 
 type ToolCallDelta = {

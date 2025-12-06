@@ -1,11 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { LLMRequestPipeline } from '../chat/LLMRequestPipeline';
 import type { SystemInsertConfig, EditCard } from '../chat/types';
 import { ChatManager, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
 import { DefaultDisplayProcessor } from '../chat/processors/DisplayProcessor';
 import { areEditCardMapsEqual } from '../chat/utils/editCardUtils';
-import { WORKSPACE_FUNCTIONS } from '../chat/types/functionCalling';
+import { WORKSPACE_FUNCTIONS } from '../llm/schemas/functionCalling';
 import { useChatStore } from '../store/chatStore';
 import { useChatUIStore } from '../store/chatUIStore';
 import { useProjectStore } from '../store/projectStore';
@@ -24,7 +23,7 @@ import StoryPanel from './workspace/components/StoryPanel';
 import { useWorkspaceState } from './workspace/hooks/useWorkspaceState';
 import { useChatHandlers } from './workspace/hooks/useChatHandlers';
 import { useFunctionCallHandlers } from './workspace/hooks/useFunctionCallHandlers';
-import { BackendError } from '../llm_request/llmService';
+import { BackendError } from '../llm/llmService';
 
 import './Workspace.css';
 import './workspace/styles/ChatPanel.css';
@@ -136,10 +135,12 @@ const Workspace: React.FC = () =>
         }
     }, [projectId, projects.length, fetchProjects]);
 
-    const [systemInsertConfig, setSystemInsertConfig] = useState<SystemInsertConfig>(
-        LLMRequestPipeline.createDefaultSystemConfig()
-    );
-    const chatPipeline = useMemo(() => new LLMRequestPipeline(), []);
+    const [systemInsertConfig, setSystemInsertConfig] = useState<SystemInsertConfig>({
+        enabled: true,
+        includeProjectInfo: true,
+        includeStoryObjects: true,
+        includeNovelContent: false,
+    });
     const displayProcessor = useMemo(() => new DefaultDisplayProcessor(), []);
     const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -197,10 +198,7 @@ const Workspace: React.FC = () =>
         return new ChatManager(
             {
                 projectId: activeProjectId,
-                // Use story objects with main language for chat context
                 getStoryObjects: () => storyObjects,
-                systemInsertConfig,
-                chatPipeline,
                 getIsLoading: () => chatUI.isLoading(activeProjectId),
                 setIsLoading: (loading: boolean) => chatUI.setLoading(activeProjectId, loading),
                 abortControllerRef,
@@ -214,7 +212,6 @@ const Workspace: React.FC = () =>
                 temperature: chatFunctionConfig.temperature,
                 provider: chatFunctionConfig.provider,
                 providerConfig: providerCredentials[chatFunctionConfig.provider],
-                providerPreference: chatFunctionConfig.providerPreference,
                 functions: WORKSPACE_FUNCTIONS,
                 mode: 'workspace',
                 enablePrefill: chatFunctionConfig.advanced.enablePrefill,
@@ -222,16 +219,16 @@ const Workspace: React.FC = () =>
                 thinkingConfig: chatFunctionConfig.advanced.thinkingConfig,
                 retryConfig: settings.retryConfig,
                 sessionId: chatSessionId,
+                getPendingFunctionCallResults: () => pendingFunctionCallResults,
             },
             chatManagerCallbacks
         );
     }, [
         projectId,
         storyObjects,
-        systemInsertConfig,
-        chatPipeline,
         // Note: chatUI is intentionally excluded - it's accessed via closures and
         // including it causes ChatManager recreation during streaming state changes
+        // pendingFunctionCallResults is also excluded - accessed via getter function
         mainLanguage,
         chatFunctionConfig,
         providerCredentials,
@@ -306,12 +303,12 @@ const Workspace: React.FC = () =>
 
         messages.forEach(message =>
         {
-            const processed = displayProcessor.process(message, {
+            const processed = displayProcessor.process(message as any, {
                 projectId,
                 storyObjects,
                 systemInsertConfig,
                 mode: 'workspace',
-            });
+            } as any);
 
             if (processed.editCards.length > 0)
             {
@@ -450,7 +447,6 @@ const Workspace: React.FC = () =>
                     projectId={projectId ?? ''}
                     systemInsertConfig={systemInsertConfig}
                     setSystemInsertConfig={setSystemInsertConfig}
-                    chatPipeline={chatPipeline}
                     storyObjects={storyObjects as unknown as import('../types/storyObject').StoryObjects}
                     messageEditCards={messageEditCards}
                     activeFunctionCalls={activeFunctionCalls}

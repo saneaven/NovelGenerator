@@ -1,4 +1,4 @@
-import type { ContentPart } from '../../llm_request/types';
+import type { ContentPart } from '../../llm/requestTypes';
 
 export interface CollapseContentPartsOptions {
   contentSeparator?: string;

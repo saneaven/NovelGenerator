@@ -3,7 +3,7 @@ import { useChatStore } from '../../../store/chatStore';
 import { useChatUIStore } from '../../../store/chatUIStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
-import type { ChatMessage, FunctionCallResultSummary } from '../../../llm_request/types';
+import type { ChatMessage, FunctionCallResultSummary } from '../../../llm/requestTypes';
 import type { ChatManager } from '../../../chat/processors/ChatManager';
 import type { ContentPart } from '../../../api/types';
 import { generateTempId } from '../../../utils/tempId';

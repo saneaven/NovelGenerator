@@ -5,7 +5,7 @@ import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { NovelEditorFunctionCallApplicator } from '../services/NovelEditorFunctionCallApplicator';
 import { NovelEditorFunctionCallService } from '../services/NovelEditorFunctionCallService';
-import type { FunctionCallMetadata, FunctionCallResultSummary, FunctionCallProgress } from '../../../llm_request/types';
+import type { FunctionCallMetadata, FunctionCallResultSummary, FunctionCallProgress } from '../../../llm/requestTypes';
 import type { EditCard } from '../../../chat/types';
 
 export function useNovelEditorFunctionCallHandlers(

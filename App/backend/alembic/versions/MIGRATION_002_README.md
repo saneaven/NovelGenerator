@@ -18,7 +18,7 @@ This migration moves the global `enable_prefill` and `enable_thinking` settings 
       "temperature": 0.7
     },
     "translation": {...},
-    "storyEdit": {...},
+    "storyObjectEdit": {...},
     "chapterGen": {...}
   }
 }

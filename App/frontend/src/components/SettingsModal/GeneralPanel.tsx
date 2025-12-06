@@ -7,7 +7,7 @@ interface GeneralPanelProps {
   functionConfigs: {
     chat: FunctionAIConfig;
     translation: FunctionAIConfig;
-    storyEdit: FunctionAIConfig;
+    storyObjectEdit: FunctionAIConfig;
     chapterGen: FunctionAIConfig;
     imagePrompt: FunctionAIConfig;
   };
@@ -20,7 +20,7 @@ interface GeneralPanelProps {
 const FUNCTION_LABELS = {
   chat: { icon: '💬', label: 'Chat' },
   translation: { icon: '🌐', label: 'Translation' },
-  storyEdit: { icon: '✏️', label: 'Object Edit' },
+  storyObjectEdit: { icon: '✏️', label: 'Story Object Edit' },
   chapterGen: { icon: '📝', label: 'Chapter Gen' },
   imagePrompt: { icon: '🎨', label: 'Image Prompt' },
 };
@@ -28,7 +28,7 @@ const FUNCTION_LABELS = {
 const FUNCTION_DESCRIPTIONS = {
   chat: 'General conversation and assistance for story planning and brainstorming',
   translation: 'Accurate language translation with context preservation',
-  storyEdit: 'Structured editing and refinement of story elements',
+  storyObjectEdit: 'Structured editing and refinement of story elements',
   chapterGen: 'Creative generation of novel chapters and narrative content',
   imagePrompt: 'AI-assisted generation of detailed image prompts from story context',
 };

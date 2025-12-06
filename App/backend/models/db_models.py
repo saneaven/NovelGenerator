@@ -52,7 +52,7 @@ class UserSettings(Base):
     function_configs = Column(JSONB, nullable=False, server_default="""{
         "chat": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
         "translation": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.2, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
-        "storyEdit": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.3, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
+        "storyObjectEdit": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.3, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
         "chapterGen": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "advanced": {"enablePrefill": true, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}}
     }""")
 
@@ -119,7 +119,7 @@ class PromptVersion(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
 
     # Prompt identification
-    function_type = Column(String(50), nullable=False)  # 'chat', 'translation', 'storyEdit', 'chapterGen'
+    function_type = Column(String(50), nullable=False)  # 'chat', 'translation', 'storyObjectEdit', 'chapterGen'
     prompt_category = Column(String(50), nullable=False)  # 'systemPrompt', 'prefill', 'userMessageTag'
     prompt_name = Column(String(50), nullable=True)  # 'workspace', 'novelEditor', etc (nullable for single prompts)
 
@@ -415,6 +415,12 @@ class Asset(Base):
     thumbnail_path = Column(String(500), nullable=True)
     mime_type = Column(String(50), default='image/png', nullable=False)
 
+    # Asset type for categorization
+    # 'scene': Images from SceneImageGeneratorModal or Rich Editor upload
+    # 'object': Story Object images (linked via StoryObjectAsset)
+    # null: Uncategorized
+    asset_type = Column(String(20), nullable=True, index=True)
+
     # Generation metadata - prompts are stored separately by type
     # Natural language providers (OpenAI, Gemini, xAI): use generation_prompt only
     # Tag-based providers (NovelAI): use generation_positive_prompt and generation_negative_prompt only
@@ -438,6 +444,7 @@ class Asset(Base):
     project = relationship("Project", back_populates="assets")
     story_object_assets = relationship("StoryObjectAsset", back_populates="asset", cascade="all, delete-orphan")
     manuscript_images = relationship("ManuscriptImage", back_populates="asset", cascade="all, delete-orphan")
+    chapter_assets = relationship("ChapterAsset", back_populates="asset", cascade="all, delete-orphan")
 
 
 class StoryObjectAsset(Base):
@@ -462,6 +469,25 @@ class StoryObjectAsset(Base):
 
     __table_args__ = (
         Index('idx_story_object_asset', 'object_type', 'object_id'),
+    )
+
+
+class ChapterAsset(Base):
+    """Links scene assets to chapters (many-to-many) for tracking usage"""
+    __tablename__ = 'chapter_assets'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    chapter_id = Column(UUID(as_uuid=True), ForeignKey('chapters.id', ondelete='CASCADE'), nullable=False, index=True)
+    asset_id = Column(UUID(as_uuid=True), ForeignKey('assets.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    asset = relationship("Asset", back_populates="chapter_assets")
+    chapter = relationship("Chapter")
+
+    __table_args__ = (
+        Index('idx_chapter_asset', 'chapter_id', 'asset_id', unique=True),
     )
 
 

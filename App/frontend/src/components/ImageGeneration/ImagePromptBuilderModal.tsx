@@ -1,369 +1,272 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import { LLMRequestManager } from '../../chat/sessions/LLMRequestManager';
-import { LLMRequestPipeline } from '../../chat/LLMRequestPipeline';
-import type { ObjectImagePromptContext } from '../../chat/managers/SystemPromptManager';
-import { OBJECT_IMAGE_PROMPT_FUNCTION } from '../../chat/types/imagePromptFunctionSchemas';
 import { useLLMToast } from '../../hooks/useLLMToast';
+import { LLMTask, LLMTaskMode, type ObjectImagePromptContext } from '../../llm';
 import './ImagePromptBuilderModal.css';
 
 interface TargetObject {
-    id: string;
-    name: string;
-    description: string;
+  id: string;
+  name: string;
+  description: string;
 }
 
 export type PromptMode = 'natural' | 'positive' | 'negative';
 
 interface ImagePromptBuilderModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    onPromptGenerated: (prompt: string) => void;
-    objectType: 'character' | 'location' | 'organization' | 'lorebook';
-    objectId: string;
-    /** Which type of prompt is being generated: natural (OpenAI/Gemini/xAI), positive tags, or negative tags (NovelAI) */
-    promptMode?: PromptMode;
-    defaultUserRequest?: string;
+  isOpen: boolean;
+  onClose: () => void;
+  onPromptGenerated: (prompt: string) => void;
+  objectType: 'character' | 'location' | 'organization' | 'lorebook';
+  objectId: string;
+  promptMode?: PromptMode;
+  defaultUserRequest?: string;
 }
 
 const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
-    isOpen,
-    onClose,
-    onPromptGenerated,
-    objectType,
-    objectId,
-    promptMode = 'natural',
-    defaultUserRequest,
+  isOpen,
+  onClose,
+  onPromptGenerated,
+  objectType,
+  objectId,
+  promptMode = 'natural',
+  defaultUserRequest,
 }) => {
-    const { settings } = useSettingsStore();
-    const unifiedStore = useUnifiedObjectStore();
+  const { settings } = useSettingsStore();
+  const unifiedStore = useUnifiedObjectStore();
 
-    // Main input
-    const [userRequest, setUserRequest] = useState(defaultUserRequest || '');
+  const [userRequest, setUserRequest] = useState(defaultUserRequest || '');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedPrompt, setGeneratedPrompt] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
-    // Session ID for toast and streaming
-    const sessionId = `image-prompt-${objectId}`;
+  const sessionId = `image-prompt-${objectId}`;
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const taskRef = useRef<LLMTask | null>(null);
 
-    // Toast notification for LLM requests
-    const { startTask, completeSuccess, completeError } = useLLMToast({
-        sessionId,
-        taskType: 'image-prompt',
-        label: 'Image Prompt Generation',
+  const { startTask, completeSuccess, completeError } = useLLMToast({
+    sessionId,
+    taskType: 'image-prompt',
+    label: 'Image Prompt Generation',
+  });
+
+  const objectData = objectId ? unifiedStore.objects[objectId] : null;
+
+  const targetObject = useMemo((): TargetObject | null => {
+    if (!objectId || !objectData) return null;
+    const data = objectData.data[settings.mainLanguage] || Object.values(objectData.data)[0] || {};
+    return { id: objectData.id, name: data.name || '', description: data.description || '' };
+  }, [objectId, objectData, settings.mainLanguage]);
+
+  const savedPrompts = useMemo(() => {
+    if (!objectData?.metadata) return null;
+    return {
+      natural: objectData.metadata.image_prompt || null,
+      positive: objectData.metadata.image_prompt_positive || null,
+      negative: objectData.metadata.image_prompt_negative || null,
+    };
+  }, [objectData]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setUserRequest('');
+      setGeneratedPrompt('');
+      setError(null);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    return () => {
+      taskRef.current?.abort();
+    };
+  }, []);
+
+  const getContextTypeLabel = (): string => {
+    const labels: Record<string, string> = {
+      character: 'Character',
+      location: 'Location',
+      organization: 'Organization',
+      lorebook: 'Lorebook Entry',
+    };
+    return labels[objectType] || '';
+  };
+
+  const handleGenerate = useCallback(async () => {
+    setIsGenerating(true);
+    setError(null);
+    setGeneratedPrompt('');
+
+    startTask({
+      taskType: 'image-prompt',
+      modalProps: { objectType, objectId, onPromptGenerated, promptMode },
+      formState: { userRequest },
     });
 
-    // Generation state
-    const [isGenerating, setIsGenerating] = useState(false);
-    const [generatedPrompt, setGeneratedPrompt] = useState('');
-    const [error, setError] = useState<string | null>(null);
+    onClose();
 
-    const abortControllerRef = useRef<AbortController | null>(null);
-    const taskRunnerRef = useRef<LLMRequestManager | null>(null);
-
-    // Get the object data directly for proper dependency tracking
-    const objectData = objectId ? unifiedStore.objects[objectId] : null;
-
-    // Get target object from cache (synchronous - data is already loaded)
-    const targetObject = useMemo((): TargetObject | null => {
-        if (!objectId || !objectData) return null;
-        const data = objectData.data[settings.mainLanguage] || Object.values(objectData.data)[0] || {};
-        return {
-            id: objectData.id,
-            name: data.name || '',
-            description: data.description || '',
-        };
-    }, [objectId, objectData, settings.mainLanguage]);
-
-    // Get saved image prompts from object metadata
-    const savedPrompts = useMemo(() => {
-        if (!objectId || !objectData) return null;
-        if (!objectData.metadata) return null;
-        return {
-            natural: objectData.metadata.image_prompt || null,
-            positive: objectData.metadata.image_prompt_positive || null,
-            negative: objectData.metadata.image_prompt_negative || null,
-        };
-    }, [objectId, objectData]);
-
-    // Reset form state on close but DON'T abort running requests
-    useEffect(() => {
-        if (!isOpen) {
-            setUserRequest('');
-            setGeneratedPrompt('');
-            setError(null);
-        }
-    }, [isOpen]);
-
-    // Get context type label for header
-    const getContextTypeLabel = (): string => {
-        switch (objectType) {
-            case 'character': return 'Character';
-            case 'location': return 'Location';
-            case 'organization': return 'Organization';
-            case 'lorebook': return 'Lorebook Entry';
-            default: return '';
-        }
-    };
-
-    // Get native output mode setting
+    const imagePromptConfig = settings.functionConfigs.imagePrompt;
+    const providerConfig = settings.providerCredentials[imagePromptConfig.provider];
     const isNativeOutput = settings.nativeOutputMode;
 
-    // Build ObjectImagePromptContext for the pipeline
-    const buildObjectImagePromptContext = useCallback((): ObjectImagePromptContext => {
-        const objectInfo = targetObject
-            ? `**${targetObject.name}**\n${targetObject.description}`
-            : '';
-        return {
-            userRequest,
-            promptMode,
-            objectType,
-            objectInfo,
-            currentPrompt: savedPrompts?.natural || null,
-            currentPromptPositive: savedPrompts?.positive || null,
-            currentPromptNegative: savedPrompts?.negative || null,
-            isNativeOutput,
-        };
-    }, [userRequest, promptMode, objectType, targetObject, savedPrompts, isNativeOutput]);
+    const objectInfo = targetObject
+      ? `**${targetObject.name}**\n${targetObject.description}`
+      : '';
 
-    const handleGenerate = useCallback(async () => {
-        setIsGenerating(true);
-        setError(null);
-        setGeneratedPrompt('');
+    const promptContext: ObjectImagePromptContext = {
+      userInput: userRequest,
+      promptMode,
+      objectType,
+      objectInfo,
+      currentPrompt: savedPrompts?.natural || null,
+      currentPromptPositive: savedPrompts?.positive || null,
+      currentPromptNegative: savedPrompts?.negative || null,
+      isNativeOutput,
+      outputLanguage: settings.mainLanguage,
+      enablePrefill: imagePromptConfig.advanced.enablePrefill,
+      enableThinking: imagePromptConfig.advanced.thinkingMode === 'model',
+      enableCustomThinking: imagePromptConfig.advanced.thinkingMode === 'custom',
+    };
 
-        // Start toast notification with retry context
-        startTask({
-            taskType: 'image-prompt',
-            modalProps: {
-                objectType,
-                objectId,
-                onPromptGenerated,
-                promptMode,
-            },
-            formState: {
-                userRequest,
-            },
-        });
-
-        // Auto-close modal - request continues in background, toast shows progress
-        onClose();
-
-        const imagePromptConfig = settings.functionConfigs.imagePrompt;
-        const providerConfig = settings.providerCredentials[imagePromptConfig.provider];
-
-        try {
-            // Build systemInsertConfig for objectImagePrompt type
-            const systemInsertConfig = {
-                enabled: true,
-                includeProjectInfo: false,
-                includeStoryObjects: false,
-                includeNovelContent: false,
-                promptType: 'objectImagePrompt' as const,
-                promptContext: buildObjectImagePromptContext(),
-            };
-
-            // Create LLMRequestManager - conditionally use function calling based on native output mode
-            taskRunnerRef.current = new LLMRequestManager(
-                {
-                    projectId: '', // Not needed for image prompt generation
-                    getStoryObjects: () => ({}),
-                    systemInsertConfig,
-                    chatPipeline: new LLMRequestPipeline(),
-                    provider: imagePromptConfig.provider,
-                    providerConfig,
-                    aiModel: imagePromptConfig.model,
-                    temperature: imagePromptConfig.temperature,
-                    mode: 'workspace',
-                    enablePrefill: imagePromptConfig.advanced.enablePrefill,
-                    thinkingMode: imagePromptConfig.advanced.thinkingMode,
-                    thinkingConfig: imagePromptConfig.advanced.thinkingConfig,
-                    retryConfig: settings.retryConfig,
-                    abortControllerRef,
-                    // Function calling configuration - skip when in native output mode
-                    functions: isNativeOutput ? undefined : [OBJECT_IMAGE_PROMPT_FUNCTION],
-                    toolChoice: isNativeOutput ? undefined : 'required',
-                    sessionId,
-                },
-                {
-                    onStreamUpdate: () => {}, // Store is now updated by LLMRequestManager internally
-                    onFunctionCalls: isNativeOutput ? undefined : async (functionCalls) => {
-                        // Handle the function call response
-                        const call = functionCalls.find(c => c.function_name === 'generate_object_image_prompt');
-                        if (call && call.arguments) {
-                            try {
-                                // Arguments may be string or already parsed
-                                const args = typeof call.arguments === 'string'
-                                    ? JSON.parse(call.arguments)
-                                    : call.arguments;
-                                if (args.prompt) {
-                                    // Modal already closed - call callback directly
-                                    onPromptGenerated(args.prompt);
-                                    completeSuccess();
-                                }
-                            } catch (e) {
-                                console.error('Failed to parse function call arguments:', e);
-                                const errorMsg = 'Failed to parse generated prompt. Please try again.';
-                                setError(errorMsg);
-                                completeError(errorMsg);
-                            }
-                        }
-                    },
-                    onFinalMessage: (message) => {
-                        // In native mode, use text content directly
-                        // In function mode, this is a fallback if no function call was made
-                        const text = message.contentParts
-                            ?.filter(part => part.type === 'content')
-                            .map(part => part.text)
-                            .join('') || '';
-
-                        if (isNativeOutput) {
-                            // Native mode: use raw text output
-                            if (text.trim()) {
-                                // Modal already closed - call callback directly
-                                onPromptGenerated(text.trim());
-                                completeSuccess();
-                            } else {
-                                const errorMsg = 'AI did not generate a prompt. Please try again.';
-                                setError(errorMsg);
-                                completeError(errorMsg);
-                            }
-                        } else {
-                            // Function mode: fallback if no function call was made
-                            if (!message.functionCalls?.length) {
-                                if (text.trim()) {
-                                    // Modal already closed - call callback directly
-                                    onPromptGenerated(text.trim());
-                                    completeSuccess();
-                                } else {
-                                    const errorMsg = 'AI did not generate a prompt. Please try again.';
-                                    setError(errorMsg);
-                                    completeError(errorMsg);
-                                }
-                            }
-                        }
-                    },
-                    onError: (err) => {
-                        if (err.name === 'AbortError') {
-                            // Request was aborted - no action needed
-                            return;
-                        }
-                        console.error('Failed to generate image prompt:', err);
-                        const errorMsg = err.message || 'Failed to generate prompt';
-                        setError(errorMsg);
-                        completeError(errorMsg);
-                    },
+    try {
+      taskRef.current = new LLMTask(
+        {
+          mode: LLMTaskMode.OBJECT_IMAGE_PROMPT,
+          projectId: '',
+          promptContext,
+          abortControllerRef,
+          sessionId,
+          provider: imagePromptConfig.provider,
+          providerConfig,
+          model: imagePromptConfig.model,
+          temperature: imagePromptConfig.temperature,
+          thinkingMode: imagePromptConfig.advanced.thinkingMode as any,
+          thinkingConfig: imagePromptConfig.advanced.thinkingConfig,
+          retryConfig: settings.retryConfig,
+        },
+        {
+          onUpdate: () => {},
+          onComplete: (result) => {
+            if (isNativeOutput) {
+              const text = result.contentParts.filter(part => part.type === 'content').map(part => part.text).join('');
+              if (text.trim()) {
+                onPromptGenerated(text.trim());
+                completeSuccess();
+              } else {
+                const errorMsg = 'AI did not generate a prompt.';
+                setError(errorMsg);
+                completeError(errorMsg);
+              }
+            } else {
+              const call = result.functionCalls.find(c => c.function_name === 'generate_object_image_prompt');
+              if (call?.arguments) {
+                try {
+                  const args = typeof call.arguments === 'string' ? JSON.parse(call.arguments) : call.arguments;
+                  if (args.prompt) {
+                    onPromptGenerated(args.prompt);
+                    completeSuccess();
+                  }
+                } catch {
+                  const errorMsg = 'Failed to parse generated prompt.';
+                  setError(errorMsg);
+                  completeError(errorMsg);
                 }
-            );
-
-            // Run with no user message (context is in systemInsertConfig)
-            await taskRunnerRef.current.run(null, {
-                history: [],
-                language: settings.mainLanguage,
-            });
-        } catch (err) {
-            if (err instanceof Error && err.name === 'AbortError') {
-                // Request was aborted - no action needed
-                return;
+              } else {
+                const text = result.contentParts.filter(part => part.type === 'content').map(part => part.text).join('');
+                if (text.trim()) {
+                  onPromptGenerated(text.trim());
+                  completeSuccess();
+                } else {
+                  const errorMsg = 'AI did not generate a prompt.';
+                  setError(errorMsg);
+                  completeError(errorMsg);
+                }
+              }
             }
-            console.error('Failed to generate image prompt:', err);
-            const errorMsg = err instanceof Error ? err.message : 'Failed to generate prompt';
+          },
+          onError: (err) => {
+            if (err.name === 'AbortError') return;
+            const errorMsg = err.message || 'Failed to generate prompt';
             setError(errorMsg);
             completeError(errorMsg);
-        } finally {
-            setIsGenerating(false);
-            taskRunnerRef.current = null;
+          },
         }
-    }, [settings, buildObjectImagePromptContext, isNativeOutput, startTask, objectType, objectId, onPromptGenerated, promptMode, userRequest, completeSuccess, completeError, onClose]);
+      );
 
-    // Just close modal - don't abort (request continues in background)
-    const handleClose = () => {
-        onClose();
-    };
+      await taskRef.current.run();
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      const errorMsg = err instanceof Error ? err.message : 'Failed to generate prompt';
+      setError(errorMsg);
+      completeError(errorMsg);
+    } finally {
+      setIsGenerating(false);
+      taskRef.current = null;
+    }
+  }, [settings, targetObject, savedPrompts, promptMode, objectType, objectId, userRequest, sessionId, startTask, onPromptGenerated, completeSuccess, completeError, onClose]);
 
-    const handleUsePrompt = () => {
-        onPromptGenerated(generatedPrompt);
-        onClose();
-    };
+  const handleUsePrompt = () => {
+    onPromptGenerated(generatedPrompt);
+    onClose();
+  };
 
-    if (!isOpen) return null;
+  if (!isOpen) return null;
 
-    const contextLabel = getContextTypeLabel();
-
-    return (
-        <div className="modal-overlay" onClick={handleClose}>
-            <div className="modal-content image-prompt-builder-modal" onClick={e => e.stopPropagation()}>
-                <div className="modal-header">
-                    <h2>AI-Assisted Image Prompt Generator</h2>
-                    <button className="modal-close" onClick={handleClose}>&times;</button>
-                </div>
-
-                <div className="modal-body">
-                    {/* Context indicator - shows what object we're generating for */}
-                    <div className="context-indicator">
-                        <span className="context-type">{contextLabel}:</span>
-                        <span className="context-name">
-                            {targetObject?.name || 'Loading...'}
-                        </span>
-                    </div>
-
-                    {/* User Request */}
-                    <div className="form-group">
-                        <label htmlFor="user-request">What do you want to visualize?</label>
-                        <textarea
-                            id="user-request"
-                            value={userRequest}
-                            onChange={(e) => setUserRequest(e.target.value)}
-                            placeholder='e.g., "A dramatic portrait looking determined" or "The location at sunset with storm clouds approaching"'
-                            rows={3}
-                            disabled={isGenerating}
-                        />
-                    </div>
-
-                    {/* Generate Button */}
-                    <div className="generate-section">
-                        <button
-                            className="generate-button"
-                            onClick={handleGenerate}
-                            disabled={isGenerating}
-                        >
-                            {isGenerating ? 'Generating...' : 'Generate Prompt'}
-                        </button>
-                    </div>
-
-                    {/* Error Display */}
-                    {error && (
-                        <div className="error-message">{error}</div>
-                    )}
-
-                    {/* Generated Prompt Preview */}
-                    {generatedPrompt && (
-                        <div className="form-group generated-prompt-section">
-                            <label>Generated Prompt</label>
-                            <textarea
-                                value={generatedPrompt}
-                                onChange={(e) => setGeneratedPrompt(e.target.value)}
-                                rows={5}
-                                className="generated-prompt"
-                            />
-                        </div>
-                    )}
-                </div>
-
-                {/* Footer */}
-                <div className="modal-footer">
-                    <button onClick={handleClose} className="btn-secondary" disabled={isGenerating}>
-                        Cancel
-                    </button>
-                    <button
-                        onClick={handleUsePrompt}
-                        className="btn-primary"
-                        disabled={!generatedPrompt.trim() || isGenerating}
-                    >
-                        Use This Prompt
-                    </button>
-                </div>
-            </div>
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content image-prompt-builder-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>AI-Assisted Image Prompt Generator</h2>
+          <button className="modal-close" onClick={onClose}>x</button>
         </div>
-    );
+
+        <div className="modal-body">
+          <div className="context-indicator">
+            <span className="context-type">{getContextTypeLabel()}:</span>
+            <span className="context-name">{targetObject?.name || 'Loading...'}</span>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="user-request">What do you want to visualize?</label>
+            <textarea
+              id="user-request"
+              value={userRequest}
+              onChange={(e) => setUserRequest(e.target.value)}
+              placeholder='e.g., "A dramatic portrait looking determined"'
+              rows={3}
+              disabled={isGenerating}
+            />
+          </div>
+
+          <div className="generate-section">
+            <button className="generate-button" onClick={handleGenerate} disabled={isGenerating}>
+              {isGenerating ? 'Generating...' : 'Generate Prompt'}
+            </button>
+          </div>
+
+          {error && <div className="error-message">{error}</div>}
+
+          {generatedPrompt && (
+            <div className="form-group generated-prompt-section">
+              <label>Generated Prompt</label>
+              <textarea
+                value={generatedPrompt}
+                onChange={(e) => setGeneratedPrompt(e.target.value)}
+                rows={5}
+                className="generated-prompt"
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="modal-footer">
+          <button onClick={onClose} className="btn-secondary" disabled={isGenerating}>Cancel</button>
+          <button onClick={handleUsePrompt} className="btn-primary" disabled={!generatedPrompt.trim() || isGenerating}>
+            Use This Prompt
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export default ImagePromptBuilderModal;

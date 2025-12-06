@@ -19,6 +19,7 @@ export type {
     ImageProviderConfig,
     ReferenceImage,
     ReferenceObject,
+    ImageReferenceObject,
     ImageGenerationRequest,
     ProcessedImageRequest,
     ImageGenerationProgress,

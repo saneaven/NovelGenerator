@@ -7,7 +7,7 @@ import { getPromptKey } from '../types/prompts';
 
 // Types
 export type ProviderType = 'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom' | 'xai';
-export type AIFunctionType = 'chat' | 'translation' | 'storyEdit' | 'chapterGen' | 'imagePrompt';
+export type AIFunctionType = 'chat' | 'translation' | 'storyObjectEdit' | 'chapterGen' | 'imagePrompt';
 export type ImageProviderType = 'openai' | 'gemini' | 'xai' | 'novelai';
 export type PromptType = 'natural' | 'tag_based';
 export type ThemeMode = 'light' | 'dark' | 'system';
@@ -230,8 +230,8 @@ const defaultSettings: Settings = {
             },
         },
 
-        // Story Edit: Good at structured editing
-        storyEdit: {
+        // Story Object Edit: Good at structured editing
+        storyObjectEdit: {
             provider: 'openrouter',
             model: 'gpt-4o',
             temperature: 0.3,

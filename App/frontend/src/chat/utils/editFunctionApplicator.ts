@@ -5,7 +5,7 @@
 
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import type { FunctionCallMetadata } from '../../llm_request/types';
+import type { FunctionCallMetadata } from '../../llm/requestTypes';
 
 export interface FunctionApplicationResult {
   success: boolean;

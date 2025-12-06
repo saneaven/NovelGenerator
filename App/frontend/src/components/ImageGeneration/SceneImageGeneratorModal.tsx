@@ -26,13 +26,12 @@ import {
     listImageProviders,
     type ImageProviderType,
     type ImageGenerationRequest,
-    type ReferenceObject,
     type ReferenceImage,
+    type ImageReferenceObject,
 } from '../../imageGeneration';
 import type { PromptMode, PromptResult } from './ScenePromptAssistModal';
 import type { Asset, ImageProvider } from '../../api/assetService';
-import type { ImageReferenceObject } from '../../chat/managers/SystemPromptManager';
-import ObjectImagePickerModal from './ObjectImagePickerModal';
+import ReferenceImagePickerModal from './ReferenceImagePickerModal';
 import ScenePromptAssistModal from './ScenePromptAssistModal';
 import './SceneImageGeneratorModal.css';
 
@@ -44,12 +43,10 @@ interface SceneContext {
     postContext: string;
 }
 
-interface ReferenceObjectWithImage {
-    id: string;
-    type: StoryObjectType;
-    name: string;
-    selectedAssetId?: string;
-    selectedAssetUrl?: string;
+// Simplified reference image - just asset info, no object metadata
+interface ReferenceImageItem {
+    assetId: string;
+    thumbnailUrl: string;
 }
 
 interface SceneImageGeneratorModalProps {
@@ -58,20 +55,6 @@ interface SceneImageGeneratorModalProps {
     onImageGenerated: (asset: Asset) => void;
     sceneContext?: SceneContext;
 }
-
-const OBJECT_TYPE_LABELS: Record<StoryObjectType, string> = {
-    character: 'Character',
-    location: 'Location',
-    organization: 'Organization',
-    lorebook: 'Lorebook',
-};
-
-const OBJECT_TYPE_ICONS: Record<StoryObjectType, string> = {
-    character: '👤',
-    location: '📍',
-    organization: '🏢',
-    lorebook: '📖',
-};
 
 const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
     isOpen,
@@ -95,6 +78,7 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
                     file_path: result.asset.filePath,
                     thumbnail_path: result.asset.thumbnailPath,
                     mime_type: result.asset.mimeType,
+                    asset_type: 'scene',  // Scene images are always type 'scene'
                     generation_prompt: result.asset.generationPrompt,
                     generation_positive_prompt: result.asset.generationPositivePrompt,
                     generation_negative_prompt: result.asset.generationNegativePrompt,
@@ -174,16 +158,14 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
         return 'natural';
     }, [isTagBased, activePromptTab]);
 
-    // Reference objects with optional images
-    const [referenceObjects, setReferenceObjects] = useState<ReferenceObjectWithImage[]>([]);
+    // Reference images (simplified - just image references, no object metadata)
+    const [referenceImages, setReferenceImages] = useState<ReferenceImageItem[]>([]);
 
     // All story objects for AI prompt generation
     const [allStoryObjects, setAllStoryObjects] = useState<ImageReferenceObject[]>([]);
 
     // Sub-modal states
-    const [showObjectPicker, setShowObjectPicker] = useState(false);
     const [showImagePicker, setShowImagePicker] = useState(false);
-    const [imagePickerObjectId, setImagePickerObjectId] = useState<string | null>(null);
     const [showPromptAssistModal, setShowPromptAssistModal] = useState(false);
 
     // Load providers on mount
@@ -236,51 +218,21 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
         return currentProvider?.supports_image_input ?? false;
     }, [providers, provider]);
 
-    // Add reference object
-    const handleAddObject = useCallback((objectId: string, objectType: StoryObjectType, objectName: string) => {
-        if (referenceObjects.some(obj => obj.id === objectId)) return;
+    // Add reference image
+    const handleImageSelected = useCallback((assetId: string, thumbnailUrl: string) => {
+        // Avoid duplicates
+        if (referenceImages.some(img => img.assetId === assetId)) {
+            setShowImagePicker(false);
+            return;
+        }
 
-        setReferenceObjects(prev => [
-            ...prev,
-            { id: objectId, type: objectType, name: objectName }
-        ]);
-    }, [referenceObjects]);
-
-    // Remove reference object
-    const handleRemoveObject = useCallback((objectId: string) => {
-        setReferenceObjects(prev => prev.filter(obj => obj.id !== objectId));
-    }, []);
-
-    // Open image picker for an object
-    const handleSelectImage = useCallback((objectId: string) => {
-        setImagePickerObjectId(objectId);
-        setShowImagePicker(true);
-    }, []);
-
-    // Set selected image for object
-    const handleImageSelected = useCallback((assetId: string, assetUrl: string) => {
-        if (!imagePickerObjectId) return;
-
-        setReferenceObjects(prev =>
-            prev.map(obj =>
-                obj.id === imagePickerObjectId
-                    ? { ...obj, selectedAssetId: assetId, selectedAssetUrl: assetUrl }
-                    : obj
-            )
-        );
+        setReferenceImages(prev => [...prev, { assetId, thumbnailUrl }]);
         setShowImagePicker(false);
-        setImagePickerObjectId(null);
-    }, [imagePickerObjectId]);
+    }, [referenceImages]);
 
-    // Clear selected image for object
-    const handleClearImage = useCallback((objectId: string) => {
-        setReferenceObjects(prev =>
-            prev.map(obj =>
-                obj.id === objectId
-                    ? { ...obj, selectedAssetId: undefined, selectedAssetUrl: undefined }
-                    : obj
-            )
-        );
+    // Remove reference image
+    const handleRemoveImage = useCallback((assetId: string) => {
+        setReferenceImages(prev => prev.filter(img => img.assetId !== assetId));
     }, []);
 
     // Handler for AI prompt generation result from ScenePromptAssistModal
@@ -305,19 +257,10 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
         const hasPrompt = isTagBased ? positivePrompt.trim() : prompt.trim();
         if (!currentProjectId || !hasPrompt) return;
 
-        // Build reference images (only for objects that have selected images)
-        const referenceImagesData: ReferenceImage[] = referenceObjects
-            .filter(obj => obj.selectedAssetId)
-            .map(obj => ({
-                assetId: obj.selectedAssetId!,
-                strength: 0.7,
-            }));
-
-        // Build reference objects data for metadata
-        const referenceObjectsData: ReferenceObject[] = referenceObjects.map(obj => ({
-            id: obj.id,
-            type: obj.type,
-            name: obj.name,
+        // Build reference images data (simplified - just asset IDs)
+        const referenceImagesData: ReferenceImage[] = referenceImages.map(img => ({
+            assetId: img.assetId,
+            strength: 0.7,
         }));
 
         const request: ImageGenerationRequest = {
@@ -329,7 +272,6 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
             size: provider === 'gemini' ? undefined : size,
             aspectRatio: provider === 'gemini' ? geminiAspectRatio : undefined,
             resolution: provider === 'gemini' ? geminiResolution : undefined,
-            referenceObjects: referenceObjectsData.length > 0 ? referenceObjectsData : undefined,
             referenceImages: supportsImageInput && referenceImagesData.length > 0 ? referenceImagesData : undefined,
             // Style selection
             styleId: isTagBased ? selectedTagBasedStyleId : selectedNaturalStyleId,
@@ -341,6 +283,8 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
             steps: provider === 'novelai' ? novelaiSteps : undefined,
             scale: provider === 'novelai' ? novelaiScale : undefined,
             noiseSchedule: provider === 'novelai' ? novelaiNoiseSchedule : undefined,
+            // Asset type for scene images
+            assetType: 'scene',
         };
 
         await generate(request);
@@ -353,7 +297,7 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
             setPositivePrompt('');
             setNegativePrompt('');
             setActivePromptTab('positive');
-            setReferenceObjects([]);
+            setReferenceImages([]);
         }
     }, [isOpen]);
 
@@ -452,85 +396,45 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
                         )}
                     </div>
 
-                    {/* Reference Objects Section */}
+                    {/* Reference Images Section */}
                     <div className="form-section">
                         <div className="section-header">
-                            <label>Reference Objects</label>
+                            <label>Reference Images</label>
                             <button
                                 className="add-object-btn"
-                                onClick={() => setShowObjectPicker(true)}
+                                onClick={() => setShowImagePicker(true)}
                                 type="button"
+                                disabled={!supportsImageInput}
+                                title={supportsImageInput ? 'Add reference image' : 'Provider does not support image input'}
                             >
-                                + Add Object
+                                + Add Image
                             </button>
                         </div>
 
-                        {referenceObjects.length === 0 ? (
+                        {!supportsImageInput ? (
                             <div className="empty-objects">
-                                <span>No reference objects added</span>
-                                <span className="hint">Add characters, locations, or other story objects to include in generation</span>
+                                <span>Image references not supported</span>
+                                <span className="hint">{PROVIDER_LABELS[provider]} does not support image-to-image generation</span>
+                            </div>
+                        ) : referenceImages.length === 0 ? (
+                            <div className="empty-objects">
+                                <span>No reference images added</span>
+                                <span className="hint">Add images from your story objects or upload new ones</span>
                             </div>
                         ) : (
-                            <div className="reference-objects-list">
-                                {referenceObjects.map(obj => (
-                                    <div key={obj.id} className="reference-object-item">
-                                        <div className="object-info">
-                                            <span className="object-icon">{OBJECT_TYPE_ICONS[obj.type]}</span>
-                                            <span className="object-name">{obj.name}</span>
-                                            <span className="object-type">{OBJECT_TYPE_LABELS[obj.type]}</span>
-                                        </div>
-
-                                        <div className="object-image-section">
-                                            {obj.selectedAssetUrl ? (
-                                                <div className="selected-image">
-                                                    <img src={obj.selectedAssetUrl} alt={obj.name} />
-                                                    <div className="image-actions">
-                                                        <button
-                                                            className="change-image-btn"
-                                                            onClick={() => handleSelectImage(obj.id)}
-                                                            title="Change image"
-                                                        >
-                                                            🔄
-                                                        </button>
-                                                        <button
-                                                            className="clear-image-btn"
-                                                            onClick={() => handleClearImage(obj.id)}
-                                                            title="Remove image"
-                                                        >
-                                                            ✕
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <button
-                                                    className={`image-placeholder ${supportsImageInput ? '' : 'disabled'}`}
-                                                    onClick={() => supportsImageInput && handleSelectImage(obj.id)}
-                                                    title={supportsImageInput ? 'Select reference image' : 'Provider does not support image input'}
-                                                    disabled={!supportsImageInput}
-                                                >
-                                                    <span className="placeholder-icon">🖼️</span>
-                                                    <span className="placeholder-text">
-                                                        {supportsImageInput ? 'Add Image' : 'No image support'}
-                                                    </span>
-                                                </button>
-                                            )}
-                                        </div>
-
+                            <div className="reference-images-grid">
+                                {referenceImages.map(img => (
+                                    <div key={img.assetId} className="reference-image-item">
+                                        <img src={img.thumbnailUrl} alt="Reference" />
                                         <button
-                                            className="remove-object-btn"
-                                            onClick={() => handleRemoveObject(obj.id)}
-                                            title="Remove object"
+                                            className="remove-image-btn"
+                                            onClick={() => handleRemoveImage(img.assetId)}
+                                            title="Remove image"
                                         >
                                             ✕
                                         </button>
                                     </div>
                                 ))}
-                            </div>
-                        )}
-
-                        {!supportsImageInput && referenceObjects.length > 0 && (
-                            <div className="image-support-notice">
-                                <span>💡 {PROVIDER_LABELS[provider]} does not support image-to-image generation. Only object metadata will be used.</span>
                             </div>
                         )}
                     </div>
@@ -795,27 +699,13 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
                     </button>
                 </div>
 
-                {/* Object Picker Sub-modal */}
-                {showObjectPicker && (
-                    <ObjectPickerModal
-                        isOpen={showObjectPicker}
-                        onClose={() => setShowObjectPicker(false)}
-                        onSelect={handleAddObject}
-                        excludeIds={referenceObjects.map(obj => obj.id)}
-                    />
-                )}
-
-                {/* Image Picker Sub-modal */}
-                {showImagePicker && imagePickerObjectId && (
-                    <ObjectImagePickerModal
+                {/* Reference Image Picker Sub-modal */}
+                {showImagePicker && (
+                    <ReferenceImagePickerModal
                         isOpen={showImagePicker}
-                        onClose={() => {
-                            setShowImagePicker(false);
-                            setImagePickerObjectId(null);
-                        }}
-                        objectId={imagePickerObjectId}
-                        objectType={referenceObjects.find(obj => obj.id === imagePickerObjectId)?.type || 'character'}
+                        onClose={() => setShowImagePicker(false)}
                         onImageSelected={handleImageSelected}
+                        excludeAssetIds={referenceImages.map(img => img.assetId)}
                     />
                 )}
 
@@ -831,121 +721,6 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
                     />
                 )}
 
-            </div>
-        </div>
-    );
-};
-
-// Simple Object Picker Modal (inline)
-interface ObjectPickerModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    onSelect: (objectId: string, objectType: StoryObjectType, objectName: string) => void;
-    excludeIds: string[];
-}
-
-const ObjectPickerModal: React.FC<ObjectPickerModalProps> = ({
-    isOpen,
-    onClose,
-    onSelect,
-    excludeIds,
-}) => {
-    const { currentProjectId } = useProjectStore();
-    const { settings } = useSettingsStore();
-    const { listObjects } = useUnifiedObjectStore();
-    const [activeTab, setActiveTab] = useState<StoryObjectType>('character');
-    const [searchTerm, setSearchTerm] = useState('');
-    const [loadedObjects, setLoadedObjects] = useState<{ id: string; name: string }[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
-
-    useEffect(() => {
-        if (!isOpen || !currentProjectId) return;
-
-        const loadObjects = async () => {
-            setIsLoading(true);
-            try {
-                const objects = await listObjects(activeTab, currentProjectId);
-                const mappedObjects = objects.map(obj => {
-                    const mainLang = settings.mainLanguage;
-                    const data = obj.data[mainLang] || obj.data[Object.keys(obj.data)[0]] || {};
-                    return {
-                        id: obj.id,
-                        name: data.name || data.title || obj.id,
-                    };
-                });
-                setLoadedObjects(mappedObjects);
-            } catch (err) {
-                console.error('Failed to load objects:', err);
-                setLoadedObjects([]);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        loadObjects();
-    }, [isOpen, currentProjectId, activeTab, listObjects, settings.mainLanguage]);
-
-    const filteredObjects = useMemo(() => {
-        return loadedObjects.filter(obj =>
-            !excludeIds.includes(obj.id) &&
-            obj.name.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-    }, [loadedObjects, excludeIds, searchTerm]);
-
-    if (!isOpen) return null;
-
-    return (
-        <div className="object-picker-overlay" onClick={onClose}>
-            <div className="object-picker-modal" onClick={e => e.stopPropagation()}>
-                <div className="picker-header">
-                    <h3>Add Reference Object</h3>
-                    <button className="close-btn" onClick={onClose}>&times;</button>
-                </div>
-
-                <div className="picker-tabs">
-                    {(Object.keys(OBJECT_TYPE_LABELS) as StoryObjectType[]).map(type => (
-                        <button
-                            key={type}
-                            className={`picker-tab ${activeTab === type ? 'active' : ''}`}
-                            onClick={() => setActiveTab(type)}
-                        >
-                            {OBJECT_TYPE_ICONS[type]} {OBJECT_TYPE_LABELS[type]}
-                        </button>
-                    ))}
-                </div>
-
-                <div className="picker-search">
-                    <input
-                        type="text"
-                        placeholder={`Search ${OBJECT_TYPE_LABELS[activeTab].toLowerCase()}s...`}
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                </div>
-
-                <div className="picker-list">
-                    {isLoading ? (
-                        <div className="picker-empty">Loading...</div>
-                    ) : filteredObjects.length === 0 ? (
-                        <div className="picker-empty">
-                            No {OBJECT_TYPE_LABELS[activeTab].toLowerCase()}s found
-                        </div>
-                    ) : (
-                        filteredObjects.map(obj => (
-                            <button
-                                key={obj.id}
-                                className="picker-item"
-                                onClick={() => {
-                                    onSelect(obj.id, activeTab, obj.name);
-                                    onClose();
-                                }}
-                            >
-                                <span className="item-icon">{OBJECT_TYPE_ICONS[activeTab]}</span>
-                                <span className="item-name">{obj.name}</span>
-                            </button>
-                        ))
-                    )}
-                </div>
             </div>
         </div>
     );

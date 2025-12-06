@@ -36,29 +36,40 @@ def _load_prompt_file(relative_path: str) -> str:
 
 
 # Load all prompts from files
-_WORKSPACE_SYSTEM_PROMPT = _load_prompt_file('systemPrompts/WorkspaceSystemPrompt.md')
-_NOVEL_EDITOR_SYSTEM_PROMPT = _load_prompt_file('systemPrompts/NovelEditorSystemPrompt.md')
-_CHAT_PREFILL = _load_prompt_file('prefills/ChatPrefill.md')
-_TRANSLATION_SYSTEM_PROMPT_STORY = _load_prompt_file('systemPrompts/TranslationPrompt.md')
-_TRANSLATION_USER_PROMPT_STORY = _load_prompt_file('userPrompts/TranslationUserPrompt.md')
-_TRANSLATION_PREFILL_STORY = _load_prompt_file('prefills/TranslationPrefill.md')
-_TRANSLATION_SYSTEM_PROMPT_CHAT = _load_prompt_file('systemPrompts/ChatTranslationPrompt.md')
-_TRANSLATION_USER_PROMPT_CHAT = _load_prompt_file('userPrompts/ChatTranslationUserPrompt.md')
-_TRANSLATION_PREFILL_CHAT = _load_prompt_file('prefills/ChatTranslationPrefill.md')
-_STORY_EDIT_SYSTEM_PROMPT = _load_prompt_file('systemPrompts/StoryObjectEditPrompt.md')
-_STORY_EDIT_USER_PROMPT = _load_prompt_file('userPrompts/StoryObjectEditUserPrompt.md')
-_STORY_EDIT_PREFILL = _load_prompt_file('prefills/StoryObjectEditPrefill.md')
-_CHAPTER_EDIT_SYSTEM_PROMPT = _load_prompt_file('systemPrompts/ChapterEditPrompt.md')
-_CHAPTER_EDIT_USER_PROMPT = _load_prompt_file('userPrompts/ChapterEditUserPrompt.md')
-_CHAPTER_EDIT_PREFILL = _load_prompt_file('prefills/ChapterEditPrefill.md')
-_LAST_USER_MESSAGE_TAG = _load_prompt_file('userMessageSystemPrompts/LastUserMessageTag.md')
-_NON_LAST_USER_MESSAGE_TAG = _load_prompt_file('userMessageSystemPrompts/NonLastUserMessageTag.md')
-_OBJECT_IMAGE_PROMPT_SYSTEM_PROMPT = _load_prompt_file('systemPrompts/ObjectImagePromptSystemPrompt.md')
-_OBJECT_IMAGE_PROMPT_USER_PROMPT = _load_prompt_file('userPrompts/ObjectImagePromptUserPrompt.md')
-_OBJECT_IMAGE_PROMPT_PREFILL = _load_prompt_file('prefills/ObjectImagePromptPrefill.md')
-_SCENE_IMAGE_PROMPT_SYSTEM_PROMPT = _load_prompt_file('systemPrompts/SceneImagePromptSystemPrompt.md')
-_SCENE_IMAGE_PROMPT_USER_PROMPT = _load_prompt_file('userPrompts/SceneImagePromptUserPrompt.md')
-_SCENE_IMAGE_PROMPT_PREFILL = _load_prompt_file('prefills/SceneImagePromptPrefill.md')
+# Chat - Workspace
+_WORKSPACE_SYSTEM_PROMPT = _load_prompt_file('chat/workspace/systemPrompt.md')
+_WORKSPACE_USER_PROMPT = _load_prompt_file('chat/workspace/userPrompt.md')
+_WORKSPACE_NON_LAST_USER_PROMPT = _load_prompt_file('chat/workspace/nonLastUserPrompt.md')
+_WORKSPACE_PREFILL = _load_prompt_file('chat/workspace/prefill.md')
+# Chat - Novel Editor
+_NOVEL_EDITOR_SYSTEM_PROMPT = _load_prompt_file('chat/novelEditor/systemPrompt.md')
+_NOVEL_EDITOR_USER_PROMPT = _load_prompt_file('chat/novelEditor/userPrompt.md')
+_NOVEL_EDITOR_NON_LAST_USER_PROMPT = _load_prompt_file('chat/novelEditor/nonLastUserPrompt.md')
+_NOVEL_EDITOR_PREFILL = _load_prompt_file('chat/novelEditor/prefill.md')
+# Translation - Story
+_TRANSLATION_SYSTEM_PROMPT_STORY = _load_prompt_file('translation/story/systemPrompt.md')
+_TRANSLATION_USER_PROMPT_STORY = _load_prompt_file('translation/story/userPrompt.md')
+_TRANSLATION_PREFILL_STORY = _load_prompt_file('translation/story/prefill.md')
+# Translation - Chat
+_TRANSLATION_SYSTEM_PROMPT_CHAT = _load_prompt_file('translation/chat/systemPrompt.md')
+_TRANSLATION_USER_PROMPT_CHAT = _load_prompt_file('translation/chat/userPrompt.md')
+_TRANSLATION_PREFILL_CHAT = _load_prompt_file('translation/chat/prefill.md')
+# Story Object Edit
+_STORY_EDIT_SYSTEM_PROMPT = _load_prompt_file('storyObjectEdit/systemPrompt.md')
+_STORY_EDIT_USER_PROMPT = _load_prompt_file('storyObjectEdit/userPrompt.md')
+_STORY_EDIT_PREFILL = _load_prompt_file('storyObjectEdit/prefill.md')
+# Chapter Generation
+_CHAPTER_EDIT_SYSTEM_PROMPT = _load_prompt_file('chapterGen/systemPrompt.md')
+_CHAPTER_EDIT_USER_PROMPT = _load_prompt_file('chapterGen/userPrompt.md')
+_CHAPTER_EDIT_PREFILL = _load_prompt_file('chapterGen/prefill.md')
+# Image Prompt - Object
+_OBJECT_IMAGE_PROMPT_SYSTEM_PROMPT = _load_prompt_file('imagePrompt/object/systemPrompt.md')
+_OBJECT_IMAGE_PROMPT_USER_PROMPT = _load_prompt_file('imagePrompt/object/userPrompt.md')
+_OBJECT_IMAGE_PROMPT_PREFILL = _load_prompt_file('imagePrompt/object/prefill.md')
+# Image Prompt - Scene
+_SCENE_IMAGE_PROMPT_SYSTEM_PROMPT = _load_prompt_file('imagePrompt/scene/systemPrompt.md')
+_SCENE_IMAGE_PROMPT_USER_PROMPT = _load_prompt_file('imagePrompt/scene/userPrompt.md')
+_SCENE_IMAGE_PROMPT_PREFILL = _load_prompt_file('imagePrompt/scene/prefill.md')
 
 # Default prompts structure
 # Format matches the frontend structure: {function_type: {category: {name?: content}}}
@@ -68,10 +79,17 @@ DEFAULT_PROMPTS = {
             'workspace': _WORKSPACE_SYSTEM_PROMPT,
             'novelEditor': _NOVEL_EDITOR_SYSTEM_PROMPT,
         },
-        'prefill': _CHAT_PREFILL,
-        'userMessageTag': {
-            'lastMessage': _LAST_USER_MESSAGE_TAG,
-            'nonLastMessage': _NON_LAST_USER_MESSAGE_TAG,
+        'userPrompt': {
+            'workspace': _WORKSPACE_USER_PROMPT,
+            'novelEditor': _NOVEL_EDITOR_USER_PROMPT,
+        },
+        'nonLastUserPrompt': {
+            'workspace': _WORKSPACE_NON_LAST_USER_PROMPT,
+            'novelEditor': _NOVEL_EDITOR_NON_LAST_USER_PROMPT,
+        },
+        'prefill': {
+            'workspace': _WORKSPACE_PREFILL,
+            'novelEditor': _NOVEL_EDITOR_PREFILL,
         },
     },
     'translation': {
@@ -88,7 +106,7 @@ DEFAULT_PROMPTS = {
             'chat': _TRANSLATION_PREFILL_CHAT,
         },
     },
-    'storyEdit': {
+    'storyObjectEdit': {
         'systemPrompt': _STORY_EDIT_SYSTEM_PROMPT,
         'userPrompt': _STORY_EDIT_USER_PROMPT,
         'prefill': _STORY_EDIT_PREFILL,

@@ -1,4 +1,4 @@
-import type { FunctionCallMetadata } from '../../llm_request/types';
+import type { FunctionCallMetadata } from '../../llm/requestTypes';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import type { ObjectType, UnifiedObject } from '../../types/unifiedObject';
 import { useSettingsStore } from '../../store/settingsStore';

@@ -92,6 +92,11 @@ function processNaturalRequest(
         }));
     }
 
+    // Add asset type if provided
+    if (request.assetType) {
+        processed.asset_type = request.assetType;
+    }
+
     return processed;
 }
 
@@ -145,6 +150,11 @@ function processTagBasedRequest(
             type: ref.type,
             name: ref.name,
         }));
+    }
+
+    // Add asset type if provided
+    if (request.assetType) {
+        processed.asset_type = request.assetType;
     }
 
     return processed;

@@ -13,7 +13,7 @@ interface RetranslateModalProps {
   availableLanguages: string[];     // [mainLanguage, ...subLanguages] - for target options
   manuscriptLanguages?: string[];   // Languages that exist in the current version - for source options
   translationTimestamp: string | null;
-  onRetranslate: (sourceLanguage: string, targetLanguage: string, includePrevious: boolean, userInstructions: string) => void;
+  onRetranslate: (sourceLanguage: string, targetLanguage: string, includePrevious: boolean, userInput: string) => void;
   isTranslating: boolean;
 }
 
@@ -35,7 +35,7 @@ const RetranslateModal: React.FC<RetranslateModalProps> = ({
   const [sourceLanguage, setSourceLanguage] = useState(defaultSourceLanguage);
   const [targetLanguage, setTargetLanguage] = useState(defaultTargetLanguage);
   const [includePrevious, setIncludePrevious] = useState(true);
-  const [userInstructions, setUserInstructions] = useState('');
+  const [userInput, setUserInput] = useState('');
 
   // Version history languages (for checking if any version has target language)
   const [versionLanguages, setVersionLanguages] = useState<string[]>([]);
@@ -73,7 +73,7 @@ const RetranslateModal: React.FC<RetranslateModalProps> = ({
       setSourceLanguage(source);
       setTargetLanguage(target);
       setIncludePrevious(true);
-      setUserInstructions('');
+      setUserInput('');
     }
   }, [isOpen, defaultSourceLanguage, defaultTargetLanguage, availableLanguages]);
 
@@ -106,12 +106,12 @@ const RetranslateModal: React.FC<RetranslateModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onRetranslate(sourceLanguage, targetLanguage, includePrevious, userInstructions.trim());
+    onRetranslate(sourceLanguage, targetLanguage, includePrevious, userInput.trim());
   };
 
   const handleCancel = () => {
     if (!isTranslating) {
-      setUserInstructions('');
+      setUserInput('');
       setIncludePrevious(true);
       onClose();
     }
@@ -217,8 +217,8 @@ const RetranslateModal: React.FC<RetranslateModalProps> = ({
             <label htmlFor="user-instructions">✏️ Additional Instructions (Optional)</label>
             <textarea
               id="user-instructions"
-              value={userInstructions}
-              onChange={(e) => setUserInstructions(e.target.value)}
+              value={userInput}
+              onChange={(e) => setUserInput(e.target.value)}
               placeholder="e.g., Make it more formal, Fix grammar issues, Use simpler vocabulary, Improve readability"
               rows={4}
               disabled={isTranslating}
