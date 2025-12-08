@@ -78,24 +78,6 @@ export const templateEditorTheme = EditorView.theme({
     outline: '1px solid var(--color-border-subtle)',
   },
 
-  // Scrollbar styling
-  '&::-webkit-scrollbar': {
-    width: '8px',
-    height: '8px',
-  },
-
-  '&::-webkit-scrollbar-track': {
-    backgroundColor: 'var(--color-surface-subtle)',
-  },
-
-  '&::-webkit-scrollbar-thumb': {
-    backgroundColor: 'var(--color-scrollbar-thumb)',
-    borderRadius: 'var(--border-radius-sm)',
-  },
-
-  '&::-webkit-scrollbar-thumb:hover': {
-    backgroundColor: 'var(--color-scrollbar-thumb-hover)',
-  },
 
   // Placeholder styling
   '.cm-placeholder': {

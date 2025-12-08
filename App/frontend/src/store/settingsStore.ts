@@ -93,12 +93,14 @@ export interface NaturalImageStyle {
     postfix: string;  // Appended to prompt
 }
 
-// Custom image style for tag-based providers (additional tags)
+// Custom image style for tag-based providers (prefix/postfix for positive and negative prompts)
 export interface TagBasedImageStyle {
     id: string;
     name: string;
-    positiveTags: string;  // Tags appended to positive prompt
-    negativeTags: string;  // Tags appended to negative prompt
+    positivePrefix: string;   // Prepended to positive prompt
+    positivePostfix: string;  // Appended to positive prompt
+    negativePrefix: string;   // Prepended to negative prompt
+    negativePostfix: string;  // Appended to negative prompt
 }
 
 // Legacy alias for backwards compatibility during migration

@@ -8,6 +8,7 @@ import type {
     ImageGenerationRequest,
     ProcessedImageRequest,
     ImagePipelineContext,
+    StyledPrompt,
 } from '../types';
 import { isTagBasedProvider } from '../config/providerConfig';
 
@@ -36,18 +37,28 @@ function processNaturalRequest(
     request: ImageGenerationRequest,
     context: ImagePipelineContext
 ): ProcessedImageRequest {
-    let finalPrompt = request.prompt?.trim() || '';
+    const userContent = request.prompt?.trim() || '';
+    let prefix = '';
+    let postfix = '';
 
-    // Apply natural style if selected
+    // Get style prefix/postfix if selected
     if (request.styleId && context.naturalStyles) {
         const style = context.naturalStyles.find((s) => s.id === request.styleId);
         if (style) {
-            finalPrompt = `${style.prefix}${finalPrompt}${style.postfix}`;
+            prefix = style.prefix || '';
+            postfix = style.postfix || '';
         }
     }
 
+    // Create StyledPrompt object
+    const prompt: StyledPrompt = {
+        prefix,
+        content: userContent,
+        postfix,
+    };
+
     const processed: ProcessedImageRequest = {
-        prompt: finalPrompt,
+        prompt,
         provider: request.provider,
         model: request.model,
     };
@@ -107,29 +118,41 @@ function processTagBasedRequest(
     request: ImageGenerationRequest,
     context: ImagePipelineContext
 ): ProcessedImageRequest {
-    let finalPositive = request.positivePrompt?.trim() || '';
-    let finalNegative = request.negativePrompt?.trim() || '';
+    const positiveContent = request.positivePrompt?.trim() || '';
+    const negativeContent = request.negativePrompt?.trim() || '';
 
-    // Apply tag-based style if selected
+    let positivePrefix = '';
+    let positivePostfix = '';
+    let negativePrefix = '';
+    let negativePostfix = '';
+
+    // Get style prefix/postfix if selected
     if (request.styleId && context.tagBasedStyles) {
         const style = context.tagBasedStyles.find((s) => s.id === request.styleId);
         if (style) {
-            if (style.positiveTags) {
-                finalPositive = finalPositive
-                    ? `${finalPositive}, ${style.positiveTags}`
-                    : style.positiveTags;
-            }
-            if (style.negativeTags) {
-                finalNegative = finalNegative
-                    ? `${finalNegative}, ${style.negativeTags}`
-                    : style.negativeTags;
-            }
+            positivePrefix = style.positivePrefix || '';
+            positivePostfix = style.positivePostfix || '';
+            negativePrefix = style.negativePrefix || '';
+            negativePostfix = style.negativePostfix || '';
         }
     }
 
+    // Create StyledPrompt objects
+    const positive_prompt: StyledPrompt = {
+        prefix: positivePrefix,
+        content: positiveContent,
+        postfix: positivePostfix,
+    };
+
+    const negative_prompt: StyledPrompt = {
+        prefix: negativePrefix,
+        content: negativeContent,
+        postfix: negativePostfix,
+    };
+
     const processed: ProcessedImageRequest = {
-        positive_prompt: finalPositive,
-        negative_prompt: finalNegative || undefined,
+        positive_prompt,
+        negative_prompt,
         provider: request.provider,
         model: request.model,
         size: request.size,

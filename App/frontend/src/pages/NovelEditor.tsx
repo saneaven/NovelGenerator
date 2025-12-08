@@ -17,7 +17,7 @@ import type { StoryObjects } from '../types/storyObject';
 import ChatSidebar from '../components/ChatSidebar';
 import ErrorModal from '../components/ErrorModal';
 import SettingsModal from '../components/SettingsModal/SettingsModal';
-import BatchTranslationModal from '../components/BatchTranslationModal';
+import TranslationModal from '../components/TranslationModal';
 import LanguageDropdown from '../components/ui/LanguageDropdown';
 import ChatPanel from './workspace/components/ChatPanel';
 import NovelEditorPanel from './noveleditor/components/NovelEditorPanel';
@@ -115,7 +115,7 @@ const NovelEditor: React.FC = () =>
         outline: null,
     });
     const [isOutlineInitialized, setIsOutlineInitialized] = useState(false);
-    const [showBatchTranslateModal, setShowBatchTranslateModal] = useState(false);
+    const [showTranslateModal, setShowTranslateModal] = useState(false);
 
     // Fetch projects if not loaded
     useEffect(() => {
@@ -597,7 +597,7 @@ const NovelEditor: React.FC = () =>
                                 title="Select display language"
                                 showTranslateAll={subLanguages && subLanguages.length > 0 && objectsNeedingTranslation > 0}
                                 translateCount={objectsNeedingTranslation}
-                                onTranslateAllClick={() => setShowBatchTranslateModal(true)}
+                                onTranslateAllClick={() => setShowTranslateModal(true)}
                             />
                         )}
                         <button
@@ -687,7 +687,7 @@ const NovelEditor: React.FC = () =>
                         title="Select display language"
                         showTranslateAll={subLanguages && subLanguages.length > 0 && objectsNeedingTranslation > 0}
                         translateCount={objectsNeedingTranslation}
-                        onTranslateAllClick={() => setShowBatchTranslateModal(true)}
+                        onTranslateAllClick={() => setShowTranslateModal(true)}
                     />
                 )}
                 <button
@@ -712,11 +712,11 @@ const NovelEditor: React.FC = () =>
                 onClose={() => uiActions.setIsSettingsOpen(false)}
             />
 
-            <BatchTranslationModal
-                isOpen={showBatchTranslateModal}
-                onClose={() => setShowBatchTranslateModal(false)}
+            <TranslationModal
+                isOpen={showTranslateModal}
+                onClose={() => setShowTranslateModal(false)}
                 projectId={projectId || ''}
-                onComplete={() => setShowBatchTranslateModal(false)}
+                onComplete={() => setShowTranslateModal(false)}
                 allowedObjectTypes={['manuscript']}
             />
         </div>

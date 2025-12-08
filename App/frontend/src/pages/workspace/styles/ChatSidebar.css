@@ -225,23 +225,6 @@
     color: var(--color-success-dark);
 }
 
-/* ===== Custom Scrollbar ===== */
-.chat-list::-webkit-scrollbar {
-    width: 6px;
-}
-
-.chat-list::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.chat-list::-webkit-scrollbar-thumb {
-    background: var(--color-border-medium);
-    border-radius: var(--border-radius-sm);
-}
-
-.chat-list::-webkit-scrollbar-thumb:hover {
-    background: var(--color-border-strong);
-}
 
 /* ===== Mobile Styles ===== */
 @media (max-width: 768px) {

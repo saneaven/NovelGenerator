@@ -206,21 +206,19 @@ pre {
 
 /* ===== Scrollbar Styling ===== */
 
-/* Webkit Browsers (Chrome, Safari, Edge) */
+/* Webkit/Blink Browsers (Chrome, Safari, Edge) */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-surface-subtle);
-  border-radius: var(--border-radius-md);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
   background: var(--color-border-medium);
-  border-radius: var(--border-radius-md);
-  border: 2px solid var(--color-surface-subtle);
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -228,26 +226,21 @@ pre {
 }
 
 ::-webkit-scrollbar-corner {
-  background: var(--color-surface-subtle);
+  background: transparent;
 }
 
-/* Remove scrollbar buttons */
-::-webkit-scrollbar-button {
-  display: none;
-  height: 0;
-  width: 0;
-}
-
-/* Firefox */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-border-medium) var(--color-surface-subtle);
+/* Firefox only (doesn't support webkit-scrollbar) */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-medium) transparent;
+  }
 }
 
 /* Thin scrollbar variant */
 .scrollbar-thin::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 2px;
+  height: 2px;
 }
 
 /* Hidden scrollbar but still scrollable */

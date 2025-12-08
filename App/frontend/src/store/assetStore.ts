@@ -145,9 +145,14 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
     },
 
     fetchStoryObjectAssets: async (projectId: string, objectType: string, objectId: string) => {
+        // Skip if already cached to avoid redundant network requests
+        const key = getObjectKey(objectType, objectId);
+        if (get().storyObjectAssets.has(key)) {
+            return;
+        }
+
         try {
             const response = await assetService.getStoryObjectAssets(projectId, objectType, objectId);
-            const key = getObjectKey(objectType, objectId);
             set((state) => {
                 const newMap = new Map(state.storyObjectAssets);
                 newMap.set(key, response.assets);

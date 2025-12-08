@@ -15,7 +15,8 @@ from ..schemas.assets import (
     ImageGenerationRequest, ImageGenerationResponse,
     ImageProvidersResponse, ImageProviderInfo, ImageModelsResponse,
     ChapterAssetCreate, ChapterAssetResponse, ChapterAssetsResponse,
-    SceneAssetResponse, SceneAssetsResponse, ChapterInfo
+    SceneAssetResponse, SceneAssetsResponse, ChapterInfo,
+    StyledPrompt
 )
 from ..services.storage_service import storage_service
 from ..image_providers.registry import ImageProviderRegistry
@@ -25,6 +26,17 @@ from ..image_providers.base import ReferenceImageData
 from ..image_providers import openai_image, gemini_image, xai_image, novelai_image
 
 router = APIRouter(prefix="/api/v1/assets", tags=["assets"])
+
+
+def _jsonb_to_styled_prompt(data: Optional[Dict[str, Any]]) -> Optional[StyledPrompt]:
+    """Convert JSONB dict to StyledPrompt object"""
+    if data is None:
+        return None
+    return StyledPrompt(
+        prefix=data.get('prefix', ''),
+        content=data.get('content', ''),
+        postfix=data.get('postfix', '')
+    )
 
 
 def _asset_to_response(asset: Asset) -> AssetResponse:
@@ -38,9 +50,9 @@ def _asset_to_response(asset: Asset) -> AssetResponse:
         thumbnail_path=cast(Optional[str], asset.thumbnail_path),
         mime_type=cast(str, asset.mime_type),
         asset_type=cast(Optional[str], asset.asset_type),
-        generation_prompt=cast(Optional[str], asset.generation_prompt),
-        generation_positive_prompt=cast(Optional[str], asset.generation_positive_prompt),
-        generation_negative_prompt=cast(Optional[str], asset.generation_negative_prompt),
+        generation_prompt=_jsonb_to_styled_prompt(cast(Optional[Dict[str, Any]], asset.generation_prompt)),
+        generation_positive_prompt=_jsonb_to_styled_prompt(cast(Optional[Dict[str, Any]], asset.generation_positive_prompt)),
+        generation_negative_prompt=_jsonb_to_styled_prompt(cast(Optional[Dict[str, Any]], asset.generation_negative_prompt)),
         generation_provider=cast(Optional[str], asset.generation_provider),
         generation_model=cast(Optional[str], asset.generation_model),
         generation_settings=cast(Optional[Dict[str, Any]], asset.generation_settings),
@@ -65,9 +77,9 @@ def _asset_to_scene_response(asset: Asset, used_in_chapters: List[ChapterInfo]) 
         thumbnail_path=cast(Optional[str], asset.thumbnail_path),
         mime_type=cast(str, asset.mime_type),
         asset_type=cast(Optional[str], asset.asset_type),
-        generation_prompt=cast(Optional[str], asset.generation_prompt),
-        generation_positive_prompt=cast(Optional[str], asset.generation_positive_prompt),
-        generation_negative_prompt=cast(Optional[str], asset.generation_negative_prompt),
+        generation_prompt=_jsonb_to_styled_prompt(cast(Optional[Dict[str, Any]], asset.generation_prompt)),
+        generation_positive_prompt=_jsonb_to_styled_prompt(cast(Optional[Dict[str, Any]], asset.generation_positive_prompt)),
+        generation_negative_prompt=_jsonb_to_styled_prompt(cast(Optional[Dict[str, Any]], asset.generation_negative_prompt)),
         generation_provider=cast(Optional[str], asset.generation_provider),
         generation_model=cast(Optional[str], asset.generation_model),
         width=cast(Optional[int], asset.width),
@@ -177,15 +189,27 @@ async def generate_image(
                         # Skip missing files
                         pass
 
+        # Construct final prompt strings from StyledPrompt objects
+        final_prompt: Optional[str] = None
+        final_positive_prompt: Optional[str] = None
+        final_negative_prompt: Optional[str] = None
+
+        if request.prompt:
+            final_prompt = f"{request.prompt.prefix}{request.prompt.content}{request.prompt.postfix}"
+        if request.positive_prompt:
+            final_positive_prompt = f"{request.positive_prompt.prefix}{request.positive_prompt.content}{request.positive_prompt.postfix}"
+        if request.negative_prompt:
+            final_negative_prompt = f"{request.negative_prompt.prefix}{request.negative_prompt.content}{request.negative_prompt.postfix}"
+
         # Generate image
         result = await provider.generate_image(
-            prompt=request.prompt,
+            prompt=final_prompt,
             model=request.model,
             size=request.size,
             quality=request.quality,
             style=request.style,
-            positive_prompt=request.positive_prompt,
-            negative_prompt=request.negative_prompt,
+            positive_prompt=final_positive_prompt,
+            negative_prompt=final_negative_prompt,
             provider_settings=request.provider_settings,
             reference_images=reference_image_data,
         )
@@ -236,9 +260,10 @@ async def generate_image(
             thumbnail_path=thumb_path,
             mime_type=mime_type,
             asset_type=request.asset_type,  # 'scene', 'object', or None - passed from frontend
-            generation_prompt=request.prompt,  # Natural language only
-            generation_positive_prompt=request.positive_prompt,  # Tag-based only
-            generation_negative_prompt=request.negative_prompt,  # Tag-based only
+            # Store StyledPrompt as JSONB dicts
+            generation_prompt=request.prompt.model_dump() if request.prompt else None,
+            generation_positive_prompt=request.positive_prompt.model_dump() if request.positive_prompt else None,
+            generation_negative_prompt=request.negative_prompt.model_dump() if request.negative_prompt else None,
             generation_provider=request.provider,
             generation_model=request.model,
             generation_settings=request.provider_settings,

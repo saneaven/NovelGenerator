@@ -208,8 +208,17 @@ export class TranslationService {
         return { objectType: objectType as ObjectType, objectId, language: targetLanguage, data, targetVersionNumber: versionNumber };
       });
 
-      await translationAPI.addTranslations(batchData);
-      // Note: setDisplayLanguage is now handled by caller after data refresh
+      const result = await translationAPI.addTranslations(batchData);
+
+      // Update store directly with returned objects (no separate GET needed)
+      if (result.objects?.length) {
+        const store = useUnifiedObjectStore.getState();
+        result.objects.forEach(obj => {
+          store.objects[obj.id] = obj;
+        });
+        useUnifiedObjectStore.setState({ objects: { ...store.objects } });
+      }
+
       onProgress?.(translations.map(t => t.objectId));
     };
 
@@ -248,8 +257,17 @@ export class TranslationService {
         return { objectType: objectType as ObjectType, objectId, language: targetLanguage, data, targetVersionNumber: versionNumber };
       });
 
-      await translationAPI.addTranslations(batchData);
-      // Note: setDisplayLanguage is now handled by caller after data refresh
+      const result = await translationAPI.addTranslations(batchData);
+
+      // Update store directly with returned objects (no separate GET needed)
+      if (result.objects?.length) {
+        const store = useUnifiedObjectStore.getState();
+        result.objects.forEach(obj => {
+          store.objects[obj.id] = obj;
+        });
+        useUnifiedObjectStore.setState({ objects: { ...store.objects } });
+      }
+
       onProgress?.(translations.map(t => t.objectId));
     };
 
@@ -382,7 +400,16 @@ export class TranslationService {
       return { objectType: objectType as ObjectType, objectId, language: targetLanguage, data, targetVersionNumber: versionNumber };
     });
 
-    await translationAPI.addTranslations(batchData);
+    const result = await translationAPI.addTranslations(batchData);
+
+    // Update store directly with returned objects (no separate GET needed)
+    if (result.objects?.length) {
+      const store = useUnifiedObjectStore.getState();
+      result.objects.forEach(obj => {
+        store.objects[obj.id] = obj;
+      });
+      useUnifiedObjectStore.setState({ objects: { ...store.objects } });
+    }
   }
 
   static async translateChatMessage(

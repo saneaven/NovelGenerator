@@ -173,23 +173,6 @@
   opacity: var(--opacity-disabled);
 }
 
-/* Custom scrollbar for textarea */
-.chat-input::-webkit-scrollbar {
-  width: 6px;
-}
-
-.chat-input::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.chat-input::-webkit-scrollbar-thumb {
-  background: var(--color-border-medium);
-  border-radius: var(--border-radius-sm);
-}
-
-.chat-input::-webkit-scrollbar-thumb:hover {
-  background: var(--color-border-strong);
-}
 
 /* ===== Send and Stop Buttons ===== */
 .send-button,

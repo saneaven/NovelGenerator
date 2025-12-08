@@ -427,25 +427,6 @@
     border-color: var(--color-border-medium);
 }
 
-/* ===== Custom Scrollbar ===== */
-.chat-messages::-webkit-scrollbar {
-    width: 8px;
-}
-
-.chat-messages::-webkit-scrollbar-track {
-    background: var(--color-surface-subtle);
-    border-radius: var(--border-radius-sm);
-}
-
-.chat-messages::-webkit-scrollbar-thumb {
-    background: var(--color-border-medium);
-    border-radius: var(--border-radius-sm);
-    transition: background var(--transition-base);
-}
-
-.chat-messages::-webkit-scrollbar-thumb:hover {
-    background: var(--color-border-strong);
-}
 
 /* ===== Mobile Responsive ===== */
 @media (max-width: 768px) {

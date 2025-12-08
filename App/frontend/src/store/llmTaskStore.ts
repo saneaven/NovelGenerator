@@ -7,7 +7,7 @@ export type TaskSessionStatus = 'idle' | 'running' | 'success' | 'error' | 'canc
 export type LLMTaskType =
   | 'ai-edit'           // AIEditModal
   | 'chapter-edit'      // NovelChapterAIEditModal
-  | 'batch-translation' // BatchTranslationModal (story objects)
+  | 'translation'       // TranslationModal (story objects)
   | 'chat-translation'  // ChatPanel inline (single message)
   | 'image-prompt'      // ImagePromptBuilderModal
   | 'scene-image'       // SceneImageGeneratorModal

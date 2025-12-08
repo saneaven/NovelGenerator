@@ -4,9 +4,8 @@ import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
 import AIEditModal from './AIEditModal';
-import RetranslateModal from './RetranslateModal';
+import TranslationModal from './TranslationModal';
 import { DropdownMenu, DropdownItem, DropdownDivider } from './ui/DropdownMenu';
-import { TranslationService } from '../services/translationService';
 import type { ActObject, ChapterObject } from '../types/unifiedObject';
 
 interface OutlineManagerProps {
@@ -17,9 +16,8 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
   const { projectId } = useParams<{ projectId: string }>();
   const store = useUnifiedObjectStore();
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
-  const translating = useUnifiedObjectStore(state => state.translating);
   const settings = useSettingsStore();
-  const { showError, showSuccess } = useErrorStore();
+  const { showError } = useErrorStore();
 
   const [editingAct, setEditingAct] = useState<string | null>(null);
   const [editingChapter, setEditingChapter] = useState<string | null>(null);
@@ -219,66 +217,6 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
     }
   };
 
-  const handleRetranslateAct = async (
-    sourceLanguage: string,
-    targetLanguage: string,
-    includePrevious: boolean,
-    userInput: string
-  ) => {
-    if (!projectId || !showActRetranslateModal) return;
-
-    const act = store.objects[showActRetranslateModal] as ActObject;
-    if (!act) return;
-
-    try {
-      TranslationService.setTranslationStatus(showActRetranslateModal, {
-        objectId: showActRetranslateModal,
-        isTranslating: true,
-      });
-
-      let instructions = userInput || '';
-
-      const availableLanguages = Object.keys(act.data);
-      if (includePrevious && availableLanguages.includes(targetLanguage)) {
-        const targetData = act.data[targetLanguage] || {};
-        const prevTranslation = `Previous translation for reference:\n${JSON.stringify({
-          name: targetData.name,
-          description: targetData.description,
-        }, null, 2)}`;
-        instructions = instructions ? `${instructions}\n\n${prevTranslation}` : prevTranslation;
-      }
-
-      const sourceData = act.data[sourceLanguage] || getActData(act, sourceLanguage);
-      await TranslationService.translateSingle(
-        {
-          objectType: 'act',
-          objectId: showActRetranslateModal,
-          sourceData: {
-            name: sourceData.name,
-            description: sourceData.description,
-          },
-        },
-        {
-          projectId,
-          sourceLanguage,
-          targetLanguage,
-          userInput: instructions || undefined,
-        }
-      );
-
-      // Refresh object to update UI with new translation
-      await store.fetchObject('act', showActRetranslateModal);
-
-      showSuccess('Success', `Retranslation complete for ${targetLanguage}`);
-      setShowActRetranslateModal(null);
-    } catch (error) {
-      console.error('Failed to retranslate act:', error);
-      showError('Retranslation Error', error instanceof Error ? error.message : 'Failed to retranslate. Please try again.');
-    } finally {
-      TranslationService.clearTranslationStatus(showActRetranslateModal);
-    }
-  };
-
   // ========================================================================
   // CHAPTER HANDLERS
   // ========================================================================
@@ -337,66 +275,6 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
     } catch (error) {
       console.error('Failed to delete chapter:', error);
       showError('Delete Error', 'Failed to delete chapter. Please try again.');
-    }
-  };
-
-  const handleRetranslateChapter = async (
-    sourceLanguage: string,
-    targetLanguage: string,
-    includePrevious: boolean,
-    userInput: string
-  ) => {
-    if (!projectId || !showChapterRetranslateModal) return;
-
-    const chapter = store.objects[showChapterRetranslateModal] as ChapterObject;
-    if (!chapter) return;
-
-    try {
-      TranslationService.setTranslationStatus(showChapterRetranslateModal, {
-        objectId: showChapterRetranslateModal,
-        isTranslating: true,
-      });
-
-      let instructions = userInput || '';
-
-      const availableLanguages = Object.keys(chapter.data);
-      if (includePrevious && availableLanguages.includes(targetLanguage)) {
-        const targetData = chapter.data[targetLanguage] || {};
-        const prevTranslation = `Previous translation for reference:\n${JSON.stringify({
-          name: targetData.name,
-          description: targetData.description,
-        }, null, 2)}`;
-        instructions = instructions ? `${instructions}\n\n${prevTranslation}` : prevTranslation;
-      }
-
-      const sourceData = chapter.data[sourceLanguage] || getChapterData(chapter, sourceLanguage);
-      await TranslationService.translateSingle(
-        {
-          objectType: 'chapter',
-          objectId: showChapterRetranslateModal,
-          sourceData: {
-            name: sourceData.name,
-            description: sourceData.description,
-          },
-        },
-        {
-          projectId,
-          sourceLanguage,
-          targetLanguage,
-          userInput: instructions || undefined,
-        }
-      );
-
-      // Refresh object to update UI with new translation
-      await store.fetchObject('chapter', showChapterRetranslateModal);
-
-      showSuccess('Success', `Retranslation complete for ${targetLanguage}`);
-      setShowChapterRetranslateModal(null);
-    } catch (error) {
-      console.error('Failed to retranslate chapter:', error);
-      showError('Retranslation Error', error instanceof Error ? error.message : 'Failed to retranslate. Please try again.');
-    } finally {
-      TranslationService.clearTranslationStatus(showChapterRetranslateModal);
     }
   };
 
@@ -829,47 +707,33 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
         />
       )}
 
-      {/* Act Retranslate Modal */}
-      {showActRetranslateModal && (() => {
-        const act = store.objects[showActRetranslateModal] as ActObject | undefined;
-        const availableLanguages = [settings.settings.mainLanguage, ...settings.settings.subLanguages];
-        return (
-          <RetranslateModal
-            isOpen={!!showActRetranslateModal}
-            onClose={() => setShowActRetranslateModal(null)}
-            objectType="act"
-            objectId={showActRetranslateModal}
-            defaultSourceLanguage={settings.settings.mainLanguage}
-            defaultTargetLanguage={globalDisplayLanguage}
-            availableLanguages={availableLanguages}
-            manuscriptLanguages={act?.data ? Object.keys(act.data) : []}
-            translationTimestamp={act?.version?.created_at || null}
-            onRetranslate={handleRetranslateAct}
-            isTranslating={translating[showActRetranslateModal] || false}
-          />
-        );
-      })()}
+      {/* Act Translation Modal */}
+      {showActRetranslateModal && projectId && (
+        <TranslationModal
+          isOpen={!!showActRetranslateModal}
+          onClose={() => setShowActRetranslateModal(null)}
+          projectId={projectId}
+          onComplete={() => setShowActRetranslateModal(null)}
+          allowedObjectTypes={['act']}
+          preSelectedObjectIds={[showActRetranslateModal]}
+          defaultSourceLanguage={settings.settings.mainLanguage}
+          defaultTargetLanguage={globalDisplayLanguage}
+        />
+      )}
 
-      {/* Chapter Retranslate Modal */}
-      {showChapterRetranslateModal && (() => {
-        const chapter = store.objects[showChapterRetranslateModal] as ChapterObject | undefined;
-        const availableLanguages = [settings.settings.mainLanguage, ...settings.settings.subLanguages];
-        return (
-          <RetranslateModal
-            isOpen={!!showChapterRetranslateModal}
-            onClose={() => setShowChapterRetranslateModal(null)}
-            objectType="chapter"
-            objectId={showChapterRetranslateModal}
-            defaultSourceLanguage={settings.settings.mainLanguage}
-            defaultTargetLanguage={globalDisplayLanguage}
-            availableLanguages={availableLanguages}
-            manuscriptLanguages={chapter?.data ? Object.keys(chapter.data) : []}
-            translationTimestamp={chapter?.version?.created_at || null}
-            onRetranslate={handleRetranslateChapter}
-            isTranslating={translating[showChapterRetranslateModal] || false}
-          />
-        );
-      })()}
+      {/* Chapter Translation Modal */}
+      {showChapterRetranslateModal && projectId && (
+        <TranslationModal
+          isOpen={!!showChapterRetranslateModal}
+          onClose={() => setShowChapterRetranslateModal(null)}
+          projectId={projectId}
+          onComplete={() => setShowChapterRetranslateModal(null)}
+          allowedObjectTypes={['chapter']}
+          preSelectedObjectIds={[showChapterRetranslateModal]}
+          defaultSourceLanguage={settings.settings.mainLanguage}
+          defaultTargetLanguage={globalDisplayLanguage}
+        />
+      )}
     </div>
   );
 };

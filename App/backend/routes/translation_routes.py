@@ -2,7 +2,7 @@
 Translation Management Endpoints
 
 Advanced translation operations:
-- Batch translation
+- Single and batch translation
 - Translation status/progress
 - Language availability queries
 - Bulk operations
@@ -306,14 +306,17 @@ async def add_translations(
     """
     Unified translation endpoint - handles single or batch translations.
     All translations are atomic - fails immediately if any translation fails.
+    Returns updated objects for immediate frontend store update (matches PUT pattern).
     """
     from ..routes.unified_object_routes import (
         create_or_update_version,
         update_translation_cache,
-        get_object_or_404
+        get_object_or_404,
+        get_object
     )
 
     translated_count = 0
+    translated_objects = []  # Track objects to return after commit
 
     try:
         for translation_data in request.translations:
@@ -347,15 +350,24 @@ async def add_translations(
                 is_active=False
             )
 
+            # Track for returning after commit
+            translated_objects.append((object_type, object_id))
             translated_count += 1
 
         # Single commit at the end (atomic operation)
         db.commit()
 
+        # Fetch updated objects to return (matches PUT pattern for immediate store update)
+        updated_objects = []
+        for obj_type, obj_id in translated_objects:
+            obj = await get_object(obj_type, obj_id, None, db, current_user)
+            updated_objects.append(obj)
+
         return {
             "success": True,
             "translated_count": translated_count,
-            "message": f"Successfully translated {translated_count} object{'s' if translated_count != 1 else ''}"
+            "message": f"Successfully translated {translated_count} object{'s' if translated_count != 1 else ''}",
+            "objects": updated_objects
         }
 
     except Exception as e:

@@ -16,7 +16,7 @@
  * Translation Features:
  * - Multi-language support
  * - Language switcher
- * - AI translation (via Batch Translation)
+ * - AI translation (via Translation Modal)
  *
  * Version Management:
  * - Manual version creation via Save Snapshot button
@@ -30,13 +30,12 @@ import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import NovelChapterAIEditModal from '../../../components/NovelChapterAIEditModal';
-import RetranslateModal from '../../../components/RetranslateModal';
+import TranslationModal from '../../../components/TranslationModal';
 import { AssetManagerModal, SceneAssetManagerModal } from '../../../components/AssetManager';
 import SceneImageGeneratorModal from '../../../components/ImageGeneration/SceneImageGeneratorModal';
 import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
 import RegenerationComparisonOverlay from '../../../components/RichTextEditor/RegenerationComparisonOverlay';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
-import { TranslationService } from '../../../services/translationService';
 import { useAssetStore } from '../../../store/assetStore';
 import { assetService, type Asset } from '../../../api/assetService';
 import type { ManuscriptObject } from '../../../types/unifiedObject';
@@ -75,10 +74,19 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   chaptersInitialized,
   onSelectChapter,
 }) => {
-  const store = useUnifiedObjectStore();
-  const translating = useUnifiedObjectStore((state) => state.translating);
+  // Granular selectors to avoid unnecessary re-renders (Zustand best practice)
+  const storeObjects = useUnifiedObjectStore((state) => state.objects);
+  const storeLoading = useUnifiedObjectStore((state) => state.loading);
+  const storeErrors = useUnifiedObjectStore((state) => state.errors);
+
+  // Actions accessed via getState() - doesn't trigger re-renders
+  const listObjects = useUnifiedObjectStore.getState().listObjects;
+  const fetchObject = useUnifiedObjectStore.getState().fetchObject;
+  const updateObject = useUnifiedObjectStore.getState().updateObject;
+  const createObject = useUnifiedObjectStore.getState().createObject;
+  const addTranslation = useUnifiedObjectStore.getState().addTranslation;
   const { settings } = useSettingsStore();
-  const { showError, showSuccess } = useErrorStore();
+  const { showError } = useErrorStore();
   const editorStore = useNovelEditorStore();
   // Get stable action references to avoid infinite loops in effects
   const setHasUnsavedChangesAction = useNovelEditorStore((state) => state.setHasUnsavedChanges);
@@ -130,10 +138,10 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   // Get manuscript from store
   const manuscript = manuscriptId
-    ? (store.objects[manuscriptId] as ManuscriptObject)
+    ? (storeObjects[manuscriptId] as ManuscriptObject)
     : null;
-  const loading = manuscriptId ? (store.loading[manuscriptId] || false) : false;
-  const error = manuscriptId ? (store.errors[manuscriptId] || null) : null;
+  const loading = manuscriptId ? (storeLoading[manuscriptId] || false) : false;
+  const error = manuscriptId ? (storeErrors[manuscriptId] || null) : null;
 
   // Get available languages from manuscript data
   const manuscriptLanguages = useMemo(() => {
@@ -184,12 +192,12 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   // Find existing manuscript
   const existingManuscript = useMemo(() => {
     if (!selectedChapterId) return null;
-    const matchingObject = Object.values(store.objects).find(
+    const matchingObject = Object.values(storeObjects).find(
       (obj) =>
         obj.type === 'manuscript' && obj.metadata?.chapter_id === selectedChapterId
     ) as ManuscriptObject | undefined;
     return matchingObject || null;
-  }, [selectedChapterId, store.objects]);
+  }, [selectedChapterId, storeObjects]);
 
   // Computed values
   const wordCount = useMemo(() => {
@@ -241,7 +249,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       setContentIdError(null);
 
       try {
-        const manuscripts = await store.listObjects('manuscript', projectId);
+        const manuscripts = await listObjects('manuscript', projectId);
         if (!isActive) return;
 
         const matchingManuscript = manuscripts.find(
@@ -255,7 +263,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
         // Create new manuscript if it doesn't exist
         const primaryLanguage = settings.mainLanguage || 'en';
-        const createdManuscript = await store.createObject(
+        const createdManuscript = await createObject(
           'manuscript',
           projectId,
           {
@@ -279,7 +287,10 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       }
     };
 
-    resolveManuscriptId();
+    // Defer to avoid flushSync conflict with TipTap editor during React render phase
+    queueMicrotask(() => {
+      resolveManuscriptId();
+    });
 
     return () => {
       isActive = false;
@@ -289,7 +300,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     projectId,
     selectedChapterId,
     existingManuscript,
-    // store는 stable하므로 제거
     settings.mainLanguage,
   ]);
 
@@ -305,11 +315,14 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       }
     }, 10000); // 10 second timeout
 
-    // Fetch without language parameter - API returns all languages
-    // effectiveLanguage (with fallback logic) will pick the right content
-    store.fetchObject('manuscript', manuscriptId).catch(err => {
-      console.error('Failed to fetch manuscript:', err);
-      setContentIdError(err.message || 'Failed to load manuscript');
+    // Defer to avoid flushSync conflict with TipTap editor during React render phase
+    queueMicrotask(() => {
+      // Fetch without language parameter - API returns all languages
+      // effectiveLanguage (with fallback logic) will pick the right content
+      fetchObject('manuscript', manuscriptId).catch((err: Error) => {
+        console.error('Failed to fetch manuscript:', err);
+        setContentIdError(err.message || 'Failed to load manuscript');
+      });
     });
 
     return () => {
@@ -383,7 +396,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         wordCount,
         savedAt: Date.now(),
       }));
-      setLastSavedContent(content);
     } catch (err) {
       console.error('localStorage save failed:', err);
     }
@@ -401,7 +413,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       setSavingType('manual');
 
       try {
-        await store.updateObject('manuscript', manuscriptId, {
+        await updateObject('manuscript', manuscriptId, {
           data: {
             content,
             wordCount,
@@ -424,7 +436,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         setSavingType(null);
       }
     },
-    [manuscript, manuscriptId, content, wordCount, store, effectiveLanguage]
+    [manuscript, manuscriptId, content, wordCount, effectiveLanguage, showError]
   );
 
   // ============================================================================
@@ -671,61 +683,9 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const handleAIEditComplete = useCallback(() => {
     // Reload the manuscript after AI edit
     if (manuscriptId) {
-      store.fetchObject('manuscript', manuscriptId);
+      fetchObject('manuscript', manuscriptId);
     }
-  }, [manuscriptId, store]);
-
-  const handleRetranslate = useCallback(async (
-    sourceLanguage: string,
-    targetLanguage: string,
-    includePrevious: boolean,
-    userInput: string
-  ) => {
-    if (!manuscript || !manuscriptId) return;
-
-    try {
-      TranslationService.setTranslationStatus(manuscriptId, { objectId: manuscriptId, isTranslating: true });
-
-      let instructions = userInput || '';
-      if (includePrevious && manuscriptLanguages.includes(targetLanguage)) {
-        const targetData = manuscript.data[targetLanguage] || {};
-        const prevTranslation = `Previous translation for reference:\n${JSON.stringify({
-          content: targetData.content,
-          wordCount: targetData.wordCount,
-        }, null, 2)}`;
-        instructions = instructions ? `${instructions}\n\n${prevTranslation}` : prevTranslation;
-      }
-
-      // Get source data for the source language
-      const sourceData = manuscript.data[sourceLanguage] || getManuscriptData(sourceLanguage);
-      await TranslationService.translateSingle(
-        {
-          objectType: 'manuscript',
-          objectId: manuscriptId,
-          sourceData: {
-            content: sourceData.content,
-            wordCount: sourceData.wordCount,
-          },
-        },
-        {
-          projectId,
-          sourceLanguage,
-          targetLanguage,
-          userInput: instructions || undefined,
-        }
-      );
-
-      // Refetch to get the updated translation
-      await store.fetchObject('manuscript', manuscriptId);
-      showSuccess('Success', `Retranslation complete for ${targetLanguage}`);
-      setShowRetranslateModal(false);
-    } catch (err) {
-      console.error('Failed to retranslate:', err);
-      showError('Retranslation Error', err instanceof Error ? err.message : 'Failed to retranslate. Please try again.');
-    } finally {
-      TranslationService.clearTranslationStatus(manuscriptId);
-    }
-  }, [manuscript, manuscriptId, projectId, store, globalDisplayLanguage, showError, showSuccess]);
+  }, [manuscriptId]);
 
   // Handle "Write from scratch" - create new translation with empty content
   const handleWriteFromScratch = useCallback(async () => {
@@ -733,19 +693,19 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
     try {
       // Add the current language as a new translation with empty content
-      await store.addTranslation('manuscript', manuscriptId, {
+      await addTranslation('manuscript', manuscriptId, {
         language: globalDisplayLanguage,
         data: { content: '', wordCount: 0 }
       });
 
       // Re-fetch to get the new translation
       // isMissingTranslation will be computed automatically after fetch
-      await store.fetchObject('manuscript', manuscriptId);
+      await fetchObject('manuscript', manuscriptId);
     } catch (err) {
       console.error('Failed to create new translation:', err);
       showError('Error', 'Failed to create new content. Please try again.');
     }
-  }, [manuscriptId, globalDisplayLanguage, store, showError]);
+  }, [manuscriptId, globalDisplayLanguage, showError]);
 
   // ============================================================================
   // RENDER
@@ -805,7 +765,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
           style={{ marginTop: '1rem' }}
           onClick={() => {
             if (manuscriptId) {
-              store.fetchObject('manuscript', manuscriptId);
+              fetchObject('manuscript', manuscriptId);
             }
           }}
         >
@@ -822,7 +782,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         <p>{error}</p>
         <button
           className="toolbar-btn"
-          onClick={() => manuscriptId && store.fetchObject('manuscript', manuscriptId)}
+          onClick={() => manuscriptId && fetchObject('manuscript', manuscriptId)}
         >
           Retry
         </button>
@@ -1047,28 +1007,21 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         />
       )}
 
-      {/* Retranslate Modal */}
+      {/* Translation Modal */}
       {manuscript && manuscriptId && (
-        <RetranslateModal
+        <TranslationModal
           isOpen={showRetranslateModal}
           onClose={() => setShowRetranslateModal(false)}
-          objectType="manuscript"
-          objectId={manuscriptId}
+          projectId={projectId}
+          onComplete={() => setShowRetranslateModal(false)}
+          allowedObjectTypes={['manuscript']}
+          preSelectedObjectIds={[manuscriptId]}
           defaultSourceLanguage={
             isMissingTranslation && availableSourceLanguages.length > 0
               ? availableSourceLanguages[0]
               : manuscriptLanguages[0] || settings.mainLanguage
           }
           defaultTargetLanguage={globalDisplayLanguage}
-          availableLanguages={[settings.mainLanguage, ...(settings.subLanguages || [])]}
-          manuscriptLanguages={
-            isMissingTranslation
-              ? availableSourceLanguages
-              : manuscriptLanguages
-          }
-          translationTimestamp={manuscript.version?.created_at || null}
-          onRetranslate={handleRetranslate}
-          isTranslating={translating[manuscriptId] || false}
         />
       )}
 

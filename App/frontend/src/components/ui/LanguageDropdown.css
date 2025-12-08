@@ -106,19 +106,6 @@
   overflow-y: auto;
 }
 
-/* Custom scrollbar for menu */
-.language-dropdown-menu-inner::-webkit-scrollbar {
-  width: 6px;
-}
-
-.language-dropdown-menu-inner::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.language-dropdown-menu-inner::-webkit-scrollbar-thumb {
-  background: var(--color-border-medium);
-  border-radius: 3px;
-}
 
 /* ===== Options ===== */
 .language-dropdown-option {

@@ -136,8 +136,10 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
         const newStyle: TagBasedImageStyle = {
             id: generateId(),
             name: 'New Style',
-            positiveTags: '',
-            negativeTags: '',
+            positivePrefix: '',
+            positivePostfix: '',
+            negativePrefix: '',
+            negativePostfix: '',
         };
         onChange({
             ...config,
@@ -529,7 +531,7 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                     <div className="section-header">
                         <h4>Custom Styles (Tag-Based)</h4>
                         <p className="section-description">
-                            Create custom styles with positive and negative tags that are appended to your prompts.
+                            Create custom styles with prefix and postfix for both positive and negative prompts.
                         </p>
                     </div>
 
@@ -576,35 +578,67 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                                             &times;
                                         </button>
                                     </div>
-                                    <div className="style-fields">
-                                        <div className="style-field">
-                                            <label>Positive Tags</label>
-                                            <input
-                                                type="text"
-                                                value={style.positiveTags}
-                                                onChange={(e) => handleUpdateTagBasedStyle(style.id, { positiveTags: e.target.value })}
-                                                placeholder="masterpiece, best quality, ..."
-                                            />
+                                    <div className="style-fields tag-based-fields">
+                                        <div className="style-field-group">
+                                            <label className="field-group-label">Positive Prompt</label>
+                                            <div className="field-row">
+                                                <div className="style-field">
+                                                    <label>Prefix</label>
+                                                    <input
+                                                        type="text"
+                                                        value={style.positivePrefix}
+                                                        onChange={(e) => handleUpdateTagBasedStyle(style.id, { positivePrefix: e.target.value })}
+                                                        placeholder="masterpiece, best quality, "
+                                                    />
+                                                </div>
+                                                <div className="style-field">
+                                                    <label>Postfix</label>
+                                                    <input
+                                                        type="text"
+                                                        value={style.positivePostfix}
+                                                        onChange={(e) => handleUpdateTagBasedStyle(style.id, { positivePostfix: e.target.value })}
+                                                        placeholder=", detailed eyes"
+                                                    />
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="style-field">
-                                            <label>Negative Tags</label>
-                                            <input
-                                                type="text"
-                                                value={style.negativeTags}
-                                                onChange={(e) => handleUpdateTagBasedStyle(style.id, { negativeTags: e.target.value })}
-                                                placeholder="lowres, bad anatomy, ..."
-                                            />
+                                        <div className="style-field-group">
+                                            <label className="field-group-label">Negative Prompt</label>
+                                            <div className="field-row">
+                                                <div className="style-field">
+                                                    <label>Prefix</label>
+                                                    <input
+                                                        type="text"
+                                                        value={style.negativePrefix}
+                                                        onChange={(e) => handleUpdateTagBasedStyle(style.id, { negativePrefix: e.target.value })}
+                                                        placeholder="lowres, "
+                                                    />
+                                                </div>
+                                                <div className="style-field">
+                                                    <label>Postfix</label>
+                                                    <input
+                                                        type="text"
+                                                        value={style.negativePostfix}
+                                                        onChange={(e) => handleUpdateTagBasedStyle(style.id, { negativePostfix: e.target.value })}
+                                                        placeholder=", bad anatomy"
+                                                    />
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-                                    {(style.positiveTags || style.negativeTags) && (
+                                    {(style.positivePrefix || style.positivePostfix || style.negativePrefix || style.negativePostfix) && (
                                         <div className="style-preview tag-based">
                                             <div className="preview-row">
                                                 <span className="preview-label positive">+</span>
-                                                <span className="preview-text">{style.positiveTags || '(none)'}</span>
+                                                <span className="preview-text">
+                                                    {style.positivePrefix}<em>[prompt]</em>{style.positivePostfix}
+                                                </span>
                                             </div>
                                             <div className="preview-row">
-                                                <span className="preview-label negative">-</span>
-                                                <span className="preview-text">{style.negativeTags || '(none)'}</span>
+                                                <span className="preview-label negative">−</span>
+                                                <span className="preview-text">
+                                                    {style.negativePrefix}<em>[prompt]</em>{style.negativePostfix}
+                                                </span>
                                             </div>
                                         </div>
                                     )}

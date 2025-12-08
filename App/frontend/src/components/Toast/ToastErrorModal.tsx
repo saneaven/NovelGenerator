@@ -6,7 +6,7 @@ import './ToastErrorModal.css';
 // Import all modal types for retry functionality
 import AIEditModal from '../AIEditModal';
 import NovelChapterAIEditModal from '../NovelChapterAIEditModal';
-import BatchTranslationModal from '../BatchTranslationModal';
+import TranslationModal from '../TranslationModal';
 import ImagePromptBuilderModal from '../ImageGeneration/ImagePromptBuilderModal';
 
 interface ToastErrorModalProps {
@@ -89,9 +89,9 @@ const ToastErrorModal: React.FC<ToastErrorModalProps> = ({
           />
         );
 
-      case 'batch-translation':
+      case 'translation':
         return (
-          <BatchTranslationModal
+          <TranslationModal
             isOpen={true}
             onClose={handleRetryModalClose}
             projectId={modalProps.projectId}

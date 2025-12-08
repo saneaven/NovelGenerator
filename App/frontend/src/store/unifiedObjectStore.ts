@@ -259,6 +259,17 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => ({
 
   listObjects: async (type: ObjectType, projectId: string) => {
     try {
+      // Check if we already have objects of this type for this project in cache
+      const state = get();
+      const cachedObjects = Object.values(state.objects).filter(
+        obj => obj.type === type && obj.metadata?.project_id === projectId
+      );
+
+      // If we have cached data, return it without making API call
+      if (cachedObjects.length > 0) {
+        return cachedObjects;
+      }
+
       // Fetch all languages (no language param = returns all languages)
       const response = await unifiedObjectService.listObjects(type, projectId, {});
 

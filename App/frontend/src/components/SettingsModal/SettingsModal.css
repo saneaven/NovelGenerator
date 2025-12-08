@@ -1832,32 +1832,6 @@
     transform: none;
 }
 
-/* ========================================
-   SCROLLBAR STYLING
-   ======================================== */
-
-.settings-modal-new .modal-body::-webkit-scrollbar,
-.models-section::-webkit-scrollbar {
-    width: var(--spacing-sm);
-}
-
-.settings-modal-new .modal-body::-webkit-scrollbar-track,
-.models-section::-webkit-scrollbar-track {
-    background: var(--color-scrollbar-track);
-    border-radius: var(--border-radius-md);
-}
-
-.settings-modal-new .modal-body::-webkit-scrollbar-thumb,
-.models-section::-webkit-scrollbar-thumb {
-    background: var(--color-scrollbar-thumb);
-    border-radius: var(--border-radius-md);
-    border: 2px solid var(--color-scrollbar-track);
-}
-
-.settings-modal-new .modal-body::-webkit-scrollbar-thumb:hover,
-.models-section::-webkit-scrollbar-thumb:hover {
-    background: var(--color-scrollbar-thumb-hover);
-}
 
 /* ========================================
    RESPONSIVE DESIGN

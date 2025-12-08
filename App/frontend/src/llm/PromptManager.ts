@@ -105,13 +105,13 @@ export class PromptManager {
       case LLMTaskMode.STORY_OBJECT_EDIT:
         return this.getStoryObjectEditFunctions(context as StoryObjectEditPromptContext);
       case LLMTaskMode.CHAPTER_EDIT:
-        return this.getChapterEditFunctions();
+        return this.getChapterEditFunctions(context as ChapterEditPromptContext);
       case LLMTaskMode.TRANSLATION:
-        return this.getTranslationFunctions();
+        return this.getTranslationFunctions(context as StoryTranslationPromptContext);
       case LLMTaskMode.CHAT_TRANSLATION:
-        return this.getChatTranslationFunctions();
+        return this.getChatTranslationFunctions(context as ChatTranslationPromptContext);
       case LLMTaskMode.OBJECT_IMAGE_PROMPT:
-        return this.getObjectImagePromptFunctions();
+        return this.getObjectImagePromptFunctions(context as ObjectImagePromptContext);
       case LLMTaskMode.SCENE_IMAGE_PROMPT:
         return undefined; // Native output
       default:
@@ -516,19 +516,31 @@ export class PromptManager {
     return getEditFunctionsForCategory(context.category, context.targetId);
   }
 
-  private static getChapterEditFunctions(): FunctionCallSchema[] | undefined {
+  private static getChapterEditFunctions(
+    context: ChapterEditPromptContext
+  ): FunctionCallSchema[] | undefined {
+    if (context.isNativeOutput) return undefined;
     return CHAPTER_EDIT_FUNCTIONS;
   }
 
-  private static getTranslationFunctions(): FunctionCallSchema[] | undefined {
+  private static getTranslationFunctions(
+    context: StoryTranslationPromptContext
+  ): FunctionCallSchema[] | undefined {
+    if (context.isNativeOutput) return undefined;
     return TRANSLATION_FUNCTIONS;
   }
 
-  private static getChatTranslationFunctions(): FunctionCallSchema[] | undefined {
+  private static getChatTranslationFunctions(
+    context: ChatTranslationPromptContext
+  ): FunctionCallSchema[] | undefined {
+    if (context.isNativeOutput) return undefined;
     return CHAT_TRANSLATION_FUNCTIONS;
   }
 
-  private static getObjectImagePromptFunctions(): FunctionCallSchema[] | undefined {
+  private static getObjectImagePromptFunctions(
+    context: ObjectImagePromptContext
+  ): FunctionCallSchema[] | undefined {
+    if (context.isNativeOutput) return undefined;
     return OBJECT_IMAGE_PROMPT_FUNCTIONS;
   }
 

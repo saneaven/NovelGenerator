@@ -347,6 +347,7 @@ export const translationService = {
 
   /**
    * Add translations for one or more objects (unified endpoint)
+   * Returns updated objects for immediate store update (no separate GET needed)
    * @param translations Array of translation data (can be 1 or many objects)
    */
   async addTranslations(
@@ -357,8 +358,18 @@ export const translationService = {
       data: Record<string, any>;
       targetVersionNumber?: number;
     }>
-  ): Promise<{ success: boolean; translated_count: number; message: string }> {
-    return apiClient.post<{ success: boolean; translated_count: number; message: string }>(
+  ): Promise<{
+    success: boolean;
+    translated_count: number;
+    message: string;
+    objects: UnifiedObject[];
+  }> {
+    return apiClient.post<{
+      success: boolean;
+      translated_count: number;
+      message: string;
+      objects: UnifiedObject[];
+    }>(
       '/api/v1/translations',
       {
         translations: translations.map(t => ({

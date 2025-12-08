@@ -17,6 +17,15 @@ export interface ImageProviderConfig {
     baseUrl?: string;
 }
 
+/**
+ * Structured prompt with style components
+ */
+export interface StyledPrompt {
+    prefix: string;
+    content: string;
+    postfix: string;
+}
+
 // Reference types
 export interface ReferenceImage {
     assetId: string;
@@ -91,10 +100,10 @@ export interface ImageGenerationRequest {
 
 // Processed request (after PreProcessor)
 export interface ProcessedImageRequest {
-    // Final prompts after style application
-    prompt?: string;
-    positive_prompt?: string;
-    negative_prompt?: string;
+    // Structured prompts with prefix/content/postfix
+    prompt?: StyledPrompt;           // Natural language
+    positive_prompt?: StyledPrompt;  // Tag-based
+    negative_prompt?: StyledPrompt;  // Tag-based
 
     provider: string;
     model: string;
@@ -134,9 +143,10 @@ export interface ProcessedImageResult {
         thumbnailPath: string | null;
         mimeType: string;
         assetType: 'scene' | 'object' | null;
-        generationPrompt: string | null;
-        generationPositivePrompt: string | null;
-        generationNegativePrompt: string | null;
+        // Structured prompts (StyledPrompt with prefix/content/postfix)
+        generationPrompt: StyledPrompt | null;
+        generationPositivePrompt: StyledPrompt | null;
+        generationNegativePrompt: StyledPrompt | null;
         generationProvider: string | null;
         generationModel: string | null;
         generationSettings: Record<string, unknown> | null;
@@ -169,8 +179,10 @@ export interface ImagePipelineContext {
     tagBasedStyles?: Array<{
         id: string;
         name: string;
-        positiveTags: string;
-        negativeTags: string;
+        positivePrefix: string;
+        positivePostfix: string;
+        negativePrefix: string;
+        negativePostfix: string;
     }>;
     selectedNaturalStyleId?: string | null;
     selectedTagBasedStyleId?: string | null;

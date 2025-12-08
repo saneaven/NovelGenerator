@@ -421,12 +421,13 @@ class Asset(Base):
     # null: Uncategorized
     asset_type = Column(String(20), nullable=True, index=True)
 
-    # Generation metadata - prompts are stored separately by type
+    # Generation metadata - prompts stored as StyledPrompt JSON structure
+    # StyledPrompt: { "prefix": str, "content": str, "postfix": str }
     # Natural language providers (OpenAI, Gemini, xAI): use generation_prompt only
     # Tag-based providers (NovelAI): use generation_positive_prompt and generation_negative_prompt only
-    generation_prompt = Column(Text, nullable=True)  # Natural language prompt (OpenAI, Gemini, xAI)
-    generation_positive_prompt = Column(Text, nullable=True)  # Positive prompt for tag-based (NovelAI)
-    generation_negative_prompt = Column(Text, nullable=True)  # Negative prompt for tag-based (NovelAI)
+    generation_prompt = Column(JSONB, nullable=True)  # Natural language prompt (OpenAI, Gemini, xAI)
+    generation_positive_prompt = Column(JSONB, nullable=True)  # Positive prompt for tag-based (NovelAI)
+    generation_negative_prompt = Column(JSONB, nullable=True)  # Negative prompt for tag-based (NovelAI)
     generation_provider = Column(String(50), nullable=True)  # 'openai', 'gemini', 'xai', 'novelai'
     generation_model = Column(String(100), nullable=True)
     generation_settings = Column(JSONB, nullable=True)  # Provider-specific settings (sampler, steps, etc.)

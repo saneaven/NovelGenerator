@@ -1,7 +1,7 @@
-/* Batch Translation Modal - Modern Design (mirrors AIEditModal) */
+/* Translation Modal - Modern Design (mirrors AIEditModal) */
 
 /* Modal Container */
-.batch-translation-modal {
+.translation-modal {
   max-width: 700px;
   width: 90dvw;
   max-height: 90dvh;
@@ -15,7 +15,7 @@
 }
 
 /* Header */
-.batch-translation-modal .modal-header {
+.translation-modal .modal-header {
   background: var(--gradient-accent);
   color: white;
   padding: var(--spacing-xl) var(--spacing-2xl);
@@ -26,7 +26,7 @@
   gap: var(--spacing-lg);
 }
 
-.batch-translation-modal .modal-header h2 {
+.translation-modal .modal-header h2 {
   font-size: var(--font-size-xl);
   font-weight: 700;
   margin: 0;
@@ -36,7 +36,7 @@
   flex: 1;
 }
 
-.batch-translation-modal .modal-close {
+.translation-modal .modal-close {
   background: rgba(255, 255, 255, 0.15);
   color: white;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -55,13 +55,13 @@
   flex-shrink: 0;
 }
 
-.batch-translation-modal .modal-close:hover {
+.translation-modal .modal-close:hover {
   background: rgba(255, 255, 255, 0.25);
   transform: rotate(90deg);
 }
 
 /* ==================== CONFIG SCREEN ==================== */
-.batch-translation-config {
+.translation-config {
   flex: 1;
   overflow-y: auto;
   padding: var(--spacing-2xl);
@@ -72,13 +72,13 @@
 }
 
 /* Form Groups */
-.batch-translation-modal .form-group {
+.translation-modal .form-group {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
 }
 
-.batch-translation-modal .form-group > label {
+.translation-modal .form-group > label {
   font-size: var(--font-size-md);
   font-weight: 600;
   color: var(--color-text-primary);
@@ -136,13 +136,13 @@
 }
 
 /* Checkbox Group - Card Style */
-.batch-translation-modal .checkbox-group {
+.translation-modal .checkbox-group {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: var(--spacing-md);
 }
 
-.batch-translation-modal .checkbox-label {
+.translation-modal .checkbox-label {
   position: relative;
   display: flex;
   align-items: center;
@@ -156,14 +156,14 @@
   user-select: none;
 }
 
-.batch-translation-modal .checkbox-label:hover {
+.translation-modal .checkbox-label:hover {
   background: var(--color-surface-muted);
   border-color: var(--color-brand-primary-border);
   transform: translateY(-2px);
   box-shadow: var(--shadow-sm);
 }
 
-.batch-translation-modal .checkbox-label input[type="checkbox"] {
+.translation-modal .checkbox-label input[type="checkbox"] {
   width: 18px;
   height: 18px;
   cursor: pointer;
@@ -171,13 +171,13 @@
   flex-shrink: 0;
 }
 
-.batch-translation-modal .checkbox-label:has(input[type="checkbox"]:checked) {
+.translation-modal .checkbox-label:has(input[type="checkbox"]:checked) {
   background: var(--color-brand-primary-soft);
   border-color: var(--color-brand-primary);
   box-shadow: 0 0 0 3px var(--color-brand-primary-muted);
 }
 
-.batch-translation-modal .checkbox-label span {
+.translation-modal .checkbox-label span {
   flex: 1;
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
@@ -185,7 +185,7 @@
   transition: all 0.2s ease;
 }
 
-.batch-translation-modal .checkbox-label:has(input[type="checkbox"]:checked) span {
+.translation-modal .checkbox-label:has(input[type="checkbox"]:checked) span {
   color: var(--color-brand-primary-active);
   font-weight: 600;
 }
@@ -341,8 +341,47 @@
   font-weight: 500;
 }
 
+/* ==================== PRE-SELECTED OBJECT DISPLAY ==================== */
+.preselected-objects {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.preselected-object-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--color-surface-elevated);
+  border: 2px solid var(--color-border-medium);
+  border-radius: var(--border-radius-md);
+}
+
+.preselected-object-item .object-type-badge {
+  padding: var(--spacing-xs) var(--spacing-md);
+  background: var(--color-brand-primary-soft);
+  color: var(--color-brand-primary);
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.preselected-object-item .object-name {
+  font-size: var(--font-size-md);
+  font-weight: 500;
+  color: var(--color-text-primary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Textarea */
-.batch-translation-modal textarea {
+.translation-modal textarea {
   padding: var(--spacing-lg);
   border: 2px solid var(--color-border-medium);
   border-radius: var(--border-radius-md);
@@ -355,13 +394,13 @@
   color: var(--color-text-primary);
 }
 
-.batch-translation-modal textarea:focus {
+.translation-modal textarea:focus {
   outline: none;
   border-color: var(--color-brand-primary);
   box-shadow: 0 0 0 3px var(--color-brand-primary-muted);
 }
 
-.batch-translation-modal textarea::placeholder {
+.translation-modal textarea::placeholder {
   color: var(--color-text-muted);
 }
 
@@ -383,7 +422,7 @@
 }
 
 /* ==================== PROGRESS SCREEN ==================== */
-.batch-translation-progress {
+.translation-progress {
   flex: 1;
   overflow-y: auto;
   padding: var(--spacing-2xl);
@@ -504,7 +543,7 @@
 }
 
 /* ==================== COMPLETE SCREEN ==================== */
-.batch-translation-complete {
+.translation-complete {
   flex: 1;
   padding: var(--spacing-2xl);
   background: var(--color-surface-base);
@@ -574,7 +613,7 @@
 }
 
 /* Error Message */
-.batch-translation-complete .error-message {
+.translation-complete .error-message {
   text-align: center;
   padding: var(--spacing-2xl);
   background: var(--color-feedback-error-soft);
@@ -583,7 +622,7 @@
   animation: shake 0.5s ease-in-out;
 }
 
-.batch-translation-complete .error-message h3 {
+.translation-complete .error-message h3 {
   margin: 0 0 var(--spacing-md) 0;
   font-size: var(--font-size-xl);
   color: var(--color-feedback-error-strong);
@@ -593,7 +632,7 @@
   gap: var(--spacing-sm);
 }
 
-.batch-translation-complete .error-message p {
+.translation-complete .error-message p {
   margin: 0;
   font-size: var(--font-size-md);
   color: var(--color-text-secondary);
@@ -612,7 +651,7 @@
 }
 
 /* ==================== MODAL ACTIONS ==================== */
-.batch-translation-modal .modal-actions {
+.translation-modal .modal-actions {
   display: flex;
   gap: var(--spacing-md);
   justify-content: flex-end;
@@ -621,7 +660,7 @@
   margin-top: auto;
 }
 
-.batch-translation-modal .modal-actions button {
+.translation-modal .modal-actions button {
   padding: var(--spacing-md) var(--spacing-2xl);
   border-radius: var(--border-radius-md);
   font-size: var(--font-size-md);
@@ -634,32 +673,32 @@
   gap: var(--spacing-sm);
 }
 
-.batch-translation-modal .btn-secondary {
+.translation-modal .btn-secondary {
   background: var(--color-surface-muted);
   border-color: var(--color-border-medium);
   color: var(--color-text-secondary);
 }
 
-.batch-translation-modal .btn-secondary:hover {
+.translation-modal .btn-secondary:hover {
   background: var(--color-surface-hover);
   border-color: var(--color-border-strong);
   transform: translateY(-1px);
 }
 
-.batch-translation-modal .btn-primary {
+.translation-modal .btn-primary {
   background: var(--color-brand-primary);
   border-color: var(--color-brand-primary-hover);
   color: white;
 }
 
-.batch-translation-modal .btn-primary:hover:not(:disabled) {
+.translation-modal .btn-primary:hover:not(:disabled) {
   background: var(--color-brand-primary-hover);
   border-color: var(--color-brand-primary-active);
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
 }
 
-.batch-translation-modal .btn-primary:disabled {
+.translation-modal .btn-primary:disabled {
   opacity: 0.6;
   cursor: not-allowed;
   transform: none;
@@ -681,23 +720,23 @@
 
 /* Tablet and small desktop */
 @media (max-width: 768px) {
-  .batch-translation-modal {
+  .translation-modal {
     max-width: 95dvw;
     max-height: 95dvh;
   }
 
-  .batch-translation-config,
-  .batch-translation-progress,
-  .batch-translation-complete {
+  .translation-config,
+  .translation-progress,
+  .translation-complete {
     padding: var(--spacing-lg);
     gap: var(--spacing-lg);
   }
 
-  .batch-translation-modal .modal-header {
+  .translation-modal .modal-header {
     padding: var(--spacing-lg) var(--spacing-xl);
   }
 
-  .batch-translation-modal .modal-header h2 {
+  .translation-modal .modal-header h2 {
     font-size: var(--font-size-lg);
   }
 
@@ -715,16 +754,16 @@
     transform: rotate(90deg);
   }
 
-  .batch-translation-modal .checkbox-group {
+  .translation-modal .checkbox-group {
     grid-template-columns: 1fr;
   }
 
-  .batch-translation-modal .modal-actions {
+  .translation-modal .modal-actions {
     flex-direction: column-reverse;
     gap: var(--spacing-sm);
   }
 
-  .batch-translation-modal .modal-actions button {
+  .translation-modal .modal-actions button {
     width: 100%;
     justify-content: center;
     padding: var(--spacing-md) var(--spacing-lg);
@@ -736,28 +775,6 @@
   }
 }
 
-/* ==================== SCROLLBAR ==================== */
-.batch-translation-config::-webkit-scrollbar,
-.batch-translation-progress::-webkit-scrollbar {
-  width: 8px;
-}
-
-.batch-translation-config::-webkit-scrollbar-track,
-.batch-translation-progress::-webkit-scrollbar-track {
-  background: var(--color-scrollbar-track);
-  border-radius: var(--border-radius-md);
-}
-
-.batch-translation-config::-webkit-scrollbar-thumb,
-.batch-translation-progress::-webkit-scrollbar-thumb {
-  background: var(--color-scrollbar-thumb);
-  border-radius: var(--border-radius-md);
-}
-
-.batch-translation-config::-webkit-scrollbar-thumb:hover,
-.batch-translation-progress::-webkit-scrollbar-thumb:hover {
-  background: var(--color-scrollbar-thumb-hover);
-}
 
 /* ==================== NEW PROGRESS SCREEN - STREAMING CONTENT ==================== */
 
@@ -940,19 +957,6 @@
   padding: var(--spacing-xs) var(--spacing-sm);
 }
 
-/* Scrollbar for completed list */
-.completed-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.completed-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.completed-list::-webkit-scrollbar-thumb {
-  background: var(--color-scrollbar-thumb);
-  border-radius: var(--border-radius-sm);
-}
 
 /* ==================== RESPONSIVE - NEW PROGRESS SCREEN ==================== */
 @media (max-width: 768px) {

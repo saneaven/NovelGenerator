@@ -108,23 +108,6 @@
   padding-right: var(--spacing-xs);
 }
 
-.gfcc-operation-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.gfcc-operation-list::-webkit-scrollbar-track {
-  background: var(--color-surface-muted);
-  border-radius: 3px;
-}
-
-.gfcc-operation-list::-webkit-scrollbar-thumb {
-  background: var(--color-border-medium);
-  border-radius: 3px;
-}
-
-.gfcc-operation-list::-webkit-scrollbar-thumb:hover {
-  background: var(--color-border-strong);
-}
 
 .gfcc-operation-item {
   display: flex;
@@ -389,18 +372,6 @@
   overflow-y: auto;
 }
 
-.gfcc-preview-field-value::-webkit-scrollbar {
-  width: 4px;
-}
-
-.gfcc-preview-field-value::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.gfcc-preview-field-value::-webkit-scrollbar-thumb {
-  background: var(--color-border-medium);
-  border-radius: 2px;
-}
 
 /* Chapters */
 .gfcc-preview-chapters {

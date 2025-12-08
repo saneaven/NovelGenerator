@@ -75,11 +75,10 @@ Chapter: **{{ variable.chapterName }}**
 {% endfor %}
 {% endif %}
 
-{% if context.contextData.existingNovelContent %}
+{% if context.contextData.existingNovelContent and context.contextData.existingNovelContent.size > 0 %}
 ### Existing Novel Content
 
-{% for pair in context.contextData.existingNovelContent %}
-{% assign chapterData = pair[1] %}
+{% for chapterData in context.contextData.existingNovelContent %}
 #### {{ chapterData.chapterName }} ({{ chapterData.wordCount }} words)
 
 {% if chapterData.chapterDescription %}

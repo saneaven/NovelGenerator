@@ -8,6 +8,13 @@ from datetime import datetime
 # IMAGE GENERATION
 # ============================================================================
 
+class StyledPrompt(BaseModel):
+    """Structured prompt with style components"""
+    prefix: str = ""
+    content: str = ""
+    postfix: str = ""
+
+
 class ReferenceImage(BaseModel):
     """Reference image for image-to-image generation"""
     asset_id: str
@@ -26,12 +33,12 @@ class ImageGenerationRequest(BaseModel):
     # API key for the image provider (sent in request body for consistency with LLM endpoints)
     api_key: str
 
-    # For natural language providers (OpenAI, Gemini, xAI)
-    prompt: Optional[str] = None
+    # For natural language providers (OpenAI, Gemini, xAI) - StyledPrompt structure
+    prompt: Optional[StyledPrompt] = None
 
-    # For tag-based providers (NovelAI)
-    positive_prompt: Optional[str] = None
-    negative_prompt: Optional[str] = None
+    # For tag-based providers (NovelAI) - StyledPrompt structure
+    positive_prompt: Optional[StyledPrompt] = None
+    negative_prompt: Optional[StyledPrompt] = None
 
     provider: str  # 'openai', 'gemini', 'xai', 'novelai'
     model: str
@@ -113,10 +120,10 @@ class AssetResponse(BaseModel):
     thumbnail_path: Optional[str] = None
     mime_type: str
     asset_type: Optional[str] = None  # 'scene', 'object', or null
-    # Prompts stored separately by provider type
-    generation_prompt: Optional[str] = None  # Natural language prompt (OpenAI, Gemini, xAI)
-    generation_positive_prompt: Optional[str] = None  # Positive prompt for tag-based (NovelAI)
-    generation_negative_prompt: Optional[str] = None  # Negative prompt for tag-based (NovelAI)
+    # Structured prompts (StyledPrompt with prefix/content/postfix)
+    generation_prompt: Optional[StyledPrompt] = None  # Natural language prompt (OpenAI, Gemini, xAI)
+    generation_positive_prompt: Optional[StyledPrompt] = None  # Positive prompt for tag-based (NovelAI)
+    generation_negative_prompt: Optional[StyledPrompt] = None  # Negative prompt for tag-based (NovelAI)
     generation_provider: Optional[str] = None
     generation_model: Optional[str] = None
     generation_settings: Optional[Dict[str, Any]] = None  # Provider-specific settings
@@ -272,9 +279,10 @@ class SceneAssetResponse(BaseModel):
     thumbnail_path: Optional[str] = None
     mime_type: str
     asset_type: Optional[str] = None
-    generation_prompt: Optional[str] = None
-    generation_positive_prompt: Optional[str] = None
-    generation_negative_prompt: Optional[str] = None
+    # Structured prompts (StyledPrompt with prefix/content/postfix)
+    generation_prompt: Optional[StyledPrompt] = None
+    generation_positive_prompt: Optional[StyledPrompt] = None
+    generation_negative_prompt: Optional[StyledPrompt] = None
     generation_provider: Optional[str] = None
     generation_model: Optional[str] = None
     width: Optional[int] = None

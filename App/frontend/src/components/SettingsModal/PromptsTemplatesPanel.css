@@ -133,23 +133,6 @@
     color: var(--color-text-secondary);
 }
 
-/* Scrollbar styling for content area */
-.prompts-content::-webkit-scrollbar {
-    width: var(--spacing-sm);
-}
-
-.prompts-content::-webkit-scrollbar-track {
-    background: var(--color-scrollbar-track);
-}
-
-.prompts-content::-webkit-scrollbar-thumb {
-    background: var(--color-scrollbar-thumb);
-    border-radius: var(--border-radius-sm);
-}
-
-.prompts-content::-webkit-scrollbar-thumb:hover {
-    background: var(--color-scrollbar-thumb-hover);
-}
 
 /* Responsive layout */
 @media (max-width: 1024px) {
@@ -217,6 +200,3 @@
     color: var(--color-text-secondary);
 }
 
-[data-theme="dark"] .prompts-content::-webkit-scrollbar-track {
-    background: var(--color-scrollbar-track);
-}

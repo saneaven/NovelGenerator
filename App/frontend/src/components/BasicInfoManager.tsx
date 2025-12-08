@@ -12,9 +12,8 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
 import AIEditModal from './AIEditModal';
 import VersionHistoryModal from './VersionHistoryModal';
-import RetranslateModal from './RetranslateModal';
+import TranslationModal from './TranslationModal';
 import { DropdownMenu, DropdownItem } from './ui/DropdownMenu';
-import { TranslationService } from '../services/translationService';
 import type { BasicInfoObject, BasicInfoData } from '../types/unifiedObject';
 
 interface BasicInfoManagerProps {
@@ -32,8 +31,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   const listObjects = useUnifiedObjectStore((state) => state.listObjects);
   const createObject = useUnifiedObjectStore((state) => state.createObject);
   const { settings } = useSettingsStore();
-  const { showError, showSuccess } = useErrorStore();
-  const translating = useUnifiedObjectStore((state) => state.translating);
+  const { showError } = useErrorStore();
 
   // Get basic info from unified store
   // In real implementation, you'd need to get the basic info ID first
@@ -182,65 +180,6 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   const handleEdit = () => {
     setEditFormData(currentData);
     setIsEditing(true);
-  };
-
-  const handleRetranslate = async (
-    sourceLanguage: string,
-    targetLanguage: string,
-    includePrevious: boolean,
-    userInput: string
-  ) => {
-    if (!basicInfo || !basicInfoId || !projectId) return;
-
-    try {
-      TranslationService.setTranslationStatus(basicInfoId, { objectId: basicInfoId, isTranslating: true });
-
-      // Build custom user instructions with optional previous translation
-      let instructions = userInput || '';
-
-      const availableLanguages = Object.keys(basicInfo.data);
-      if (includePrevious && availableLanguages.includes(targetLanguage)) {
-        // Get previous translation data if available
-        const targetData = basicInfo.data[targetLanguage] || {};
-        const prevTranslation = `Previous translation for reference:\n${JSON.stringify({
-          title: targetData.title,
-          logline: targetData.logline,
-          genre: targetData.genre,
-        }, null, 2)}`;
-        instructions = instructions ? `${instructions}\n\n${prevTranslation}` : prevTranslation;
-      }
-
-      // Get source data for the source language
-      const sourceData = basicInfo.data[sourceLanguage] || currentData;
-      await TranslationService.translateSingle(
-        {
-          objectType: 'basic_info',
-          objectId: basicInfoId,
-          sourceData: {
-            title: sourceData.title,
-            logline: sourceData.logline,
-            genre: sourceData.genre,
-          },
-        },
-        {
-          projectId,
-          sourceLanguage,
-          targetLanguage,
-          userInput: instructions || undefined,
-        }
-      );
-
-      // Refresh object to update UI with new translation
-      await fetchObject('basic_info', basicInfoId);
-
-      showSuccess('Success', `Retranslation complete for ${targetLanguage}`);
-      setShowRetranslateModal(false);
-    } catch (err) {
-      console.error('Failed to retranslate:', err);
-      showError('Retranslation Error', err instanceof Error ? err.message : 'Failed to retranslate. Please try again.');
-    } finally {
-      TranslationService.clearTranslationStatus(basicInfoId);
-    }
   };
 
   const handleAIResult = async (result: any) => {
@@ -503,20 +442,17 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
         />
       )}
 
-      {/* Retranslate Modal */}
-      {basicInfo && basicInfoId && (
-        <RetranslateModal
+      {/* Translation Modal */}
+      {basicInfo && basicInfoId && projectId && (
+        <TranslationModal
           isOpen={showRetranslateModal}
           onClose={() => setShowRetranslateModal(false)}
-          objectType="basic_info"
-          objectId={basicInfoId}
+          projectId={projectId}
+          onComplete={() => setShowRetranslateModal(false)}
+          allowedObjectTypes={['basic_info']}
+          preSelectedObjectIds={[basicInfoId]}
           defaultSourceLanguage={settings.mainLanguage}
           defaultTargetLanguage={globalDisplayLanguage}
-          availableLanguages={[settings.mainLanguage, ...settings.subLanguages]}
-          manuscriptLanguages={Object.keys(basicInfo.data)}
-          translationTimestamp={basicInfo.version.created_at || null}
-          onRetranslate={handleRetranslate}
-          isTranslating={translating[basicInfoId] || false}
         />
       )}
     </div>

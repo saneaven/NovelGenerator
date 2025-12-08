@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import './BatchTranslationModal.css';
+import './TranslationModal.css';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useLLMTaskStore } from '../store/llmTaskStore';
@@ -10,7 +10,7 @@ import type { UnifiedObject, ObjectType } from '../types/unifiedObject';
 import ThinkingDisplay from './ThinkingDisplay';
 import { useLLMToast } from '../hooks/useLLMToast';
 
-interface BatchTranslationModalProps {
+interface TranslationModalProps {
   isOpen: boolean;
   onClose: () => void;
   projectId: string;
@@ -19,6 +19,7 @@ interface BatchTranslationModalProps {
   defaultSourceLanguage?: string;
   defaultTargetLanguage?: string;
   defaultUserInput?: string;
+  preSelectedObjectIds?: string[];  // If provided, skip tree selector and show only these objects
 }
 
 type ScreenType = 'config' | 'progress' | 'complete';
@@ -45,7 +46,7 @@ const CATEGORY_CONFIG: Record<string, { label: string; order: number }> = {
   manuscript: { label: 'Manuscript', order: 7 },
 };
 
-const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
+const TranslationModal: React.FC<TranslationModalProps> = ({
   isOpen,
   onClose,
   projectId,
@@ -54,6 +55,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
   defaultSourceLanguage,
   defaultTargetLanguage,
   defaultUserInput,
+  preSelectedObjectIds,
 }) => {
   const [screen, setScreen] = useState<ScreenType>('config');
   const [sourceLanguage, setSourceLanguage] = useState<string>(defaultSourceLanguage || '');
@@ -80,22 +82,22 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
   const abortControllerRef = useRef<AbortController | null>(null);
-  const toastSessionIdRef = useRef<string>(`batch-translation-${Date.now()}`);
+  const toastSessionIdRef = useRef<string>(`translation-${Date.now()}`);
   const store = useUnifiedObjectStore();
   const settings = useSettingsStore((state) => state.settings);
 
   // Generate new session ID when modal opens
   useEffect(() => {
     if (isOpen) {
-      toastSessionIdRef.current = `batch-translation-${Date.now()}`;
+      toastSessionIdRef.current = `translation-${Date.now()}`;
     }
   }, [isOpen]);
 
   // Toast notification for LLM requests
   const { startTask, updateProgress, completeSuccess, completeError } = useLLMToast({
     sessionId: toastSessionIdRef.current,
-    taskType: 'batch-translation',
-    label: 'Batch Translation',
+    taskType: 'translation',
+    label: 'Translation',
   });
 
   // Get streaming content from store
@@ -149,9 +151,21 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
     const objects: (StoryObjectToTranslate & { label: string; order?: number })[] = [];
     const allObjects = Object.values(store.objects) as UnifiedObject<any>[];
 
+    // When preSelectedObjectIds is provided, use those objects regardless of translation status
+    const preSelectedSet = preSelectedObjectIds ? new Set(preSelectedObjectIds) : null;
+
     allObjects.forEach(obj => {
       if (obj.metadata?.project_id !== projectId) return;
-      if (Object.keys(obj.data || {}).includes(targetLanguage)) return; // Skip if already translated
+
+      // If preSelectedObjectIds is provided, only include those specific objects
+      if (preSelectedSet) {
+        if (!preSelectedSet.has(obj.id)) return;
+        // For pre-selected objects, skip target language check (allow retranslation)
+      } else {
+        // Normal mode: skip if already translated
+        if (Object.keys(obj.data || {}).includes(targetLanguage)) return;
+      }
+
       if (!Object.keys(obj.data || {}).includes(sourceLanguage)) return; // Skip if no source language data
 
       const objType = obj.type;
@@ -178,7 +192,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
       const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
       return orderA - orderB;
     });
-  }, [store.objects, projectId, targetLanguage, sourceLanguage, allowedObjectTypes]);
+  }, [store.objects, projectId, targetLanguage, sourceLanguage, allowedObjectTypes, preSelectedObjectIds]);
 
   // Build tree structure from available objects
   const translationTree = useMemo((): TranslationTreeNode[] => {
@@ -222,9 +236,12 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
     return tree;
   }, [availableObjects]);
 
-  // Initialize selectedIds when tree changes (select all by default)
+  // Initialize selectedIds when tree changes (select all by default, or use preSelectedObjectIds)
   useEffect(() => {
-    if (translationTree.length > 0 && selectedIds.size === 0) {
+    if (preSelectedObjectIds && preSelectedObjectIds.length > 0) {
+      // When preSelectedObjectIds is provided, use those directly
+      setSelectedIds(new Set(preSelectedObjectIds));
+    } else if (translationTree.length > 0 && selectedIds.size === 0) {
       const allIds = new Set<string>();
       translationTree.forEach(category => {
         category.children?.forEach(child => {
@@ -233,7 +250,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
       });
       setSelectedIds(allIds);
     }
-  }, [translationTree, selectedIds.size]);
+  }, [translationTree, selectedIds.size, preSelectedObjectIds]);
 
   // Get objects to translate based on selection
   const objectsToTranslate = useMemo((): StoryObjectToTranslate[] => {
@@ -276,7 +293,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
 
     // Start toast notification with retry context
     startTask({
-      taskType: 'batch-translation',
+      taskType: 'translation',
       modalProps: {
         projectId,
         onComplete,
@@ -370,12 +387,10 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
       onComplete();
       // Modal already closed - success shown in toast
     } catch (err) {
-      // If we have partial translations, they're already applied in onPartialSuccess
+      // Error already handled by onError callback - no need to call completeError again
       if (partialTranslations.length === 0) {
         const errorMsg = err instanceof Error ? err.message : 'Translation failed';
         setError(errorMsg);
-        completeError(errorMsg);
-        // Modal already closed - error shown in toast
       }
     }
   };
@@ -485,15 +500,15 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
 
   return (
     <div className="modal-overlay" onClick={handleClose}>
-      <div className="modal-content batch-translation-modal" onClick={e => e.stopPropagation()}>
+      <div className="modal-content translation-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>🌐 Batch Translation</h2>
+          <h2>🌐 Translation</h2>
           <button className="modal-close" onClick={handleClose}>×</button>
         </div>
 
         {/* Configuration Screen */}
         {screen === 'config' && (
-          <div className="batch-translation-config">
+          <div className="translation-config">
             <div className="form-group">
               <label>Languages</label>
               <div className="language-selector-row">
@@ -527,8 +542,23 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
               </div>
             </div>
 
-            {/* Tree-based object selector */}
-            {translationTree.length > 0 && (
+            {/* Pre-selected object display (when preSelectedObjectIds is provided) */}
+            {preSelectedObjectIds && preSelectedObjectIds.length > 0 && availableObjects.length > 0 && (
+              <div className="form-group">
+                <label>Object to Translate</label>
+                <div className="preselected-objects">
+                  {availableObjects.map(obj => (
+                    <div key={obj.objectId} className="preselected-object-item">
+                      <span className="object-type-badge">{CATEGORY_CONFIG[obj.objectType]?.label || obj.objectType}</span>
+                      <span className="object-name">{obj.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Tree-based object selector (when no preSelectedObjectIds) */}
+            {!preSelectedObjectIds && translationTree.length > 0 && (
               <div className="form-group">
                 <div className="tree-header">
                   <label>Select Objects to Translate</label>
@@ -600,9 +630,12 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
               />
             </div>
 
-            <div className="translation-summary">
-              <strong>{selectedIds.size}</strong> of <strong>{availableObjects.length}</strong> objects selected
-            </div>
+            {/* Summary - only show for batch mode */}
+            {!preSelectedObjectIds && (
+              <div className="translation-summary">
+                <strong>{selectedIds.size}</strong> of <strong>{availableObjects.length}</strong> objects selected
+              </div>
+            )}
 
             <div className="modal-actions">
               <button onClick={handleClose} className="btn-secondary">
@@ -621,7 +654,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
 
         {/* Progress Screen */}
         {screen === 'progress' && (
-          <div className="batch-translation-progress">
+          <div className="translation-progress">
             {/* Inline Error Banner for Partial Success */}
             {partialError && (
               <div className="partial-error-banner">
@@ -655,7 +688,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
             {/* Thinking Display */}
             {contentParts.some(p => p.type === 'thinking') && (
               <ThinkingDisplay
-                messageId="batch-translation"
+                messageId="translation"
                 contentParts={contentParts}
                 displayMode="separate"
                 isStreaming={true}
@@ -766,7 +799,7 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
 
         {/* Complete Screen */}
         {screen === 'complete' && (
-          <div className="batch-translation-complete">
+          <div className="translation-complete">
             {error ? (
               <>
                 <div className="error-message">
@@ -812,4 +845,4 @@ const BatchTranslationModal: React.FC<BatchTranslationModalProps> = ({
   );
 };
 
-export default BatchTranslationModal;
+export default TranslationModal;

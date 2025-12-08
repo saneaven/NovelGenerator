@@ -288,6 +288,8 @@
     color: var(--color-text-tertiary);
     font-size: var(--font-size-sm);
     line-height: var(--line-height-relaxed);
+    max-height: 160px;
+    overflow-y: auto;
 }
 
 /* Chapters List */
@@ -361,6 +363,8 @@
     font-size: var(--font-size-sm);
     line-height: var(--line-height-relaxed);
     margin-bottom: var(--spacing-sm);
+    max-height: 120px;
+    overflow-y: auto;
 }
 
 .chapter-status {
@@ -1220,59 +1224,6 @@
     }
 }
 
-/* Modern Scrollbars */
-::-webkit-scrollbar {
-    width: var(--scrollbar-width);
-    height: var(--scrollbar-width);
-}
-
-::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-    background: var(--color-border-medium);
-    border-radius: var(--border-radius-sm);
-    border: none;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: var(--color-border-strong);
-}
-
-::-webkit-scrollbar-corner {
-    background: transparent;
-}
-
-::-webkit-scrollbar-button {
-    display: none;
-    height: 0;
-    width: 0;
-}
-
-::-webkit-scrollbar-button:start:decrement,
-::-webkit-scrollbar-button:end:increment {
-    display: none;
-    height: 0;
-    width: 0;
-    background: transparent;
-}
-
-::-webkit-scrollbar-button:vertical:start:decrement,
-::-webkit-scrollbar-button:vertical:end:increment,
-::-webkit-scrollbar-button:horizontal:start:decrement,
-::-webkit-scrollbar-button:horizontal:end:increment {
-    display: none;
-    height: 0;
-    width: 0;
-}
-
-/* Firefox Scrollbar */
-* {
-    scrollbar-width: thin;
-    scrollbar-color: var(--color-border-medium) transparent;
-}
-
 /* Animations */
 @keyframes fadeIn {
     0% {
@@ -1653,8 +1604,8 @@
     font-weight: var(--font-weight-medium);
 }
 
-/* Batch Translate Button */
-.batch-translate-btn {
+/* Translate Button */
+.translate-btn {
     padding: var(--spacing-sm);
     background: var(--color-surface-elevated);
     color: var(--color-text-secondary);
@@ -1668,7 +1619,7 @@
     box-shadow: var(--shadow-xs);
 }
 
-.batch-translate-btn:hover:not(:disabled) {
+.translate-btn:hover:not(:disabled) {
     background: var(--color-brand-accent);
     color: var(--color-text-inverse);
     border-color: var(--color-brand-accent);
@@ -1676,7 +1627,7 @@
     box-shadow: var(--shadow-md);
 }
 
-.batch-translate-btn:disabled {
+.translate-btn:disabled {
     background: var(--color-surface-subtle);
     cursor: not-allowed;
     opacity: 0.6;

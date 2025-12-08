@@ -16,7 +16,7 @@ import ChatSidebar from '../components/ChatSidebar';
 import ErrorModal from '../components/ErrorModal';
 import SettingsModal from '../components/SettingsModal/SettingsModal';
 import LanguageDropdown from '../components/ui/LanguageDropdown';
-import BatchTranslationModal from '../components/BatchTranslationModal';
+import TranslationModal from '../components/TranslationModal';
 import ChatPanel from './workspace/components/ChatPanel';
 import StoryPanel from './workspace/components/StoryPanel';
 
@@ -73,8 +73,8 @@ const Workspace: React.FC = () =>
     const { state: uiState, actions: uiActions } = useWorkspaceState(projectId);
     const settings = useSettingsStore(state => state.settings);
 
-    // Batch translation modal state
-    const [showBatchTranslateModal, setShowBatchTranslateModal] = useState(false);
+    // Translation modal state
+    const [showTranslateModal, setShowTranslateModal] = useState(false);
     const unifiedStore = useUnifiedObjectStore();
 
     // Build available languages list (main + all sub languages)
@@ -110,9 +110,9 @@ const Workspace: React.FC = () =>
         return count;
     }, [unifiedStore.objects, projectId, settings.subLanguages]);
 
-    // Handler for batch translation complete
-    const handleBatchTranslateComplete = () => {
-        // Refresh objects after batch translation
+    // Handler for translation complete
+    const handleTranslateComplete = () => {
+        // Refresh objects after translation
         if (projectId) {
             listObjects('basic_info', projectId);
             listObjects('character', projectId);
@@ -122,7 +122,7 @@ const Workspace: React.FC = () =>
             listObjects('act', projectId);
             listObjects('chapter', projectId);
         }
-        setShowBatchTranslateModal(false);
+        setShowTranslateModal(false);
     };
 
     // Derive story objects reactively from unified store (always uses main language for chat context)
@@ -423,7 +423,7 @@ const Workspace: React.FC = () =>
                                 title="Select display language"
                                 showTranslateAll={settings.subLanguages && settings.subLanguages.length > 0 && objectsNeedingTranslation > 0}
                                 translateCount={objectsNeedingTranslation}
-                                onTranslateAllClick={() => setShowBatchTranslateModal(true)}
+                                onTranslateAllClick={() => setShowTranslateModal(true)}
                             />
                         )}
                         <button
@@ -509,7 +509,7 @@ const Workspace: React.FC = () =>
                         title="Select display language"
                         showTranslateAll={settings.subLanguages && settings.subLanguages.length > 0 && objectsNeedingTranslation > 0}
                         translateCount={objectsNeedingTranslation}
-                        onTranslateAllClick={() => setShowBatchTranslateModal(true)}
+                        onTranslateAllClick={() => setShowTranslateModal(true)}
                     />
                 )}
                 <button
@@ -521,11 +521,11 @@ const Workspace: React.FC = () =>
                 </button>
             </footer>
 
-            <BatchTranslationModal
-                isOpen={showBatchTranslateModal}
-                onClose={() => setShowBatchTranslateModal(false)}
+            <TranslationModal
+                isOpen={showTranslateModal}
+                onClose={() => setShowTranslateModal(false)}
                 projectId={projectId || ''}
-                onComplete={handleBatchTranslateComplete}
+                onComplete={handleTranslateComplete}
                 allowedObjectTypes={['basic_info', 'character', 'organization', 'location', 'lorebook', 'act', 'chapter']}
             />
 

@@ -62,6 +62,11 @@ export function useLLMToast(options: UseLLMToastOptions): UseLLMToastReturn {
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
+  // Track the active session ID (captured when startTask is called)
+  // This ensures all subsequent calls (completeError, completeSuccess, etc.)
+  // use the same sessionId that was used to start the task
+  const activeSessionIdRef = useRef<string | null>(null);
+
   const setRunning = useLLMTaskStore((state) => state.setRunning);
   const setProgress = useLLMTaskStore((state) => state.setProgress);
   const setSuccess = useLLMTaskStore((state) => state.setSuccess);
@@ -74,6 +79,7 @@ export function useLLMToast(options: UseLLMToastOptions): UseLLMToastReturn {
   const startTask = useCallback(
     (retryContext?: RetryContext) => {
       const { taskType: type, label: lbl, sessionId: id } = optionsRef.current;
+      activeSessionIdRef.current = id; // Capture sessionId at start
       setRunning(id, lbl, type, retryContext);
     },
     [setRunning]
@@ -81,24 +87,31 @@ export function useLLMToast(options: UseLLMToastOptions): UseLLMToastReturn {
 
   const updateProgress = useCallback(
     (current: number, total: number, currentItemLabel?: string) => {
-      setProgress(optionsRef.current.sessionId, current, total, currentItemLabel);
+      const id = activeSessionIdRef.current ?? optionsRef.current.sessionId;
+      setProgress(id, current, total, currentItemLabel);
     },
     [setProgress]
   );
 
   const completeSuccess = useCallback(() => {
-    setSuccess(optionsRef.current.sessionId);
+    const id = activeSessionIdRef.current ?? optionsRef.current.sessionId;
+    setSuccess(id);
+    activeSessionIdRef.current = null; // Reset for next task
   }, [setSuccess]);
 
   const completeError = useCallback(
     (message: string) => {
-      setTaskError(optionsRef.current.sessionId, message);
+      const id = activeSessionIdRef.current ?? optionsRef.current.sessionId;
+      setTaskError(id, message);
+      activeSessionIdRef.current = null; // Reset for next task
     },
     [setTaskError]
   );
 
   const completeCancelled = useCallback(() => {
-    setCancelled(optionsRef.current.sessionId);
+    const id = activeSessionIdRef.current ?? optionsRef.current.sessionId;
+    setCancelled(id);
+    activeSessionIdRef.current = null; // Reset for next task
   }, [setCancelled]);
 
   return {

@@ -130,23 +130,6 @@
   /* Children indentation is handled by the paddingLeft in the component */
 }
 
-/* Scrollbar styling */
-.prompt-tree-content::-webkit-scrollbar {
-  width: var(--spacing-sm);
-}
-
-.prompt-tree-content::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.prompt-tree-content::-webkit-scrollbar-thumb {
-  background: var(--color-scrollbar-thumb);
-  border-radius: var(--border-radius-sm);
-}
-
-.prompt-tree-content::-webkit-scrollbar-thumb:hover {
-  background: var(--color-scrollbar-thumb-hover);
-}
 
 /* Dark mode support */
 [data-theme="dark"] .prompt-tree-nav {

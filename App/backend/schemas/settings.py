@@ -128,11 +128,13 @@ class NaturalImageStyle(BaseModel):
 
 
 class TagBasedImageStyle(BaseModel):
-    """Custom image style for tag-based providers (additional tags)"""
+    """Custom image style for tag-based providers (prefix/postfix for positive and negative prompts)"""
     id: str
     name: str
-    positiveTags: str = ""
-    negativeTags: str = ""
+    positivePrefix: str = ""
+    positivePostfix: str = ""
+    negativePrefix: str = ""
+    negativePostfix: str = ""
 
 
 class OpenAIImageSettings(BaseModel):

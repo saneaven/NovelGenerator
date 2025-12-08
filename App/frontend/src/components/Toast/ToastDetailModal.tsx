@@ -90,9 +90,7 @@ const ToastDetailModal: React.FC<ToastDetailModalProps> = ({ session, onClose })
             <div className="toast-detail-stream">
               <div className="toast-detail-stream-label">Output</div>
               <div className="toast-detail-stream-content">
-                {streamContent.length > 2000
-                  ? `${streamContent.slice(0, 2000)}...`
-                  : streamContent}
+                {streamContent}
                 {session.status === 'running' && (
                   <span className="toast-detail-cursor">|</span>
                 )}

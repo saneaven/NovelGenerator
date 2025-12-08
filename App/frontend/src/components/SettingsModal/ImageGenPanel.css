@@ -314,6 +314,39 @@
 }
 
 /* ========================================
+   TAG-BASED STYLE FIELDS
+   ======================================== */
+
+.custom-style-item .style-fields.tag-based-fields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.custom-style-item .style-field-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    background: var(--color-surface-base);
+    border-radius: var(--border-radius-sm);
+}
+
+.custom-style-item .field-group-label {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.custom-style-item .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-md);
+}
+
+/* ========================================
    TAG-BASED STYLE PREVIEW
    ======================================== */
 
