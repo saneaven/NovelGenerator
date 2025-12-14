@@ -203,7 +203,7 @@ const SceneAssetManagerModal: React.FC<SceneAssetManagerModalProps> = ({
                                                         onClick={(e) => handleStartRename(asset, e)}
                                                         title="Rename"
                                                     >
-                                                        <Edit size={12} />
+                                                        <Edit size="xs" />
                                                     </button>
                                                     <button
                                                         className="delete-button"

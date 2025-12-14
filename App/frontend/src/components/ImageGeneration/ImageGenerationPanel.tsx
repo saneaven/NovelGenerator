@@ -17,7 +17,7 @@ import {
 } from '../../imageGeneration';
 import type { Asset } from '../../api/assetService';
 import ImagePromptBuilderModal from './ImagePromptBuilderModal';
-import { Sparkle, Check } from '../icons';
+import { Check, AIAssistMini } from '../icons';
 import './ImageGenerationPanel.css';
 
 // Settings passed from asset detail for regeneration
@@ -317,7 +317,7 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                                 title="AI-assisted prompt generation"
                                 type="button"
                             >
-                                <Sparkle size={14} /> AI Assist
+                                <AIAssistMini size="sm" /> AI Assist
                             </button>
                         </div>
                     </div>
@@ -332,13 +332,13 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                                 className={`prompt-tab ${activePromptTab === 'positive' ? 'active' : ''}`}
                                 onClick={() => setActivePromptTab('positive')}
                             >
-                                Positive {positivePrompt && <Check size={12} />}
+                                Positive {positivePrompt && <Check size="xs" />}
                             </button>
                             <button
                                 className={`prompt-tab ${activePromptTab === 'negative' ? 'active' : ''}`}
                                 onClick={() => setActivePromptTab('negative')}
                             >
-                                Negative {negativePrompt && <Check size={12} />}
+                                Negative {negativePrompt && <Check size="xs" />}
                             </button>
                         </div>
                         <div className="prompt-input-wrapper">
@@ -365,7 +365,7 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                                 title="AI-assisted prompt generation"
                                 type="button"
                             >
-                                <Sparkle size={14} /> AI Assist
+                                <AIAssistMini size="sm" /> AI Assist
                             </button>
                         </div>
                     </div>

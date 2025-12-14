@@ -1,20 +1,23 @@
 import React from 'react';
-import type { IconProps } from '../types';
+import { resolveIconSize, type IconProps } from '../types';
 
 export const Bullet: React.FC<IconProps> = ({
-  size = 16,
+  size,
   className = '',
   color = 'currentColor'
-}) => (
+}) => {
+  const resolvedSize = resolveIconSize(size);
+  return (
   <svg
-    width={size}
-    height={size}
+    width={resolvedSize}
+    height={resolvedSize}
     viewBox="0 0 24 24"
-    fill={color}
+    fill="none"
     className={className}
     xmlns="http://www.w3.org/2000/svg"
   >
     {/* Placeholder: filled square */}
-    <circle cx="8" cy="8" r="4" />
+    <circle cx="8" cy="8" r="4" fill={color} />
   </svg>
-);
+  );
+};

@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useRef, useState, useEffect } from 'react';
-import { Folder, Image, Sparkle } from '../icons';
+import { AIAssistMini, Folder, Image } from '../icons';
 import './ImageInsertMenu.css';
 
 interface ImageInsertMenuProps {
@@ -145,7 +145,7 @@ export function ImageInsertMenu({
         onDragLeave={handleDragLeave}
         onClick={() => fileInputRef.current?.click()}
       >
-        <div className="dropzone-icon"><Folder size={24} /></div>
+        <div className="dropzone-icon"><Folder size="2xl" /></div>
         <div className="dropzone-text">
           <span className="dropzone-primary">Drop image here</span>
           <span className="dropzone-secondary">or click to browse</span>
@@ -168,7 +168,7 @@ export function ImageInsertMenu({
           className="image-insert-action-btn"
           onClick={handleBrowseClick}
         >
-          <span className="action-icon"><Image size={16} /></span>
+          <span className="action-icon"><Image size="md" /></span>
           <span className="action-label">From Assets</span>
         </button>
         <button
@@ -176,7 +176,7 @@ export function ImageInsertMenu({
           className="image-insert-action-btn generate"
           onClick={handleGenerateClick}
         >
-          <span className="action-icon"><Sparkle size={16} /></span>
+          <span className="action-icon"><AIAssistMini size="md" /></span>
           <span className="action-label">Generate with AI</span>
         </button>
         {onManageSceneAssets && (
@@ -187,7 +187,7 @@ export function ImageInsertMenu({
               className="image-insert-action-btn manage"
               onClick={handleManageClick}
             >
-              <span className="action-icon"><Folder size={16} /></span>
+              <span className="action-icon"><Folder size="md" /></span>
               <span className="action-label">Manage Scene Assets</span>
             </button>
           </>

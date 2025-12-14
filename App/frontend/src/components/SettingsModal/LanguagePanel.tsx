@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import './LanguagePanel.css';
 
 interface LanguagePanelProps {
   mainLanguage: string;

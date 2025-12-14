@@ -366,7 +366,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     <div className="modal-overlay" onClick={handleClose}>
       <div className="modal-content translation-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2><Globe size={20} /> Translation</h2>
+          <h2><Globe size="xl" /> Translation</h2>
           <button className="modal-close" onClick={handleClose}>×</button>
         </div>
 
@@ -388,7 +388,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
                   className="swap-languages-btn"
                   title="Swap languages"
                 >
-                  <Swap size={16} />
+                  <Swap size="md" />
                 </button>
                 <select
                   value={targetLanguage}

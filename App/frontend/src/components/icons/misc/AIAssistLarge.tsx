@@ -1,22 +1,28 @@
 import React from 'react';
-import type { IconProps } from '../types';
+import { resolveIconSize, type IconProps } from '../types';
 
 export const AIAssistLarge: React.FC<IconProps> = ({
-  size = 16,
+  size,
   className = '',
   color = 'currentColor',
   strokeWidth = 1.5,
-}) => (
+}) => {
+  const resolvedSize = resolveIconSize(size);
+  return (
     <svg
-        width={size}
-        height={size}
+        width={resolvedSize}
+        height={resolvedSize}
         viewBox="0 0 24 24"
-        fill={color}
+        fill="none"
         className={className}
         xmlns="http://www.w3.org/2000/svg"
     >
-        <path fill-rule="evenodd" clip-rule="evenodd" d="M3 15.9254C5.27269 16.6622 7.05414 18.4437 7.79098 20.7174C8.52784 18.4437 10.3093 16.6622 12.582 15.9254C10.3093 15.1886 8.52784 13.4071 7.79098 11.1344C7.05414 13.4071 5.27269 15.1886 3 15.9254Z" stroke={color} stroke-width={strokeWidth} stroke-linecap="round" stroke-linejoin="round"></path>
-        <path fill-rule="evenodd" clip-rule="evenodd" d="M14.6488 10.9655C16.1552 11.4539 17.336 12.6347 17.8244 14.1418C18.3128 12.6347 19.4936 11.4539 21 10.9655C19.4936 10.4771 18.3128 9.29632 17.8244 7.78992C17.336 9.29632 16.1552 10.4771 14.6488 10.9655Z" stroke={color} stroke-width={strokeWidth} stroke-linecap="round" stroke-linejoin="round"></path>
-        <path fill-rule="evenodd" clip-rule="evenodd" d="M9.12097 5.2487C10.0536 5.55105 10.7847 6.28212 11.0871 7.21517C11.3894 6.28212 12.1205 5.55105 13.0532 5.2487C12.1205 4.94631 11.3894 4.21524 11.0871 3.28259C10.7847 4.21524 10.0536 4.94631 9.12097 5.2487Z" stroke={color} stroke-width={strokeWidth} stroke-linecap="round" stroke-linejoin="round"></path>
+<path d="M3 19.1479H10.1176" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"></path>
+<path d="M3 14.3828H7.43225" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"></path>
+<path d="M3 4.85156H20.9992" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"></path>
+<path d="M3 9.61719H10.0111" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"></path>
+<path d="M14.5117 17.619L14.3664 17.2259C13.8186 15.7434 12.6515 14.5745 11.1712 14.026L10.7786 13.8805L11.1712 13.735C12.6515 13.1864 13.8186 12.0176 14.3664 10.5351L14.5117 10.1419L14.657 10.5351C15.2047 12.0176 16.3718 13.1864 17.8522 13.735L18.2448 13.8805L17.8522 14.026C16.3718 14.5745 15.2047 15.7434 14.657 17.2259L14.5117 17.619Z" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"></path>
+<path d="M19.8224 19.147C19.6508 18.5823 19.2096 18.1404 18.6457 17.9685C19.2096 17.7967 19.6508 17.3547 19.8224 16.7901C19.994 17.3547 20.4353 17.7967 20.9991 17.9685C20.4353 18.1404 19.994 18.5823 19.8224 19.147Z" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"></path>
     </svg>
-);
+  );
+};

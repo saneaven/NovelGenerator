@@ -295,7 +295,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
               }
             >
               <DropdownItem
-                icon={<Edit size={14} />}
+                icon={<Edit size="sm" />}
                 label="Edit"
                 onClick={handleEdit}
                 disabled={loading}
@@ -304,14 +304,14 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
               {settings.defaultSubLanguage &&
                 Object.keys(basicInfo.data).includes(settings.defaultSubLanguage) && (
                   <DropdownItem
-                    icon={<Refresh size={14} />}
+                    icon={<Refresh size="sm" />}
                     label="Retranslate"
                     onClick={() => setShowRetranslateModal(true)}
                     disabled={loading}
                   />
               )}
               <DropdownItem
-                icon={<Books size={14} />}
+                icon={<Books size="sm" />}
                 label="History"
                 onClick={() => setShowVersionHistory(true)}
                 disabled={loading}
@@ -325,7 +325,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
               className="ai-edit-btn"
               disabled={isSaving}
             >
-              <AIAssist size={14} /> AI Edit
+              <AIAssist size="sm" /> AI Edit
             </button>
             <div className="form-actions-right">
               <button
@@ -408,7 +408,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
         {/* Metadata */}
         <div className="metadata">
           <span className="item-language">
-            {isFallback && <span className="fallback-warning" title={`${globalDisplayLanguage} not available, showing ${effectiveLanguage}`}><Warning size={14} /> </span>}
+            {isFallback && <span className="fallback-warning" title={`${globalDisplayLanguage} not available, showing ${effectiveLanguage}`}><Warning size="sm" /> </span>}
             Language: {effectiveLanguage}
           </span>
           <span className="version-info">

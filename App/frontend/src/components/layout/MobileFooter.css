@@ -1,0 +1,99 @@
+/* ===== Mobile Footer ===== */
+.mobile-footer {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-footer {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    background: var(--color-surface-elevated);
+    border-top: 1px solid var(--color-border-default);
+    padding: 0 var(--spacing-md);
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+    z-index: var(--z-sticky);
+    box-shadow: var(--shadow-lg);
+  }
+
+  /* Footer notification button */
+  .footer-notification-btn .notification-button {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: var(--border-radius-md);
+    flex-shrink: 0;
+  }
+
+  /* Chat toggle button */
+  .footer-chat-toggle-btn {
+    display: flex;
+    flex: 1;
+    justify-content: center;
+    align-items: center;
+    padding: var(--spacing-sm) var(--spacing-xl);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-lg);
+    background: var(--color-surface-base);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    transition: all var(--transition-base);
+    box-shadow: var(--shadow-xs);
+  }
+
+  .footer-chat-toggle-btn:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text-primary);
+    border-color: var(--color-border-medium);
+  }
+
+  .footer-chat-toggle-btn:active {
+    transform: scale(0.98);
+  }
+
+  .footer-chat-toggle-btn.active {
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+  }
+
+  .footer-chat-toggle-btn.active:hover {
+    background: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
+    color: white;
+  }
+
+  /* Settings button */
+  .footer-settings-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
+    background: var(--color-surface-base);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-md);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-base);
+    flex-shrink: 0;
+    font-size: var(--font-size-lg);
+  }
+
+  .footer-settings-btn:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text-primary);
+    border-color: var(--color-border-medium);
+  }
+
+  .footer-settings-btn:active {
+    transform: scale(0.95);
+  }
+}

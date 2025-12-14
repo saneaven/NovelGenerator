@@ -42,7 +42,7 @@ import type { ManuscriptObject } from '../../../types/unifiedObject';
 import type { InitialGenerationSettings } from '../../../components/ImageGeneration/SceneImageGeneratorModal';
 import { API_BASE_URL } from '../../../api/client';
 import ChapterSidebar from './ChapterSidebar';
-import { Save, Check, Bullet, Warning, HamburgerMenu, ChevronUp, ChevronDown, AIAssist, Refresh, Globe, Lightbulb } from '../../../components/icons';
+import { Save, Check, Bullet, Warning, HamburgerMenu, AIAssist, Refresh, Globe, Lightbulb } from '../../../components/icons';
 
 interface NovelEditorPanelProps {
   projectId: string;
@@ -209,10 +209,12 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   // Generate editor key - changes trigger editor remount for external content updates
   // This replaces the fragile isSettingContentRef approach with React's key mechanism
+  // Include globalDisplayLanguage to ensure remount when user switches display language
+  // Fixes bug where switching to main language after AI Edit showed empty content
   const editorKey = useMemo(() => {
     if (!manuscript) return 'loading';
-    return `${manuscriptId}-${manuscript.version?.number ?? 0}-${effectiveLanguage}`;
-  }, [manuscriptId, manuscript?.version?.number, effectiveLanguage]);
+    return `${manuscriptId}-${manuscript.version?.number ?? 0}-${globalDisplayLanguage}-${effectiveLanguage}`;
+  }, [manuscriptId, manuscript?.version?.number, globalDisplayLanguage, effectiveLanguage]);
 
   // Compute initial content INLINE during render (not in an effect!)
   // This ensures the value is ready BEFORE the editor mounts with a new key
@@ -811,15 +813,28 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
             <div className="editor-header">
               <div className="editor-info">
                 <div className="editor-title-row">
-                  <h2 className="editor-chapter-title">{selectedChapter.name}</h2>
+                  {/* Mobile-only: Save status icon */}
+                  <div className="mobile-save-status">
+                    {isSaving && <span className="saving-indicator" title="Saving..."><Save size="sm" /></span>}
+                    {!isSaving && hasUnsavedChanges && <span className="unsaved-indicator" title="Unsaved"><Bullet size="sm" /></span>}
+                    {!isSaving && !hasUnsavedChanges && <span className="saved-indicator" title="Saved"><Check size="sm" /></span>}
+                  </div>
 
-                  {/* Status Info - Save status + Word count (stacked vertically) */}
+                  <h2
+                    className={`editor-chapter-title ${selectedChapter.description ? 'has-description' : ''}`}
+                    onClick={selectedChapter.description ? () => setIsDescriptionExpanded(!isDescriptionExpanded) : undefined}
+                    title={selectedChapter.description ? (isDescriptionExpanded ? 'Hide description' : 'Show description') : undefined}
+                  >
+                    {selectedChapter.name}
+                  </h2>
+
+                  {/* Desktop: Status Info - Save status + Word count (stacked vertically) */}
                   <div className="editor-status-info">
                     <div className="save-status">
-                      {isSaving && savingType === 'auto' && <span className="saving-indicator"><Save size={12} /> Auto-saving...</span>}
-                      {isSaving && savingType === 'manual' && <span className="saving-indicator"><Save size={12} /> Saving...</span>}
-                      {!isSaving && hasUnsavedChanges && <span className="unsaved-indicator"><Bullet size={8} /> Unsaved</span>}
-                      {!isSaving && !hasUnsavedChanges && <span className="saved-indicator"><Check size={12} /> Saved</span>}
+                      {isSaving && savingType === 'auto' && <span className="saving-indicator"><Save size="xs" /> Auto-saving...</span>}
+                      {isSaving && savingType === 'manual' && <span className="saving-indicator"><Save size="xs" /> Saving...</span>}
+                      {!isSaving && hasUnsavedChanges && <span className="unsaved-indicator"><Bullet size="xs" /> Unsaved</span>}
+                      {!isSaving && !hasUnsavedChanges && <span className="saved-indicator"><Check size="xs" /> Saved</span>}
                     </div>
                     <div className="word-count">
                       <span>{wordCount.toLocaleString()} words</span>
@@ -829,7 +844,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                   {/* Fallback Warning */}
                   {isFallback && (
                     <span className="fallback-warning" title={`${globalDisplayLanguage} not available, showing ${effectiveLanguage}`}>
-                      <Warning size={14} /> {effectiveLanguage}
+                      <Warning size="sm" /> {effectiveLanguage}
                     </span>
                   )}
 
@@ -839,21 +854,13 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                     className="header-btn sidebar-toggle-btn"
                     title="Toggle chapter list"
                   >
-                    <HamburgerMenu size={16} />
+                    <HamburgerMenu size="md" />
                   </button>
                 </div>
 
                 {/* Collapsible Description */}
                 {selectedChapter.description && (
                   <div className={`editor-chapter-description-wrapper ${isDescriptionExpanded ? 'expanded' : ''}`}>
-                    <button
-                      className="description-toggle-btn"
-                      onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
-                      aria-expanded={isDescriptionExpanded}
-                      title={isDescriptionExpanded ? 'Hide description' : 'Show description'}
-                    >
-                      {isDescriptionExpanded ? <><ChevronUp size={12} /> Hide description</> : <><ChevronDown size={12} /> Show description</>}
-                    </button>
                     <p className="editor-chapter-description">{selectedChapter.description}</p>
                   </div>
                 )}
@@ -887,7 +894,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                     disabled={isSaving || !selectedChapter}
                     title="AI Edit Chapter"
                   >
-                    <AIAssist size={14} /> AI Edit
+                    <AIAssist size="sm" /> AI Edit
                   </button>
 
                   {/* Manual Save Button */}
@@ -897,7 +904,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                     disabled={isSaving || !hasUnsavedChanges}
                     title="Create version snapshot (Ctrl+S)"
                   >
-                    <Save size={14} /> Save
+                    <Save size="sm" /> Save
                   </button>
 
                   {/* More Actions Dropdown - contains mobile-hidden actions */}
@@ -910,7 +917,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                   >
                     {/* AI Edit - accessible via dropdown on mobile */}
                     <DropdownItem
-                      icon={<AIAssist size={14} />}
+                      icon={<AIAssist size="sm" />}
                       label="AI Edit"
                       onClick={() => setIsAIEditModalOpen(true)}
                       disabled={isSaving || !selectedChapter}
@@ -918,7 +925,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                     />
                     {/* Save - accessible via dropdown on mobile */}
                     <DropdownItem
-                      icon={<Save size={14} />}
+                      icon={<Save size="sm" />}
                       label="Save"
                       onClick={() => handleManualSave('Manual Save')}
                       disabled={isSaving || !hasUnsavedChanges}
@@ -928,14 +935,14 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                     {settings.subLanguages && settings.subLanguages.length > 0 && (
                       manuscriptLanguages.includes(globalDisplayLanguage) ? (
                         <DropdownItem
-                          icon={<Refresh size={14} />}
+                          icon={<Refresh size="sm" />}
                           label="Retranslate"
                           onClick={() => setShowRetranslateModal(true)}
                           disabled={isSaving}
                         />
                       ) : (
                         <DropdownItem
-                          icon={<Globe size={14} />}
+                          icon={<Globe size="sm" />}
                           label="Translate"
                           onClick={() => setShowRetranslateModal(true)}
                           disabled={isSaving || !manuscript}
@@ -981,7 +988,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
               <span>Version: {manuscript.version.number}</span>
             </div>
             <div className="editor-footer-notice">
-              <Lightbulb size={14} /> Auto-cached locally • Click Save to create version
+              <Lightbulb size="sm" /> Auto-cached locally • Click Save to create version
             </div>
           </div>
         </div>

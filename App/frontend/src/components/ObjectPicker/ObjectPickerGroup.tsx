@@ -95,7 +95,7 @@ const ObjectPickerGroup: React.FC<ObjectPickerGroupProps> = ({
       <div className={headerClasses} onClick={handleHeaderClick}>
         {/* Chevron icon */}
         <span className="object-picker-group-chevron">
-          <ChevronRight size={14} />
+          <ChevronRight size="sm" />
         </span>
 
         {/* Group name */}

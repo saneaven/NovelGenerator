@@ -7,7 +7,7 @@
 .syntax-trigger-btn {
     width: var(--spacing-2xl);
     height: var(--spacing-2xl);
-    border-radius: var(--border-radius-full);
+    border-radius: var(--border-radius-sm);
     border: 1px solid var(--color-border-default);
     background: var(--color-surface-base);
     color: var(--color-text-secondary);
@@ -28,12 +28,6 @@
 .syntax-trigger-btn:disabled {
     opacity: var(--opacity-muted);
     cursor: progress;
-}
-
-.syntax-trigger-icon svg {
-    width: var(--spacing-lg);
-    height: var(--spacing-lg);
-    display: block;
 }
 
 .syntax-popover {

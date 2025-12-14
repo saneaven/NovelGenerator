@@ -225,7 +225,7 @@ const ToastDetailModal: React.FC<ToastDetailModalProps> = ({ session, onClose })
             <h3>{session.label || 'Task'}</h3>
           </div>
           <button className="toast-detail-close" onClick={onClose} title="Close">
-            <Close size={14} />
+            <Close size="sm" />
           </button>
         </div>
 

@@ -358,7 +358,7 @@
 
 .breadcrumb {
     color: var(--color-text-secondary);
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: var(--spacing-sm);
 }
 
 .breadcrumb-link {

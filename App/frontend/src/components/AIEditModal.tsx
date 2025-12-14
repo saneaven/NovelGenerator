@@ -381,7 +381,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
               ))}
             </div>
             <p className="context-help">
-              <Lightbulb size={14} />
+              <Lightbulb size="sm" />
               Select the context for the AI to refer to. Providing more context will lead to more consistent results.
             </p>
           </div>

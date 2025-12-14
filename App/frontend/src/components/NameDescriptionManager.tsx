@@ -127,14 +127,16 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     }
   };
 
-  // Expand all items
-  const expandAll = () => {
-    setExpandedItems(new Set(items.map(item => item.id)));
-  };
+  // Check if all items are collapsed
+  const allCollapsed = expandedItems.size === 0;
 
-  // Collapse all items
-  const collapseAll = () => {
-    setExpandedItems(new Set());
+  // Toggle function: expand all if collapsed, otherwise collapse all
+  const toggleAllCards = () => {
+    if (allCollapsed) {
+      setExpandedItems(new Set(items.map(item => item.id)));
+    } else {
+      setExpandedItems(new Set());
+    }
   };
 
   // Fetch list of items from backend
@@ -394,25 +396,19 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
         <h2>{title}</h2>
         <div className="header-buttons">
           <button
-            onClick={expandAll}
+            onClick={toggleAllCards}
             className="collapse-control-btn desktop-only"
-            title="Expand All"
+            title={allCollapsed ? "Expand All" : "Collapse All"}
           >
-            <Collapse size={12} /> Expand
-          </button>
-          <button
-            onClick={collapseAll}
-            className="collapse-control-btn desktop-only"
-            title="Collapse All"
-          >
-            <Expand size={12} /> Collapse
+            {allCollapsed ? <Collapse size="xs" /> : <Expand size="xs" />}
+            {allCollapsed ? "Expand" : "Collapse"}
           </button>
           <button
             onClick={() => handleAIEdit()}
             className="ai-edit-button desktop-only"
             disabled={showAddForm}
           >
-            <AIAssist size={14} /> AI Edit All
+            <AIAssist size="sm" /> AI Edit All
           </button>
           <button
             onClick={() => setShowAddForm(true)}
@@ -429,24 +425,19 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
             }
           >
             <DropdownItem
-              icon={<Collapse size={14} />}
-              label="Expand All"
-              onClick={expandAll}
-            />
-            <DropdownItem
-              icon={<Expand size={14} />}
-              label="Collapse All"
-              onClick={collapseAll}
+              icon={allCollapsed ? <Collapse size="sm" /> : <Expand size="sm" />}
+              label={allCollapsed ? "Expand All" : "Collapse All"}
+              onClick={toggleAllCards}
             />
             <DropdownDivider />
             <DropdownItem
-              icon={<AIAssist size={14} />}
+              icon={<AIAssist size="sm" />}
               label="AI Edit All"
               onClick={() => handleAIEdit()}
               disabled={showAddForm}
             />
             <DropdownItem
-              icon={<Plus size={14} />}
+              icon={<Plus size="sm" />}
               label={`Add ${singularName}`}
               onClick={() => setShowAddForm(true)}
               disabled={showAddForm}
@@ -730,7 +721,7 @@ const ItemDisplay = React.memo<ItemDisplayProps>(({
         aria-label="Open edit panel"
         title="Edit"
       >
-        <Collapse size={12} />
+        <Expand size="xl" />
       </button>
 
       {/* Content */}

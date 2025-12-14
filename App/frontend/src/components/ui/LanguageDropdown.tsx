@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Globe } from '../icons';
+import { Check, ChevronDown, Globe } from '../icons';
 import './LanguageDropdown.css';
 
 interface LanguageDropdownProps {
@@ -64,18 +64,10 @@ const LanguageDropdown: React.FC<LanguageDropdownProps> = ({
         aria-expanded={isOpen}
         aria-haspopup="listbox"
       >
-        <span className="language-dropdown-icon"><Globe size={14} /></span>
+        <span className="language-dropdown-icon"><Globe size="lg" /></span>
         <span className="language-dropdown-value">{value}</span>
         <span className={`language-dropdown-arrow ${isOpen ? 'open' : ''}`}>
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path
-              d="M2.5 4.5L6 8L9.5 4.5"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+            <ChevronDown size="md" />
         </span>
       </button>
 
@@ -94,15 +86,7 @@ const LanguageDropdown: React.FC<LanguageDropdownProps> = ({
                 <span className="language-dropdown-option-text">{lang}</span>
                 {lang === value && (
                   <span className="language-dropdown-check">
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                      <path
-                        d="M11.5 4L5.5 10L2.5 7"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
+                    <Check size="md" />
                   </span>
                 )}
               </button>
@@ -120,9 +104,9 @@ const LanguageDropdown: React.FC<LanguageDropdownProps> = ({
             }}
             title={`Translate ${translateCount} objects`}
           >
-            <span className="language-dropdown-translate-icon"><Globe size={14} /></span>
+            <span className="language-dropdown-translate-icon"><Globe size="lg" /></span>
             <span className="language-dropdown-translate-text">
-              Translate All ({translateCount})
+              Translate ({translateCount})
             </span>
           </button>
         )}

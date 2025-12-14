@@ -54,7 +54,7 @@ const PromptsTemplatesPanel: React.FC = () => {
                     onClick={toggleSidebar}
                     title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
                   >
-                    {isSidebarCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+                    {isSidebarCollapsed ? <ChevronLeft size="sm" /> : <ChevronRight size="sm" />}
                   </button>
                 </div>
               </div>
@@ -73,7 +73,7 @@ const PromptsTemplatesPanel: React.FC = () => {
             </div>
           ) : (
             <div className="prompts-empty-state">
-              <div className="empty-state-icon"><Document size={48} /></div>
+              <div className="empty-state-icon"><Document size="4xl" /></div>
               <h3>Select a prompt to edit</h3>
               <p>Choose a prompt from the sidebar to view and edit its content</p>
             </div>

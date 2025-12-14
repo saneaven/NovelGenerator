@@ -31,7 +31,7 @@ export const PROMPT_TREE: PromptNode[] = [
   {
     id: 'chat',
     label: 'Chat',
-    icon: <Chat size={14} />,
+    icon: <Chat size="sm" />,
     type: 'category',
     defaultExpanded: true,
     children: [
@@ -127,7 +127,7 @@ export const PROMPT_TREE: PromptNode[] = [
   {
     id: 'translation',
     label: 'Translation',
-    icon: <Globe size={14} />,
+    icon: <Globe size="sm" />,
     type: 'category',
     children: [
       {
@@ -204,7 +204,7 @@ export const PROMPT_TREE: PromptNode[] = [
   {
     id: 'storyobjectedit',
     label: 'Story Object Edit',
-    icon: <Edit size={14} />,
+    icon: <Edit size="sm" />,
     type: 'category',
     children: [
       {
@@ -236,7 +236,7 @@ export const PROMPT_TREE: PromptNode[] = [
   {
     id: 'chaptergen',
     label: 'Chapter Generation',
-    icon: <Document size={14} />,
+    icon: <Document size="sm" />,
     type: 'category',
     children: [
       {
@@ -268,7 +268,7 @@ export const PROMPT_TREE: PromptNode[] = [
   {
     id: 'imageprompt',
     label: 'Image Prompt',
-    icon: <Palette size={14} />,
+    icon: <Palette size="sm" />,
     type: 'category',
     children: [
       {

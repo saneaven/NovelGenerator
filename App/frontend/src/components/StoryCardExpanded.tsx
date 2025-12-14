@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { useProjectStore } from '../store/projectStore';
 import { DropdownMenu, DropdownItem, DropdownDivider } from './ui/DropdownMenu';
-import { Close, AIAssistMini, Scroll, Refresh, Trash } from './icons';
+import { Close, AIAssistMini, Scroll, Refresh, Trash, Collapse } from './icons';
 import ImageTabContent from './AssetManager/ImageTabContent';
 import type { Asset } from '../api/assetService';
 import { API_BASE_URL } from '../api/client';
@@ -110,7 +110,7 @@ const StoryCardExpanded: React.FC<StoryCardExpandedProps> = ({
                 onClick={handleCancel}
                 aria-label="Close"
             >
-                <Close size={16} />
+                <Collapse size="xl" />
             </button>
 
             {/* Content section */}
@@ -168,7 +168,7 @@ const StoryCardExpanded: React.FC<StoryCardExpandedProps> = ({
                                     onClick={onAIEdit}
                                     title="AI Edit"
                                 >
-                                    <span className="ai-icon"><AIAssistMini size={14} /></span>
+                                    <span className="ai-icon"><AIAssistMini size="sm" /></span>
                                     AI Edit
                                 </button>
 
@@ -181,20 +181,20 @@ const StoryCardExpanded: React.FC<StoryCardExpandedProps> = ({
                                     align="right"
                                 >
                                     <DropdownItem
-                                        icon={<Scroll size={14} />}
+                                        icon={<Scroll size="sm" />}
                                         label="Version History"
                                         onClick={onVersionHistory}
                                     />
                                     {showSecondaryLanguage && (
                                         <DropdownItem
-                                            icon={<Refresh size={14} />}
+                                            icon={<Refresh size="sm" />}
                                             label="Retranslate"
                                             onClick={onRetranslate}
                                         />
                                     )}
                                     <DropdownDivider />
                                     <DropdownItem
-                                        icon={<Trash size={14} />}
+                                        icon={<Trash size="sm" />}
                                         label="Delete"
                                         onClick={onDelete}
                                         variant="danger"

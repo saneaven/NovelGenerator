@@ -22,12 +22,12 @@ const LLMLogViewer: React.FC = () => {
     const getStatusIcon = (status: LLMLogStatus) => {
         switch (status) {
             case 'success':
-                return <Check size={14} className="status-icon success" />;
+                return <Check size="sm" className="status-icon success" />;
             case 'error':
-                return <Warning size={14} className="status-icon error" />;
+                return <Warning size="sm" className="status-icon error" />;
             case 'streaming':
             case 'pending':
-                return <Loading size={14} className="status-icon pending" />;
+                return <Loading size="sm" className="status-icon pending" />;
         }
     };
 
@@ -66,7 +66,7 @@ const LLMLogViewer: React.FC = () => {
                     disabled={logs.length === 0}
                     className="clear-logs-button"
                 >
-                    <Trash size={14} /> Clear Logs
+                    <Trash size="sm" /> Clear Logs
                 </button>
             </div>
 
@@ -79,7 +79,7 @@ const LLMLogViewer: React.FC = () => {
             {/* Log entries */}
             {logs.length === 0 ? (
                 <div className="empty-logs">
-                    <Document size={32} />
+                    <Document size="3xl" />
                     <p>No logs captured yet.</p>
                 </div>
             ) : (
@@ -103,7 +103,7 @@ const LLMLogViewer: React.FC = () => {
                                     </div>
                                     <div className="log-entry-meta">
                                         <span className="log-duration">
-                                            <Clock size={12} /> {formatDuration(log.durationMs)}
+                                            <Clock size="xs" /> {formatDuration(log.durationMs)}
                                         </span>
                                         <span className="log-timestamp">
                                             {formatTimestamp(log.timestamp)}

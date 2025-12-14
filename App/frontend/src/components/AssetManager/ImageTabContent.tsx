@@ -278,7 +278,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                                     className={`asset-item ${link.is_main ? 'main' : ''}`}
                                     onClick={() => handleAssetClick(link.asset)}
                                 >
-                                    {link.is_main && <span className="main-badge"><Star size={12} /></span>}
+                                    {link.is_main && <span className="main-badge"><Star size="xs" /></span>}
                                     <div className="asset-thumbnail">
                                         <img
                                             src={`${API_BASE_URL}${link.asset.thumbnail_url || link.asset.file_url}`}
@@ -313,7 +313,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                                                     }}
                                                     title="Rename"
                                                 >
-                                                    <Edit size={12} />
+                                                    <Edit size="xs" />
                                                 </button>
                                             </>
                                         )}

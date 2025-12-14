@@ -714,7 +714,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
               onClick={() => setIsContextExpanded(!isContextExpanded)}
             >
               <span className={`context-options-toggle ${isContextExpanded ? 'expanded' : ''}`}>
-                {isContextExpanded ? <Collapse size={10} /> : <Expand size={10} />}
+                {isContextExpanded ? <Collapse size="xs" /> : <Expand size="xs" />}
               </span>
               <label>Context Inclusion Options</label>
             </div>

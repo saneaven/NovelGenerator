@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import type { RetryConfig } from '../../store/settingsStore';
 import LLMLogViewer from './LLMLogViewer';
+import ToggleSwitch from '../ToggleSwitch';
+import { Refresh, Document } from '../icons';
 import './AdvancedPanel.css';
 
 interface AdvancedPanelProps {
@@ -17,13 +19,6 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
     onNativeOutputModeChange,
 }) => {
     const [newErrorCode, setNewErrorCode] = useState('');
-
-    const handleToggleEnabled = () => {
-        onRetryConfigChange({
-            ...retryConfig,
-            enabled: !retryConfig.enabled,
-        });
-    };
 
     const handleMaxRetriesChange = (value: number) => {
         onRetryConfigChange({
@@ -80,16 +75,12 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
 
                 {/* Enable/Disable Toggle */}
                 <div className="form-field">
-                    <label className="toggle-label">
-                        <input
-                            type="checkbox"
-                            checked={retryConfig.enabled}
-                            onChange={handleToggleEnabled}
-                            className="toggle-input"
-                        />
-                        <span className="toggle-switch"></span>
-                        <span className="toggle-text">Enable automatic retry on errors</span>
-                    </label>
+                    <ToggleSwitch
+                        checked={retryConfig.enabled}
+                        onChange={(checked) => onRetryConfigChange({ ...retryConfig, enabled: checked })}
+                        label="Enable automatic retry on errors"
+                        icon={<Refresh size="sm" />}
+                    />
                 </div>
 
                 {/* Max Retries Slider */}
@@ -194,16 +185,12 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
             <div className="advanced-settings-card">
                 <h3>Native Output Mode</h3>
                 <div className="form-field">
-                    <label className="toggle-label">
-                        <input
-                            type="checkbox"
-                            checked={nativeOutputMode}
-                            onChange={(e) => onNativeOutputModeChange(e.target.checked)}
-                            className="toggle-input"
-                        />
-                        <span className="toggle-switch"></span>
-                        <span className="toggle-text">Enable native output mode</span>
-                    </label>
+                    <ToggleSwitch
+                        checked={nativeOutputMode}
+                        onChange={onNativeOutputModeChange}
+                        label="Enable native output mode"
+                        icon={<Document size="sm" />}
+                    />
                     <p className="field-hint">
                         When enabled, AI features (except chat) will output raw text instead of using function calls.
                         This can improve compatibility with some models but may reduce structured output reliability.

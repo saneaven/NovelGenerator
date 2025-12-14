@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useState, useMemo } from 'react';
+import React, { useCallback, useState, useMemo } from 'react';
 import { useLLMTaskStore, type LLMTaskSessionState } from '../../store/llmTaskStore';
 import ToastItem from './ToastItem';
 import ToastDetailModal from './ToastDetailModal';
@@ -29,30 +29,7 @@ const ToastContainer: React.FC = () => {
   const [errorSessionId, setErrorSessionId] = useState<string | null>(null);
   const [retrySession, setRetrySession] = useState<LLMTaskSessionState | null>(null);
 
-  // Auto-dismiss sessions with autoDismissMs
-  useEffect(() => {
-    const timers: ReturnType<typeof setTimeout>[] = [];
-
-    for (const session of sessions) {
-      if (session.autoDismissMs && session.status !== 'running') {
-        const elapsed = Date.now() - session.updatedAt;
-        const remaining = session.autoDismissMs - elapsed;
-
-        if (remaining <= 0) {
-          clearSession(session.id);
-        } else {
-          const timer = setTimeout(() => {
-            clearSession(session.id);
-          }, remaining);
-          timers.push(timer);
-        }
-      }
-    }
-
-    return () => {
-      timers.forEach(clearTimeout);
-    };
-  }, [sessions, clearSession]);
+  // Note: Auto-dismiss removed - notifications persist until manually cleared
 
   const handleDismiss = useCallback(
     (id: string) => {

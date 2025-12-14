@@ -36,16 +36,14 @@ export interface LLMTaskSessionState {
   functionCallProgress: FunctionCallProgress[];
   error?: string;
   updatedAt: number;
-  // Toast-related fields
+  // Notification-related fields
   taskType?: LLMTaskType;
   label?: string;
   progress?: TaskProgress;
   retryContext?: RetryContext;
-  autoDismissMs?: number;
+  isRead: boolean;
   createdAt: number;
 }
-
-const DEFAULT_SUCCESS_DISMISS_MS = 3000;
 
 const createDefaultSession = (id: string): LLMTaskSessionState => ({
   id,
@@ -55,6 +53,7 @@ const createDefaultSession = (id: string): LLMTaskSessionState => ({
   functionCallProgress: [],
   updatedAt: Date.now(),
   createdAt: Date.now(),
+  isRead: false,
 });
 
 interface LLMTaskStore {
@@ -68,9 +67,9 @@ interface LLMTaskStore {
   setFunctionCallProgress: (id: string, progress: FunctionCallProgress[]) => void;
   clearSession: (id: string) => void;
 
-  // Toast convenience methods
+  // Notification convenience methods
   setRunning: (id: string, label: string, taskType: LLMTaskType, retryContext?: RetryContext) => void;
-  setSuccess: (id: string, autoDismissMs?: number) => void;
+  setSuccess: (id: string) => void;
   setTaskError: (id: string, message: string) => void;
   setCancelled: (id: string) => void;
   setProgress: (id: string, current: number, total: number, currentItemLabel?: string) => void;
@@ -78,10 +77,13 @@ interface LLMTaskStore {
   // Query helpers
   getActiveSessions: () => LLMTaskSessionState[];
   getSessionById: (id: string) => LLMTaskSessionState | undefined;
+  hasUnread: () => boolean;
+  hasRunningTasks: () => boolean;
 
-  // Bulk operations
-  dismissAll: () => void;
-  clearCompleted: () => void;
+  // Notification actions
+  markAllAsRead: () => void;
+  clearNotification: (id: string) => void;
+  clearAllNotifications: () => void;
 }
 
 export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
@@ -178,7 +180,7 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
           retryContext,
           progress: undefined,
           error: undefined,
-          autoDismissMs: undefined,
+          isRead: false,
           createdAt: state.sessions[id]?.createdAt ?? now,
           updatedAt: now,
         },
@@ -186,7 +188,7 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
     }));
   },
 
-  setSuccess: (id, autoDismissMs = DEFAULT_SUCCESS_DISMISS_MS) => {
+  setSuccess: (id) => {
     set((state) => {
       const existing = state.sessions[id];
       if (!existing) return state;
@@ -196,7 +198,6 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
           [id]: {
             ...existing,
             status: 'success',
-            autoDismissMs,
             error: undefined,
             updatedAt: Date.now(),
           },
@@ -216,7 +217,6 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
             ...existing,
             status: 'error',
             error: message,
-            autoDismissMs: undefined,
             updatedAt: Date.now(),
           },
         },
@@ -234,7 +234,6 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
           [id]: {
             ...existing,
             status: 'cancelled',
-            autoDismissMs: DEFAULT_SUCCESS_DISMISS_MS,
             updatedAt: Date.now(),
           },
         },
@@ -271,20 +270,45 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
     return get().sessions[id];
   },
 
-  // Bulk operations
-  dismissAll: () => {
-    set({ sessions: {} });
+  hasUnread: () => {
+    const { sessions } = get();
+    return Object.values(sessions).some(
+      (s) => s !== undefined && s.status !== 'idle' && !s.isRead
+    );
   },
 
-  clearCompleted: () => {
+  hasRunningTasks: () => {
+    const { sessions } = get();
+    return Object.values(sessions).some(
+      (s) => s !== undefined && s.status === 'running'
+    );
+  },
+
+  // Notification actions
+  markAllAsRead: () => {
     set((state) => {
-      const remaining: Record<string, LLMTaskSessionState> = {};
+      const updated: Record<string, LLMTaskSessionState> = {};
       for (const [id, session] of Object.entries(state.sessions)) {
-        if (session && session.status === 'running') {
-          remaining[id] = session;
+        if (session) {
+          updated[id] = { ...session, isRead: true };
         }
       }
-      return { sessions: remaining };
+      return { sessions: updated };
     });
+  },
+
+  clearNotification: (id) => {
+    set((state) => {
+      if (!state.sessions[id]) {
+        return state;
+      }
+      const next = { ...state.sessions };
+      delete next[id];
+      return { sessions: next };
+    });
+  },
+
+  clearAllNotifications: () => {
+    set({ sessions: {} });
   },
 }));

@@ -11,3 +11,4 @@ export { Building } from './Building';
 export { Organization } from './Organization';
 export { Map } from './Map';
 export { People } from './People';
+export { Workspace } from './Workspace';

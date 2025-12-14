@@ -14,7 +14,7 @@ const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
   checked,
   onChange,
   label,
-  icon = <Clipboard size={14} />,
+  icon = <Clipboard size="sm" />,
   disabled = false,
 }) => {
   return (

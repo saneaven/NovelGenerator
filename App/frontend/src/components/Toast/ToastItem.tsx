@@ -36,11 +36,11 @@ const ToastItem: React.FC<ToastItemProps> = ({
           </div>
         );
       case 'success':
-        return <span className="toast-icon toast-icon--success"><Check size={14} /></span>;
+        return <span className="toast-icon toast-icon--success"><Check size="sm" /></span>;
       case 'error':
         return <span className="toast-icon toast-icon--error">!</span>;
       case 'cancelled':
-        return <span className="toast-icon toast-icon--cancelled"><Close size={14} /></span>;
+        return <span className="toast-icon toast-icon--cancelled"><Close size="sm" /></span>;
       default:
         return null;
     }
@@ -98,7 +98,7 @@ const ToastItem: React.FC<ToastItemProps> = ({
           title="Dismiss"
           aria-label="Dismiss notification"
         >
-          <Close size={12} />
+          <Close size="xs" />
         </button>
       </div>
 

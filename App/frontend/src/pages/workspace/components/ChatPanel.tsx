@@ -487,7 +487,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                                         disabled={translateDisabled}
                                                         title={translateButtonLabel}
                                                     >
-                                                        {isTranslating ? <CircularArrow size={14} /> : translationAvailable ? <CircularArrow size={14} /> : <Globe size={14} />}
+                                                        {isTranslating ? <CircularArrow size="sm" /> : translationAvailable ? <CircularArrow size="sm" /> : <Globe size="sm" />}
                                                     </button>
                                                 )}
                                                 <button
@@ -503,7 +503,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                                     disabled={isTranslating || !primaryPlainContent.trim()}
                                                     title="Edit"
                                                 >
-                                                    <Edit size={14} />
+                                                    <Edit size="sm" />
                                                 </button>
                                                 <button
                                                     className="action-btn delete-btn"
@@ -511,7 +511,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                                     disabled={isTranslating}
                                                     title="Delete"
                                                 >
-                                                    <Trash size={14} />
+                                                    <Trash size="sm" />
                                                 </button>
                                             </div>
                                         </div>
@@ -529,14 +529,14 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 <div className={`chat-controls ${isControlsCollapsed ? 'collapsed' : 'expanded'}`}>
                     <div className="chat-controls-header" onClick={() => setIsControlsCollapsed(!isControlsCollapsed)}>
                         <span className="chat-controls-title">
-                            <Settings size={14} /> Contexts
+                            <Settings size="sm" /> Contexts
                         </span>
                         <button
                             type="button"
                             className="chat-controls-toggle"
                             aria-label={isControlsCollapsed ? "Expand contexts" : "Collapse contexts"}
                         >
-                            {isControlsCollapsed ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                            {isControlsCollapsed ? <ChevronUp size="xs" /> : <ChevronDown size="xs" />}
                         </button>
                     </div>
                     {!isControlsCollapsed && (
@@ -548,7 +548,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                     enabled: checked
                                 }))}
                                 label="Include story context in messages"
-                                icon={<Books size={14} />}
+                                icon={<Books size="sm" />}
                             />
                             <ToggleSwitch
                                 checked={systemInsertConfig.includeNovelContent}
@@ -557,7 +557,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                     includeNovelContent: checked
                                 }))}
                                 label="Include novel content in messages"
-                                icon={<Book size={14} />}
+                                icon={<Book size="sm" />}
                             />
                         </div>
                     )}

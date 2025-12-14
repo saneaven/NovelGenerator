@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import type { SystemInsertConfig, EditCard } from '../chat/types';
 import { ChatManager, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
 import { DefaultDisplayProcessor } from '../chat/processors/DisplayProcessor';
@@ -18,9 +18,9 @@ import ChatSidebar from '../components/ChatSidebar';
 import ErrorModal from '../components/ErrorModal';
 import SettingsModal from '../components/SettingsModal/SettingsModal';
 import TranslationModal from '../components/TranslationModal';
-import LanguageDropdown from '../components/ui/LanguageDropdown';
 import ChatPanel from './workspace/components/ChatPanel';
 import NovelEditorPanel from './noveleditor/components/NovelEditorPanel';
+import { PageHeader, MobileFooter } from '../components/layout';
 
 import { useNovelEditorState } from './noveleditor/hooks/useNovelEditorState';
 import { useChatHandlers } from './workspace/hooks/useChatHandlers';
@@ -35,12 +35,10 @@ import './workspace/styles/ChatInput.css';
 import './workspace/styles/ChatSidebar.css';
 import './workspace/styles/MessageEditCards.css';
 import '../components/MobileChat.css';
-import { ArrowLeft, Settings } from '../components/icons';
 
 const NovelEditor: React.FC = () =>
 {
     const { projectId } = useParams<{ projectId: string }>();
-    const navigate = useNavigate();
 
     const { getCurrentProject, fetchProjects, projects, isLoading: projectsLoading } = useProjectStore();
     const {
@@ -575,57 +573,18 @@ const NovelEditor: React.FC = () =>
 
     return (
         <div className="novel-editor-container">
-            <div className="novel-editor-header">
-                <div className="breadcrumb">
-                    <Link to="/" className="breadcrumb-link">Home</Link>
-                    <span className="breadcrumb-separator"> / </span>
-                    <Link to={`/project/${projectId}`} className="breadcrumb-link">{currentProject.name}</Link>
-                    <span className="breadcrumb-separator"> / </span>
-                    <span className="breadcrumb-current">Novel Editor</span>
-                </div>
-                <div className="novel-editor-title">
-                    <div className="title-section">
-                        <h1>Novel Editor</h1>
-                    </div>
-                    <div className="novel-editor-controls">
-                        <button
-                            className="back-btn mobile-only"
-                            onClick={() => navigate(`/project/${projectId}`)}
-                            title="Back to project"
-                        >
-                            <ArrowLeft size={16} />
-                        </button>
-                        <button
-                            className={`chat-toggle-btn mobile-only ${chatUI.isChatVisible(projectId ?? '') ? 'active' : ''}`}
-                            onClick={() =>
-                            {
-                                chatUI.toggleChatVisible(projectId ?? '');
-                                chatUI.setMobileSidebarVisible(projectId ?? '', false);
-                            }}
-                        >
-                            Chat
-                        </button>
-                        {availableLanguages.length > 1 && (
-                            <LanguageDropdown
-                                languages={availableLanguages}
-                                value={currentDisplayLanguage}
-                                onChange={(lang) => setDisplayLanguage(projectId ?? '', lang)}
-                                title="Select display language"
-                                showTranslateAll={subLanguages && subLanguages.length > 0 && objectsNeedingTranslation > 0}
-                                translateCount={objectsNeedingTranslation}
-                                onTranslateAllClick={() => setShowTranslateModal(true)}
-                            />
-                        )}
-                        <button
-                            className="settings-btn"
-                            onClick={() => uiActions.setIsSettingsOpen(true)}
-                            title="Settings"
-                        >
-                            <Settings size={16} />
-                        </button>
-                    </div>
-                </div>
-            </div>
+            <PageHeader
+                projectId={projectId ?? ''}
+                projectName={currentProject.name}
+                pageTitle="Novel Editor"
+                availableLanguages={availableLanguages}
+                currentLanguage={currentDisplayLanguage}
+                onLanguageChange={(lang: string) => setDisplayLanguage(projectId ?? '', lang)}
+                showTranslateAll={subLanguages && subLanguages.length > 0 && objectsNeedingTranslation > 0}
+                translateCount={objectsNeedingTranslation}
+                onTranslateAllClick={() => setShowTranslateModal(true)}
+                onSettingsClick={() => uiActions.setIsSettingsOpen(true)}
+            />
 
             <div className={`novel-editor-content ${chatUI.isChatVisible(projectId ?? '') ? 'chat-visible' : ''}`}>
                 <ChatPanel
@@ -676,44 +635,14 @@ const NovelEditor: React.FC = () =>
                 <div className="desktop-chat-overlay desktop-only" onClick={() => chatUI.setDesktopChatListVisible(projectId ?? '', false)} />
             )}
 
-            {/* Mobile Footer */}
-            <footer className="mobile-footer">
-                <button
-                    className="footer-back-btn"
-                    onClick={() => navigate(`/project/${projectId}`)}
-                    title="Back to project"
-                >
-                    <ArrowLeft size={16} />
-                </button>
-                <button
-                    className={`footer-chat-toggle-btn ${chatUI.isChatVisible(projectId ?? '') ? 'active' : ''}`}
-                    onClick={() =>
-                    {
-                        chatUI.toggleChatVisible(projectId ?? '');
-                        chatUI.setMobileSidebarVisible(projectId ?? '', false);
-                    }}
-                >
-                    Chat
-                </button>
-                {availableLanguages.length > 1 && (
-                    <LanguageDropdown
-                        languages={availableLanguages}
-                        value={currentDisplayLanguage}
-                        onChange={(lang) => setDisplayLanguage(projectId ?? '', lang)}
-                        title="Select display language"
-                        showTranslateAll={subLanguages && subLanguages.length > 0 && objectsNeedingTranslation > 0}
-                        translateCount={objectsNeedingTranslation}
-                        onTranslateAllClick={() => setShowTranslateModal(true)}
-                    />
-                )}
-                <button
-                    className="footer-settings-btn"
-                    onClick={() => uiActions.setIsSettingsOpen(true)}
-                    title="Settings"
-                >
-                    <Settings size={16} />
-                </button>
-            </footer>
+            <MobileFooter
+                isChatVisible={chatUI.isChatVisible(projectId ?? '')}
+                onChatToggle={() => {
+                    chatUI.toggleChatVisible(projectId ?? '');
+                    chatUI.setMobileSidebarVisible(projectId ?? '', false);
+                }}
+                onSettingsClick={() => uiActions.setIsSettingsOpen(true)}
+            />
 
             <ErrorModal
                 isOpen={!!currentError}

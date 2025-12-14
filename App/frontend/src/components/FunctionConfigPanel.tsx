@@ -87,7 +87,7 @@ const FunctionConfigPanel: React.FC<FunctionConfigPanelProps> = ({
                 <span className="model-badge">
                     {config.provider} / {config.model}
                 </span>
-                <span className="expand-icon">{isExpanded ? <Collapse size={12} /> : <Expand size={12} />}</span>
+                <span className="expand-icon">{isExpanded ? <Collapse size="xs" /> : <Expand size="xs" />}</span>
             </div>
 
             {/* Content (expandable) */}
@@ -163,7 +163,7 @@ const FunctionConfigPanel: React.FC<FunctionConfigPanelProps> = ({
                             onClick={toggleModels}
                             className="models-expand-btn"
                         >
-                            {showModels ? <><ChevronUp size={12} /> Hide Models</> : <>Show Available Models <ChevronDown size={12} /></>}
+                            {showModels ? <><ChevronUp size="xs" /> Hide Models</> : <>Show Available Models <ChevronDown size="xs" /></>}
                         </button>
 
                         {showModels && (

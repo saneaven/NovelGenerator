@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import type { ActObject, ChapterObject, ManuscriptObject, VersionHistoryEntry } from '../../../types/unifiedObject';
+import { Close } from '../../../components/icons';
 
 interface ChapterSidebarProps {
   projectId: string;
@@ -153,7 +154,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
             onClick={onToggle}
             title="Close chapter list"
           >
-            Close
+            <Close size="sm" />
           </button>
         </div>
         <div className="chapter-sidebar-content">
@@ -218,7 +219,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
           onClick={onToggle}
           title="Close sidebar"
         >
-          Close
+          <Close size="sm" />
         </button>
       </div>
 

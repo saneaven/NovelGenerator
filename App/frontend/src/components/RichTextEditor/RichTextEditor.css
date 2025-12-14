@@ -36,6 +36,38 @@
     background: var(--color-surface-elevated);
     border-bottom: 1px solid var(--color-border-default);
     flex-shrink: 0;
+    overflow: hidden;
+}
+
+/* Scrollable format tools container */
+.toolbar-format-tools {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-shrink: 1;
+    min-width: 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-medium) transparent;
+    -webkit-overflow-scrolling: touch;
+}
+
+.toolbar-format-tools::-webkit-scrollbar {
+    height: 4px;
+}
+
+.toolbar-format-tools::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.toolbar-format-tools::-webkit-scrollbar-thumb {
+    background: var(--color-border-medium);
+    border-radius: 2px;
+}
+
+.toolbar-format-tools::-webkit-scrollbar-thumb:hover {
+    background: var(--color-border-strong);
 }
 
 .format-btn {
@@ -51,6 +83,7 @@
     font-size: var(--font-size-sm);
     cursor: pointer;
     transition: all var(--transition-base);
+    flex-shrink: 0;
 }
 
 .format-btn:hover:not(:disabled) {
@@ -77,6 +110,7 @@
     height: 20px;
     background: var(--color-border-default);
     margin: 0 var(--spacing-xs);
+    flex-shrink: 0;
 }
 
 /* Toolbar spacer - pushes actions to the right */
@@ -90,6 +124,7 @@
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
+    flex-shrink: 0;
 }
 
 .toolbar-actions .action-btn {
@@ -469,13 +504,13 @@
 /* Responsive */
 @media (max-width: 768px) {
     .editor-format-toolbar {
-        flex-wrap: wrap;
         padding: var(--spacing-xs) var(--spacing-sm);
     }
 
     .format-btn {
         width: 36px;
         height: 36px;
+        flex-shrink: 0;
     }
 
     .editor-content-wrapper {
@@ -498,5 +533,10 @@
 
     .toolbar-spacer {
         flex: 1;
+        min-width: var(--spacing-sm);
+    }
+
+    .toolbar-format-tools {
+        flex-shrink: 1;
     }
 }

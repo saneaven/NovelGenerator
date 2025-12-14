@@ -93,14 +93,14 @@ const Home: React.FC = () => {
               onClick={() => setIsSettingsModalOpen(true)}
               title="Settings"
             >
-              <Settings size={18} />
+              <Settings size="lg" />
             </button>
             <button
               className="settings-btn"
               onClick={handleLogout}
               title="Logout"
             >
-              <Logout size={18} />
+              <Logout size="lg" />
             </button>
           </div>
         </div>
@@ -194,7 +194,7 @@ const Home: React.FC = () => {
                   onClick={(e) => handleDeleteProject(project.id, e)}
                   title="Delete project"
                 >
-                  <Close size={14} />
+                  <Close size="sm" />
                 </button>
               </div>
             ))}

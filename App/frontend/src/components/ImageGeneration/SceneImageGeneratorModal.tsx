@@ -37,7 +37,7 @@ import type { PromptMode, PromptResult } from './ScenePromptAssistModal';
 import type { Asset, ImageProvider } from '../../api/assetService';
 import ReferenceImagePickerModal from './ReferenceImagePickerModal';
 import ScenePromptAssistModal from './ScenePromptAssistModal';
-import { Check, Sparkle } from '../icons';
+import { AIAssistMini, Check } from '../icons';
 import './SceneImageGeneratorModal.css';
 
 // Story object types
@@ -418,14 +418,14 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
                                         onClick={() => setActivePromptTab('positive')}
                                         type="button"
                                     >
-                                        Positive {positivePrompt && <Check size={12} />}
+                                        Positive {positivePrompt && <Check size="xs" />}
                                     </button>
                                     <button
                                         className={`prompt-tab ${activePromptTab === 'negative' ? 'active' : ''}`}
                                         onClick={() => setActivePromptTab('negative')}
                                         type="button"
                                     >
-                                        Negative {negativePrompt && <Check size={12} />}
+                                        Negative {negativePrompt && <Check size="xs" />}
                                     </button>
                                 </div>
                                 <div className="prompt-input-wrapper">
@@ -452,7 +452,7 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
                                         title={!sceneContext ? 'Scene context required' : 'AI-assisted prompt generation'}
                                         type="button"
                                     >
-                                        <Sparkle size={14} /> AI Assist
+                                        <AIAssistMini size="sm" /> AI Assist
                                     </button>
                                 </div>
                             </>
@@ -473,7 +473,7 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
                                     title={!sceneContext ? 'Scene context required' : 'AI-assisted prompt generation'}
                                     type="button"
                                 >
-                                    <Sparkle size={14} /> AI Assist
+                                    <AIAssistMini size="sm" /> AI Assist
                                 </button>
                             </div>
                         )}

@@ -53,7 +53,7 @@ const ToastErrorModal: React.FC<ToastErrorModalProps> = ({
           <div className="toast-error-icon">!</div>
           <h3>Error Occurred</h3>
           <button className="toast-error-close" onClick={onClose} title="Close">
-            <Close size={14} />
+            <Close size="sm" />
           </button>
         </div>
 

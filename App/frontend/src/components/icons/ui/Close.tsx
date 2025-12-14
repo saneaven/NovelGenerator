@@ -1,20 +1,24 @@
 import React from 'react';
-import type { IconProps } from '../types';
+import { resolveIconSize, type IconProps } from '../types';
 
 export const Close: React.FC<IconProps> = ({
-  size = 16,
+  size,
   className = '',
-  color = 'currentColor'
-}) => (
+  color = 'currentColor',
+  strokeWidth = 1.5
+}) => {
+  const resolvedSize = resolveIconSize(size);
+  return (
   <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 124"
-    fill={color}
+    width={resolvedSize}
+    height={resolvedSize}
+    viewBox="0 0 24 24"
+    fill="none"
     className={className}
     xmlns="http://www.w3.org/2000/svg"
   >
-    {/* Placeholder: filled square */}
-    <rect x="0" y="0" width="16" height="16" />
+		<path d="M6 6L18 18" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"></path>
+		<path d="M18 6L6 18" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"></path>
   </svg>
-);
+  );
+};

@@ -1,20 +1,28 @@
 import React from 'react';
-import type { IconProps } from '../types';
+import { resolveIconSize, type IconProps } from '../types';
 
 export const Expand: React.FC<IconProps> = ({
-  size = 16,
+  size,
   className = '',
-  color = 'currentColor'
-}) => (
+  color = 'currentColor',
+  strokeWidth = 1.5
+}) => {
+  const resolvedSize = resolveIconSize(size);
+  return (
   <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 124"
-    fill={color}
+    width={resolvedSize}
+    height={resolvedSize}
+    viewBox="0 0 24 24"
+    fill="none"
     className={className}
     xmlns="http://www.w3.org/2000/svg"
   >
-    {/* Placeholder: filled square */}
-    <rect x="0" y="0" width="16" height="16" />
+		<path d="M8.67675 18.9919L6.00394 18.9972C5.45003 18.9983 5.00075 18.549 5.00196 17.9951L5.00777 15.3229" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"></path>
+		<path d="M5.49805 18.5L9.00193 14.9961" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"></path>
+		<path d="M6.00972 9.6787L6.00391 7.00608C6.0027 6.4521 6.4521 6.0027 7.00608 6.00391L9.6787 6.00972" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"></path>
+		<path d="M17.9912 14.3242L17.9971 16.9968C17.9983 17.5508 17.5489 18.0002 16.9949 17.999L14.3223 17.9932" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"></path>
+		<path d="M15.3203 5.00937L17.9937 5.00391C18.5477 5.00278 18.997 5.45228 18.9957 6.0063L18.9893 8.67835" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"></path>
+		<path d="M18.5001 5.5L14.9961 9.00396" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"></path>
   </svg>
-);
+  );
+};

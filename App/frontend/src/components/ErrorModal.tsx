@@ -14,9 +14,9 @@ interface ErrorModalProps {
 }
 
 const NOTIFICATION_CONFIG: Record<NotificationType, { icon: React.ReactNode; buttonClass: string }> = {
-  success: { icon: <Check size={20} />, buttonClass: 'notification-ok-btn--success' },
-  error: { icon: <Warning size={20} />, buttonClass: 'notification-ok-btn--error' },
-  info: { icon: <Info size={20} />, buttonClass: 'notification-ok-btn--info' },
+  success: { icon: <Check size="xl" />, buttonClass: 'notification-ok-btn--success' },
+  error: { icon: <Warning size="xl" />, buttonClass: 'notification-ok-btn--error' },
+  info: { icon: <Info size="xl" />, buttonClass: 'notification-ok-btn--info' },
 };
 
 const ErrorModal: React.FC<ErrorModalProps> = ({

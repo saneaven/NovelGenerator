@@ -3,7 +3,7 @@ import { useProjectStore } from '../store/projectStore';
 import { DropdownMenu, DropdownItem, DropdownDivider } from './ui/DropdownMenu';
 import ImageTabContent from './AssetManager/ImageTabContent';
 import type { Asset } from '../api/assetService';
-import { Sparkle, Scroll, Refresh, Trash } from './icons';
+import { Scroll, Refresh, Trash, AIAssistMini } from './icons';
 import './StoryCardInlineEdit.css';
 
 type TabType = 'edit' | 'image';
@@ -145,7 +145,7 @@ const StoryCardInlineEdit: React.FC<StoryCardInlineEditProps> = ({
                                 onClick={onAIEdit}
                                 title="AI Edit"
                             >
-                                <span className="ai-icon"><Sparkle size={14} /></span>
+                                <span className="ai-icon"><AIAssistMini size="sm" /></span>
                                 AI Edit
                             </button>
 
@@ -158,20 +158,20 @@ const StoryCardInlineEdit: React.FC<StoryCardInlineEditProps> = ({
                                 align="right"
                             >
                                 <DropdownItem
-                                    icon={<Scroll size={14} />}
+                                    icon={<Scroll size="sm" />}
                                     label="Version History"
                                     onClick={onVersionHistory}
                                 />
                                 {showSecondaryLanguage && (
                                     <DropdownItem
-                                        icon={<Refresh size={14} />}
+                                        icon={<Refresh size="sm" />}
                                         label="Retranslate"
                                         onClick={onRetranslate}
                                     />
                                 )}
                                 <DropdownDivider />
                                 <DropdownItem
-                                    icon={<Trash size={14} />}
+                                    icon={<Trash size="sm" />}
                                     label="Delete"
                                     onClick={onDelete}
                                     variant="danger"

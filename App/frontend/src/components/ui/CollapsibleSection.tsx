@@ -84,7 +84,7 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
     <div className={sectionClasses}>
       <div className="collapsible-section-header" onClick={handleHeaderClick}>
         <span className="collapsible-section-chevron">
-          <ChevronRight size={14} />
+          <ChevronRight size="sm" />
         </span>
         <span className="collapsible-section-label">{label}</span>
 

@@ -19,11 +19,11 @@ interface GeneralPanelProps {
 }
 
 const FUNCTION_LABELS: Record<AIFunctionType, { icon: React.ReactNode; label: string }> = {
-  chat: { icon: <Chat size={14} />, label: 'Chat' },
-  translation: { icon: <Globe size={14} />, label: 'Translation' },
-  storyObjectEdit: { icon: <Edit size={14} />, label: 'Story Object Edit' },
-  chapterGen: { icon: <Document size={14} />, label: 'Chapter Gen' },
-  imagePrompt: { icon: <Palette size={14} />, label: 'Image Prompt' },
+  chat: { icon: <Chat size="sm" />, label: 'Chat' },
+  translation: { icon: <Globe size="sm" />, label: 'Translation' },
+  storyObjectEdit: { icon: <Edit size="sm" />, label: 'Story Object Edit' },
+  chapterGen: { icon: <Document size="sm" />, label: 'Chapter Gen' },
+  imagePrompt: { icon: <Palette size="sm" />, label: 'Image Prompt' },
 };
 
 const FUNCTION_DESCRIPTIONS = {

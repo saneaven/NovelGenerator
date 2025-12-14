@@ -5,6 +5,7 @@ import { PROMPT_SCHEMAS } from '../../templateEngine/schema';
 import type { PromptType } from '../../templateEngine/schema';
 
 import './TemplateSyntaxHint.css';
+import { Info } from '../icons';
 
 interface TemplateSyntaxHintProps {
     selectedNode: PromptNode | null;
@@ -173,16 +174,7 @@ const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode })
                 onClick={toggleOpen}
             >
                 <span className="syntax-trigger-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" focusable="false">
-                        <path
-                            fill="currentColor"
-                            d="M9.25 6.5c0-.69-.56-1.25-1.25-1.25H5.5C4.12 5.25 3 6.37 3 7.75v8.5C3 17.63 4.12 18.75 5.5 18.75h2.5c.69 0 1.25-.56 1.25-1.25s-.56-1.25-1.25-1.25H5.75a.5.5 0 0 1-.5-.5v-8.5a.5.5 0 0 1 .5-.5H8c.69 0 1.25-.56 1.25-1.25Zm11 0c0-1.38-1.12-2.5-2.5-2.5h-2.5c-.69 0-1.25.56-1.25 1.25S14.56 6.5 15.25 6.5h2.25a.5.5 0 0 1 .5.5v8.5a.5.5 0 0 1-.5.5H15c-.69 0-1.25.56-1.25 1.25s.56 1.25 1.25 1.25h2.5c1.38 0 2.5-1.12 2.5-2.5v-8.5Z"
-                        />
-                        <path
-                            fill="currentColor"
-                            d="M14.5 8.25c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25s.56 1.25 1.25 1.25h2.5c.69 0 1.25-.56 1.25-1.25Zm0 7.5c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25s.56 1.25 1.25 1.25h2.5c.69 0 1.25-.56 1.25-1.25Z"
-                        />
-                    </svg>
+                    <Info size={"lg"}/>
                 </span>
             </button>
 

@@ -51,7 +51,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
         {/* Expand/collapse icon for categories */}
         {isCategory && hasChildren && (
           <span className="tree-node-expand-icon">
-            {isExpanded ? <Collapse size={10} /> : <Expand size={10} />}
+            {isExpanded ? <Collapse size="xs" /> : <Expand size="xs" />}
           </span>
         )}
 
@@ -65,7 +65,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 
         {/* Bullet for prompt nodes */}
         {!isCategory && (
-          <span className="tree-node-bullet"><Bullet size={6} /></span>
+          <span className="tree-node-bullet"><Bullet size="xs" /></span>
         )}
       </div>
 

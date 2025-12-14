@@ -187,7 +187,7 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
                                 title="Regenerate image"
                                 disabled={isLoadingAsset}
                             >
-                                <Refresh size={16} />
+                                <Refresh size="md" />
                             </button>
                         )}
 
@@ -197,7 +197,7 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
                             onClick={handleReplace}
                             title="Replace image"
                         >
-                            <Shuffle size={16} />
+                            <Shuffle size="md" />
                         </button>
                     </div>
 
@@ -208,7 +208,7 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
                         onClick={handleDelete}
                         title="Remove image"
                     >
-                        <Trash size={16} />
+                        <Trash size="md" />
                     </button>
                 </div>
             )}

@@ -282,7 +282,7 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
             {statusLabel}
           </span>
           <span className={`gfcc-toggle ${isExpanded ? 'expanded' : 'collapsed'}`}>
-            {isExpanded ? <Collapse size={10} /> : <Expand size={10} />}
+            {isExpanded ? <Collapse size="xs" /> : <Expand size="xs" />}
           </span>
         </div>
       </div>
@@ -363,7 +363,7 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
                       />
                     ) : (
                       <span className={`gfcc-result-icon ${wasRejected ? 'rejected' : 'applied'}`}>
-                        {wasRejected ? <Close size={12} /> : <Check size={12} />}
+                        {wasRejected ? <Close size="xs" /> : <Check size="xs" />}
                       </span>
                     )}
                   </div>
@@ -379,7 +379,7 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
                     {/* Show error banner for validation or apply errors */}
                     {hasError && (
                       <div className="gfcc-error-banner">
-                        <Warning size={14} />
+                        <Warning size="sm" />
                         <span>{card.validationError || card.applyError}</span>
                       </div>
                     )}

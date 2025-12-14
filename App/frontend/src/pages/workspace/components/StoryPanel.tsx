@@ -22,12 +22,12 @@ const StoryPanel: React.FC<StoryPanelProps> = ({
   const [showRightButton, setShowRightButton] = useState(false);
 
   const storyTabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
-    { id: 'basicInfo', label: 'Basic Info', icon: <Clipboard size={14} /> },
-    { id: 'characters', label: 'Characters', icon: <People size={14} /> },
-    { id: 'organizations', label: 'Organizations', icon: <Organization size={14} /> },
-    { id: 'locations', label: 'Locations', icon: <Map size={14} /> },
-    { id: 'lorebook', label: 'Lorebook', icon: <Books size={14} /> },
-    { id: 'outline', label: 'Outline', icon: <Document size={14} /> },
+    { id: 'basicInfo', label: 'Basic Info', icon: <Clipboard size="sm" /> },
+    { id: 'characters', label: 'Characters', icon: <People size="sm" /> },
+    { id: 'organizations', label: 'Organizations', icon: <Organization size="sm" /> },
+    { id: 'locations', label: 'Locations', icon: <Map size="sm" /> },
+    { id: 'lorebook', label: 'Lorebook', icon: <Books size="sm" /> },
+    { id: 'outline', label: 'Outline', icon: <Document size="sm" /> },
   ];
 
   // Check scroll position to show/hide navigation buttons
@@ -147,7 +147,7 @@ const StoryPanel: React.FC<StoryPanelProps> = ({
   return (
     <div className="story-panel">
       <div className="story-header">
-        <h2><Clipboard size={18} /> Story Objects</h2>
+        <h2><Clipboard size="2xl" /> Story Objects</h2>
       </div>
 
       <div className="story-tabs-container">
@@ -156,7 +156,7 @@ const StoryPanel: React.FC<StoryPanelProps> = ({
           onClick={() => scroll('left')}
           aria-label="Scroll tabs left"
         >
-          <ChevronLeft size={14} />
+          <ChevronLeft size="sm" />
         </button>
 
         <div
@@ -181,7 +181,7 @@ const StoryPanel: React.FC<StoryPanelProps> = ({
           onClick={() => scroll('right')}
           aria-label="Scroll tabs right"
         >
-          <ChevronRight size={14} />
+          <ChevronRight size="sm" />
         </button>
       </div>
 

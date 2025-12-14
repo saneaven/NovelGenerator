@@ -262,6 +262,8 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     <div className={`rich-text-editor ${disabled ? 'disabled' : ''}`}>
       {/* Toolbar */}
       <div className="editor-format-toolbar">
+        {/* Scrollable format tools container */}
+        <div className="toolbar-format-tools">
         {/* Heading Dropdown */}
         <div className="heading-dropdown" ref={headingDropdownRef}>
           <button
@@ -423,9 +425,10 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
             disabled={disabled}
             title="Insert image"
           >
-            <Image size={16} />
+            <Image size="md" />
           </button>
         )}
+        </div>
 
         {/* Toolbar Actions - right side (passed from parent) */}
         {toolbarActions && (

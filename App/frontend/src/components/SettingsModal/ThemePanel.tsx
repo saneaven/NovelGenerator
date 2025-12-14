@@ -29,12 +29,12 @@ const ThemePanel: React.FC<ThemePanelProps> = ({ theme, onThemeChange }) => {
               className={`theme-option ${theme === 'light' ? 'active' : ''}`}
               onClick={() => onThemeChange('light')}
             >
-              <div className="theme-option-icon"><Sun size={20} /></div>
+              <div className="theme-option-icon"><Sun size="xl" /></div>
               <div className="theme-option-content">
                 <div className="theme-option-title">Light</div>
                 <div className="theme-option-description">Bright and clean interface</div>
               </div>
-              {theme === 'light' && <div className="theme-option-check"><Check size={16} /></div>}
+              {theme === 'light' && <div className="theme-option-check"><Check size="md" /></div>}
             </button>
 
             {/* Dark Mode Option */}
@@ -43,12 +43,12 @@ const ThemePanel: React.FC<ThemePanelProps> = ({ theme, onThemeChange }) => {
               className={`theme-option ${theme === 'dark' ? 'active' : ''}`}
               onClick={() => onThemeChange('dark')}
             >
-              <div className="theme-option-icon"><Moon size={20} /></div>
+              <div className="theme-option-icon"><Moon size="xl" /></div>
               <div className="theme-option-content">
                 <div className="theme-option-title">Dark</div>
                 <div className="theme-option-description">Easy on the eyes in low light</div>
               </div>
-              {theme === 'dark' && <div className="theme-option-check"><Check size={16} /></div>}
+              {theme === 'dark' && <div className="theme-option-check"><Check size="md" /></div>}
             </button>
 
             {/* System Auto Option */}
@@ -57,19 +57,19 @@ const ThemePanel: React.FC<ThemePanelProps> = ({ theme, onThemeChange }) => {
               className={`theme-option ${theme === 'system' ? 'active' : ''}`}
               onClick={() => onThemeChange('system')}
             >
-              <div className="theme-option-icon"><Computer size={20} /></div>
+              <div className="theme-option-icon"><Computer size="xl" /></div>
               <div className="theme-option-content">
                 <div className="theme-option-title">System</div>
                 <div className="theme-option-description">Match your OS preference</div>
               </div>
-              {theme === 'system' && <div className="theme-option-check"><Check size={16} /></div>}
+              {theme === 'system' && <div className="theme-option-check"><Check size="md" /></div>}
             </button>
           </div>
         </div>
       </div>
 
       <div className="theme-info-box">
-        <h4><Lightbulb size={16} /> About Themes</h4>
+        <h4><Lightbulb size="md" /> About Themes</h4>
         <ul>
           <li>
             <strong>Light:</strong> Traditional bright interface, great for well-lit environments
