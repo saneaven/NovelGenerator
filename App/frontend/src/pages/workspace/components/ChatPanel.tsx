@@ -15,6 +15,7 @@ import ToggleSwitch from '../../../components/ToggleSwitch';
 import ThinkingDisplay from '../../../components/ThinkingDisplay';
 import GroupedFunctionCallCard from '../../../components/functionCall/GroupedFunctionCallCard';
 import { collapseContentParts } from '../../../chat/utils/contentParts';
+import { Settings, Books, Book, Edit, Trash, Globe, CircularArrow, ChevronUp, ChevronDown } from '../../../components/icons';
 
 interface ChatPanelProps
 {
@@ -486,7 +487,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                                         disabled={translateDisabled}
                                                         title={translateButtonLabel}
                                                     >
-                                                        {isTranslating ? '⟳' : translationAvailable ? '↻' : '🌐'}
+                                                        {isTranslating ? <CircularArrow size={14} /> : translationAvailable ? <CircularArrow size={14} /> : <Globe size={14} />}
                                                     </button>
                                                 )}
                                                 <button
@@ -502,7 +503,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                                     disabled={isTranslating || !primaryPlainContent.trim()}
                                                     title="Edit"
                                                 >
-                                                    ✎
+                                                    <Edit size={14} />
                                                 </button>
                                                 <button
                                                     className="action-btn delete-btn"
@@ -510,7 +511,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                                     disabled={isTranslating}
                                                     title="Delete"
                                                 >
-                                                    🗑
+                                                    <Trash size={14} />
                                                 </button>
                                             </div>
                                         </div>
@@ -528,14 +529,14 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 <div className={`chat-controls ${isControlsCollapsed ? 'collapsed' : 'expanded'}`}>
                     <div className="chat-controls-header" onClick={() => setIsControlsCollapsed(!isControlsCollapsed)}>
                         <span className="chat-controls-title">
-                            {isControlsCollapsed ? '⚙️ Contexts' : '⚙️ Contexts'}
+                            <Settings size={14} /> Contexts
                         </span>
                         <button
                             type="button"
                             className="chat-controls-toggle"
                             aria-label={isControlsCollapsed ? "Expand contexts" : "Collapse contexts"}
                         >
-                            {isControlsCollapsed ? '▲' : '▼'}
+                            {isControlsCollapsed ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                         </button>
                     </div>
                     {!isControlsCollapsed && (
@@ -547,7 +548,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                     enabled: checked
                                 }))}
                                 label="Include story context in messages"
-                                icon="📚"
+                                icon={<Books size={14} />}
                             />
                             <ToggleSwitch
                                 checked={systemInsertConfig.includeNovelContent}
@@ -556,7 +557,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                     includeNovelContent: checked
                                 }))}
                                 label="Include novel content in messages"
-                                icon="📖"
+                                icon={<Book size={14} />}
                             />
                         </div>
                     )}

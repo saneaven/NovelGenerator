@@ -1,11 +1,12 @@
 import React from 'react';
 import './ToggleSwitch.css';
+import { Clipboard } from './icons';
 
 interface ToggleSwitchProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label: string;
-  icon?: string;
+  icon?: React.ReactNode;
   disabled?: boolean;
 }
 
@@ -13,7 +14,7 @@ const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
   checked,
   onChange,
   label,
-  icon = '📋',
+  icon = <Clipboard size={14} />,
   disabled = false,
 }) => {
   return (

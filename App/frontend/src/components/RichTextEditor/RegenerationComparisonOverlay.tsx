@@ -5,10 +5,8 @@
 
 import React from 'react';
 import type { Asset } from '../../api/assetService';
+import { API_BASE_URL } from '../../api/client';
 import './RegenerationComparisonOverlay.css';
-
-// Get API base URL for image sources
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 interface RegenerationComparisonOverlayProps {
     newAsset: Asset;

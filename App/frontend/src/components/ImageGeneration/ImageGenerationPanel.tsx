@@ -17,6 +17,7 @@ import {
 } from '../../imageGeneration';
 import type { Asset } from '../../api/assetService';
 import ImagePromptBuilderModal from './ImagePromptBuilderModal';
+import { Sparkle, Check } from '../icons';
 import './ImageGenerationPanel.css';
 
 // Settings passed from asset detail for regeneration
@@ -316,7 +317,7 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                                 title="AI-assisted prompt generation"
                                 type="button"
                             >
-                                ✨ AI Assist
+                                <Sparkle size={14} /> AI Assist
                             </button>
                         </div>
                     </div>
@@ -331,13 +332,13 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                                 className={`prompt-tab ${activePromptTab === 'positive' ? 'active' : ''}`}
                                 onClick={() => setActivePromptTab('positive')}
                             >
-                                Positive {positivePrompt && '✓'}
+                                Positive {positivePrompt && <Check size={12} />}
                             </button>
                             <button
                                 className={`prompt-tab ${activePromptTab === 'negative' ? 'active' : ''}`}
                                 onClick={() => setActivePromptTab('negative')}
                             >
-                                Negative {negativePrompt && '✓'}
+                                Negative {negativePrompt && <Check size={12} />}
                             </button>
                         </div>
                         <div className="prompt-input-wrapper">
@@ -364,7 +365,7 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                                 title="AI-assisted prompt generation"
                                 type="button"
                             >
-                                ✨ AI Assist
+                                <Sparkle size={14} /> AI Assist
                             </button>
                         </div>
                     </div>

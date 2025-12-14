@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ProviderCredentials } from '../../store/settingsStore';
+import { Settings, Shuffle } from '../icons';
 
 interface CredentialsPanelProps {
   credentials: ProviderCredentials;
@@ -112,7 +113,7 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
       {/* OpenRouter */}
       <div className="credential-card">
         <div className="credential-header">
-          <div className="credential-icon">🔀</div>
+          <div className="credential-icon"><Shuffle size={16} /></div>
           <h3>OpenRouter</h3>
         </div>
         <div className="credential-body">
@@ -203,7 +204,7 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
       {/* Custom Endpoint */}
       <div className="credential-card">
         <div className="credential-header">
-          <div className="credential-icon">⚙️</div>
+          <div className="credential-icon"><Settings size={16} /></div>
           <h3>Custom Endpoint</h3>
         </div>
         <div className="credential-body">

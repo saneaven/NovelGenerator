@@ -84,6 +84,12 @@ export interface ImageGenerationRequest {
     steps?: number;
     scale?: number;
     noiseSchedule?: string;
+    // NovelAI reference image settings (i2i / Vibe Transfer)
+    referenceMode?: 'auto' | 'i2i' | 'vibe';
+    strength?: number;        // i2i: transformation strength (0-1)
+    i2iNoise?: number;        // i2i: detail addition (0-1)
+    vibeStrength?: number;    // vibe: style influence (0-1)
+    vibeInfoExtracted?: number; // vibe: concept extraction (0-1)
 
     // Style application (handled by preprocessor)
     styleId?: string | null;

@@ -42,6 +42,7 @@ import type { ManuscriptObject } from '../../../types/unifiedObject';
 import type { InitialGenerationSettings } from '../../../components/ImageGeneration/SceneImageGeneratorModal';
 import { API_BASE_URL } from '../../../api/client';
 import ChapterSidebar from './ChapterSidebar';
+import { Save, Check, Bullet, Warning, HamburgerMenu, ChevronUp, ChevronDown, AIAssist, Refresh, Globe, Lightbulb } from '../../../components/icons';
 
 interface NovelEditorPanelProps {
   projectId: string;
@@ -310,7 +311,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     // Set a timeout to prevent infinite loading
     loadingTimeoutRef.current = setTimeout(() => {
       if (!manuscript && loading) {
-        console.error('⏱️ Loading timeout - forcing error state');
+        console.error('Loading timeout - forcing error state');
         setContentIdError('Loading timeout. The manuscript is taking too long to load. Please try refreshing.');
       }
     }, 10000); // 10 second timeout
@@ -582,17 +583,17 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const getInitialSettings = useCallback((asset: Asset): InitialGenerationSettings => {
     const settings: InitialGenerationSettings = {};
 
-    // Natural language prompt
+    // Natural language prompt (extract content from StyledPrompt)
     if (asset.generation_prompt) {
-      settings.prompt = asset.generation_prompt;
+      settings.prompt = asset.generation_prompt.content;
     }
 
-    // Tag-based prompts (NovelAI)
+    // Tag-based prompts (NovelAI) - extract content from StyledPrompt
     if (asset.generation_positive_prompt) {
-      settings.positivePrompt = asset.generation_positive_prompt;
+      settings.positivePrompt = asset.generation_positive_prompt.content;
     }
     if (asset.generation_negative_prompt) {
-      settings.negativePrompt = asset.generation_negative_prompt;
+      settings.negativePrompt = asset.generation_negative_prompt.content;
     }
 
     // Provider and model
@@ -815,10 +816,10 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                   {/* Status Info - Save status + Word count (stacked vertically) */}
                   <div className="editor-status-info">
                     <div className="save-status">
-                      {isSaving && savingType === 'auto' && <span className="saving-indicator">💾 Auto-saving...</span>}
-                      {isSaving && savingType === 'manual' && <span className="saving-indicator">💾 Saving...</span>}
-                      {!isSaving && hasUnsavedChanges && <span className="unsaved-indicator">● Unsaved</span>}
-                      {!isSaving && !hasUnsavedChanges && <span className="saved-indicator">✓ Saved</span>}
+                      {isSaving && savingType === 'auto' && <span className="saving-indicator"><Save size={12} /> Auto-saving...</span>}
+                      {isSaving && savingType === 'manual' && <span className="saving-indicator"><Save size={12} /> Saving...</span>}
+                      {!isSaving && hasUnsavedChanges && <span className="unsaved-indicator"><Bullet size={8} /> Unsaved</span>}
+                      {!isSaving && !hasUnsavedChanges && <span className="saved-indicator"><Check size={12} /> Saved</span>}
                     </div>
                     <div className="word-count">
                       <span>{wordCount.toLocaleString()} words</span>
@@ -828,7 +829,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                   {/* Fallback Warning */}
                   {isFallback && (
                     <span className="fallback-warning" title={`${globalDisplayLanguage} not available, showing ${effectiveLanguage}`}>
-                      ⚠️ {effectiveLanguage}
+                      <Warning size={14} /> {effectiveLanguage}
                     </span>
                   )}
 
@@ -838,7 +839,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                     className="header-btn sidebar-toggle-btn"
                     title="Toggle chapter list"
                   >
-                    ☰
+                    <HamburgerMenu size={16} />
                   </button>
                 </div>
 
@@ -851,7 +852,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                       aria-expanded={isDescriptionExpanded}
                       title={isDescriptionExpanded ? 'Hide description' : 'Show description'}
                     >
-                      {isDescriptionExpanded ? '▲ Hide description' : '▼ Show description'}
+                      {isDescriptionExpanded ? <><ChevronUp size={12} /> Hide description</> : <><ChevronDown size={12} /> Show description</>}
                     </button>
                     <p className="editor-chapter-description">{selectedChapter.description}</p>
                   </div>
@@ -886,7 +887,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                     disabled={isSaving || !selectedChapter}
                     title="AI Edit Chapter"
                   >
-                    🤖 AI Edit
+                    <AIAssist size={14} /> AI Edit
                   </button>
 
                   {/* Manual Save Button */}
@@ -896,7 +897,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                     disabled={isSaving || !hasUnsavedChanges}
                     title="Create version snapshot (Ctrl+S)"
                   >
-                    💾 Save
+                    <Save size={14} /> Save
                   </button>
 
                   {/* More Actions Dropdown - contains mobile-hidden actions */}
@@ -909,7 +910,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                   >
                     {/* AI Edit - accessible via dropdown on mobile */}
                     <DropdownItem
-                      icon="🤖"
+                      icon={<AIAssist size={14} />}
                       label="AI Edit"
                       onClick={() => setIsAIEditModalOpen(true)}
                       disabled={isSaving || !selectedChapter}
@@ -917,7 +918,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                     />
                     {/* Save - accessible via dropdown on mobile */}
                     <DropdownItem
-                      icon="💾"
+                      icon={<Save size={14} />}
                       label="Save"
                       onClick={() => handleManualSave('Manual Save')}
                       disabled={isSaving || !hasUnsavedChanges}
@@ -927,14 +928,14 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                     {settings.subLanguages && settings.subLanguages.length > 0 && (
                       manuscriptLanguages.includes(globalDisplayLanguage) ? (
                         <DropdownItem
-                          icon="🔄"
+                          icon={<Refresh size={14} />}
                           label="Retranslate"
                           onClick={() => setShowRetranslateModal(true)}
                           disabled={isSaving}
                         />
                       ) : (
                         <DropdownItem
-                          icon="🌐"
+                          icon={<Globe size={14} />}
                           label="Translate"
                           onClick={() => setShowRetranslateModal(true)}
                           disabled={isSaving || !manuscript}
@@ -980,7 +981,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
               <span>Version: {manuscript.version.number}</span>
             </div>
             <div className="editor-footer-notice">
-              💡 Auto-cached locally • Click Save to create version
+              <Lightbulb size={14} /> Auto-cached locally • Click Save to create version
             </div>
           </div>
         </div>

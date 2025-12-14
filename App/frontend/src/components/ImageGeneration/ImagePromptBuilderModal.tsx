@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useModalHistory } from '../../hooks/useModalHistory';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import { useLLMToast } from '../../hooks/useLLMToast';
-import { LLMTask, LLMTaskMode, type ObjectImagePromptContext } from '../../llm';
+import { LLMTask, LLMTaskMode, LLMTaskManager, type ObjectImagePromptContext } from '../../llm';
 import './ImagePromptBuilderModal.css';
 
 interface TargetObject {
@@ -32,23 +32,14 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
   promptMode = 'natural',
   defaultUserRequest,
 }) => {
+  useModalHistory(isOpen, onClose);
   const { settings } = useSettingsStore();
   const unifiedStore = useUnifiedObjectStore();
 
   const [userRequest, setUserRequest] = useState(defaultUserRequest || '');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedPrompt, setGeneratedPrompt] = useState('');
-  const [error, setError] = useState<string | null>(null);
 
-  const sessionId = `image-prompt-${objectId}`;
   const abortControllerRef = useRef<AbortController | null>(null);
   const taskRef = useRef<LLMTask | null>(null);
-
-  const { startTask, completeSuccess, completeError } = useLLMToast({
-    sessionId,
-    taskType: 'image-prompt',
-    label: 'Image Prompt Generation',
-  });
 
   const objectData = objectId ? unifiedStore.objects[objectId] : null;
 
@@ -70,8 +61,6 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
   useEffect(() => {
     if (!isOpen) {
       setUserRequest('');
-      setGeneratedPrompt('');
-      setError(null);
     }
   }, [isOpen]);
 
@@ -92,14 +81,15 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
   };
 
   const handleGenerate = useCallback(async () => {
-    setIsGenerating(true);
-    setError(null);
-    setGeneratedPrompt('');
-
-    startTask({
+    // Start task via LLMTaskManager - returns a handle with bound completion functions
+    const task = LLMTaskManager.startTask({
       taskType: 'image-prompt',
-      modalProps: { objectType, objectId, onPromptGenerated, promptMode },
-      formState: { userRequest },
+      label: 'Image Prompt Generation',
+      retryContext: {
+        taskType: 'image-prompt',
+        modalProps: { objectType, objectId, onPromptGenerated, promptMode },
+        formState: { userRequest },
+      },
     });
 
     onClose();
@@ -134,7 +124,7 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
           projectId: '',
           promptContext,
           abortControllerRef,
-          sessionId,
+          sessionId: task.sessionId,
           provider: imagePromptConfig.provider,
           providerConfig,
           model: imagePromptConfig.model,
@@ -150,11 +140,9 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
               const text = result.contentParts.filter(part => part.type === 'content').map(part => part.text).join('');
               if (text.trim()) {
                 onPromptGenerated(text.trim());
-                completeSuccess();
+                task.complete();
               } else {
-                const errorMsg = 'AI did not generate a prompt.';
-                setError(errorMsg);
-                completeError(errorMsg);
+                task.error('AI did not generate a prompt.');
               }
             } else {
               const call = result.functionCalls.find(c => c.function_name === 'generate_object_image_prompt');
@@ -163,51 +151,43 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
                   const args = typeof call.arguments === 'string' ? JSON.parse(call.arguments) : call.arguments;
                   if (args.prompt) {
                     onPromptGenerated(args.prompt);
-                    completeSuccess();
+                    task.complete();
                   }
                 } catch {
-                  const errorMsg = 'Failed to parse generated prompt.';
-                  setError(errorMsg);
-                  completeError(errorMsg);
+                  task.error('Failed to parse generated prompt.');
                 }
               } else {
                 const text = result.contentParts.filter(part => part.type === 'content').map(part => part.text).join('');
                 if (text.trim()) {
                   onPromptGenerated(text.trim());
-                  completeSuccess();
+                  task.complete();
                 } else {
-                  const errorMsg = 'AI did not generate a prompt.';
-                  setError(errorMsg);
-                  completeError(errorMsg);
+                  task.error('AI did not generate a prompt.');
                 }
               }
             }
           },
           onError: (err) => {
-            if (err.name === 'AbortError') return;
-            const errorMsg = err.message || 'Failed to generate prompt';
-            setError(errorMsg);
-            completeError(errorMsg);
+            if (err.name === 'AbortError') {
+              task.cancel();
+            } else {
+              task.error(err.message || 'Failed to generate prompt');
+            }
           },
         }
       );
 
       await taskRef.current.run();
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return;
-      const errorMsg = err instanceof Error ? err.message : 'Failed to generate prompt';
-      setError(errorMsg);
-      completeError(errorMsg);
+      if (err instanceof Error && err.name === 'AbortError') {
+        task.cancel();
+        return;
+      }
+      task.error(err instanceof Error ? err.message : 'Failed to generate prompt');
     } finally {
-      setIsGenerating(false);
       taskRef.current = null;
     }
-  }, [settings, targetObject, savedPrompts, promptMode, objectType, objectId, userRequest, sessionId, startTask, onPromptGenerated, completeSuccess, completeError, onClose]);
-
-  const handleUsePrompt = () => {
-    onPromptGenerated(generatedPrompt);
-    onClose();
-  };
+  }, [settings, targetObject, savedPrompts, promptMode, objectType, objectId, userRequest, onPromptGenerated, onClose]);
 
   if (!isOpen) return null;
 
@@ -233,36 +213,18 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
               onChange={(e) => setUserRequest(e.target.value)}
               placeholder='e.g., "A dramatic portrait looking determined"'
               rows={3}
-              disabled={isGenerating}
             />
           </div>
 
           <div className="generate-section">
-            <button className="generate-button" onClick={handleGenerate} disabled={isGenerating}>
-              {isGenerating ? 'Generating...' : 'Generate Prompt'}
+            <button className="generate-button" onClick={handleGenerate}>
+              Generate Prompt
             </button>
           </div>
-
-          {error && <div className="error-message">{error}</div>}
-
-          {generatedPrompt && (
-            <div className="form-group generated-prompt-section">
-              <label>Generated Prompt</label>
-              <textarea
-                value={generatedPrompt}
-                onChange={(e) => setGeneratedPrompt(e.target.value)}
-                rows={5}
-                className="generated-prompt"
-              />
-            </div>
-          )}
         </div>
 
         <div className="modal-footer">
-          <button onClick={onClose} className="btn-secondary" disabled={isGenerating}>Cancel</button>
-          <button onClick={handleUsePrompt} className="btn-primary" disabled={!generatedPrompt.trim() || isGenerating}>
-            Use This Prompt
-          </button>
+          <button onClick={onClose} className="btn-secondary">Cancel</button>
         </div>
       </div>
     </div>

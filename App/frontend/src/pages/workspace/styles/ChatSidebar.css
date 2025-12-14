@@ -4,7 +4,7 @@
    ======================================== */
 
 .chat-sidebar {
-    width: 300px;
+    width: var(--size-chat-sidebar-width);
     background: var(--color-surface-elevated);
     border-right: 1px solid var(--color-border-default);
     display: flex;
@@ -233,8 +233,8 @@
         top: 0;
         left: 0;
         height: 100dvh;
-        z-index: var(--z-fixed);
-        width: 300px;
+        z-index: calc(var(--z-modal) + 2);
+        width: var(--size-chat-sidebar-width-mobile);
         transform: translateX(-100%);
         transition: transform var(--transition-base);
         box-shadow: var(--shadow-xl);
@@ -258,13 +258,6 @@
 
     .chat-item {
         padding: var(--spacing-md);
-    }
-}
-
-/* ===== Small Mobile ===== */
-@media (max-width: 480px) {
-    .chat-sidebar {
-        width: 280px;
     }
 }
 

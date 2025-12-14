@@ -526,13 +526,14 @@
     overflow: hidden;
 }
 
-.config-section.advanced-section::before {
-    content: '⚠️';
+.config-section.advanced-section .advanced-warning-icon {
     position: absolute;
     top: var(--spacing-md);
     right: var(--spacing-lg);
-    font-size: var(--font-size-xl);
     opacity: var(--opacity-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .config-section.advanced-section .section-title {
@@ -544,9 +545,8 @@
     margin-bottom: var(--spacing-lg);
 }
 
-.config-section.advanced-section .section-title::before {
-    content: '⚡';
-    font-size: var(--font-size-lg);
+.config-section.advanced-section .section-title svg {
+    flex-shrink: 0;
 }
 
 /* Advanced Options Container */
@@ -904,9 +904,8 @@
     gap: var(--spacing-sm);
 }
 
-.subsection-title::before {
-    content: '⚙️';
-    font-size: var(--font-size-base);
+.subsection-title svg {
+    flex-shrink: 0;
 }
 
 /* ========================================

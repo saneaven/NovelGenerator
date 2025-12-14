@@ -1,12 +1,15 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useModalHistory } from '../hooks/useModalHistory';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { useLLMTaskStore } from '../store/llmTaskStore';
 import type { FunctionCallMetadata } from '../llm/requestTypes';
 import type { ManuscriptObject } from '../types/unifiedObject';
 import { extractRawContent } from '../utils/nativeOutputParser';
-import { useLLMToast } from '../hooks/useLLMToast';
-import { LLMTask, LLMTaskMode, type ChapterEditPromptContext } from '../llm';
+import { LLMTask, LLMTaskMode, LLMTaskManager, type ChapterEditPromptContext, type TaskHandle } from '../llm';
+import { Expand, Collapse } from './icons';
+import { ObjectPicker } from './ObjectPicker';
+import CollapsibleSection from './ui/CollapsibleSection';
+import type { ObjectPickerGroup } from './ObjectPicker/types';
 
 // Available objects fetched on modal open
 interface OutlineAct {
@@ -61,6 +64,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
   onResult,
   defaultUserRequest,
 }) => {
+  useModalHistory(isOpen, onClose);
   const [userRequest, setUserRequest] = useState(defaultUserRequest || '');
   const [availableObjects, setAvailableObjects] = useState<AvailableContextObjects | null>(null);
   const [selectedObjects, setSelectedObjects] = useState<SelectedContextObjects>({
@@ -72,26 +76,15 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
     outlineChapters: new Set<string>(),
     novelContentChapters: new Set<string>(),
   });
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
-  const [expandedActs, setExpandedActs] = useState<Set<string>>(new Set());
   const [isContextExpanded, setIsContextExpanded] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const sessionId = `chapter-edit-${chapterId}`;
-
-  const { startTask, completeSuccess, completeError, completeCancelled } = useLLMToast({
-    sessionId,
-    taskType: 'chapter-edit',
-    label: `AI Edit: ${chapterName}`,
+  // Section collapse state
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    storyObjects: true,
+    outlines: true,
+    novelContent: true,
   });
-
-  const session = useLLMTaskStore(useCallback((state) => state.sessions[sessionId], [sessionId]));
-  const streamContent = useMemo(() => {
-    if (!session?.contentParts?.length) return '';
-    return session.contentParts.filter((p) => p.type === 'content').map((p) => p.text).join('');
-  }, [session?.contentParts]);
 
   const unifiedStore = useUnifiedObjectStore();
   const settingsStore = useSettingsStore();
@@ -216,8 +209,6 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
       loadAvailableObjects();
     } else {
       setUserRequest('');
-      setError(null);
-      setIsProcessing(false);
       setAvailableObjects(null);
     }
   }, [isOpen, loadAvailableObjects]);
@@ -226,6 +217,174 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
     return () => {
       taskRef.current?.abort();
     };
+  }, []);
+
+  // Build ObjectPicker groups for story objects
+  const storyObjectGroups = useMemo((): ObjectPickerGroup[] => {
+    if (!availableObjects) return [];
+
+    const groups: ObjectPickerGroup[] = [];
+
+    // Basic Info as first group
+    if (availableObjects.basicInfo) {
+      groups.push({
+        id: 'basic_info',
+        label: 'Basic Info',
+        type: 'basic_info',
+        items: [{
+          id: 'basic_info:main',
+          name: availableObjects.basicInfo.title,
+          type: 'basic_info',
+        }],
+      });
+    }
+
+    if (availableObjects.characters.length > 0) {
+      groups.push({
+        id: 'characters',
+        label: 'Characters',
+        type: 'character',
+        items: availableObjects.characters.map(c => ({
+          id: `character:${c.id}`,
+          name: c.name,
+          type: 'character',
+        })),
+      });
+    }
+
+    if (availableObjects.organizations.length > 0) {
+      groups.push({
+        id: 'organizations',
+        label: 'Organizations',
+        type: 'organization',
+        items: availableObjects.organizations.map(o => ({
+          id: `organization:${o.id}`,
+          name: o.name,
+          type: 'organization',
+        })),
+      });
+    }
+
+    if (availableObjects.locations.length > 0) {
+      groups.push({
+        id: 'locations',
+        label: 'Locations',
+        type: 'location',
+        items: availableObjects.locations.map(l => ({
+          id: `location:${l.id}`,
+          name: l.name,
+          type: 'location',
+        })),
+      });
+    }
+
+    if (availableObjects.lorebook.length > 0) {
+      groups.push({
+        id: 'lorebook',
+        label: 'Lorebook',
+        type: 'lorebook',
+        items: availableObjects.lorebook.map(l => ({
+          id: `lorebook:${l.id}`,
+          name: l.name,
+          type: 'lorebook',
+        })),
+      });
+    }
+
+    return groups;
+  }, [availableObjects]);
+
+  // Build ObjectPicker groups for outlines
+  const outlineGroups = useMemo((): ObjectPickerGroup[] => {
+    if (!availableObjects || availableObjects.outlines.length === 0) return [];
+
+    return availableObjects.outlines.map(act => ({
+      id: `outline-act-${act.id}`,
+      label: act.name,
+      type: 'act' as any,
+      items: act.chapters.map(ch => ({
+        id: ch.id,
+        name: ch.name,
+        type: 'chapter' as any,
+      })),
+    }));
+  }, [availableObjects]);
+
+  // Build ObjectPicker groups for novel content
+  const novelContentGroups = useMemo((): ObjectPickerGroup[] => {
+    if (!availableObjects || availableObjects.novelContent.length === 0) return [];
+
+    return availableObjects.novelContent.map(act => ({
+      id: `novel-act-${act.id}`,
+      label: act.name,
+      type: 'act' as any,
+      items: act.chapters.map(ch => ({
+        id: ch.id,
+        name: ch.name,
+        type: 'manuscript' as any,
+        wordCount: ch.wordCount,
+      })),
+    }));
+  }, [availableObjects]);
+
+  // Convert selected story objects to ObjectPicker format (with prefixes)
+  const selectedStoryObjectIds = useMemo((): string[] => {
+    const ids: string[] = [];
+    if (selectedObjects.basicInfo) ids.push('basic_info:main');
+    selectedObjects.characters.forEach(id => ids.push(`character:${id}`));
+    selectedObjects.organizations.forEach(id => ids.push(`organization:${id}`));
+    selectedObjects.locations.forEach(id => ids.push(`location:${id}`));
+    selectedObjects.lorebook.forEach(id => ids.push(`lorebook:${id}`));
+    return ids;
+  }, [selectedObjects.basicInfo, selectedObjects.characters, selectedObjects.organizations, selectedObjects.locations, selectedObjects.lorebook]);
+
+  // Handle story objects selection change
+  const handleStoryObjectsChange = useCallback((ids: string[] | string) => {
+    const idArray = Array.isArray(ids) ? ids : [ids];
+
+    let basicInfo = false;
+    const characters = new Set<string>();
+    const organizations = new Set<string>();
+    const locations = new Set<string>();
+    const lorebook = new Set<string>();
+
+    idArray.forEach(prefixedId => {
+      const [category, id] = prefixedId.split(':');
+      switch (category) {
+        case 'basic_info': basicInfo = true; break;
+        case 'character': characters.add(id); break;
+        case 'organization': organizations.add(id); break;
+        case 'location': locations.add(id); break;
+        case 'lorebook': lorebook.add(id); break;
+      }
+    });
+
+    setSelectedObjects(prev => ({
+      ...prev,
+      basicInfo,
+      characters,
+      organizations,
+      locations,
+      lorebook,
+    }));
+  }, []);
+
+  // Handle outline chapters selection change
+  const handleOutlineChaptersChange = useCallback((ids: string[] | string) => {
+    const idArray = Array.isArray(ids) ? ids : [ids];
+    setSelectedObjects(prev => ({
+      ...prev,
+      outlineChapters: new Set(idArray),
+    }));
+  }, []);
+
+  // Handle novel content chapters selection change
+  const handleNovelContentChaptersChange = useCallback((ids: string[] | string) => {
+    const idArray = Array.isArray(ids) ? ids : [ids];
+    setSelectedObjects(prev => ({
+      ...prev,
+      novelContentChapters: new Set(idArray),
+    }));
   }, []);
 
   const generateNovelContext = async (): Promise<Record<string, any>> => {
@@ -377,13 +536,12 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
     return context;
   };
 
+  // These handlers now accept a task handle for proper completion tracking
   const handleFunctionCallResults = useCallback(
-    async (functionCalls: FunctionCallMetadata[]) => {
+    async (functionCalls: FunctionCallMetadata[], task: TaskHandle) => {
       const updateCall = functionCalls.find((fc) => fc.function_name === 'update_manuscript');
       if (!updateCall) {
-        const errorMsg = 'AI did not call update_manuscript function';
-        setError(errorMsg);
-        completeError(errorMsg);
+        task.error('AI did not call update_manuscript function');
         return;
       }
 
@@ -391,9 +549,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         const args = typeof updateCall.arguments === 'string' ? JSON.parse(updateCall.arguments) : updateCall.arguments;
         const manuscriptObj = unifiedStore.getManuscriptByChapterId(args.chapterId);
         if (!manuscriptObj) {
-          const errorMsg = `Manuscript not found for chapter ${args.chapterId}`;
-          setError(errorMsg);
-          completeError(errorMsg);
+          task.error(`Manuscript not found for chapter ${args.chapterId}`);
           return;
         }
 
@@ -405,26 +561,22 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
           user_request: 'AI Generated Content',
         });
 
-        completeSuccess();
+        task.complete();
         onResult?.();
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : 'Failed to apply chapter content update';
-        setError(errorMsg);
-        completeError(errorMsg);
+        task.error(err instanceof Error ? err.message : 'Failed to apply chapter content update');
       }
     },
-    [unifiedStore, settingsStore, completeSuccess, completeError, onResult]
+    [unifiedStore, settingsStore, onResult]
   );
 
   const handleNativeOutput = useCallback(
-    async (text: string) => {
+    async (text: string, task: TaskHandle) => {
       const cleanedContent = extractRawContent(text);
       const manuscriptObj = unifiedStore.getManuscriptByChapterId(chapterId);
 
       if (!manuscriptObj) {
-        const errorMsg = `Manuscript not found for chapter ${chapterId}`;
-        setError(errorMsg);
-        completeError(errorMsg);
+        task.error(`Manuscript not found for chapter ${chapterId}`);
         return;
       }
 
@@ -436,23 +588,25 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         user_request: 'AI Generated Content',
       });
 
-      completeSuccess();
+      task.complete();
       onResult?.();
     },
-    [chapterId, unifiedStore, settingsStore, completeSuccess, completeError, onResult]
+    [chapterId, unifiedStore, settingsStore, onResult]
   );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userRequest.trim() || isProcessing) return;
+    if (!userRequest.trim()) return;
 
-    setIsProcessing(true);
-    setError(null);
-
-    startTask({
+    // Start task via LLMTaskManager - returns a handle with bound completion functions
+    const task = LLMTaskManager.startTask({
       taskType: 'chapter-edit',
-      modalProps: { projectId, chapterId, chapterName, onResult },
-      formState: { userRequest, selectedObjects },
+      label: `AI Edit: ${chapterName}`,
+      retryContext: {
+        taskType: 'chapter-edit',
+        modalProps: { projectId, chapterId, chapterName, onResult },
+        formState: { userRequest, selectedObjects },
+      },
     });
 
     onClose();
@@ -483,7 +637,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
           projectId,
           promptContext,
           abortControllerRef,
-          sessionId,
+          sessionId: task.sessionId,
           provider: chapterGenConfig.provider,
           providerConfig,
           model: chapterGenConfig.model,
@@ -498,22 +652,19 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
             if (isNativeOutput) {
               const text = result.contentParts.filter(part => part.type === 'content').map(part => part.text).join('');
               if (text.trim()) {
-                await handleNativeOutput(text.trim());
+                await handleNativeOutput(text.trim(), task);
               } else {
-                const errorMsg = 'AI did not generate any content.';
-                setError(errorMsg);
-                completeError(errorMsg);
+                task.error('AI did not generate any content.');
               }
             } else {
-              await handleFunctionCallResults(result.functionCalls);
+              await handleFunctionCallResults(result.functionCalls, task);
             }
           },
           onError: (err) => {
             if (err.name === 'AbortError') {
-              completeCancelled();
+              task.cancel();
             } else {
-              setError(err.message);
-              completeError(err.message);
+              task.error(err.message);
             }
           },
         }
@@ -522,395 +673,13 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
       await taskRef.current.run();
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        completeCancelled();
+        task.cancel();
         return;
       }
-      const errorMsg = err instanceof Error ? err.message : 'An unknown error occurred.';
-      setError(errorMsg);
-      completeError(errorMsg);
+      task.error(err instanceof Error ? err.message : 'An unknown error occurred.');
     } finally {
-      setIsProcessing(false);
       taskRef.current = null;
     }
-  };
-
-  // Toggle individual object selection
-  const toggleObjectSelection = (category: keyof Omit<SelectedContextObjects, 'basicInfo'>, id: string) => {
-    setSelectedObjects(prev => {
-      const newSet = new Set(prev[category]);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-      return { ...prev, [category]: newSet };
-    });
-  };
-
-  // Select all objects in a category
-  const selectAllInCategory = (category: keyof Omit<SelectedContextObjects, 'basicInfo'>) => {
-    if (!availableObjects) return;
-    if (category === 'outlineChapters') {
-      const allChapterIds = availableObjects.outlines.flatMap(act => act.chapters.map(ch => ch.id));
-      setSelectedObjects(prev => ({ ...prev, outlineChapters: new Set(allChapterIds) }));
-      return;
-    }
-    if (category === 'novelContentChapters') {
-      const allChapterIds = availableObjects.novelContent.flatMap(act => act.chapters.map(ch => ch.id));
-      setSelectedObjects(prev => ({ ...prev, novelContentChapters: new Set(allChapterIds) }));
-      return;
-    }
-    const categoryMap: Record<string, Array<{ id: string }>> = {
-      characters: availableObjects.characters,
-      organizations: availableObjects.organizations,
-      locations: availableObjects.locations,
-      lorebook: availableObjects.lorebook,
-    };
-    const items = categoryMap[category] || [];
-    setSelectedObjects(prev => ({
-      ...prev,
-      [category]: new Set(items.map(item => item.id))
-    }));
-  };
-
-  // Deselect all objects in a category
-  const deselectAllInCategory = (category: keyof Omit<SelectedContextObjects, 'basicInfo'>) => {
-    setSelectedObjects(prev => ({
-      ...prev,
-      [category]: new Set<string>()
-    }));
-  };
-
-  // Toggle category expansion
-  const toggleCategoryExpansion = (category: string) => {
-    setExpandedCategories(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(category)) {
-        newSet.delete(category);
-      } else {
-        newSet.add(category);
-      }
-      return newSet;
-    });
-  };
-
-  // Toggle act expansion
-  const toggleActExpansion = (actId: string) => {
-    setExpandedActs(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(actId)) {
-        newSet.delete(actId);
-      } else {
-        newSet.add(actId);
-      }
-      return newSet;
-    });
-  };
-
-  // Render category section
-  const renderCategorySection = (
-    category: keyof Omit<SelectedContextObjects, 'basicInfo'>,
-    title: string,
-    items: Array<{ id: string; name: string; [key: string]: any }>
-  ) => {
-    if (items.length === 0) return null;
-
-    const selectedCount = selectedObjects[category].size;
-    const totalCount = items.length;
-    const isExpanded = expandedCategories.has(category);
-
-    return (
-      <div className="context-category" key={category}>
-        <div
-          className="context-category-header"
-          onClick={() => toggleCategoryExpansion(category)}
-        >
-          <span className={`context-category-toggle ${isExpanded ? 'expanded' : ''}`}>
-            {isExpanded ? '▼' : '▶'}
-          </span>
-          <span className="context-category-title">{title}</span>
-          <span className="context-category-count">({selectedCount}/{totalCount})</span>
-          <div className="context-category-actions" onClick={e => e.stopPropagation()}>
-            <button
-              type="button"
-              className="context-action-btn"
-              onClick={() => selectAllInCategory(category)}
-              disabled={isProcessing}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              className="context-action-btn"
-              onClick={() => deselectAllInCategory(category)}
-              disabled={isProcessing}
-            >
-              None
-            </button>
-          </div>
-        </div>
-        {isExpanded && (
-          <div className="context-object-list">
-            {items.map(item => (
-              <label key={item.id} className={`context-object-item ${item.isCurrent ? 'current-chapter' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={selectedObjects[category].has(item.id)}
-                  onChange={() => toggleObjectSelection(category, item.id)}
-                  disabled={isProcessing}
-                />
-                <span className="context-object-name">
-                  {item.name}
-                  {item.actName && <span className="context-object-meta"> ({item.actName})</span>}
-                  {item.wordCount !== undefined && <span className="context-object-meta"> ({item.wordCount.toLocaleString()} words)</span>}
-                  {item.isCurrent && <span className="context-object-badge">current</span>}
-                </span>
-              </label>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  // Select/deselect all chapters in an act
-  const selectAllInAct = (actId: string) => {
-    if (!availableObjects) return;
-    const act = availableObjects.outlines.find(a => a.id === actId);
-    if (!act) return;
-    setSelectedObjects(prev => {
-      const newSet = new Set(prev.outlineChapters);
-      act.chapters.forEach(ch => newSet.add(ch.id));
-      return { ...prev, outlineChapters: newSet };
-    });
-  };
-
-  const deselectAllInAct = (actId: string) => {
-    if (!availableObjects) return;
-    const act = availableObjects.outlines.find(a => a.id === actId);
-    if (!act) return;
-    setSelectedObjects(prev => {
-      const newSet = new Set(prev.outlineChapters);
-      act.chapters.forEach(ch => newSet.delete(ch.id));
-      return { ...prev, outlineChapters: newSet };
-    });
-  };
-
-  // Render outlines section with acts
-  const renderOutlinesSection = () => {
-    if (!availableObjects || availableObjects.outlines.length === 0) return null;
-
-    const allChapters = availableObjects.outlines.flatMap(act => act.chapters);
-    const totalCount = allChapters.length;
-    const selectedCount = allChapters.filter(ch => selectedObjects.outlineChapters.has(ch.id)).length;
-    const isExpanded = expandedCategories.has('outlineChapters');
-
-    return (
-      <div className="context-category">
-        <div
-          className="context-category-header"
-          onClick={() => toggleCategoryExpansion('outlineChapters')}
-        >
-          <span className={`context-category-toggle ${isExpanded ? 'expanded' : ''}`}>
-            {isExpanded ? '▼' : '▶'}
-          </span>
-          <span className="context-category-title">Outlines</span>
-          <span className="context-category-count">({selectedCount}/{totalCount})</span>
-          <div className="context-category-actions" onClick={e => e.stopPropagation()}>
-            <button
-              type="button"
-              className="context-action-btn"
-              onClick={() => selectAllInCategory('outlineChapters')}
-              disabled={isProcessing}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              className="context-action-btn"
-              onClick={() => deselectAllInCategory('outlineChapters')}
-              disabled={isProcessing}
-            >
-              None
-            </button>
-          </div>
-        </div>
-        {isExpanded && (
-          <div className="context-outlines-content">
-            {availableObjects.outlines.map(act => {
-              const actSelectedCount = act.chapters.filter(ch => selectedObjects.outlineChapters.has(ch.id)).length;
-              const isActExpanded = expandedActs.has(act.id);
-              return (
-                <div key={act.id} className="context-act-section">
-                  <div className="context-act-header" onClick={() => toggleActExpansion(act.id)}>
-                    <span className={`context-act-toggle ${isActExpanded ? 'expanded' : ''}`}>
-                      {isActExpanded ? '▼' : '▶'}
-                    </span>
-                    <span className="context-act-title">{act.name}</span>
-                    <span className="context-act-count">({actSelectedCount}/{act.chapters.length})</span>
-                    <div className="context-act-actions" onClick={e => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        className="context-action-btn"
-                        onClick={() => selectAllInAct(act.id)}
-                        disabled={isProcessing}
-                      >
-                        All
-                      </button>
-                      <button
-                        type="button"
-                        className="context-action-btn"
-                        onClick={() => deselectAllInAct(act.id)}
-                        disabled={isProcessing}
-                      >
-                        None
-                      </button>
-                    </div>
-                  </div>
-                  {isActExpanded && (
-                    <div className="context-object-list">
-                      {act.chapters.map(chapter => (
-                        <label key={chapter.id} className="context-object-item">
-                          <input
-                            type="checkbox"
-                            checked={selectedObjects.outlineChapters.has(chapter.id)}
-                            onChange={() => toggleObjectSelection('outlineChapters', chapter.id)}
-                            disabled={isProcessing}
-                          />
-                          <span className="context-object-name">{chapter.name}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  // Select/deselect all chapters in a novel content act
-  const selectAllInNovelContentAct = (actId: string) => {
-    if (!availableObjects) return;
-    const act = availableObjects.novelContent.find(a => a.id === actId);
-    if (!act) return;
-    setSelectedObjects(prev => {
-      const newSet = new Set(prev.novelContentChapters);
-      act.chapters.forEach(ch => newSet.add(ch.id));
-      return { ...prev, novelContentChapters: newSet };
-    });
-  };
-
-  const deselectAllInNovelContentAct = (actId: string) => {
-    if (!availableObjects) return;
-    const act = availableObjects.novelContent.find(a => a.id === actId);
-    if (!act) return;
-    setSelectedObjects(prev => {
-      const newSet = new Set(prev.novelContentChapters);
-      act.chapters.forEach(ch => newSet.delete(ch.id));
-      return { ...prev, novelContentChapters: newSet };
-    });
-  };
-
-  // Render novel content section with acts
-  const renderNovelContentSection = () => {
-    if (!availableObjects || availableObjects.novelContent.length === 0) return null;
-
-    const allChapters = availableObjects.novelContent.flatMap(act => act.chapters);
-    const totalCount = allChapters.length;
-    const selectedCount = allChapters.filter(ch => selectedObjects.novelContentChapters.has(ch.id)).length;
-    const isExpanded = expandedCategories.has('novelContentChapters');
-
-    return (
-      <div className="context-category">
-        <div
-          className="context-category-header"
-          onClick={() => toggleCategoryExpansion('novelContentChapters')}
-        >
-          <span className={`context-category-toggle ${isExpanded ? 'expanded' : ''}`}>
-            {isExpanded ? '▼' : '▶'}
-          </span>
-          <span className="context-category-title">Novel Content</span>
-          <span className="context-category-count">({selectedCount}/{totalCount})</span>
-          <div className="context-category-actions" onClick={e => e.stopPropagation()}>
-            <button
-              type="button"
-              className="context-action-btn"
-              onClick={() => selectAllInCategory('novelContentChapters')}
-              disabled={isProcessing}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              className="context-action-btn"
-              onClick={() => deselectAllInCategory('novelContentChapters')}
-              disabled={isProcessing}
-            >
-              None
-            </button>
-          </div>
-        </div>
-        {isExpanded && (
-          <div className="context-outlines-content">
-            {availableObjects.novelContent.map(act => {
-              const actSelectedCount = act.chapters.filter(ch => selectedObjects.novelContentChapters.has(ch.id)).length;
-              const isActExpanded = expandedActs.has(`novel-${act.id}`);
-              return (
-                <div key={act.id} className="context-act-section">
-                  <div className="context-act-header" onClick={() => toggleActExpansion(`novel-${act.id}`)}>
-                    <span className={`context-act-toggle ${isActExpanded ? 'expanded' : ''}`}>
-                      {isActExpanded ? '▼' : '▶'}
-                    </span>
-                    <span className="context-act-title">{act.name}</span>
-                    <span className="context-act-count">({actSelectedCount}/{act.chapters.length})</span>
-                    <div className="context-act-actions" onClick={e => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        className="context-action-btn"
-                        onClick={() => selectAllInNovelContentAct(act.id)}
-                        disabled={isProcessing}
-                      >
-                        All
-                      </button>
-                      <button
-                        type="button"
-                        className="context-action-btn"
-                        onClick={() => deselectAllInNovelContentAct(act.id)}
-                        disabled={isProcessing}
-                      >
-                        None
-                      </button>
-                    </div>
-                  </div>
-                  {isActExpanded && (
-                    <div className="context-object-list">
-                      {act.chapters.map(chapter => (
-                        <label key={chapter.id} className={`context-object-item ${chapter.isCurrent ? 'current-chapter' : ''}`}>
-                          <input
-                            type="checkbox"
-                            checked={selectedObjects.novelContentChapters.has(chapter.id)}
-                            onChange={() => toggleObjectSelection('novelContentChapters', chapter.id)}
-                            disabled={isProcessing}
-                          />
-                          <span className="context-object-name">
-                            {chapter.name}
-                            <span className="context-object-meta"> ({chapter.wordCount.toLocaleString()} words)</span>
-                            {chapter.isCurrent && <span className="context-object-badge">current</span>}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
   };
 
   if (!isOpen) return null;
@@ -936,7 +705,6 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
               placeholder={`Enter your edit request for "${chapterName}".`}
               rows={4}
               required
-              disabled={isProcessing}
             />
           </div>
 
@@ -946,7 +714,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
               onClick={() => setIsContextExpanded(!isContextExpanded)}
             >
               <span className={`context-options-toggle ${isContextExpanded ? 'expanded' : ''}`}>
-                {isContextExpanded ? '▼' : '▶'}
+                {isContextExpanded ? <Collapse size={10} /> : <Expand size={10} />}
               </span>
               <label>Context Inclusion Options</label>
             </div>
@@ -956,26 +724,90 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
                   <div className="context-loading">Loading available objects...</div>
                 ) : availableObjects ? (
                   <div className="context-selector">
-                    {/* Basic Info - simple checkbox */}
-                    {availableObjects.basicInfo && (
-                      <label className="context-basic-info">
-                        <input
-                          type="checkbox"
-                          checked={selectedObjects.basicInfo}
-                          onChange={() => setSelectedObjects(prev => ({ ...prev, basicInfo: !prev.basicInfo }))}
-                          disabled={isProcessing}
+                    {/* Story Objects (Basic Info, Characters, Organizations, Locations, Lorebook) */}
+                    {storyObjectGroups.length > 0 && (
+                      <CollapsibleSection
+                        label="Story Objects"
+                        expanded={!collapsedSections.storyObjects}
+                        onExpandChange={(expanded) => setCollapsedSections(prev => ({ ...prev, storyObjects: !expanded }))}
+                        selectedCount={selectedStoryObjectIds.length}
+                        totalCount={storyObjectGroups.reduce((sum, g) => sum + g.items.length, 0)}
+                        onToggleAll={(selectAll) => {
+                          const allIds = storyObjectGroups.flatMap(g => g.items.map(i => i.id));
+                          handleStoryObjectsChange(selectAll ? allIds : []);
+                        }}
+                      >
+                        <ObjectPicker
+                          mode="story-objects"
+                          selectionMode="multi"
+                          selectedIds={selectedStoryObjectIds}
+                          onChange={handleStoryObjectsChange}
+                          projectId={projectId}
+                          language={settingsStore.settings.mainLanguage}
+                          customGroups={storyObjectGroups}
+                          showSearch={false}
+                          maxHeight="200px"
+                          emptyMessage="No story objects available"
                         />
-                        <span>Basic Info ({availableObjects.basicInfo.title})</span>
-                      </label>
+                      </CollapsibleSection>
                     )}
 
-                    {/* Object categories */}
-                    {renderCategorySection('characters', 'Characters', availableObjects.characters)}
-                    {renderCategorySection('organizations', 'Organizations', availableObjects.organizations)}
-                    {renderCategorySection('locations', 'Locations', availableObjects.locations)}
-                    {renderCategorySection('lorebook', 'Lorebook', availableObjects.lorebook)}
-                    {renderOutlinesSection()}
-                    {renderNovelContentSection()}
+                    {/* Outlines (Chapter descriptions) */}
+                    {outlineGroups.length > 0 && (
+                      <CollapsibleSection
+                        label="Outlines"
+                        expanded={!collapsedSections.outlines}
+                        onExpandChange={(expanded) => setCollapsedSections(prev => ({ ...prev, outlines: !expanded }))}
+                        selectedCount={selectedObjects.outlineChapters.size}
+                        totalCount={outlineGroups.reduce((sum, g) => sum + g.items.length, 0)}
+                        onToggleAll={(selectAll) => {
+                          const allIds = outlineGroups.flatMap(g => g.items.map(i => i.id));
+                          handleOutlineChaptersChange(selectAll ? allIds : []);
+                        }}
+                      >
+                        <ObjectPicker
+                          mode="manuscript"
+                          selectionMode="multi"
+                          selectedIds={Array.from(selectedObjects.outlineChapters)}
+                          onChange={handleOutlineChaptersChange}
+                          projectId={projectId}
+                          language={settingsStore.settings.mainLanguage}
+                          customGroups={outlineGroups}
+                          showSearch={false}
+                          maxHeight="200px"
+                          emptyMessage="No outlines available"
+                        />
+                      </CollapsibleSection>
+                    )}
+
+                    {/* Novel Content (Manuscript content) */}
+                    {novelContentGroups.length > 0 && (
+                      <CollapsibleSection
+                        label="Novel Content"
+                        expanded={!collapsedSections.novelContent}
+                        onExpandChange={(expanded) => setCollapsedSections(prev => ({ ...prev, novelContent: !expanded }))}
+                        selectedCount={selectedObjects.novelContentChapters.size}
+                        totalCount={novelContentGroups.reduce((sum, g) => sum + g.items.length, 0)}
+                        onToggleAll={(selectAll) => {
+                          const allIds = novelContentGroups.flatMap(g => g.items.map(i => i.id));
+                          handleNovelContentChaptersChange(selectAll ? allIds : []);
+                        }}
+                      >
+                        <ObjectPicker
+                          mode="manuscript"
+                          selectionMode="multi"
+                          selectedIds={Array.from(selectedObjects.novelContentChapters)}
+                          onChange={handleNovelContentChaptersChange}
+                          projectId={projectId}
+                          language={settingsStore.settings.mainLanguage}
+                          customGroups={novelContentGroups}
+                          highlightIds={[chapterId]}
+                          showSearch={false}
+                          maxHeight="200px"
+                          emptyMessage="No novel content available"
+                        />
+                      </CollapsibleSection>
+                    )}
                   </div>
                 ) : (
                   <div className="context-error">Failed to load objects</div>
@@ -987,19 +819,10 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
             )}
           </div>
 
-          {error && <div className="error-message">{error}</div>}
-
-          {streamContent && (
-            <div className="ai-response">
-              <h3>AI Response:</h3>
-              <div className="response-content novel-content-preview">{streamContent}</div>
-            </div>
-          )}
-
           <div className="form-actions">
             <button type="button" onClick={onClose} className="cancel-button">Cancel</button>
-            <button type="submit" className="submit-button" disabled={!userRequest.trim() || isProcessing || isLoading}>
-              {isProcessing ? 'AI Processing...' : 'Request AI Edit'}
+            <button type="submit" className="submit-button" disabled={!userRequest.trim() || isLoading}>
+              Request AI Edit
             </button>
           </div>
         </form>

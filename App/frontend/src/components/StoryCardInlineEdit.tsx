@@ -3,6 +3,7 @@ import { useProjectStore } from '../store/projectStore';
 import { DropdownMenu, DropdownItem, DropdownDivider } from './ui/DropdownMenu';
 import ImageTabContent from './AssetManager/ImageTabContent';
 import type { Asset } from '../api/assetService';
+import { Sparkle, Scroll, Refresh, Trash } from './icons';
 import './StoryCardInlineEdit.css';
 
 type TabType = 'edit' | 'image';
@@ -144,7 +145,7 @@ const StoryCardInlineEdit: React.FC<StoryCardInlineEditProps> = ({
                                 onClick={onAIEdit}
                                 title="AI Edit"
                             >
-                                <span className="ai-icon">✨</span>
+                                <span className="ai-icon"><Sparkle size={14} /></span>
                                 AI Edit
                             </button>
 
@@ -157,20 +158,20 @@ const StoryCardInlineEdit: React.FC<StoryCardInlineEditProps> = ({
                                 align="right"
                             >
                                 <DropdownItem
-                                    icon="📜"
+                                    icon={<Scroll size={14} />}
                                     label="Version History"
                                     onClick={onVersionHistory}
                                 />
                                 {showSecondaryLanguage && (
                                     <DropdownItem
-                                        icon="🔄"
+                                        icon={<Refresh size={14} />}
                                         label="Retranslate"
                                         onClick={onRetranslate}
                                     />
                                 )}
                                 <DropdownDivider />
                                 <DropdownItem
-                                    icon="🗑️"
+                                    icon={<Trash size={14} />}
                                     label="Delete"
                                     onClick={onDelete}
                                     variant="danger"

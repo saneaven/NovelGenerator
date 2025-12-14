@@ -1,3 +1,6 @@
+import type { SimplifiedStoryObjects } from '../../../store/unifiedObjectStore';
+import { parseFunctionName, resolveStoryObjectName } from '../../../chat/utils/objectNameResolver';
+
 type EditType = "add" | "edit" | "remove" | "init";
 
 interface FunctionMeta {
@@ -150,6 +153,11 @@ const meta: Record<string, FunctionMeta> = {
   },
 };
 
+export interface FunctionCallValidation {
+  valid: boolean;
+  error?: string;
+}
+
 export class FunctionCallService {
   static mapFunctionToEditType(functionName: string): EditType {
     return meta[functionName]?.editType ?? "edit";
@@ -172,6 +180,40 @@ export class FunctionCallService {
     if (!base) return "Function call";
     const summary = base.summary ? base.summary(args) : undefined;
     return summary ? `${base.description}: ${summary}` : base.description;
+  }
+
+  /**
+   * Validate function call arguments.
+   * For update_* and delete_* functions:
+   * - Requires a valid 'id' field
+   * - If storyObjects provided, validates ID exists
+   */
+  static validateFunctionCall(
+    functionName: string,
+    args: any,
+    storyObjects?: SimplifiedStoryObjects
+  ): FunctionCallValidation {
+    const requiresId = functionName.startsWith('update_') || functionName.startsWith('delete_');
+    if (requiresId) {
+      if (!args?.id) {
+        return {
+          valid: false,
+          error: 'Missing required ID for this operation',
+        };
+      }
+      // Validate ID exists in storyObjects
+      if (storyObjects) {
+        const parsed = parseFunctionName(functionName);
+        const resolvedName = resolveStoryObjectName(storyObjects, parsed?.objectType, args.id);
+        if (!resolvedName) {
+          return {
+            valid: false,
+            error: `Object with ID "${args.id}" not found`,
+          };
+        }
+      }
+    }
+    return { valid: true };
   }
 }
 

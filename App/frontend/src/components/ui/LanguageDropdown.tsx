@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Globe } from '../icons';
 import './LanguageDropdown.css';
 
 interface LanguageDropdownProps {
@@ -63,7 +64,7 @@ const LanguageDropdown: React.FC<LanguageDropdownProps> = ({
         aria-expanded={isOpen}
         aria-haspopup="listbox"
       >
-        <span className="language-dropdown-icon">🌐</span>
+        <span className="language-dropdown-icon"><Globe size={14} /></span>
         <span className="language-dropdown-value">{value}</span>
         <span className={`language-dropdown-arrow ${isOpen ? 'open' : ''}`}>
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -119,7 +120,7 @@ const LanguageDropdown: React.FC<LanguageDropdownProps> = ({
             }}
             title={`Translate ${translateCount} objects`}
           >
-            <span className="language-dropdown-translate-icon">🌐</span>
+            <span className="language-dropdown-translate-icon"><Globe size={14} /></span>
             <span className="language-dropdown-translate-text">
               Translate All ({translateCount})
             </span>

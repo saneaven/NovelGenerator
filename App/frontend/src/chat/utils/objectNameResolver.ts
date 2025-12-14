@@ -1,4 +1,9 @@
-import type { StoryObjects, Act, Chapter } from '../../types/storyObject';
+import type { SimplifiedStoryObjects } from '../../store/unifiedObjectStore';
+
+/** Simplified act type for name resolution */
+type SimplifiedAct = SimplifiedStoryObjects['outline']['acts'][number];
+/** Simplified chapter type for name resolution */
+type SimplifiedChapter = SimplifiedAct['chapters'][number];
 
 /**
  * Parses a function name like "update_character" into { action: "update", objectType: "character" }
@@ -35,7 +40,7 @@ export const parseFunctionName = (
  * Used to display friendly names instead of UUIDs in function call previews.
  */
 export const resolveStoryObjectName = (
-  storyObjects: StoryObjects,
+  storyObjects: SimplifiedStoryObjects,
   type?: string,
   id?: string
 ): string | undefined => {
@@ -71,13 +76,13 @@ export const resolveStoryObjectName = (
 /**
  * Finds an act by ID from the acts array.
  */
-const findAct = (acts: Act[] | undefined, id: string): Act | undefined =>
+const findAct = (acts: SimplifiedAct[] | undefined, id: string): SimplifiedAct | undefined =>
   acts?.find((act) => act.id === id);
 
 /**
  * Finds a chapter by ID, searching through all acts.
  */
-const findChapter = (acts: Act[] | undefined, id: string): Chapter | undefined => {
+const findChapter = (acts: SimplifiedAct[] | undefined, id: string): SimplifiedChapter | undefined => {
   if (!acts) return undefined;
   for (const act of acts) {
     const chapter = act.chapters?.find((entry) => entry.id === id);

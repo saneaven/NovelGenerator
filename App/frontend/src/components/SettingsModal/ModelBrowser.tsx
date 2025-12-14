@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { ProviderType, ProviderPreference, ProviderCredentials } from '../../store/settingsStore';
 import { fetchModels, fetchModelEndpoints } from '../../llm/llmService';
+import { Check, Expand, Collapse } from '../icons';
 
 interface ModelBrowserProps {
   provider: ProviderType;
@@ -696,14 +697,14 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
                             onClick={() => toggleProviderOnly(model.id, endpoint.provider_name)}
                             className={`model-card__endpoint-btn ${isInOnly ? 'model-card__endpoint-btn--active' : ''}`}
                           >
-                            {isInOnly ? '✓ Only' : 'Only'}
+                            {isInOnly ? <><Check size={12} /> Only</> : 'Only'}
                           </button>
                           <button
                             type="button"
                             onClick={() => toggleProviderIgnore(model.id, endpoint.provider_name)}
                             className={`model-card__endpoint-btn model-card__endpoint-btn--ignore ${isInIgnore ? 'model-card__endpoint-btn--active' : ''}`}
                           >
-                            {isInIgnore ? '✓ Ignore' : 'Ignore'}
+                            {isInIgnore ? <><Check size={12} /> Ignore</> : 'Ignore'}
                           </button>
                         </div>
                       </div>
@@ -745,7 +746,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
           className={`model-tree__header ${isExpanded ? 'model-tree__header--expanded' : ''}`}
           onClick={() => toggleFamilyExpansion(node.id)}
         >
-          <span className="model-tree__toggle">{isExpanded ? '▼' : '▶'}</span>
+          <span className="model-tree__toggle">{isExpanded ? <Collapse size={10} /> : <Expand size={10} />}</span>
           <span className="model-tree__label">{node.label}</span>
           <span className="model-tree__count">{modelCount} models</span>
         </div>

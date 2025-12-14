@@ -34,6 +34,7 @@ import './workspace/styles/ChatInput.css';
 import './workspace/styles/ChatSidebar.css';
 import './workspace/styles/MessageEditCards.css';
 import '../components/MobileChat.css';
+import { ArrowLeft, Settings } from '../components/icons';
 
 const Workspace: React.FC = () =>
 {
@@ -189,9 +190,6 @@ const Workspace: React.FC = () =>
         },
     }), [updateMessageContentLocal, updateMessage, handleFunctionCalls, addMessage, getMessages, showError, handleFunctionCallProgress]);
 
-    // Session ID for chat streaming toast
-    const chatSessionId = projectId ? `chat-${projectId}` : undefined;
-
     const chatManager = useMemo(() =>
     {
         const activeProjectId = projectId ?? '';
@@ -218,7 +216,6 @@ const Workspace: React.FC = () =>
                 thinkingMode: chatFunctionConfig.advanced.thinkingMode,
                 thinkingConfig: chatFunctionConfig.advanced.thinkingConfig,
                 retryConfig: settings.retryConfig,
-                sessionId: chatSessionId,
                 getPendingFunctionCallResults: () => pendingFunctionCallResults,
             },
             chatManagerCallbacks
@@ -235,7 +232,6 @@ const Workspace: React.FC = () =>
         getSelectedChatId,
         chatManagerCallbacks,
         settings.retryConfig,
-        chatSessionId,
     ]);
 
     const chatHandlers = useChatHandlers(
@@ -403,7 +399,7 @@ const Workspace: React.FC = () =>
                             onClick={() => navigate(`/project/${projectId}`)}
                             title="Back to project"
                         >
-                            ←
+                            <ArrowLeft size={16} />
                         </button>
                         <button
                             className={`chat-toggle-btn mobile-only ${chatUI.isChatVisible(projectId ?? '') ? 'active' : ''}`}
@@ -431,18 +427,13 @@ const Workspace: React.FC = () =>
                             onClick={() => uiActions.setIsSettingsOpen(true)}
                             title="Settings"
                         >
-                            ⚙
+                            <Settings size={16} />
                         </button>
                     </div>
                 </div>
             </div>
 
             <div className={`workspace-content ${chatUI.isChatVisible(projectId ?? '') ? 'chat-visible' : ''}`}>
-                <ChatSidebar
-                    projectId={projectId ?? ''}
-                    onSelectChat={chatHandlers.handleSelectChat}
-                />
-
                 <ChatPanel
                     projectId={projectId ?? ''}
                     systemInsertConfig={systemInsertConfig}
@@ -470,6 +461,11 @@ const Workspace: React.FC = () =>
                 />
             </div>
 
+            <ChatSidebar
+                projectId={projectId ?? ''}
+                onSelectChat={chatHandlers.handleSelectChat}
+            />
+
             {chatUI.isChatVisible(projectId ?? '') && (
                 <div className="chat-overlay mobile-only" onClick={() => chatUI.setChatVisible(projectId ?? '', false)} />
             )}
@@ -489,7 +485,7 @@ const Workspace: React.FC = () =>
                     onClick={() => navigate(`/project/${projectId}`)}
                     title="Back to project"
                 >
-                    ←
+                    <ArrowLeft size={16} />
                 </button>
                 <button
                     className={`footer-chat-toggle-btn ${chatUI.isChatVisible(projectId ?? '') ? 'active' : ''}`}
@@ -517,7 +513,7 @@ const Workspace: React.FC = () =>
                     onClick={() => uiActions.setIsSettingsOpen(true)}
                     title="Settings"
                 >
-                    ⚙
+                    <Settings size={16} />
                 </button>
             </footer>
 

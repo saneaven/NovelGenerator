@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { RetryConfig } from '../../store/settingsStore';
+import LLMLogViewer from './LLMLogViewer';
 import './AdvancedPanel.css';
 
 interface AdvancedPanelProps {
@@ -208,6 +209,17 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                         This can improve compatibility with some models but may reduce structured output reliability.
                     </p>
                 </div>
+            </div>
+
+            {/* LLM Request Logging */}
+            <div className="advanced-settings-card">
+                <h3>LLM Request Logging</h3>
+                <div className="panel-description">
+                    <p>
+                        Debug LLM requests and responses. Logs are stored in memory and cleared on page refresh.
+                    </p>
+                </div>
+                <LLMLogViewer />
             </div>
         </div>
     );

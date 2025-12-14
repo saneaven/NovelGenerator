@@ -164,7 +164,21 @@ function processTagBasedRequest(
         steps: request.steps || 28,
         scale: request.scale || 6,
         noise_schedule: request.noiseSchedule || 'native',
+        // Reference image settings (i2i / Vibe Transfer)
+        referenceMode: request.referenceMode || 'auto',
+        strength: request.strength ?? 0.7,
+        i2iNoise: request.i2iNoise ?? 0.0,
+        vibeStrength: request.vibeStrength ?? 0.6,
+        vibeInfoExtracted: request.vibeInfoExtracted ?? 1.0,
     };
+
+    // Add reference images if provided
+    if (request.referenceImages && request.referenceImages.length > 0) {
+        processed.reference_images = request.referenceImages.map((ref) => ({
+            asset_id: ref.assetId,
+            strength: ref.strength,
+        }));
+    }
 
     // Add reference objects if provided
     if (request.referenceObjects && request.referenceObjects.length > 0) {

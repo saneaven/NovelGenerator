@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ValidationError } from '../../api/promptService';
+import { Warning, Lightning } from '../icons';
 
 interface ValidationWarningsProps {
   errors: ValidationError[];
@@ -16,7 +17,7 @@ const ValidationWarnings: React.FC<ValidationWarningsProps> = ({ errors, warning
       {errors.length > 0 && (
         <div className="validation-errors">
           <div className="validation-header error">
-            <span className="icon">⚠️</span>
+            <span className="icon"><Warning size={14} /></span>
             <strong>Syntax Errors ({errors.length})</strong>
           </div>
           <ul className="validation-list">
@@ -35,7 +36,7 @@ const ValidationWarnings: React.FC<ValidationWarningsProps> = ({ errors, warning
       {warnings.length > 0 && (
         <div className="validation-warnings">
           <div className="validation-header warning">
-            <span className="icon">⚡</span>
+            <span className="icon"><Lightning size={14} /></span>
             <strong>Warnings ({warnings.length})</strong>
           </div>
           <ul className="validation-list">

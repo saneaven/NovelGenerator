@@ -4,6 +4,7 @@ import type { FunctionCallOperationPreview, FunctionCallProgress } from '../../l
 import type { StoryObjects } from '../../types/storyObject';
 import { buildOperationPreviewsFromArgs } from '../../chat/utils/functionCallPreview';
 import { resolveStoryObjectName, parseFunctionName } from '../../chat/utils/objectNameResolver';
+import { Expand, Collapse, Check, Close, Warning } from '../icons';
 import './GroupedFunctionCallCard.css';
 
 type CardMode = 'streaming' | 'pending' | 'confirmed';
@@ -141,8 +142,8 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
           type: objectType,
           action,
           id: objectId,
-          // Resolve targetName from ID if not already set
-          targetName: preview.targetName ?? resolveStoryObjectName(storyObjects, objectType, objectId),
+          // Only use resolved name from ID - validates ID actually exists
+          targetName: resolveStoryObjectName(storyObjects, objectType, objectId),
         };
       });
 
@@ -281,7 +282,7 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
             {statusLabel}
           </span>
           <span className={`gfcc-toggle ${isExpanded ? 'expanded' : 'collapsed'}`}>
-            {isExpanded ? '▼' : '▶'}
+            {isExpanded ? <Collapse size={10} /> : <Expand size={10} />}
           </span>
         </div>
       </div>
@@ -332,17 +333,25 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
 
             {/* Pending/Confirmed mode: render cards with previews */}
             {!isStreaming && cardsWithPreviews.map(({ card, previews }) => {
+              // Check for errors
+              const hasValidationError = !!card.validationError;
+              const hasApplyError = !!card.applyError;
+              const hasError = hasValidationError || hasApplyError;
+
               // Always use boolean to keep checkbox controlled (undefined would make it uncontrolled)
+              // Cards with validation errors are auto-deselected and cannot be selected
               const isSelected = isConfirmed
                 ? (card.isApplied && !card.isRejected)
-                : (selections[card.id] ?? true); // Default to true (apply) if not yet in selections
+                : hasValidationError
+                  ? false
+                  : (selections[card.id] ?? true); // Default to true (apply) if not yet in selections
               const wasRejected = isConfirmed && card.isRejected;
               const wasApplied = isConfirmed && card.isApplied && !card.isRejected;
 
               return (
                 <div
                   key={card.id}
-                  className={`gfcc-operation-item ${isSelected ? 'selected' : 'rejected'} ${wasApplied ? 'applied' : ''} ${wasRejected ? 'was-rejected' : ''}`}
+                  className={`gfcc-operation-item ${isSelected ? 'selected' : 'rejected'} ${wasApplied ? 'applied' : ''} ${wasRejected ? 'was-rejected' : ''} ${hasError ? 'has-error' : ''}`}
                 >
                   <div className="gfcc-operation-checkbox">
                     {!isConfirmed ? (
@@ -350,11 +359,11 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => handleToggle(card.id)}
-                        disabled={isConfirming}
+                        disabled={isConfirming || hasValidationError}
                       />
                     ) : (
                       <span className={`gfcc-result-icon ${wasRejected ? 'rejected' : 'applied'}`}>
-                        {wasRejected ? '✗' : '✓'}
+                        {wasRejected ? <Close size={12} /> : <Check size={12} />}
                       </span>
                     )}
                   </div>
@@ -367,6 +376,13 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
                         </span>
                       )}
                     </div>
+                    {/* Show error banner for validation or apply errors */}
+                    {hasError && (
+                      <div className="gfcc-error-banner">
+                        <Warning size={14} />
+                        <span>{card.validationError || card.applyError}</span>
+                      </div>
+                    )}
                     {previews.length > 0 && (
                       <div className="gfcc-operation-previews">
                         {previews.map((preview, idx) => (

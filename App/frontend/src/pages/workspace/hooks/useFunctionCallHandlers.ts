@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { useChatStore } from '../../../store/chatStore';
-import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
+import { useUnifiedObjectStore, useStoryObjects } from '../../../store/unifiedObjectStore';
+import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { FunctionCallApplicator } from '../../../chat/utils/functionCallApplicator';
 import { FunctionCallService } from '../services/FunctionCallService';
@@ -13,6 +14,8 @@ export function useFunctionCallHandlers(
   const { updateMessageFunctionCalls, updateFunctionCallStatus, getSelectedChatId } = useChatStore();
   const unifiedStore = useUnifiedObjectStore();
   const { showError } = useErrorStore();
+  const mainLanguage = useSettingsStore(state => state.settings.mainLanguage);
+  const storyObjects = useStoryObjects(projectId, mainLanguage);
 
   const [messageEditCards, setMessageEditCards] = useState<Record<string, EditCard[]>>({});
   const [functionCallApplicator] = useState(() => new FunctionCallApplicator(unifiedStore));
@@ -98,38 +101,32 @@ export function useFunctionCallHandlers(
           }
         } catch (error) {
           console.error('Error applying function call:', error);
-          showError('Function Call Error', 'An error occurred while applying changes. Please try again.');
-
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+          // Show error modal
+          showError('Function Call Error', `Failed to apply ${FunctionCallService.getFunctionDisplayName(functionCall.function_name)}: ${errorMessage}`);
+
+          // Update chat store status (mark as not applied due to error)
           const chatIdForError = getActiveChatId();
           if (chatIdForError) {
             updateFunctionCallStatus(projectId, chatIdForError, messageId, functionCall.id, false, undefined, errorMessage, errorMessage);
           }
 
-          setPendingFunctionCallResults(prev => [...prev,
-            {
-              functionCallId: functionCall.id,
-              functionName: functionCall.function_name,
-              success: false,
-              resultMessage: errorMessage,
-              appliedAt: new Date()
-            }
-          ]);
-
+          // Update card with error but DON'T mark as applied - keep pending
           setMessageEditCards(prev => ({
             ...prev,
             [messageId]: prev[messageId]?.map(card =>
               card.id === functionCall.id
                 ? {
                     ...card,
-                    isApplied: true,
-                    appliedAt: new Date(),
-                    title: 'Apply Error',
-                    description: `${FunctionCallService.getFunctionDisplayName(functionCall.function_name)} error: ${errorMessage}`
+                    // Keep isApplied: false (or undefined) - card stays pending
+                    applyError: errorMessage,
                   }
                 : card
             ) || []
           }));
+
+          // DON'T add to pendingFunctionCallResults - card stays pending for retry
         }
       };
     },
@@ -200,19 +197,29 @@ export function useFunctionCallHandlers(
       // Store function calls for batch operations
       functionCallsByMessage.current[messageId] = functionCalls;
 
-      const functionCallCards: EditCard[] = functionCalls.map(funcCall => ({
-        id: funcCall.id,
-        type: FunctionCallService.mapFunctionToEditType(funcCall.function_name),
-        title: FunctionCallService.getFunctionCallTitle(funcCall.function_name),
-        description: FunctionCallService.generateFunctionCallSummary(funcCall.function_name, funcCall.arguments),
-        isApplied: funcCall.isApplied,
-        isRejected: funcCall.isRejected,
-        data: funcCall.arguments,
-        appliedAt: funcCall.appliedAt,
-        functionCall: funcCall, // Include reference to full function call
-        onApply: createFunctionCallApplyHandler(messageId, funcCall),
-        onReject: createFunctionCallRejectHandler(messageId, funcCall)
-      }));
+      const functionCallCards: EditCard[] = functionCalls.map(funcCall => {
+        // Validate function call (check for missing required ID and ID existence)
+        const validation = FunctionCallService.validateFunctionCall(
+          funcCall.function_name,
+          funcCall.arguments,
+          storyObjects
+        );
+
+        return {
+          id: funcCall.id,
+          type: FunctionCallService.mapFunctionToEditType(funcCall.function_name),
+          title: FunctionCallService.getFunctionCallTitle(funcCall.function_name),
+          description: FunctionCallService.generateFunctionCallSummary(funcCall.function_name, funcCall.arguments),
+          isApplied: funcCall.isApplied,
+          isRejected: funcCall.isRejected,
+          data: funcCall.arguments,
+          appliedAt: funcCall.appliedAt,
+          functionCall: funcCall, // Include reference to full function call
+          onApply: createFunctionCallApplyHandler(messageId, funcCall),
+          onReject: createFunctionCallRejectHandler(messageId, funcCall),
+          validationError: validation.error, // Set validation error if invalid
+        };
+      });
 
       setMessageEditCards(prev => ({
         ...prev,
@@ -259,11 +266,18 @@ export function useFunctionCallHandlers(
       }
       if (!functionCalls || functionCalls.length === 0) return;
 
-      const results: { cardId: string; success: boolean; isRejected: boolean; message: string }[] = [];
+      const results: { cardId: string; success: boolean; isRejected: boolean; message: string; hasError?: boolean }[] = [];
+      const cards = messageEditCards[messageId] || [];
 
       // Process each function call based on selection
       for (const funcCall of functionCalls) {
+        const card = cards.find(c => c.id === funcCall.id);
         const isSelected = selections[funcCall.id] ?? true; // Default to selected if not specified
+
+        // Skip cards with validation errors - they cannot be applied
+        if (card?.validationError) {
+          continue;
+        }
 
         if (isSelected) {
           // Apply the function call
@@ -291,6 +305,7 @@ export function useFunctionCallHandlers(
                 appliedAt: new Date()
               }]);
             } else {
+              // Apply failed but not an exception - still mark as processed with error
               updateFunctionCallStatus(
                 projectId, chatId, messageId, funcCall.id,
                 true, result, result.error, result.error || result.message, false
@@ -312,26 +327,21 @@ export function useFunctionCallHandlers(
               }]);
             }
           } catch (error) {
+            // Exception during apply - keep card pending with error
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            updateFunctionCallStatus(
-              projectId, chatId, messageId, funcCall.id,
-              true, undefined, errorMessage, errorMessage, false
-            );
+            console.error('Error applying function call in batch:', errorMessage);
+
+            // Show error modal for the failed operation
+            showError('Function Call Error', `Failed to apply ${FunctionCallService.getFunctionDisplayName(funcCall.function_name)}: ${errorMessage}`);
+
+            // Mark this card as having an error but NOT applied
             results.push({
               cardId: funcCall.id,
               success: false,
               isRejected: false,
-              message: errorMessage
+              message: errorMessage,
+              hasError: true, // Flag to indicate this should stay pending
             });
-
-            setPendingFunctionCallResults(prev => [...prev, {
-              functionCallId: funcCall.id,
-              functionName: funcCall.function_name,
-              success: false,
-              isRejected: false,
-              resultMessage: errorMessage,
-              appliedAt: new Date()
-            }]);
           }
         } else {
           // Reject the function call
@@ -365,6 +375,15 @@ export function useFunctionCallHandlers(
           const result = results.find(r => r.cardId === card.id);
           if (!result) return card;
 
+          // If hasError flag is set, keep card pending with applyError
+          if (result.hasError) {
+            return {
+              ...card,
+              // Keep isApplied: false - card stays pending
+              applyError: result.message,
+            };
+          }
+
           return {
             ...card,
             isApplied: true,
@@ -395,6 +414,7 @@ export function useFunctionCallHandlers(
       setMessageEditCards,
       setConfirmedMessages,
       messageEditCards, // Added for fallback extraction of function calls
+      showError,
     ]
   );
 

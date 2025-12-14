@@ -18,8 +18,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 
 # revision identifiers, used by Alembic
-revision = '023_convert_prompts_to_jsonb'
-down_revision = '022_add_asset_type_and_chapter_assets'
+revision = '023'
+down_revision = '022'
 branch_labels = None
 depends_on = None
 

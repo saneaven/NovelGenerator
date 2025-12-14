@@ -532,8 +532,9 @@
   border-left: 3px solid var(--color-brand-secondary-outline);
 }
 
-.context-help::before {
-  content: '💡 ';
+.context-help svg {
+  flex-shrink: 0;
+  margin-right: var(--spacing-xs);
 }
 
 /* Error Message */
@@ -551,9 +552,7 @@
   animation: shake 0.5s ease-in-out;
 }
 
-.error-message::before {
-  content: '⚠️';
-  font-size: var(--font-size-lg);
+.error-message svg {
   flex-shrink: 0;
 }
 
@@ -580,9 +579,8 @@
   gap: var(--spacing-sm);
 }
 
-.ai-response h3::before {
-  content: '🤖';
-  font-size: var(--font-size-xl);
+.ai-response h3 svg {
+  flex-shrink: 0;
 }
 
 .response-content {
@@ -673,8 +671,7 @@
 }
 
 /* Loading state for submit button */
-.submit-button:disabled::before {
-  content: '⏳';
+.submit-button:disabled svg {
   margin-right: var(--spacing-sm);
   animation: spin 2s linear infinite;
 }

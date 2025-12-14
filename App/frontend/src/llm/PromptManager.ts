@@ -321,6 +321,8 @@ export class PromptManager {
       ]) as [string, string, string | null];
     }
 
+    const hasContext = !!(context.contextData && Object.keys(context.contextData).length > 0);
+
     const templateData: TemplateData = {
       variable: {
         userInput: context.userInput,
@@ -334,9 +336,11 @@ export class PromptManager {
         enableCustomThinking: context.enableCustomThinking ?? false,
         enablePrefill: context.enablePrefill ?? false,
         isNativeOutput: context.isNativeOutput ?? false,
+        hasContext,
       },
       context: {
         objectsArray: context.objectsArray,
+        contextData: context.contextData,
       },
     };
 

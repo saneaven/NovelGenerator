@@ -33,6 +33,7 @@ export interface TranslationOptions {
   sourceLanguage: string;
   targetLanguage: string;
   userInput?: string;
+  contextData?: Record<string, any>;
   onProgress?: (completed: string[]) => void;
   onError?: (error: Error) => void;
   onPartialSuccess?: (translations: TranslationResult[], error: Error) => void;
@@ -131,6 +132,7 @@ export class TranslationService {
       sourceLanguage,
       targetLanguage,
       userInput,
+      contextData,
       onProgress,
       onError,
       onPartialSuccess,
@@ -277,6 +279,7 @@ export class TranslationService {
       targetLanguage,
       objectCount: objects.length,
       objectsArray,
+      contextData,
       isNativeOutput,
       outputLanguage: targetLanguage,
       enablePrefill: translationConfig.advanced.enablePrefill,

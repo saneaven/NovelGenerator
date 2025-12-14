@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useModalHistory } from '../../hooks/useModalHistory';
 import { useAssetStore } from '../../store/assetStore';
 import { useProjectStore } from '../../store/projectStore';
-import type { SceneAsset } from '../../api/assetService';
+import { formatStyledPrompt, type SceneAsset } from '../../api/assetService';
 import { API_BASE_URL } from '../../api/client';
+import { Edit } from '../icons';
 import './SceneAssetManagerModal.css';
 
 interface SceneAssetManagerModalProps {
@@ -14,6 +16,7 @@ const SceneAssetManagerModal: React.FC<SceneAssetManagerModalProps> = ({
     isOpen,
     onClose,
 }) => {
+    useModalHistory(isOpen, onClose);
     const { currentProjectId } = useProjectStore();
     const {
         sceneAssets,
@@ -200,7 +203,7 @@ const SceneAssetManagerModal: React.FC<SceneAssetManagerModalProps> = ({
                                                         onClick={(e) => handleStartRename(asset, e)}
                                                         title="Rename"
                                                     >
-                                                        ✎
+                                                        <Edit size={12} />
                                                     </button>
                                                     <button
                                                         className="delete-button"
@@ -353,7 +356,7 @@ const SceneAssetManagerModal: React.FC<SceneAssetManagerModalProps> = ({
                                             <div className="detail-row vertical">
                                                 <span className="detail-label">Prompt</span>
                                                 <div className="detail-prompt-box">
-                                                    {detailAsset.generation_prompt}
+                                                    {formatStyledPrompt(detailAsset.generation_prompt)}
                                                 </div>
                                             </div>
                                         )}
@@ -363,7 +366,7 @@ const SceneAssetManagerModal: React.FC<SceneAssetManagerModalProps> = ({
                                             <div className="detail-row vertical">
                                                 <span className="detail-label">Positive Prompt</span>
                                                 <div className="detail-prompt-box positive">
-                                                    {detailAsset.generation_positive_prompt}
+                                                    {formatStyledPrompt(detailAsset.generation_positive_prompt)}
                                                 </div>
                                             </div>
                                         )}
@@ -371,7 +374,7 @@ const SceneAssetManagerModal: React.FC<SceneAssetManagerModalProps> = ({
                                             <div className="detail-row vertical">
                                                 <span className="detail-label">Negative Prompt</span>
                                                 <div className="detail-prompt-box negative">
-                                                    {detailAsset.generation_negative_prompt}
+                                                    {formatStyledPrompt(detailAsset.generation_negative_prompt)}
                                                 </div>
                                             </div>
                                         )}

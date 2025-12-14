@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useModalHistory } from '../../hooks/useModalHistory';
 import { useSettingsStore } from '../../store/settingsStore';
 import type { Settings, AIFunctionType } from '../../store/settingsStore';
 import CredentialsPanel from './CredentialsPanel';
@@ -8,6 +9,7 @@ import PromptsTemplatesPanel from './PromptsTemplatesPanel';
 import ThemePanel from './ThemePanel';
 import AdvancedPanel from './AdvancedPanel';
 import ImageGenPanel from './ImageGenPanel';
+import { Settings as SettingsIcon, Lock, Image, Document, Globe, Palette, Wrench } from '../icons';
 import './SettingsModal.css';
 
 interface SettingsModalProps {
@@ -18,6 +20,7 @@ interface SettingsModalProps {
 type MainTab = 'credentials' | 'general' | 'imageGen' | 'prompts' | 'language' | 'theme' | 'advanced';
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
+  useModalHistory(isOpen, onClose);
   const settingsStore = useSettingsStore();
   const [localSettings, setLocalSettings] = useState<Settings>(settingsStore.settings);
   const [isSaving, setIsSaving] = useState(false);
@@ -56,7 +59,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       <div className="modal-content settings-modal-new" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="modal-header">
-          <h2>⚙️ Settings</h2>
+          <h2><SettingsIcon size={20} /> Settings</h2>
           <button className="close-button" onClick={handleCancel}>
             ×
           </button>
@@ -68,49 +71,49 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             className={`main-tab ${mainTab === 'credentials' ? 'active' : ''}`}
             onClick={() => setMainTab('credentials')}
           >
-            <span className="tab-icon">🔐</span>
+            <span className="tab-icon"><Lock size={14} /></span>
             <span className="tab-label">Credentials</span>
           </button>
           <button
             className={`main-tab ${mainTab === 'general' ? 'active' : ''}`}
             onClick={() => setMainTab('general')}
           >
-            <span className="tab-icon">⚙️</span>
+            <span className="tab-icon"><SettingsIcon size={14} /></span>
             <span className="tab-label">General</span>
           </button>
           <button
             className={`main-tab ${mainTab === 'imageGen' ? 'active' : ''}`}
             onClick={() => setMainTab('imageGen')}
           >
-            <span className="tab-icon">🖼️</span>
+            <span className="tab-icon"><Image size={14} /></span>
             <span className="tab-label">Image Gen</span>
           </button>
           <button
             className={`main-tab ${mainTab === 'prompts' ? 'active' : ''}`}
             onClick={() => setMainTab('prompts')}
           >
-            <span className="tab-icon">📝</span>
+            <span className="tab-icon"><Document size={14} /></span>
             <span className="tab-label">Prompts & Templates</span>
           </button>
           <button
             className={`main-tab ${mainTab === 'language' ? 'active' : ''}`}
             onClick={() => setMainTab('language')}
           >
-            <span className="tab-icon">🌐</span>
+            <span className="tab-icon"><Globe size={14} /></span>
             <span className="tab-label">Language</span>
           </button>
           <button
             className={`main-tab ${mainTab === 'theme' ? 'active' : ''}`}
             onClick={() => setMainTab('theme')}
           >
-            <span className="tab-icon">🎨</span>
+            <span className="tab-icon"><Palette size={14} /></span>
             <span className="tab-label">Theme</span>
           </button>
           <button
             className={`main-tab ${mainTab === 'advanced' ? 'active' : ''}`}
             onClick={() => setMainTab('advanced')}
           >
-            <span className="tab-icon">🔧</span>
+            <span className="tab-icon"><Wrench size={14} /></span>
             <span className="tab-label">Advanced</span>
           </button>
         </div>

@@ -3,12 +3,14 @@
  * Defines the hierarchical organization of all prompts in the system
  */
 
+import React from 'react';
 import type { FunctionType, PromptCategory } from '../../types/prompts';
+import { Chat, Globe, Edit, Document, Palette } from '../icons';
 
 export interface PromptNode {
   id: string;
   label: string;
-  icon?: string;
+  icon?: React.ReactNode;
   type: 'category' | 'prompt';
 
   // For prompt nodes
@@ -29,7 +31,7 @@ export const PROMPT_TREE: PromptNode[] = [
   {
     id: 'chat',
     label: 'Chat',
-    icon: '💬',
+    icon: <Chat size={14} />,
     type: 'category',
     defaultExpanded: true,
     children: [
@@ -125,7 +127,7 @@ export const PROMPT_TREE: PromptNode[] = [
   {
     id: 'translation',
     label: 'Translation',
-    icon: '🌐',
+    icon: <Globe size={14} />,
     type: 'category',
     children: [
       {
@@ -202,7 +204,7 @@ export const PROMPT_TREE: PromptNode[] = [
   {
     id: 'storyobjectedit',
     label: 'Story Object Edit',
-    icon: '✏️',
+    icon: <Edit size={14} />,
     type: 'category',
     children: [
       {
@@ -234,7 +236,7 @@ export const PROMPT_TREE: PromptNode[] = [
   {
     id: 'chaptergen',
     label: 'Chapter Generation',
-    icon: '📝',
+    icon: <Document size={14} />,
     type: 'category',
     children: [
       {
@@ -266,7 +268,7 @@ export const PROMPT_TREE: PromptNode[] = [
   {
     id: 'imageprompt',
     label: 'Image Prompt',
-    icon: '🎨',
+    icon: <Palette size={14} />,
     type: 'category',
     children: [
       {

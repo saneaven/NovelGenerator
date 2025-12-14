@@ -8,8 +8,8 @@ export class NovelEditorFunctionCallService {
 
   static getFunctionCallTitle(functionName: string): string {
     switch (functionName) {
-      case 'update_manuscript': return '📝 Update Manuscript';
-      default: return '📝 Function Call';
+      case 'update_manuscript': return 'Update Manuscript';
+      default: return 'Function Call';
     }
   }
 

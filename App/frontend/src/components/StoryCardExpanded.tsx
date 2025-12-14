@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { useProjectStore } from '../store/projectStore';
 import { DropdownMenu, DropdownItem, DropdownDivider } from './ui/DropdownMenu';
+import { Close, AIAssistMini, Scroll, Refresh, Trash } from './icons';
 import ImageTabContent from './AssetManager/ImageTabContent';
 import type { Asset } from '../api/assetService';
 import { API_BASE_URL } from '../api/client';
@@ -109,11 +110,11 @@ const StoryCardExpanded: React.FC<StoryCardExpandedProps> = ({
                 onClick={handleCancel}
                 aria-label="Close"
             >
-                ✕
+                <Close size={16} />
             </button>
 
-            {/* Content section - DOM order first, z-index: 10 to stay above image */}
-            <div className="expanded-content-section" style={{ zIndex: 10 }}>
+            {/* Content section */}
+            <div className="expanded-content-section">
                 {/* Tab navigation */}
                 <div className="expanded-tabs">
                     <button
@@ -137,8 +138,7 @@ const StoryCardExpanded: React.FC<StoryCardExpandedProps> = ({
                             {/* Name field */}
                             <div className="expanded-field">
                                 <label htmlFor={`expanded-name-${itemId}`}>Name</label>
-                                <motion.input
-                                    layoutId={`card-${itemId}-title`}
+                                <input
                                     id={`expanded-name-${itemId}`}
                                     type="text"
                                     value={name}
@@ -168,7 +168,7 @@ const StoryCardExpanded: React.FC<StoryCardExpandedProps> = ({
                                     onClick={onAIEdit}
                                     title="AI Edit"
                                 >
-                                    <span className="ai-icon">✨</span>
+                                    <span className="ai-icon"><AIAssistMini size={14} /></span>
                                     AI Edit
                                 </button>
 
@@ -181,20 +181,20 @@ const StoryCardExpanded: React.FC<StoryCardExpandedProps> = ({
                                     align="right"
                                 >
                                     <DropdownItem
-                                        icon="📜"
+                                        icon={<Scroll size={14} />}
                                         label="Version History"
                                         onClick={onVersionHistory}
                                     />
                                     {showSecondaryLanguage && (
                                         <DropdownItem
-                                            icon="🔄"
+                                            icon={<Refresh size={14} />}
                                             label="Retranslate"
                                             onClick={onRetranslate}
                                         />
                                     )}
                                     <DropdownDivider />
                                     <DropdownItem
-                                        icon="🗑️"
+                                        icon={<Trash size={14} />}
                                         label="Delete"
                                         onClick={onDelete}
                                         variant="danger"
@@ -243,19 +243,15 @@ const StoryCardExpanded: React.FC<StoryCardExpandedProps> = ({
                 </div>
             </div>
 
-            {/* Image section - DOM order LAST, z-index: 0 to stay behind content (z-index: 10) */}
+            {/* Image section - plain div (no layoutId to avoid Framer Motion interference) */}
             {hasImage && mainAsset && (
-                <motion.div
-                    layoutId={`card-${itemId}-image`}
-                    className="expanded-image-section"
-                    style={{ zIndex: 0 }}
-                >
+                <div className="expanded-image-section">
                     <img
                         src={`${API_BASE_URL}${mainAsset.file_url}`}
                         alt={itemData.name}
                         className="expanded-image"
                     />
-                </motion.div>
+                </div>
             )}
         </motion.article>
     );

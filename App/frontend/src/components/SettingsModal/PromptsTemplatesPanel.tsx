@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import PromptTreeNav from './PromptTreeNav';
 import PromptEditor from './PromptEditor';
 import { PROMPT_TREE, getFirstPromptNode, type PromptNode } from './promptTree';
+import { ChevronLeft, ChevronRight, Document } from '../icons';
 import './PromptsTemplatesPanel.css';
 import TemplateSyntaxHint from './TemplateSyntaxHint';
 
@@ -53,7 +54,7 @@ const PromptsTemplatesPanel: React.FC = () => {
                     onClick={toggleSidebar}
                     title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
                   >
-                    {isSidebarCollapsed ? '◀' : '▶'}
+                    {isSidebarCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
                   </button>
                 </div>
               </div>
@@ -72,7 +73,7 @@ const PromptsTemplatesPanel: React.FC = () => {
             </div>
           ) : (
             <div className="prompts-empty-state">
-              <div className="empty-state-icon">📝</div>
+              <div className="empty-state-icon"><Document size={48} /></div>
               <h3>Select a prompt to edit</h3>
               <p>Choose a prompt from the sidebar to view and edit its content</p>
             </div>

@@ -5,6 +5,12 @@ import ToastDetailModal from './ToastDetailModal';
 import ToastErrorModal from './ToastErrorModal';
 import './ToastContainer.css';
 
+// Import modal types for retry functionality
+import AIEditModal from '../AIEditModal';
+import NovelChapterAIEditModal from '../NovelChapterAIEditModal';
+import TranslationModal from '../TranslationModal';
+import ImagePromptBuilderModal from '../ImageGeneration/ImagePromptBuilderModal';
+
 const MAX_VISIBLE_TOASTS = 5;
 
 const ToastContainer: React.FC = () => {
@@ -21,6 +27,7 @@ const ToastContainer: React.FC = () => {
 
   const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
   const [errorSessionId, setErrorSessionId] = useState<string | null>(null);
+  const [retrySession, setRetrySession] = useState<LLMTaskSessionState | null>(null);
 
   // Auto-dismiss sessions with autoDismissMs
   useEffect(() => {
@@ -70,6 +77,84 @@ const ToastContainer: React.FC = () => {
     setErrorSessionId(null);
   }, []);
 
+  const handleRetry = useCallback((session: LLMTaskSessionState) => {
+    setRetrySession(session);
+    setErrorSessionId(null); // Close error modal
+  }, []);
+
+  const handleRetryModalClose = useCallback(() => {
+    if (retrySession) {
+      clearSession(retrySession.id);
+    }
+    setRetrySession(null);
+  }, [retrySession, clearSession]);
+
+  const renderRetryModal = () => {
+    if (!retrySession?.retryContext) return null;
+
+    const { taskType, modalProps, formState } = retrySession.retryContext;
+
+    switch (taskType) {
+      case 'ai-edit':
+        return (
+          <AIEditModal
+            isOpen={true}
+            onClose={handleRetryModalClose}
+            category={modalProps.category}
+            projectId={modalProps.projectId}
+            targetId={modalProps.targetId}
+            onResult={modalProps.onResult}
+            defaultUserRequest={formState?.userRequest}
+            defaultContextOptions={formState?.contextOptions}
+          />
+        );
+
+      case 'chapter-edit':
+        return (
+          <NovelChapterAIEditModal
+            isOpen={true}
+            onClose={handleRetryModalClose}
+            projectId={modalProps.projectId}
+            chapterId={modalProps.chapterId}
+            chapterName={modalProps.chapterName}
+            onResult={modalProps.onResult}
+            defaultUserRequest={formState?.userRequest}
+          />
+        );
+
+      case 'translation':
+        return (
+          <TranslationModal
+            isOpen={true}
+            onClose={handleRetryModalClose}
+            projectId={modalProps.projectId}
+            onComplete={modalProps.onComplete}
+            allowedObjectTypes={modalProps.allowedObjectTypes}
+            defaultSourceLanguage={formState?.sourceLanguage}
+            defaultTargetLanguage={formState?.targetLanguage}
+            defaultUserInput={formState?.userInput}
+          />
+        );
+
+      case 'image-prompt':
+        return (
+          <ImagePromptBuilderModal
+            isOpen={true}
+            onClose={handleRetryModalClose}
+            objectType={modalProps.objectType}
+            objectId={modalProps.objectId}
+            onPromptGenerated={modalProps.onPromptGenerated}
+            promptMode={modalProps.promptMode}
+            defaultUserRequest={formState?.userRequest}
+          />
+        );
+
+      default:
+        console.warn(`Retry not implemented for task type: ${taskType}`);
+        return null;
+    }
+  };
+
   const visibleSessions = sessions.slice(0, MAX_VISIBLE_TOASTS);
   const hiddenCount = Math.max(0, sessions.length - MAX_VISIBLE_TOASTS);
 
@@ -109,8 +194,11 @@ const ToastContainer: React.FC = () => {
             handleCloseError();
             handleDismiss(errorSession.id);
           }}
+          onRetry={handleRetry}
         />
       )}
+
+      {renderRetryModal()}
     </>
   );
 };

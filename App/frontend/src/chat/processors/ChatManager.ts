@@ -1,9 +1,8 @@
 import type { MutableRefObject } from 'react';
 import type { ChatMessage, FunctionCallMetadata, ContentPart, FunctionCallProgress, FunctionCallResultSummary } from '../../llm/requestTypes';
 import type { ProviderType, ProviderConfig, ThinkingConfig, RetryConfig } from '../../store/settingsStore';
-import { useLLMTaskStore } from '../../store/llmTaskStore';
 import { generateTempId } from '../../utils/tempId';
-import { LLMTask, LLMTaskMode, type ChatWorkspacePromptContext, type ChatNovelEditorPromptContext } from '../../llm';
+import { LLMTask, LLMTaskMode, LLMTaskManager, type TaskHandle, type ChatWorkspacePromptContext, type ChatNovelEditorPromptContext } from '../../llm';
 
 /**
  * Find the index of the last user message in an array of chat messages
@@ -37,7 +36,6 @@ export interface ChatManagerConfig {
   thinkingMode?: 'off' | 'model' | 'custom';
   thinkingConfig?: ThinkingConfig;
   retryConfig?: RetryConfig;
-  sessionId?: string;
 }
 
 export interface ChatManagerCallbacks {
@@ -54,6 +52,7 @@ export class ChatManager {
   private config: ChatManagerConfig;
   private callbacks: ChatManagerCallbacks;
   private task: LLMTask | null = null;
+  private taskHandle: TaskHandle | null = null;
   private isAborted = false;
 
   constructor(config: ChatManagerConfig, callbacks: ChatManagerCallbacks) {
@@ -71,9 +70,11 @@ export class ChatManager {
     this.config.setIsLoading(true);
     this.isAborted = false;
 
-    if (this.config.sessionId) {
-      useLLMTaskStore.getState().setRunning(this.config.sessionId, 'AI Response', 'chat');
-    }
+    // Start task with unique session ID for independent tracking
+    this.taskHandle = LLMTaskManager.startTask({
+      taskType: 'chat',
+      label: 'AI Response',
+    });
 
     try {
       await this.callbacks.onAddMessage(this.config.projectId, chatId, userMessage, language);
@@ -86,9 +87,7 @@ export class ChatManager {
 
       await this.runLLMTask(chatId, assistantMessageId, language, this.getMessageText(userMessage));
 
-      if (this.config.sessionId) {
-        useLLMTaskStore.getState().setSuccess(this.config.sessionId);
-      }
+      this.taskHandle?.complete();
     } catch (error) {
       this.handleError(error);
     } finally {
@@ -106,9 +105,11 @@ export class ChatManager {
     this.config.setIsLoading(true);
     this.isAborted = false;
 
-    if (this.config.sessionId) {
-      useLLMTaskStore.getState().setRunning(this.config.sessionId, 'AI Response', 'chat');
-    }
+    // Start task with unique session ID for independent tracking
+    this.taskHandle = LLMTaskManager.startTask({
+      taskType: 'chat',
+      label: 'AI Response',
+    });
 
     try {
       const assistantMessageId = await this.callbacks.onAddMessage(
@@ -120,9 +121,7 @@ export class ChatManager {
 
       await this.runLLMTask(chatId, assistantMessageId, language, '');
 
-      if (this.config.sessionId) {
-        useLLMTaskStore.getState().setSuccess(this.config.sessionId);
-      }
+      this.taskHandle?.complete();
     } catch (error) {
       this.handleError(error);
     } finally {
@@ -145,13 +144,25 @@ export class ChatManager {
     // Remove the empty assistant message we just added
     const history = chatHistory.slice(0, -1);
     // Remove the user message we just added (it goes into userInput)
-    const previousHistory = userInput ? history.slice(0, -1) : history;
+    let previousHistory = userInput ? history.slice(0, -1) : history;
+
+    // Handle trailing user messages (from previous failed requests without assistant response)
+    // Collect and merge them with current userInput, then remove from history
+    const trailingUserTexts: string[] = [];
+    while (previousHistory.length > 0 && previousHistory[previousHistory.length - 1].role === 'user') {
+      const lastMsg = previousHistory[previousHistory.length - 1];
+      trailingUserTexts.unshift(this.getMessageText(lastMsg));
+      previousHistory = previousHistory.slice(0, -1);
+    }
+
+    // Combine trailing user messages with current userInput
+    const combinedUserInput = [...trailingUserTexts, userInput].filter(Boolean).join('\n\n');
 
     const mode = this.config.mode === 'workspace'
       ? LLMTaskMode.CHAT_WORKSPACE
       : LLMTaskMode.CHAT_NOVEL_EDITOR;
 
-    const promptContext = this.buildPromptContext(userInput, language);
+    const promptContext = this.buildPromptContext(combinedUserInput, language);
 
     let result: { contentParts: ContentPart[]; functionCalls: FunctionCallMetadata[]; thinkingDetails?: any[] } | null = null;
 
@@ -161,7 +172,7 @@ export class ChatManager {
         projectId: this.config.projectId,
         promptContext,
         abortControllerRef: this.config.abortControllerRef,
-        sessionId: this.config.sessionId,
+        sessionId: this.taskHandle?.sessionId,
         provider: this.config.provider,
         providerConfig: this.config.providerConfig,
         model: this.config.aiModel,
@@ -262,21 +273,18 @@ export class ChatManager {
     const isAbortError = error instanceof DOMException && error.name === 'AbortError';
 
     if (isAbortError || this.isAborted) {
-      if (this.config.sessionId) {
-        useLLMTaskStore.getState().setCancelled(this.config.sessionId);
-      }
+      this.taskHandle?.cancel();
     } else {
       const err = error instanceof Error ? error : new Error(String(error));
       this.callbacks.onError(err);
-      if (this.config.sessionId) {
-        useLLMTaskStore.getState().setTaskError(this.config.sessionId, err.message);
-      }
+      this.taskHandle?.error(err.message);
     }
   }
 
   private cleanup(): void {
     this.config.setIsLoading(false);
     this.task = null;
+    this.taskHandle = null;
     this.isAborted = false;
     this.config.abortControllerRef.current = null;
   }

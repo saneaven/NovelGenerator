@@ -24,6 +24,7 @@ import TranslationModal from './TranslationModal';
 import { AssetManagerModal } from './AssetManager';
 import StoryCardExpanded from './StoryCardExpanded';
 import { DropdownMenu, DropdownItem, DropdownDivider } from './ui/DropdownMenu';
+import { Expand, Collapse, Plus, AIAssist } from './icons';
 import { getSpanType, type SpanType } from '../hooks/useCardSpanType';
 import type { UnifiedObject, ObjectType } from '../types/unifiedObject';
 import type { Asset } from '../api/assetService';
@@ -355,7 +356,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 
     try {
       await store.restoreVersion(category, versionHistoryTargetId, versionId);
-      console.log('✓ Version restored');
+      console.log('Version restored');
     } catch (error) {
       console.error('Failed to restore version:', error);
       showError('Restore Error', 'Failed to restore version. Please try again.');
@@ -397,21 +398,21 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
             className="collapse-control-btn desktop-only"
             title="Expand All"
           >
-            ▼ Expand
+            <Collapse size={12} /> Expand
           </button>
           <button
             onClick={collapseAll}
             className="collapse-control-btn desktop-only"
             title="Collapse All"
           >
-            ▶ Collapse
+            <Expand size={12} /> Collapse
           </button>
           <button
             onClick={() => handleAIEdit()}
             className="ai-edit-button desktop-only"
             disabled={showAddForm}
           >
-            🤖 AI Edit All
+            <AIAssist size={14} /> AI Edit All
           </button>
           <button
             onClick={() => setShowAddForm(true)}
@@ -428,24 +429,24 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
             }
           >
             <DropdownItem
-              icon="▼"
+              icon={<Collapse size={14} />}
               label="Expand All"
               onClick={expandAll}
             />
             <DropdownItem
-              icon="▶"
+              icon={<Expand size={14} />}
               label="Collapse All"
               onClick={collapseAll}
             />
             <DropdownDivider />
             <DropdownItem
-              icon="🤖"
+              icon={<AIAssist size={14} />}
               label="AI Edit All"
               onClick={() => handleAIEdit()}
               disabled={showAddForm}
             />
             <DropdownItem
-              icon="➕"
+              icon={<Plus size={14} />}
               label={`Add ${singularName}`}
               onClick={() => setShowAddForm(true)}
               disabled={showAddForm}
@@ -477,7 +478,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
           >
             {items.map((item) => {
                 const isFullExpanded = expandedCardId === item.id;
-                const { effectiveLanguage, isFallback } = getEffectiveLanguage(item);
+                const { effectiveLanguage } = getEffectiveLanguage(item);
                 const itemData = getDataForLanguage(item, effectiveLanguage);
                 const mainAsset = getMainAsset(category, item.id);
                 const spanType = getSpanType(mainAsset);
@@ -488,8 +489,6 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
                     key={item.id}
                     item={item}
                     itemData={itemData}
-                    effectiveLanguage={effectiveLanguage}
-                    isFallback={isFallback}
                     isExpanded={isExpanded}
                     isFullExpanded={isFullExpanded}
                     isAnimating={animatingCardId === item.id}
@@ -504,7 +503,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
           </div>
 
           {/* State 3: Full expanded overlay - inside LayoutGroup for animation */}
-          <AnimatePresence>
+          <AnimatePresence mode="sync">
             {expandedCardId && (() => {
               const item = items.find(i => i.id === expandedCardId);
               if (!item) return null;
@@ -521,7 +520,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
                   className="story-card-expanded-container"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
+                  exit={{ opacity: 0, transition: { duration: 0.4, delay: 0.15 } }}
                   transition={{ duration: 0.2 }}
                 >
                   <StoryCardExpanded
@@ -689,8 +688,6 @@ const AddItemForm: React.FC<AddItemFormProps> = ({
 interface ItemDisplayProps {
   item: NameDescriptionObject;
   itemData: NameDescriptionData;
-  effectiveLanguage: string;
-  isFallback: boolean;
   isExpanded: boolean;        // State 2: description visible
   isFullExpanded: boolean;    // State 3: card is in overlay (hide but keep space)
   isAnimating: boolean;       // Card is animating (needs z-index elevation)
@@ -704,8 +701,6 @@ interface ItemDisplayProps {
 const ItemDisplay = React.memo<ItemDisplayProps>(({
   item,
   itemData,
-  effectiveLanguage,
-  isFallback,
   isExpanded,
   isFullExpanded,
   isAnimating,
@@ -718,16 +713,15 @@ const ItemDisplay = React.memo<ItemDisplayProps>(({
   return (
     <motion.article
       layoutId={`card-${item.id}`}
-      className="story-card"
+      className={`story-card ${isAnimating ? 'story-card--animating' : ''}`}
       data-expanded={isExpanded}
       data-has-image={Boolean(mainAsset)}
       data-span={spanType}
-      style={isAnimating ? { zIndex: 50 } : undefined}
       initial={false}
       animate={{ opacity: isFullExpanded ? 0 : 1 }}
       whileHover={{ y: -4 }}
       transition={{ opacity: { duration: 0.15 } }}
-      onAnimationComplete={onAnimationComplete}
+      onLayoutAnimationComplete={onAnimationComplete}
     >
       {/* Expand button - top right, always visible */}
       <button
@@ -736,63 +730,42 @@ const ItemDisplay = React.memo<ItemDisplayProps>(({
         aria-label="Open edit panel"
         title="Edit"
       >
-        ▼
+        <Collapse size={12} />
       </button>
 
-      {/* Content - DOM order first, z-index: 10 to stay above image */}
-      <div className="story-card__content" style={{ zIndex: 10 }}>
-        {/* State 1 & 2: Header with clickable name */}
+      {/* Content */}
+      <div className="story-card__content">
+        {/* Header - always visible */}
         <header className="story-card__header">
-          <motion.h4
-            className="story-card__title"
-            onClick={onToggleExpand}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => e.key === 'Enter' && onToggleExpand()}
-            layoutId={`card-${item.id}-title`}
+          <h4
+            className={`story-card__title ${spanType === 'text-only' ? 'story-card__title--no-toggle' : ''}`}
+            onClick={spanType !== 'text-only' ? onToggleExpand : undefined}
+            role={spanType !== 'text-only' ? 'button' : undefined}
+            tabIndex={spanType !== 'text-only' ? 0 : undefined}
+            onKeyDown={spanType !== 'text-only' ? (e) => e.key === 'Enter' && onToggleExpand() : undefined}
           >
             {itemData.name}
-          </motion.h4>
+          </h4>
         </header>
 
-        {/* State 2: Description visible */}
-        {isExpanded && (
-          <div className="story-card__description-wrapper">
-            <div className="story-card__description-inner">
-              <div className="story-card__description">
-                <p>{itemData.description || 'No description.'}</p>
-              </div>
-              <footer className="story-card__metadata">
-                <span className="story-card__language">
-                  {isFallback && <span className="story-card__fallback-warning" title="Selected language not available">!</span>}
-                  {effectiveLanguage}
-                </span>
-                <span className="story-card__version">v{item.version.number}</span>
-                {item.metadata.updated_at && (
-                  <span className="story-card__updated">
-                    {new Date(item.metadata.updated_at).toLocaleDateString()}
-                  </span>
-                )}
-              </footer>
-            </div>
+        {/* Description - always in DOM, CSS controls visibility via max-height */}
+        <div className="story-card__description-wrapper">
+          <div className="story-card__description">
+            <p>{itemData.description || 'No description.'}</p>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Image - DOM order LAST, z-index: 0 to stay behind content (z-index: 10) */}
+      {/* Image - plain div (no layoutId to avoid Framer Motion interference) */}
       {mainAsset && (
-        <motion.div
-          layoutId={`card-${item.id}-image`}
-          className="story-card__image-container"
-          style={{ zIndex: 0 }}
-        >
+        <div className="story-card__image-container">
           <img
             src={`${API_BASE_URL}${mainAsset.file_url}`}
             alt={itemData.name}
             className="story-card__image"
             loading="lazy"
           />
-        </motion.div>
+        </div>
       )}
     </motion.article>
   );
@@ -806,8 +779,6 @@ const ItemDisplay = React.memo<ItemDisplayProps>(({
     prevProps.isExpanded === nextProps.isExpanded &&
     prevProps.isFullExpanded === nextProps.isFullExpanded &&
     prevProps.isAnimating === nextProps.isAnimating &&
-    prevProps.effectiveLanguage === nextProps.effectiveLanguage &&
-    prevProps.isFallback === nextProps.isFallback &&
     prevProps.mainAsset?.id === nextProps.mainAsset?.id &&
     prevProps.spanType === nextProps.spanType
   );

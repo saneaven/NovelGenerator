@@ -3,6 +3,13 @@
  */
 
 import apiClient from './client';
+import type { StyledPrompt } from '../imageGeneration/types';
+
+// Helper to format StyledPrompt for display
+export function formatStyledPrompt(prompt: StyledPrompt | null): string {
+    if (!prompt) return '';
+    return [prompt.prefix, prompt.content, prompt.postfix].filter(Boolean).join('');
+}
 
 // Types
 // Reference object stored in asset metadata
@@ -22,10 +29,10 @@ export interface Asset {
     thumbnail_path: string | null;
     mime_type: string;
     asset_type: AssetType;  // 'scene', 'object', or null
-    // Prompts stored separately by provider type
-    generation_prompt: string | null;  // Natural language prompt (OpenAI, Gemini, xAI)
-    generation_positive_prompt: string | null;  // Positive prompt for tag-based (NovelAI)
-    generation_negative_prompt: string | null;  // Negative prompt for tag-based (NovelAI)
+    // Prompts stored separately by provider type (StyledPrompt with prefix/content/postfix)
+    generation_prompt: StyledPrompt | null;  // Natural language prompt (OpenAI, Gemini, xAI)
+    generation_positive_prompt: StyledPrompt | null;  // Positive prompt for tag-based (NovelAI)
+    generation_negative_prompt: StyledPrompt | null;  // Negative prompt for tag-based (NovelAI)
     generation_provider: string | null;
     generation_model: string | null;
     generation_settings: Record<string, any> | null;  // Provider-specific settings

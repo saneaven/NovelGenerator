@@ -288,7 +288,9 @@
     --border-radius-full: 9999px;
 
     --size-sidebar-width: 450px;
-    --size-sidebar-width-mobile: 100%;
+    --size-sidebar-width-mobile: 75%;
+    --size-chat-sidebar-width: 300px;
+    --size-chat-sidebar-width-mobile: 280px;
 
     /* ===== Transitions ===== */
     --transition-fast: 150ms cubic-bezier(0.2, 0, 0.2, 1);
@@ -302,6 +304,12 @@
 
     /* ===== Z-Index Layers ===== */
     --z-base: 0;
+    --z-behind: -1;
+    --z-content: 10;
+    --z-button: 20;
+    --z-elevated: 30;
+    --z-card-animating: 50;
+    --z-header: 100;
     --z-dropdown: 1000;
     --z-sticky: 1010;
     --z-fixed: 1020;
@@ -309,6 +317,7 @@
     --z-modal: 1040;
     --z-popover: 1050;
     --z-tooltip: 1060;
+    --z-max: 9999;
 
     /* ===== Modal Gradients ===== */
     --gradient-modal-header-primary: linear-gradient(135deg, var(--color-primary-500) 0%, var(--color-primary-600) 100%);
@@ -406,17 +415,17 @@
 
     /* Neutral Scale - Inverted for dark */
     --color-neutral-00: oklch(0.050 0.001 55.0);
-    --color-neutral-50: oklch(0.100 0.003 55.0);
-    --color-neutral-100: oklch(0.180 0.006 55.0);
-    --color-neutral-200: oklch(0.260 0.009 55.0);
-    --color-neutral-300: oklch(0.340 0.011 55.0);
-    --color-neutral-400: oklch(0.420 0.014 55.0);
-    --color-neutral-500: oklch(0.500 0.017 55.0);
-    --color-neutral-600: oklch(0.580 0.020 55.0);
-    --color-neutral-700: oklch(0.660 0.022 55.0);
-    --color-neutral-800: oklch(0.740 0.025 55.0);
-    --color-neutral-900: oklch(0.820 0.016 55.0);
-    --color-neutral-950: oklch(0.900 0.008 55.0);
+    --color-neutral-50: oklch(0.100 0.002 55.0);
+    --color-neutral-100: oklch(0.180 0.004 55.0);
+    --color-neutral-200: oklch(0.260 0.005 55.0);
+    --color-neutral-300: oklch(0.340 0.007 55.0);
+    --color-neutral-400: oklch(0.420 0.009 55.0);
+    --color-neutral-500: oklch(0.500 0.011 55.0);
+    --color-neutral-600: oklch(0.580 0.015 55.0);
+    --color-neutral-700: oklch(0.660 0.017 55.0);
+    --color-neutral-800: oklch(0.740 0.019 55.0);
+    --color-neutral-900: oklch(0.820 0.013 55.0);
+    --color-neutral-950: oklch(0.900 0.004 55.0);
     --color-neutral-1000: oklch(0.950 0.001 55.0);
 
     /* Semantic Colors - dark mode */

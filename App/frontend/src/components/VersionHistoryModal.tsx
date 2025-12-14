@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useModalHistory } from '../hooks/useModalHistory';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
 import type { ObjectType } from '../types/unifiedObject';
+import { Scroll, Loading, Mailbox, Check, Globe, Clock, SpeechBubble, DocumentAlt } from './icons';
 import './VersionHistoryModal.css';
 
 interface VersionHistoryModalProps {
@@ -20,6 +22,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   objectId,
   onRestoreVersion,
 }) => {
+  useModalHistory(isOpen, onClose);
   const store = useUnifiedObjectStore();
   const { showError } = useErrorStore();
   const [versions, setVersions] = useState<any[]>([]);
@@ -168,15 +171,16 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content version-history-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>{getTypeDisplayName(objectType)} Version History</h2>
+          <h2><Scroll size={24} />{getTypeDisplayName(objectType)} Version History</h2>
           <button className="modal-close" onClick={onClose}>Close</button>
         </div>
 
         <div className="version-history-content">
           {loading ? (
-            <div className="loading-state">Loading versions...</div>
+            <div className="loading-state"><Loading size={24} />Loading versions...</div>
           ) : versions.length === 0 ? (
             <div className="empty-state">
+              <Mailbox size={48} />
               <p>No saved versions.</p>
             </div>
           ) : (
@@ -194,16 +198,19 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                       <div className="version-info">
                         <div className="version-title">
                           <span className="version-number">Version #{version.number}</span>
-                          {isCurrentVersion && <span className="active-badge">Latest</span>}
+                          {isCurrentVersion && <span className="active-badge"><Check size={12} />Latest</span>}
                           <span className="version-languages-badge">
+                            <Globe size={12} />
                             {Object.keys(version.data || {}).join(', ') || 'No data'}
                           </span>
                         </div>
                         <div className="version-metadata">
                           <span className="version-timestamp">
+                            <Clock size={14} />
                             {new Date(version.created_at).toLocaleString()}
                           </span>
                           <span className="version-request">
+                            <SpeechBubble size={14} />
                             {version.user_request || 'No description'}
                           </span>
                         </div>
@@ -230,13 +237,14 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
 
                     {expandedVersions.has(version.id) && (
                       <div className="version-content">
-                        <h4>Version Data (Language: {currentLanguage}):</h4>
+                        <h4><DocumentAlt size={16} />Version Data (Language: {currentLanguage}):</h4>
                         <div className="version-data">
                           {renderVersionData(versionData, objectType)}
                         </div>
                         {Object.keys(version.data).length > 1 && (
                           <div className="version-languages">
                             <small>
+                              <Globe size={12} />
                               Available in: {Object.keys(version.data).join(', ')}
                             </small>
                           </div>

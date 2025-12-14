@@ -31,7 +31,7 @@ Based on your previous suggestions, the user made the following decisions:
 {% if context.storyContext.characters.size > 0 %}
 ## Characters
 {% for char in context.storyContext.characters %}
-### {{ char.name }}
+### {{ char.name }} (id: {{ char.id }})
 {{ char.description }}
 {% endfor %}
 {% endif %}
@@ -39,7 +39,7 @@ Based on your previous suggestions, the user made the following decisions:
 {% if context.storyContext.organizations.size > 0 %}
 ## Organizations
 {% for org in context.storyContext.organizations %}
-### {{ org.name }}
+### {{ org.name }} (id: {{ org.id }})
 {{ org.description }}
 {% endfor %}
 {% endif %}
@@ -47,7 +47,7 @@ Based on your previous suggestions, the user made the following decisions:
 {% if context.storyContext.locations.size > 0 %}
 ## Locations
 {% for loc in context.storyContext.locations %}
-### {{ loc.name }}
+### {{ loc.name }} (id: {{ loc.id }})
 {{ loc.description }}
 {% endfor %}
 {% endif %}
@@ -55,38 +55,21 @@ Based on your previous suggestions, the user made the following decisions:
 {% if context.storyContext.lorebook.size > 0 %}
 ## Lorebook
 {% for entry in context.storyContext.lorebook %}
-### {{ entry.name }}
+### {{ entry.name }} (id: {{ entry.id }})
 {{ entry.description }}
 {% endfor %}
 {% endif %}
 
-{% if context.storyContext.acts.size > 0 %}
+{% if context.storyContext.outline and context.storyContext.outline.acts.size > 0 %}
 ## Story Outline
-{% for act in context.storyContext.acts %}
-### {{ act.name }}
+{% for act in context.storyContext.outline.acts %}
+### {{ act.name }} (id: {{ act.id }})
 {{ act.description }}
 {% for ch in act.chapters %}
-- **{{ ch.name }}**: {{ ch.description }}
+- **{{ ch.name }}** (id: {{ ch.id }}): {{ ch.description }}
 {% endfor %}
 {% endfor %}
 {% endif %}
-{% endif %}
-
-{% if context.customSections.size > 0 %}
-{% for section in context.customSections %}
-# {{ section.heading }}
-{% if section.format == 'json' %}
-```json
-{{ section.content | json }}
-```
-{% elsif section.format == 'text' %}
-```text
-{{ section.content }}
-```
-{% else %}
-{{ section.content }}
-{% endif %}
-{% endfor %}
 {% endif %}
 
 # Language Instruction

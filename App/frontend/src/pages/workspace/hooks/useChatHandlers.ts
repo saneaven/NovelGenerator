@@ -15,7 +15,16 @@ export function useChatHandlers(
   clearPendingFunctionCallResults?: () => void
 ) {
   const { selectChat, getSelectedChatId, updateMessage, deleteMessage, clearMessageTranslations } = useChatStore();
-  const chatUI = useChatUIStore();
+  // Use individual selectors for actions to avoid unnecessary re-renders
+  // Actions are stable references, so we can select them individually
+  const isLoading = useChatUIStore(state => state.isLoading);
+  const clearInput = useChatUIStore(state => state.clearInput);
+  const startEditing = useChatUIStore(state => state.startEditing);
+  const updateEditContent = useChatUIStore(state => state.updateEditContent);
+  const getEditing = useChatUIStore(state => state.getEditing);
+  const cancelEditing = useChatUIStore(state => state.cancelEditing);
+  const setMobileSidebarVisible = useChatUIStore(state => state.setMobileSidebarVisible);
+  const setDesktopChatListVisible = useChatUIStore(state => state.setDesktopChatListVisible);
   const mainLanguage = useSettingsStore(state => state.settings.mainLanguage);
   const getObjectsMissingMainLanguage = useUnifiedObjectStore(state => state.getObjectsMissingMainLanguage);
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -25,14 +34,14 @@ export function useChatHandlers(
   const handleSelectChat = useCallback((chatId: string) => {
     if (!projectId) return;
     selectChat(projectId, chatId);
-    chatUI.setMobileSidebarVisible(projectId, false);
-    chatUI.setDesktopChatListVisible(projectId, false);
-  }, [projectId, selectChat, chatUI]);
+    setMobileSidebarVisible(projectId, false);
+    setDesktopChatListVisible(projectId, false);
+  }, [projectId, selectChat, setMobileSidebarVisible, setDesktopChatListVisible]);
 
   const handleSubmit = useCallback(async (e: React.FormEvent, input: string) => {
     e.preventDefault();
     if (!projectId || !chatManager) return;
-    if (chatUI.isLoading(projectId)) return;
+    if (isLoading(projectId)) return;
 
     const chatId = getActiveChatId();
     if (!chatId) return;
@@ -64,7 +73,7 @@ export function useChatHandlers(
       clearPendingFunctionCallResults();
     }
 
-    chatUI.clearInput(projectId);
+    clearInput(projectId);
 
     if (!input?.trim()) {
       await chatManager.processEmptyRequest();
@@ -79,7 +88,7 @@ export function useChatHandlers(
     };
 
     await chatManager.processUserMessage(userMessage);
-  }, [projectId, chatManager, chatUI, getActiveChatId, getObjectsMissingMainLanguage, mainLanguage, pendingFunctionCallResults, clearPendingFunctionCallResults]);
+  }, [projectId, chatManager, isLoading, clearInput, getActiveChatId, getObjectsMissingMainLanguage, mainLanguage, pendingFunctionCallResults, clearPendingFunctionCallResults]);
 
   const handleStop = useCallback(() => {
     chatManager?.abort();
@@ -94,22 +103,22 @@ export function useChatHandlers(
 
   const handleEditMessage = useCallback((messageId: string, content: string, _language: string) => {
     if (!projectId) return;
-    chatUI.startEditing(projectId, messageId, mainLanguage, content);
+    startEditing(projectId, messageId, mainLanguage, content);
     setTimeout(adjustTextareaHeight, 0);
-  }, [projectId, chatUI, mainLanguage, adjustTextareaHeight]);
+  }, [projectId, startEditing, mainLanguage, adjustTextareaHeight]);
 
   const handleEditContentChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (!projectId) return;
-    chatUI.updateEditContent(projectId, e.target.value);
+    updateEditContent(projectId, e.target.value);
     adjustTextareaHeight();
-  }, [projectId, chatUI, adjustTextareaHeight]);
+  }, [projectId, updateEditContent, adjustTextareaHeight]);
 
   const handleSaveEdit = useCallback(() => {
     if (!projectId) return;
     const chatId = getActiveChatId();
     if (!chatId) return;
 
-    const editing = chatUI.getEditing(projectId);
+    const editing = getEditing(projectId);
     if (!editing.messageId) return;
 
     // Convert the string content to ContentPart array for the primary language only
@@ -118,13 +127,13 @@ export function useChatHandlers(
     updateMessage(projectId, chatId, editing.messageId, contentParts, mainLanguage);
     // Purge cached translations so the next view requires a fresh translate
     clearMessageTranslations(projectId, chatId, editing.messageId, [mainLanguage]);
-    chatUI.cancelEditing(projectId);
-  }, [projectId, chatUI, getActiveChatId, updateMessage, clearMessageTranslations, mainLanguage]);
+    cancelEditing(projectId);
+  }, [projectId, getEditing, cancelEditing, getActiveChatId, updateMessage, clearMessageTranslations, mainLanguage]);
 
   const handleCancelEdit = useCallback(() => {
     if (!projectId) return;
-    chatUI.cancelEditing(projectId);
-  }, [projectId, chatUI]);
+    cancelEditing(projectId);
+  }, [projectId, cancelEditing]);
 
   const handleDeleteMessage = useCallback((messageId: string) => {
     if (!projectId) return;
@@ -148,4 +157,3 @@ export function useChatHandlers(
     handleDeleteMessage,
   };
 }
-

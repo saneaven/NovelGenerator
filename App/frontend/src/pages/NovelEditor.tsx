@@ -35,6 +35,7 @@ import './workspace/styles/ChatInput.css';
 import './workspace/styles/ChatSidebar.css';
 import './workspace/styles/MessageEditCards.css';
 import '../components/MobileChat.css';
+import { ArrowLeft, Settings } from '../components/icons';
 
 const NovelEditor: React.FC = () =>
 {
@@ -64,15 +65,35 @@ const NovelEditor: React.FC = () =>
         ?? localStorage.getItem(`selectedChapter_${projectId ?? ''}`)
         ?? undefined;
 
-    // Helper to get all manuscripts from unified store
+    // Helper to get all manuscripts from unified store (filtered by language)
     const getAllManuscripts = useMemo(() => {
-        return (projId: string) => {
+        return (projId: string, language: string) => {
+            // Build chapter name lookup map
+            const chapterNames: Record<string, string> = {};
+            Object.values(unifiedObjects).forEach(obj => {
+                if (obj.type === 'chapter' && obj.metadata?.project_id === projId) {
+                    const chapterData = obj.data[language]
+                        ?? obj.data[Object.keys(obj.data)[0]]
+                        ?? {};
+                    chapterNames[obj.id] = chapterData.name ?? '';
+                }
+            });
+
             const allContent: Record<string, any> = {};
             Object.values(unifiedObjects).forEach(obj => {
                 if (obj.type === 'manuscript' && obj.metadata?.project_id === projId) {
                     const chapterId = obj.metadata?.chapter_id as string;
                     if (chapterId) {
-                        allContent[chapterId] = obj;
+                        // Extract only specified language data (with fallback to first available)
+                        const langData = obj.data[language]
+                            ?? obj.data[Object.keys(obj.data)[0]]
+                            ?? {};
+                        allContent[chapterId] = {
+                            id: obj.id,
+                            chapterId,
+                            chapterName: chapterNames[chapterId] ?? '',
+                            content: langData.content ?? '',
+                        };
                     }
                 }
             });
@@ -188,9 +209,6 @@ const NovelEditor: React.FC = () =>
         },
     }), [updateMessageContentLocal, updateMessage, handleFunctionCalls, addMessage, getMessages, showError, handleFunctionCallProgress]);
 
-    // Session ID for chat streaming toast
-    const chatSessionId = projectId ? `novel-chat-${projectId}` : undefined;
-
     const chatManager = useMemo(() =>
     {
         const activeProjectId = projectId ?? '';
@@ -198,7 +216,7 @@ const NovelEditor: React.FC = () =>
             {
                 projectId: activeProjectId,
                 getStoryObjects: () => storyObjectsFromHook,
-                getNovelData: () => getAllManuscripts(activeProjectId),
+                getNovelData: () => getAllManuscripts(activeProjectId, mainLanguage),
                 getIsLoading: () => chatUI.isLoading(activeProjectId),
                 setIsLoading: (loading: boolean) => chatUI.setLoading(activeProjectId, loading),
                 abortControllerRef,
@@ -218,7 +236,6 @@ const NovelEditor: React.FC = () =>
                 thinkingMode: chatFunctionConfig.advanced.thinkingMode,
                 thinkingConfig: chatFunctionConfig.advanced.thinkingConfig as any,
                 retryConfig: settings.retryConfig,
-                sessionId: chatSessionId,
                 getPendingFunctionCallResults: () => pendingFunctionCallResults,
             },
             chatManagerCallbacks
@@ -236,7 +253,6 @@ const NovelEditor: React.FC = () =>
         getSelectedChatId,
         chatManagerCallbacks,
         settings.retryConfig,
-        chatSessionId,
     ]);
 
     const chatHandlers = useChatHandlers(
@@ -577,7 +593,7 @@ const NovelEditor: React.FC = () =>
                             onClick={() => navigate(`/project/${projectId}`)}
                             title="Back to project"
                         >
-                            ←
+                            <ArrowLeft size={16} />
                         </button>
                         <button
                             className={`chat-toggle-btn mobile-only ${chatUI.isChatVisible(projectId ?? '') ? 'active' : ''}`}
@@ -605,24 +621,19 @@ const NovelEditor: React.FC = () =>
                             onClick={() => uiActions.setIsSettingsOpen(true)}
                             title="Settings"
                         >
-                            ⚙
+                            <Settings size={16} />
                         </button>
                     </div>
                 </div>
             </div>
 
             <div className={`novel-editor-content ${chatUI.isChatVisible(projectId ?? '') ? 'chat-visible' : ''}`}>
-                <ChatSidebar
-                    projectId={projectId ?? ''}
-                    onSelectChat={chatHandlers.handleSelectChat}
-                />
-
                 <ChatPanel
                     projectId={projectId ?? ''}
                     systemInsertConfig={systemInsertConfig}
                     setSystemInsertConfig={setSystemInsertConfig}
                     storyObjects={storyObjects}
-                    novelData={getAllManuscripts(projectId ?? '')}
+                    novelData={getAllManuscripts(projectId ?? '', mainLanguage)}
                     messageEditCards={messageEditCards}
                     activeFunctionCalls={activeFunctionCalls}
                     onBatchConfirm={handleBatchConfirm}
@@ -648,6 +659,11 @@ const NovelEditor: React.FC = () =>
                 />
             </div>
 
+            <ChatSidebar
+                projectId={projectId ?? ''}
+                onSelectChat={chatHandlers.handleSelectChat}
+            />
+
             {chatUI.isChatVisible(projectId ?? '') && (
                 <div className="chat-overlay mobile-only" onClick={() => chatUI.setChatVisible(projectId ?? '', false)} />
             )}
@@ -667,7 +683,7 @@ const NovelEditor: React.FC = () =>
                     onClick={() => navigate(`/project/${projectId}`)}
                     title="Back to project"
                 >
-                    ←
+                    <ArrowLeft size={16} />
                 </button>
                 <button
                     className={`footer-chat-toggle-btn ${chatUI.isChatVisible(projectId ?? '') ? 'active' : ''}`}
@@ -695,7 +711,7 @@ const NovelEditor: React.FC = () =>
                     onClick={() => uiActions.setIsSettingsOpen(true)}
                     title="Settings"
                 >
-                    ⚙
+                    <Settings size={16} />
                 </button>
             </footer>
 

@@ -3,8 +3,9 @@ import { useAssetStore } from '../../store/assetStore';
 import { useProjectStore } from '../../store/projectStore';
 import { ImageGenerationPanel } from '../ImageGeneration';
 import ImagePromptManager from './ImagePromptManager';
-import type { Asset, StoryObjectAsset } from '../../api/assetService';
+import { formatStyledPrompt, type Asset, type StoryObjectAsset } from '../../api/assetService';
 import { API_BASE_URL } from '../../api/client';
+import { Star, Edit } from '../icons';
 import './ImageTabContent.css';
 
 type SubTabType = 'library' | 'upload' | 'generate' | 'prompt';
@@ -151,9 +152,9 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         const settings: RegenerateSettings = {
             provider: asset.generation_provider,
             model: asset.generation_model || '',
-            prompt: asset.generation_prompt || undefined,
-            positive_prompt: asset.generation_positive_prompt || undefined,
-            negative_prompt: asset.generation_negative_prompt || undefined,
+            prompt: asset.generation_prompt?.content || undefined,
+            positive_prompt: asset.generation_positive_prompt?.content || undefined,
+            negative_prompt: asset.generation_negative_prompt?.content || undefined,
             settings: asset.generation_settings || undefined,
         };
 
@@ -277,7 +278,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                                     className={`asset-item ${link.is_main ? 'main' : ''}`}
                                     onClick={() => handleAssetClick(link.asset)}
                                 >
-                                    {link.is_main && <span className="main-badge">★</span>}
+                                    {link.is_main && <span className="main-badge"><Star size={12} /></span>}
                                     <div className="asset-thumbnail">
                                         <img
                                             src={`${API_BASE_URL}${link.asset.thumbnail_url || link.asset.file_url}`}
@@ -312,7 +313,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                                                     }}
                                                     title="Rename"
                                                 >
-                                                    ✎
+                                                    <Edit size={12} />
                                                 </button>
                                             </>
                                         )}
@@ -496,7 +497,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                                             <div className="detail-row vertical">
                                                 <span className="detail-label">Prompt</span>
                                                 <div className="detail-prompt-box">
-                                                    {detailAsset.generation_prompt}
+                                                    {formatStyledPrompt(detailAsset.generation_prompt)}
                                                 </div>
                                             </div>
                                         )}
@@ -505,7 +506,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                                             <div className="detail-row vertical">
                                                 <span className="detail-label">Positive Prompt</span>
                                                 <div className="detail-prompt-box positive">
-                                                    {detailAsset.generation_positive_prompt}
+                                                    {formatStyledPrompt(detailAsset.generation_positive_prompt)}
                                                 </div>
                                             </div>
                                         )}
@@ -513,7 +514,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                                             <div className="detail-row vertical">
                                                 <span className="detail-label">Negative Prompt</span>
                                                 <div className="detail-prompt-box negative">
-                                                    {detailAsset.generation_negative_prompt}
+                                                    {formatStyledPrompt(detailAsset.generation_negative_prompt)}
                                                 </div>
                                             </div>
                                         )}

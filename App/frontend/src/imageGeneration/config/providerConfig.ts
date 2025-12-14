@@ -69,7 +69,7 @@ export const PROVIDER_SUPPORTS_IMAGE_INPUT: Record<ImageProviderType, boolean> =
     openai: true, // GPT-Image-1
     gemini: true, // Gemini supports reference images
     xai: false,
-    novelai: false,
+    novelai: true, // NovelAI supports i2i and Vibe Transfer
 };
 
 // Provider-specific default settings
@@ -78,11 +78,26 @@ export const DEFAULT_OPENAI_SETTINGS = {
     style: 'natural' as const,
 };
 
+// NovelAI reference image modes
+export type NovelAIReferenceMode = 'auto' | 'i2i' | 'vibe';
+
+export const NOVELAI_REFERENCE_MODES: { value: NovelAIReferenceMode; label: string }[] = [
+    { value: 'auto', label: 'Auto (1 img = Transform, 2+ = Vibe)' },
+    { value: 'i2i', label: 'Image-to-Image (transform)' },
+    { value: 'vibe', label: 'Vibe Transfer (style inspiration)' },
+];
+
 export const DEFAULT_NOVELAI_SETTINGS = {
     sampler: 'k_euler_ancestral',
     steps: 28,
     scale: 6,
     noiseSchedule: 'native',
+    // Reference image settings (i2i / Vibe Transfer)
+    referenceMode: 'auto' as NovelAIReferenceMode,
+    strength: 0.7,          // i2i: transformation strength
+    i2iNoise: 0.0,          // i2i: detail addition
+    vibeStrength: 0.6,      // vibe: style influence
+    vibeInfoExtracted: 1.0, // vibe: concept extraction
 };
 
 export const DEFAULT_GEMINI_SETTINGS = {

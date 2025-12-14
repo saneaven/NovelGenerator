@@ -42,6 +42,10 @@ export interface EditCard {
   functionCall?: FunctionCallMetadata;
   onApply?: () => void;
   onReject?: () => void;
+  /** Validation error (e.g., missing required ID) - card cannot be applied */
+  validationError?: string;
+  /** Apply error (e.g., 404) - card stays pending after failed apply */
+  applyError?: string;
 }
 
 /**

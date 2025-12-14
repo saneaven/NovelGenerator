@@ -3,10 +3,12 @@ import type {
   ContentPart,
   ContentPartType,
   ConversationBlock,
+  FunctionCallMetadata,
 } from './requestTypes';
 import { streamLLM } from './llmService';
 import { useSettingsStore, type AIFunctionType } from '../store/settingsStore';
 import { useLLMTaskStore } from '../store/llmTaskStore';
+import { useLLMLogStore } from '../store/llmLogStore';
 import { FunctionCallStreamTracker } from '../chat/streaming/FunctionCallStreamTracker';
 import { PromptManager } from './PromptManager';
 import type {
@@ -69,6 +71,11 @@ export class LLMTask {
     this.isRunning = true;
     this.pendingParts = [];
 
+    // Initialize logging variables outside try block for catch block access
+    const logStore = useLLMLogStore.getState();
+    let logEntryId: string | undefined;
+    const requestStartTime = Date.now();
+
     try {
       // 1. Get provider/model config (from settings or overrides)
       const settingsStore = useSettingsStore.getState();
@@ -102,7 +109,7 @@ export class LLMTask {
       const messages = await this.prepareMessages(history, promptBundle);
 
       // Log LLM request structure for debugging
-      console.log('🤖 LLM Request:', {
+      console.log('LLM Request:', {
         mode: this.config.mode,
         provider,
         model,
@@ -111,6 +118,22 @@ export class LLMTask {
         functions,
         messages,
       });
+
+      // Log to LLM Log Store if enabled
+      if (logStore.isLoggingEnabled) {
+        logEntryId = logStore.addLogEntry({
+          status: 'pending',
+          request: {
+            mode: this.config.mode,
+            provider,
+            model,
+            temperature,
+            thinkingMode,
+            functions,
+            messages,
+          },
+        });
+      }
 
       // 5. Initialize function tracker
       this.functionTracker = new FunctionCallStreamTracker(functions);
@@ -130,6 +153,11 @@ export class LLMTask {
           currentPartType = null;
         }
       };
+
+      // Update log entry to streaming
+      if (logEntryId) {
+        logStore.updateLogEntry(logEntryId, { status: 'streaming' });
+      }
 
       for await (const chunk of streamLLM(
         messages,
@@ -277,7 +305,14 @@ export class LLMTask {
       }
 
       // 9. Complete with results
-      const functionCalls = this.functionTracker?.finalize() ?? [];
+      const rawFunctionCalls = this.functionTracker?.finalize() ?? [];
+      const functionCalls: FunctionCallMetadata[] = rawFunctionCalls.map((fc: any) => ({
+        id: fc.id,
+        function_name: fc.function?.name ?? '',
+        arguments: this.parseArguments(fc.function?.arguments),
+        isApplied: false,
+        isRejected: false,
+      }));
       const result: LLMTaskResult = {
         contentParts: [...this.pendingParts],
         functionCalls,
@@ -292,16 +327,38 @@ export class LLMTask {
         functionCalls,
       });
 
+      // Update log entry to success
+      if (logEntryId) {
+        logStore.updateLogEntry(logEntryId, {
+          status: 'success',
+          durationMs: Date.now() - requestStartTime,
+          response: {
+            contentParts: [...this.pendingParts],
+            functionCalls,
+            thinkingDetails: accumulatedThinkingDetails,
+          },
+        });
+      }
+
       await this.callbacks.onComplete(result);
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
 
       // Log streaming failure
-      console.log('❌ LLM Streaming Failed:', {
+      console.log('LLM Streaming Failed:', {
         success: false,
         error: err.message,
         contentParts: [...this.pendingParts],
       });
+
+      // Update log entry to error
+      if (logEntryId) {
+        logStore.updateLogEntry(logEntryId, {
+          status: 'error',
+          durationMs: Date.now() - requestStartTime,
+          error: err.message,
+        });
+      }
 
       this.callbacks.onError(err);
       throw err;
@@ -396,5 +453,18 @@ export class LLMTask {
       .filter((p: ContentPart) => p.type === 'content')
       .map((p: ContentPart) => p.text)
       .join('');
+  }
+
+  /**
+   * Parse function call arguments from JSON string to object
+   */
+  private parseArguments(args: string | undefined): any {
+    if (!args) return {};
+    try {
+      return JSON.parse(args);
+    } catch {
+      console.error('Failed to parse function call arguments:', args);
+      return {};
+    }
   }
 }

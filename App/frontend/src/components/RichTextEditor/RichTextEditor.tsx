@@ -21,6 +21,7 @@ import ImageWithOverlay from './extensions/ImageWithOverlay';
 import { IMAGE_OVERLAY_STORAGE_KEY, type ImageOverlayCallbacks } from './extensions/ImageNodeView';
 import ImageInsertMenu from './ImageInsertMenu';
 import type { Asset } from '../../api/assetService';
+import { Image } from '../icons';
 import './RichTextEditor.css';
 
 export interface RichTextEditorRef {
@@ -233,13 +234,13 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   const getTextAroundCursor = useCallback(() => {
     if (!editor) return { before: '', after: '' };
     const { anchor } = editor.state.selection;
-    const fullText = editor.getText();
-    // Get text content up to cursor position
-    const textBeforeCursor = editor.state.doc.textBetween(0, anchor, ' ');
-    const textPos = textBeforeCursor.length;
+    const docSize = editor.state.doc.content.size;
+    // Use consistent separator (double newline between blocks, matching getText() behavior)
+    const textBeforeCursor = editor.state.doc.textBetween(0, anchor, '\n\n');
+    const textAfterCursor = editor.state.doc.textBetween(anchor, docSize, '\n\n');
     return {
-      before: fullText.slice(0, textPos),
-      after: fullText.slice(textPos),
+      before: textBeforeCursor,
+      after: textAfterCursor,
     };
   }, [editor]);
 
@@ -422,7 +423,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
             disabled={disabled}
             title="Insert image"
           >
-            🖼️
+            <Image size={16} />
           </button>
         )}
 

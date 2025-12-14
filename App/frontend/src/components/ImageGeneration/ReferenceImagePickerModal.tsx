@@ -6,14 +6,16 @@
  */
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useModalHistory } from '../../hooks/useModalHistory';
 import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import { assetService, type Asset } from '../../api/assetService';
+import { assetService, type Asset, type SceneAsset } from '../../api/assetService';
 import { API_BASE_URL } from '../../api/client';
 import './ReferenceImagePickerModal.css';
 
 type StoryObjectTab = 'character' | 'location' | 'organization' | 'lorebook';
+type PickerTab = StoryObjectTab | 'scene';
 
 interface GroupedAssets {
   objectId: string;
@@ -28,11 +30,16 @@ interface ReferenceImagePickerModalProps {
   excludeAssetIds?: string[];
 }
 
-const TAB_CONFIG: { key: StoryObjectTab; label: string }[] = [
+const STORY_OBJECT_TABS: { key: StoryObjectTab; label: string }[] = [
   { key: 'character', label: 'Characters' },
   { key: 'location', label: 'Locations' },
   { key: 'organization', label: 'Organizations' },
   { key: 'lorebook', label: 'Lorebook' },
+];
+
+const TAB_CONFIG: { key: PickerTab; label: string }[] = [
+  { key: 'scene', label: 'Scene Images' },
+  ...STORY_OBJECT_TABS,
 ];
 
 const ReferenceImagePickerModal: React.FC<ReferenceImagePickerModalProps> = ({
@@ -41,12 +48,14 @@ const ReferenceImagePickerModal: React.FC<ReferenceImagePickerModalProps> = ({
   onImageSelected,
   excludeAssetIds = [],
 }) => {
+  useModalHistory(isOpen, onClose);
   const { currentProjectId } = useProjectStore();
   const { listObjects } = useUnifiedObjectStore();
   const { settings } = useSettingsStore();
 
-  const [activeTab, setActiveTab] = useState<StoryObjectTab>('character');
+  const [activeTab, setActiveTab] = useState<PickerTab>('scene');
   const [groupedAssets, setGroupedAssets] = useState<Map<StoryObjectTab, GroupedAssets[]>>(new Map());
+  const [sceneAssets, setSceneAssets] = useState<SceneAsset[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -65,7 +74,16 @@ const ReferenceImagePickerModal: React.FC<ReferenceImagePickerModalProps> = ({
       try {
         const newGroupedAssets = new Map<StoryObjectTab, GroupedAssets[]>();
 
-        for (const tab of TAB_CONFIG) {
+        // Load scene assets
+        try {
+          const sceneResponse = await assetService.listSceneAssets(currentProjectId);
+          setSceneAssets(sceneResponse.assets);
+        } catch {
+          setSceneAssets([]);
+        }
+
+        // Load story object assets
+        for (const tab of STORY_OBJECT_TABS) {
           // Load objects of this type
           const objects = await listObjects(tab.key, currentProjectId);
 
@@ -112,8 +130,18 @@ const ReferenceImagePickerModal: React.FC<ReferenceImagePickerModalProps> = ({
     loadAllAssets();
   }, [isOpen, currentProjectId, listObjects, settings?.mainLanguage]);
 
-  // Get display groups based on active tab and search
+  // Get filtered scene assets based on search
+  const displaySceneAssets = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return sceneAssets;
+    }
+    const query = searchQuery.toLowerCase();
+    return sceneAssets.filter(asset => asset.name.toLowerCase().includes(query));
+  }, [sceneAssets, searchQuery]);
+
+  // Get display groups based on active tab and search (for story object tabs)
   const displayGroups = useMemo(() => {
+    if (activeTab === 'scene') return [];
     const groups = groupedAssets.get(activeTab) || [];
 
     if (!searchQuery.trim()) {
@@ -135,7 +163,8 @@ const ReferenceImagePickerModal: React.FC<ReferenceImagePickerModalProps> = ({
 
   // Count assets per tab
   const tabCounts = useMemo(() => {
-    const counts: Record<StoryObjectTab, number> = {
+    const counts: Record<PickerTab, number> = {
+      scene: sceneAssets.length,
       character: 0,
       location: 0,
       organization: 0,
@@ -147,10 +176,10 @@ const ReferenceImagePickerModal: React.FC<ReferenceImagePickerModalProps> = ({
     }
 
     return counts;
-  }, [groupedAssets]);
+  }, [groupedAssets, sceneAssets.length]);
 
-  // Handle asset selection
-  const handleSelect = useCallback((asset: Asset) => {
+  // Handle asset selection (works for both Asset and SceneAsset)
+  const handleSelect = useCallback((asset: Asset | SceneAsset) => {
     if (excludeAssetIds.includes(asset.id)) return;
     const thumbnailUrl = `${API_BASE_URL}${asset.thumbnail_url || asset.file_url}`;
     onImageSelected(asset.id, thumbnailUrl);
@@ -237,6 +266,35 @@ const ReferenceImagePickerModal: React.FC<ReferenceImagePickerModalProps> = ({
             <div className="picker-loading">Loading assets...</div>
           ) : error ? (
             <div className="picker-error">{error}</div>
+          ) : activeTab === 'scene' ? (
+            // Scene assets - flat grid (no grouping)
+            displaySceneAssets.length === 0 ? (
+              <div className="picker-empty">
+                No scene images found
+              </div>
+            ) : (
+              <div className="asset-grid scene-assets-grid">
+                {displaySceneAssets.map(asset => {
+                  const isExcluded = excludeAssetIds.includes(asset.id);
+                  return (
+                    <button
+                      key={asset.id}
+                      className={`asset-item ${isExcluded ? 'excluded' : ''}`}
+                      onClick={() => handleSelect(asset)}
+                      disabled={isExcluded}
+                      title={isExcluded ? 'Already selected' : asset.name}
+                    >
+                      <img
+                        src={`${API_BASE_URL}${asset.thumbnail_url || asset.file_url}`}
+                        alt={asset.name}
+                        loading="lazy"
+                      />
+                      {isExcluded && <div className="excluded-overlay">Selected</div>}
+                    </button>
+                  );
+                })}
+              </div>
+            )
           ) : displayGroups.length === 0 ? (
             <div className="picker-empty">
               No images found for {TAB_CONFIG.find(t => t.key === activeTab)?.label}

@@ -61,7 +61,7 @@ export async function* generateImage(
         const requestPayload = { ...request, api_key: apiKey };
 
         // Debug logging
-        console.group('🖼️ Image Generation Request');
+        console.group('Image Generation Request');
         console.log('Endpoint:', `/api/v1/assets/${projectId}/generate`);
         console.log('Provider:', request.provider);
         console.log('Model:', request.model);
@@ -80,7 +80,7 @@ export async function* generateImage(
         );
 
         // Debug logging for response
-        console.group('🖼️ Image Generation Response');
+        console.group('Image Generation Response');
         console.log('Success:', response.success);
         if (response.success) {
             console.log('Asset ID:', response.asset_id);

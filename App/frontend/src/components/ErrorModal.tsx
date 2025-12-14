@@ -1,5 +1,7 @@
 import React from 'react';
+import { useModalHistory } from '../hooks/useModalHistory';
 import type { NotificationType } from '../store/errorStore';
+import { Check, Warning, Info } from './icons';
 import './ErrorModal.css';
 
 interface ErrorModalProps {
@@ -11,10 +13,10 @@ interface ErrorModalProps {
   onClose: () => void;
 }
 
-const NOTIFICATION_CONFIG: Record<NotificationType, { icon: string; buttonClass: string }> = {
-  success: { icon: '✓', buttonClass: 'notification-ok-btn--success' },
-  error: { icon: '⚠️', buttonClass: 'notification-ok-btn--error' },
-  info: { icon: 'ℹ️', buttonClass: 'notification-ok-btn--info' },
+const NOTIFICATION_CONFIG: Record<NotificationType, { icon: React.ReactNode; buttonClass: string }> = {
+  success: { icon: <Check size={20} />, buttonClass: 'notification-ok-btn--success' },
+  error: { icon: <Warning size={20} />, buttonClass: 'notification-ok-btn--error' },
+  info: { icon: <Info size={20} />, buttonClass: 'notification-ok-btn--info' },
 };
 
 const ErrorModal: React.FC<ErrorModalProps> = ({
@@ -25,6 +27,8 @@ const ErrorModal: React.FC<ErrorModalProps> = ({
   detail,
   onClose
 }) => {
+  useModalHistory(isOpen, onClose);
+
   if (!isOpen) return null;
 
   const config = NOTIFICATION_CONFIG[type];

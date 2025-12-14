@@ -7,6 +7,7 @@ import type {
   ThinkingConfig,
 } from '../../store/settingsStore';
 import ModelBrowser from './ModelBrowser';
+import { Warning, Lightning, Settings } from '../icons';
 
 interface FunctionConfigFormProps {
   functionType: AIFunctionType;
@@ -191,7 +192,8 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
 
       {/* Advanced Settings */}
       <div className="config-section advanced-section">
-        <h4 className="section-title">Advanced Settings</h4>
+        <span className="advanced-warning-icon"><Warning size={20} /></span>
+        <h4 className="section-title"><Lightning size={18} />Advanced Settings</h4>
 
         <div className="advanced-options">
           <div className={`checkbox-field ${config.provider === 'openai' ? 'disabled' : ''}`}>
@@ -271,7 +273,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
             {/* Thinking Config (only shown for model mode) */}
             {config.advanced.thinkingMode === 'model' && (
               <div className="thinking-config">
-                <h5 className="subsection-title">Thinking Configuration</h5>
+                <h5 className="subsection-title"><Settings size={14} />Thinking Configuration</h5>
 
                 {/* Generic settings for OpenRouter/Custom/OpenAI */}
                 {config.provider !== 'claude' && config.provider !== 'gemini' && (

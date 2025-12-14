@@ -88,6 +88,7 @@ export interface StoryTranslationPromptContext extends BasePromptContext {
   targetLanguage: string;
   objectCount: number;
   objectsArray: Record<string, any>[];
+  contextData?: Record<string, any>;
   isNativeOutput?: boolean;
 }
 

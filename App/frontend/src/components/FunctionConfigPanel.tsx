@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { type FunctionAIConfig, type ProviderType, type AIFunctionType, type ProviderCredentials } from '../store/settingsStore';
 import { fetchModels } from '../llm/llmService';
+import { Expand, Collapse } from './icons';
+import { ChevronUp, ChevronDown } from './icons';
 
 interface FunctionMetadata {
     label: string;
@@ -85,7 +87,7 @@ const FunctionConfigPanel: React.FC<FunctionConfigPanelProps> = ({
                 <span className="model-badge">
                     {config.provider} / {config.model}
                 </span>
-                <span className="expand-icon">{isExpanded ? '▼' : '▶'}</span>
+                <span className="expand-icon">{isExpanded ? <Collapse size={12} /> : <Expand size={12} />}</span>
             </div>
 
             {/* Content (expandable) */}
@@ -161,7 +163,7 @@ const FunctionConfigPanel: React.FC<FunctionConfigPanelProps> = ({
                             onClick={toggleModels}
                             className="models-expand-btn"
                         >
-                            {showModels ? 'Hide Models ▲' : 'Show Available Models ▼'}
+                            {showModels ? <><ChevronUp size={12} /> Hide Models</> : <>Show Available Models <ChevronDown size={12} /></>}
                         </button>
 
                         {showModels && (

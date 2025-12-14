@@ -41,6 +41,60 @@ For manuscript objects, use `content` instead of `name` and `description`:
 5. **Natural Language**: Ensure all translations sound natural and fluent in the target language, not mechanical.
 6. **Completeness**: Translate EVERY object in the provided payload without skipping any.
 
+{% if state.hasContext %}
+## Reference Context (Already Translated to {{ variable.targetLanguage }})
+
+Use the following already-translated content as reference to maintain consistent terminology, naming, and style:
+
+{% if context.contextData.basicInfo %}
+### Story Info
+- **Title**: {{ context.contextData.basicInfo.title }}
+- **Logline**: {{ context.contextData.basicInfo.logline }}
+- **Genre**: {{ context.contextData.basicInfo.genre }}
+{% endif %}
+
+{% if context.contextData.characters %}
+### Characters
+{% for char in context.contextData.characters %}
+- **{{ char.name }}**: {{ char.description | truncate(200) }}
+{% endfor %}
+{% endif %}
+
+{% if context.contextData.organizations %}
+### Organizations
+{% for org in context.contextData.organizations %}
+- **{{ org.name }}**: {{ org.description | truncate(200) }}
+{% endfor %}
+{% endif %}
+
+{% if context.contextData.locations %}
+### Locations
+{% for loc in context.contextData.locations %}
+- **{{ loc.name }}**: {{ loc.description | truncate(200) }}
+{% endfor %}
+{% endif %}
+
+{% if context.contextData.lorebook %}
+### World Details
+{% for entry in context.contextData.lorebook %}
+- **{{ entry.name }}**: {{ entry.description | truncate(200) }}
+{% endfor %}
+{% endif %}
+
+{% if context.contextData.outline %}
+### Story Outline
+{% for act in context.contextData.outline.acts %}
+#### {{ act.name }}
+{{ act.description | truncate(150) }}
+{% for chapter in act.chapters %}
+- {{ chapter.name }}: {{ chapter.description | truncate(100) }}
+{% endfor %}
+{% endfor %}
+{% endif %}
+
+**Important**: Use the exact names and terminology from this reference context when translating.
+{% endif %}
+
 {% if not state.isNativeOutput %}
 ## Available Translation Functions
 

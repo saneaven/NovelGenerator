@@ -41,6 +41,7 @@
   right: auto;
   left: auto;
   margin-top: 0;
+  z-index: var(--z-max);
 }
 
 @keyframes dropdownIn {

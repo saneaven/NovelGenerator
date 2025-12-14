@@ -27,59 +27,47 @@ export const PROMPT_SCHEMAS = {
     },
     context: {
       storyContext: {
-        desc: "Full story objects - template author chooses which fields to use. Contains: basicInfo (id, createdAt, updatedAt, title, logline, genre), characters/organizations/locations/lorebook (id, createdAt, updatedAt, name, description), acts (id, createdAt, updatedAt, name, description, chapters[]), chapters (id, createdAt, updatedAt, name, description, actId)",
+        desc: "Full story objects - template author chooses which fields to use. Contains: basicInfo (id, title, logline, genre), characters/organizations/locations/lorebook (id, name, description), outline.acts (id, name, description, chapters[]), outline.acts[].chapters (id, name, description, actId)",
         example: {
           basicInfo: {
             id: "abc123",
-            createdAt: "2025-01-01T00:00:00Z",
-            updatedAt: "2025-01-02T00:00:00Z",
             title: "The Last Kingdom",
             logline: "A warrior's journey to reclaim his homeland",
             genre: "Fantasy"
           },
           characters: [{
             id: "char1",
-            createdAt: "2025-01-01T00:00:00Z",
-            updatedAt: "2025-01-02T00:00:00Z",
             name: "Uhtred",
             description: "A Saxon lord raised by Danes..."
           }],
           organizations: [{
             id: "org1",
-            createdAt: "2025-01-01T00:00:00Z",
-            updatedAt: "2025-01-02T00:00:00Z",
             name: "The Saxon Army",
             description: "King Alfred's military force..."
           }],
           locations: [{
             id: "loc1",
-            createdAt: "2025-01-01T00:00:00Z",
-            updatedAt: "2025-01-02T00:00:00Z",
             name: "Bebbanburg",
             description: "A fortress on the northern coast..."
           }],
           lorebook: [{
             id: "lore1",
-            createdAt: "2025-01-01T00:00:00Z",
-            updatedAt: "2025-01-02T00:00:00Z",
             name: "Dane Law",
             description: "The legal system of the Danish settlers..."
           }],
-          acts: [{
-            id: "act1",
-            createdAt: "2025-01-01T00:00:00Z",
-            updatedAt: "2025-01-02T00:00:00Z",
-            name: "Act 1: The Fall",
-            description: "Uhtred loses his birthright...",
-            chapters: [{
-              id: "ch1",
-              createdAt: "2025-01-01T00:00:00Z",
-              updatedAt: "2025-01-02T00:00:00Z",
-              name: "Chapter 1: The Raid",
-              description: "Danish raiders attack Bebbanburg...",
-              actId: "act1"
+          outline: {
+            acts: [{
+              id: "act1",
+              name: "Act 1: The Fall",
+              description: "Uhtred loses his birthright...",
+              chapters: [{
+                id: "ch1",
+                name: "Chapter 1: The Raid",
+                description: "Danish raiders attack Bebbanburg...",
+                actId: "act1"
+              }]
             }]
-          }]
+          }
         } as Record<string, any> | null
       },
       novelContent: {

@@ -490,8 +490,9 @@ async def update_object(
 
     db.commit()
 
-    # Return updated object
-    return await get_object(object_type, object_id, request.language, db, current_user)
+    # Return updated object with ALL languages (not just the edited one)
+    # Frontend replaces the entire object, so we need to return all languages
+    return await get_object(object_type, object_id, None, db, current_user)
 
 
 @router.post("/objects/{object_type}/{object_id}/translations")

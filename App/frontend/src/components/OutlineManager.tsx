@@ -6,6 +6,8 @@ import { useErrorStore } from '../store/errorStore';
 import AIEditModal from './AIEditModal';
 import TranslationModal from './TranslationModal';
 import { DropdownMenu, DropdownItem, DropdownDivider } from './ui/DropdownMenu';
+import { Expand, Collapse, Plus, Edit, Trash, Refresh, AIAssist, Books } from './icons';
+import { Warning } from './icons';
 import type { ActObject, ChapterObject } from '../types/unifiedObject';
 
 interface OutlineManagerProps {
@@ -382,14 +384,14 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
             className="collapse-control-btn desktop-only"
             title="Expand All"
           >
-            ▼ Expand
+            <Collapse size={12} /> Expand
           </button>
           <button
             onClick={collapseAll}
             className="collapse-control-btn desktop-only"
             title="Collapse All"
           >
-            ▶ Collapse
+            <Expand size={12} /> Collapse
           </button>
           <button
             onClick={() => setShowAIModal(true)}
@@ -412,23 +414,23 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
             }
           >
             <DropdownItem
-              icon="▼"
+              icon={<Collapse size={14} />}
               label="Expand All"
               onClick={expandAll}
             />
             <DropdownItem
-              icon="▶"
+              icon={<Expand size={14} />}
               label="Collapse All"
               onClick={collapseAll}
             />
             <DropdownDivider />
             <DropdownItem
-              icon="🤖"
+              icon={<AIAssist size={14} />}
               label="AI Edit"
               onClick={() => setShowAIModal(true)}
             />
             <DropdownItem
-              icon="➕"
+              icon={<Plus size={14} />}
               label="Add Act"
               onClick={() => setShowAddActForm(true)}
               disabled={showAddActForm}
@@ -465,11 +467,11 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
                       onClick={() => toggleItemExpand(act.id)}
                       title={expandedItems.has(act.id) ? 'Collapse' : 'Expand'}
                     >
-                      {expandedItems.has(act.id) ? '▼' : '▶'}
+                      {expandedItems.has(act.id) ? <Collapse size={12} /> : <Expand size={12} />}
                     </button>
                     <span className="act-number">Act {actIndex + 1}</span>
                     <h3 onClick={() => toggleItemExpand(act.id)} className="item-name-clickable">{actData.name}</h3>
-                    {actIsFallback && <span className="fallback-warning" title={`${globalDisplayLanguage} not available`}>⚠️</span>}
+                    {actIsFallback && <span className="fallback-warning" title={`${globalDisplayLanguage} not available`}><Warning size={14} /></span>}
                   </div>
                   <div className="card-actions">
                     <button
@@ -494,14 +496,14 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
                       }
                     >
                       <DropdownItem
-                        icon="✏️"
+                        icon={<Edit size={14} />}
                         label="Edit"
                         onClick={() => setEditingAct(act.id)}
                         disabled={!!store.loading[act.id]}
                         className="mobile-only"
                       />
                       <DropdownItem
-                        icon="➕"
+                        icon={<Plus size={14} />}
                         label="Add Chapter"
                         onClick={() => setShowAddChapterForm(act.id)}
                         disabled={showAddChapterForm === act.id}
@@ -511,21 +513,21 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
                       {settings.settings.defaultSubLanguage &&
                         Object.keys(act.data).includes(settings.settings.defaultSubLanguage) && (
                           <DropdownItem
-                            icon="🔄"
+                            icon={<Refresh size={14} />}
                             label="Retranslate"
                             onClick={() => setShowActRetranslateModal(act.id)}
                             disabled={!!store.loading[act.id]}
                           />
                       )}
                       <DropdownItem
-                        icon="📚"
+                        icon={<Books size={14} />}
                         label="History"
                         onClick={() => setShowActVersionHistory(act.id)}
                         disabled={!!store.loading[act.id]}
                       />
                       <DropdownDivider />
                       <DropdownItem
-                        icon="🗑️"
+                        icon={<Trash size={14} />}
                         label="Delete"
                         onClick={() => handleDeleteAct(act.id)}
                         variant="danger"
@@ -571,13 +573,13 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
                             onClick={() => toggleItemExpand(chapter.id)}
                             title={expandedItems.has(chapter.id) ? 'Collapse' : 'Expand'}
                           >
-                            {expandedItems.has(chapter.id) ? '▼' : '▶'}
+                            {expandedItems.has(chapter.id) ? <Collapse size={12} /> : <Expand size={12} />}
                           </button>
                           <span className="chapter-number">
                             Chapter {chapterIndex + 1}
                           </span>
                           <h4 onClick={() => toggleItemExpand(chapter.id)} className="item-name-clickable">{chapterData.name}</h4>
-                          {chapterIsFallback && <span className="fallback-warning" title={`${globalDisplayLanguage} not available`}>⚠️</span>}
+                          {chapterIsFallback && <span className="fallback-warning" title={`${globalDisplayLanguage} not available`}><Warning size={14} /></span>}
                         </div>
                         <div className="card-actions">
                           <button
@@ -595,7 +597,7 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
                             }
                           >
                             <DropdownItem
-                              icon="✏️"
+                              icon={<Edit size={14} />}
                               label="Edit"
                               onClick={() => setEditingChapter(chapter.id)}
                               disabled={!!store.loading[chapter.id]}
@@ -604,21 +606,21 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
                             {settings.settings.defaultSubLanguage &&
                               Object.keys(chapter.data).includes(settings.settings.defaultSubLanguage) && (
                                 <DropdownItem
-                                  icon="🔄"
+                                  icon={<Refresh size={14} />}
                                   label="Retranslate"
                                   onClick={() => setShowChapterRetranslateModal(chapter.id)}
                                   disabled={!!store.loading[chapter.id]}
                                 />
                             )}
                             <DropdownItem
-                              icon="📚"
+                              icon={<Books size={14} />}
                               label="History"
                               onClick={() => setShowChapterVersionHistory(chapter.id)}
                               disabled={!!store.loading[chapter.id]}
                             />
                             <DropdownDivider />
                             <DropdownItem
-                              icon="🗑️"
+                              icon={<Trash size={14} />}
                               label="Delete"
                               onClick={() => handleDeleteChapter(chapter.id)}
                               variant="danger"
@@ -842,7 +844,7 @@ const EditActForm: React.FC<EditActFormProps> = ({ actData, onUpdate, onCancel, 
         </div>
         <div className="form-actions-split">
           <button type="button" onClick={onAIEdit} className="ai-edit-btn">
-            🤖 AI Edit
+            <AIAssist size={14} /> AI Edit
           </button>
           <div className="form-actions-right">
             <button type="button" onClick={onCancel} className="cancel-button">
@@ -963,7 +965,7 @@ const EditChapterForm: React.FC<EditChapterFormProps> = ({ chapterData, onUpdate
         </div>
         <div className="form-actions-split">
           <button type="button" onClick={onAIEdit} className="ai-edit-btn">
-            🤖 AI Edit
+            <AIAssist size={14} /> AI Edit
           </button>
           <div className="form-actions-right">
             <button type="button" onClick={onCancel} className="cancel-button">

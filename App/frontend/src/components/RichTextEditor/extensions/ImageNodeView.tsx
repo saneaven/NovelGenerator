@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import { NodeViewWrapper } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/core';
 import type { Asset } from '../../../api/assetService';
+import { Refresh, Shuffle, Trash } from '../../icons';
 import './ImageNodeView.css';
 
 // Storage keys for extension callbacks
@@ -186,7 +187,7 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
                                 title="Regenerate image"
                                 disabled={isLoadingAsset}
                             >
-                                🔄
+                                <Refresh size={16} />
                             </button>
                         )}
 
@@ -196,7 +197,7 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
                             onClick={handleReplace}
                             title="Replace image"
                         >
-                            🔀
+                            <Shuffle size={16} />
                         </button>
                     </div>
 
@@ -207,7 +208,7 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
                         onClick={handleDelete}
                         title="Remove image"
                     >
-                        🗑️
+                        <Trash size={16} />
                     </button>
                 </div>
             )}

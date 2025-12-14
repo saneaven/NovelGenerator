@@ -3,12 +3,10 @@
  */
 
 import React, { useState, useRef, useCallback, useMemo } from 'react';
+import { useModalHistory } from '../../hooks/useModalHistory';
 import { useProjectStore } from '../../store/projectStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import { useLLMTaskStore } from '../../store/llmTaskStore';
-import { useLLMToast } from '../../hooks/useLLMToast';
-import { generateTempId } from '../../utils/tempId';
-import { LLMTask, LLMTaskMode, type SceneImagePromptContext, type SelectedObjectContext } from '../../llm';
+import { LLMTask, LLMTaskMode, LLMTaskManager, type SceneImagePromptContext, type SelectedObjectContext } from '../../llm';
 import './ScenePromptAssistModal.css';
 
 export type PromptMode = 'natural' | 'positive' | 'negative';
@@ -44,8 +42,6 @@ interface ScenePromptAssistModalProps {
   allStoryObjects: ImageReferenceObject[];
 }
 
-const createSessionId = () => `scene-prompt-assist-${generateTempId()}`;
-
 const getSavedImagePrompt = (obj: ImageReferenceObject, mode: PromptMode): string | undefined => {
   if (!obj.metadata) return undefined;
   switch (mode) {
@@ -63,24 +59,15 @@ const ScenePromptAssistModal: React.FC<ScenePromptAssistModalProps> = ({
   promptMode,
   allStoryObjects,
 }) => {
+  useModalHistory(isOpen, onClose);
   const { currentProjectId } = useProjectStore();
   const { settings } = useSettingsStore();
 
   const [userRequest, setUserRequest] = useState('');
   const [excludedObjectIds, setExcludedObjectIds] = useState<Set<string>>(new Set());
 
-  const sessionIdRef = useRef<string>(createSessionId());
-  const sessionId = sessionIdRef.current;
   const abortControllerRef = useRef<AbortController | null>(null);
   const taskRef = useRef<LLMTask | null>(null);
-
-  const { startTask, completeSuccess, completeError, completeCancelled } = useLLMToast({
-    sessionId,
-    taskType: 'scene-image',
-    label: 'Scene Prompt Generation',
-  });
-
-  const updateSession = useLLMTaskStore((state) => state.updateSession);
 
   const handleToggleObject = useCallback((objId: string) => {
     setExcludedObjectIds(prev => {
@@ -105,10 +92,15 @@ const ScenePromptAssistModal: React.FC<ScenePromptAssistModalProps> = ({
   };
 
   const handleGenerate = useCallback(async () => {
-    startTask({
+    // Start task via LLMTaskManager - returns a handle with bound completion functions
+    const task = LLMTaskManager.startTask({
       taskType: 'scene-image',
-      modalProps: { sceneContext, allStoryObjects, onPromptGenerated, promptMode },
-      formState: { userRequest, excludedObjectIds: Array.from(excludedObjectIds) },
+      label: 'Scene Prompt Generation',
+      retryContext: {
+        taskType: 'scene-image',
+        modalProps: { sceneContext, allStoryObjects, onPromptGenerated, promptMode },
+        formState: { userRequest, excludedObjectIds: Array.from(excludedObjectIds) },
+      },
     });
 
     onClose();
@@ -144,7 +136,7 @@ const ScenePromptAssistModal: React.FC<ScenePromptAssistModalProps> = ({
           projectId: currentProjectId || '',
           promptContext,
           abortControllerRef,
-          sessionId,
+          sessionId: task.sessionId,
           provider: imagePromptConfig.provider,
           providerConfig,
           model: imagePromptConfig.model,
@@ -163,23 +155,17 @@ const ScenePromptAssistModal: React.FC<ScenePromptAssistModalProps> = ({
 
             if (text.trim()) {
               onPromptGenerated({ prompt: text.trim(), mode: promptMode });
-              updateSession(sessionId, { status: 'success' });
-              completeSuccess();
+              task.complete();
             } else {
-              const errorMsg = 'AI did not generate a prompt.';
-              updateSession(sessionId, { status: 'error', error: errorMsg });
-              completeError(errorMsg);
+              task.error('AI did not generate a prompt.');
             }
           },
           onError: (err) => {
             if (err.name === 'AbortError') {
-              updateSession(sessionId, { status: 'cancelled' });
-              completeCancelled();
-              return;
+              task.cancel();
+            } else {
+              task.error(err.message || 'Failed to generate prompt');
             }
-            const errorMsg = err.message || 'Failed to generate prompt';
-            updateSession(sessionId, { status: 'error', error: errorMsg });
-            completeError(errorMsg);
           },
         }
       );
@@ -187,13 +173,10 @@ const ScenePromptAssistModal: React.FC<ScenePromptAssistModalProps> = ({
       await taskRef.current.run();
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        updateSession(sessionId, { status: 'cancelled' });
-        completeCancelled();
+        task.cancel();
         return;
       }
-      const errorMsg = err instanceof Error ? err.message : 'Failed to generate prompt';
-      updateSession(sessionId, { status: 'error', error: errorMsg });
-      completeError(errorMsg);
+      task.error(err instanceof Error ? err.message : 'Failed to generate prompt');
     } finally {
       taskRef.current = null;
     }
@@ -206,14 +189,8 @@ const ScenePromptAssistModal: React.FC<ScenePromptAssistModalProps> = ({
     userRequest,
     promptMode,
     excludedObjectIds,
-    sessionId,
-    startTask,
     onClose,
     onPromptGenerated,
-    updateSession,
-    completeSuccess,
-    completeError,
-    completeCancelled,
   ]);
 
   if (!isOpen) return null;

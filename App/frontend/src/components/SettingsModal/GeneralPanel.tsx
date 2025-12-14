@@ -1,6 +1,7 @@
 import React from 'react';
 import type { AIFunctionType, FunctionAIConfig, ProviderCredentials } from '../../store/settingsStore';
 import FunctionConfigForm from './FunctionConfigForm';
+import { Chat, Globe, Edit, Document, Palette } from '../icons';
 import './GeneralPanel.css';
 
 interface GeneralPanelProps {
@@ -17,12 +18,12 @@ interface GeneralPanelProps {
   onConfigChange: (functionType: AIFunctionType, config: FunctionAIConfig) => void;
 }
 
-const FUNCTION_LABELS = {
-  chat: { icon: '💬', label: 'Chat' },
-  translation: { icon: '🌐', label: 'Translation' },
-  storyObjectEdit: { icon: '✏️', label: 'Story Object Edit' },
-  chapterGen: { icon: '📝', label: 'Chapter Gen' },
-  imagePrompt: { icon: '🎨', label: 'Image Prompt' },
+const FUNCTION_LABELS: Record<AIFunctionType, { icon: React.ReactNode; label: string }> = {
+  chat: { icon: <Chat size={14} />, label: 'Chat' },
+  translation: { icon: <Globe size={14} />, label: 'Translation' },
+  storyObjectEdit: { icon: <Edit size={14} />, label: 'Story Object Edit' },
+  chapterGen: { icon: <Document size={14} />, label: 'Chapter Gen' },
+  imagePrompt: { icon: <Palette size={14} />, label: 'Image Prompt' },
 };
 
 const FUNCTION_DESCRIPTIONS = {

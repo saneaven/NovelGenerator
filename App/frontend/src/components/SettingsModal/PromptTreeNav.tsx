@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { PromptNode } from './promptTree';
+import { Expand, Collapse, Bullet } from '../icons';
 import './PromptTreeNav.css';
 
 interface PromptTreeNavProps {
@@ -50,7 +51,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
         {/* Expand/collapse icon for categories */}
         {isCategory && hasChildren && (
           <span className="tree-node-expand-icon">
-            {isExpanded ? '▼' : '▶'}
+            {isExpanded ? <Collapse size={10} /> : <Expand size={10} />}
           </span>
         )}
 
@@ -64,7 +65,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 
         {/* Bullet for prompt nodes */}
         {!isCategory && (
-          <span className="tree-node-bullet">•</span>
+          <span className="tree-node-bullet"><Bullet size={6} /></span>
         )}
       </div>
 

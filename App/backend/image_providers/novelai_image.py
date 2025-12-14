@@ -60,6 +60,10 @@ class NovelAIImageProvider(BaseImageProvider):
     def get_supported_styles(self) -> List[str]:
         return ["natural"]
 
+    def supports_image_input(self) -> bool:
+        """NovelAI supports both i2i and Vibe Transfer"""
+        return True
+
     def get_settings_schema(self) -> Optional[Dict]:
         """Return NovelAI-specific settings schema"""
         return {
@@ -98,6 +102,54 @@ class NovelAIImageProvider(BaseImageProvider):
                     {"value": "exponential", "label": "Exponential"},
                 ],
                 "default": "karras"
+            },
+            # Reference image settings (i2i / Vibe Transfer)
+            "referenceMode": {
+                "type": "select",
+                "label": "Reference Mode",
+                "options": [
+                    {"value": "auto", "label": "Auto (1 img = Transform, 2+ = Vibe)"},
+                    {"value": "i2i", "label": "Image-to-Image (transform)"},
+                    {"value": "vibe", "label": "Vibe Transfer (style inspiration)"},
+                ],
+                "default": "auto",
+                "showWhen": "hasReferenceImages"
+            },
+            "strength": {
+                "type": "number",
+                "label": "Transformation Strength",
+                "min": 0.0,
+                "max": 1.0,
+                "step": 0.05,
+                "default": 0.7,
+                "showWhen": "i2iMode"
+            },
+            "i2iNoise": {
+                "type": "number",
+                "label": "Detail Addition",
+                "min": 0.0,
+                "max": 1.0,
+                "step": 0.05,
+                "default": 0.0,
+                "showWhen": "i2iMode"
+            },
+            "vibeStrength": {
+                "type": "number",
+                "label": "Style Influence",
+                "min": 0.0,
+                "max": 1.0,
+                "step": 0.05,
+                "default": 0.6,
+                "showWhen": "vibeMode"
+            },
+            "vibeInfoExtracted": {
+                "type": "number",
+                "label": "Info Extraction",
+                "min": 0.0,
+                "max": 1.0,
+                "step": 0.05,
+                "default": 1.0,
+                "showWhen": "vibeMode"
             }
         }
 
@@ -154,11 +206,23 @@ class NovelAIImageProvider(BaseImageProvider):
         scale = settings.get("scale", 6)
         noise_schedule = settings.get("noise_schedule", "karras")
 
+        # Determine reference image mode
+        has_reference = reference_images is not None and len(reference_images) > 0
+        reference_mode = settings.get("referenceMode", "auto")
+
+        # Auto mode: 1 image = i2i, 2+ images = vibe
+        if has_reference and reference_mode == "auto":
+            reference_mode = "i2i" if len(reference_images) == 1 else "vibe"
+
         # Build request payload for V4.5
+        action = "generate"
+        if has_reference and reference_mode == "i2i":
+            action = "img2img"
+
         payload = {
             "input": final_positive,
             "model": model,
-            "action": "generate",
+            "action": action,
             "parameters": {
                 "params_version": 3,
                 "width": width,
@@ -195,6 +259,34 @@ class NovelAIImageProvider(BaseImageProvider):
                 }
             }
         }
+
+        # Add reference image parameters based on mode
+        if reference_images is not None and len(reference_images) > 0:
+            if reference_mode == "i2i":
+                # Image-to-Image: Use first image as base to transform
+                ref_image = reference_images[0]
+                image_b64 = base64.b64encode(ref_image.image_data).decode('utf-8')
+
+                payload["parameters"]["image"] = image_b64
+                payload["parameters"]["strength"] = settings.get("strength", 0.7)
+                payload["parameters"]["noise"] = settings.get("i2iNoise", 0.0)
+
+            else:  # vibe transfer
+                # Vibe Transfer: Use all images as style inspiration
+                vibe_strength = settings.get("vibeStrength", 0.6)
+                vibe_info = settings.get("vibeInfoExtracted", 1.0)
+
+                payload["parameters"]["reference_image_multiple"] = [
+                    base64.b64encode(ref.image_data).decode('utf-8')
+                    for ref in reference_images
+                ]
+                payload["parameters"]["reference_strength_multiple"] = [
+                    ref.strength if ref.strength else vibe_strength
+                    for ref in reference_images
+                ]
+                payload["parameters"]["reference_information_extracted_multiple"] = [
+                    vibe_info for _ in reference_images
+                ]
 
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:

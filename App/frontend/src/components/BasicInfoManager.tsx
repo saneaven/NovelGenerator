@@ -14,6 +14,7 @@ import AIEditModal from './AIEditModal';
 import VersionHistoryModal from './VersionHistoryModal';
 import TranslationModal from './TranslationModal';
 import { DropdownMenu, DropdownItem } from './ui/DropdownMenu';
+import { Edit, Refresh, Books, AIAssist, Warning } from './icons';
 import type { BasicInfoObject, BasicInfoData } from '../types/unifiedObject';
 
 interface BasicInfoManagerProps {
@@ -294,7 +295,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
               }
             >
               <DropdownItem
-                icon="✏️"
+                icon={<Edit size={14} />}
                 label="Edit"
                 onClick={handleEdit}
                 disabled={loading}
@@ -303,14 +304,14 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
               {settings.defaultSubLanguage &&
                 Object.keys(basicInfo.data).includes(settings.defaultSubLanguage) && (
                   <DropdownItem
-                    icon="🔄"
+                    icon={<Refresh size={14} />}
                     label="Retranslate"
                     onClick={() => setShowRetranslateModal(true)}
                     disabled={loading}
                   />
               )}
               <DropdownItem
-                icon="📚"
+                icon={<Books size={14} />}
                 label="History"
                 onClick={() => setShowVersionHistory(true)}
                 disabled={loading}
@@ -324,7 +325,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
               className="ai-edit-btn"
               disabled={isSaving}
             >
-              🤖 AI Edit
+              <AIAssist size={14} /> AI Edit
             </button>
             <div className="form-actions-right">
               <button
@@ -407,7 +408,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
         {/* Metadata */}
         <div className="metadata">
           <span className="item-language">
-            {isFallback && <span className="fallback-warning" title={`${globalDisplayLanguage} not available, showing ${effectiveLanguage}`}>⚠️ </span>}
+            {isFallback && <span className="fallback-warning" title={`${globalDisplayLanguage} not available, showing ${effectiveLanguage}`}><Warning size={14} /> </span>}
             Language: {effectiveLanguage}
           </span>
           <span className="version-info">

@@ -39,6 +39,7 @@ export {
     GEMINI_RESOLUTIONS,
     NOVELAI_SAMPLERS,
     NOVELAI_NOISE_SCHEDULES,
+    NOVELAI_REFERENCE_MODES,
     PROVIDER_PROMPT_TYPES,
     PROVIDER_SUPPORTS_IMAGE_INPUT,
     DEFAULT_OPENAI_SETTINGS,
@@ -51,6 +52,7 @@ export {
     getDefaultSize,
     type ProviderCredentials,
     type ProviderMetadata,
+    type NovelAIReferenceMode,
 } from './config/providerConfig';
 
 // Service (for advanced usage)

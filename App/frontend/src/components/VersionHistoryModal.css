@@ -34,10 +34,8 @@
   flex: 1;
 }
 
-.version-history-modal .modal-header h2::before {
-  content: '📜';
-  font-size: var(--font-size-3xl);
-  line-height: 1;
+.version-history-modal .modal-header h2 svg {
+  flex-shrink: 0;
 }
 
 .version-history-modal .modal-close {
@@ -79,9 +77,8 @@
   animation: pulse 1.5s ease-in-out infinite;
 }
 
-.loading-state::before {
-  content: '⏳';
-  font-size: var(--font-size-3xl);
+.loading-state svg {
+  flex-shrink: 0;
   margin-right: var(--spacing-md);
 }
 
@@ -96,9 +93,7 @@
   text-align: center;
 }
 
-.empty-state::before {
-  content: '📭';
-  font-size: 4rem;
+.empty-state svg {
   margin-bottom: var(--spacing-xl);
   opacity: 0.5;
 }
@@ -233,9 +228,8 @@
   animation: slideInRight 0.3s ease-out;
 }
 
-.active-badge::before {
-  content: '✓';
-  font-size: var(--font-size-sm);
+.active-badge svg {
+  flex-shrink: 0;
 }
 
 .version-languages-badge {
@@ -251,9 +245,8 @@
   font-weight: 500;
 }
 
-.version-languages-badge::before {
-  content: '🌐';
-  font-size: var(--font-size-xs);
+.version-languages-badge svg {
+  flex-shrink: 0;
 }
 
 /* Version Metadata */
@@ -274,9 +267,7 @@
   word-break: break-word;
 }
 
-.version-timestamp::before {
-  content: '🕒';
-  font-size: var(--font-size-sm);
+.version-timestamp svg {
   flex-shrink: 0;
 }
 
@@ -291,9 +282,7 @@
   overflow-wrap: break-word;
 }
 
-.version-request::before {
-  content: '💬';
-  font-size: var(--font-size-sm);
+.version-request svg {
   flex-shrink: 0;
   margin-top: 2px;
 }
@@ -369,9 +358,8 @@
   gap: var(--spacing-sm);
 }
 
-.version-content h4::before {
-  content: '📄';
-  font-size: var(--font-size-lg);
+.version-content h4 svg {
+  flex-shrink: 0;
 }
 
 /* Version Data Display */
@@ -463,8 +451,8 @@
   gap: var(--spacing-xs);
 }
 
-.version-languages small::before {
-  content: '🌐';
+.version-languages small svg {
+  flex-shrink: 0;
 }
 
 /* Footer */

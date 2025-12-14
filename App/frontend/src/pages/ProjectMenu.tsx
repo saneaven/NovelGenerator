@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useProjectStore } from '../store/projectStore';
+import { Building, Document, ArrowRight, ArrowLeft } from '../components/icons';
 
 const ProjectMenu: React.FC = () => {
   const navigate = useNavigate();
@@ -66,23 +67,23 @@ const ProjectMenu: React.FC = () => {
 
       <div className="menu-grid">
         <div className="menu-card" onClick={handleWorkspaceClick}>
-          <div className="menu-icon">🏢</div>
+          <div className="menu-icon"><Building size={32} /></div>
           <h3>Workspace</h3>
           <p>Unified workspace with AI chat and story editing</p>
-          <div className="menu-arrow">→</div>
+          <div className="menu-arrow"><ArrowRight size={16} /></div>
         </div>
 
         <div className="menu-card" onClick={handleNovelEditorClick}>
-          <div className="menu-icon">📝</div>
+          <div className="menu-icon"><Document size={32} /></div>
           <h3>Novel Editor</h3>
           <p>Write your novel with a structured editor</p>
-          <div className="menu-arrow">→</div>
+          <div className="menu-arrow"><ArrowRight size={16} /></div>
         </div>
 
       </div>
 
       <button className="back-home-btn mobile-only" onClick={() => navigate('/')}>
-        ← Back to Home
+        <ArrowLeft size={14} /> Back to Home
       </button>
     </div>
   );

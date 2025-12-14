@@ -60,9 +60,9 @@ Based on your previous suggestions, the user made the following decisions:
 {% endfor %}
 {% endif %}
 
-{% if context.storyContext.acts.size > 0 %}
+{% if context.storyContext.outline and context.storyContext.outline.acts.size > 0 %}
 ## Story Outline
-{% for act in context.storyContext.acts %}
+{% for act in context.storyContext.outline.acts %}
 ### {{ act.name }}
 {{ act.description }}
 {% for ch in act.chapters %}
@@ -72,27 +72,14 @@ Based on your previous suggestions, the user made the following decisions:
 {% endif %}
 {% endif %}
 
-{% if context.novelContent %}
+{% if context.novelContent.size > 0 %}
 # Current Novel Content
-```json
-{{ context.novelContent | json }}
-```
-{% endif %}
 
-{% if context.customSections.size > 0 %}
-{% for section in context.customSections %}
-# {{ section.heading }}
-{% if section.format == 'json' %}
-```json
-{{ section.content | json }}
-```
-{% elsif section.format == 'text' %}
-```text
-{{ section.content }}
-```
-{% else %}
-{{ section.content }}
-{% endif %}
+{% for item in context.novelContent %}
+{% assign manuscript = item[1] %}
+## {{ manuscript.chapterName }} [ID: {{ manuscript.chapterId }}]
+{{ manuscript.content }}
+
 {% endfor %}
 {% endif %}
 

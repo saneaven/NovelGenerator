@@ -1,5 +1,6 @@
 import React from 'react';
 import type { LLMTaskSessionState } from '../../store/llmTaskStore';
+import { Check, Close } from '../icons';
 import ToastProgressBar from './ToastProgressBar';
 import './ToastItem.css';
 
@@ -35,11 +36,11 @@ const ToastItem: React.FC<ToastItemProps> = ({
           </div>
         );
       case 'success':
-        return <span className="toast-icon toast-icon--success">&#10003;</span>;
+        return <span className="toast-icon toast-icon--success"><Check size={14} /></span>;
       case 'error':
         return <span className="toast-icon toast-icon--error">!</span>;
       case 'cancelled':
-        return <span className="toast-icon toast-icon--cancelled">&#10005;</span>;
+        return <span className="toast-icon toast-icon--cancelled"><Close size={14} /></span>;
       default:
         return null;
     }
@@ -97,7 +98,7 @@ const ToastItem: React.FC<ToastItemProps> = ({
           title="Dismiss"
           aria-label="Dismiss notification"
         >
-          &#10005;
+          <Close size={12} />
         </button>
       </div>
 

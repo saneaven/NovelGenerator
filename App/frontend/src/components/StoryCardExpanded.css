@@ -33,7 +33,7 @@
     position: absolute;
     top: var(--spacing-md);
     right: var(--spacing-md);
-    z-index: 10;
+    z-index: var(--z-button);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -78,6 +78,7 @@
 .expanded-content-section {
     order: 2; /* Visually second (right column) */
     position: relative;
+    z-index: var(--z-content);
     display: flex;
     flex-direction: column;
     min-height: 0;

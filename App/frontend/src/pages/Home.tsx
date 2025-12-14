@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../store/projectStore';
 import { useAuthStore } from '../store/authStore';
 import SettingsModal from '../components/SettingsModal/SettingsModal';
+import { Settings, Logout, Close } from '../components/icons';
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
@@ -92,14 +93,14 @@ const Home: React.FC = () => {
               onClick={() => setIsSettingsModalOpen(true)}
               title="Settings"
             >
-              ⚙️
+              <Settings size={18} />
             </button>
             <button
               className="settings-btn"
               onClick={handleLogout}
               title="Logout"
             >
-              🚪
+              <Logout size={18} />
             </button>
           </div>
         </div>
@@ -193,7 +194,7 @@ const Home: React.FC = () => {
                   onClick={(e) => handleDeleteProject(project.id, e)}
                   title="Delete project"
                 >
-                  ✕
+                  <Close size={14} />
                 </button>
               </div>
             ))}

@@ -102,7 +102,6 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
             position: 'absolute',
             top: menuPosition.top,
             left: menuPosition.left,
-            zIndex: 9999,
           }}
         >
           {React.Children.map(children, (child) => {
@@ -127,7 +126,7 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
 };
 
 interface DropdownItemProps {
-  icon?: string;
+  icon?: React.ReactNode;
   label: string;
   onClick?: () => void;
   variant?: 'default' | 'danger';

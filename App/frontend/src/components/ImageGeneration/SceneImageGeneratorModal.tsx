@@ -10,6 +10,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useModalHistory } from '../../hooks/useModalHistory';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
@@ -22,17 +23,21 @@ import {
     GEMINI_RESOLUTIONS,
     NOVELAI_SAMPLERS,
     NOVELAI_NOISE_SCHEDULES,
+    NOVELAI_REFERENCE_MODES,
     PROVIDER_PROMPT_TYPES,
+    DEFAULT_NOVELAI_SETTINGS,
     listImageProviders,
     type ImageProviderType,
     type ImageGenerationRequest,
     type ReferenceImage,
     type ImageReferenceObject,
+    type NovelAIReferenceMode,
 } from '../../imageGeneration';
 import type { PromptMode, PromptResult } from './ScenePromptAssistModal';
 import type { Asset, ImageProvider } from '../../api/assetService';
 import ReferenceImagePickerModal from './ReferenceImagePickerModal';
 import ScenePromptAssistModal from './ScenePromptAssistModal';
+import { Check, Sparkle } from '../icons';
 import './SceneImageGeneratorModal.css';
 
 // Story object types
@@ -91,6 +96,7 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
     initialSettings,
     mode = 'generate',
 }) => {
+    useModalHistory(isOpen, onClose);
     const { currentProjectId } = useProjectStore();
     const { settings } = useSettingsStore();
     const { listObjects } = useUnifiedObjectStore();
@@ -152,6 +158,13 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
     const [novelaiSteps, setNovelaiSteps] = useState(settings.imageGenConfig.novelaiSettings.steps);
     const [novelaiScale, setNovelaiScale] = useState(settings.imageGenConfig.novelaiSettings.scale);
     const [novelaiNoiseSchedule, setNovelaiNoiseSchedule] = useState(settings.imageGenConfig.novelaiSettings.noise_schedule);
+
+    // NovelAI reference image settings (i2i / Vibe Transfer)
+    const [novelaiReferenceMode, setNovelaiReferenceMode] = useState<NovelAIReferenceMode>(DEFAULT_NOVELAI_SETTINGS.referenceMode);
+    const [novelaiStrength, setNovelaiStrength] = useState(DEFAULT_NOVELAI_SETTINGS.strength);
+    const [novelaiI2iNoise, setNovelaiI2iNoise] = useState(DEFAULT_NOVELAI_SETTINGS.i2iNoise);
+    const [novelaiVibeStrength, setNovelaiVibeStrength] = useState(DEFAULT_NOVELAI_SETTINGS.vibeStrength);
+    const [novelaiVibeInfoExtracted, setNovelaiVibeInfoExtracted] = useState(DEFAULT_NOVELAI_SETTINGS.vibeInfoExtracted);
 
     // Style selection
     const [selectedNaturalStyleId, setSelectedNaturalStyleId] = useState<string | null>(
@@ -247,6 +260,17 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
         return currentProvider?.supports_image_input ?? false;
     }, [providers, provider]);
 
+    // Compute effective reference mode for NovelAI (auto mode resolves based on image count)
+    const effectiveReferenceMode = useMemo(() => {
+        if (novelaiReferenceMode === 'auto') {
+            return referenceImages.length === 1 ? 'i2i' : 'vibe';
+        }
+        return novelaiReferenceMode;
+    }, [novelaiReferenceMode, referenceImages.length]);
+
+    // Check if we should show NovelAI reference settings
+    const showNovelaiRefSettings = provider === 'novelai' && referenceImages.length > 0;
+
     // Add reference image
     const handleImageSelected = useCallback((assetId: string, thumbnailUrl: string) => {
         // Avoid duplicates
@@ -312,6 +336,12 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
             steps: provider === 'novelai' ? novelaiSteps : undefined,
             scale: provider === 'novelai' ? novelaiScale : undefined,
             noiseSchedule: provider === 'novelai' ? novelaiNoiseSchedule : undefined,
+            // NovelAI reference image settings (i2i / Vibe Transfer)
+            referenceMode: provider === 'novelai' ? novelaiReferenceMode : undefined,
+            strength: provider === 'novelai' ? novelaiStrength : undefined,
+            i2iNoise: provider === 'novelai' ? novelaiI2iNoise : undefined,
+            vibeStrength: provider === 'novelai' ? novelaiVibeStrength : undefined,
+            vibeInfoExtracted: provider === 'novelai' ? novelaiVibeInfoExtracted : undefined,
             // Asset type for scene images
             assetType: 'scene',
         };
@@ -388,14 +418,14 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
                                         onClick={() => setActivePromptTab('positive')}
                                         type="button"
                                     >
-                                        Positive {positivePrompt && '✓'}
+                                        Positive {positivePrompt && <Check size={12} />}
                                     </button>
                                     <button
                                         className={`prompt-tab ${activePromptTab === 'negative' ? 'active' : ''}`}
                                         onClick={() => setActivePromptTab('negative')}
                                         type="button"
                                     >
-                                        Negative {negativePrompt && '✓'}
+                                        Negative {negativePrompt && <Check size={12} />}
                                     </button>
                                 </div>
                                 <div className="prompt-input-wrapper">
@@ -422,7 +452,7 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
                                         title={!sceneContext ? 'Scene context required' : 'AI-assisted prompt generation'}
                                         type="button"
                                     >
-                                        ✨ AI Assist
+                                        <Sparkle size={14} /> AI Assist
                                     </button>
                                 </div>
                             </>
@@ -443,7 +473,7 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
                                     title={!sceneContext ? 'Scene context required' : 'AI-assisted prompt generation'}
                                     type="button"
                                 >
-                                    ✨ AI Assist
+                                    <Sparkle size={14} /> AI Assist
                                 </button>
                             </div>
                         )}
@@ -698,6 +728,97 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
                                         </select>
                                     </div>
                                 </div>
+
+                                {/* NovelAI Reference Image Settings (i2i / Vibe Transfer) */}
+                                {showNovelaiRefSettings && (
+                                    <div className="novelai-ref-settings">
+                                        <div className="ref-settings-header">
+                                            <span className="ref-settings-label">Reference Image Mode</span>
+                                            {referenceImages.length > 4 && effectiveReferenceMode === 'vibe' && (
+                                                <span className="ref-warning">Extra Anlas cost for &gt;4 images</span>
+                                            )}
+                                        </div>
+                                        <div className="form-row">
+                                            <div className="form-field full-width">
+                                                <select
+                                                    value={novelaiReferenceMode}
+                                                    onChange={(e) => setNovelaiReferenceMode(e.target.value as NovelAIReferenceMode)}
+                                                    className="config-select"
+                                                >
+                                                    {NOVELAI_REFERENCE_MODES.map((m) => (
+                                                        <option key={m.value} value={m.value}>
+                                                            {m.label}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {/* i2i Settings */}
+                                        {effectiveReferenceMode === 'i2i' && (
+                                            <div className="form-row">
+                                                <div className="form-field">
+                                                    <label>Strength</label>
+                                                    <input
+                                                        type="range"
+                                                        min={0}
+                                                        max={1}
+                                                        step={0.05}
+                                                        value={novelaiStrength}
+                                                        onChange={(e) => setNovelaiStrength(parseFloat(e.target.value))}
+                                                        className="config-slider"
+                                                    />
+                                                    <span className="slider-value">{novelaiStrength.toFixed(2)}</span>
+                                                </div>
+                                                <div className="form-field">
+                                                    <label>Noise</label>
+                                                    <input
+                                                        type="range"
+                                                        min={0}
+                                                        max={1}
+                                                        step={0.05}
+                                                        value={novelaiI2iNoise}
+                                                        onChange={(e) => setNovelaiI2iNoise(parseFloat(e.target.value))}
+                                                        className="config-slider"
+                                                    />
+                                                    <span className="slider-value">{novelaiI2iNoise.toFixed(2)}</span>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Vibe Transfer Settings */}
+                                        {effectiveReferenceMode === 'vibe' && (
+                                            <div className="form-row">
+                                                <div className="form-field">
+                                                    <label>Style Influence</label>
+                                                    <input
+                                                        type="range"
+                                                        min={0}
+                                                        max={1}
+                                                        step={0.05}
+                                                        value={novelaiVibeStrength}
+                                                        onChange={(e) => setNovelaiVibeStrength(parseFloat(e.target.value))}
+                                                        className="config-slider"
+                                                    />
+                                                    <span className="slider-value">{novelaiVibeStrength.toFixed(2)}</span>
+                                                </div>
+                                                <div className="form-field">
+                                                    <label>Info Extraction</label>
+                                                    <input
+                                                        type="range"
+                                                        min={0}
+                                                        max={1}
+                                                        step={0.05}
+                                                        value={novelaiVibeInfoExtracted}
+                                                        onChange={(e) => setNovelaiVibeInfoExtracted(parseFloat(e.target.value))}
+                                                        className="config-slider"
+                                                    />
+                                                    <span className="slider-value">{novelaiVibeInfoExtracted.toFixed(2)}</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
