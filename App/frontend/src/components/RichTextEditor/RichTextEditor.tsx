@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useCallback, useImperativeHandle, forwardRef, useRef, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -76,13 +77,17 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
 
   // Heading dropdown state
   const [headingDropdownOpen, setHeadingDropdownOpen] = useState(false);
-  const headingDropdownRef = useRef<HTMLDivElement>(null);
+  const [headingDropdownPos, setHeadingDropdownPos] = useState({ top: 0, left: 0 });
+  const headingTriggerRef = useRef<HTMLButtonElement>(null);
+  const headingMenuRef = useRef<HTMLDivElement>(null);
 
   // Table dropdown state
   const [tableDropdownOpen, setTableDropdownOpen] = useState(false);
+  const [tableDropdownPos, setTableDropdownPos] = useState({ top: 0, left: 0 });
   const [tableRows, setTableRows] = useState(3);
   const [tableCols, setTableCols] = useState(3);
-  const tableDropdownRef = useRef<HTMLDivElement>(null);
+  const tableTriggerRef = useRef<HTMLButtonElement>(null);
+  const tableMenuRef = useRef<HTMLDivElement>(null);
 
   // Image insert menu state
   const [imageMenuOpen, setImageMenuOpen] = useState(false);
@@ -99,19 +104,54 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     getAssetByUrl,
   }), [projectId, onReplaceImage, onRegenerateImage, getAssetByUrl]);
 
+  // Open heading dropdown with position calculation
+  const openHeadingDropdown = () => {
+    if (headingTriggerRef.current) {
+      const rect = headingTriggerRef.current.getBoundingClientRect();
+      setHeadingDropdownPos({
+        top: rect.bottom + 4,
+        left: rect.left,
+      });
+    }
+    setHeadingDropdownOpen(true);
+  };
+
+  // Open table dropdown with position calculation
+  const openTableDropdown = () => {
+    if (tableTriggerRef.current) {
+      const rect = tableTriggerRef.current.getBoundingClientRect();
+      setTableDropdownPos({
+        top: rect.bottom + 4,
+        left: rect.left,
+      });
+    }
+    setTableDropdownOpen(true);
+  };
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (headingDropdownRef.current && !headingDropdownRef.current.contains(e.target as Node)) {
-        setHeadingDropdownOpen(false);
+      const target = e.target as Node;
+      // Check heading dropdown
+      if (headingDropdownOpen) {
+        const clickedTrigger = headingTriggerRef.current?.contains(target);
+        const clickedMenu = headingMenuRef.current?.contains(target);
+        if (!clickedTrigger && !clickedMenu) {
+          setHeadingDropdownOpen(false);
+        }
       }
-      if (tableDropdownRef.current && !tableDropdownRef.current.contains(e.target as Node)) {
-        setTableDropdownOpen(false);
+      // Check table dropdown
+      if (tableDropdownOpen) {
+        const clickedTrigger = tableTriggerRef.current?.contains(target);
+        const clickedMenu = tableMenuRef.current?.contains(target);
+        if (!clickedTrigger && !clickedMenu) {
+          setTableDropdownOpen(false);
+        }
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [headingDropdownOpen, tableDropdownOpen]);
 
   const editor = useEditor({
     extensions: [
@@ -263,12 +303,13 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
       {/* Toolbar */}
       <div className="editor-format-toolbar">
         {/* Scrollable format tools container */}
-        <div className="toolbar-format-tools">
+        <div className="toolbar-format-tools scrollbar-thin">
         {/* Heading Dropdown */}
-        <div className="heading-dropdown" ref={headingDropdownRef}>
+        <div className="heading-dropdown">
           <button
+            ref={headingTriggerRef}
             type="button"
-            onClick={() => setHeadingDropdownOpen(!headingDropdownOpen)}
+            onClick={() => headingDropdownOpen ? setHeadingDropdownOpen(false) : openHeadingDropdown()}
             className={`format-btn heading-dropdown-trigger ${
               editor.isActive('heading') ? 'active' : ''
             }`}
@@ -283,36 +324,45 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
              editor.isActive('heading', { level: 6 }) ? 'H6' : '¶'}
             <span className="dropdown-arrow">▾</span>
           </button>
-          {headingDropdownOpen && (
-            <div className="heading-dropdown-menu">
+        </div>
+        {headingDropdownOpen && createPortal(
+          <div
+            ref={headingMenuRef}
+            className="heading-dropdown-menu"
+            style={{
+              position: 'fixed',
+              top: headingDropdownPos.top,
+              left: headingDropdownPos.left,
+            }}
+          >
+            <button
+              type="button"
+              className={`heading-dropdown-item ${!editor.isActive('heading') ? 'active' : ''}`}
+              onClick={() => {
+                editor.chain().focus().setParagraph().run();
+                setHeadingDropdownOpen(false);
+              }}
+            >
+              <span className="heading-label">¶</span>
+              <span>Paragraph</span>
+            </button>
+            {([1, 2, 3, 4, 5, 6] as const).map((level) => (
               <button
+                key={level}
                 type="button"
-                className={`heading-dropdown-item ${!editor.isActive('heading') ? 'active' : ''}`}
+                className={`heading-dropdown-item ${editor.isActive('heading', { level }) ? 'active' : ''}`}
                 onClick={() => {
-                  editor.chain().focus().setParagraph().run();
+                  editor.chain().focus().toggleHeading({ level }).run();
                   setHeadingDropdownOpen(false);
                 }}
               >
-                <span className="heading-label">¶</span>
-                <span>Paragraph</span>
+                <span className="heading-label">H{level}</span>
+                <span>Heading {level}</span>
               </button>
-              {([1, 2, 3, 4, 5, 6] as const).map((level) => (
-                <button
-                  key={level}
-                  type="button"
-                  className={`heading-dropdown-item ${editor.isActive('heading', { level }) ? 'active' : ''}`}
-                  onClick={() => {
-                    editor.chain().focus().toggleHeading({ level }).run();
-                    setHeadingDropdownOpen(false);
-                  }}
-                >
-                  <span className="heading-label">H{level}</span>
-                  <span>Heading {level}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+            ))}
+          </div>,
+          document.body
+        )}
 
         <div className="toolbar-divider" />
 
@@ -365,53 +415,63 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
           —
         </button>
         {/* Table Dropdown */}
-        <div className="table-dropdown" ref={tableDropdownRef}>
+        <div className="table-dropdown">
           <button
+            ref={tableTriggerRef}
             type="button"
-            onClick={() => setTableDropdownOpen(!tableDropdownOpen)}
+            onClick={() => tableDropdownOpen ? setTableDropdownOpen(false) : openTableDropdown()}
             className={`format-btn ${editor.isActive('table') ? 'active' : ''}`}
             disabled={disabled}
             title="Insert table"
           >
             ⊞
           </button>
-          {tableDropdownOpen && (
-            <div className="table-dropdown-menu">
-              <div className="table-size-inputs">
-                <label>
-                  <span>Rows</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={20}
-                    value={tableRows}
-                    onChange={(e) => setTableRows(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
-                  />
-                </label>
-                <label>
-                  <span>Cols</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={10}
-                    value={tableCols}
-                    onChange={(e) => setTableCols(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
-                  />
-                </label>
-              </div>
-              <button
-                type="button"
-                className="table-insert-btn"
-                onClick={() => {
-                  editor.chain().focus().insertTable({ rows: tableRows, cols: tableCols, withHeaderRow: true }).run();
-                  setTableDropdownOpen(false);
-                }}
-              >
-                Insert Table
-              </button>
-            </div>
-          )}
         </div>
+        {tableDropdownOpen && createPortal(
+          <div
+            ref={tableMenuRef}
+            className="table-dropdown-menu"
+            style={{
+              position: 'fixed',
+              top: tableDropdownPos.top,
+              left: tableDropdownPos.left,
+            }}
+          >
+            <div className="table-size-inputs">
+              <label>
+                <span>Rows</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={tableRows}
+                  onChange={(e) => setTableRows(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
+                />
+              </label>
+              <label>
+                <span>Cols</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={tableCols}
+                  onChange={(e) => setTableCols(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+                />
+              </label>
+            </div>
+            <button
+              type="button"
+              className="table-insert-btn"
+              onClick={() => {
+                editor.chain().focus().insertTable({ rows: tableRows, cols: tableCols, withHeaderRow: true }).run();
+                setTableDropdownOpen(false);
+              }}
+            >
+              Insert Table
+            </button>
+          </div>,
+          document.body
+        )}
 
         <div className="toolbar-divider" />
 

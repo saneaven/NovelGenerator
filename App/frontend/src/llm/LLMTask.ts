@@ -11,6 +11,7 @@ import { useLLMTaskStore } from '../store/llmTaskStore';
 import { useLLMLogStore } from '../store/llmLogStore';
 import { FunctionCallStreamTracker } from '../chat/streaming/FunctionCallStreamTracker';
 import { PromptManager } from './PromptManager';
+import { LLMTaskManager } from './LLMTaskManager';
 import type {
   LLMTaskConfig,
   LLMTaskCallbacks,
@@ -140,6 +141,14 @@ export class LLMTask {
 
       // 6. Setup abort controller
       this.config.abortControllerRef.current = new AbortController();
+
+      // Register abort controller with task manager for centralized cancellation
+      if (this.config.sessionId) {
+        LLMTaskManager.registerAbortController(
+          this.config.sessionId,
+          this.config.abortControllerRef.current
+        );
+      }
 
       // 7. Stream with RAF throttling
       let currentPartType: ContentPartType | null = null;

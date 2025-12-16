@@ -1,59 +1,9 @@
-/* Version History Modal - Modern Design */
+/* Version History Modal - Component-specific styles */
+/* Base modal structure is handled by BaseModal */
 
-.version-history-modal {
-  max-width: 800px;
-  width: 90dvw;
-  max-height: 85dvh;
-  display: flex;
-  flex-direction: column;
-  border-radius: var(--border-radius-lg);
-  overflow: hidden;
-  animation: slideInUp 0.3s ease-out;
-  min-width: 0; /* Prevent flex item from exceeding container */
-}
-
-/* Header Styling */
-.version-history-modal .modal-header {
-  background: var(--gradient-modal-header-primary);
-  color: white;
-  padding: var(--spacing-xl) var(--spacing-2xl);
-  border-bottom: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-lg);
-}
-
-.version-history-modal .modal-header h2 {
-  font-size: var(--font-size-2xl);
-  font-weight: 700;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  flex: 1;
-}
-
-.version-history-modal .modal-header h2 svg {
-  flex-shrink: 0;
-}
-
-.version-history-modal .modal-close {
-  background: rgba(255, 255, 255, 0.15);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  padding: var(--spacing-sm) var(--spacing-lg);
-  border-radius: var(--border-radius-md);
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-}
-
-.version-history-modal .modal-close:hover {
-  background: rgba(255, 255, 255, 0.25);
-  transform: translateY(-1px);
+/* Override BaseModal body padding for custom layout */
+.version-history-modal .base-modal-body {
+  padding: 0;
 }
 
 /* Content Area */

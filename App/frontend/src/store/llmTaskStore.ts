@@ -3,6 +3,9 @@ import type { ContentPart, FunctionCallProgress } from '../llm/requestTypes';
 
 export type TaskSessionStatus = 'idle' | 'running' | 'success' | 'error' | 'cancelled';
 
+// AbortController registry (outside Zustand store to avoid serialization issues)
+const abortControllers = new Map<string, AbortController>();
+
 // Task types for different LLM operations
 export type LLMTaskType =
   | 'ai-edit'           // AIEditModal
@@ -84,6 +87,11 @@ interface LLMTaskStore {
   markAllAsRead: () => void;
   clearNotification: (id: string) => void;
   clearAllNotifications: () => void;
+
+  // Abort controller management
+  registerAbortController: (id: string, controller: AbortController) => void;
+  unregisterAbortController: (id: string) => void;
+  cancelTask: (id: string) => void;
 }
 
 export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
@@ -310,5 +318,38 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
 
   clearAllNotifications: () => {
     set({ sessions: {} });
+  },
+
+  // Abort controller management
+  registerAbortController: (id, controller) => {
+    abortControllers.set(id, controller);
+  },
+
+  unregisterAbortController: (id) => {
+    abortControllers.delete(id);
+  },
+
+  cancelTask: (id) => {
+    // 1. Abort the request
+    const controller = abortControllers.get(id);
+    if (controller) {
+      controller.abort();
+      abortControllers.delete(id);
+    }
+    // 2. Update status to cancelled
+    set((state) => {
+      const existing = state.sessions[id];
+      if (!existing) return state;
+      return {
+        sessions: {
+          ...state.sessions,
+          [id]: {
+            ...existing,
+            status: 'cancelled',
+            updatedAt: Date.now(),
+          },
+        },
+      };
+    });
   },
 }));

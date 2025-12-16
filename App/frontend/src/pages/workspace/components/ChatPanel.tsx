@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useChatStore, type StoredChatMessage } from '../../../store/chatStore';
 import { useChatUIStore } from '../../../store/chatUIStore';
+import { useSidebarStore } from '../../../store/sidebarStore';
 import { useProjectStore } from '../../../store/projectStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
@@ -14,6 +15,8 @@ import type { ChatMessage, FunctionCallProgress } from '../../../llm/requestType
 import ToggleSwitch from '../../../components/ToggleSwitch';
 import ThinkingDisplay from '../../../components/ThinkingDisplay';
 import GroupedFunctionCallCard from '../../../components/functionCall/GroupedFunctionCallCard';
+import { TextButton } from '../../../components/TextButton';
+import { IconButton } from '../../../components/IconButton';
 import { collapseContentParts } from '../../../chat/utils/contentParts';
 import { Settings, Books, Book, Edit, Trash, Globe, CircularArrow, ChevronUp, ChevronDown } from '../../../components/icons';
 
@@ -38,6 +41,151 @@ interface ChatPanelProps
     editTextareaRef: React.RefObject<HTMLTextAreaElement>;
     mode: 'novelEditor' | 'workspace';
 }
+
+// Separate component to avoid re-rendering the entire ChatPanel on collapse toggle
+interface ChatControlsProps {
+    systemInsertConfig: SystemInsertConfig;
+    setSystemInsertConfig: (config: SystemInsertConfig | ((prev: SystemInsertConfig) => SystemInsertConfig)) => void;
+}
+
+const ChatControls: React.FC<ChatControlsProps> = React.memo(({ systemInsertConfig, setSystemInsertConfig }) => {
+    const [isCollapsed, setIsCollapsed] = useState(true);
+
+    return (
+        <div className={`chat-controls ${isCollapsed ? 'collapsed' : 'expanded'}`}>
+            <div className="chat-controls-header" onClick={() => setIsCollapsed(!isCollapsed)}>
+                <span className="chat-controls-title">
+                    <Settings size="sm" /> Context Configs
+                </span>
+                <button
+                    type="button"
+                    className="chat-controls-toggle"
+                    aria-label={isCollapsed ? "Expand context configs" : "Collapse context configs"}
+                >
+                    {isCollapsed ? <ChevronUp size="xs" /> : <ChevronDown size="xs" />}
+                </button>
+            </div>
+            <div className="chat-controls-content">
+                <div className="chat-controls-content-inner">
+                    <div className="chat-controls-content-body">
+                        <ToggleSwitch
+                            checked={systemInsertConfig.enabled}
+                            onChange={(checked) => setSystemInsertConfig(prev => ({
+                                ...prev,
+                                enabled: checked
+                            }))}
+                            label="Include story context in messages"
+                            icon={<Books size="sm" />}
+                        />
+                        <ToggleSwitch
+                            checked={systemInsertConfig.includeNovelContent}
+                            onChange={(checked) => setSystemInsertConfig(prev => ({
+                                ...prev,
+                                includeNovelContent: checked
+                            }))}
+                            label="Include novel content in messages"
+                            icon={<Book size="sm" />}
+                        />
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+});
+
+// Separate component for input form to avoid re-rendering messages on typing
+interface ChatInputFormProps {
+    projectId: string;
+    mainLanguage: string;
+    onSubmit: (e: React.FormEvent, input: string, isLoading: boolean) => Promise<void>;
+    onStop: () => void;
+}
+
+const ChatInputForm: React.FC<ChatInputFormProps> = React.memo(({ projectId, mainLanguage, onSubmit, onStop }) => {
+    const input = useChatUIStore((state) => state.inputByProject[projectId] ?? '');
+    const isLoading = useChatUIStore((state) => state.loadingByProject[projectId] ?? false);
+    const setInput = useChatUIStore((state) => state.setInput);
+
+    const handleSubmit = useCallback((e: React.FormEvent) => {
+        onSubmit(e, input, isLoading);
+    }, [onSubmit, input, isLoading]);
+
+    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            onSubmit(e as any, input, isLoading);
+        }
+    }, [onSubmit, input, isLoading]);
+
+    return (
+        <form onSubmit={handleSubmit} className="chat-form">
+            <div className="input-group">
+                <textarea
+                    value={input}
+                    onChange={(e) => setInput(projectId, e.target.value)}
+                    placeholder={`Enter a message in ${mainLanguage}...`}
+                    rows={1}
+                    className="chat-input"
+                    disabled={isLoading}
+                    onKeyDown={handleKeyDown}
+                />
+                {isLoading ? (
+                    <TextButton type="button" variant="danger" onClick={onStop} className="chat-submit-btn">
+                        Stop
+                    </TextButton>
+                ) : (
+                    <TextButton type="submit" variant="primary" className="chat-submit-btn">
+                        Send
+                    </TextButton>
+                )}
+            </div>
+        </form>
+    );
+});
+
+// Separate component for message edit form to avoid re-rendering all messages on typing
+interface MessageEditFormProps {
+    projectId: string;
+    displayLanguage: string;
+    editTextareaRef: React.RefObject<HTMLTextAreaElement>;
+    onEditContentChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+    onSaveEdit: (messageId: string | null, content: string, language: string) => void;
+    onCancelEdit: () => void;
+}
+
+const MessageEditForm: React.FC<MessageEditFormProps> = React.memo(({
+    projectId,
+    displayLanguage,
+    editTextareaRef,
+    onEditContentChange,
+    onSaveEdit,
+    onCancelEdit
+}) => {
+    const editingMessageId = useChatUIStore((state) => state.editingByProject[projectId]?.messageId ?? null);
+    const editingContent = useChatUIStore((state) => state.editingByProject[projectId]?.content ?? '');
+    const editingLanguage = useChatUIStore((state) => state.editingByProject[projectId]?.language ?? null);
+
+    return (
+        <div className="message-edit">
+            <textarea
+                ref={editTextareaRef}
+                value={editingContent}
+                onChange={onEditContentChange}
+                placeholder="Edit content"
+            />
+            <div className="edit-actions">
+                <TextButton
+                    variant="primary"
+                    size="sm"
+                    onClick={() => onSaveEdit(editingMessageId, editingContent, editingLanguage || displayLanguage)}
+                >
+                    Save
+                </TextButton>
+                <TextButton variant="secondary" size="sm" onClick={onCancelEdit}>Cancel</TextButton>
+            </div>
+        </div>
+    );
+});
 
 interface DisplayMessageInfo
 {
@@ -73,7 +221,17 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const displayProcessor = useMemo(() => new DefaultDisplayProcessor(), []);
     const { convertToDisplayMessage, addTranslatedMessage } = useChatStore();
-    const chatUI = useChatUIStore();
+
+    // Use selectors for chatUI to avoid re-rendering on input changes
+    const isLoading = useChatUIStore((state) => state.loadingByProject[projectId] ?? false);
+    const chatVisibleState = useChatUIStore((state) => state.chatVisibleByProject[projectId] ?? false);
+    const editingMessageId = useChatUIStore((state) => state.editingByProject[projectId]?.messageId ?? null);
+    const setChatVisible = useChatUIStore((state) => state.setChatVisible);
+
+    // Handle desktop visibility separately to avoid selector side effects
+    const isDesktop = typeof window !== 'undefined' && window.innerWidth > 768;
+    const isChatVisible = isDesktop ? true : chatVisibleState;
+
     const { getCurrentProject } = useProjectStore();
     const { settings } = useSettingsStore();
     const { showError } = useErrorStore();
@@ -100,7 +258,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
     const [translatingMessages, setTranslatingMessages] = useState<Record<string, boolean>>({});
     const [translationErrors, setTranslationErrors] = useState<Record<string, string | null>>({});
-    const [isControlsCollapsed, setIsControlsCollapsed] = useState(true);
     // Per-message language view: tracks which messages are showing translation
     const [messageLanguageView, setMessageLanguageView] = useState<Record<string, 'primary' | 'secondary'>>({});
 
@@ -143,7 +300,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
             }
         }
-    }, [storedMessages, chatUI.isLoading(projectId)]);
+    }, [storedMessages, isLoading]);
 
     // Display context for the display processor (context is unused but kept for type compatibility)
     const displayContext = useMemo(() => ({
@@ -312,7 +469,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                     </div>
                 )}
                 {processed.displayContent}
-                {chatUI.isLoading(projectId) &&
+                {isLoading &&
                     message.chatMessage.role === 'assistant' &&
                     message === displayMessages[displayMessages.length - 1] && (
                         <div className="typing-indicator inline">
@@ -329,33 +486,27 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     const translationTargetLabel = defaultSubLanguage || 'secondary language';
 
     return (
-        <div className={`chat-panel ${chatUI.isChatVisible(projectId) ? 'visible' : 'hidden'}`}>
+        <div className={`chat-panel ${isChatVisible ? 'visible' : 'hidden'}`}>
             <div className="chat-header">
                 <div className="chat-header-left">
-                    <button
-                        className="chat-list-btn"
-                        onClick={() =>
-                        {
-                            if (window.innerWidth <= 768)
-                            {
-                                chatUI.setMobileSidebarVisible(projectId, true);
-                            } else
-                            {
-                                chatUI.setDesktopChatListVisible(projectId, !chatUI.isDesktopChatListVisible(projectId));
-                            }
-                        }}
+                    <TextButton
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => useSidebarStore.getState().toggleSidebar(projectId, 'chat')}
                         title="View chat list"
                     >
                         Chats
-                    </button>
+                    </TextButton>
                     <h2>{selectedChat?.name || 'AI Chat'}</h2>
                 </div>
-                <button
-                    className="chat-close-btn mobile-only"
-                    onClick={() => chatUI.setChatVisible(projectId, false)}
+                <TextButton
+                    variant="secondary"
+                    size="sm"
+                    className="mobile-only"
+                    onClick={() => setChatVisible(projectId, false)}
                 >
                     Close
-                </button>
+                </TextButton>
             </div>
 
             <div className="chat-messages">
@@ -374,8 +525,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 {displayMessages.map((message) =>
                 {
                     const isUser = message.chatMessage.role === 'user';
-                    const editing = chatUI.getEditing(projectId);
-                    const isEditing = editing.messageId === message.chatMessage.id;
+                    const isEditing = editingMessageId === message.chatMessage.id;
                     const processingResult = displayProcessor.process(message.chatMessage as any, displayContext as any);
                     const isTranslating = Boolean(translatingMessages[message.storedMessage.id]);
                     const primaryMessage = message.storedMessage.data[mainLanguage]
@@ -399,7 +549,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                     messageId={message.chatMessage.id}
                                     contentParts={message.chatMessage.contentParts}
                                     displayMode="separate"
-                                    isStreaming={chatUI.isLoading(projectId) && message.chatMessage.id === storedMessages[storedMessages.length - 1]?.id}
+                                    isStreaming={isLoading && message.chatMessage.id === storedMessages[storedMessages.length - 1]?.id}
                                 />
                             )}
 
@@ -410,27 +560,14 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                 </div>
 
                                 {isEditing ? (
-                                    <div className="message-edit">
-                                        <textarea
-                                            ref={editTextareaRef}
-                                            value={editing.content}
-                                            onChange={onEditContentChange}
-                                            placeholder={`Edit content`}
-                                        />
-                                        <div className="edit-actions">
-                                            <button
-                                                className="save-button"
-                                                onClick={() => onSaveEdit(
-                                                    editing.messageId,
-                                                    editing.content,
-                                                    editing.language || message.displayLanguage
-                                                )}
-                                            >
-                                                Save
-                                            </button>
-                                            <button className="cancel-button" onClick={onCancelEdit}>Cancel</button>
-                                        </div>
-                                    </div>
+                                    <MessageEditForm
+                                        projectId={projectId}
+                                        displayLanguage={message.displayLanguage}
+                                        editTextareaRef={editTextareaRef}
+                                        onEditContentChange={onEditContentChange}
+                                        onSaveEdit={onSaveEdit}
+                                        onCancelEdit={onCancelEdit}
+                                    />
                                 ) : (
                                     <>
                                         {renderMessageContent(message, processingResult)}
@@ -463,8 +600,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                             <div className="action-buttons">
                                                 {/* Per-message language toggle - only show when translation exists */}
                                                 {translationAvailable && (
-                                                    <button
-                                                        className="action-btn language-toggle-btn"
+                                                    <TextButton
+                                                        variant="secondary"
+                                                        size="sm"
                                                         onClick={() => setMessageLanguageView(prev => ({
                                                             ...prev,
                                                             [message.storedMessage.id]: prev[message.storedMessage.id] === 'secondary' ? 'primary' : 'secondary'
@@ -478,20 +616,19 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                                             ? defaultSubLanguage?.slice(0, 2).toUpperCase()
                                                             : mainLanguage?.slice(0, 2).toUpperCase()
                                                         }
-                                                    </button>
+                                                    </TextButton>
                                                 )}
                                                 {translationEnabled && (
-                                                    <button
-                                                        className="action-btn translate-btn"
+                                                    <IconButton
+                                                        icon={isTranslating ? <CircularArrow size="sm" /> : translationAvailable ? <CircularArrow size="sm" /> : <Globe size="sm" />}
                                                         onClick={() => translateMessage(message.storedMessage)}
                                                         disabled={translateDisabled}
                                                         title={translateButtonLabel}
-                                                    >
-                                                        {isTranslating ? <CircularArrow size="sm" /> : translationAvailable ? <CircularArrow size="sm" /> : <Globe size="sm" />}
-                                                    </button>
+                                                        size="sm"
+                                                    />
                                                 )}
-                                                <button
-                                                    className="action-btn edit-btn"
+                                                <IconButton
+                                                    icon={<Edit size="sm" />}
                                                     onClick={() => {
                                                         // Switch to primary view for this message when editing
                                                         setMessageLanguageView(prev => ({
@@ -502,17 +639,15 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                                     }}
                                                     disabled={isTranslating || !primaryPlainContent.trim()}
                                                     title="Edit"
-                                                >
-                                                    <Edit size="sm" />
-                                                </button>
-                                                <button
-                                                    className="action-btn delete-btn"
+                                                    size="sm"
+                                                />
+                                                <IconButton
+                                                    icon={<Trash size="sm" />}
                                                     onClick={() => onDeleteMessage(message.chatMessage.id)}
                                                     disabled={isTranslating}
                                                     title="Delete"
-                                                >
-                                                    <Trash size="sm" />
-                                                </button>
+                                                    size="sm"
+                                                />
                                             </div>
                                         </div>
                                     </>
@@ -526,72 +661,16 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             </div>
 
             <div className="chat-input-container">
-                <div className={`chat-controls ${isControlsCollapsed ? 'collapsed' : 'expanded'}`}>
-                    <div className="chat-controls-header" onClick={() => setIsControlsCollapsed(!isControlsCollapsed)}>
-                        <span className="chat-controls-title">
-                            <Settings size="sm" /> Contexts
-                        </span>
-                        <button
-                            type="button"
-                            className="chat-controls-toggle"
-                            aria-label={isControlsCollapsed ? "Expand contexts" : "Collapse contexts"}
-                        >
-                            {isControlsCollapsed ? <ChevronUp size="xs" /> : <ChevronDown size="xs" />}
-                        </button>
-                    </div>
-                    {!isControlsCollapsed && (
-                        <div className="chat-controls-content">
-                            <ToggleSwitch
-                                checked={systemInsertConfig.enabled}
-                                onChange={(checked) => setSystemInsertConfig(prev => ({
-                                    ...prev,
-                                    enabled: checked
-                                }))}
-                                label="Include story context in messages"
-                                icon={<Books size="sm" />}
-                            />
-                            <ToggleSwitch
-                                checked={systemInsertConfig.includeNovelContent}
-                                onChange={(checked) => setSystemInsertConfig(prev => ({
-                                    ...prev,
-                                    includeNovelContent: checked
-                                }))}
-                                label="Include novel content in messages"
-                                icon={<Book size="sm" />}
-                            />
-                        </div>
-                    )}
-                </div>
-
-                <form onSubmit={(e) => onSubmit(e, chatUI.getInput(projectId), chatUI.isLoading(projectId))} className="chat-form">
-                    <div className="input-group">
-                        <textarea
-                            value={chatUI.getInput(projectId)}
-                            onChange={(e) => chatUI.setInput(projectId, e.target.value)}
-                            placeholder={`Enter a message in ${mainLanguage}...`}
-                            rows={1}
-                            className="chat-input"
-                            disabled={chatUI.isLoading(projectId)}
-                            onKeyDown={(e) =>
-                            {
-                                if (e.key === 'Enter' && !e.shiftKey)
-                                {
-                                    e.preventDefault();
-                                    onSubmit(e as any, chatUI.getInput(projectId), chatUI.isLoading(projectId));
-                                }
-                            }}
-                        />
-                        {chatUI.isLoading(projectId) ? (
-                            <button type="button" onClick={onStop} className="stop-button">
-                                Stop
-                            </button>
-                        ) : (
-                            <button type="submit" className="send-button">
-                                Send
-                            </button>
-                        )}
-                    </div>
-                </form>
+                <ChatControls
+                    systemInsertConfig={systemInsertConfig}
+                    setSystemInsertConfig={setSystemInsertConfig}
+                />
+                <ChatInputForm
+                    projectId={projectId}
+                    mainLanguage={mainLanguage}
+                    onSubmit={onSubmit}
+                    onStop={onStop}
+                />
             </div>
         </div>
     );

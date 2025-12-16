@@ -7,7 +7,8 @@
       "Bash(uvicorn:*)",
       "Bash(npm run build)",
       "Bash(npx tsc:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

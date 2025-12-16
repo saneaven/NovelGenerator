@@ -18,8 +18,7 @@ interface NovelEditorUIState {
   // Chapter selection per project
   selectedChapterByProject: Record<string, string | undefined>;
 
-  // UI visibility per project
-  chapterSidebarVisibleByProject: Record<string, boolean>;
+  // UI visibility per project (sidebar visibility is now in sidebarStore)
   chatVisibleByProject: Record<string, boolean>;
 
   // Modal states (global - one at a time)
@@ -43,9 +42,7 @@ interface NovelEditorActions {
   getSelectedChapterId: (projectId: string) => string | undefined;
   clearSelectedChapter: (projectId: string) => void;
 
-  // UI visibility
-  setChapterSidebarVisible: (projectId: string, visible: boolean) => void;
-  isChapterSidebarVisible: (projectId: string) => boolean;
+  // UI visibility (sidebar visibility is now in sidebarStore)
   setChatVisible: (projectId: string, visible: boolean) => void;
   isChatVisible: (projectId: string) => boolean;
 
@@ -76,7 +73,6 @@ type NovelEditorStore = NovelEditorUIState & NovelEditorActions;
 
 const initialState: NovelEditorUIState = {
   selectedChapterByProject: {},
-  chapterSidebarVisibleByProject: {},
   chatVisibleByProject: {},
   isAIEditModalOpen: false,
   isVersionModalOpen: false,
@@ -130,20 +126,7 @@ export const useNovelEditorStore = create<NovelEditorStore>()((set, get) => ({
     localStorage.removeItem(`selectedChapter_${projectId}`);
   },
 
-  // UI visibility
-  setChapterSidebarVisible: (projectId: string, visible: boolean) => {
-    set((state) => ({
-      chapterSidebarVisibleByProject: {
-        ...state.chapterSidebarVisibleByProject,
-        [projectId]: visible,
-      },
-    }));
-  },
-
-  isChapterSidebarVisible: (projectId: string) => {
-    return get().chapterSidebarVisibleByProject[projectId] ?? false;
-  },
-
+  // UI visibility (sidebar visibility is now in sidebarStore)
   setChatVisible: (projectId: string, visible: boolean) => {
     set((state) => ({
       chatVisibleByProject: {
@@ -245,7 +228,6 @@ export const useNovelEditorStore = create<NovelEditorStore>()((set, get) => ({
     set((state) => {
       const newState = { ...state };
       delete newState.selectedChapterByProject[projectId];
-      delete newState.chapterSidebarVisibleByProject[projectId];
       delete newState.chatVisibleByProject[projectId];
       delete newState.editorContentByProject[projectId];
       delete newState.isSavingByProject[projectId];

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useModalHistory } from '../../hooks/useModalHistory';
+import { BaseModal } from '../BaseModal';
 import { useSettingsStore } from '../../store/settingsStore';
 import type { Settings, AIFunctionType } from '../../store/settingsStore';
 import CredentialsPanel from './CredentialsPanel';
@@ -10,6 +10,7 @@ import ThemePanel from './ThemePanel';
 import AdvancedPanel from './AdvancedPanel';
 import ImageGenPanel from './ImageGenPanel';
 import { Settings as SettingsIcon, Lock, Image, Document, Globe, Palette, Wrench } from '../icons';
+import { TextButton } from '../TextButton';
 import './SettingsModal.css';
 import './_shared-components.css';
 
@@ -21,7 +22,6 @@ interface SettingsModalProps {
 type MainTab = 'credentials' | 'general' | 'imageGen' | 'prompts' | 'language' | 'theme' | 'advanced';
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
-  useModalHistory(isOpen, onClose);
   const settingsStore = useSettingsStore();
   const [localSettings, setLocalSettings] = useState<Settings>(settingsStore.settings);
   const [isSaving, setIsSaving] = useState(false);
@@ -53,166 +53,168 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     onClose();
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content settings-modal-new" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="modal-header">
-          <h2><SettingsIcon size="xl" /> Settings</h2>
-          <button className="close-button" onClick={handleCancel}>
-            ×
-          </button>
-        </div>
-
-        {/* Main Category Tabs */}
-        <div className="main-tabs">
-          <button
-            className={`main-tab ${mainTab === 'credentials' ? 'active' : ''}`}
-            onClick={() => setMainTab('credentials')}
-          >
-            <span className="tab-icon"><Lock size="sm" /></span>
-            <span className="tab-label">Credentials</span>
-          </button>
-          <button
-            className={`main-tab ${mainTab === 'general' ? 'active' : ''}`}
-            onClick={() => setMainTab('general')}
-          >
-            <span className="tab-icon"><SettingsIcon size="sm" /></span>
-            <span className="tab-label">General</span>
-          </button>
-          <button
-            className={`main-tab ${mainTab === 'imageGen' ? 'active' : ''}`}
-            onClick={() => setMainTab('imageGen')}
-          >
-            <span className="tab-icon"><Image size="sm" /></span>
-            <span className="tab-label">Image Gen</span>
-          </button>
-          <button
-            className={`main-tab ${mainTab === 'prompts' ? 'active' : ''}`}
-            onClick={() => setMainTab('prompts')}
-          >
-            <span className="tab-icon"><Document size="sm" /></span>
-            <span className="tab-label">Prompts & Templates</span>
-          </button>
-          <button
-            className={`main-tab ${mainTab === 'language' ? 'active' : ''}`}
-            onClick={() => setMainTab('language')}
-          >
-            <span className="tab-icon"><Globe size="sm" /></span>
-            <span className="tab-label">Language</span>
-          </button>
-          <button
-            className={`main-tab ${mainTab === 'theme' ? 'active' : ''}`}
-            onClick={() => setMainTab('theme')}
-          >
-            <span className="tab-icon"><Palette size="sm" /></span>
-            <span className="tab-label">Theme</span>
-          </button>
-          <button
-            className={`main-tab ${mainTab === 'advanced' ? 'active' : ''}`}
-            onClick={() => setMainTab('advanced')}
-          >
-            <span className="tab-icon"><Wrench size="sm" /></span>
-            <span className="tab-label">Advanced</span>
-          </button>
-        </div>
-
-        {/* Panel Content */}
-        <div className="modal-body">
-          {mainTab === 'credentials' && (
-            <CredentialsPanel
-              credentials={localSettings.providerCredentials}
-              onChange={(credentials) =>
-                setLocalSettings({ ...localSettings, providerCredentials: credentials })
-              }
-            />
-          )}
-
-          {mainTab === 'general' && (
-            <GeneralPanel
-              functionConfigs={localSettings.functionConfigs}
-              credentials={localSettings.providerCredentials}
-              activeFunction={activeFunction}
-              onFunctionChange={setActiveFunction}
-              onConfigChange={(functionType, config) =>
-                setLocalSettings({
-                  ...localSettings,
-                  functionConfigs: {
-                    ...localSettings.functionConfigs,
-                    [functionType]: config,
-                  },
-                })
-              }
-            />
-          )}
-
-          {mainTab === 'imageGen' && (
-            <ImageGenPanel
-              config={localSettings.imageGenConfig}
-              onChange={(config) =>
-                setLocalSettings({ ...localSettings, imageGenConfig: config })
-              }
-            />
-          )}
-
-          {mainTab === 'language' && (
-            <LanguagePanel
-              mainLanguage={localSettings.mainLanguage}
-              subLanguages={localSettings.subLanguages}
-              defaultSubLanguage={localSettings.defaultSubLanguage}
-              onMainLanguageChange={(language) =>
-                setLocalSettings(prev => ({ ...prev, mainLanguage: language }))
-              }
-              onSubLanguagesChange={(languages) =>
-                setLocalSettings(prev => ({ ...prev, subLanguages: languages }))
-              }
-              onDefaultSubLanguageChange={(language) =>
-                setLocalSettings(prev => ({ ...prev, defaultSubLanguage: language }))
-              }
-            />
-          )}
-
-          {mainTab === 'theme' && (
-            <ThemePanel
-              theme={localSettings.theme}
-              onThemeChange={(theme) => {
-                // Update local settings for consistency
-                setLocalSettings({ ...localSettings, theme });
-                // Apply theme immediately to global store
-                settingsStore.setTheme(theme);
-              }}
-            />
-          )}
-
-          {mainTab === 'prompts' && <PromptsTemplatesPanel />}
-
-          {mainTab === 'advanced' && (
-            <AdvancedPanel
-              retryConfig={localSettings.retryConfig}
-              onRetryConfigChange={(config) =>
-                setLocalSettings(prev => ({ ...prev, retryConfig: config }))
-              }
-              nativeOutputMode={localSettings.nativeOutputMode}
-              onNativeOutputModeChange={(enabled) =>
-                setLocalSettings(prev => ({ ...prev, nativeOutputMode: enabled }))
-              }
-            />
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="modal-footer">
-          <button onClick={handleCancel} className="btn-secondary" disabled={isSaving}>
+    <BaseModal
+      isOpen={isOpen}
+      onClose={handleCancel}
+      size="large"
+      showHeader={false}
+      className="settings-modal"
+      footer={
+        <>
+          <TextButton variant="secondary" onClick={handleCancel} disabled={isSaving}>
             Cancel
-          </button>
-          <button onClick={handleSave} className="btn-primary" disabled={isSaving}>
+          </TextButton>
+          <TextButton variant="primary" onClick={handleSave} disabled={isSaving} loading={isSaving}>
             {isSaving ? 'Saving...' : 'Save Settings'}
-          </button>
-        </div>
+          </TextButton>
+        </>
+      }
+    >
+      {/* Custom Header */}
+      <div className="settings-modal-header">
+        <h2><SettingsIcon size="xl" /> Settings</h2>
+        <button className="close-button" onClick={handleCancel}>
+          ×
+        </button>
       </div>
-    </div>
+
+      {/* Main Category Tabs */}
+      <div className="main-tabs">
+        <button
+          className={`main-tab ${mainTab === 'credentials' ? 'active' : ''}`}
+          onClick={() => setMainTab('credentials')}
+        >
+          <span className="tab-icon"><Lock size="sm" /></span>
+          <span className="tab-label">Credentials</span>
+        </button>
+        <button
+          className={`main-tab ${mainTab === 'general' ? 'active' : ''}`}
+          onClick={() => setMainTab('general')}
+        >
+          <span className="tab-icon"><SettingsIcon size="sm" /></span>
+          <span className="tab-label">General</span>
+        </button>
+        <button
+          className={`main-tab ${mainTab === 'imageGen' ? 'active' : ''}`}
+          onClick={() => setMainTab('imageGen')}
+        >
+          <span className="tab-icon"><Image size="sm" /></span>
+          <span className="tab-label">Image Gen</span>
+        </button>
+        <button
+          className={`main-tab ${mainTab === 'prompts' ? 'active' : ''}`}
+          onClick={() => setMainTab('prompts')}
+        >
+          <span className="tab-icon"><Document size="sm" /></span>
+          <span className="tab-label">Prompts & Templates</span>
+        </button>
+        <button
+          className={`main-tab ${mainTab === 'language' ? 'active' : ''}`}
+          onClick={() => setMainTab('language')}
+        >
+          <span className="tab-icon"><Globe size="sm" /></span>
+          <span className="tab-label">Language</span>
+        </button>
+        <button
+          className={`main-tab ${mainTab === 'theme' ? 'active' : ''}`}
+          onClick={() => setMainTab('theme')}
+        >
+          <span className="tab-icon"><Palette size="sm" /></span>
+          <span className="tab-label">Theme</span>
+        </button>
+        <button
+          className={`main-tab ${mainTab === 'advanced' ? 'active' : ''}`}
+          onClick={() => setMainTab('advanced')}
+        >
+          <span className="tab-icon"><Wrench size="sm" /></span>
+          <span className="tab-label">Advanced</span>
+        </button>
+      </div>
+
+      {/* Panel Content */}
+      <div className="settings-panel-content">
+        {mainTab === 'credentials' && (
+          <CredentialsPanel
+            credentials={localSettings.providerCredentials}
+            onChange={(credentials) =>
+              setLocalSettings({ ...localSettings, providerCredentials: credentials })
+            }
+          />
+        )}
+
+        {mainTab === 'general' && (
+          <GeneralPanel
+            functionConfigs={localSettings.functionConfigs}
+            credentials={localSettings.providerCredentials}
+            activeFunction={activeFunction}
+            onFunctionChange={setActiveFunction}
+            onConfigChange={(functionType, config) =>
+              setLocalSettings({
+                ...localSettings,
+                functionConfigs: {
+                  ...localSettings.functionConfigs,
+                  [functionType]: config,
+                },
+              })
+            }
+          />
+        )}
+
+        {mainTab === 'imageGen' && (
+          <ImageGenPanel
+            config={localSettings.imageGenConfig}
+            onChange={(config) =>
+              setLocalSettings({ ...localSettings, imageGenConfig: config })
+            }
+          />
+        )}
+
+        {mainTab === 'language' && (
+          <LanguagePanel
+            mainLanguage={localSettings.mainLanguage}
+            subLanguages={localSettings.subLanguages}
+            defaultSubLanguage={localSettings.defaultSubLanguage}
+            onMainLanguageChange={(language) =>
+              setLocalSettings(prev => ({ ...prev, mainLanguage: language }))
+            }
+            onSubLanguagesChange={(languages) =>
+              setLocalSettings(prev => ({ ...prev, subLanguages: languages }))
+            }
+            onDefaultSubLanguageChange={(language) =>
+              setLocalSettings(prev => ({ ...prev, defaultSubLanguage: language }))
+            }
+          />
+        )}
+
+        {mainTab === 'theme' && (
+          <ThemePanel
+            theme={localSettings.theme}
+            onThemeChange={(theme) => {
+              // Update local settings for consistency
+              setLocalSettings({ ...localSettings, theme });
+              // Apply theme immediately to global store
+              settingsStore.setTheme(theme);
+            }}
+          />
+        )}
+
+        {mainTab === 'prompts' && <PromptsTemplatesPanel />}
+
+        {mainTab === 'advanced' && (
+          <AdvancedPanel
+            retryConfig={localSettings.retryConfig}
+            onRetryConfigChange={(config) =>
+              setLocalSettings(prev => ({ ...prev, retryConfig: config }))
+            }
+            nativeOutputMode={localSettings.nativeOutputMode}
+            onNativeOutputModeChange={(enabled) =>
+              setLocalSettings(prev => ({ ...prev, nativeOutputMode: enabled }))
+            }
+          />
+        )}
+      </div>
+    </BaseModal>
   );
 };
 

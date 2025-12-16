@@ -17,3 +17,4 @@ export { Logout } from './Logout';
 export { Lock } from './Lock';
 export { Wrench } from './Wrench';
 export { Advenced } from './Advenced';
+export { MoreHorizontal } from './MoreHorizontal';

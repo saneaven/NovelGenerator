@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useLLMTaskStore } from '../../store/llmTaskStore';
 import { Bell } from '../icons';
+import { IconButton } from '../IconButton';
 import NotificationPanel from './NotificationPanel';
+import './Notification.css';
 
 interface NotificationButtonProps {
   position?: 'desktop' | 'mobile';
@@ -13,6 +15,7 @@ const NotificationButton: React.FC<NotificationButtonProps> = ({
   className = '',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -32,12 +35,23 @@ const NotificationButton: React.FC<NotificationButtonProps> = ({
     if (!isOpen) {
       // Opening the panel - mark all as read
       markAllAsRead();
+      setIsOpen(true);
+    } else {
+      // Closing with animation
+      setIsClosing(true);
+      setTimeout(() => {
+        setIsOpen(false);
+        setIsClosing(false);
+      }, 150);
     }
-    setIsOpen(!isOpen);
   };
 
   const handleClose = () => {
-    setIsOpen(false);
+    setIsClosing(true);
+    setTimeout(() => {
+      setIsOpen(false);
+      setIsClosing(false);
+    }, 150);
   };
 
   // Close on click outside
@@ -45,6 +59,7 @@ const NotificationButton: React.FC<NotificationButtonProps> = ({
     const handleClickOutside = (event: MouseEvent) => {
       if (
         isOpen &&
+        !isClosing &&
         buttonRef.current &&
         panelRef.current &&
         !buttonRef.current.contains(event.target as Node) &&
@@ -55,52 +70,49 @@ const NotificationButton: React.FC<NotificationButtonProps> = ({
         if (target.closest('.modal-overlay')) {
           return;
         }
-        setIsOpen(false);
+        handleClose();
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
+  }, [isOpen, isClosing]);
 
   // Close on escape
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && isOpen) {
-        setIsOpen(false);
+      if (event.key === 'Escape' && isOpen && !isClosing) {
+        handleClose();
       }
     };
 
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [isOpen]);
+  }, [isOpen, isClosing]);
+
+  const buttonSize = position === 'mobile' ? 'sm' : 'md';
 
   return (
     <div className={`notification-button-wrapper notification-button-wrapper--${position} ${className}`}>
-      <button
+      <IconButton
         ref={buttonRef}
-        className={`notification-button ${isOpen ? 'notification-button--active' : ''}`}
+        icon={<Bell size="xl" />}
         onClick={handleToggle}
         title="Notifications"
-        aria-label="Notifications"
-        aria-expanded={isOpen}
-      >
-        <div className="notification-button-icon">
-          <Bell size="xl" />
-          {hasRunning && (
-            <div className="notification-button-spinner">
-              <div className="notification-button-spinner-ring" />
-            </div>
-          )}
-        </div>
-        {hasUnread && !hasRunning && (
-          <span className="notification-button-dot" />
-        )}
-      </button>
+        ariaLabel="Notifications"
+        ariaExpanded={isOpen}
+        isActive={isOpen}
+        showSpinner={hasRunning}
+        showDot={hasUnread && !hasRunning}
+        size={buttonSize}
+      />
 
       {isOpen && (
-        <div ref={panelRef} className="notification-panel-container">
-          <NotificationPanel onClose={handleClose} position={position} />
+        <div
+          ref={panelRef}
+          className={`notification-panel-container ${isClosing ? 'notification-panel-container--closing' : ''}`}
+        >
+          <NotificationPanel onClose={handleClose} />
         </div>
       )}
     </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import PromptTreeNav from './PromptTreeNav';
 import PromptEditor from './PromptEditor';
 import { PROMPT_TREE, getFirstPromptNode, type PromptNode } from './promptTree';
+import { IconButton } from '../IconButton';
 import { ChevronLeft, ChevronRight, Document } from '../icons';
 import './PromptsTemplatesPanel.css';
 import TemplateSyntaxHint from './TemplateSyntaxHint';
@@ -49,18 +50,16 @@ const PromptsTemplatesPanel: React.FC = () => {
                 </div>
                 <div className="prompts-editor-header-actions">
                   <TemplateSyntaxHint selectedNode={selectedNode} />
-                  <button
-                    className="sidebar-toggle-btn"
+                  <IconButton
+                    icon={isSidebarCollapsed ? <ChevronLeft size="sm" /> : <ChevronRight size="sm" />}
                     onClick={toggleSidebar}
                     title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                  >
-                    {isSidebarCollapsed ? <ChevronLeft size="sm" /> : <ChevronRight size="sm" />}
-                  </button>
+                    size="sm"
+                  />
                 </div>
               </div>
 
               {/* Prompt editor */}
-              <div className="prompts-editor-wrapper">
                 <PromptEditor
                   key={`${selectedNode.functionType}-${selectedNode.category}-${selectedNode.name || ''}`}
                   functionType={selectedNode.functionType!}
@@ -69,7 +68,6 @@ const PromptsTemplatesPanel: React.FC = () => {
                   label={selectedNode.label}
                   description={selectedNode.description}
                 />
-              </div>
             </div>
           ) : (
             <div className="prompts-empty-state">

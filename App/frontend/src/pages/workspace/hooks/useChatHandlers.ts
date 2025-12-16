@@ -1,6 +1,7 @@
 import { useRef, useCallback } from 'react';
 import { useChatStore } from '../../../store/chatStore';
 import { useChatUIStore } from '../../../store/chatUIStore';
+import { useSidebarStore } from '../../../store/sidebarStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import type { ChatMessage, FunctionCallResultSummary } from '../../../llm/requestTypes';
@@ -23,8 +24,7 @@ export function useChatHandlers(
   const updateEditContent = useChatUIStore(state => state.updateEditContent);
   const getEditing = useChatUIStore(state => state.getEditing);
   const cancelEditing = useChatUIStore(state => state.cancelEditing);
-  const setMobileSidebarVisible = useChatUIStore(state => state.setMobileSidebarVisible);
-  const setDesktopChatListVisible = useChatUIStore(state => state.setDesktopChatListVisible);
+  const closeSidebar = useSidebarStore(state => state.closeSidebar);
   const mainLanguage = useSettingsStore(state => state.settings.mainLanguage);
   const getObjectsMissingMainLanguage = useUnifiedObjectStore(state => state.getObjectsMissingMainLanguage);
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -34,9 +34,8 @@ export function useChatHandlers(
   const handleSelectChat = useCallback((chatId: string) => {
     if (!projectId) return;
     selectChat(projectId, chatId);
-    setMobileSidebarVisible(projectId, false);
-    setDesktopChatListVisible(projectId, false);
-  }, [projectId, selectChat, setMobileSidebarVisible, setDesktopChatListVisible]);
+    closeSidebar(projectId);
+  }, [projectId, selectChat, closeSidebar]);
 
   const handleSubmit = useCallback(async (e: React.FormEvent, input: string) => {
     e.preventDefault();

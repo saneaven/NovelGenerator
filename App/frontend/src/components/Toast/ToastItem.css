@@ -172,19 +172,4 @@
   justify-content: flex-end;
 }
 
-.toast-more-info-btn {
-  padding: var(--spacing-xs) var(--spacing-sm);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-error);
-  background: var(--color-error-light);
-  border: 1px solid var(--color-error);
-  border-radius: var(--border-radius-sm);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.toast-more-info-btn:hover {
-  background: var(--color-error);
-  color: white;
-}
+/* More info button styling now comes from TextButton component */

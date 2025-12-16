@@ -3,6 +3,7 @@ import { useAssetStore } from '../../store/assetStore';
 import { useProjectStore } from '../../store/projectStore';
 import { ImageGenerationPanel } from '../ImageGeneration';
 import ImagePromptManager from './ImagePromptManager';
+import { TextButton } from '../TextButton';
 import { formatStyledPrompt, type Asset, type StoryObjectAsset } from '../../api/assetService';
 import { API_BASE_URL } from '../../api/client';
 import { Star, Edit } from '../icons';
@@ -428,12 +429,12 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                             </div>
                         </div>
                         <div className="success-modal-footer">
-                            <button className="cancel-button" onClick={() => setSuccessModalAsset(null)}>
+                            <TextButton variant="secondary" onClick={() => setSuccessModalAsset(null)}>
                                 Cancel
-                            </button>
-                            <button className="save-button" onClick={handleSuccessModalSave}>
+                            </TextButton>
+                            <TextButton variant="primary" onClick={handleSuccessModalSave}>
                                 Save & Link
-                            </button>
+                            </TextButton>
                         </div>
                     </div>
                 </div>
@@ -538,16 +539,16 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                         </div>
                         <div className="asset-detail-footer">
                             {detailAsset.generation_provider && (
-                                <button
-                                    className="regenerate-button"
+                                <TextButton
+                                    variant="secondary"
                                     onClick={() => handleRegenerateWithSettings(detailAsset)}
                                 >
                                     Regenerate
-                                </button>
+                                </TextButton>
                             )}
-                            <button className="cancel-button" onClick={() => setDetailAsset(null)}>
+                            <TextButton variant="secondary" onClick={() => setDetailAsset(null)}>
                                 Close
-                            </button>
+                            </TextButton>
                         </div>
                     </div>
                 </div>

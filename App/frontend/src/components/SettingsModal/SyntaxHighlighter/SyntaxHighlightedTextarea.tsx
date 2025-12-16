@@ -10,20 +10,16 @@ interface SyntaxHighlightedTextareaProps
     value: string;
     onChange: (value: string) => void;
     placeholder?: string;
-    minHeight?: number;
-    maxHeight?: number;
 }
 
 /**
  * CodeMirror-based textarea with syntax highlighting
- * Replaces the old overlay-based implementation
+ * Fills its container height (parent must have defined height)
  */
 const SyntaxHighlightedTextarea: React.FC<SyntaxHighlightedTextareaProps> = ({
     value,
     onChange,
     placeholder = '',
-    minHeight = 200,
-    maxHeight = 600
 }) =>
 {
     const editorRef = useRef<any>(null);
@@ -52,11 +48,10 @@ const SyntaxHighlightedTextarea: React.FC<SyntaxHighlightedTextareaProps> = ({
         },
     ]);
 
-    // Height extension - dynamic height based on content
+    // Height extension - fill container
     const heightExtension = EditorView.theme({
         '&': {
-            minHeight: `${minHeight}px`,
-            maxHeight: `${maxHeight}px`,
+            height: '100%',
         },
         '.cm-scroller': {
             overflow: 'auto',

@@ -76,7 +76,7 @@ export const LLMTaskManager = {
       sessionId,
       complete: () => store.setSuccess(sessionId),
       error: (message: string) => store.setTaskError(sessionId, message),
-      cancel: () => store.setCancelled(sessionId),
+      cancel: () => store.cancelTask(sessionId),
       updateProgress: (current: number, total: number, currentItemLabel?: string) =>
         store.setProgress(sessionId, current, total, currentItemLabel),
     };
@@ -115,6 +115,23 @@ export const LLMTaskManager = {
    */
   setFunctionCallProgress(sessionId: string, progress: import('../llm/requestTypes').FunctionCallProgress[]) {
     useLLMTaskStore.getState().setFunctionCallProgress(sessionId, progress);
+  },
+
+  /**
+   * Register an AbortController for a session
+   * @param sessionId Session ID
+   * @param controller AbortController to register
+   */
+  registerAbortController(sessionId: string, controller: AbortController) {
+    useLLMTaskStore.getState().registerAbortController(sessionId, controller);
+  },
+
+  /**
+   * Cancel a running task by aborting the request and updating status
+   * @param sessionId Session ID to cancel
+   */
+  cancelTask(sessionId: string) {
+    useLLMTaskStore.getState().cancelTask(sessionId);
   },
 };
 

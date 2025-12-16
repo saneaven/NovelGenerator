@@ -5,6 +5,7 @@ import { validateTemplate } from '../../templateEngine/engine';
 import { mapFunctionTypeToSchemaType } from '../../templateEngine/validator';
 import type { FunctionType, PromptCategory } from '../../types/prompts';
 import { useSettingsStore } from '../../store/settingsStore';
+import { TextButton } from '../TextButton';
 import ValidationWarnings from './ValidationWarnings';
 import VersionHistoryModal from './VersionHistoryModal';
 import './PromptEditor.css';
@@ -158,23 +159,17 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
     {
         return (
             <div className="prompt-editor loading">
-                <label>{label}</label>
-                {description && <p className="prompt-description">{description}</p>}
-                <div className="loading-indicator">Loading prompt...</div>
             </div>
         );
     }
 
     return (
         <div className="prompt-editor">
-            {description && <p className="prompt-description">{description}</p>}
             {/* Syntax highlighted textarea */}
             <SyntaxHighlightedTextarea
                 value={content}
                 onChange={setContent}
                 placeholder="Enter prompt template..."
-                minHeight={200}
-                maxHeight={600}
             />
 
             {/* Validation warnings/errors */}
@@ -188,13 +183,14 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
             {/* Action buttons */}
             <div className="editor-actions">
                 <div className="editor-left-actions">
-                    <button
+                    <TextButton
+                        variant="secondary"
+                        size="sm"
                         onClick={() => setShowNoteInput(!showNoteInput)}
-                        className="btn-secondary"
                         disabled={isSaving || !hasChanges}
                     >
                         {showNoteInput ? 'Hide Note' : 'Add Note'}
-                    </button>
+                    </TextButton>
                     {showNoteInput && (
                         <input
                             type="text"
@@ -212,19 +208,22 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
                         {content.length} characters
                         {hasChanges && <span className="unsaved-indicator"> • Unsaved changes</span>}
                     </span>
-                    <button
+                    <TextButton
+                        variant="secondary"
+                        size="sm"
                         onClick={() => setShowVersionHistory(true)}
-                        className="btn-secondary"
                     >
                         Version History
-                    </button>
-                    <button
+                    </TextButton>
+                    <TextButton
+                        variant="primary"
+                        size="sm"
                         onClick={handleSave}
-                        className="btn-primary"
                         disabled={isSaving || !validation?.valid || !hasChanges}
+                        loading={isSaving}
                     >
-                        {isSaving ? 'Saving...' : 'Save'}
-                    </button>
+                        Save
+                    </TextButton>
                 </div>
             </div>
 

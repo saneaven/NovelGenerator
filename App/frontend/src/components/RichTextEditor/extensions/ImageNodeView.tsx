@@ -7,6 +7,8 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import { NodeViewWrapper } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/core';
 import type { Asset } from '../../../api/assetService';
+import { IconButton } from '../../IconButton';
+import { TextButton } from '../../TextButton';
 import { Refresh, Shuffle, Trash } from '../../icons';
 import './ImageNodeView.css';
 
@@ -98,10 +100,7 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
     }, [isTouchDevice, showDeleteConfirm]);
 
     // Handle regenerate
-    const handleRegenerate = useCallback((e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-
+    const handleRegenerate = useCallback(() => {
         if (!asset || !callbacks?.onRegenerate || !imageRef.current) return;
 
         const bounds = imageRef.current.getBoundingClientRect();
@@ -110,10 +109,7 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
     }, [asset, callbacks]);
 
     // Handle replace
-    const handleReplace = useCallback((e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-
+    const handleReplace = useCallback(() => {
         if (!callbacks?.onReplace) return;
 
         callbacks.onReplace(src);
@@ -121,25 +117,19 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
     }, [src, callbacks]);
 
     // Handle delete (show confirmation)
-    const handleDelete = useCallback((e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
+    const handleDelete = useCallback(() => {
         setShowDeleteConfirm(true);
     }, []);
 
     // Confirm delete
-    const confirmDelete = useCallback((e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
+    const confirmDelete = useCallback(() => {
         deleteNode();
         setShowDeleteConfirm(false);
         setShowOverlay(false);
     }, [deleteNode]);
 
     // Cancel delete
-    const cancelDelete = useCallback((e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
+    const cancelDelete = useCallback(() => {
         setShowDeleteConfirm(false);
     }, []);
 
@@ -175,57 +165,54 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
                 draggable={false}
             />
 
-            {/* Action overlay */}
-            {(showOverlay || showDeleteConfirm) && !showDeleteConfirm && (
-                <div className="image-overlay">
+            {/* Action overlay - always rendered, visibility controlled by CSS */}
+            {!showDeleteConfirm && (
+                <div className="image-overlay" onClick={(e) => e.stopPropagation()}>
                     <div className="overlay-buttons">
                         {/* Regenerate - only for generated images */}
                         {canRegenerate && (
-                            <button
-                                type="button"
+                            <IconButton
+                                icon={<Refresh size="md" />}
                                 onClick={handleRegenerate}
                                 title="Regenerate image"
                                 disabled={isLoadingAsset}
-                            >
-                                <Refresh size="md" />
-                            </button>
+                                size="sm"
+                            />
                         )}
 
                         {/* Replace */}
-                        <button
-                            type="button"
+                        <IconButton
+                            icon={<Shuffle size="md" />}
                             onClick={handleReplace}
                             title="Replace image"
-                        >
-                            <Shuffle size="md" />
-                        </button>
+                            size="sm"
+                        />
                     </div>
 
                     {/* Delete - separated from other buttons */}
-                    <button
-                        type="button"
-                        className="delete-btn"
+                    <IconButton
+                        icon={<Trash size="md" />}
                         onClick={handleDelete}
                         title="Remove image"
-                    >
-                        <Trash size="md" />
-                    </button>
+                        size="sm"
+                        className="delete-btn"
+                    />
                 </div>
             )}
 
             {/* Delete confirmation dialog */}
             {showDeleteConfirm && (
-                <div className="delete-confirm-overlay">
+                <div className="delete-confirm-overlay" onClick={(e) => e.stopPropagation()}>
                     <div className="delete-confirm-dialog">
                         <p>Remove this image from the editor?</p>
                         <p className="hint">(Image will remain in the library)</p>
                         <div className="confirm-buttons">
-                            <button type="button" onClick={confirmDelete}>
+                            <TextButton variant="danger" size="sm" onClick={confirmDelete}>
                                 Remove
-                            </button>
-                            <button type="button" onClick={cancelDelete}>
+                            </TextButton>
+                            <TextButton variant="secondary" size="sm" onClick={cancelDelete}>
                                 Cancel
-                            </button>
+                            </TextButton>
                         </div>
                     </div>
                 </div>

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useModalHistory } from '../hooks/useModalHistory';
+import { BaseModal } from './BaseModal';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
 import type { ObjectType } from '../types/unifiedObject';
 import { Scroll, Loading, Mailbox, Check, Globe, Clock, SpeechBubble, DocumentAlt } from './icons';
+import { TextButton } from './TextButton';
 import './VersionHistoryModal.css';
 
 interface VersionHistoryModalProps {
@@ -22,7 +23,6 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   objectId,
   onRestoreVersion,
 }) => {
-  useModalHistory(isOpen, onClose);
   const store = useUnifiedObjectStore();
   const { showError } = useErrorStore();
   const [versions, setVersions] = useState<any[]>([]);
@@ -165,106 +165,104 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     );
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content version-history-modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2><Scroll size="2xl" />{getTypeDisplayName(objectType)} Version History</h2>
-          <button className="modal-close" onClick={onClose}>Close</button>
-        </div>
+    <BaseModal
+      isOpen={isOpen}
+      onClose={onClose}
+      size="large"
+      title={<><Scroll size="2xl" />{getTypeDisplayName(objectType)} Version History</>}
+      className="version-history-modal"
+      footer={
+        <TextButton variant="secondary" onClick={onClose}>
+          Close
+        </TextButton>
+      }
+    >
+      <div className="version-history-content">
+        {loading ? (
+          <div className="loading-state"><Loading size="2xl" />Loading versions...</div>
+        ) : versions.length === 0 ? (
+          <div className="empty-state">
+            <Mailbox size="4xl" />
+            <p>No saved versions.</p>
+          </div>
+        ) : (
+          <div className="versions-list">
+            {versions.map((version) => {
+              const isCurrentVersion = currentObject?.version.id === version.id;
+              const versionData = version.data[currentLanguage] || Object.values(version.data)[0] || {};
 
-        <div className="version-history-content">
-          {loading ? (
-            <div className="loading-state"><Loading size="2xl" />Loading versions...</div>
-          ) : versions.length === 0 ? (
-            <div className="empty-state">
-              <Mailbox size="4xl" />
-              <p>No saved versions.</p>
-            </div>
-          ) : (
-            <div className="versions-list">
-              {versions.map((version) => {
-                const isCurrentVersion = currentObject?.version.id === version.id;
-                const versionData = version.data[currentLanguage] || Object.values(version.data)[0] || {};
-
-                return (
-                  <div
-                    key={version.id}
-                    className={`version-item ${isCurrentVersion ? 'active' : ''}`}
-                  >
-                    <div className="version-header">
-                      <div className="version-info">
-                        <div className="version-title">
-                          <span className="version-number">Version #{version.number}</span>
-                          {isCurrentVersion && <span className="active-badge"><Check size="xs" />Latest</span>}
-                          <span className="version-languages-badge">
-                            <Globe size={"1em"} />
-                            {Object.keys(version.data || {}).join(', ') || 'No data'}
-                          </span>
-                        </div>
-                        <div className="version-metadata">
-                          <span className="version-timestamp">
-                            <Clock size="sm" />
-                            {new Date(version.created_at).toLocaleString()}
-                          </span>
-                          <span className="version-request">
-                            <SpeechBubble size="sm" />
-                            {version.user_request || 'No description'}
-                          </span>
-                        </div>
+              return (
+                <div
+                  key={version.id}
+                  className={`version-item ${isCurrentVersion ? 'active' : ''}`}
+                >
+                  <div className="version-header">
+                    <div className="version-info">
+                      <div className="version-title">
+                        <span className="version-number">Version #{version.number}</span>
+                        {isCurrentVersion && <span className="active-badge"><Check size="xs" />Latest</span>}
+                        <span className="version-languages-badge">
+                          <Globe size={"1em"} />
+                          {Object.keys(version.data || {}).join(', ') || 'No data'}
+                        </span>
                       </div>
-
-                      <div className="version-actions">
-                        <button
-                          onClick={() => toggleExpandVersion(version.id)}
-                          className="expand-button"
-                        >
-                          {expandedVersions.has(version.id) ? 'Hide details' : 'Show details'}
-                        </button>
-
-                        {!isCurrentVersion && (
-                          <button
-                            onClick={() => handleRestoreVersion(version.id)}
-                            className="restore-button"
-                          >
-                            Restore
-                          </button>
-                        )}
+                      <div className="version-metadata">
+                        <span className="version-timestamp">
+                          <Clock size="sm" />
+                          {new Date(version.created_at).toLocaleString()}
+                        </span>
+                        <span className="version-request">
+                          <SpeechBubble size="sm" />
+                          {version.user_request || 'No description'}
+                        </span>
                       </div>
                     </div>
 
-                    {expandedVersions.has(version.id) && (
-                      <div className="version-content">
-                        <h4><DocumentAlt size="md" />Version Data (Language: {currentLanguage}):</h4>
-                        <div className="version-data">
-                          {renderVersionData(versionData, objectType)}
-                        </div>
-                        {Object.keys(version.data).length > 1 && (
-                          <div className="version-languages">
-                            <small>
-                              <Globe size="xs" />
-                              Available in: {Object.keys(version.data).join(', ')}
-                            </small>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                    <div className="version-actions">
+                      <TextButton
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleExpandVersion(version.id)}
+                      >
+                        {expandedVersions.has(version.id) ? 'Hide details' : 'Show details'}
+                      </TextButton>
 
-        <div className="modal-footer">
-          <button onClick={onClose} className="cancel-button">
-            Close
-          </button>
-        </div>
+                      {!isCurrentVersion && (
+                        <TextButton
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => handleRestoreVersion(version.id)}
+                        >
+                          Restore
+                        </TextButton>
+                      )}
+                    </div>
+                  </div>
+
+                  {expandedVersions.has(version.id) && (
+                    <div className="version-content">
+                      <h4><DocumentAlt size="md" />Version Data (Language: {currentLanguage}):</h4>
+                      <div className="version-data">
+                        {renderVersionData(versionData, objectType)}
+                      </div>
+                      {Object.keys(version.data).length > 1 && (
+                        <div className="version-languages">
+                          <small>
+                            <Globe size="xs" />
+                            Available in: {Object.keys(version.data).join(', ')}
+                          </small>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
-    </div>
+    </BaseModal>
   );
 };
 

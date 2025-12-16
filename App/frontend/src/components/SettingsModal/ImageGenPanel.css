@@ -310,7 +310,7 @@
 
 /* NovelAI settings grid - 2x2 layout */
 .novelai-settings {
-    grid-template-columns: 1fr 1fr !important;
+    grid-template-columns: 1fr 1fr;
 }
 
 /* ========================================

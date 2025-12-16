@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useModalHistory } from '../hooks/useModalHistory';
+import { BaseModal } from './BaseModal';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import type { ObjectType } from '../types/unifiedObject';
@@ -9,6 +9,7 @@ import { applyEditFunctionCalls } from '../chat/utils/editFunctionApplicator';
 import { parseJsonOutput, extractRawContent } from '../utils/nativeOutputParser';
 import { LLMTask, LLMTaskMode, LLMTaskManager, type StoryObjectEditPromptContext, type TaskHandle } from '../llm';
 import { Lightbulb } from './icons';
+import { TextButton } from './TextButton';
 import './AIEditModal.css';
 
 interface ContextOptions {
@@ -55,7 +56,6 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   defaultUserRequest,
   defaultContextOptions,
 }) => {
-  useModalHistory(isOpen, onClose);
   const [userRequest, setUserRequest] = useState(defaultUserRequest ?? '');
   const [contextOptions, setContextOptions] = useState<ContextOptions>(
     defaultContextOptions ?? {
@@ -82,11 +82,8 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     }
   }, [isOpen]);
 
-  useEffect(() => {
-    return () => {
-      taskRef.current?.abort();
-    };
-  }, []);
+  // Note: abort is handled by LLMTaskManager.cancelTask() via toast dismiss
+  // No cleanup abort needed here as task continues in background after modal closes
 
   const getObjectData = (obj: any): Record<string, any> => {
     const mainLanguage = settingsStore.settings.mainLanguage;
@@ -343,58 +340,63 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     setContextOptions(prev => ({ ...prev, [option]: !prev[option] }));
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content ai-edit-modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>AI {categoryDisplayName} {editTypeText} Edit</h2>
-          <button className="modal-close" onClick={onClose}>x</button>
+    <BaseModal
+      isOpen={isOpen}
+      onClose={onClose}
+      size="large"
+      title={`AI ${categoryDisplayName} ${editTypeText} Edit`}
+      className="ai-edit-modal"
+      footer={
+        <>
+          <TextButton variant="secondary" onClick={onClose}>
+            Cancel
+          </TextButton>
+          <TextButton
+            variant="primary"
+            type="submit"
+            form="ai-edit-form"
+            disabled={!userRequest.trim()}
+          >
+            Request AI Edit
+          </TextButton>
+        </>
+      }
+    >
+      <form id="ai-edit-form" onSubmit={handleSubmit} className="ai-edit-form">
+        <div className="form-group">
+          <label htmlFor="user-request">Edit Request</label>
+          <textarea
+            id="user-request"
+            value={userRequest}
+            onChange={(e) => setUserRequest(e.target.value)}
+            placeholder={`Enter your edit request for the ${categoryDisplayName} ${editTypeText}.`}
+            rows={4}
+            required
+          />
         </div>
 
-        <form onSubmit={handleSubmit} className="ai-edit-form">
-          <div className="form-group">
-            <label htmlFor="user-request">Edit Request</label>
-            <textarea
-              id="user-request"
-              value={userRequest}
-              onChange={(e) => setUserRequest(e.target.value)}
-              placeholder={`Enter your edit request for the ${categoryDisplayName} ${editTypeText}.`}
-              rows={4}
-              required
-            />
+        <div className="form-group context-options">
+          <label>Context Inclusion Options</label>
+          <div className="checkbox-group">
+            {Object.entries(contextOptions).map(([key, checked]) => (
+              <label key={key} className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggleContextOption(key as keyof ContextOptions)}
+                />
+                <span className="checkbox-text">{getCategoryDisplayName(key)}</span>
+              </label>
+            ))}
           </div>
-
-          <div className="form-group context-options">
-            <label>Context Inclusion Options</label>
-            <div className="checkbox-group">
-              {Object.entries(contextOptions).map(([key, checked]) => (
-                <label key={key} className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleContextOption(key as keyof ContextOptions)}
-                  />
-                  <span className="checkbox-text">{getCategoryDisplayName(key)}</span>
-                </label>
-              ))}
-            </div>
-            <p className="context-help">
-              <Lightbulb size="sm" />
-              Select the context for the AI to refer to. Providing more context will lead to more consistent results.
-            </p>
-          </div>
-
-          <div className="form-actions">
-            <button type="button" onClick={onClose} className="cancel-button">Cancel</button>
-            <button type="submit" className="submit-button" disabled={!userRequest.trim()}>
-              Request AI Edit
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+          <p className="context-help">
+            <Lightbulb size="sm" />
+            Select the context for the AI to refer to. Providing more context will lead to more consistent results.
+          </p>
+        </div>
+      </form>
+    </BaseModal>
   );
 };
 

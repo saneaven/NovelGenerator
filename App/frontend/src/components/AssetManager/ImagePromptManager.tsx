@@ -3,6 +3,7 @@ import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import ImagePromptBuilderModal, { type PromptMode } from '../ImageGeneration/ImagePromptBuilderModal';
 import type { ObjectType } from '../../types/unifiedObject';
+import { TextButton } from '../TextButton';
 import './ImagePromptManager.css';
 
 interface ImagePromptManagerProps {
@@ -180,21 +181,23 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                         <div className="prompt-section-header">
                             <label>Natural Language Prompt</label>
                             <div className="prompt-actions">
-                                <button
-                                    className="ai-assist-btn"
+                                <TextButton
+                                    variant="secondary"
+                                    size="sm"
                                     onClick={handleAIAssist}
                                     title="Generate prompt with AI assistance"
                                 >
                                     AI Assist
-                                </button>
+                                </TextButton>
                                 {naturalPrompt && (
-                                    <button
-                                        className="clear-btn"
+                                    <TextButton
+                                        variant="ghost"
+                                        size="sm"
                                         onClick={() => handleClear('natural')}
                                         title="Clear prompt"
                                     >
                                         Clear
-                                    </button>
+                                    </TextButton>
                                 )}
                             </div>
                         </div>
@@ -216,21 +219,23 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                         <div className="prompt-section-header">
                             <label>Positive Tags (NovelAI)</label>
                             <div className="prompt-actions">
-                                <button
-                                    className="ai-assist-btn"
+                                <TextButton
+                                    variant="secondary"
+                                    size="sm"
                                     onClick={handleAIAssist}
                                     title="Generate prompt with AI assistance"
                                 >
                                     AI Assist
-                                </button>
+                                </TextButton>
                                 {positivePrompt && (
-                                    <button
-                                        className="clear-btn"
+                                    <TextButton
+                                        variant="ghost"
+                                        size="sm"
                                         onClick={() => handleClear('positive')}
                                         title="Clear prompt"
                                     >
                                         Clear
-                                    </button>
+                                    </TextButton>
                                 )}
                             </div>
                         </div>
@@ -252,21 +257,23 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                         <div className="prompt-section-header">
                             <label>Negative Tags (NovelAI)</label>
                             <div className="prompt-actions">
-                                <button
-                                    className="ai-assist-btn"
+                                <TextButton
+                                    variant="secondary"
+                                    size="sm"
                                     onClick={handleAIAssist}
                                     title="Generate prompt with AI assistance"
                                 >
                                     AI Assist
-                                </button>
+                                </TextButton>
                                 {negativePrompt && (
-                                    <button
-                                        className="clear-btn"
+                                    <TextButton
+                                        variant="ghost"
+                                        size="sm"
                                         onClick={() => handleClear('negative')}
                                         title="Clear prompt"
                                     >
                                         Clear
-                                    </button>
+                                    </TextButton>
                                 )}
                             </div>
                         </div>
@@ -289,13 +296,14 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                     {hasChanges && <span className="unsaved-indicator">Unsaved changes</span>}
                     {saveSuccess && <span className="save-success">Saved!</span>}
                 </div>
-                <button
-                    className="save-btn"
+                <TextButton
+                    variant="primary"
                     onClick={handleSave}
                     disabled={isSaving || !hasChanges}
+                    loading={isSaving}
                 >
-                    {isSaving ? 'Saving...' : 'Save Prompts'}
-                </button>
+                    Save Prompts
+                </TextButton>
             </div>
 
             {/* AI Prompt Builder Modal */}

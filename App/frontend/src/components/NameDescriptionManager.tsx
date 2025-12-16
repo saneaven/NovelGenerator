@@ -24,7 +24,9 @@ import TranslationModal from './TranslationModal';
 import { AssetManagerModal } from './AssetManager';
 import StoryCardExpanded from './StoryCardExpanded';
 import { DropdownMenu, DropdownItem, DropdownDivider } from './ui/DropdownMenu';
-import { Expand, Collapse, Plus, AIAssist } from './icons';
+import { IconButton } from './IconButton';
+import { TextButton } from './TextButton';
+import { Expand, Collapse, Plus, AIAssist, MoreHorizontal } from './icons';
 import { getSpanType, type SpanType } from '../hooks/useCardSpanType';
 import type { UnifiedObject, ObjectType } from '../types/unifiedObject';
 import type { Asset } from '../api/assetService';
@@ -395,33 +397,43 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
       <div className="section-header">
         <h2>{title}</h2>
         <div className="header-buttons">
-          <button
+          <TextButton
+            variant="ghost"
+            size="sm"
             onClick={toggleAllCards}
-            className="collapse-control-btn desktop-only"
             title={allCollapsed ? "Expand All" : "Collapse All"}
+            iconLeft={allCollapsed ? <Collapse size="xs" /> : <Expand size="xs" />}
+            className="desktop-only"
           >
-            {allCollapsed ? <Collapse size="xs" /> : <Expand size="xs" />}
             {allCollapsed ? "Expand" : "Collapse"}
-          </button>
-          <button
+          </TextButton>
+          <TextButton
+            variant="primary"
+            size="sm"
             onClick={() => handleAIEdit()}
-            className="ai-edit-button desktop-only"
             disabled={showAddForm}
+            iconLeft={<AIAssist size="sm" />}
+            className="desktop-only"
           >
-            <AIAssist size="sm" /> AI Edit All
-          </button>
-          <button
+            AI Edit All
+          </TextButton>
+          <TextButton
+            variant="secondary"
+            size="sm"
             onClick={() => setShowAddForm(true)}
-            className="add-button desktop-only"
             disabled={showAddForm}
+            className="desktop-only"
           >
             Add {singularName}
-          </button>
+          </TextButton>
           <DropdownMenu
             trigger={
-              <button className="more-button mobile-only" title="More actions">
-                •••
-              </button>
+              <IconButton
+                icon={<MoreHorizontal size="sm" />}
+                title="More actions"
+                size="sm"
+                className="mobile-only"
+              />
             }
           >
             <DropdownItem
@@ -662,12 +674,12 @@ const AddItemForm: React.FC<AddItemFormProps> = ({
           />
         </div>
         <div className="form-actions">
-          <button type="button" onClick={onCancel} className="cancel-button">
+          <TextButton variant="secondary" type="button" onClick={onCancel}>
             Cancel
-          </button>
-          <button type="submit" className="save-button">
+          </TextButton>
+          <TextButton variant="primary" type="submit">
             Add
-          </button>
+          </TextButton>
         </div>
       </form>
     </div>
@@ -715,14 +727,14 @@ const ItemDisplay = React.memo<ItemDisplayProps>(({
       onLayoutAnimationComplete={onAnimationComplete}
     >
       {/* Expand button - top right, always visible */}
-      <button
-        className="story-card__full-expand-btn"
+      <IconButton
+        icon={<Expand size="md" />}
         onClick={onOpenFullExpand}
-        aria-label="Open edit panel"
+        ariaLabel="Open edit panel"
         title="Edit"
-      >
-        <Expand size="xl" />
-      </button>
+        size="sm"
+        className="story-card__full-expand-btn"
+      />
 
       {/* Content */}
       <div className="story-card__content">

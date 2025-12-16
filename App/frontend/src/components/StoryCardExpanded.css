@@ -10,9 +10,9 @@
     border-radius: var(--border-radius-xl);
     box-shadow: var(--shadow-xl);
     overflow: hidden;
-    max-width: 900px;
     width: 100%;
-    max-height: 90vh;
+    height: 100%;
+    max-height: 90dvh;
     isolation: isolate; /* Create stacking context */
 }
 
@@ -28,32 +28,12 @@
     max-width: 500px;
 }
 
-/* Close button */
-.expanded-close-btn {
+/* Close button - positioning only (styling from IconButton) */
+.expanded-close-btn.icon-button {
     position: absolute;
     top: var(--spacing-md);
     right: var(--spacing-md);
     z-index: var(--z-button);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    background: var(--color-surface-elevated);
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--border-radius-full);
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-lg);
-    cursor: pointer;
-    transition: all var(--transition-base);
-    box-shadow: var(--shadow-sm);
-}
-
-.expanded-close-btn:hover {
-    background: var(--color-surface-hover);
-    border-color: var(--color-border-medium);
-    color: var(--color-text-primary);
-    transform: scale(1.05);
 }
 
 /* Image section - DOM order last, but visually first via order */
@@ -206,49 +186,8 @@
     gap: var(--spacing-sm);
 }
 
-.expanded-ai-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--spacing-xs);
-    padding: var(--spacing-sm) var(--spacing-md);
-    background: linear-gradient(135deg, var(--color-brand-primary), var(--color-brand-secondary, #8b5cf6));
-    border: none;
-    border-radius: var(--border-radius-md);
-    color: white;
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-medium);
-    cursor: pointer;
-    transition: all var(--transition-base);
-}
+/* AI button styling now comes from TextButton component */
 
-.expanded-ai-btn:hover {
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
-    filter: brightness(1.1);
-}
-
-.expanded-ai-btn .ai-icon {
-    font-size: var(--font-size-sm);
-}
-
-.expanded-more-btn {
-    padding: var(--spacing-sm) var(--spacing-md);
-    background: var(--color-surface-subtle);
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--border-radius-md);
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-bold);
-    letter-spacing: 1px;
-    cursor: pointer;
-    transition: all var(--transition-base);
-}
-
-.expanded-more-btn:hover {
-    background: var(--color-surface-hover);
-    border-color: var(--color-border-medium);
-    color: var(--color-text-primary);
-}
 
 /* Metadata */
 .expanded-metadata {
@@ -282,44 +221,7 @@
     flex-shrink: 0;
 }
 
-.expanded-cancel-btn {
-    padding: var(--spacing-sm) var(--spacing-lg);
-    background: var(--color-surface-elevated);
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--border-radius-md);
-    color: var(--color-text-primary);
-    font-size: var(--font-size-sm);
-    cursor: pointer;
-    transition: all var(--transition-base);
-}
-
-.expanded-cancel-btn:hover {
-    background: var(--color-surface-hover);
-    border-color: var(--color-border-medium);
-}
-
-.expanded-save-btn {
-    padding: var(--spacing-sm) var(--spacing-lg);
-    background: var(--color-brand-primary);
-    border: none;
-    border-radius: var(--border-radius-md);
-    color: var(--color-text-inverse);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-    cursor: pointer;
-    transition: all var(--transition-base);
-}
-
-.expanded-save-btn:hover:not(:disabled) {
-    background: var(--color-brand-primary-hover);
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
-}
-
-.expanded-save-btn:disabled {
-    opacity: var(--opacity-disabled);
-    cursor: not-allowed;
-}
+/* Cancel/Save button styling now comes from TextButton component */
 
 /* ===== MOBILE RESPONSIVE ===== */
 @media (max-width: 768px) {
@@ -338,12 +240,9 @@
         max-height: 250px;
     }
 
-    .expanded-close-btn {
+    .expanded-close-btn.icon-button {
         top: var(--spacing-sm);
         right: var(--spacing-sm);
-        width: 32px;
-        height: 32px;
-        font-size: var(--font-size-base);
     }
 
     .expanded-edit-content {

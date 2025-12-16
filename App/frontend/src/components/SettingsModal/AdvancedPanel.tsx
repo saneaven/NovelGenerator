@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { RetryConfig } from '../../store/settingsStore';
 import LLMLogViewer from './LLMLogViewer';
 import ToggleSwitch from '../ToggleSwitch';
+import { TextButton } from '../TextButton';
 import { Refresh, Document } from '../icons';
 import './AdvancedPanel.css';
 
@@ -158,14 +159,15 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                             disabled={!retryConfig.enabled}
                             className="add-code-input"
                         />
-                        <button
+                        <TextButton
+                            variant="secondary"
+                            size="sm"
                             type="button"
                             onClick={handleAddErrorCode}
                             disabled={!retryConfig.enabled || !newErrorCode}
-                            className="add-code-button"
                         >
                             + Add
-                        </button>
+                        </TextButton>
                     </div>
                 </div>
             </div>

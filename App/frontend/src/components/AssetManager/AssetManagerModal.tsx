@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useModalHistory } from '../../hooks/useModalHistory';
+import { BaseModal } from '../BaseModal';
 import { useAssetStore } from '../../store/assetStore';
 import { useProjectStore } from '../../store/projectStore';
 import { ImageGenerationPanel } from '../ImageGeneration';
 import ImagePromptManager from './ImagePromptManager';
+import { TextButton } from '../TextButton';
 import { formatStyledPrompt, type Asset, type StoryObjectAsset } from '../../api/assetService';
 import { API_BASE_URL } from '../../api/client';
 import { Star, Edit } from '../icons';
@@ -51,7 +52,6 @@ const AssetManagerModal: React.FC<AssetManagerModalProps> = ({
     title = 'Asset Manager',
     onSelect,
 }) => {
-    useModalHistory(isOpen, onClose);
     const { currentProjectId } = useProjectStore();
     const {
         assets,
@@ -286,16 +286,27 @@ const AssetManagerModal: React.FC<AssetManagerModalProps> = ({
     };
 
     return (
-        <div className="asset-modal-overlay" onClick={onClose}>
-            <div className="asset-modal" onClick={(e) => e.stopPropagation()}>
+        <>
+            <BaseModal
+                isOpen={isOpen}
+                onClose={onClose}
+                size="large"
+                showHeader={false}
+                className="asset-modal"
+                footer={
+                    <TextButton variant="secondary" onClick={onClose}>
+                        Close
+                    </TextButton>
+                }
+            >
                 <div className="asset-modal-header">
-                    <h2>{title}</h2>
-                    <button className="close-button" onClick={onClose}>
-                        &times;
-                    </button>
-                </div>
+                <h2>{title}</h2>
+                <button className="close-button" onClick={onClose}>
+                    &times;
+                </button>
+            </div>
 
-                <div className="asset-modal-tabs">
+            <div className="asset-modal-tabs">
                     <button
                         className={`tab-button ${activeTab === 'library' ? 'active' : ''}`}
                         onClick={() => setActiveTab('library')}
@@ -503,13 +514,7 @@ const AssetManagerModal: React.FC<AssetManagerModalProps> = ({
                         </div>
                     )}
                 </div>
-
-                <div className="asset-modal-footer">
-                    <button className="cancel-button" onClick={onClose}>
-                        Close
-                    </button>
-                </div>
-            </div>
+        </BaseModal>
 
             {/* Success Modal */}
             {successModalAsset && (
@@ -539,12 +544,12 @@ const AssetManagerModal: React.FC<AssetManagerModalProps> = ({
                             </div>
                         </div>
                         <div className="success-modal-footer">
-                            <button className="cancel-button" onClick={() => setSuccessModalAsset(null)}>
+                            <TextButton variant="secondary" onClick={() => setSuccessModalAsset(null)}>
                                 Cancel
-                            </button>
-                            <button className="save-button" onClick={handleSuccessModalSave}>
+                            </TextButton>
+                            <TextButton variant="primary" onClick={handleSuccessModalSave}>
                                 Save
-                            </button>
+                            </TextButton>
                         </div>
                     </div>
                 </div>
@@ -663,24 +668,24 @@ const AssetManagerModal: React.FC<AssetManagerModalProps> = ({
                             )}
                             {/* Select button - only in picker mode */}
                             {isPickerMode && (
-                                <button
-                                    className="select-button"
+                                <TextButton
+                                    variant="primary"
                                     onClick={() => {
                                         onSelect?.(detailAsset);
                                         setDetailAsset(null);
                                     }}
                                 >
                                     Select
-                                </button>
+                                </TextButton>
                             )}
-                            <button className="cancel-button" onClick={() => setDetailAsset(null)}>
+                            <TextButton variant="secondary" onClick={() => setDetailAsset(null)}>
                                 Close
-                            </button>
+                            </TextButton>
                         </div>
                     </div>
                 </div>
             )}
-        </div>
+        </>
     );
 };
 

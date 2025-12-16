@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { useProjectStore } from '../store/projectStore';
-import { DropdownMenu, DropdownItem, DropdownDivider } from './ui/DropdownMenu';
-import { Close, AIAssistMini, Scroll, Refresh, Trash, Collapse } from './icons';
+import { DropdownMenu, DropdownItem, DropdownSection } from './ui/DropdownMenu';
+import { AIAssistMini, Scroll, Refresh, Trash, Collapse, MoreHorizontal } from './icons';
+import { IconButton } from './IconButton';
+import { TextButton } from './TextButton';
 import ImageTabContent from './AssetManager/ImageTabContent';
 import type { Asset } from '../api/assetService';
 import { API_BASE_URL } from '../api/client';
@@ -105,13 +107,14 @@ const StoryCardExpanded: React.FC<StoryCardExpandedProps> = ({
             }}
         >
             {/* Close button */}
-            <button
-                className="expanded-close-btn"
+            <IconButton
+                icon={<Collapse size="md" />}
                 onClick={handleCancel}
-                aria-label="Close"
-            >
-                <Collapse size="xl" />
-            </button>
+                ariaLabel="Close"
+                title="Close"
+                size="sm"
+                className="expanded-close-btn"
+            />
 
             {/* Content section */}
             <div className="expanded-content-section">
@@ -163,42 +166,48 @@ const StoryCardExpanded: React.FC<StoryCardExpandedProps> = ({
 
                             {/* Actions row */}
                             <div className="expanded-actions-row">
-                                <button
-                                    className="expanded-ai-btn"
+                                <TextButton
+                                    variant="primary"
+                                    size="sm"
                                     onClick={onAIEdit}
                                     title="AI Edit"
+                                    iconLeft={<AIAssistMini size="sm" />}
                                 >
-                                    <span className="ai-icon"><AIAssistMini size="sm" /></span>
                                     AI Edit
-                                </button>
+                                </TextButton>
 
                                 <DropdownMenu
                                     trigger={
-                                        <button className="expanded-more-btn" title="More actions">
-                                            •••
-                                        </button>
+                                        <IconButton
+                                            icon={<MoreHorizontal size="sm" />}
+                                            title="More actions"
+                                            size="sm"
+                                        />
                                     }
                                     align="right"
                                 >
-                                    <DropdownItem
-                                        icon={<Scroll size="sm" />}
-                                        label="Version History"
-                                        onClick={onVersionHistory}
-                                    />
-                                    {showSecondaryLanguage && (
+                                    <DropdownSection>
                                         <DropdownItem
-                                            icon={<Refresh size="sm" />}
-                                            label="Retranslate"
-                                            onClick={onRetranslate}
+                                            icon={<Scroll size="sm" />}
+                                            label="Version History"
+                                            onClick={onVersionHistory}
                                         />
-                                    )}
-                                    <DropdownDivider />
-                                    <DropdownItem
-                                        icon={<Trash size="sm" />}
-                                        label="Delete"
-                                        onClick={onDelete}
-                                        variant="danger"
-                                    />
+                                        {showSecondaryLanguage && (
+                                            <DropdownItem
+                                                icon={<Refresh size="sm" />}
+                                                label="Retranslate"
+                                                onClick={onRetranslate}
+                                            />
+                                        )}
+                                    </DropdownSection>
+                                    <DropdownSection>
+                                        <DropdownItem
+                                            icon={<Trash size="sm" />}
+                                            label="Delete"
+                                            onClick={onDelete}
+                                            variant="danger"
+                                        />
+                                    </DropdownSection>
                                 </DropdownMenu>
                             </div>
 
@@ -227,19 +236,20 @@ const StoryCardExpanded: React.FC<StoryCardExpandedProps> = ({
 
                 {/* Footer with save/cancel */}
                 <div className="expanded-footer">
-                    <button
-                        className="expanded-cancel-btn"
+                    <TextButton
+                        variant="secondary"
                         onClick={handleCancel}
                     >
                         Cancel
-                    </button>
-                    <button
-                        className="expanded-save-btn"
+                    </TextButton>
+                    <TextButton
+                        variant="primary"
                         onClick={handleSave}
                         disabled={loading || !name.trim()}
+                        loading={loading}
                     >
-                        {loading ? 'Saving...' : 'Save'}
-                    </button>
+                        Save
+                    </TextButton>
                 </div>
             </div>
 

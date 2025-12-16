@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { BaseModal } from '../BaseModal';
 import { useProjectStore } from '../../store/projectStore';
 import { assetService, type Asset, type StoryObjectAsset } from '../../api/assetService';
 import { API_BASE_URL } from '../../api/client';
@@ -82,65 +83,63 @@ const ObjectImagePickerModal: React.FC<ObjectImagePickerModalProps> = ({
     onImageSelected(asset.id, thumbnailUrl);
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="object-image-picker-overlay" onClick={onClose}>
-      <div className="object-image-picker-modal" onClick={e => e.stopPropagation()}>
-        <div className="picker-header">
-          <h3>Select Reference Image</h3>
-          <button className="close-btn" onClick={onClose}>&times;</button>
-        </div>
-
-        <div className="picker-tabs">
-          <button
-            className={`picker-tab ${activeTab === 'object' ? 'active' : ''}`}
-            onClick={() => setActiveTab('object')}
-            disabled={objectAssets.length === 0}
-          >
-            Object Images ({objectAssets.length})
-          </button>
-          <button
-            className={`picker-tab ${activeTab === 'all' ? 'active' : ''}`}
-            onClick={() => setActiveTab('all')}
-          >
-            All Assets ({allAssets.length})
-          </button>
-        </div>
-
-        <div className="picker-content">
-          {loading ? (
-            <div className="picker-loading">Loading assets...</div>
-          ) : error ? (
-            <div className="picker-error">{error}</div>
-          ) : displayAssets.length === 0 ? (
-            <div className="picker-empty">
-              {activeTab === 'object'
-                ? 'No images linked to this object'
-                : 'No assets in project'}
-            </div>
-          ) : (
-            <div className="asset-grid">
-              {displayAssets.map(asset => (
-                <button
-                  key={asset.id}
-                  className="asset-item"
-                  onClick={() => handleSelect(asset)}
-                  title={asset.name}
-                >
-                  <img
-                    src={`${API_BASE_URL}${asset.thumbnail_url || asset.file_url}`}
-                    alt={asset.name}
-                    loading="lazy"
-                  />
-                  <div className="asset-name">{asset.name}</div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+    <BaseModal
+      isOpen={isOpen}
+      onClose={onClose}
+      size="medium"
+      title="Select Reference Image"
+      className="object-image-picker-modal"
+      zIndexLayer={2}
+    >
+      <div className="picker-tabs">
+        <button
+          className={`picker-tab ${activeTab === 'object' ? 'active' : ''}`}
+          onClick={() => setActiveTab('object')}
+          disabled={objectAssets.length === 0}
+        >
+          Object Images ({objectAssets.length})
+        </button>
+        <button
+          className={`picker-tab ${activeTab === 'all' ? 'active' : ''}`}
+          onClick={() => setActiveTab('all')}
+        >
+          All Assets ({allAssets.length})
+        </button>
       </div>
-    </div>
+
+      <div className="picker-content">
+        {loading ? (
+          <div className="picker-loading">Loading assets...</div>
+        ) : error ? (
+          <div className="picker-error">{error}</div>
+        ) : displayAssets.length === 0 ? (
+          <div className="picker-empty">
+            {activeTab === 'object'
+              ? 'No images linked to this object'
+              : 'No assets in project'}
+          </div>
+        ) : (
+          <div className="asset-grid">
+            {displayAssets.map(asset => (
+              <button
+                key={asset.id}
+                className="asset-item"
+                onClick={() => handleSelect(asset)}
+                title={asset.name}
+              >
+                <img
+                  src={`${API_BASE_URL}${asset.thumbnail_url || asset.file_url}`}
+                  alt={asset.name}
+                  loading="lazy"
+                />
+                <div className="asset-name">{asset.name}</div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </BaseModal>
   );
 };
 

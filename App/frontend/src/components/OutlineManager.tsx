@@ -5,8 +5,10 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
 import AIEditModal from './AIEditModal';
 import TranslationModal from './TranslationModal';
-import { DropdownMenu, DropdownItem, DropdownDivider } from './ui/DropdownMenu';
-import { Expand, Collapse, Plus, Edit, Trash, Refresh, AIAssist, Books } from './icons';
+import { DropdownMenu, DropdownItem, DropdownDivider, DropdownSection } from './ui/DropdownMenu';
+import { IconButton } from './IconButton';
+import { TextButton } from './TextButton';
+import { Expand, Collapse, Plus, Edit, Trash, Refresh, AIAssist, Books, MoreHorizontal } from './icons';
 import { Warning } from './icons';
 import type { ActObject, ChapterObject } from '../types/unifiedObject';
 
@@ -381,32 +383,42 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
       <div className="section-header">
         <h2>Story Outline</h2>
         <div className="header-buttons">
-          <button
+          <TextButton
+            variant="ghost"
+            size="sm"
             onClick={toggleAllCards}
-            className="collapse-control-btn desktop-only"
             title={allCollapsed ? "Expand All" : "Collapse All"}
+            iconLeft={allCollapsed ? <Collapse size="xs" /> : <Expand size="xs" />}
+            className="desktop-only"
           >
-            {allCollapsed ? <Collapse size="xs" /> : <Expand size="xs" />}
             {allCollapsed ? "Expand" : "Collapse"}
-          </button>
-          <button
+          </TextButton>
+          <TextButton
+            variant="primary"
+            size="sm"
             onClick={() => setShowAIModal(true)}
-            className="ai-edit-button desktop-only"
+            iconLeft={<AIAssist size="sm" />}
+            className="desktop-only"
           >
             AI Edit
-          </button>
-          <button
+          </TextButton>
+          <TextButton
+            variant="secondary"
+            size="sm"
             onClick={() => setShowAddActForm(true)}
-            className="add-button desktop-only"
             disabled={showAddActForm}
+            className="desktop-only"
           >
             Add Act
-          </button>
+          </TextButton>
           <DropdownMenu
             trigger={
-              <button className="more-button mobile-only" title="More actions">
-                •••
-              </button>
+              <IconButton
+                icon={<MoreHorizontal size="sm" />}
+                title="More actions"
+                size="sm"
+                className="mobile-only"
+              />
             }
           >
             <DropdownItem
@@ -453,77 +465,87 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
               <div key={act.id} className="act-card">
                 <div className="act-header">
                   <div className="act-title">
-                    <button
-                      className="collapse-toggle"
+                    <IconButton
+                      icon={expandedItems.has(act.id) ? <Collapse size="xs" /> : <Expand size="xs" />}
                       onClick={() => toggleItemExpand(act.id)}
                       title={expandedItems.has(act.id) ? 'Collapse' : 'Expand'}
-                    >
-                      {expandedItems.has(act.id) ? <Collapse size="xs" /> : <Expand size="xs" />}
-                    </button>
+                      size="xs"
+                      className="collapse-toggle"
+                    />
                     <span className="act-number">Act {actIndex + 1}</span>
                     <h3 onClick={() => toggleItemExpand(act.id)} className="item-name-clickable">{actData.name}</h3>
                     {actIsFallback && <span className="fallback-warning" title={`${globalDisplayLanguage} not available`}><Warning size="sm" /></span>}
                   </div>
                   <div className="card-actions">
-                    <button
+                    <TextButton
+                      variant="secondary"
+                      size="sm"
                       onClick={() => setEditingAct(act.id)}
-                      className="card-edit-btn desktop-only"
                       disabled={!!store.loading[act.id]}
+                      className="desktop-only"
                     >
                       Edit
-                    </button>
-                    <button
+                    </TextButton>
+                    <TextButton
+                      variant="secondary"
+                      size="sm"
                       onClick={() => setShowAddChapterForm(act.id)}
-                      className="card-add-btn desktop-only"
                       disabled={showAddChapterForm === act.id}
+                      className="desktop-only"
                     >
                       + Chapter
-                    </button>
+                    </TextButton>
                     <DropdownMenu
                       trigger={
-                        <button className="more-button" disabled={!!store.loading[act.id]} title="More actions">
-                          •••
-                        </button>
+                        <IconButton
+                          icon={<MoreHorizontal size="sm" />}
+                          disabled={!!store.loading[act.id]}
+                          title="More actions"
+                          size="sm"
+                        />
                       }
                     >
-                      <DropdownItem
-                        icon={<Edit size="sm" />}
-                        label="Edit"
-                        onClick={() => setEditingAct(act.id)}
-                        disabled={!!store.loading[act.id]}
-                        className="mobile-only"
-                      />
-                      <DropdownItem
-                        icon={<Plus size="sm" />}
-                        label="Add Chapter"
-                        onClick={() => setShowAddChapterForm(act.id)}
-                        disabled={showAddChapterForm === act.id}
-                        className="mobile-only"
-                      />
-                      <DropdownDivider className="mobile-only" />
-                      {settings.settings.defaultSubLanguage &&
-                        Object.keys(act.data).includes(settings.settings.defaultSubLanguage) && (
-                          <DropdownItem
-                            icon={<Refresh size="sm" />}
-                            label="Retranslate"
-                            onClick={() => setShowActRetranslateModal(act.id)}
-                            disabled={!!store.loading[act.id]}
-                          />
-                      )}
-                      <DropdownItem
-                        icon={<Books size="sm" />}
-                        label="History"
-                        onClick={() => setShowActVersionHistory(act.id)}
-                        disabled={!!store.loading[act.id]}
-                      />
-                      <DropdownDivider />
-                      <DropdownItem
-                        icon={<Trash size="sm" />}
-                        label="Delete"
-                        onClick={() => handleDeleteAct(act.id)}
-                        variant="danger"
-                        disabled={!!store.loading[act.id]}
-                      />
+                      <DropdownSection>
+                        <DropdownItem
+                          icon={<Edit size="sm" />}
+                          label="Edit"
+                          onClick={() => setEditingAct(act.id)}
+                          disabled={!!store.loading[act.id]}
+                          className="mobile-only"
+                        />
+                        <DropdownItem
+                          icon={<Plus size="sm" />}
+                          label="Add Chapter"
+                          onClick={() => setShowAddChapterForm(act.id)}
+                          disabled={showAddChapterForm === act.id}
+                          className="mobile-only"
+                        />
+                        <DropdownDivider className="mobile-only" />
+                        {settings.settings.defaultSubLanguage &&
+                          Object.keys(act.data).includes(settings.settings.defaultSubLanguage) && (
+                            <DropdownItem
+                              icon={<Refresh size="sm" />}
+                              label="Retranslate"
+                              onClick={() => setShowActRetranslateModal(act.id)}
+                              disabled={!!store.loading[act.id]}
+                            />
+                        )}
+                        <DropdownItem
+                          icon={<Books size="sm" />}
+                          label="History"
+                          onClick={() => setShowActVersionHistory(act.id)}
+                          disabled={!!store.loading[act.id]}
+                        />
+                      </DropdownSection>
+                      <DropdownSection>
+                        <DropdownItem
+                          icon={<Trash size="sm" />}
+                          label="Delete"
+                          onClick={() => handleDeleteAct(act.id)}
+                          variant="danger"
+                          disabled={!!store.loading[act.id]}
+                        />
+                      </DropdownSection>
                     </DropdownMenu>
                   </div>
                 </div>
@@ -559,13 +581,13 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
                     <div key={chapter.id} className="chapter-card">
                       <div className="chapter-header">
                         <div className="chapter-title">
-                          <button
-                            className="collapse-toggle"
+                          <IconButton
+                            icon={expandedItems.has(chapter.id) ? <Collapse size="xs" /> : <Expand size="xs" />}
                             onClick={() => toggleItemExpand(chapter.id)}
                             title={expandedItems.has(chapter.id) ? 'Collapse' : 'Expand'}
-                          >
-                            {expandedItems.has(chapter.id) ? <Collapse size="xs" /> : <Expand size="xs" />}
-                          </button>
+                            size="xs"
+                            className="collapse-toggle"
+                          />
                           <span className="chapter-number">
                             Chapter {chapterIndex + 1}
                           </span>
@@ -573,50 +595,58 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
                           {chapterIsFallback && <span className="fallback-warning" title={`${globalDisplayLanguage} not available`}><Warning size="sm" /></span>}
                         </div>
                         <div className="card-actions">
-                          <button
+                          <TextButton
+                            variant="secondary"
+                            size="sm"
                             onClick={() => setEditingChapter(chapter.id)}
-                            className="card-edit-btn desktop-only"
                             disabled={!!store.loading[chapter.id]}
+                            className="desktop-only"
                           >
                             Edit
-                          </button>
+                          </TextButton>
                           <DropdownMenu
                             trigger={
-                              <button className="more-button" disabled={!!store.loading[chapter.id]} title="More actions">
-                                •••
-                              </button>
+                              <IconButton
+                                icon={<MoreHorizontal size="sm" />}
+                                disabled={!!store.loading[chapter.id]}
+                                title="More actions"
+                                size="sm"
+                              />
                             }
                           >
-                            <DropdownItem
-                              icon={<Edit size="sm" />}
-                              label="Edit"
-                              onClick={() => setEditingChapter(chapter.id)}
-                              disabled={!!store.loading[chapter.id]}
-                              className="mobile-only"
-                            />
-                            {settings.settings.defaultSubLanguage &&
-                              Object.keys(chapter.data).includes(settings.settings.defaultSubLanguage) && (
-                                <DropdownItem
-                                  icon={<Refresh size="sm" />}
-                                  label="Retranslate"
-                                  onClick={() => setShowChapterRetranslateModal(chapter.id)}
-                                  disabled={!!store.loading[chapter.id]}
-                                />
-                            )}
-                            <DropdownItem
-                              icon={<Books size="sm" />}
-                              label="History"
-                              onClick={() => setShowChapterVersionHistory(chapter.id)}
-                              disabled={!!store.loading[chapter.id]}
-                            />
-                            <DropdownDivider />
-                            <DropdownItem
-                              icon={<Trash size="sm" />}
-                              label="Delete"
-                              onClick={() => handleDeleteChapter(chapter.id)}
-                              variant="danger"
-                              disabled={!!store.loading[chapter.id]}
-                            />
+                            <DropdownSection>
+                              <DropdownItem
+                                icon={<Edit size="sm" />}
+                                label="Edit"
+                                onClick={() => setEditingChapter(chapter.id)}
+                                disabled={!!store.loading[chapter.id]}
+                                className="mobile-only"
+                              />
+                              {settings.settings.defaultSubLanguage &&
+                                Object.keys(chapter.data).includes(settings.settings.defaultSubLanguage) && (
+                                  <DropdownItem
+                                    icon={<Refresh size="sm" />}
+                                    label="Retranslate"
+                                    onClick={() => setShowChapterRetranslateModal(chapter.id)}
+                                    disabled={!!store.loading[chapter.id]}
+                                  />
+                              )}
+                              <DropdownItem
+                                icon={<Books size="sm" />}
+                                label="History"
+                                onClick={() => setShowChapterVersionHistory(chapter.id)}
+                                disabled={!!store.loading[chapter.id]}
+                              />
+                            </DropdownSection>
+                            <DropdownSection>
+                              <DropdownItem
+                                icon={<Trash size="sm" />}
+                                label="Delete"
+                                onClick={() => handleDeleteChapter(chapter.id)}
+                                variant="danger"
+                                disabled={!!store.loading[chapter.id]}
+                              />
+                            </DropdownSection>
                           </DropdownMenu>
                         </div>
                       </div>
@@ -777,12 +807,12 @@ const AddActForm: React.FC<AddActFormProps> = ({ onAdd, onCancel }) => {
           />
         </div>
         <div className="form-actions">
-          <button type="button" onClick={onCancel} className="cancel-button">
+          <TextButton variant="secondary" type="button" onClick={onCancel}>
             Cancel
-          </button>
-          <button type="submit" className="save-button">
+          </TextButton>
+          <TextButton variant="primary" type="submit">
             Add
-          </button>
+          </TextButton>
         </div>
       </form>
     </div>
@@ -834,16 +864,16 @@ const EditActForm: React.FC<EditActFormProps> = ({ actData, onUpdate, onCancel, 
           />
         </div>
         <div className="form-actions-split">
-          <button type="button" onClick={onAIEdit} className="ai-edit-btn">
-            <AIAssist size="sm" /> AI Edit
-          </button>
+          <TextButton variant="primary" size="sm" type="button" onClick={onAIEdit} iconLeft={<AIAssist size="sm" />}>
+            AI Edit
+          </TextButton>
           <div className="form-actions-right">
-            <button type="button" onClick={onCancel} className="cancel-button">
+            <TextButton variant="secondary" type="button" onClick={onCancel}>
               Cancel
-            </button>
-            <button type="submit" className="save-button">
+            </TextButton>
+            <TextButton variant="primary" type="submit">
               Save
-            </button>
+            </TextButton>
           </div>
         </div>
       </form>
@@ -898,12 +928,12 @@ const AddChapterForm: React.FC<AddChapterFormProps> = ({ actId, onAdd, onCancel 
           />
         </div>
         <div className="form-actions">
-          <button type="button" onClick={onCancel} className="cancel-button">
+          <TextButton variant="secondary" type="button" onClick={onCancel}>
             Cancel
-          </button>
-          <button type="submit" className="save-button">
+          </TextButton>
+          <TextButton variant="primary" type="submit">
             Add
-          </button>
+          </TextButton>
         </div>
       </form>
     </div>
@@ -955,16 +985,16 @@ const EditChapterForm: React.FC<EditChapterFormProps> = ({ chapterData, onUpdate
           />
         </div>
         <div className="form-actions-split">
-          <button type="button" onClick={onAIEdit} className="ai-edit-btn">
-            <AIAssist size="sm" /> AI Edit
-          </button>
+          <TextButton variant="primary" size="sm" type="button" onClick={onAIEdit} iconLeft={<AIAssist size="sm" />}>
+            AI Edit
+          </TextButton>
           <div className="form-actions-right">
-            <button type="button" onClick={onCancel} className="cancel-button">
+            <TextButton variant="secondary" type="button" onClick={onCancel}>
               Cancel
-            </button>
-            <button type="submit" className="save-button">
+            </TextButton>
+            <TextButton variant="primary" type="submit">
               Save
-            </button>
+            </TextButton>
           </div>
         </div>
       </form>
@@ -1066,7 +1096,9 @@ const ActVersionHistoryModal: React.FC<ActVersionHistoryModalProps> = ({
                       </div>
 
                       <div className="version-actions">
-                        <button
+                        <TextButton
+                          variant="ghost"
+                          size="sm"
                           onClick={() => {
                             const newExpanded = new Set(expandedVersions);
                             if (newExpanded.has(version.id)) {
@@ -1076,18 +1108,18 @@ const ActVersionHistoryModal: React.FC<ActVersionHistoryModalProps> = ({
                             }
                             setExpandedVersions(newExpanded);
                           }}
-                          className="expand-button"
                         >
                           {expandedVersions.has(version.id) ? 'Hide details' : 'Show details'}
-                        </button>
+                        </TextButton>
 
                         {!isCurrentVersion && (
-                          <button
+                          <TextButton
+                            variant="secondary"
+                            size="sm"
                             onClick={() => onRestoreVersion(version.id)}
-                            className="restore-button"
                           >
                             Restore
-                          </button>
+                          </TextButton>
                         )}
                       </div>
                     </div>
@@ -1117,9 +1149,9 @@ const ActVersionHistoryModal: React.FC<ActVersionHistoryModalProps> = ({
         </div>
 
         <div className="modal-footer">
-          <button onClick={onClose} className="cancel-button">
+          <TextButton variant="secondary" onClick={onClose}>
             Close
-          </button>
+          </TextButton>
         </div>
       </div>
     </div>
@@ -1220,7 +1252,9 @@ const ChapterVersionHistoryModal: React.FC<ChapterVersionHistoryModalProps> = ({
                       </div>
 
                       <div className="version-actions">
-                        <button
+                        <TextButton
+                          variant="ghost"
+                          size="sm"
                           onClick={() => {
                             const newExpanded = new Set(expandedVersions);
                             if (newExpanded.has(version.id)) {
@@ -1230,18 +1264,18 @@ const ChapterVersionHistoryModal: React.FC<ChapterVersionHistoryModalProps> = ({
                             }
                             setExpandedVersions(newExpanded);
                           }}
-                          className="expand-button"
                         >
                           {expandedVersions.has(version.id) ? 'Hide details' : 'Show details'}
-                        </button>
+                        </TextButton>
 
                         {!isCurrentVersion && (
-                          <button
+                          <TextButton
+                            variant="secondary"
+                            size="sm"
                             onClick={() => onRestoreVersion(version.id)}
-                            className="restore-button"
                           >
                             Restore
-                          </button>
+                          </TextButton>
                         )}
                       </div>
                     </div>
@@ -1271,9 +1305,9 @@ const ChapterVersionHistoryModal: React.FC<ChapterVersionHistoryModalProps> = ({
         </div>
 
         <div className="modal-footer">
-          <button onClick={onClose} className="cancel-button">
+          <TextButton variant="secondary" onClick={onClose}>
             Close
-          </button>
+          </TextButton>
         </div>
       </div>
     </div>

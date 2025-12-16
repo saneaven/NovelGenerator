@@ -23,7 +23,7 @@
   border: 1px solid var(--color-border-default);
   display: flex;
   flex-direction: column;
-  transition: all var(--transition-base);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
   overflow: hidden;
 }
 
@@ -40,7 +40,7 @@
   padding: var(--spacing-md) var(--spacing-lg);
   cursor: pointer;
   background: var(--color-surface-subtle);
-  transition: all var(--transition-base);
+  transition: background var(--transition-base);
   user-select: none;
 }
 
@@ -49,12 +49,14 @@
 }
 
 .chat-controls-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  transition: all var(--transition-base);
 }
 
 .chat-controls-toggle {
@@ -78,22 +80,25 @@
 
 /* Chat Controls Content */
 .chat-controls-content {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.3s ease-out;
+}
+
+.chat-controls.collapsed .chat-controls-content {
+  grid-template-rows: 0fr;
+}
+
+.chat-controls-content-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat-controls-content-body {
   padding: 0 var(--spacing-lg) var(--spacing-lg) var(--spacing-lg);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
-  animation: expandContent 0.3s ease-out;
-}
-
-@keyframes expandContent {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 /* Collapsed State */
@@ -174,60 +179,22 @@
 }
 
 
-/* ===== Send and Stop Buttons ===== */
-.send-button,
-.stop-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* ===== Chat Submit Button (Send/Stop) ===== */
+.chat-submit-btn {
   min-width: 3.5rem;
   height: 3.5rem;
-  border: none;
   border-radius: var(--border-radius-lg);
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
-  transition: all var(--transition-base);
-  white-space: nowrap;
   font-size: var(--font-size-sm);
   box-shadow: var(--shadow-md);
   flex-shrink: 0;
 }
 
-.send-button {
-  background: var(--gradient-accent);
-  color: var(--color-text-inverse);
-}
-
-.send-button:hover:not(:disabled) {
+.chat-submit-btn:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: var(--shadow-lg);
 }
 
-.send-button:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: var(--shadow-md);
-}
-
-.send-button:disabled {
-  background: var(--color-surface-disabled);
-  color: var(--color-text-muted);
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: var(--shadow-xs);
-  opacity: var(--opacity-disabled);
-}
-
-.stop-button {
-  background: linear-gradient(135deg, var(--color-error) 0%, var(--color-error-dark) 100%);
-  color: var(--color-text-inverse);
-}
-
-.stop-button:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
-}
-
-.stop-button:active {
+.chat-submit-btn:active:not(:disabled) {
   transform: translateY(0);
   box-shadow: var(--shadow-md);
 }
@@ -283,8 +250,7 @@
     border-radius: var(--border-radius-lg);
   }
 
-  .send-button,
-  .stop-button {
+  .chat-submit-btn {
     min-width: 2.75rem;
     height: 2.75rem;
     font-size: var(--font-size-xs);
@@ -303,8 +269,7 @@
     font-size: var(--font-size-sm);
   }
 
-  .send-button,
-  .stop-button {
+  .chat-submit-btn {
     min-width: 3rem;
     height: 3rem;
   }

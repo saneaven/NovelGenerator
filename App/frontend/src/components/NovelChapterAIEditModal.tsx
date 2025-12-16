@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { useModalHistory } from '../hooks/useModalHistory';
+import { BaseModal } from './BaseModal';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import type { FunctionCallMetadata } from '../llm/requestTypes';
@@ -8,6 +8,7 @@ import { extractRawContent } from '../utils/nativeOutputParser';
 import { LLMTask, LLMTaskMode, LLMTaskManager, type ChapterEditPromptContext, type TaskHandle } from '../llm';
 import { Expand, Collapse } from './icons';
 import { ObjectPicker } from './ObjectPicker';
+import { TextButton } from './TextButton';
 import CollapsibleSection from './ui/CollapsibleSection';
 import type { ObjectPickerGroup } from './ObjectPicker/types';
 
@@ -64,7 +65,6 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
   onResult,
   defaultUserRequest,
 }) => {
-  useModalHistory(isOpen, onClose);
   const [userRequest, setUserRequest] = useState(defaultUserRequest || '');
   const [availableObjects, setAvailableObjects] = useState<AvailableContextObjects | null>(null);
   const [selectedObjects, setSelectedObjects] = useState<SelectedContextObjects>({
@@ -682,152 +682,152 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content ai-edit-modal novel-chapter-ai-edit-modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>AI Chapter Edit</h2>
-          <div className="chapter-info">
-            <span className="chapter-name">{chapterName}</span>
-          </div>
-          <button className="modal-close" onClick={onClose}>x</button>
+    <BaseModal
+      isOpen={isOpen}
+      onClose={onClose}
+      size="large"
+      title={<>AI Chapter Edit <span className="chapter-name-badge">{chapterName}</span></>}
+      className="novel-chapter-ai-edit-modal"
+      footer={
+        <>
+          <TextButton variant="secondary" type="button" onClick={onClose}>Cancel</TextButton>
+          <TextButton
+            variant="primary"
+            type="submit"
+            form="novel-chapter-ai-edit-form"
+            disabled={!userRequest.trim() || isLoading}
+          >
+            Request AI Edit
+          </TextButton>
+        </>
+      }
+    >
+      <form id="novel-chapter-ai-edit-form" onSubmit={handleSubmit} className="ai-edit-form">
+        <div className="form-group">
+          <label htmlFor="user-request">Edit Request</label>
+          <textarea
+            id="user-request"
+            value={userRequest}
+            onChange={(e) => setUserRequest(e.target.value)}
+            placeholder={`Enter your edit request for "${chapterName}".`}
+            rows={4}
+            required
+          />
         </div>
 
-        <form onSubmit={handleSubmit} className="ai-edit-form">
-          <div className="form-group">
-            <label htmlFor="user-request">Edit Request</label>
-            <textarea
-              id="user-request"
-              value={userRequest}
-              onChange={(e) => setUserRequest(e.target.value)}
-              placeholder={`Enter your edit request for "${chapterName}".`}
-              rows={4}
-              required
-            />
+        <div className="form-group context-options">
+          <div
+            className="context-options-header"
+            onClick={() => setIsContextExpanded(!isContextExpanded)}
+          >
+            <span className={`context-options-toggle ${isContextExpanded ? 'expanded' : ''}`}>
+              {isContextExpanded ? <Collapse size="xs" /> : <Expand size="xs" />}
+            </span>
+            <label>Context Inclusion Options</label>
           </div>
+          {isContextExpanded && (
+            <>
+              {isLoading ? (
+                <div className="context-loading">Loading available objects...</div>
+              ) : availableObjects ? (
+                <div className="context-selector">
+                  {/* Story Objects (Basic Info, Characters, Organizations, Locations, Lorebook) */}
+                  {storyObjectGroups.length > 0 && (
+                    <CollapsibleSection
+                      label="Story Objects"
+                      expanded={!collapsedSections.storyObjects}
+                      onExpandChange={(expanded) => setCollapsedSections(prev => ({ ...prev, storyObjects: !expanded }))}
+                      selectedCount={selectedStoryObjectIds.length}
+                      totalCount={storyObjectGroups.reduce((sum, g) => sum + g.items.length, 0)}
+                      onToggleAll={(selectAll) => {
+                        const allIds = storyObjectGroups.flatMap(g => g.items.map(i => i.id));
+                        handleStoryObjectsChange(selectAll ? allIds : []);
+                      }}
+                    >
+                      <ObjectPicker
+                        mode="story-objects"
+                        selectionMode="multi"
+                        selectedIds={selectedStoryObjectIds}
+                        onChange={handleStoryObjectsChange}
+                        projectId={projectId}
+                        language={settingsStore.settings.mainLanguage}
+                        customGroups={storyObjectGroups}
+                        showSearch={false}
+                        maxHeight="200px"
+                        emptyMessage="No story objects available"
+                      />
+                    </CollapsibleSection>
+                  )}
 
-          <div className="form-group context-options">
-            <div
-              className="context-options-header"
-              onClick={() => setIsContextExpanded(!isContextExpanded)}
-            >
-              <span className={`context-options-toggle ${isContextExpanded ? 'expanded' : ''}`}>
-                {isContextExpanded ? <Collapse size="xs" /> : <Expand size="xs" />}
-              </span>
-              <label>Context Inclusion Options</label>
-            </div>
-            {isContextExpanded && (
-              <>
-                {isLoading ? (
-                  <div className="context-loading">Loading available objects...</div>
-                ) : availableObjects ? (
-                  <div className="context-selector">
-                    {/* Story Objects (Basic Info, Characters, Organizations, Locations, Lorebook) */}
-                    {storyObjectGroups.length > 0 && (
-                      <CollapsibleSection
-                        label="Story Objects"
-                        expanded={!collapsedSections.storyObjects}
-                        onExpandChange={(expanded) => setCollapsedSections(prev => ({ ...prev, storyObjects: !expanded }))}
-                        selectedCount={selectedStoryObjectIds.length}
-                        totalCount={storyObjectGroups.reduce((sum, g) => sum + g.items.length, 0)}
-                        onToggleAll={(selectAll) => {
-                          const allIds = storyObjectGroups.flatMap(g => g.items.map(i => i.id));
-                          handleStoryObjectsChange(selectAll ? allIds : []);
-                        }}
-                      >
-                        <ObjectPicker
-                          mode="story-objects"
-                          selectionMode="multi"
-                          selectedIds={selectedStoryObjectIds}
-                          onChange={handleStoryObjectsChange}
-                          projectId={projectId}
-                          language={settingsStore.settings.mainLanguage}
-                          customGroups={storyObjectGroups}
-                          showSearch={false}
-                          maxHeight="200px"
-                          emptyMessage="No story objects available"
-                        />
-                      </CollapsibleSection>
-                    )}
+                  {/* Outlines (Chapter descriptions) */}
+                  {outlineGroups.length > 0 && (
+                    <CollapsibleSection
+                      label="Outlines"
+                      expanded={!collapsedSections.outlines}
+                      onExpandChange={(expanded) => setCollapsedSections(prev => ({ ...prev, outlines: !expanded }))}
+                      selectedCount={selectedObjects.outlineChapters.size}
+                      totalCount={outlineGroups.reduce((sum, g) => sum + g.items.length, 0)}
+                      onToggleAll={(selectAll) => {
+                        const allIds = outlineGroups.flatMap(g => g.items.map(i => i.id));
+                        handleOutlineChaptersChange(selectAll ? allIds : []);
+                      }}
+                    >
+                      <ObjectPicker
+                        mode="manuscript"
+                        selectionMode="multi"
+                        selectedIds={Array.from(selectedObjects.outlineChapters)}
+                        onChange={handleOutlineChaptersChange}
+                        projectId={projectId}
+                        language={settingsStore.settings.mainLanguage}
+                        customGroups={outlineGroups}
+                        showSearch={false}
+                        maxHeight="200px"
+                        emptyMessage="No outlines available"
+                      />
+                    </CollapsibleSection>
+                  )}
 
-                    {/* Outlines (Chapter descriptions) */}
-                    {outlineGroups.length > 0 && (
-                      <CollapsibleSection
-                        label="Outlines"
-                        expanded={!collapsedSections.outlines}
-                        onExpandChange={(expanded) => setCollapsedSections(prev => ({ ...prev, outlines: !expanded }))}
-                        selectedCount={selectedObjects.outlineChapters.size}
-                        totalCount={outlineGroups.reduce((sum, g) => sum + g.items.length, 0)}
-                        onToggleAll={(selectAll) => {
-                          const allIds = outlineGroups.flatMap(g => g.items.map(i => i.id));
-                          handleOutlineChaptersChange(selectAll ? allIds : []);
-                        }}
-                      >
-                        <ObjectPicker
-                          mode="manuscript"
-                          selectionMode="multi"
-                          selectedIds={Array.from(selectedObjects.outlineChapters)}
-                          onChange={handleOutlineChaptersChange}
-                          projectId={projectId}
-                          language={settingsStore.settings.mainLanguage}
-                          customGroups={outlineGroups}
-                          showSearch={false}
-                          maxHeight="200px"
-                          emptyMessage="No outlines available"
-                        />
-                      </CollapsibleSection>
-                    )}
-
-                    {/* Novel Content (Manuscript content) */}
-                    {novelContentGroups.length > 0 && (
-                      <CollapsibleSection
-                        label="Novel Content"
-                        expanded={!collapsedSections.novelContent}
-                        onExpandChange={(expanded) => setCollapsedSections(prev => ({ ...prev, novelContent: !expanded }))}
-                        selectedCount={selectedObjects.novelContentChapters.size}
-                        totalCount={novelContentGroups.reduce((sum, g) => sum + g.items.length, 0)}
-                        onToggleAll={(selectAll) => {
-                          const allIds = novelContentGroups.flatMap(g => g.items.map(i => i.id));
-                          handleNovelContentChaptersChange(selectAll ? allIds : []);
-                        }}
-                      >
-                        <ObjectPicker
-                          mode="manuscript"
-                          selectionMode="multi"
-                          selectedIds={Array.from(selectedObjects.novelContentChapters)}
-                          onChange={handleNovelContentChaptersChange}
-                          projectId={projectId}
-                          language={settingsStore.settings.mainLanguage}
-                          customGroups={novelContentGroups}
-                          highlightIds={[chapterId]}
-                          showSearch={false}
-                          maxHeight="200px"
-                          emptyMessage="No novel content available"
-                        />
-                      </CollapsibleSection>
-                    )}
-                  </div>
-                ) : (
-                  <div className="context-error">Failed to load objects</div>
-                )}
-                <p className="context-help">
-                  Select individual objects to include as context for the AI.
-                </p>
-              </>
-            )}
-          </div>
-
-          <div className="form-actions">
-            <button type="button" onClick={onClose} className="cancel-button">Cancel</button>
-            <button type="submit" className="submit-button" disabled={!userRequest.trim() || isLoading}>
-              Request AI Edit
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+                  {/* Novel Content (Manuscript content) */}
+                  {novelContentGroups.length > 0 && (
+                    <CollapsibleSection
+                      label="Novel Content"
+                      expanded={!collapsedSections.novelContent}
+                      onExpandChange={(expanded) => setCollapsedSections(prev => ({ ...prev, novelContent: !expanded }))}
+                      selectedCount={selectedObjects.novelContentChapters.size}
+                      totalCount={novelContentGroups.reduce((sum, g) => sum + g.items.length, 0)}
+                      onToggleAll={(selectAll) => {
+                        const allIds = novelContentGroups.flatMap(g => g.items.map(i => i.id));
+                        handleNovelContentChaptersChange(selectAll ? allIds : []);
+                      }}
+                    >
+                      <ObjectPicker
+                        mode="manuscript"
+                        selectionMode="multi"
+                        selectedIds={Array.from(selectedObjects.novelContentChapters)}
+                        onChange={handleNovelContentChaptersChange}
+                        projectId={projectId}
+                        language={settingsStore.settings.mainLanguage}
+                        customGroups={novelContentGroups}
+                        highlightIds={[chapterId]}
+                        showSearch={false}
+                        maxHeight="200px"
+                        emptyMessage="No novel content available"
+                      />
+                    </CollapsibleSection>
+                  )}
+                </div>
+              ) : (
+                <div className="context-error">Failed to load objects</div>
+              )}
+              <p className="context-help">
+                Select individual objects to include as context for the AI.
+              </p>
+            </>
+          )}
+        </div>
+      </form>
+    </BaseModal>
   );
 };
 

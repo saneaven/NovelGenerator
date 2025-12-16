@@ -62,43 +62,9 @@
     gap: 8px;
 }
 
-/* Action buttons */
-.image-overlay button {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: white;
-    border: none;
-    cursor: pointer;
-    font-size: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform var(--transition-fast), background var(--transition-fast);
-    box-shadow: var(--shadow-md);
-}
-
-.image-overlay button:hover {
-    transform: scale(1.1);
-}
-
-.image-overlay button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.image-overlay button:disabled:hover {
-    transform: none;
-}
-
 /* Delete button - separated with extra margin */
 .image-overlay .delete-btn {
-    margin-top: 16px;
-    background: #fee2e2;
-}
-
-.image-overlay .delete-btn:hover {
-    background: #fecaca;
+    margin-top: var(--spacing-md);
 }
 
 /* ===== Delete Confirmation Dialog ===== */
@@ -146,34 +112,7 @@
     justify-content: center;
 }
 
-.confirm-buttons button {
-    padding: var(--spacing-sm) var(--spacing-md);
-    border-radius: var(--border-radius-md);
-    cursor: pointer;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-    transition: all var(--transition-fast);
-}
-
-.confirm-buttons button:first-child {
-    background: var(--color-danger);
-    color: white;
-    border: none;
-}
-
-.confirm-buttons button:first-child:hover {
-    background: var(--color-danger-hover, #dc2626);
-}
-
-.confirm-buttons button:last-child {
-    background: var(--color-surface-base);
-    color: var(--color-text-primary);
-    border: 1px solid var(--color-border-default);
-}
-
-.confirm-buttons button:last-child:hover {
-    background: var(--color-surface-hover);
-}
+/* Button styling now comes from TextButton component */
 
 /* ===== Mobile Support ===== */
 
@@ -199,19 +138,8 @@
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
-    .image-overlay button {
-        width: 40px;
-        height: 40px;
-        font-size: 18px;
-    }
-
     .delete-confirm-dialog {
         padding: var(--spacing-md);
         max-width: 240px;
-    }
-
-    .confirm-buttons button {
-        padding: var(--spacing-xs) var(--spacing-sm);
-        font-size: var(--font-size-xs);
     }
 }

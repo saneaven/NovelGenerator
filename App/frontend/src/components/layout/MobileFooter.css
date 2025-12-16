@@ -10,23 +10,26 @@
     bottom: 0;
     left: 0;
     right: 0;
-    height: 56px;
-    background: var(--color-surface-elevated);
-    border-top: 1px solid var(--color-border-default);
+    height: var(--size-mobile-footer-height);
+    border: none;
     padding: 0 var(--spacing-md);
     align-items: center;
     justify-content: space-between;
     gap: var(--spacing-sm);
     z-index: var(--z-sticky);
-    box-shadow: var(--shadow-lg);
   }
 
-  /* Footer notification button */
-  .footer-notification-btn .notification-button {
-    width: 2.5rem;
-    height: 2.5rem;
-    border-radius: var(--border-radius-md);
-    flex-shrink: 0;
+  /* Background layer with gradient mask - buttons not affected */
+  .mobile-footer::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(5px);
+    mask-image: linear-gradient(to top, #000 0%, #000 50%, transparent 100%);
+    box-shadow: var(--shadow-lg);
+    z-index: -1;
+    pointer-events: none;
   }
 
   /* Chat toggle button */
@@ -67,33 +70,5 @@
     background: var(--color-primary-hover);
     border-color: var(--color-primary-hover);
     color: white;
-  }
-
-  /* Settings button */
-  .footer-settings-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.5rem;
-    height: 2.5rem;
-    padding: 0;
-    background: var(--color-surface-base);
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--border-radius-md);
-    color: var(--color-text-secondary);
-    cursor: pointer;
-    transition: all var(--transition-base);
-    flex-shrink: 0;
-    font-size: var(--font-size-lg);
-  }
-
-  .footer-settings-btn:hover {
-    background: var(--color-surface-hover);
-    color: var(--color-text-primary);
-    border-color: var(--color-border-medium);
-  }
-
-  .footer-settings-btn:active {
-    transform: scale(0.95);
   }
 }

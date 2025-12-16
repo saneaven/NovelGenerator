@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { TextButton } from '../TextButton';
+import { IconButton } from '../IconButton';
+import { Close } from '../icons';
 import './LanguagePanel.css';
 
 interface LanguagePanelProps {
@@ -105,14 +108,13 @@ const LanguagePanel: React.FC<LanguagePanelProps> = ({
                     className="default-radio"
                   />
                   <span className="language-name">{lang}</span>
-                  <button
-                    type="button"
+                  <IconButton
+                    icon={<Close size="xs" />}
                     onClick={() => handleRemoveLanguage(lang)}
-                    className="remove-language-btn"
+                    size="xs"
                     title={`Remove ${lang}`}
-                  >
-                    ×
-                  </button>
+                    className="remove-language-btn"
+                  />
                 </div>
               ))}
             </div>
@@ -127,14 +129,15 @@ const LanguagePanel: React.FC<LanguagePanelProps> = ({
               placeholder="e.g., Korean, Japanese, Spanish"
               className="language-input add-language-input"
             />
-            <button
+            <TextButton
+              variant="secondary"
+              size="sm"
               type="button"
               onClick={handleAddLanguage}
               disabled={!newLanguage.trim()}
-              className="add-language-btn"
             >
               + Add
-            </button>
+            </TextButton>
           </div>
         </div>
       </div>

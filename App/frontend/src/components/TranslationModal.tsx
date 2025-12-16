@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { useModalHistory } from '../hooks/useModalHistory';
+import { BaseModal } from './BaseModal';
 import './TranslationModal.css';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -10,6 +10,8 @@ import { LLMTaskManager } from '../llm';
 import { Globe, Swap } from './icons';
 import { ObjectPicker, CATEGORY_CONFIG as PICKER_CATEGORY_CONFIG } from './ObjectPicker';
 import CollapsibleSection from './ui/CollapsibleSection';
+import { TextButton } from './TextButton';
+import { IconButton } from './IconButton';
 
 interface TranslationModalProps {
   isOpen: boolean;
@@ -37,7 +39,6 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   defaultUserInput,
   preSelectedObjectIds,
 }) => {
-  useModalHistory(isOpen, onClose);
   const [sourceLanguage, setSourceLanguage] = useState<string>(defaultSourceLanguage || '');
   const [targetLanguage, setTargetLanguage] = useState<string>(defaultTargetLanguage || '');
   const [userInput, setUserInput] = useState(defaultUserInput || '');
@@ -268,12 +269,12 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   }, [availableObjects, selectedIds]);
 
   // Reset state when modal closes
+  // Note: abort is handled by LLMTaskManager.cancelTask() via toast dismiss, not here
   useEffect(() => {
     if (!isOpen) {
       setUserInput('');
       setSelectedIds(new Set());
       hasInitializedSelectionRef.current = false;
-      abortControllerRef.current?.abort();
       abortControllerRef.current = null;
     }
   }, [isOpen]);
@@ -340,11 +341,6 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     }
   };
 
-  // Just close modal - don't abort (request continues in background)
-  const handleClose = () => {
-    onClose();
-  };
-
   const handleSwapLanguages = () => {
     const temp = sourceLanguage;
     setSourceLanguage(targetLanguage);
@@ -360,164 +356,161 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="modal-overlay" onClick={handleClose}>
-      <div className="modal-content translation-modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2><Globe size="xl" /> Translation</h2>
-          <button className="modal-close" onClick={handleClose}>×</button>
+    <BaseModal
+      isOpen={isOpen}
+      onClose={onClose}
+      size="medium"
+      title={<><Globe size="xl" /> Translation</>}
+      className="translation-modal"
+      footer={
+        <>
+          <TextButton variant="secondary" onClick={onClose}>
+            Cancel
+          </TextButton>
+          <TextButton
+            variant="primary"
+            onClick={handleStart}
+            disabled={objectsToTranslate.length === 0 || !targetLanguage}
+          >
+            Start Translation
+          </TextButton>
+        </>
+      }
+    >
+      <div className="translation-config">
+        <div className="form-group">
+          <label>Languages</label>
+          <div className="language-selector-row">
+            <select
+              value={sourceLanguage}
+              onChange={(e) => setSourceLanguage(e.target.value)}
+              className="language-select"
+            >
+              {availableLanguages.map(lang => (
+                <option key={lang} value={lang}>{lang}</option>
+              ))}
+            </select>
+            <IconButton
+              icon={<Swap size="md" />}
+              onClick={handleSwapLanguages}
+              title="Swap languages"
+              size="sm"
+            />
+            <select
+              value={targetLanguage}
+              onChange={(e) => setTargetLanguage(e.target.value)}
+              className="language-select"
+            >
+              {availableLanguages
+                .filter(lang => lang !== sourceLanguage)
+                .map(lang => (
+                  <option key={lang} value={lang}>{lang}</option>
+                ))}
+            </select>
+          </div>
         </div>
 
-        <div className="translation-config">
-            <div className="form-group">
-              <label>Languages</label>
-              <div className="language-selector-row">
-                <select
-                  value={sourceLanguage}
-                  onChange={(e) => setSourceLanguage(e.target.value)}
-                  className="language-select"
-                >
-                  {availableLanguages.map(lang => (
-                    <option key={lang} value={lang}>{lang}</option>
-                  ))}
-                </select>
-                <button
-                  onClick={handleSwapLanguages}
-                  className="swap-languages-btn"
-                  title="Swap languages"
-                >
-                  <Swap size="md" />
-                </button>
-                <select
-                  value={targetLanguage}
-                  onChange={(e) => setTargetLanguage(e.target.value)}
-                  className="language-select"
-                >
-                  {availableLanguages
-                    .filter(lang => lang !== sourceLanguage)
-                    .map(lang => (
-                      <option key={lang} value={lang}>{lang}</option>
-                    ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Pre-selected object display (when preSelectedObjectIds is provided) */}
-            {preSelectedObjectIds && preSelectedObjectIds.length > 0 && availableObjects.length > 0 && (
-              <div className="form-group">
-                <label>Object to Translate</label>
-                <div className="preselected-objects">
-                  {availableObjects.map(obj => (
-                    <div key={obj.objectId} className="preselected-object-item">
-                      <span className="object-type-badge">{CATEGORY_CONFIG[obj.objectType]?.label || obj.objectType}</span>
-                      <span className="object-name">{obj.label}</span>
-                    </div>
-                  ))}
+        {/* Pre-selected object display (when preSelectedObjectIds is provided) */}
+        {preSelectedObjectIds && preSelectedObjectIds.length > 0 && availableObjects.length > 0 && (
+          <div className="form-group">
+            <label>Object to Translate</label>
+            <div className="preselected-objects">
+              {availableObjects.map(obj => (
+                <div key={obj.objectId} className="preselected-object-item">
+                  <span className="object-type-badge">{CATEGORY_CONFIG[obj.objectType]?.label || obj.objectType}</span>
+                  <span className="object-name">{obj.label}</span>
                 </div>
-              </div>
-            )}
-
-            {/* Tree-based object selector (when no preSelectedObjectIds) */}
-            {!preSelectedObjectIds && availableObjectIds.length > 0 && (
-              <CollapsibleSection
-                label="Objects to Translate"
-                expanded={!isObjectsCollapsed}
-                onExpandChange={(expanded) => setIsObjectsCollapsed(!expanded)}
-                selectedCount={selectedIds.size}
-                totalCount={availableObjects.length}
-                onToggleAll={(selectAll) => {
-                  if (selectAll) {
-                    setSelectedIds(new Set(availableObjectIds));
-                  } else {
-                    setSelectedIds(new Set());
-                  }
-                }}
-              >
-                <ObjectPicker
-                  mode="all"
-                  selectionMode="multi"
-                  selectedIds={Array.from(selectedIds)}
-                  onChange={handleSelectionChange}
-                  projectId={projectId}
-                  language={sourceLanguage}
-                  filterIds={availableObjectIds}
-                  showSearch={false}
-                  maxHeight="300px"
-                  emptyMessage="No objects available for translation"
-                />
-              </CollapsibleSection>
-            )}
-
-            <div className="form-group">
-              <label htmlFor="instructions">Additional Instructions (Optional)</label>
-              <textarea
-                id="instructions"
-                value={userInput}
-                onChange={(e) => setUserInput(e.target.value)}
-                placeholder="e.g., Maintain formal tone, Use specific terminology..."
-                rows={3}
-              />
+              ))}
             </div>
+          </div>
+        )}
 
-            {/* Context Section - select already-translated objects as reference */}
-            {hasAnyContext && (
-              <CollapsibleSection
-                label="Context (Target Language)"
-                expanded={!isContextCollapsed}
-                onExpandChange={(expanded) => setIsContextCollapsed(!expanded)}
-                selectedCount={selectedContextIds.size}
-                totalCount={contextObjectIds.length}
-                onToggleAll={(selectAll) => {
-                  if (selectAll) {
-                    setSelectedContextIds(new Set(contextObjectIds));
-                  } else {
-                    setSelectedContextIds(new Set());
-                  }
-                }}
-              >
-                <ObjectPicker
-                  mode="story-objects"
-                  selectionMode="multi"
-                  selectedIds={Array.from(selectedContextIds)}
-                  onChange={(ids) => {
-                    if (Array.isArray(ids)) {
-                      setSelectedContextIds(new Set(ids));
-                    }
-                  }}
-                  projectId={projectId}
-                  language={targetLanguage}
-                  filterIds={contextObjectIds}
-                  showSearch={false}
-                  maxHeight="200px"
-                  emptyMessage="No translated objects available"
-                />
-              </CollapsibleSection>
-            )}
+        {/* Tree-based object selector (when no preSelectedObjectIds) */}
+        {!preSelectedObjectIds && availableObjectIds.length > 0 && (
+          <CollapsibleSection
+            label="Objects to Translate"
+            expanded={!isObjectsCollapsed}
+            onExpandChange={(expanded) => setIsObjectsCollapsed(!expanded)}
+            selectedCount={selectedIds.size}
+            totalCount={availableObjects.length}
+            onToggleAll={(selectAll) => {
+              if (selectAll) {
+                setSelectedIds(new Set(availableObjectIds));
+              } else {
+                setSelectedIds(new Set());
+              }
+            }}
+          >
+            <ObjectPicker
+              mode="all"
+              selectionMode="multi"
+              selectedIds={Array.from(selectedIds)}
+              onChange={handleSelectionChange}
+              projectId={projectId}
+              language={sourceLanguage}
+              filterIds={availableObjectIds}
+              showSearch={false}
+              maxHeight="300px"
+              emptyMessage="No objects available for translation"
+            />
+          </CollapsibleSection>
+        )}
 
-            {/* Summary - only show for batch mode */}
-            {!preSelectedObjectIds && (
-              <div className="translation-summary">
-                <strong>{objectsToTranslate.length}</strong> of <strong>{availableObjects.length}</strong> objects selected
-              </div>
-            )}
-
-            <div className="modal-actions">
-              <button onClick={handleClose} className="btn-secondary">
-                Cancel
-              </button>
-              <button
-                onClick={handleStart}
-                className="btn-primary"
-                disabled={objectsToTranslate.length === 0 || !targetLanguage}
-              >
-                Start Translation
-              </button>
-            </div>
+        <div className="form-group">
+          <label htmlFor="instructions">Additional Instructions (Optional)</label>
+          <textarea
+            id="instructions"
+            value={userInput}
+            onChange={(e) => setUserInput(e.target.value)}
+            placeholder="e.g., Maintain formal tone, Use specific terminology..."
+            rows={3}
+          />
         </div>
+
+        {/* Context Section - select already-translated objects as reference */}
+        {hasAnyContext && (
+          <CollapsibleSection
+            label="Context (Target Language)"
+            expanded={!isContextCollapsed}
+            onExpandChange={(expanded) => setIsContextCollapsed(!expanded)}
+            selectedCount={selectedContextIds.size}
+            totalCount={contextObjectIds.length}
+            onToggleAll={(selectAll) => {
+              if (selectAll) {
+                setSelectedContextIds(new Set(contextObjectIds));
+              } else {
+                setSelectedContextIds(new Set());
+              }
+            }}
+          >
+            <ObjectPicker
+              mode="story-objects"
+              selectionMode="multi"
+              selectedIds={Array.from(selectedContextIds)}
+              onChange={(ids) => {
+                if (Array.isArray(ids)) {
+                  setSelectedContextIds(new Set(ids));
+                }
+              }}
+              projectId={projectId}
+              language={targetLanguage}
+              filterIds={contextObjectIds}
+              showSearch={false}
+              maxHeight="200px"
+              emptyMessage="No translated objects available"
+            />
+          </CollapsibleSection>
+        )}
+
+        {/* Summary - only show for batch mode */}
+        {!preSelectedObjectIds && (
+          <div className="translation-summary">
+            <strong>{objectsToTranslate.length}</strong> of <strong>{availableObjects.length}</strong> objects selected
+          </div>
+        )}
       </div>
-    </div>
+    </BaseModal>
   );
 };
 

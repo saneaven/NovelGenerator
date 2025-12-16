@@ -12,10 +12,9 @@ import ImagePromptBuilderModal from '../ImageGeneration/ImagePromptBuilderModal'
 
 interface NotificationPanelProps {
   onClose: () => void;
-  position?: 'desktop' | 'mobile';
 }
 
-const NotificationPanel: React.FC<NotificationPanelProps> = ({ position = 'desktop' }) => {
+const NotificationPanel: React.FC<NotificationPanelProps> = () => {
   // Select raw sessions object (stable reference) and derive list with useMemo
   const sessionsMap = useLLMTaskStore((state) => state.sessions);
   const sessions = useMemo(() =>
@@ -26,6 +25,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ position = 'deskt
   );
   const clearNotification = useLLMTaskStore((state) => state.clearNotification);
   const clearAllNotifications = useLLMTaskStore((state) => state.clearAllNotifications);
+  const cancelTask = useLLMTaskStore((state) => state.cancelTask);
 
   const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
   const [errorSessionId, setErrorSessionId] = useState<string | null>(null);
@@ -33,9 +33,14 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ position = 'deskt
 
   const handleDismiss = useCallback(
     (id: string) => {
+      const session = sessionsMap[id];
+      // If task is running, cancel it first (abort request + update status)
+      if (session?.status === 'running') {
+        cancelTask(id);
+      }
       clearNotification(id);
     },
-    [clearNotification]
+    [sessionsMap, cancelTask, clearNotification]
   );
 
   const handleOpenDetail = useCallback((id: string) => {
@@ -141,39 +146,38 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ position = 'deskt
 
   return (
     <>
-      <div className={`notification-panel notification-panel--${position}`}>
-        <div className="notification-panel-header">
-          <h3 className="notification-panel-title">Notifications</h3>
-          {sessions.length > 0 && (
-            <button
-              className="notification-panel-clear"
-              onClick={handleClearAll}
-            >
-              Clear All
-            </button>
-          )}
-        </div>
-
-        <div className="notification-panel-content">
-          {sessions.length === 0 ? (
-            <div className="notification-panel-empty">
-              <p>No notifications</p>
-            </div>
-          ) : (
-            <div className="notification-panel-list">
-              {sessions.map((session) => (
-                <NotificationItem
-                  key={session.id}
-                  session={session}
-                  onDismiss={() => handleDismiss(session.id)}
-                  onOpenDetail={() => handleOpenDetail(session.id)}
-                  onOpenError={() => handleOpenError(session.id)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+      {/* Thin Header Card */}
+      <div className="notification-header">
+        <h3 className="notification-header-title">Notifications</h3>
+        {sessions.length > 0 && (
+          <button
+            className="notification-header-clear"
+            onClick={handleClearAll}
+          >
+            Clear All
+          </button>
+        )}
       </div>
+
+      {/* Floating Items */}
+      {sessions.length === 0 ? (
+        <div className="notification-empty">
+          <p>No notifications</p>
+        </div>
+      ) : (
+        <div className="notification-items-container">
+          {sessions.map((session, index) => (
+            <NotificationItem
+              key={session.id}
+              session={session}
+              style={{ '--item-index': index } as React.CSSProperties}
+              onDismiss={() => handleDismiss(session.id)}
+              onOpenDetail={() => handleOpenDetail(session.id)}
+              onOpenError={() => handleOpenError(session.id)}
+            />
+          ))}
+        </div>
+      )}
 
       {detailSession && (
         <ToastDetailModal session={detailSession} onClose={handleCloseDetail} />

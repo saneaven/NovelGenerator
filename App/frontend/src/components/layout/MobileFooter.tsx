@@ -1,7 +1,7 @@
 import React from 'react';
 import { Settings } from '../icons';
 import { NotificationButton } from '../Notification';
-import '../Notification/Notification.css';
+import { IconButton } from '../IconButton';
 import './MobileFooter.css';
 
 export interface MobileFooterProps {
@@ -26,13 +26,12 @@ const MobileFooter: React.FC<MobileFooterProps> = ({
         Chat
       </button>
 
-      <button
-        className="footer-settings-btn"
+      <IconButton
+        icon={<Settings size="xl" />}
         onClick={onSettingsClick}
         title="Settings"
-      >
-        <Settings size="xl" />
-      </button>
+        size="sm"
+      />
     </footer>
   );
 };

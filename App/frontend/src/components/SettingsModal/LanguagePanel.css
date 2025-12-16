@@ -89,26 +89,7 @@
     font-weight: var(--font-weight-medium);
 }
 
-.sub-language-chip .remove-language-btn {
-    background: none;
-    border: none;
-    padding: 0;
-    width: 18px;
-    height: 18px;
-    font-size: var(--font-size-md);
-    color: var(--color-text-tertiary);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--border-radius-full);
-    transition: all var(--transition-base);
-}
-
-.sub-language-chip .remove-language-btn:hover {
-    background: var(--color-danger-soft);
-    color: var(--color-danger-main);
-}
+/* Remove button styling now comes from IconButton component */
 
 .add-language-row {
     display: flex;
@@ -120,24 +101,4 @@
     flex: 1;
 }
 
-.add-language-btn {
-    padding: var(--spacing-sm) var(--spacing-md);
-    background: var(--color-primary-main);
-    color: white;
-    border: none;
-    border-radius: var(--border-radius-md);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-    cursor: pointer;
-    transition: all var(--transition-base);
-    white-space: nowrap;
-}
-
-.add-language-btn:hover:not(:disabled) {
-    background: var(--color-primary-hover);
-}
-
-.add-language-btn:disabled {
-    opacity: var(--opacity-disabled);
-    cursor: not-allowed;
-}
+/* .add-language-btn migrated to TextButton component */

@@ -4,6 +4,7 @@ import { Check, Close } from '../icons';
 
 interface NotificationItemProps {
   session: LLMTaskSessionState;
+  style?: React.CSSProperties;
   onDismiss: () => void;
   onOpenDetail: () => void;
   onOpenError: () => void;
@@ -25,6 +26,7 @@ const formatRelativeTime = (timestamp: number): string => {
 
 const NotificationItem: React.FC<NotificationItemProps> = ({
   session,
+  style,
   onDismiss,
   onOpenDetail,
   onOpenError,
@@ -81,6 +83,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   return (
     <div
       className={`notification-item notification-item--${status} ${isClickable ? 'notification-item--clickable' : ''} ${!isRead ? 'notification-item--unread' : ''}`}
+      style={style}
       onClick={isClickable ? handleClick : undefined}
       role={isClickable ? 'button' : undefined}
       tabIndex={isClickable ? 0 : undefined}

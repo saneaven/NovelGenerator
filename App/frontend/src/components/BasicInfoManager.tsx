@@ -14,7 +14,9 @@ import AIEditModal from './AIEditModal';
 import VersionHistoryModal from './VersionHistoryModal';
 import TranslationModal from './TranslationModal';
 import { DropdownMenu, DropdownItem } from './ui/DropdownMenu';
-import { Edit, Refresh, Books, AIAssist, Warning } from './icons';
+import { IconButton } from './IconButton';
+import { TextButton } from './TextButton';
+import { Edit, Refresh, Books, AIAssist, Warning, MoreHorizontal } from './icons';
 import type { BasicInfoObject, BasicInfoData } from '../types/unifiedObject';
 
 interface BasicInfoManagerProps {
@@ -284,14 +286,17 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
         <h2>Basic Information</h2>
         {!isEditing ? (
           <div className="card-actions">
-            <button onClick={handleEdit} className="card-edit-btn desktop-only" disabled={loading}>
+            <TextButton variant="secondary" size="sm" onClick={handleEdit} disabled={loading} className="desktop-only">
               Edit
-            </button>
+            </TextButton>
             <DropdownMenu
               trigger={
-                <button className="more-button" disabled={loading} title="More actions">
-                  •••
-                </button>
+                <IconButton
+                  icon={<MoreHorizontal size="sm" />}
+                  disabled={loading}
+                  title="More actions"
+                  size="sm"
+                />
               }
             >
               <DropdownItem
@@ -320,28 +325,33 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
           </div>
         ) : (
           <div className="form-actions-split">
-            <button
+            <TextButton
+              variant="primary"
+              size="sm"
               onClick={() => setShowAIModal(true)}
-              className="ai-edit-btn"
               disabled={isSaving}
+              iconLeft={<AIAssist size="sm" />}
             >
-              <AIAssist size="sm" /> AI Edit
-            </button>
+              AI Edit
+            </TextButton>
             <div className="form-actions-right">
-              <button
+              <TextButton
+                variant="secondary"
+                size="sm"
                 onClick={handleCancel}
-                className="cancel-button"
                 disabled={isSaving}
               >
                 Cancel
-              </button>
-              <button
+              </TextButton>
+              <TextButton
+                variant="primary"
+                size="sm"
                 onClick={handleSave}
-                className="save-button"
                 disabled={isSaving}
+                loading={isSaving}
               >
-                {isSaving ? 'Saving...' : 'Save'}
-              </button>
+                Save
+              </TextButton>
             </div>
           </div>
         )}

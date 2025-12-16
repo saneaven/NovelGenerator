@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useModalHistory } from '../../hooks/useModalHistory';
+import { BaseModal } from '../BaseModal';
 import { useAssetStore } from '../../store/assetStore';
 import { useProjectStore } from '../../store/projectStore';
+import { TextButton } from '../TextButton';
 import { formatStyledPrompt, type SceneAsset } from '../../api/assetService';
 import { API_BASE_URL } from '../../api/client';
 import { Edit } from '../icons';
@@ -16,7 +17,6 @@ const SceneAssetManagerModal: React.FC<SceneAssetManagerModalProps> = ({
     isOpen,
     onClose,
 }) => {
-    useModalHistory(isOpen, onClose);
     const { currentProjectId } = useProjectStore();
     const {
         sceneAssets,
@@ -123,15 +123,19 @@ const SceneAssetManagerModal: React.FC<SceneAssetManagerModalProps> = ({
     };
 
     return (
-        <div className="scene-asset-modal-overlay" onClick={onClose}>
-            <div className="scene-asset-modal" onClick={(e) => e.stopPropagation()}>
-                <div className="scene-asset-modal-header">
-                    <h2>Scene Asset Library</h2>
-                    <button className="close-button" onClick={onClose}>
-                        &times;
-                    </button>
-                </div>
-
+        <>
+            <BaseModal
+                isOpen={isOpen}
+                onClose={onClose}
+                size="large"
+                title="Scene Asset Library"
+                className="scene-asset-modal"
+                footer={
+                    <TextButton variant="secondary" onClick={onClose}>
+                        Close
+                    </TextButton>
+                }
+            >
                 <div className="scene-asset-modal-content">
                     <div className="scene-library-tab">
                         <div className="search-bar">
@@ -229,13 +233,7 @@ const SceneAssetManagerModal: React.FC<SceneAssetManagerModalProps> = ({
                         </div>
                     </div>
                 </div>
-
-                <div className="scene-asset-modal-footer">
-                    <button className="cancel-button" onClick={onClose}>
-                        Close
-                    </button>
-                </div>
-            </div>
+            </BaseModal>
 
             {/* Delete Confirmation Modal */}
             {deleteConfirmAsset && (
@@ -271,12 +269,12 @@ const SceneAssetManagerModal: React.FC<SceneAssetManagerModalProps> = ({
                             )}
                         </div>
                         <div className="delete-confirm-footer">
-                            <button className="cancel-button" onClick={() => setDeleteConfirmAsset(null)}>
+                            <TextButton variant="secondary" onClick={() => setDeleteConfirmAsset(null)}>
                                 Cancel
-                            </button>
-                            <button className="delete-confirm-button" onClick={handleConfirmDelete}>
+                            </TextButton>
+                            <TextButton variant="danger" onClick={handleConfirmDelete}>
                                 Delete
-                            </button>
+                            </TextButton>
                         </div>
                     </div>
                 </div>
@@ -383,14 +381,14 @@ const SceneAssetManagerModal: React.FC<SceneAssetManagerModalProps> = ({
                             </div>
                         </div>
                         <div className="scene-detail-footer">
-                            <button className="cancel-button" onClick={() => setDetailAsset(null)}>
+                            <TextButton variant="secondary" onClick={() => setDetailAsset(null)}>
                                 Close
-                            </button>
+                            </TextButton>
                         </div>
                     </div>
                 </div>
             )}
-        </div>
+        </>
     );
 };
 

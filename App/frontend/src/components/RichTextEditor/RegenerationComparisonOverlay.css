@@ -67,25 +67,7 @@
     transform: scale(1.05);
 }
 
-.comparison-actions .use-btn {
-    background: var(--color-success, #10b981);
-    color: white;
-    border: none;
-}
-
-.comparison-actions .use-btn:hover {
-    background: var(--color-success-hover, #059669);
-}
-
-.comparison-actions .discard-btn {
-    background: var(--color-surface-base);
-    color: var(--color-text-secondary);
-    border: 1px solid var(--color-border-default);
-}
-
-.comparison-actions .discard-btn:hover {
-    background: var(--color-surface-hover);
-}
+/* Use/Discard button styling now comes from TextButton component */
 
 .regeneration-comparison .hint {
     text-align: center;
@@ -98,10 +80,10 @@
 @media (max-width: 768px) {
     .regeneration-comparison {
         position: fixed;
-        top: 50% !important;
-        left: 50% !important;
+        top: 50%;
+        left: 50%;
         transform: translate(-50%, -50%);
-        width: calc(100% - var(--spacing-xl)) !important;
+        width: calc(100% - var(--spacing-xl));
         max-width: 400px;
     }
 

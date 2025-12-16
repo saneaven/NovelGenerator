@@ -167,3 +167,19 @@ interface DropdownDividerProps {
 export const DropdownDivider: React.FC<DropdownDividerProps> = ({ className = '' }) => {
   return <div className={`dropdown-divider ${className}`.trim()} />;
 };
+
+interface DropdownSectionProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+export const DropdownSection: React.FC<DropdownSectionProps> = ({
+  children,
+  className = ''
+}) => {
+  return (
+    <div className={`dropdown-section ${className}`.trim()}>
+      {children}
+    </div>
+  );
+};

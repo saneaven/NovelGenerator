@@ -2,6 +2,7 @@
     display: grid;
     grid-template-columns: 1fr 280px;
     height: 100%;
+    min-height: 0;
     gap: 0;
     overflow: hidden;
     transition: grid-template-columns var(--transition-base);
@@ -39,20 +40,29 @@
 /* Content area */
 .prompts-content {
     height: 100%;
+    min-height: 0;
     overflow: hidden;
     background: var(--color-surface-base);
 }
 
 .prompts-content-body {
     height: 100%;
-    overflow-y: auto;
+    min-height: 0;
+    overflow: hidden;
     padding: var(--spacing-md);
+    display: flex;
+    flex-direction: column;
 }
 
 /* Editor container */
 .prompts-editor-container {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
     max-width: 900px;
     margin: 0 auto;
+    width: 100%;
 }
 
 /* Editor header */
@@ -62,6 +72,7 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: var(--spacing-sm);
+    flex-shrink: 0;
 }
 
 .prompts-editor-header-text {
@@ -96,11 +107,6 @@
 
 .prompts-editor-header-text + .template-syntax-hint {
     flex-shrink: 0;
-}
-
-/* Editor wrapper */
-.prompts-editor-wrapper {
-    /* The PromptEditor component has its own styling */
 }
 
 /* Empty state */

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useLLMLogStore, type LLMLogEntry, type LLMLogStatus } from '../../store/llmLogStore';
+import { TextButton } from '../TextButton';
 import { Check, Warning, Loading, Clock, Trash, Document } from '../icons';
 import './LLMLogViewer.css';
 
@@ -61,13 +62,15 @@ const LLMLogViewer: React.FC = () => {
                         <span className="toggle-text">Enable LLM Request Logging</span>
                     </label>
                 </div>
-                <button
+                <TextButton
+                    variant="danger"
+                    size="sm"
                     onClick={clearLogs}
                     disabled={logs.length === 0}
-                    className="clear-logs-button"
+                    iconLeft={<Trash size="sm" />}
                 >
-                    <Trash size="sm" /> Clear Logs
-                </button>
+                    Clear Logs
+                </TextButton>
             </div>
 
             {!isLoggingEnabled && (

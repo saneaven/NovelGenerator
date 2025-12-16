@@ -23,12 +23,37 @@
 
 /* Prompt Editor */
 .prompt-editor {
-    margin-bottom: var(--spacing-lg);
-    padding: var(--spacing-md);
     background: var(--color-surface-base);
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--border-radius-md);
     text-align: left;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* CodeMirror wrapper - direct child created by @uiw/react-codemirror */
+.prompt-editor > div:first-child {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    width: 100%;
+    position: relative;
+}
+
+/* Theme wrapper (cm-theme, cm-theme-light/dark) needs height too */
+.prompt-editor > div:first-child > div {
+    height: 100%;
+}
+
+/* CodeMirror editor - fill container */
+.prompt-editor .cm-editor {
+    height: 100%;
+}
+
+/* Force scroller to fill via absolute positioning (required for flex containers) */
+.prompt-editor .cm-scroller {
+    position: absolute;
+    inset: 0;
 }
 
 /* Removed overly broad color rule to allow syntax highlighting */
@@ -145,8 +170,10 @@
     justify-content: space-between;
     align-items: center;
     margin-top: var(--spacing-sm);
+    padding: var(--spacing-md);
     gap: var(--spacing-sm);
     flex-wrap: wrap;
+    flex-shrink: 0;
 }
 
 .editor-left-actions {

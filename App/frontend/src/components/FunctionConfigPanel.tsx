@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { type FunctionAIConfig, type ProviderType, type AIFunctionType, type ProviderCredentials } from '../store/settingsStore';
 import { fetchModels } from '../llm/llmService';
-import { Expand, Collapse } from './icons';
-import { ChevronUp, ChevronDown } from './icons';
+import { TextButton } from './TextButton';
+import { Expand, Collapse, ChevronUp, ChevronDown } from './icons';
 
 interface FunctionMetadata {
     label: string;
@@ -158,13 +158,15 @@ const FunctionConfigPanel: React.FC<FunctionConfigPanelProps> = ({
 
                     {/* Browse Models - Simple List */}
                     <div className="form-group">
-                        <button
-                            type="button"
+                        <TextButton
+                            variant="ghost"
+                            size="sm"
                             onClick={toggleModels}
-                            className="models-expand-btn"
+                            iconLeft={showModels ? <ChevronUp size="xs" /> : undefined}
+                            iconRight={!showModels ? <ChevronDown size="xs" /> : undefined}
                         >
-                            {showModels ? <><ChevronUp size="xs" /> Hide Models</> : <>Show Available Models <ChevronDown size="xs" /></>}
-                        </button>
+                            {showModels ? 'Hide Models' : 'Show Available Models'}
+                        </TextButton>
 
                         {showModels && (
                             <div className="models-section">
@@ -172,9 +174,9 @@ const FunctionConfigPanel: React.FC<FunctionConfigPanelProps> = ({
                                 {modelsError && (
                                     <div className="error-text">
                                         <p>Error: {modelsError}</p>
-                                        <button type="button" onClick={loadModels} className="retry-button">
+                                        <TextButton variant="secondary" size="sm" onClick={loadModels}>
                                             Retry
-                                        </button>
+                                        </TextButton>
                                     </div>
                                 )}
                                 {modelsData && !loadingModels && !modelsError && (
@@ -186,13 +188,13 @@ const FunctionConfigPanel: React.FC<FunctionConfigPanelProps> = ({
                                                     <br />
                                                     <small>{model.id}</small>
                                                 </div>
-                                                <button
-                                                    type="button"
+                                                <TextButton
+                                                    variant="primary"
+                                                    size="sm"
                                                     onClick={() => selectModel(model.id)}
-                                                    className="select-model-btn"
                                                 >
                                                     Use
-                                                </button>
+                                                </TextButton>
                                             </div>
                                         ))}
                                     </div>

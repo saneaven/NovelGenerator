@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useModalHistory } from '../../hooks/useModalHistory';
+import { BaseModal } from '../BaseModal';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
@@ -37,7 +37,9 @@ import type { PromptMode, PromptResult } from './ScenePromptAssistModal';
 import type { Asset, ImageProvider } from '../../api/assetService';
 import ReferenceImagePickerModal from './ReferenceImagePickerModal';
 import ScenePromptAssistModal from './ScenePromptAssistModal';
-import { AIAssistMini, Check } from '../icons';
+import { AIAssistMini, Check, Close } from '../icons';
+import { TextButton } from '../TextButton';
+import { IconButton } from '../IconButton';
 import './SceneImageGeneratorModal.css';
 
 // Story object types
@@ -96,7 +98,6 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
     initialSettings,
     mode = 'generate',
 }) => {
-    useModalHistory(isOpen, onClose);
     const { currentProjectId } = useProjectStore();
     const { settings } = useSettingsStore();
     const { listObjects } = useUnifiedObjectStore();
@@ -390,14 +391,29 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
     const currentSizeOptions = SIZE_OPTIONS[provider] || ['1024x1024'];
 
     return (
-        <div className="scene-image-generator-overlay" onClick={onClose}>
-            <div className="scene-image-generator-modal" onClick={e => e.stopPropagation()}>
-                <div className="modal-header">
-                    <h2>{mode === 'regenerate' ? 'Regenerate Image' : 'Generate Scene Image'}</h2>
-                    <button className="close-btn" onClick={onClose}>&times;</button>
-                </div>
-
-                <div className="modal-body">
+        <BaseModal
+            isOpen={isOpen}
+            onClose={onClose}
+            size="large"
+            title={mode === 'regenerate' ? 'Regenerate Image' : 'Generate Scene Image'}
+            className="scene-image-generator-modal"
+            footer={
+                <>
+                    <TextButton variant="secondary" onClick={onClose}>
+                        Cancel
+                    </TextButton>
+                    <TextButton
+                        variant="primary"
+                        onClick={handleGenerate}
+                        disabled={isGenerating || !(isTagBased ? positivePrompt.trim() : prompt.trim())}
+                        loading={isGenerating}
+                    >
+                        {mode === 'regenerate' ? 'Regenerate' : 'Generate Image'}
+                    </TextButton>
+                </>
+            }
+        >
+            <div className="modal-body">
                     {/* Scene Context Info */}
                     {sceneContext && (sceneContext.preContext || sceneContext.postContext) && (
                         <div className="scene-context-info">
@@ -445,15 +461,16 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
                                         rows={4}
                                         className="prompt-input"
                                     />
-                                    <button
-                                        className="ai-assist-btn"
+                                    <TextButton
+                                        variant="secondary"
+                                        size="sm"
                                         onClick={() => setShowPromptAssistModal(true)}
                                         disabled={!sceneContext}
                                         title={!sceneContext ? 'Scene context required' : 'AI-assisted prompt generation'}
-                                        type="button"
+                                        iconLeft={<AIAssistMini size="sm" />}
                                     >
-                                        <AIAssistMini size="sm" /> AI Assist
-                                    </button>
+                                        AI Assist
+                                    </TextButton>
                                 </div>
                             </>
                         ) : (
@@ -466,15 +483,16 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
                                     rows={4}
                                     className="prompt-input"
                                 />
-                                <button
-                                    className="ai-assist-btn"
+                                <TextButton
+                                    variant="secondary"
+                                    size="sm"
                                     onClick={() => setShowPromptAssistModal(true)}
                                     disabled={!sceneContext}
                                     title={!sceneContext ? 'Scene context required' : 'AI-assisted prompt generation'}
-                                    type="button"
+                                    iconLeft={<AIAssistMini size="sm" />}
                                 >
-                                    <AIAssistMini size="sm" /> AI Assist
-                                </button>
+                                    AI Assist
+                                </TextButton>
                             </div>
                         )}
                     </div>
@@ -483,15 +501,15 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
                     <div className="form-section">
                         <div className="section-header">
                             <label>Reference Images</label>
-                            <button
-                                className="add-object-btn"
+                            <TextButton
+                                variant="secondary"
+                                size="sm"
                                 onClick={() => setShowImagePicker(true)}
-                                type="button"
                                 disabled={!supportsImageInput}
                                 title={supportsImageInput ? 'Add reference image' : 'Provider does not support image input'}
                             >
                                 + Add Image
-                            </button>
+                            </TextButton>
                         </div>
 
                         {!supportsImageInput ? (
@@ -509,13 +527,13 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
                                 {referenceImages.map(img => (
                                     <div key={img.assetId} className="reference-image-item">
                                         <img src={img.thumbnailUrl} alt="Reference" />
-                                        <button
-                                            className="remove-image-btn"
+                                        <IconButton
+                                            icon={<Close size="sm" />}
                                             onClick={() => handleRemoveImage(img.assetId)}
                                             title="Remove image"
-                                        >
-                                            ✕
-                                        </button>
+                                            size="sm"
+                                            className="remove-image-btn"
+                                        />
                                     </div>
                                 ))}
                             </div>
@@ -860,47 +878,28 @@ const SceneImageGeneratorModal: React.FC<SceneImageGeneratorModalProps> = ({
                     {error && <div className="error-message">{error}</div>}
                 </div>
 
-                <div className="modal-footer">
-                    <button className="cancel-btn" onClick={onClose}>
-                        Cancel
-                    </button>
-                    <button
-                        className="generate-btn"
-                        onClick={handleGenerate}
-                        disabled={isGenerating || !(isTagBased ? positivePrompt.trim() : prompt.trim())}
-                    >
-                        {isGenerating
-                            ? 'Generating...'
-                            : mode === 'regenerate'
-                            ? 'Regenerate'
-                            : 'Generate Image'}
-                    </button>
-                </div>
+            {/* Reference Image Picker Sub-modal */}
+            {showImagePicker && (
+                <ReferenceImagePickerModal
+                    isOpen={showImagePicker}
+                    onClose={() => setShowImagePicker(false)}
+                    onImageSelected={handleImageSelected}
+                    excludeAssetIds={referenceImages.map(img => img.assetId)}
+                />
+            )}
 
-                {/* Reference Image Picker Sub-modal */}
-                {showImagePicker && (
-                    <ReferenceImagePickerModal
-                        isOpen={showImagePicker}
-                        onClose={() => setShowImagePicker(false)}
-                        onImageSelected={handleImageSelected}
-                        excludeAssetIds={referenceImages.map(img => img.assetId)}
-                    />
-                )}
-
-                {/* AI Prompt Assistant Sub-modal */}
-                {showPromptAssistModal && sceneContext && (
-                    <ScenePromptAssistModal
-                        isOpen={showPromptAssistModal}
-                        onClose={() => setShowPromptAssistModal(false)}
-                        onPromptGenerated={handlePromptGenerated}
-                        sceneContext={sceneContext}
-                        promptMode={getCurrentPromptMode()}
-                        allStoryObjects={allStoryObjects}
-                    />
-                )}
-
-            </div>
-        </div>
+            {/* AI Prompt Assistant Sub-modal */}
+            {showPromptAssistModal && sceneContext && (
+                <ScenePromptAssistModal
+                    isOpen={showPromptAssistModal}
+                    onClose={() => setShowPromptAssistModal(false)}
+                    onPromptGenerated={handlePromptGenerated}
+                    sceneContext={sceneContext}
+                    promptMode={getCurrentPromptMode()}
+                    allStoryObjects={allStoryObjects}
+                />
+            )}
+        </BaseModal>
     );
 };
 

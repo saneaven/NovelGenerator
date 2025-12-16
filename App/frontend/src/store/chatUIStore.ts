@@ -3,16 +3,16 @@ import { create } from 'zustand';
 /**
  * ChatUIStore - UI State for Chat Components
  *
- * This store handles all chat-related UI state shared between
+ * This store handles chat-related UI state shared between
  * NovelEditor and Workspace pages:
  * - Chat panel visibility
  * - Loading states
  * - Input text
  * - Message editing state
- * - Sidebar visibility
  *
  * Note: Chat data (messages, chats) is managed by chatStore.
  * Note: Selected chat ID remains in chatStore for data operations.
+ * Note: Sidebar visibility is now managed by sidebarStore.
  */
 
 interface EditingState {
@@ -22,10 +22,8 @@ interface EditingState {
 }
 
 interface ChatUIState {
-  // Per-project visibility state
+  // Per-project visibility state (chat panel only - sidebar visibility is in sidebarStore)
   chatVisibleByProject: Record<string, boolean>;
-  mobileSidebarVisibleByProject: Record<string, boolean>;
-  desktopChatListVisibleByProject: Record<string, boolean>;
 
   // Per-project loading state
   loadingByProject: Record<string, boolean>;
@@ -38,18 +36,10 @@ interface ChatUIState {
 }
 
 interface ChatUIActions {
-  // Chat visibility
+  // Chat panel visibility (not sidebar - that's in sidebarStore)
   setChatVisible: (projectId: string, visible: boolean) => void;
   isChatVisible: (projectId: string) => boolean;
   toggleChatVisible: (projectId: string) => void;
-
-  // Mobile sidebar visibility
-  setMobileSidebarVisible: (projectId: string, visible: boolean) => void;
-  isMobileSidebarVisible: (projectId: string) => boolean;
-
-  // Desktop chat list visibility
-  setDesktopChatListVisible: (projectId: string, visible: boolean) => void;
-  isDesktopChatListVisible: (projectId: string) => boolean;
 
   // Loading state
   setLoading: (projectId: string, loading: boolean) => void;
@@ -81,8 +71,6 @@ const defaultEditingState: EditingState = {
 
 const initialState: ChatUIState = {
   chatVisibleByProject: {},
-  mobileSidebarVisibleByProject: {},
-  desktopChatListVisibleByProject: {},
   loadingByProject: {},
   inputByProject: {},
   editingByProject: {},
@@ -111,34 +99,6 @@ export const useChatUIStore = create<ChatUIStore>()((set, get) => ({
   toggleChatVisible: (projectId: string) => {
     const current = get().isChatVisible(projectId);
     get().setChatVisible(projectId, !current);
-  },
-
-  // Mobile sidebar visibility
-  setMobileSidebarVisible: (projectId: string, visible: boolean) => {
-    set((state) => ({
-      mobileSidebarVisibleByProject: {
-        ...state.mobileSidebarVisibleByProject,
-        [projectId]: visible,
-      },
-    }));
-  },
-
-  isMobileSidebarVisible: (projectId: string) => {
-    return get().mobileSidebarVisibleByProject[projectId] ?? false;
-  },
-
-  // Desktop chat list visibility
-  setDesktopChatListVisible: (projectId: string, visible: boolean) => {
-    set((state) => ({
-      desktopChatListVisibleByProject: {
-        ...state.desktopChatListVisibleByProject,
-        [projectId]: visible,
-      },
-    }));
-  },
-
-  isDesktopChatListVisible: (projectId: string) => {
-    return get().desktopChatListVisibleByProject[projectId] ?? false;
   },
 
   // Loading state
@@ -226,8 +186,6 @@ export const useChatUIStore = create<ChatUIStore>()((set, get) => ({
     set((state) => {
       const newState = { ...state };
       delete newState.chatVisibleByProject[projectId];
-      delete newState.mobileSidebarVisibleByProject[projectId];
-      delete newState.desktopChatListVisibleByProject[projectId];
       delete newState.loadingByProject[projectId];
       delete newState.inputByProject[projectId];
       delete newState.editingByProject[projectId];

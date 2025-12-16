@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useProjectStore } from '../store/projectStore';
-import { DropdownMenu, DropdownItem, DropdownDivider } from './ui/DropdownMenu';
+import { DropdownMenu, DropdownItem, DropdownSection } from './ui/DropdownMenu';
+import { TextButton } from './TextButton';
 import ImageTabContent from './AssetManager/ImageTabContent';
 import type { Asset } from '../api/assetService';
 import { Scroll, Refresh, Trash, AIAssistMini } from './icons';
@@ -140,14 +141,15 @@ const StoryCardInlineEdit: React.FC<StoryCardInlineEditProps> = ({
 
                         {/* Action row */}
                         <div className="edit-actions-row">
-                            <button
-                                className="ai-edit-button"
+                            <TextButton
+                                variant="primary"
+                                size="sm"
                                 onClick={onAIEdit}
                                 title="AI Edit"
+                                iconLeft={<AIAssistMini size="sm" />}
                             >
-                                <span className="ai-icon"><AIAssistMini size="sm" /></span>
                                 AI Edit
-                            </button>
+                            </TextButton>
 
                             <DropdownMenu
                                 trigger={
@@ -157,25 +159,28 @@ const StoryCardInlineEdit: React.FC<StoryCardInlineEditProps> = ({
                                 }
                                 align="right"
                             >
-                                <DropdownItem
-                                    icon={<Scroll size="sm" />}
-                                    label="Version History"
-                                    onClick={onVersionHistory}
-                                />
-                                {showSecondaryLanguage && (
+                                <DropdownSection>
                                     <DropdownItem
-                                        icon={<Refresh size="sm" />}
-                                        label="Retranslate"
-                                        onClick={onRetranslate}
+                                        icon={<Scroll size="sm" />}
+                                        label="Version History"
+                                        onClick={onVersionHistory}
                                     />
-                                )}
-                                <DropdownDivider />
-                                <DropdownItem
-                                    icon={<Trash size="sm" />}
-                                    label="Delete"
-                                    onClick={onDelete}
-                                    variant="danger"
-                                />
+                                    {showSecondaryLanguage && (
+                                        <DropdownItem
+                                            icon={<Refresh size="sm" />}
+                                            label="Retranslate"
+                                            onClick={onRetranslate}
+                                        />
+                                    )}
+                                </DropdownSection>
+                                <DropdownSection>
+                                    <DropdownItem
+                                        icon={<Trash size="sm" />}
+                                        label="Delete"
+                                        onClick={onDelete}
+                                        variant="danger"
+                                    />
+                                </DropdownSection>
                             </DropdownMenu>
                         </div>
 
@@ -191,19 +196,20 @@ const StoryCardInlineEdit: React.FC<StoryCardInlineEditProps> = ({
 
                         {/* Save/Cancel buttons */}
                         <div className="edit-buttons-row">
-                            <button
-                                className="cancel-button"
+                            <TextButton
+                                variant="secondary"
                                 onClick={handleCancel}
                             >
                                 Cancel
-                            </button>
-                            <button
-                                className="save-button"
+                            </TextButton>
+                            <TextButton
+                                variant="primary"
                                 onClick={handleSave}
                                 disabled={loading || !name.trim()}
+                                loading={loading}
                             >
-                                {loading ? 'Saving...' : 'Save'}
-                            </button>
+                                Save
+                            </TextButton>
                         </div>
                     </div>
                 )}

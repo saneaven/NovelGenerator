@@ -29,6 +29,7 @@ import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
+import { useSidebarStore } from '../../../store/sidebarStore';
 import NovelChapterAIEditModal from '../../../components/NovelChapterAIEditModal';
 import TranslationModal from '../../../components/TranslationModal';
 import { AssetManagerModal, SceneAssetManagerModal } from '../../../components/AssetManager';
@@ -42,7 +43,9 @@ import type { ManuscriptObject } from '../../../types/unifiedObject';
 import type { InitialGenerationSettings } from '../../../components/ImageGeneration/SceneImageGeneratorModal';
 import { API_BASE_URL } from '../../../api/client';
 import ChapterSidebar from './ChapterSidebar';
-import { Save, Check, Bullet, Warning, HamburgerMenu, AIAssist, Refresh, Globe, Lightbulb } from '../../../components/icons';
+import { Save, Check, Bullet, Warning, HamburgerMenu, AIAssist, Refresh, Globe, Lightbulb, MoreHorizontal } from '../../../components/icons';
+import { IconButton } from '../../../components/IconButton';
+import { TextButton } from '../../../components/TextButton';
 
 interface NovelEditorPanelProps {
   projectId: string;
@@ -91,9 +94,12 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const editorStore = useNovelEditorStore();
   // Get stable action references to avoid infinite loops in effects
   const setHasUnsavedChangesAction = useNovelEditorStore((state) => state.setHasUnsavedChanges);
+  const setIsSavingAction = useNovelEditorStore((state) => state.setIsSaving);
+
+  // Sidebar state from unified sidebar store
+  const toggleSidebar = useSidebarStore((state) => state.toggleSidebar);
 
   // Get UI state from store
-  const isChapterSidebarVisible = editorStore.isChapterSidebarVisible(projectId);
   const globalDisplayLanguage = editorStore.getDisplayLanguage(projectId) || settings.mainLanguage;
 
   // State
@@ -126,7 +132,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   // Editor state
   const [content, setContent] = useState('');
   const [lastSavedContent, setLastSavedContent] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
+  const isSaving = useNovelEditorStore((state) => state.isSavingByProject[projectId] ?? false);
+  const setIsSaving = (saving: boolean) => setIsSavingAction(projectId, saving);
   const [savingType, setSavingType] = useState<'auto' | 'manual' | null>(null);
 
   // Refs
@@ -763,17 +770,18 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         <p style={{ fontSize: '0.875rem', color: 'var(--color-text-tertiary)', marginTop: '0.5rem' }}>
           Manuscript ID: {manuscriptId}
         </p>
-        <button
-          className="toolbar-btn"
-          style={{ marginTop: '1rem' }}
-          onClick={() => {
-            if (manuscriptId) {
-              fetchObject('manuscript', manuscriptId);
-            }
-          }}
-        >
-          Retry
-        </button>
+        <div style={{ marginTop: '1rem' }}>
+          <TextButton
+            variant="secondary"
+            onClick={() => {
+              if (manuscriptId) {
+                fetchObject('manuscript', manuscriptId);
+              }
+            }}
+          >
+            Retry
+          </TextButton>
+        </div>
       </div>
     );
   }
@@ -783,12 +791,12 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       <div className="novel-editor-panel error">
         <h3>Error Loading Chapter</h3>
         <p>{error}</p>
-        <button
-          className="toolbar-btn"
+        <TextButton
+          variant="secondary"
           onClick={() => manuscriptId && fetchObject('manuscript', manuscriptId)}
         >
           Retry
-        </button>
+        </TextButton>
       </div>
     );
   }
@@ -849,13 +857,13 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                   )}
 
                   {/* Sidebar Toggle Button */}
-                  <button
-                    onClick={() => editorStore.setChapterSidebarVisible(projectId, !isChapterSidebarVisible)}
-                    className="header-btn sidebar-toggle-btn"
+                  <IconButton
+                    icon={<HamburgerMenu size="md" />}
+                    onClick={() => toggleSidebar(projectId, 'chapter')}
                     title="Toggle chapter list"
-                  >
-                    <HamburgerMenu size="md" />
-                  </button>
+                    size="sm"
+                    className="sidebar-toggle-btn"
+                  />
                 </div>
 
                 {/* Collapsible Description */}
@@ -888,31 +896,40 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
               toolbarActions={
                 <>
                   {/* AI Edit Button */}
-                  <button
+                  <TextButton
+                    variant="primary"
+                    size="sm"
                     onClick={() => setIsAIEditModalOpen(true)}
-                    className="action-btn ai-edit-btn"
                     disabled={isSaving || !selectedChapter}
                     title="AI Edit Chapter"
+                    iconLeft={<AIAssist size="sm" />}
+                    className="desktop-only"
                   >
-                    <AIAssist size="sm" /> AI Edit
-                  </button>
+                    AI Edit
+                  </TextButton>
 
                   {/* Manual Save Button */}
-                  <button
+                  <TextButton
+                    variant="secondary"
+                    size="sm"
                     onClick={() => handleManualSave('Manual Save')}
-                    className="action-btn save-btn"
                     disabled={isSaving || !hasUnsavedChanges}
                     title="Create version snapshot (Ctrl+S)"
+                    iconLeft={<Save size="sm" />}
+                    className="desktop-only"
                   >
-                    <Save size="sm" /> Save
-                  </button>
+                    Save
+                  </TextButton>
 
                   {/* More Actions Dropdown - contains mobile-hidden actions */}
                   <DropdownMenu
                     trigger={
-                      <button className="more-button" disabled={isSaving} title="More actions">
-                        •••
-                      </button>
+                      <IconButton
+                        icon={<MoreHorizontal size="sm" />}
+                        disabled={isSaving}
+                        title="More actions"
+                        size="sm"
+                      />
                     }
                   >
                     {/* AI Edit - accessible via dropdown on mobile */}
@@ -961,19 +978,19 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                   <p>This chapter doesn't have content in {globalDisplayLanguage} yet.</p>
                   <div className="overlay-actions">
                     {availableSourceLanguages.length > 0 && (
-                      <button
-                        className="primary-btn"
+                      <TextButton
+                        variant="primary"
                         onClick={() => setShowRetranslateModal(true)}
                       >
                         Translate from {availableSourceLanguages[0]}
-                      </button>
+                      </TextButton>
                     )}
-                    <button
-                      className="secondary-btn"
+                    <TextButton
+                      variant="secondary"
                       onClick={handleWriteFromScratch}
                     >
                       Write from scratch
-                    </button>
+                    </TextButton>
                   </div>
                 </div>
               </div>
@@ -996,10 +1013,9 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         {/* Chapter Sidebar */}
         <ChapterSidebar
           projectId={projectId}
-          isVisible={isChapterSidebarVisible}
-          onToggle={() => editorStore.setChapterSidebarVisible(projectId, !isChapterSidebarVisible)}
           selectedChapterId={selectedChapterId}
           onSelectChapter={onSelectChapter}
+          displayLanguage={globalDisplayLanguage}
         />
       </div>
 

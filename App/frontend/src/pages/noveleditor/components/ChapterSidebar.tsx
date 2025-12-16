@@ -1,46 +1,53 @@
 import React, { useState, useEffect } from 'react';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
+import { useSidebarStore } from '../../../store/sidebarStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import type { ActObject, ChapterObject, ManuscriptObject, VersionHistoryEntry } from '../../../types/unifiedObject';
+import { BaseSidebar } from '../../../components/BaseSidebar';
+import { IconButton } from '../../../components/IconButton';
 import { Close } from '../../../components/icons';
+import './ChapterSidebar.css';
 
 interface ChapterSidebarProps {
   projectId: string;
-  isVisible: boolean;
-  onToggle: () => void;
   selectedChapterId: string | null;
   onSelectChapter: (chapterId: string) => void;
+  displayLanguage: string;
 }
 
 const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
   projectId,
-  isVisible,
-  onToggle,
   selectedChapterId,
   onSelectChapter,
+  displayLanguage,
 }) => {
   const store = useUnifiedObjectStore();
+  const closeSidebar = useSidebarStore((state) => state.closeSidebar);
   const mainLanguage = useSettingsStore(state => state.settings.mainLanguage);
   const [showVersions, setShowVersions] = useState(false);
 
-  // Helper to get data for language with fallback
+  const handleClose = () => {
+    closeSidebar(projectId);
+  };
+
+  // Helper to get data for language with fallback (displayLanguage -> mainLanguage -> first available)
   const getActData = (act: ActObject) => {
-    const data = act.data[mainLanguage];
-    if (data) return data;
+    if (act.data[displayLanguage]) return act.data[displayLanguage];
+    if (act.data[mainLanguage]) return act.data[mainLanguage];
     const available = Object.keys(act.data);
     return available.length > 0 ? act.data[available[0]] : { name: '', description: '' };
   };
 
   const getChapterData = (chapter: ChapterObject) => {
-    const data = chapter.data[mainLanguage];
-    if (data) return data;
+    if (chapter.data[displayLanguage]) return chapter.data[displayLanguage];
+    if (chapter.data[mainLanguage]) return chapter.data[mainLanguage];
     const available = Object.keys(chapter.data);
     return available.length > 0 ? chapter.data[available[0]] : { name: '', description: '' };
   };
 
   const getManuscriptData = (manuscript: ManuscriptObject) => {
-    const data = manuscript.data[mainLanguage];
-    if (data) return data;
+    if (manuscript.data[displayLanguage]) return manuscript.data[displayLanguage];
+    if (manuscript.data[mainLanguage]) return manuscript.data[mainLanguage];
     const available = Object.keys(manuscript.data);
     return available.length > 0 ? manuscript.data[available[0]] : { content: '', wordCount: 0 };
   };
@@ -140,31 +147,60 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
   // Find selected chapter for display
   const selectedChapter = selectedChapterId ? (store.objects[selectedChapterId] as ChapterObject) : null;
 
+  const sidebarHeader = (
+    <div className="chapter-sidebar-header">
+      <div className="sidebar-nav">
+        <button
+          className={`nav-tab ${!showVersions ? 'active' : ''}`}
+          onClick={() => setShowVersions(false)}
+        >
+          Chapters
+        </button>
+        {selectedChapterId && (
+          <button
+            className={`nav-tab ${showVersions ? 'active' : ''}`}
+            onClick={() => setShowVersions(true)}
+          >
+            Versions
+          </button>
+        )}
+      </div>
+      <IconButton
+        icon={<Close size="sm" />}
+        onClick={handleClose}
+        title="Close sidebar"
+        size="sm"
+      />
+    </div>
+  );
+
   if (acts.length === 0) {
     return (
-      <>
-        {isVisible && (
-          <div className="chapter-sidebar-backdrop" onClick={onToggle} />
-        )}
-        <div className={`chapter-sidebar ${isVisible ? 'visible' : 'hidden'}`}>
-        <div className="chapter-sidebar-header">
-          <h3>Chapters</h3>
-          <button
-            className="sidebar-close-btn"
-            onClick={onToggle}
-            title="Close chapter list"
-          >
-            <Close size="sm" />
-          </button>
-        </div>
+      <BaseSidebar
+        id="chapter"
+        projectId={projectId}
+        position="right"
+        className="chapter-sidebar"
+        header={
+          <div className="chapter-sidebar-header">
+            <h3>Chapters</h3>
+            <IconButton
+              icon={<Close size="sm" />}
+              onClick={handleClose}
+              title="Close chapter list"
+              size="sm"
+            />
+          </div>
+        }
+        onClose={handleClose}
+      >
         <div className="chapter-sidebar-content">
           <div className="no-chapters-message">
             <p>No chapters available.</p>
             <p>Create acts and chapters in the Workspace first.</p>
           </div>
         </div>
-      </div>
-      </>
+      </BaseSidebar>
     );
   }
 
@@ -192,37 +228,14 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
   };
 
   return (
-    <>
-      {isVisible && (
-        <div className="chapter-sidebar-backdrop" onClick={onToggle} />
-      )}
-      <div className={`chapter-sidebar ${isVisible ? 'visible' : 'hidden'}`}>
-        <div className="chapter-sidebar-header">
-        <div className="sidebar-nav">
-          <button
-            className={`nav-tab ${!showVersions ? 'active' : ''}`}
-            onClick={() => setShowVersions(false)}
-          >
-            Chapters
-          </button>
-          {selectedChapterId && (
-            <button
-              className={`nav-tab ${showVersions ? 'active' : ''}`}
-              onClick={() => setShowVersions(true)}
-            >
-              Versions
-            </button>
-          )}
-        </div>
-        <button
-          className="sidebar-close-btn"
-          onClick={onToggle}
-          title="Close sidebar"
-        >
-          <Close size="sm" />
-        </button>
-      </div>
-
+    <BaseSidebar
+      id="chapter"
+      projectId={projectId}
+      position="right"
+      className="chapter-sidebar"
+      header={sidebarHeader}
+      onClose={handleClose}
+    >
       <div className="chapter-sidebar-content">
         {!showVersions ? (
           // Chapters View
@@ -355,8 +368,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
           </div>
         )}
       </div>
-      </div>
-    </>
+    </BaseSidebar>
   );
 };
 

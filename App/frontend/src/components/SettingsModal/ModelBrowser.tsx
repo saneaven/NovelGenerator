@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { ProviderType, ProviderPreference, ProviderCredentials } from '../../store/settingsStore';
 import { fetchModels, fetchModelEndpoints } from '../../llm/llmService';
+import { TextButton } from '../TextButton';
+import { CustomSelect } from '../ui/CustomSelect';
 import { Check, Expand, Collapse } from '../icons';
 
 interface ModelBrowserProps {
@@ -560,13 +562,13 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
               )}
             </p>
             {isDescriptionLong && (
-              <button
-                type="button"
+              <TextButton
+                variant="ghost"
+                size="sm"
                 onClick={() => toggleSectionExpansion(`${model.id}-description`)}
-                className="model-card__expand-btn"
               >
                 {isDescExpanded ? 'Show less' : 'Show more'}
-              </button>
+              </TextButton>
             )}
           </div>
         )}
@@ -633,13 +635,13 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
             <div className="model-card__details-header">
               <h5>Available Providers</h5>
               {providerPreference && (
-                <button
-                  type="button"
+                <TextButton
+                  variant="ghost"
+                  size="sm"
                   onClick={clearProviderPreference}
-                  className="model-card__clear-btn"
                 >
                   Clear Filters
-                </button>
+                </TextButton>
               )}
             </div>
             {loadingEndpoints[model.id] ? (
@@ -768,9 +770,9 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
       return (
         <div className="model-browser__error">
           <p>Error: {modelsError}</p>
-          <button type="button" onClick={loadModels} className="model-browser__retry-btn">
+          <TextButton variant="secondary" size="sm" type="button" onClick={loadModels}>
             Retry
-          </button>
+          </TextButton>
         </div>
       );
     }
@@ -813,20 +815,18 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
               onChange={(e) => setSearchQuery(e.target.value)}
               className="model-browser__search"
             />
-            <select
+            <CustomSelect
               value={sortOption}
-              onChange={(e) => setSortOption(e.target.value as SortOption)}
-              className="model-browser__sort"
-            >
-              <option value="name-asc">Name (A-Z)</option>
-              <option value="name-desc">Name (Z-A)</option>
-              {provider === 'openrouter' && (
-                <>
-                  <option value="price-asc">Price (Low-High)</option>
-                  <option value="price-desc">Price (High-Low)</option>
-                </>
-              )}
-            </select>
+              onChange={(value) => setSortOption(value as SortOption)}
+              options={[
+                { value: 'name-asc', label: 'Name (A-Z)' },
+                { value: 'name-desc', label: 'Name (Z-A)' },
+                ...(provider === 'openrouter' ? [
+                  { value: 'price-asc', label: 'Price (Low-High)' },
+                  { value: 'price-desc', label: 'Price (High-Low)' },
+                ] : []),
+              ]}
+            />
           </div>
 
           {renderModelList()}

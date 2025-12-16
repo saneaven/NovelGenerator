@@ -1,61 +1,5 @@
-/* AI Edit Modal - Modern Design */
-
-.ai-edit-modal {
-  max-width: 900px;
-  width: 90dvw;
-  max-height: 90dvh;
-  display: flex;
-  flex-direction: column;
-  border-radius: var(--border-radius-lg);
-  overflow: hidden;
-  animation: slideInUp 0.3s ease-out;
-}
-
-/* Header Styling */
-.ai-edit-modal .modal-header {
-  background: var(--gradient-accent);
-  color: white;
-  padding: var(--spacing-xl) var(--spacing-2xl);
-  border-bottom: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-lg);
-}
-
-.ai-edit-modal .modal-header h2 {
-  font-size: var(--font-size-2xl);
-  font-weight: 700;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  flex: 1;
-}
-
-.ai-edit-modal .modal-close {
-  background: rgba(255, 255, 255, 0.15);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  padding: var(--spacing-sm) var(--spacing-sm);
-  border-radius: var(--border-radius-md);
-  font-size: var(--font-size-2xl);
-  font-weight: 300;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.ai-edit-modal .modal-close:hover {
-  background: rgba(255, 255, 255, 0.25);
-  transform: rotate(90deg);
-}
+/* AI Edit Modal - Component-specific styles */
+/* Base modal structure is handled by BaseModal */
 
 /* Form Styling */
 .ai-edit-form {
@@ -537,75 +481,6 @@
   margin-right: var(--spacing-xs);
 }
 
-/* Error Message */
-.error-message {
-  padding: var(--spacing-lg);
-  background: var(--color-feedback-error-soft);
-  border: 2px solid var(--color-feedback-error-base);
-  border-radius: var(--border-radius-md);
-  color: var(--color-feedback-error-strong);
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-md);
-  animation: shake 0.5s ease-in-out;
-}
-
-.error-message svg {
-  flex-shrink: 0;
-}
-
-/* AI Response Display */
-.ai-response {
-  background: var(--color-surface-elevated);
-  border-radius: var(--border-radius-lg);
-  border: 2px solid var(--color-brand-secondary-accent);
-  overflow: hidden;
-  animation: slideInUp 0.3s ease-out;
-  box-shadow: var(--shadow-md);
-}
-
-.ai-response h3 {
-  margin: 0;
-  padding: var(--spacing-lg) var(--spacing-xl);
-  background: var(--gradient-modal-content-secondary);
-  border-bottom: 2px solid var(--color-brand-secondary-tint);
-  font-size: var(--font-size-lg);
-  font-weight: 600;
-  color: var(--color-text-primary);
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
-.ai-response h3 svg {
-  flex-shrink: 0;
-}
-
-.response-content {
-  margin: 0;
-  padding: var(--spacing-xl);
-  background: var(--color-surface-inverse);
-  color: var(--color-text-inverse);
-  font-family: var(--font-family-mono);
-  font-size: var(--font-size-sm);
-  line-height: 1.8;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 400px;
-  overflow-y: auto;
-  position: relative;
-}
-
-/* Typing indicator animation */
-.response-content::after {
-  content: '▊';
-  animation: blink 1s steps(2, start) infinite;
-  color: var(--color-brand-primary-outline);
-  margin-left: 2px;
-}
-
 @keyframes blink {
   0%, 100% {
     opacity: 1;
@@ -638,9 +513,18 @@
 }
 
 .cancel-button {
+  padding: var(--spacing-md) var(--spacing-2xl);
   background: var(--color-surface-muted);
-  border-color: var(--color-border-medium);
+  border: 2px solid var(--color-border-medium);
+  border-radius: var(--border-radius-md);
   color: var(--color-text-secondary);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
 .cancel-button:hover:not(:disabled) {
@@ -650,9 +534,18 @@
 }
 
 .submit-button {
+  padding: var(--spacing-md) var(--spacing-2xl);
   background: var(--color-brand-primary);
-  border-color: var(--color-brand-primary-hover);
+  border: 2px solid var(--color-brand-primary-hover);
+  border-radius: var(--border-radius-md);
   color: white;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
   position: relative;
   overflow: hidden;
 }

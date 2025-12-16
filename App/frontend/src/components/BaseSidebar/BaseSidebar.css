@@ -1,0 +1,106 @@
+/* BaseSidebar - Unified Sidebar Base Styles */
+
+/* Backdrop overlay */
+.base-sidebar-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: var(--z-sidebar-backdrop);
+  animation: sidebarBackdropFadeIn 0.2s ease-out;
+}
+
+@keyframes sidebarBackdropFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Base sidebar container */
+.base-sidebar {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: var(--size-sidebar-width);
+  max-width: 90vw;
+  background-color: var(--color-surface-elevated, #ffffff);
+  display: flex;
+  flex-direction: column;
+  z-index: var(--z-sidebar);
+  box-shadow: var(--shadow-lg, 0 10px 25px rgba(0, 0, 0, 0.15));
+  transition: transform var(--transition-base, 0.2s ease);
+  overflow: hidden;
+}
+
+/* Left position */
+.base-sidebar--left {
+  left: 0;
+  transform: translateX(-100%);
+  border-right: 1px solid var(--color-border-default, #e5e7eb);
+}
+
+.base-sidebar--left.base-sidebar--open {
+  transform: translateX(0);
+}
+
+/* Right position */
+.base-sidebar--right {
+  right: 0;
+  transform: translateX(100%);
+  border-left: 1px solid var(--color-border-default, #e5e7eb);
+}
+
+.base-sidebar--right.base-sidebar--open {
+  transform: translateX(0);
+}
+
+/* Header section (optional) */
+.base-sidebar-header {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--color-border-default, #e5e7eb);
+}
+
+/* Content area */
+.base-sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Scrollbar styling for sidebar content */
+.base-sidebar-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.base-sidebar-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.base-sidebar-content::-webkit-scrollbar-thumb {
+  background-color: var(--color-border-default, #d1d5db);
+  border-radius: 3px;
+}
+
+.base-sidebar-content::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-text-tertiary, #9ca3af);
+}
+
+/* Desktop styles */
+@media (min-width: 769px) {
+  .base-sidebar {
+    box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.1));
+  }
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .base-sidebar {
+    width: var(--size-sidebar-width-mobile);
+    max-width: 85vw;
+  }
+}

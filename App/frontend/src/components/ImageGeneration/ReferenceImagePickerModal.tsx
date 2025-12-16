@@ -6,12 +6,13 @@
  */
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useModalHistory } from '../../hooks/useModalHistory';
+import { BaseModal } from '../BaseModal';
 import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { assetService, type Asset, type SceneAsset } from '../../api/assetService';
 import { API_BASE_URL } from '../../api/client';
+import { TextButton } from '../TextButton';
 import './ReferenceImagePickerModal.css';
 
 type StoryObjectTab = 'character' | 'location' | 'organization' | 'lorebook';
@@ -48,7 +49,6 @@ const ReferenceImagePickerModal: React.FC<ReferenceImagePickerModalProps> = ({
   onImageSelected,
   excludeAssetIds = [],
 }) => {
-  useModalHistory(isOpen, onClose);
   const { currentProjectId } = useProjectStore();
   const { listObjects } = useUnifiedObjectStore();
   const { settings } = useSettingsStore();
@@ -211,18 +211,17 @@ const ReferenceImagePickerModal: React.FC<ReferenceImagePickerModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="reference-image-picker-overlay" onClick={onClose}>
-      <div className="reference-image-picker-modal" onClick={e => e.stopPropagation()}>
-        <div className="picker-header">
-          <h3>Select Reference Image</h3>
-          <button className="close-btn" onClick={onClose}>&times;</button>
-        </div>
-
-        {/* Search and Upload */}
-        <div className="picker-toolbar">
+    <BaseModal
+      isOpen={isOpen}
+      onClose={onClose}
+      size="medium"
+      title="Select Reference Image"
+      className="reference-image-picker-modal"
+      zIndexLayer={1}
+    >
+      {/* Search and Upload */}
+      <div className="picker-toolbar">
           <input
             type="text"
             className="search-input"
@@ -230,13 +229,14 @@ const ReferenceImagePickerModal: React.FC<ReferenceImagePickerModalProps> = ({
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
           />
-          <button
-            className="upload-btn"
+          <TextButton
+            variant="secondary"
+            size="sm"
             onClick={handleUploadClick}
             disabled={uploading}
           >
             {uploading ? 'Uploading...' : '+ Upload Image'}
-          </button>
+          </TextButton>
           <input
             ref={fileInputRef}
             type="file"
@@ -330,8 +330,7 @@ const ReferenceImagePickerModal: React.FC<ReferenceImagePickerModalProps> = ({
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </BaseModal>
   );
 };
 

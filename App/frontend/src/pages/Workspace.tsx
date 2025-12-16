@@ -7,6 +7,7 @@ import { areEditCardMapsEqual } from '../chat/utils/editCardUtils';
 import { WORKSPACE_FUNCTIONS } from '../llm/schemas/functionCalling';
 import { useChatStore } from '../store/chatStore';
 import { useChatUIStore } from '../store/chatUIStore';
+import { useSidebarStore } from '../store/sidebarStore';
 import { useProjectStore } from '../store/projectStore';
 import { useUnifiedObjectStore, useStoryObjects } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -18,6 +19,7 @@ import SettingsModal from '../components/SettingsModal/SettingsModal';
 import TranslationModal from '../components/TranslationModal';
 import ChatPanel from './workspace/components/ChatPanel';
 import StoryPanel from './workspace/components/StoryPanel';
+import WorkspaceTabsSidebar from './workspace/components/WorkspaceTabsSidebar';
 import { PageHeader, MobileFooter } from '../components/layout';
 
 import { useWorkspaceState } from './workspace/hooks/useWorkspaceState';
@@ -34,6 +36,16 @@ import './workspace/styles/ChatInput.css';
 import './workspace/styles/ChatSidebar.css';
 import './workspace/styles/MessageEditCards.css';
 import '../components/MobileChat.css';
+
+// Tab labels for mobile subtitle
+const tabLabels: Record<string, string> = {
+    basicInfo: 'Basic Info',
+    characters: 'Characters',
+    organizations: 'Organizations',
+    locations: 'Locations',
+    lorebook: 'Lorebook',
+    outline: 'Outline',
+};
 
 const Workspace: React.FC = () =>
 {
@@ -53,7 +65,13 @@ const Workspace: React.FC = () =>
     const chatFunctionConfig = useSettingsStore(state => state.settings.functionConfigs.chat);
     const providerCredentials = useSettingsStore(state => state.settings.providerCredentials);
     const { currentError, showError, hideError } = useErrorStore();
-    const chatUI = useChatUIStore();
+    // Use selectors to avoid re-rendering on input changes
+    const isChatVisibleState = useChatUIStore((state) => state.chatVisibleByProject[projectId ?? ''] ?? false);
+    const setChatVisible = useChatUIStore((state) => state.setChatVisible);
+    const toggleChatVisible = useChatUIStore((state) => state.toggleChatVisible);
+    const isDesktopView = typeof window !== 'undefined' && window.innerWidth > 768;
+    const isChatVisible = isDesktopView ? true : isChatVisibleState;
+    const sidebarStore = useSidebarStore();
 
     // Force re-render when crossing desktop/mobile breakpoint
     const [_isDesktop, setIsDesktop] = useState(() => window.innerWidth > 768);
@@ -195,8 +213,8 @@ const Workspace: React.FC = () =>
             {
                 projectId: activeProjectId,
                 getStoryObjects: () => storyObjects,
-                getIsLoading: () => chatUI.isLoading(activeProjectId),
-                setIsLoading: (loading: boolean) => chatUI.setLoading(activeProjectId, loading),
+                getIsLoading: () => useChatUIStore.getState().isLoading(activeProjectId),
+                setIsLoading: (loading: boolean) => useChatUIStore.getState().setLoading(activeProjectId, loading),
                 abortControllerRef,
                 getActiveChatId: () =>
                 {
@@ -392,9 +410,12 @@ const Workspace: React.FC = () =>
                 translateCount={objectsNeedingTranslation}
                 onTranslateAllClick={() => setShowTranslateModal(true)}
                 onSettingsClick={() => uiActions.setIsSettingsOpen(true)}
+                mobileSubtitle={tabLabels[uiState.activeStoryTab]}
+                showHamburger={true}
+                onHamburgerClick={() => sidebarStore.toggleSidebar(projectId ?? '', 'workspace-tabs')}
             />
 
-            <div className={`workspace-content ${chatUI.isChatVisible(projectId ?? '') ? 'chat-visible' : ''}`}>
+            <div className={`workspace-content ${isChatVisible ? 'chat-visible' : ''}`}>
                 <ChatPanel
                     projectId={projectId ?? ''}
                     systemInsertConfig={systemInsertConfig}
@@ -427,23 +448,21 @@ const Workspace: React.FC = () =>
                 onSelectChat={chatHandlers.handleSelectChat}
             />
 
-            {chatUI.isChatVisible(projectId ?? '') && (
-                <div className="chat-overlay mobile-only" onClick={() => chatUI.setChatVisible(projectId ?? '', false)} />
-            )}
+            <WorkspaceTabsSidebar
+                projectId={projectId ?? ''}
+                activeTab={uiState.activeStoryTab}
+                onTabChange={uiActions.setActiveStoryTab}
+            />
 
-            {chatUI.isMobileSidebarVisible(projectId ?? '') && (
-                <div className="sidebar-overlay mobile-only" onClick={() => chatUI.setMobileSidebarVisible(projectId ?? '', false)} />
-            )}
-
-            {chatUI.isDesktopChatListVisible(projectId ?? '') && (
-                <div className="desktop-chat-overlay desktop-only" onClick={() => chatUI.setDesktopChatListVisible(projectId ?? '', false)} />
+            {isChatVisible && (
+                <div className="chat-overlay mobile-only" onClick={() => setChatVisible(projectId ?? '', false)} />
             )}
 
             <MobileFooter
-                isChatVisible={chatUI.isChatVisible(projectId ?? '')}
+                isChatVisible={isChatVisible}
                 onChatToggle={() => {
-                    chatUI.toggleChatVisible(projectId ?? '');
-                    chatUI.setMobileSidebarVisible(projectId ?? '', false);
+                    toggleChatVisible(projectId ?? '');
+                    sidebarStore.closeSidebar(projectId ?? '');
                 }}
                 onSettingsClick={() => uiActions.setIsSettingsOpen(true)}
             />

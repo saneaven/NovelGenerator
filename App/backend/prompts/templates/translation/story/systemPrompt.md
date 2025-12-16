@@ -56,28 +56,28 @@ Use the following already-translated content as reference to maintain consistent
 {% if context.contextData.characters %}
 ### Characters
 {% for char in context.contextData.characters %}
-- **{{ char.name }}**: {{ char.description | truncate(200) }}
+- **{{ char.name }}**: {{ char.description }}
 {% endfor %}
 {% endif %}
 
 {% if context.contextData.organizations %}
 ### Organizations
 {% for org in context.contextData.organizations %}
-- **{{ org.name }}**: {{ org.description | truncate(200) }}
+- **{{ org.name }}**: {{ org.description }}
 {% endfor %}
 {% endif %}
 
 {% if context.contextData.locations %}
 ### Locations
 {% for loc in context.contextData.locations %}
-- **{{ loc.name }}**: {{ loc.description | truncate(200) }}
+- **{{ loc.name }}**: {{ loc.description }}
 {% endfor %}
 {% endif %}
 
 {% if context.contextData.lorebook %}
 ### World Details
 {% for entry in context.contextData.lorebook %}
-- **{{ entry.name }}**: {{ entry.description | truncate(200) }}
+- **{{ entry.name }}**: {{ entry.description }}
 {% endfor %}
 {% endif %}
 
@@ -85,9 +85,9 @@ Use the following already-translated content as reference to maintain consistent
 ### Story Outline
 {% for act in context.contextData.outline.acts %}
 #### {{ act.name }}
-{{ act.description | truncate(150) }}
+{{ act.description }}
 {% for chapter in act.chapters %}
-- {{ chapter.name }}: {{ chapter.description | truncate(100) }}
+- {{ chapter.name }}: {{ chapter.description }}
 {% endfor %}
 {% endfor %}
 {% endif %}

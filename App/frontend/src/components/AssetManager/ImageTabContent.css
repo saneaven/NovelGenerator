@@ -289,9 +289,9 @@
 }
 
 .upload-subtab .upload-hint {
-    color: var(--color-text-tertiary) !important;
-    font-size: var(--font-size-xs) !important;
-    font-weight: var(--font-weight-normal) !important;
+    color: var(--color-text-tertiary);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-normal);
 }
 
 /* Generate sub-tab */

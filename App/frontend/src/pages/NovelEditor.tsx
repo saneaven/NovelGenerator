@@ -7,6 +7,7 @@ import { areEditCardMapsEqual } from '../chat/utils/editCardUtils';
 import { NOVEL_EDITOR_FUNCTIONS } from '../llm/schemas/functionCalling';
 import { useChatStore } from '../store/chatStore';
 import { useChatUIStore } from '../store/chatUIStore';
+import { useSidebarStore } from '../store/sidebarStore';
 import { useProjectStore } from '../store/projectStore';
 import { useUnifiedObjectStore, useStoryObjects } from '../store/unifiedObjectStore';
 import { useNovelEditorStore } from '../store/novelEditorStore';
@@ -54,6 +55,8 @@ const NovelEditor: React.FC = () =>
     // UI state for selected chapter and display language
     const selectedChapterByProject = useNovelEditorStore(state => state.selectedChapterByProject);
     const displayLanguageByProject = useNovelEditorStore(state => state.displayLanguageByProject);
+    const isSavingByProject = useNovelEditorStore(state => state.isSavingByProject);
+    const hasUnsavedChangesByProject = useNovelEditorStore(state => state.hasUnsavedChangesByProject);
     const getSelectedChapterId = useNovelEditorStore(state => state.getSelectedChapterId);
     const selectChapter = useNovelEditorStore(state => state.selectChapter);
     const setDisplayLanguage = useNovelEditorStore(state => state.setDisplayLanguage);
@@ -105,6 +108,7 @@ const NovelEditor: React.FC = () =>
     const providerCredentials = settings.providerCredentials;
     const { currentError, showError, hideError } = useErrorStore();
     const chatUI = useChatUIStore();
+    const sidebarStore = useSidebarStore();
 
     // Force re-render when crossing desktop/mobile breakpoint
     const [_isDesktop, setIsDesktop] = useState(() => window.innerWidth > 768);
@@ -268,8 +272,8 @@ const NovelEditor: React.FC = () =>
         const chapter = unifiedObjects[selectedChapterId];
         if (!chapter || chapter.type !== 'chapter') return null;
 
-        // Use language-keyed data access
-        const langData = chapter.data[mainLanguage] || chapter.data[Object.keys(chapter.data)[0]] || {};
+        // Use display language with fallback to mainLanguage
+        const langData = chapter.data[currentDisplayLanguage] || chapter.data[mainLanguage] || chapter.data[Object.keys(chapter.data)[0]] || {};
 
         return {
             id: chapter.id,
@@ -278,7 +282,7 @@ const NovelEditor: React.FC = () =>
             order: chapter.metadata.order || 0,
             actId: chapter.metadata.act_id || '',
         };
-    }, [selectedChapterId, unifiedObjects, mainLanguage]);
+    }, [selectedChapterId, unifiedObjects, currentDisplayLanguage, mainLanguage]);
 
     const hasChapters = storyObjects.outline?.acts.some(act => act.chapters.length > 0) ?? false;
 
@@ -584,6 +588,17 @@ const NovelEditor: React.FC = () =>
                 translateCount={objectsNeedingTranslation}
                 onTranslateAllClick={() => setShowTranslateModal(true)}
                 onSettingsClick={() => uiActions.setIsSettingsOpen(true)}
+                mobileSubtitle={selectedChapter?.name || 'No chapter selected'}
+                showHamburger={true}
+                onHamburgerClick={() => sidebarStore.toggleSidebar(projectId ?? '', 'chapter')}
+                showSaveIndicator={true}
+                saveStatus={
+                    isSavingByProject[projectId ?? '']
+                        ? 'saving'
+                        : hasUnsavedChangesByProject[projectId ?? '']
+                            ? 'unsaved'
+                            : 'saved'
+                }
             />
 
             <div className={`novel-editor-content ${chatUI.isChatVisible(projectId ?? '') ? 'chat-visible' : ''}`}>
@@ -627,19 +642,11 @@ const NovelEditor: React.FC = () =>
                 <div className="chat-overlay mobile-only" onClick={() => chatUI.setChatVisible(projectId ?? '', false)} />
             )}
 
-            {chatUI.isMobileSidebarVisible(projectId ?? '') && (
-                <div className="sidebar-overlay mobile-only" onClick={() => chatUI.setMobileSidebarVisible(projectId ?? '', false)} />
-            )}
-
-            {chatUI.isDesktopChatListVisible(projectId ?? '') && (
-                <div className="desktop-chat-overlay desktop-only" onClick={() => chatUI.setDesktopChatListVisible(projectId ?? '', false)} />
-            )}
-
             <MobileFooter
                 isChatVisible={chatUI.isChatVisible(projectId ?? '')}
                 onChatToggle={() => {
                     chatUI.toggleChatVisible(projectId ?? '');
-                    chatUI.setMobileSidebarVisible(projectId ?? '', false);
+                    sidebarStore.closeSidebar(projectId ?? '');
                 }}
                 onSettingsClick={() => uiActions.setIsSettingsOpen(true)}
             />

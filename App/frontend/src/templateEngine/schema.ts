@@ -113,9 +113,21 @@ export const PROMPT_SCHEMAS = {
       enablePrefill: { desc: "Enable prefill", example: true },
       enableCustomThinking: { desc: "Enable custom thinking", example: false },
       isNativeOutput: { desc: "Native output mode (no function calls, use XML format)", example: false },
+      hasContext: { desc: "Whether context data is provided for reference", example: false },
     },
     context: {
       objectsArray: { desc: "Array of objects to translate", example: [] as Record<string, any>[] },
+      contextData: {
+        desc: "Already-translated objects in target language for reference. Contains: basicInfo, characters, organizations, locations, lorebook, outline",
+        example: {
+          basicInfo: { title: "The Story", logline: "A tale of adventure", genre: "Fantasy" },
+          characters: [{ id: "char1", name: "Hero", description: "The protagonist" }],
+          organizations: [{ id: "org1", name: "Guild", description: "A group of heroes" }],
+          locations: [{ id: "loc1", name: "Castle", description: "Ancient fortress" }],
+          lorebook: [{ id: "lore1", name: "Magic", description: "The power source" }],
+          outline: { acts: [{ id: "act1", name: "Act 1", description: "Beginning", chapters: [] }] }
+        } as Record<string, any>
+      },
     }
   },
   storyObjectEdit: {

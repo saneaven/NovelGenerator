@@ -52,14 +52,14 @@
 
     /* ===== Mobile-only visibility ===== */
     .mobile-only {
-        display: block !important;
+        display: block;
     }
 }
 
 /* ===== Desktop: Hide mobile-only elements ===== */
 @media (min-width: 769px) {
     .mobile-only {
-        display: none !important;
+        display: none;
     }
 }
 

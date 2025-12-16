@@ -5,6 +5,8 @@ import type {
     NaturalImageStyle,
     TagBasedImageStyle,
 } from '../../store/settingsStore';
+import { TextButton } from '../TextButton';
+import { CustomSelect } from '../ui/CustomSelect';
 import './ImageGenPanel.css';
 
 interface ImageGenPanelProps {
@@ -183,17 +185,14 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                         <span className="label-text">Provider</span>
                         <span className="label-hint">Choose the AI provider for image generation</span>
                     </label>
-                    <select
+                    <CustomSelect
                         value={config.provider}
-                        onChange={(e) => handleProviderChange(e.target.value as ImageProviderType)}
-                        className="setting-select"
-                    >
-                        {(Object.keys(PROVIDER_LABELS) as ImageProviderType[]).map((p) => (
-                            <option key={p} value={p}>
-                                {PROVIDER_LABELS[p]}
-                            </option>
-                        ))}
-                    </select>
+                        onChange={(value) => handleProviderChange(value as ImageProviderType)}
+                        options={(Object.keys(PROVIDER_LABELS) as ImageProviderType[]).map((p) => ({
+                            value: p,
+                            label: PROVIDER_LABELS[p],
+                        }))}
+                    />
                 </div>
 
                 {/* Model Selection */}
@@ -202,17 +201,14 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                         <span className="label-text">Model</span>
                         <span className="label-hint">Select the image generation model</span>
                     </label>
-                    <select
+                    <CustomSelect
                         value={config.model}
-                        onChange={(e) => onChange({ ...config, model: e.target.value })}
-                        className="setting-select"
-                    >
-                        {currentModels.map((m) => (
-                            <option key={m.id} value={m.id}>
-                                {m.name}
-                            </option>
-                        ))}
-                    </select>
+                        onChange={(value) => onChange({ ...config, model: value })}
+                        options={currentModels.map((m) => ({
+                            value: m.id,
+                            label: m.name,
+                        }))}
+                    />
                 </div>
 
                 {/* Size Selection - Gemini uses aspect ratio + resolution instead */}
@@ -223,46 +219,40 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                                 <span className="label-text">Aspect Ratio</span>
                                 <span className="label-hint">Image aspect ratio</span>
                             </label>
-                            <select
+                            <CustomSelect
                                 value={config.geminiSettings.aspect_ratio}
-                                onChange={(e) => onChange({
+                                onChange={(value) => onChange({
                                     ...config,
                                     geminiSettings: {
                                         ...config.geminiSettings,
-                                        aspect_ratio: e.target.value,
+                                        aspect_ratio: value,
                                     },
                                 })}
-                                className="setting-select"
-                            >
-                                {GEMINI_ASPECT_RATIOS.map((ar) => (
-                                    <option key={ar} value={ar}>
-                                        {ar}
-                                    </option>
-                                ))}
-                            </select>
+                                options={GEMINI_ASPECT_RATIOS.map((ar) => ({
+                                    value: ar,
+                                    label: ar,
+                                }))}
+                            />
                         </div>
                         <div className="setting-item">
                             <label className="setting-label">
                                 <span className="label-text">Resolution</span>
                                 <span className="label-hint">Image resolution</span>
                             </label>
-                            <select
+                            <CustomSelect
                                 value={config.geminiSettings.image_resolution}
-                                onChange={(e) => onChange({
+                                onChange={(value) => onChange({
                                     ...config,
                                     geminiSettings: {
                                         ...config.geminiSettings,
-                                        image_resolution: e.target.value,
+                                        image_resolution: value,
                                     },
                                 })}
-                                className="setting-select"
-                            >
-                                {GEMINI_RESOLUTIONS.map((r) => (
-                                    <option key={r} value={r}>
-                                        {r}
-                                    </option>
-                                ))}
-                            </select>
+                                options={GEMINI_RESOLUTIONS.map((r) => ({
+                                    value: r,
+                                    label: r,
+                                }))}
+                            />
                         </div>
                     </>
                 ) : (
@@ -271,17 +261,14 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                             <span className="label-text">Size</span>
                             <span className="label-hint">Default image dimensions</span>
                         </label>
-                        <select
+                        <CustomSelect
                             value={config.size}
-                            onChange={(e) => onChange({ ...config, size: e.target.value })}
-                            className="setting-select"
-                        >
-                            {currentSizes.map((s) => (
-                                <option key={s} value={s}>
-                                    {s}
-                                </option>
-                            ))}
-                        </select>
+                            onChange={(value) => onChange({ ...config, size: value })}
+                            options={currentSizes.map((s) => ({
+                                value: s,
+                                label: s,
+                            }))}
+                        />
                     </div>
                 )}
             </div>
@@ -301,40 +288,40 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                                 <span className="label-text">Quality</span>
                                 <span className="label-hint">Image quality level</span>
                             </label>
-                            <select
+                            <CustomSelect
                                 value={config.openaiSettings.quality}
-                                onChange={(e) => onChange({
+                                onChange={(value) => onChange({
                                     ...config,
                                     openaiSettings: {
                                         ...config.openaiSettings,
-                                        quality: e.target.value as 'standard' | 'hd',
+                                        quality: value as 'standard' | 'hd',
                                     },
                                 })}
-                                className="setting-select"
-                            >
-                                <option value="standard">Standard</option>
-                                <option value="hd">HD</option>
-                            </select>
+                                options={[
+                                    { value: 'standard', label: 'Standard' },
+                                    { value: 'hd', label: 'HD' },
+                                ]}
+                            />
                         </div>
                         <div className="setting-item">
                             <label className="setting-label">
                                 <span className="label-text">Style</span>
                                 <span className="label-hint">Image style preference</span>
                             </label>
-                            <select
+                            <CustomSelect
                                 value={config.openaiSettings.style}
-                                onChange={(e) => onChange({
+                                onChange={(value) => onChange({
                                     ...config,
                                     openaiSettings: {
                                         ...config.openaiSettings,
-                                        style: e.target.value as 'natural' | 'vivid',
+                                        style: value as 'natural' | 'vivid',
                                     },
                                 })}
-                                className="setting-select"
-                            >
-                                <option value="natural">Natural</option>
-                                <option value="vivid">Vivid</option>
-                            </select>
+                                options={[
+                                    { value: 'natural', label: 'Natural' },
+                                    { value: 'vivid', label: 'Vivid' },
+                                ]}
+                            />
                         </div>
                     </div>
                 </div>
@@ -355,21 +342,20 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                                 <span className="label-text">Sampler</span>
                                 <span className="label-hint">Sampling algorithm</span>
                             </label>
-                            <select
+                            <CustomSelect
                                 value={config.novelaiSettings.sampler}
-                                onChange={(e) => onChange({
+                                onChange={(value) => onChange({
                                     ...config,
                                     novelaiSettings: {
                                         ...config.novelaiSettings,
-                                        sampler: e.target.value,
+                                        sampler: value,
                                     },
                                 })}
-                                className="setting-select"
-                            >
-                                {NOVELAI_SAMPLERS.map((s) => (
-                                    <option key={s} value={s}>{s}</option>
-                                ))}
-                            </select>
+                                options={NOVELAI_SAMPLERS.map((s) => ({
+                                    value: s,
+                                    label: s,
+                                }))}
+                            />
                         </div>
                         <div className="setting-item">
                             <label className="setting-label">
@@ -417,21 +403,20 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                                 <span className="label-text">Noise Schedule</span>
                                 <span className="label-hint">Noise scheduling method</span>
                             </label>
-                            <select
+                            <CustomSelect
                                 value={config.novelaiSettings.noise_schedule}
-                                onChange={(e) => onChange({
+                                onChange={(value) => onChange({
                                     ...config,
                                     novelaiSettings: {
                                         ...config.novelaiSettings,
-                                        noise_schedule: e.target.value,
+                                        noise_schedule: value,
                                     },
                                 })}
-                                className="setting-select"
-                            >
-                                {NOVELAI_NOISE_SCHEDULES.map((s) => (
-                                    <option key={s} value={s}>{s}</option>
-                                ))}
-                            </select>
+                                options={NOVELAI_NOISE_SCHEDULES.map((s) => ({
+                                    value: s,
+                                    label: s,
+                                }))}
+                            />
                         </div>
                     </div>
                 </div>
@@ -452,23 +437,22 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                             <span className="label-text">Default Style</span>
                             <span className="label-hint">Style to apply by default when generating images</span>
                         </label>
-                        <select
+                        <CustomSelect
                             value={config.selectedNaturalStyleId || ''}
-                            onChange={(e) => onChange({ ...config, selectedNaturalStyleId: e.target.value || null })}
-                            className="setting-select"
-                        >
-                            <option value="">None</option>
-                            {config.naturalStyles.map((s) => (
-                                <option key={s.id} value={s.id}>
-                                    {s.name}
-                                </option>
-                            ))}
-                        </select>
+                            onChange={(value) => onChange({ ...config, selectedNaturalStyleId: value || null })}
+                            options={[
+                                { value: '', label: 'None' },
+                                ...config.naturalStyles.map((s) => ({
+                                    value: s.id,
+                                    label: s.name,
+                                })),
+                            ]}
+                        />
                     </div>
 
-                    <button className="add-style-button" onClick={handleAddNaturalStyle}>
+                    <TextButton variant="secondary" size="sm" onClick={handleAddNaturalStyle}>
                         + Add New Style
-                    </button>
+                    </TextButton>
 
                     {config.naturalStyles.length > 0 && (
                         <div className="custom-styles-list">
@@ -540,23 +524,22 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                             <span className="label-text">Default Style</span>
                             <span className="label-hint">Style to apply by default when generating images</span>
                         </label>
-                        <select
+                        <CustomSelect
                             value={config.selectedTagBasedStyleId || ''}
-                            onChange={(e) => onChange({ ...config, selectedTagBasedStyleId: e.target.value || null })}
-                            className="setting-select"
-                        >
-                            <option value="">None</option>
-                            {config.tagBasedStyles.map((s) => (
-                                <option key={s.id} value={s.id}>
-                                    {s.name}
-                                </option>
-                            ))}
-                        </select>
+                            onChange={(value) => onChange({ ...config, selectedTagBasedStyleId: value || null })}
+                            options={[
+                                { value: '', label: 'None' },
+                                ...config.tagBasedStyles.map((s) => ({
+                                    value: s.id,
+                                    label: s.name,
+                                })),
+                            ]}
+                        />
                     </div>
 
-                    <button className="add-style-button" onClick={handleAddTagBasedStyle}>
+                    <TextButton variant="secondary" size="sm" onClick={handleAddTagBasedStyle}>
                         + Add New Style
-                    </button>
+                    </TextButton>
 
                     {config.tagBasedStyles.length > 0 && (
                         <div className="custom-styles-list">

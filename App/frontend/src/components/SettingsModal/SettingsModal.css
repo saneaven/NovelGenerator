@@ -13,10 +13,10 @@
    ======================================== */
 
 @media (max-width: 768px) {
-    .settings-modal-new {
+    .settings-modal {
         width: 100%;
         max-width: 100%;
-        max-height: 100dvh;
+        height: 100dvh;
         border-radius: 0;
     }
 
@@ -31,7 +31,7 @@
         white-space: nowrap;
     }
 
-    .settings-modal-new .modal-body {
+    .settings-panel-content {
         padding: var(--spacing-lg);
     }
 

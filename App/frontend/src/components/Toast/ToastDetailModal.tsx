@@ -1,10 +1,12 @@
-import React, { useMemo } from 'react';
-import { useModalHistory } from '../../hooks/useModalHistory';
-import type { LLMTaskSessionState } from '../../store/llmTaskStore';
+import React, { useMemo, useCallback } from 'react';
+import { BaseModal } from '../BaseModal';
+import { useLLMTaskStore, type LLMTaskSessionState } from '../../store/llmTaskStore';
 import ThinkingDisplay from '../ThinkingDisplay';
 import ToastProgressBar from './ToastProgressBar';
 import { parsePartialJson } from '../../utils/nativeOutputParser';
 import { Close } from '../icons';
+import { TextButton } from '../TextButton';
+import { IconButton } from '../IconButton';
 import './ToastDetailModal.css';
 
 // Content segment types for mixed text/JSON content
@@ -168,7 +170,12 @@ interface ToastDetailModalProps {
 }
 
 const ToastDetailModal: React.FC<ToastDetailModalProps> = ({ session, onClose }) => {
-  useModalHistory(true, onClose);  // Always open when rendered
+  const cancelTask = useLLMTaskStore((state) => state.cancelTask);
+
+  const handleCancel = useCallback(() => {
+    cancelTask(session.id);
+    onClose();
+  }, [cancelTask, session.id, onClose]);
 
   const streamContent = useMemo(() => {
     if (!session.contentParts || session.contentParts.length === 0) {
@@ -190,12 +197,6 @@ const ToastDetailModal: React.FC<ToastDetailModalProps> = ({ session, onClose })
     return session.contentParts?.some((part) => part.type === 'thinking') ?? false;
   }, [session.contentParts]);
 
-  const handleOverlayClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
   const getStatusLabel = () => {
     switch (session.status) {
       case 'running':
@@ -212,94 +213,112 @@ const ToastDetailModal: React.FC<ToastDetailModalProps> = ({ session, onClose })
   };
 
   return (
-    <div className="toast-detail-overlay" onClick={handleOverlayClick}>
-      <div className="toast-detail-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="toast-detail-header">
-          <div className="toast-detail-title">
-            <span className={`toast-detail-status toast-detail-status--${session.status}`}>
-              {session.status === 'running' && (
-                <span className="toast-detail-spinner" />
-              )}
-              {getStatusLabel()}
-            </span>
-            <h3>{session.label || 'Task'}</h3>
+    <BaseModal
+      isOpen={true}
+      onClose={onClose}
+      size="medium"
+      showHeader={false}
+      className="toast-detail-modal"
+      footer={
+        session.status === 'running' ? (
+          <div className="toast-detail-footer-actions">
+            <TextButton variant="danger" onClick={handleCancel}>
+              Cancel Task
+            </TextButton>
+            <TextButton variant="secondary" onClick={onClose}>
+              Continue in Background
+            </TextButton>
           </div>
-          <button className="toast-detail-close" onClick={onClose} title="Close">
-            <Close size="sm" />
-          </button>
+        ) : (
+          <TextButton variant="secondary" onClick={onClose}>
+            Close
+          </TextButton>
+        )
+      }
+    >
+      {/* Custom Header */}
+      <div className="toast-detail-header">
+        <div className="toast-detail-title">
+          <span className={`toast-detail-status toast-detail-status--${session.status}`}>
+            {session.status === 'running' && (
+              <span className="toast-detail-spinner" />
+            )}
+            {getStatusLabel()}
+          </span>
+          <h3>{session.label || 'Task'}</h3>
         </div>
+        <IconButton
+          icon={<Close size="sm" />}
+          onClick={onClose}
+          title="Close"
+          size="sm"
+        />
+      </div>
 
-        {session.progress && (
-          <div className="toast-detail-progress">
-            <div className="toast-detail-progress-text">
-              {session.progress.currentItemLabel || `${session.progress.current} / ${session.progress.total}`}
-            </div>
-            <ToastProgressBar current={session.progress.current} total={session.progress.total} />
+      {session.progress && (
+        <div className="toast-detail-progress">
+          <div className="toast-detail-progress-text">
+            {session.progress.currentItemLabel || `${session.progress.current} / ${session.progress.total}`}
+          </div>
+          <ToastProgressBar current={session.progress.current} total={session.progress.total} />
+        </div>
+      )}
+
+      <div className="toast-detail-content">
+        {/* Thinking Display */}
+        {hasThinking && session.contentParts && (
+          <div className="toast-detail-thinking">
+            <ThinkingDisplay
+              messageId={session.id}
+              contentParts={session.contentParts}
+              displayMode="separate"
+              isStreaming={session.status === 'running'}
+            />
           </div>
         )}
 
-        <div className="toast-detail-content">
-          {/* Thinking Display */}
-          {hasThinking && session.contentParts && (
-            <div className="toast-detail-thinking">
-              <ThinkingDisplay
-                messageId={session.id}
-                contentParts={session.contentParts}
-                displayMode="separate"
-                isStreaming={session.status === 'running'}
-              />
-            </div>
-          )}
+        {/* Streaming Content - Mixed Text/JSON */}
+        {contentSegments.length > 0 && (
+          <div className="toast-detail-stream">
+            <div className="toast-detail-stream-label">Output</div>
+            <div className="toast-detail-segments">
+              {contentSegments.map((segment, index) => {
+                const isLastSegment = index === contentSegments.length - 1;
+                const isStreaming = session.status === 'running';
 
-          {/* Streaming Content - Mixed Text/JSON */}
-          {contentSegments.length > 0 && (
-            <div className="toast-detail-stream">
-              <div className="toast-detail-stream-label">Output</div>
-              <div className="toast-detail-segments">
-                {contentSegments.map((segment, index) => {
-                  const isLastSegment = index === contentSegments.length - 1;
-                  const isStreaming = session.status === 'running';
-
-                  if (segment.type === 'json' && segment.parsed) {
-                    return (
-                      <JsonObjectViewer
-                        key={index}
-                        data={segment.parsed}
-                        isStreaming={isLastSegment && isStreaming}
-                      />
-                    );
-                  }
-
-                  // Text segment
+                if (segment.type === 'json' && segment.parsed) {
                   return (
-                    <div key={index} className="toast-detail-text-segment">
-                      {segment.content}
-                      {isLastSegment && isStreaming && (
-                        <span className="toast-detail-cursor">|</span>
-                      )}
-                    </div>
+                    <JsonObjectViewer
+                      key={index}
+                      data={segment.parsed}
+                      isStreaming={isLastSegment && isStreaming}
+                    />
                   );
-                })}
-              </div>
-            </div>
-          )}
+                }
 
-          {/* No content yet */}
-          {!streamContent && !hasThinking && session.status === 'running' && (
-            <div className="toast-detail-waiting">
-              <div className="toast-detail-waiting-spinner" />
-              <span>Waiting for response...</span>
+                // Text segment
+                return (
+                  <div key={index} className="toast-detail-text-segment">
+                    {segment.content}
+                    {isLastSegment && isStreaming && (
+                      <span className="toast-detail-cursor">|</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        <div className="toast-detail-footer">
-          <button className="toast-detail-btn" onClick={onClose}>
-            {session.status === 'running' ? 'Continue in Background' : 'Close'}
-          </button>
-        </div>
+        {/* No content yet */}
+        {!streamContent && !hasThinking && session.status === 'running' && (
+          <div className="toast-detail-waiting">
+            <div className="toast-detail-waiting-spinner" />
+            <span>Waiting for response...</span>
+          </div>
+        )}
       </div>
-    </div>
+    </BaseModal>
   );
 };
 

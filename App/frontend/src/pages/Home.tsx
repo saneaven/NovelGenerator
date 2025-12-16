@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../store/projectStore';
 import { useAuthStore } from '../store/authStore';
 import SettingsModal from '../components/SettingsModal/SettingsModal';
+import { IconButton } from '../components/IconButton';
 import { Settings, Logout, Close } from '../components/icons';
 
 const Home: React.FC = () => {
@@ -57,8 +58,7 @@ const Home: React.FC = () => {
     navigate(`/project/${projectId}`);
   };
 
-  const handleDeleteProject = async (projectId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDeleteProject = async (projectId: string) => {
     if (confirm('Are you sure you want to delete this project?')) {
       try {
         await deleteProject(projectId);
@@ -88,20 +88,18 @@ const Home: React.FC = () => {
             {user && <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Welcome, {user.username}!</p>}
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button
-              className="settings-btn"
+            <IconButton
+              icon={<Settings size="lg" />}
               onClick={() => setIsSettingsModalOpen(true)}
               title="Settings"
-            >
-              <Settings size="lg" />
-            </button>
-            <button
-              className="settings-btn"
+              size="md"
+            />
+            <IconButton
+              icon={<Logout size="lg" />}
               onClick={handleLogout}
               title="Logout"
-            >
-              <Logout size="lg" />
-            </button>
+              size="md"
+            />
           </div>
         </div>
       </div>
@@ -189,13 +187,15 @@ const Home: React.FC = () => {
                     Created: {new Date(project.created_at).toLocaleDateString()}
                   </p>
                 </div>
-                <button
-                  className="project-delete-button"
-                  onClick={(e) => handleDeleteProject(project.id, e)}
-                  title="Delete project"
-                >
-                  <Close size="sm" />
-                </button>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <IconButton
+                    icon={<Close size="sm" />}
+                    onClick={() => handleDeleteProject(project.id)}
+                    title="Delete project"
+                    size="sm"
+                    className="project-delete-button"
+                  />
+                </div>
               </div>
             ))}
           </div>

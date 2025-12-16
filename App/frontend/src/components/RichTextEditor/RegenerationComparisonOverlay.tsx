@@ -6,6 +6,7 @@
 import React from 'react';
 import type { Asset } from '../../api/assetService';
 import { API_BASE_URL } from '../../api/client';
+import { TextButton } from '../TextButton';
 import './RegenerationComparisonOverlay.css';
 
 interface RegenerationComparisonOverlayProps {
@@ -57,20 +58,18 @@ const RegenerationComparisonOverlay: React.FC<RegenerationComparisonOverlayProps
 
                 {/* Action buttons */}
                 <div className="comparison-actions">
-                    <button
-                        type="button"
-                        className="use-btn"
+                    <TextButton
+                        variant="primary"
                         onClick={onUse}
                     >
                         Use This
-                    </button>
-                    <button
-                        type="button"
-                        className="discard-btn"
+                    </TextButton>
+                    <TextButton
+                        variant="secondary"
                         onClick={onDiscard}
                     >
                         Discard
-                    </button>
+                    </TextButton>
                 </div>
 
                 {/* Hint text */}

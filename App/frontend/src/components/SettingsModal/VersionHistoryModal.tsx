@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { promptService, type VersionHistoryItem } from '../../api/promptService';
 import type { FunctionType, PromptCategory } from '../../types/prompts';
 import { useErrorStore } from '../../store/errorStore';
+import { TextButton } from '../TextButton';
 
 interface VersionHistoryModalProps {
   functionType: FunctionType;
@@ -118,13 +119,15 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                   <div className="details-header">
                     <h4>Version {selectedVersionData.version_number} Details</h4>
                     {!selectedVersionData.is_active && (
-                      <button
+                      <TextButton
+                        variant="primary"
+                        size="sm"
                         onClick={() => handleRestore(selectedVersionData.version_number)}
-                        className="btn-primary"
                         disabled={isRestoring}
+                        loading={isRestoring}
                       >
-                        {isRestoring ? 'Restoring...' : 'Restore This Version'}
-                      </button>
+                        Restore This Version
+                      </TextButton>
                     )}
                   </div>
                   <div className="details-meta">
@@ -145,9 +148,9 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
         </div>
 
         <div className="modal-footer">
-          <button onClick={onClose} className="btn-secondary">
+          <TextButton variant="secondary" onClick={onClose}>
             Close
-          </button>
+          </TextButton>
         </div>
       </div>
     </div>

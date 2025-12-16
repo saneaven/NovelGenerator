@@ -1,6 +1,7 @@
 import React from 'react';
 import type { LLMTaskSessionState } from '../../store/llmTaskStore';
 import { Check, Close } from '../icons';
+import { TextButton } from '../TextButton';
 import ToastProgressBar from './ToastProgressBar';
 import './ToastItem.css';
 
@@ -107,16 +108,14 @@ const ToastItem: React.FC<ToastItemProps> = ({
       )}
 
       {status === 'error' && (
-        <div className="toast-item-action">
-          <button
-            className="toast-more-info-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenError();
-            }}
+        <div className="toast-item-action" onClick={(e) => e.stopPropagation()}>
+          <TextButton
+            variant="ghost"
+            size="sm"
+            onClick={onOpenError}
           >
             More Info
-          </button>
+          </TextButton>
         </div>
       )}
     </div>

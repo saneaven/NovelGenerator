@@ -41,60 +41,7 @@
     text-align: center;
 }
 
-/* ===== Chat List Button ===== */
-.chat-list-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    /* background: var(--gradient-accent); */
-    color: var(--color-text);
-    border: 1px solid var(--color-primary-main);
-    padding: var(--spacing-sm) var(--spacing-lg);
-    border-radius: var(--border-radius-md);
-    cursor: pointer;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    transition: all var(--transition-base);
-    box-shadow: var(--shadow-sm);
-    white-space: nowrap;
-}
-
-.chat-list-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
-}
-
-.chat-list-btn:active {
-    transform: translateY(0);
-    box-shadow: var(--shadow-sm);
-}
-
-/* ===== Close Button ===== */
-.chat-close-btn {
-    display: none;
-    background: var(--color-surface-base);
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--border-radius-md);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-    cursor: pointer;
-    color: var(--color-text-secondary);
-    padding: var(--spacing-sm) var(--spacing-lg);
-    transition: all var(--transition-base);
-    box-shadow: var(--shadow-xs);
-    white-space: nowrap;
-}
-
-.chat-close-btn:hover {
-    background: var(--color-error-light);
-    color: var(--color-error);
-    border-color: var(--color-error);
-    box-shadow: var(--shadow-sm);
-}
-
-.chat-close-btn:active {
-    transform: scale(0.98);
-}
+/* Note: .chat-list-btn and .chat-close-btn migrated to TextButton component */
 
 /* ===== Mobile Styles ===== */
 @media (max-width: 768px) {
@@ -104,17 +51,6 @@
 
     .chat-header h2 {
         font-size: var(--font-size-base);
-    }
-
-    .chat-list-btn {
-        padding: var(--spacing-sm) var(--spacing-md);
-        font-size: var(--font-size-xs);
-    }
-
-    .chat-close-btn {
-        display: block;
-        padding: var(--spacing-sm) var(--spacing-md);
-        font-size: var(--font-size-xs);
     }
 
     .chat-header-left {

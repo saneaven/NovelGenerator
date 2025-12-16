@@ -186,9 +186,7 @@ const StoryPanel: React.FC<StoryPanelProps> = ({
       </div>
 
       <div className="story-content">
-        <div style={{ height: '100%' }}>
           {renderStoryContent()}
-        </div>
       </div>
     </div>
   );

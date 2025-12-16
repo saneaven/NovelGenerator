@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useChatStore, type Chat } from '../store/chatStore';
-import { useChatUIStore } from '../store/chatUIStore';
+import { useSidebarStore } from '../store/sidebarStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
 import { TranslationService } from '../services/translationService';
+import { BaseSidebar } from './BaseSidebar';
+import { TextButton } from './TextButton';
 
 interface ChatSidebarProps {
   projectId: string;
@@ -14,9 +16,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
   projectId,
   onSelectChat,
 }) => {
-  const chatUI = useChatUIStore();
-  const isMobileVisible = chatUI.isMobileSidebarVisible(projectId);
-  const isDesktopVisible = chatUI.isDesktopChatListVisible(projectId);
+  const closeSidebar = useSidebarStore((state) => state.closeSidebar);
   const {
     createChat,
     getChats,
@@ -52,12 +52,6 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
     onSelectChat(chatId);
   };
 
-  const handleStartEdit = (chat: Chat, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditingChatId(chat.id);
-    setEditName(chat.name);
-  };
-
   const handleSaveEdit = () => {
     if (editingChatId && editName.trim()) {
       renameChat(projectId, editingChatId, editName.trim());
@@ -69,25 +63,6 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
   const handleCancelEdit = () => {
     setEditingChatId(null);
     setEditName('');
-  };
-
-  const handleDeleteChat = (chatId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (chats.length <= 1) {
-      showError('Warning', 'Cannot delete the last chat');
-      return;
-    }
-
-    if (confirm('Are you sure you want to delete this chat?')) {
-      deleteChat(projectId, chatId);
-      const remainingChats = getChats(projectId);
-      if (remainingChats.length > 0) {
-        const newSelectedId = getSelectedChatId(projectId);
-        if (newSelectedId) {
-          onSelectChat(newSelectedId);
-        }
-      }
-    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -156,23 +131,37 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
     return targetDate.toLocaleDateString();
   };
 
-  return (
-    <div className={`chat-sidebar ${isMobileVisible ? 'mobile-visible' : ''} ${isDesktopVisible ? 'desktop-visible' : ''}`}>
-      <div className="chat-sidebar-header">
-        <div className="sidebar-title">
-          <h3>Chats</h3>
-        </div>
-        <div className="sidebar-controls">
-          <button
-            className="add-chat-btn"
-            onClick={handleCreateChat}
-            title="Create new chat"
-          >
-            New Chat
-          </button>
-        </div>
-      </div>
+  const handleClose = () => {
+    closeSidebar(projectId);
+  };
 
+  const sidebarHeader = (
+    <div className="chat-sidebar-header">
+      <div className="sidebar-title">
+        <h3>Chats</h3>
+      </div>
+      <div className="sidebar-controls">
+        <TextButton
+          variant="primary"
+          size="sm"
+          onClick={handleCreateChat}
+          title="Create new chat"
+        >
+          New Chat
+        </TextButton>
+      </div>
+    </div>
+  );
+
+  return (
+    <BaseSidebar
+      id="chat"
+      projectId={projectId}
+      position="left"
+      className="chat-sidebar"
+      header={sidebarHeader}
+      onClose={handleClose}
+    >
       <div className="chat-list">
         {chats.map((chat) => (
           <div
@@ -201,28 +190,51 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
             </div>
 
             {editingChatId !== chat.id && (
-              <div className="chat-actions">
-                <button
-                  className="chat-action-btn edit-btn"
-                  onClick={(e) => handleStartEdit(chat, e)}
+              <div
+                className="chat-actions"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <TextButton
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setEditingChatId(chat.id);
+                    setEditName(chat.name);
+                  }}
                   title="Rename chat"
                 >
                   Rename
-                </button>
-                <button
-                  className="chat-action-btn delete-btn"
-                  onClick={(e) => handleDeleteChat(chat.id, e)}
+                </TextButton>
+                <TextButton
+                  variant="danger"
+                  size="sm"
+                  onClick={() => {
+                    if (chats.length <= 1) {
+                      showError('Warning', 'Cannot delete the last chat');
+                      return;
+                    }
+                    if (confirm('Are you sure you want to delete this chat?')) {
+                      deleteChat(projectId, chat.id);
+                      const remainingChats = getChats(projectId);
+                      if (remainingChats.length > 0) {
+                        const newSelectedId = getSelectedChatId(projectId);
+                        if (newSelectedId) {
+                          onSelectChat(newSelectedId);
+                        }
+                      }
+                    }
+                  }}
                   title="Delete chat"
                   disabled={chats.length <= 1}
                 >
                   Delete
-                </button>
+                </TextButton>
               </div>
             )}
           </div>
         ))}
       </div>
-    </div>
+    </BaseSidebar>
   );
 };
 

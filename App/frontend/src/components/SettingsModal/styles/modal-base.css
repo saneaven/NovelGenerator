@@ -4,10 +4,10 @@
    ======================================== */
 
 /* Modal Base */
-.settings-modal-new {
+.settings-modal {
     width: 90%;
     max-width: 900px;
-    max-height: 85dvh;
+    height: 85dvh;
     display: flex;
     flex-direction: column;
     background: var(--color-surface-base);
@@ -17,16 +17,17 @@
 }
 
 /* Header */
-.settings-modal-new .modal-header {
+.settings-modal-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: var(--spacing-lg) var(--spacing-xl);
     background: var(--gradient-surface);
     border-bottom: 1px solid var(--color-border-default);
+    flex-shrink: 0;
 }
 
-.settings-modal-new .modal-header h2 {
+.settings-modal-header h2 {
     margin: 0;
     font-size: var(--font-size-xl);
     font-weight: var(--font-weight-bold);
@@ -36,7 +37,7 @@
     gap: var(--spacing-sm);
 }
 
-.settings-modal-new .close-button {
+.settings-modal .close-button {
     background: none;
     border: none;
     font-size: var(--font-size-2xl);
@@ -51,17 +52,27 @@
     transition: all var(--transition-base);
 }
 
-.settings-modal-new .close-button:hover {
+.settings-modal .close-button:hover {
     background: var(--color-surface-hover);
     color: var(--color-text-primary);
 }
 
 /* Modal Body */
-.settings-modal-new .modal-body {
+.settings-panel-content {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding: var(--spacing-xl);
     background: var(--color-surface-base);
+}
+
+/* Override BaseModal body padding for custom layout */
+.settings-modal .base-modal-body {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
 }
 
 /* Panel Description */
@@ -84,7 +95,7 @@
    MODAL FOOTER
    ======================================== */
 
-.settings-modal-new .modal-footer {
+.settings-modal .base-modal-footer {
     display: flex;
     align-items: center;
     justify-content: flex-end;
@@ -92,52 +103,8 @@
     padding: var(--spacing-lg) var(--spacing-xl);
     background: var(--color-surface-subtle);
     border-top: 1px solid var(--color-border-default);
+    flex-shrink: 0;
 }
 
-.btn-secondary {
-    padding: var(--spacing-md) var(--spacing-xl);
-    background: var(--color-surface-base);
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--border-radius-md);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-secondary);
-    cursor: pointer;
-    transition: all var(--transition-base);
-}
-
-.btn-secondary:hover {
-    background: var(--color-surface-hover);
-    border-color: var(--color-border-medium);
-    color: var(--color-text-primary);
-}
-
-.btn-secondary:disabled {
-    opacity: var(--opacity-disabled);
-    cursor: not-allowed;
-}
-
-.btn-primary {
-    padding: var(--spacing-md) var(--spacing-xl);
-    background: var(--gradient-accent);
-    color: var(--color-text-inverse);
-    border: none;
-    border-radius: var(--border-radius-md);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-bold);
-    cursor: pointer;
-    transition: all var(--transition-base);
-    box-shadow: var(--shadow-md);
-}
-
-.btn-primary:hover {
-    box-shadow: var(--shadow-lg);
-    transform: translateY(-1px);
-    filter: brightness(0.95);
-}
-
-.btn-primary:disabled {
-    opacity: var(--opacity-muted);
-    cursor: not-allowed;
-    transform: none;
-}
+/* Note: btn-primary and btn-secondary have been migrated to TextButton component.
+   Generic button styles are available in utilities.css if needed. */

@@ -3,9 +3,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { PromptNode } from './promptTree';
 import { PROMPT_SCHEMAS } from '../../templateEngine/schema';
 import type { PromptType } from '../../templateEngine/schema';
-
+import { IconButton } from '../IconButton';
+import { Info, Close } from '../icons';
 import './TemplateSyntaxHint.css';
-import { Info } from '../icons';
 
 interface TemplateSyntaxHintProps {
     selectedNode: PromptNode | null;
@@ -167,29 +167,23 @@ const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode })
 
     return (
         <div className="template-syntax-hint" ref={containerRef}>
-            <button
-                type="button"
-                className="syntax-trigger-btn"
-                aria-label="View template syntax tokens"
+            <IconButton
+                icon={<Info size="lg" />}
                 onClick={toggleOpen}
-            >
-                <span className="syntax-trigger-icon" aria-hidden="true">
-                    <Info size={"lg"}/>
-                </span>
-            </button>
+                title="View template syntax tokens"
+                size="sm"
+            />
 
             {isOpen && (
                 <div className="syntax-popover" role="dialog" aria-label="LiquidJS syntax tokens">
                     <header className="syntax-popover-header">
                         <h4>LiquidJS Syntax</h4>
-                        <button
-                            type="button"
-                            className="syntax-popover-close"
-                            aria-label="Close syntax panel"
+                        <IconButton
+                            icon={<Close size="sm" />}
                             onClick={() => setIsOpen(false)}
-                        >
-                            X
-                        </button>
+                            title="Close syntax panel"
+                            size="xs"
+                        />
                     </header>
                     <div className="syntax-popover-content">{content}</div>
                     {copyFeedback && <div className="syntax-copy-feedback">{copyFeedback}</div>}

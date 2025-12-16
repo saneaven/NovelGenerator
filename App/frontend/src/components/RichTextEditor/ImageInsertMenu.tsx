@@ -9,6 +9,7 @@
 
 import { useCallback, useRef, useState, useEffect } from 'react';
 import { AIAssistMini, Folder, Image } from '../icons';
+import { TextButton } from '../TextButton';
 import './ImageInsertMenu.css';
 
 interface ImageInsertMenuProps {
@@ -163,33 +164,36 @@ export function ImageInsertMenu({
 
       {/* Action buttons */}
       <div className="image-insert-actions">
-        <button
-          type="button"
-          className="image-insert-action-btn"
+        <TextButton
+          variant="secondary"
+          size="sm"
           onClick={handleBrowseClick}
+          iconLeft={<Image size="md" />}
+          fullWidth
         >
-          <span className="action-icon"><Image size="md" /></span>
-          <span className="action-label">From Assets</span>
-        </button>
-        <button
-          type="button"
-          className="image-insert-action-btn generate"
+          From Assets
+        </TextButton>
+        <TextButton
+          variant="primary"
+          size="sm"
           onClick={handleGenerateClick}
+          iconLeft={<AIAssistMini size="md" />}
+          fullWidth
         >
-          <span className="action-icon"><AIAssistMini size="md" /></span>
-          <span className="action-label">Generate with AI</span>
-        </button>
+          Generate with AI
+        </TextButton>
         {onManageSceneAssets && (
           <>
             <div className="image-insert-action-divider" />
-            <button
-              type="button"
-              className="image-insert-action-btn manage"
+            <TextButton
+              variant="ghost"
+              size="sm"
               onClick={handleManageClick}
+              iconLeft={<Folder size="md" />}
+              fullWidth
             >
-              <span className="action-icon"><Folder size="md" /></span>
-              <span className="action-label">Manage Scene Assets</span>
-            </button>
+              Manage Scene Assets
+            </TextButton>
           </>
         )}
       </div>

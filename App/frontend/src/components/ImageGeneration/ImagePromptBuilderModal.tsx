@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useModalHistory } from '../../hooks/useModalHistory';
+import { BaseModal } from '../BaseModal';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { LLMTask, LLMTaskMode, LLMTaskManager, type ObjectImagePromptContext } from '../../llm';
+import { TextButton } from '../TextButton';
 import './ImagePromptBuilderModal.css';
 
 interface TargetObject {
@@ -32,7 +33,6 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
   promptMode = 'natural',
   defaultUserRequest,
 }) => {
-  useModalHistory(isOpen, onClose);
   const { settings } = useSettingsStore();
   const unifiedStore = useUnifiedObjectStore();
 
@@ -189,45 +189,43 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
     }
   }, [settings, targetObject, savedPrompts, promptMode, objectType, objectId, userRequest, onPromptGenerated, onClose]);
 
-  if (!isOpen) return null;
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content image-prompt-builder-modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>AI-Assisted Image Prompt Generator</h2>
-          <button className="modal-close" onClick={onClose}>x</button>
+    <BaseModal
+      isOpen={isOpen}
+      onClose={onClose}
+      size="small"
+      title="AI-Assisted Image Prompt Generator"
+      className="image-prompt-builder-modal"
+      zIndexLayer={1}
+      footer={
+        <>
+          <TextButton variant="secondary" onClick={onClose}>
+            Cancel
+          </TextButton>
+          <TextButton variant="primary" onClick={handleGenerate}>
+            Generate Prompt
+          </TextButton>
+        </>
+      }
+    >
+      <div className="modal-body">
+        <div className="context-indicator">
+          <span className="context-type">{getContextTypeLabel()}:</span>
+          <span className="context-name">{targetObject?.name || 'Loading...'}</span>
         </div>
 
-        <div className="modal-body">
-          <div className="context-indicator">
-            <span className="context-type">{getContextTypeLabel()}:</span>
-            <span className="context-name">{targetObject?.name || 'Loading...'}</span>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="user-request">What do you want to visualize?</label>
-            <textarea
-              id="user-request"
-              value={userRequest}
-              onChange={(e) => setUserRequest(e.target.value)}
-              placeholder='e.g., "A dramatic portrait looking determined"'
-              rows={3}
-            />
-          </div>
-
-          <div className="generate-section">
-            <button className="generate-button" onClick={handleGenerate}>
-              Generate Prompt
-            </button>
-          </div>
-        </div>
-
-        <div className="modal-footer">
-          <button onClick={onClose} className="btn-secondary">Cancel</button>
+        <div className="form-group">
+          <label htmlFor="user-request">What do you want to visualize?</label>
+          <textarea
+            id="user-request"
+            value={userRequest}
+            onChange={(e) => setUserRequest(e.target.value)}
+            placeholder='e.g., "A dramatic portrait looking determined"'
+            rows={3}
+          />
         </div>
       </div>
-    </div>
+    </BaseModal>
   );
 };
 

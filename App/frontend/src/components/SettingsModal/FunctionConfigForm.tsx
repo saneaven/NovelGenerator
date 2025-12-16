@@ -7,6 +7,8 @@ import type {
   ThinkingConfig,
 } from '../../store/settingsStore';
 import ModelBrowser from './ModelBrowser';
+import { TextButton } from '../TextButton';
+import { CustomSelect } from '../ui/CustomSelect';
 import { Warning, Settings, Advenced } from '../icons';
 
 interface FunctionConfigFormProps {
@@ -102,18 +104,18 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
 
         <div className="form-field">
           <label>Provider</label>
-          <select
+          <CustomSelect
             value={config.provider}
-            onChange={(e) => handleProviderChange(e.target.value as ProviderType)}
-            className="config-select"
-          >
-            <option value="openai">OpenAI</option>
-            <option value="gemini">Gemini</option>
-            <option value="claude">Claude</option>
-            <option value="openrouter">OpenRouter</option>
-            <option value="xai">xAI (Grok)</option>
-            <option value="custom">Custom Endpoint</option>
-          </select>
+            onChange={(value) => handleProviderChange(value as ProviderType)}
+            options={[
+              { value: 'openai', label: 'OpenAI' },
+              { value: 'gemini', label: 'Gemini' },
+              { value: 'claude', label: 'Claude' },
+              { value: 'openrouter', label: 'OpenRouter' },
+              { value: 'xai', label: 'xAI (Grok)' },
+              { value: 'custom', label: 'Custom Endpoint' },
+            ]}
+          />
           <p className="field-hint">
             {config.provider === 'openai' && 'Direct OpenAI API access (GPT-4o, o1, etc.)'}
             {config.provider === 'gemini' && 'Google Gemini with thought summaries'}
@@ -134,14 +136,15 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
               placeholder="e.g., gpt-4o, anthropic/claude-3.5-sonnet"
               className="config-input"
             />
-            <button
+            <TextButton
+              variant={showModelBrowser ? 'primary' : 'secondary'}
+              size="sm"
               type="button"
               onClick={() => setShowModelBrowser(!showModelBrowser)}
-              className={`browse-model-btn ${showModelBrowser ? 'active' : ''}`}
               title="Browse available models"
             >
               {showModelBrowser ? 'Hide' : 'Browse'}
-            </button>
+            </TextButton>
           </div>
           <p className="field-hint">
             Model identifier for this function
@@ -280,21 +283,16 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                   <>
                     <div className="form-field">
                       <label>{isGpt5 ? 'Reasoning Effort (GPT-5)' : 'Effort Level'}</label>
-                      <select
+                      <CustomSelect
                         value={config.advanced.thinkingConfig?.effort || 'medium'}
-                        onChange={(e) =>
-                          handleThinkingConfigChange('effort', e.target.value)
-                        }
-                        className="config-select"
-                      >
-                        {/* 'none' option only for GPT-5 */}
-                        {isGpt5 && (
-                          <option value="none">None - No reasoning (fastest)</option>
-                        )}
-                        <option value="low">Low {isGpt5 ? '- Quick reasoning' : '(~20% of max tokens)'}</option>
-                        <option value="medium">Medium {isGpt5 ? '- Balanced' : '(~50% of max tokens)'}</option>
-                        <option value="high">High {isGpt5 ? '- Deep reasoning' : '(~80% of max tokens)'}</option>
-                      </select>
+                        onChange={(value) => handleThinkingConfigChange('effort', value)}
+                        options={[
+                          ...(isGpt5 ? [{ value: 'none', label: 'None - No reasoning (fastest)' }] : []),
+                          { value: 'low', label: isGpt5 ? 'Low - Quick reasoning' : 'Low (~20% of max tokens)' },
+                          { value: 'medium', label: isGpt5 ? 'Medium - Balanced' : 'Medium (~50% of max tokens)' },
+                          { value: 'high', label: isGpt5 ? 'High - Deep reasoning' : 'High (~80% of max tokens)' },
+                        ]}
+                      />
                       <p className="field-hint">
                         {isGpt5
                           ? 'Controls how much reasoning GPT-5 performs before responding'
@@ -306,17 +304,15 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                     {isGpt5 && (
                       <div className="form-field">
                         <label>Output Verbosity (GPT-5)</label>
-                        <select
+                        <CustomSelect
                           value={config.advanced.thinkingConfig?.verbosity || 'medium'}
-                          onChange={(e) =>
-                            handleThinkingConfigChange('verbosity', e.target.value)
-                          }
-                          className="config-select"
-                        >
-                          <option value="low">Low - Concise output</option>
-                          <option value="medium">Medium - Standard</option>
-                          <option value="high">High - Detailed output</option>
-                        </select>
+                          onChange={(value) => handleThinkingConfigChange('verbosity', value)}
+                          options={[
+                            { value: 'low', label: 'Low - Concise output' },
+                            { value: 'medium', label: 'Medium - Standard' },
+                            { value: 'high', label: 'High - Detailed output' },
+                          ]}
+                        />
                         <p className="field-hint">
                           Controls the length and detail of the model's output
                         </p>
@@ -386,23 +382,23 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                           }
                           return null;
                         })()}
-                        <select
+                        <CustomSelect
                           value={
                             config.advanced.thinkingConfig?.geminiThinkingLevel === 'low'
                               ? 'low'
                               : 'high'
                           }
-                          onChange={(e) =>
+                          onChange={(value) =>
                             handleThinkingConfigChange(
                               'geminiThinkingLevel',
-                              e.target.value as ThinkingConfig['geminiThinkingLevel']
+                              value as ThinkingConfig['geminiThinkingLevel']
                             )
                           }
-                          className="config-select"
-                        >
-                          <option value="low">Low</option>
-                          <option value="high">High</option>
-                        </select>
+                          options={[
+                            { value: 'low', label: 'Low' },
+                            { value: 'high', label: 'High' },
+                          ]}
+                        />
                         <p className="field-hint">Controls depth of reasoning for Gemini 3 models.</p>
                       </div>
                     )}

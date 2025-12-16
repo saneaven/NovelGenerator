@@ -19,10 +19,10 @@ export const templateEditorTheme = EditorView.theme({
     color: 'var(--color-text-primary)',
     border: '1px solid var(--color-border-default)',
     borderRadius: 'var(--border-radius-md)',
-    height: '100%',
+    position: 'relative',
+    flex: '1',
+    width: '100%',
     minHeight: '200px',
-    maxHeight: '600px',
-    overflow: 'auto',
   },
 
   '&.cm-focused': {
@@ -33,6 +33,11 @@ export const templateEditorTheme = EditorView.theme({
 
   '.cm-scroller': {
     backgroundColor: 'var(--color-surface-base)',
+    position: 'absolute',
+    top: '0',
+    right: '0',
+    bottom: '0',
+    left: '0',
     overflow: 'auto',
   },
 

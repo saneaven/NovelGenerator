@@ -3,10 +3,11 @@
  */
 
 import React, { useState, useRef, useCallback, useMemo } from 'react';
-import { useModalHistory } from '../../hooks/useModalHistory';
+import { BaseModal } from '../BaseModal';
 import { useProjectStore } from '../../store/projectStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { LLMTask, LLMTaskMode, LLMTaskManager, type SceneImagePromptContext, type SelectedObjectContext } from '../../llm';
+import { TextButton } from '../TextButton';
 import './ScenePromptAssistModal.css';
 
 export type PromptMode = 'natural' | 'positive' | 'negative';
@@ -59,7 +60,6 @@ const ScenePromptAssistModal: React.FC<ScenePromptAssistModalProps> = ({
   promptMode,
   allStoryObjects,
 }) => {
-  useModalHistory(isOpen, onClose);
   const { currentProjectId } = useProjectStore();
   const { settings } = useSettingsStore();
 
@@ -193,17 +193,22 @@ const ScenePromptAssistModal: React.FC<ScenePromptAssistModalProps> = ({
     onPromptGenerated,
   ]);
 
-  if (!isOpen) return null;
-
   return (
-    <div className="scene-prompt-assist-overlay" onClick={onClose}>
-      <div className="scene-prompt-assist-modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>AI Scene Prompt Assistant</h3>
-          <button className="close-btn" onClick={onClose}>x</button>
-        </div>
-
-        <div className="modal-body">
+    <BaseModal
+      isOpen={isOpen}
+      onClose={onClose}
+      size="medium"
+      title="AI Scene Prompt Assistant"
+      className="scene-prompt-assist-modal"
+      zIndexLayer={1}
+      footer={
+        <>
+          <TextButton variant="secondary" onClick={onClose}>Cancel</TextButton>
+          <TextButton variant="primary" onClick={handleGenerate}>Generate Prompt</TextButton>
+        </>
+      }
+    >
+      <div className="modal-body">
           <div className="prompt-mode-indicator">
             <span className="mode-label">Generating:</span>
             <span className="mode-value">{getPromptModeLabel()}</span>
@@ -265,13 +270,7 @@ const ScenePromptAssistModal: React.FC<ScenePromptAssistModalProps> = ({
             />
           </div>
         </div>
-
-        <div className="modal-footer">
-          <button className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={handleGenerate}>Generate Prompt</button>
-        </div>
-      </div>
-    </div>
+    </BaseModal>
   );
 };
 

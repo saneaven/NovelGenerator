@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Check, ChevronDown, Globe } from '../icons';
+import { TextButton } from '../TextButton';
 import './LanguageDropdown.css';
 
 interface LanguageDropdownProps {
@@ -72,43 +73,46 @@ const LanguageDropdown: React.FC<LanguageDropdownProps> = ({
       </button>
 
       <div className={`language-dropdown-panel ${isOpen ? 'open' : ''}`}>
-        <div className="language-dropdown-menu" role="listbox">
-          <div className="language-dropdown-menu-inner">
-            {languages.map((lang, index) => (
-              <button
-                key={lang}
-                className={`language-dropdown-option ${lang === value ? 'selected' : ''}`}
-                onClick={() => handleSelect(lang)}
-                role="option"
-                aria-selected={lang === value}
-                style={{ animationDelay: `${index * 30}ms` }}
-              >
-                <span className="language-dropdown-option-text">{lang}</span>
-                {lang === value && (
-                  <span className="language-dropdown-check">
-                    <Check size="md" />
-                  </span>
-                )}
-              </button>
-            ))}
+        <div className="language-dropdown-section">
+          <div className="language-dropdown-menu" role="listbox">
+            <div className="language-dropdown-menu-inner">
+              {languages.map((lang, index) => (
+                <button
+                  key={lang}
+                  className={`language-dropdown-option ${lang === value ? 'selected' : ''}`}
+                  onClick={() => handleSelect(lang)}
+                  role="option"
+                  aria-selected={lang === value}
+                  style={{ animationDelay: `${index * 30}ms` }}
+                >
+                  <span className="language-dropdown-option-text">{lang}</span>
+                  {lang === value && (
+                    <span className="language-dropdown-check">
+                      <Check size="md" />
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
         {showTranslateAll && translateCount > 0 && (
-          <button
-            className="language-dropdown-translate-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              onTranslateAllClick?.();
-              setIsOpen(false);
-            }}
-            title={`Translate ${translateCount} objects`}
-          >
-            <span className="language-dropdown-translate-icon"><Globe size="lg" /></span>
-            <span className="language-dropdown-translate-text">
+          <div className="language-dropdown-section" onClick={(e) => e.stopPropagation()}>
+            <TextButton
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                onTranslateAllClick?.();
+                setIsOpen(false);
+              }}
+              title={`Translate ${translateCount} objects`}
+              iconLeft={<Globe size="sm" />}
+              fullWidth
+            >
               Translate ({translateCount})
-            </span>
-          </button>
+            </TextButton>
+          </div>
         )}
       </div>
     </div>

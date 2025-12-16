@@ -1,7 +1,8 @@
 import React from 'react';
-import { useModalHistory } from '../hooks/useModalHistory';
+import { BaseModal } from './BaseModal';
 import type { NotificationType } from '../store/errorStore';
 import { Check, Warning, Info } from './icons';
+import { TextButton } from './TextButton';
 import './ErrorModal.css';
 
 interface ErrorModalProps {
@@ -27,65 +28,34 @@ const ErrorModal: React.FC<ErrorModalProps> = ({
   detail,
   onClose
 }) => {
-  useModalHistory(isOpen, onClose);
-
-  if (!isOpen) return null;
-
   const config = NOTIFICATION_CONFIG[type];
 
-  const handleOverlayClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      onClose();
-    }
-  };
-
   return (
-    <div
-      className="error-modal-overlay"
-      onClick={handleOverlayClick}
-      onKeyDown={handleKeyDown}
-      tabIndex={-1}
+    <BaseModal
+      isOpen={isOpen}
+      onClose={onClose}
+      size="small"
+      title={
+        <>
+          <span className={`notification-icon notification-icon--${type}`}>{config.icon}</span>
+          {title}
+        </>
+      }
+      className={`notification-modal notification-modal--${type}`}
+      footer={
+        <TextButton variant="primary" onClick={onClose}>
+          OK
+        </TextButton>
+      }
     >
-      <div className={`error-modal notification-modal--${type}`}>
-        <div className="error-modal-header">
-          <div className={`error-icon notification-icon--${type}`}>{config.icon}</div>
-          <h3 className="error-title">{title}</h3>
-          <button
-            className="error-close-btn"
-            onClick={onClose}
-            title="Close"
-          >
-            ✕
-          </button>
-        </div>
-
-        <div className="error-modal-body">
-          <p className="error-message">{message}</p>
-          {detail && (
-            <details className="error-detail">
-              <summary>Show Detail</summary>
-              <pre className="error-detail-content">{detail}</pre>
-            </details>
-          )}
-        </div>
-
-        <div className="error-modal-footer">
-          <button
-            className={`error-ok-btn ${config.buttonClass}`}
-            onClick={onClose}
-            autoFocus
-          >
-            OK
-          </button>
-        </div>
-      </div>
-    </div>
+      <p className="notification-message">{message}</p>
+      {detail && (
+        <details className="notification-detail">
+          <summary>Show Detail</summary>
+          <pre className="notification-detail-content">{detail}</pre>
+        </details>
+      )}
+    </BaseModal>
   );
 };
 
