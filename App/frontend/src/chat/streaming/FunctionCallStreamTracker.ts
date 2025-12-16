@@ -5,7 +5,7 @@ import type {
   FunctionCallProgress,
   FunctionCallProgressStatus,
 } from '../../llm/requestTypes';
-import type { FunctionCallSchema } from '../../llm/schemas/functionCalling';
+import type { FunctionCallSchema } from '../../llm/schemas/chatFunctions';
 import { buildPreviewFromOperation } from '../utils/functionCallPreview';
 
 type ToolCallDelta = {

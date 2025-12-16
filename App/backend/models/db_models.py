@@ -53,7 +53,7 @@ class UserSettings(Base):
         "chat": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
         "translation": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.2, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
         "storyObjectEdit": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.3, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
-        "chapterGen": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "advanced": {"enablePrefill": true, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}}
+        "manuscriptEdit": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "advanced": {"enablePrefill": true, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}}
     }""")
 
     # NEW: Provider credentials (shared across functions)
@@ -99,6 +99,12 @@ class UserSettings(Base):
 
     # Native output mode - use raw LLM output instead of function calling
     native_output_mode = Column(Boolean, default=False, nullable=False)
+
+    # Patch auto-retry - automatically retry with replace mode if patch fails
+    patch_auto_retry = Column(Boolean, default=True, nullable=False)
+
+    # LLM logging enabled - enable LLM request logging for debugging
+    llm_logging_enabled = Column(Boolean, default=False, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

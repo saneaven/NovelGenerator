@@ -7,7 +7,7 @@ import { getPromptKey } from '../types/prompts';
 
 // Types
 export type ProviderType = 'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom' | 'xai';
-export type AIFunctionType = 'chat' | 'translation' | 'storyObjectEdit' | 'chapterGen' | 'imagePrompt';
+export type AIFunctionType = 'chat' | 'translation' | 'storyObjectEdit' | 'manuscriptEdit' | 'imagePrompt';
 export type ImageProviderType = 'openai' | 'gemini' | 'xai' | 'novelai';
 export type PromptType = 'natural' | 'tag_based';
 export type ThemeMode = 'light' | 'dark' | 'system';
@@ -174,6 +174,12 @@ export interface Settings {
 
     // Native output mode - skip function calling and output raw text/XML
     nativeOutputMode: boolean;
+
+    // Patch auto-retry - automatically retry with replace mode if patch fails
+    patchAutoRetry: boolean;
+
+    // LLM request logging - enable logging of LLM requests for debugging
+    llmLoggingEnabled: boolean;
 }
 
 // Default settings
@@ -246,8 +252,8 @@ const defaultSettings: Settings = {
             },
         },
 
-        // Chapter Gen: Creative writing
-        chapterGen: {
+        // Manuscript Edit: Creative writing and editing
+        manuscriptEdit: {
             provider: 'openrouter',
             model: 'gpt-4o',
             temperature: 0.7,
@@ -321,6 +327,12 @@ const defaultSettings: Settings = {
 
     // Native output mode disabled by default
     nativeOutputMode: false,
+
+    // Patch auto-retry enabled by default
+    patchAutoRetry: true,
+
+    // LLM logging disabled by default
+    llmLoggingEnabled: false,
 };
 
 // Store interface
@@ -367,6 +379,12 @@ interface SettingsStore {
     // Native output mode setter
     setNativeOutputMode: (enabled: boolean) => void;
 
+    // Patch auto-retry setter
+    setPatchAutoRetry: (enabled: boolean) => void;
+
+    // LLM logging setter
+    setLLMLoggingEnabled: (enabled: boolean) => void;
+
     // Prompt methods
     loadPrompt: (functionType: FunctionType, category: PromptCategory, name?: string) => Promise<string>;
     getPromptFromCache: (functionType: FunctionType, category: PromptCategory, name?: string) => string | null;
@@ -388,6 +406,12 @@ const migrateAdvancedSettings = (advanced: any): AdvancedFunctionSettings => ({
 const mergeWithDefaults = (stored: any): Settings => {
     if (!stored || typeof stored !== 'object') {
         return defaultSettings;
+    }
+
+    // Migration: chapterGen → manuscriptEdit
+    if (stored.functionConfigs?.chapterGen && !stored.functionConfigs?.manuscriptEdit) {
+        stored.functionConfigs.manuscriptEdit = stored.functionConfigs.chapterGen;
+        delete stored.functionConfigs.chapterGen;
     }
 
     const migratedFunctionConfigs: any = {};
@@ -441,6 +465,8 @@ const mergeWithDefaults = (stored: any): Settings => {
             ...stored.retryConfig,
         },
         nativeOutputMode: stored.nativeOutputMode ?? defaultSettings.nativeOutputMode,
+        patchAutoRetry: stored.patchAutoRetry ?? defaultSettings.patchAutoRetry,
+        llmLoggingEnabled: stored.llmLoggingEnabled ?? defaultSettings.llmLoggingEnabled,
     };
 };
 
@@ -683,6 +709,20 @@ export const useSettingsStore = create<SettingsStore>()(
             setNativeOutputMode: (enabled) => {
                 set((state) => ({
                     settings: { ...state.settings, nativeOutputMode: enabled },
+                }));
+            },
+
+            // Patch auto-retry setter
+            setPatchAutoRetry: (enabled) => {
+                set((state) => ({
+                    settings: { ...state.settings, patchAutoRetry: enabled },
+                }));
+            },
+
+            // LLM logging setter
+            setLLMLoggingEnabled: (enabled) => {
+                set((state) => ({
+                    settings: { ...state.settings, llmLoggingEnabled: enabled },
                 }));
             },
 

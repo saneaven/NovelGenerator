@@ -35,23 +35,21 @@ const MAX_LOG_ENTRIES = 50;
 
 interface LLMLogStore {
   logs: LLMLogEntry[];
-  isLoggingEnabled: boolean;
   maxLogEntries: number;
 
   // Actions
-  setLoggingEnabled: (enabled: boolean) => void;
   addLogEntry: (entry: Omit<LLMLogEntry, 'id' | 'timestamp'>) => string;
   updateLogEntry: (id: string, updates: Partial<LLMLogEntry>) => void;
   clearLogs: () => void;
   getLogById: (id: string) => LLMLogEntry | undefined;
 }
 
+// Note: isLoggingEnabled is now in settingsStore (llmLoggingEnabled)
+// Use useSettingsStore().settings.llmLoggingEnabled to check if logging is enabled
+
 export const useLLMLogStore = create<LLMLogStore>((set, get) => ({
   logs: [],
-  isLoggingEnabled: false,
   maxLogEntries: MAX_LOG_ENTRIES,
-
-  setLoggingEnabled: (enabled) => set({ isLoggingEnabled: enabled }),
 
   addLogEntry: (entry) => {
     const id = `llm-log-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;

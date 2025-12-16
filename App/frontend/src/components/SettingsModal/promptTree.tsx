@@ -234,34 +234,34 @@ export const PROMPT_TREE: PromptNode[] = [
     ]
   },
   {
-    id: 'chaptergen',
-    label: 'Chapter Generation',
+    id: 'manuscriptedit',
+    label: 'Manuscript Edit',
     icon: <Document size="sm" />,
     type: 'category',
     children: [
       {
-        id: 'chaptergen-system',
+        id: 'manuscriptedit-system',
         label: 'System Prompt',
         type: 'prompt',
-        functionType: 'chapterGen',
+        functionType: 'manuscriptEdit',
         category: 'systemPrompt',
-        description: 'Instructions for chapter content generation'
+        description: 'Instructions for manuscript editing behavior'
       },
       {
-        id: 'chaptergen-user',
+        id: 'manuscriptedit-user',
         label: 'User Prompt',
         type: 'prompt',
-        functionType: 'chapterGen',
+        functionType: 'manuscriptEdit',
         category: 'userPrompt',
-        description: 'Auto-generated user message that conveys chapter content and requests'
+        description: 'Auto-generated user message that conveys manuscript content and requests'
       },
       {
-        id: 'chaptergen-prefill',
+        id: 'manuscriptedit-prefill',
         label: 'Prefill Template',
         type: 'prompt',
-        functionType: 'chapterGen',
+        functionType: 'manuscriptEdit',
         category: 'prefill',
-        description: 'Template for chapter generation responses'
+        description: 'Template for manuscript edit responses'
       }
     ]
   },

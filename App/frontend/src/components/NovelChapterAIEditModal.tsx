@@ -4,8 +4,11 @@ import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import type { FunctionCallMetadata } from '../llm/requestTypes';
 import type { ManuscriptObject } from '../types/unifiedObject';
-import { extractRawContent } from '../utils/nativeOutputParser';
+import type { PatchRetryContext } from '../types/patchTypes';
+import { applyPatch } from '../utils/patchUtils';
+import { extractRawContent, parseSingleJsonOutput, isReplacementOperation } from '../utils/nativeOutputParser';
 import { LLMTask, LLMTaskMode, LLMTaskManager, type ChapterEditPromptContext, type TaskHandle } from '../llm';
+import { shouldRetry, buildRetryPrompt, summarizePatchFailures } from '../llm/patchRetryHandler';
 import { Expand, Collapse } from './icons';
 import { ObjectPicker } from './ObjectPicker';
 import { TextButton } from './TextButton';
@@ -538,25 +541,80 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
 
   // These handlers now accept a task handle for proper completion tracking
   const handleFunctionCallResults = useCallback(
-    async (functionCalls: FunctionCallMetadata[], task: TaskHandle) => {
-      const updateCall = functionCalls.find((fc) => fc.function_name === 'update_manuscript');
-      if (!updateCall) {
-        task.error('AI did not call update_manuscript function');
+    async (
+      functionCalls: FunctionCallMetadata[],
+      task: TaskHandle,
+      attemptCount: number = 0,
+      retryCallback?: (retryContexts: PatchRetryContext[], attemptCount: number) => Promise<void>
+    ) => {
+      // Look for new function names first, fall back to legacy
+      const replaceCall = functionCalls.find((fc) => fc.function_name === 'replace_manuscript');
+      const patchCall = functionCalls.find((fc) => fc.function_name === 'patch_manuscript');
+      const legacyCall = functionCalls.find((fc) => fc.function_name === 'update_manuscript');
+
+      const functionCall = replaceCall || patchCall || legacyCall;
+      if (!functionCall) {
+        task.error('AI did not call a manuscript update function');
         return;
       }
 
       try {
-        const args = typeof updateCall.arguments === 'string' ? JSON.parse(updateCall.arguments) : updateCall.arguments;
-        const manuscriptObj = unifiedStore.getManuscriptByChapterId(args.chapterId);
+        const args = typeof functionCall.arguments === 'string' ? JSON.parse(functionCall.arguments) : functionCall.arguments;
+        const targetChapterId = args.chapterId || chapterId;
+        const manuscriptObj = unifiedStore.getManuscriptByChapterId(targetChapterId);
         if (!manuscriptObj) {
-          task.error(`Manuscript not found for chapter ${args.chapterId}`);
+          task.error(`Manuscript not found for chapter ${targetChapterId}`);
           return;
         }
 
-        const wordCount = args.content.trim().split(/\s+/).filter(Boolean).length;
+        // Get current content for patch resolution
+        const mainLanguage = settingsStore.settings.mainLanguage;
+        const currentData = manuscriptObj.data[mainLanguage] || Object.values(manuscriptObj.data)[0] || {};
+        const currentContent = currentData.content || '';
+
+        const retryContexts: PatchRetryContext[] = [];
+        let resolvedContent: string;
+
+        if (functionCall.function_name === 'replace_manuscript') {
+          // Full replacement
+          resolvedContent = args.content;
+        } else if (functionCall.function_name === 'patch_manuscript') {
+          // Search and replace patches
+          const result = applyPatch(currentContent, args.replacements || []);
+          resolvedContent = result.value;
+
+          if (!result.success && result.needsRetry) {
+            retryContexts.push({
+              objectId: manuscriptObj.id,
+              fieldName: 'content',
+              currentValue: currentContent,
+              error: result.error || 'Patch application failed',
+            });
+          }
+        } else {
+          // Legacy update_manuscript - treat content as full replacement
+          resolvedContent = typeof args.content === 'string' ? args.content : currentContent;
+        }
+
+        // Check if we should retry with replace mode
+        if (retryContexts.length > 0 && shouldRetry(retryContexts, attemptCount)) {
+          console.log('Patch failures detected, retrying with replace mode:', summarizePatchFailures(retryContexts));
+          if (retryCallback) {
+            await retryCallback(retryContexts, attemptCount + 1);
+            return;
+          }
+        }
+
+        // If there were retry contexts but retry was not possible, report them
+        if (retryContexts.length > 0) {
+          task.error(`Patch application failed: ${summarizePatchFailures(retryContexts)}`);
+          return;
+        }
+
+        const wordCount = resolvedContent.trim().split(/\s+/).filter(Boolean).length;
         await unifiedStore.updateObject('manuscript', manuscriptObj.id, {
-          data: { content: args.content, wordCount },
-          language: settingsStore.settings.mainLanguage,
+          data: { content: resolvedContent, wordCount },
+          language: mainLanguage,
           create_new_version: true,
           user_request: 'AI Generated Content',
         });
@@ -567,22 +625,58 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         task.error(err instanceof Error ? err.message : 'Failed to apply chapter content update');
       }
     },
-    [unifiedStore, settingsStore, onResult]
+    [unifiedStore, settingsStore, onResult, chapterId]
   );
 
   const handleNativeOutput = useCallback(
     async (text: string, task: TaskHandle) => {
-      const cleanedContent = extractRawContent(text);
-      const manuscriptObj = unifiedStore.getManuscriptByChapterId(chapterId);
+      const cleanedText = extractRawContent(text);
+      const parsed = parseSingleJsonOutput(cleanedText);
 
+      const manuscriptObj = unifiedStore.getManuscriptByChapterId(chapterId);
       if (!manuscriptObj) {
         task.error(`Manuscript not found for chapter ${chapterId}`);
         return;
       }
 
-      const wordCount = cleanedContent.trim().split(/\s+/).filter(Boolean).length;
+      const currentContent = getActiveLanguageContent(chapterId);
+      let finalContent: string;
+
+      // Check for different output formats:
+      // 1. Direct string content (full replacement)
+      // 2. { content: "..." } (full replacement)
+      // 3. { replacements: [{old, new}] } (search-replace patches)
+      // 4. { content: { replacements: [...] } } (nested patch format)
+      if (typeof parsed === 'string') {
+        finalContent = parsed;
+      } else if (parsed?.replacements && Array.isArray(parsed.replacements)) {
+        // Root level replacements
+        const result = applyPatch(currentContent, parsed.replacements);
+        if (!result.success) {
+          task.error(result.error || 'Failed to apply content changes.');
+          return;
+        }
+        finalContent = result.value;
+      } else if (typeof parsed?.content === 'string') {
+        // Direct content string
+        finalContent = parsed.content;
+      } else if (isReplacementOperation(parsed?.content)) {
+        // Content with replacements
+        const result = applyPatch(currentContent, parsed.content.replacements);
+        if (!result.success) {
+          task.error(result.error || 'Failed to apply content changes.');
+          return;
+        }
+        finalContent = result.value;
+      } else {
+        task.error('AI did not return valid JSON output.');
+        return;
+      }
+
+      const wordCount = finalContent.trim().split(/\s+/).filter(Boolean).length;
+
       await unifiedStore.updateObject('manuscript', manuscriptObj.id, {
-        data: { content: cleanedContent, wordCount },
+        data: { content: finalContent, wordCount },
         language: settingsStore.settings.mainLanguage,
         create_new_version: true,
         user_request: 'AI Generated Content',
@@ -591,7 +685,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
       task.complete();
       onResult?.();
     },
-    [chapterId, unifiedStore, settingsStore, onResult]
+    [chapterId, unifiedStore, settingsStore, onResult, getActiveLanguageContent]
   );
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -612,65 +706,97 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
     onClose();
 
     try {
-      const chapterGenConfig = settingsStore.getFunctionConfig('chapterGen');
-      const providerConfig = settingsStore.getProviderConfig(chapterGenConfig.provider);
+      const manuscriptEditConfig = settingsStore.getFunctionConfig('manuscriptEdit');
+      const providerConfig = settingsStore.getProviderConfig(manuscriptEditConfig.provider);
       const isNativeOutput = settingsStore.settings.nativeOutputMode;
 
       const currentContent = getActiveLanguageContent(chapterId);
       const contextData = await generateNovelContext();
 
-      const promptContext: ChapterEditPromptContext = {
-        userInput: userRequest.trim(),
-        chapterName,
-        currentContent,
-        contextData,
-        isNativeOutput,
-        outputLanguage: settingsStore.settings.mainLanguage,
-        enablePrefill: chapterGenConfig.advanced.enablePrefill,
-        enableThinking: chapterGenConfig.advanced.thinkingMode === 'model',
-        enableCustomThinking: chapterGenConfig.advanced.thinkingMode === 'custom',
+      // Function to run the LLM task with optional retry prompt
+      const runLLMTask = async (
+        attemptCount: number = 0,
+        retryContexts?: PatchRetryContext[]
+      ): Promise<void> => {
+        // Build user input with retry instructions if needed
+        let effectiveUserInput = userRequest.trim();
+        if (retryContexts?.length) {
+          effectiveUserInput = buildRetryPrompt(effectiveUserInput, retryContexts);
+        }
+
+        const promptContext: ChapterEditPromptContext = {
+          userInput: effectiveUserInput,
+          currentChapterId: chapterId,
+          currentChapterName: chapterName,
+          currentChapterContent: currentContent,
+          contextData,
+          isNativeOutput,
+          outputLanguage: settingsStore.settings.mainLanguage,
+          enablePrefill: manuscriptEditConfig.advanced.enablePrefill,
+          enableThinking: manuscriptEditConfig.advanced.thinkingMode === 'model',
+          enableCustomThinking: manuscriptEditConfig.advanced.thinkingMode === 'custom',
+        };
+
+        return new Promise((resolve, reject) => {
+          taskRef.current = new LLMTask(
+            {
+              mode: LLMTaskMode.CHAPTER_EDIT,
+              projectId,
+              promptContext,
+              abortControllerRef,
+              sessionId: task.sessionId,
+              provider: manuscriptEditConfig.provider,
+              providerConfig,
+              model: manuscriptEditConfig.model,
+              temperature: manuscriptEditConfig.temperature,
+              thinkingMode: manuscriptEditConfig.advanced.thinkingMode as any,
+              thinkingConfig: manuscriptEditConfig.advanced.thinkingConfig,
+              retryConfig: settingsStore.settings.retryConfig,
+            },
+            {
+              onUpdate: () => {},
+              onComplete: async (result) => {
+                try {
+                  if (isNativeOutput) {
+                    const text = result.contentParts.filter(part => part.type === 'content').map(part => part.text).join('');
+                    if (text.trim()) {
+                      await handleNativeOutput(text.trim(), task);
+                    } else {
+                      task.error('AI did not generate any content.');
+                    }
+                  } else {
+                    // Pass retry callback for patch failure retry
+                    await handleFunctionCallResults(
+                      result.functionCalls,
+                      task,
+                      attemptCount,
+                      async (newRetryContexts, newAttemptCount) => {
+                        console.log(`Retrying with replace mode (attempt ${newAttemptCount})...`);
+                        await runLLMTask(newAttemptCount, newRetryContexts);
+                      }
+                    );
+                  }
+                  resolve();
+                } catch (err) {
+                  reject(err);
+                }
+              },
+              onError: (err) => {
+                if (err.name === 'AbortError') {
+                  task.cancel();
+                } else {
+                  task.error(err.message);
+                }
+                reject(err);
+              },
+            }
+          );
+
+          taskRef.current.run().catch(reject);
+        });
       };
 
-      taskRef.current = new LLMTask(
-        {
-          mode: LLMTaskMode.CHAPTER_EDIT,
-          projectId,
-          promptContext,
-          abortControllerRef,
-          sessionId: task.sessionId,
-          provider: chapterGenConfig.provider,
-          providerConfig,
-          model: chapterGenConfig.model,
-          temperature: chapterGenConfig.temperature,
-          thinkingMode: chapterGenConfig.advanced.thinkingMode as any,
-          thinkingConfig: chapterGenConfig.advanced.thinkingConfig,
-          retryConfig: settingsStore.settings.retryConfig,
-        },
-        {
-          onUpdate: () => {},
-          onComplete: async (result) => {
-            if (isNativeOutput) {
-              const text = result.contentParts.filter(part => part.type === 'content').map(part => part.text).join('');
-              if (text.trim()) {
-                await handleNativeOutput(text.trim(), task);
-              } else {
-                task.error('AI did not generate any content.');
-              }
-            } else {
-              await handleFunctionCallResults(result.functionCalls, task);
-            }
-          },
-          onError: (err) => {
-            if (err.name === 'AbortError') {
-              task.cancel();
-            } else {
-              task.error(err.message);
-            }
-          },
-        }
-      );
-
-      await taskRef.current.run();
+      await runLLMTask();
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
         task.cancel();

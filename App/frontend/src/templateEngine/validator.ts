@@ -29,8 +29,8 @@ export function mapFunctionTypeToSchemaType(
       return 'translation';
     case 'storyObjectEdit':
       return 'storyObjectEdit';
-    case 'chapterGen':
-      return 'chapterEdit';
+    case 'manuscriptEdit':
+      return 'manuscriptEdit';
     case 'imagePrompt':
       return name === 'scene' ? 'sceneImagePrompt' : 'objectImagePrompt';
     default:
@@ -56,9 +56,9 @@ function traverseObjectPath(obj: unknown, pathSegments: string[]): { exists: boo
 
   // Handle arrays: check if property exists on first element
   if (Array.isArray(obj)) {
-    // Liquid built-in array properties
-    if (['size', 'first', 'last'].includes(current)) {
-      // These are valid Liquid properties for arrays
+    // Liquid/JavaScript built-in array properties
+    if (['size', 'length', 'first', 'last'].includes(current)) {
+      // These are valid properties for arrays
       return { exists: true };
     }
 

@@ -1,6 +1,6 @@
 # Chapter Editing Payload
 
-Chapter: **{{ variable.chapterName }}**
+Chapter: **{{ variable.currentChapterName }}** (ID: `{{ variable.currentChapterId }}`)
 
 {% if context.contextData %}
 ## Project Context
@@ -95,7 +95,7 @@ Chapter: **{{ variable.chapterName }}**
 
 ## Current Chapter Content
 
-{{ variable.currentContent }}
+{{ variable.currentChapterContent }}
 
 {% if variable.userInput %}
 ## User Request

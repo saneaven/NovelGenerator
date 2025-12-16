@@ -3,15 +3,65 @@
  *
  * Parses JSON-formatted output from LLM responses when using native output mode.
  * Uses partial-json library to support streaming JSON parsing.
+ *
+ * Supports two formats for text fields:
+ * - Direct strings (for full replacement)
+ * - Replacement arrays: { replacements: [{old, new}] } (for search-replace patches)
  */
 
 import { Allow, parse } from 'partial-json';
 
+/**
+ * Replacement operation for patch-style edits
+ */
+export interface ReplacementOperation {
+  old: string;
+  new: string;
+}
+
+/**
+ * Text field that can be either a direct string or a patch operation
+ */
+export type TextFieldValue = string | { replacements: ReplacementOperation[] };
+
+/**
+ * Parsed item from LLM native output.
+ * Text fields can be either direct strings or replacement arrays.
+ */
 export interface ParsedItem {
-  id?: string;
-  name?: string;
-  description?: string;
-  content?: string;
+  id?: string | null;
+  name?: TextFieldValue;
+  description?: TextFieldValue;
+  content?: TextFieldValue;
+  // For acts with nested chapters
+  chapters?: ParsedChapterItem[];
+  order?: number;
+  actId?: string | null;
+  // For manuscript patches
+  chapterId?: string;
+  replacements?: ReplacementOperation[];
+}
+
+export interface ParsedChapterItem {
+  id?: string | null;
+  name?: TextFieldValue;
+  description?: TextFieldValue;
+  order?: number;
+  actId?: string | null;
+}
+
+/**
+ * Check if a value is a replacement operation (patch format)
+ */
+export function isReplacementOperation(
+  value: unknown
+): value is { replacements: ReplacementOperation[] } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'replacements' in value &&
+    Array.isArray((value as any).replacements)
+  );
 }
 
 /**

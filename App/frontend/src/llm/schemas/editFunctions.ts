@@ -1,528 +1,324 @@
-// Function schemas for AI Edit operations using function calling
+/**
+ * Function schemas for AI Edit operations.
+ *
+ * Uses the same replace/patch pattern as chat functions:
+ * - replace_*: Full field replacement
+ * - patch_*: Search and replace within fields
+ *
+ * Categories:
+ * - Basic Info: title, logline, genre
+ * - Story Object: character, location, item, event, act, other
+ * - Chapter: id, actId, name, description
+ * - Manuscript: chapterId, content
+ */
 
-import type { FunctionCallSchema } from './functionCalling';
+import type { FunctionCallSchema } from './chatFunctions';
+import type { StoryObjectType } from '../../types/patchTypes';
 
 // ============================================
-// SINGLE ITEM EDIT FUNCTIONS
+// SCHEMA BUILDING BLOCKS
 // ============================================
 
-export const EDIT_BASIC_INFO_FUNCTION: FunctionCallSchema = {
-  name: "edit_basic_info",
-  description: "Edit the story's basic information including title, logline, and genre",
-  parameters: {
-    type: "object",
-    properties: {
-      title: {
-        type: "string",
-        description: "The story title"
-      },
-      logline: {
-        type: "string",
-        description: "A brief one-sentence summary of the story"
-      },
-      genre: {
-        type: "string",
-        description: "The story genre (e.g., Fantasy, Science Fiction, Mystery)"
-      }
-    },
-    required: ["title", "logline", "genre"]
-  }
+/** Story object type enum for schemas */
+const STORY_OBJECT_TYPE_ENUM: StoryObjectType[] = [
+  'character',
+  'location',
+  'item',
+  'event',
+  'act',
+  'other',
+];
+
+/** Schema for story object type field */
+const storyObjectTypeSchema = {
+  type: 'string',
+  enum: STORY_OBJECT_TYPE_ENUM,
+  description: 'Type of story object',
 };
 
-export const EDIT_CHARACTER_FUNCTION: FunctionCallSchema = {
-  name: "edit_character",
-  description: "Edit a single character's information",
-  parameters: {
-    type: "object",
-    properties: {
-      id: {
-        type: "string",
-        description: "The ID of the character to edit (keep existing ID)"
-      },
-      name: {
-        type: "string",
-        description: "The character's name"
-      },
-      description: {
-        type: "string",
-        description: "The character's description"
-      }
+/** Schema for a single replacement in patch operations (with field) */
+const replacementWithFieldSchema = {
+  type: 'object',
+  properties: {
+    field: {
+      type: 'string',
+      enum: ['name', 'description'],
+      description: 'Field to patch',
     },
-    required: ["id", "name", "description"]
-  }
+    old: {
+      type: 'string',
+      description:
+        'Text to find. Include surrounding context to ensure uniqueness.',
+    },
+    new: {
+      type: 'string',
+      description: 'Replacement text',
+    },
+  },
+  required: ['field', 'old', 'new'],
 };
 
-export const EDIT_ORGANIZATION_FUNCTION: FunctionCallSchema = {
-  name: "edit_organization",
-  description: "Edit a single organization's information",
-  parameters: {
-    type: "object",
-    properties: {
-      id: {
-        type: "string",
-        description: "The ID of the organization to edit (keep existing ID)"
-      },
-      name: {
-        type: "string",
-        description: "The organization's name"
-      },
-      description: {
-        type: "string",
-        description: "The organization's description"
-      }
+/** Schema for basic info field replacement */
+const basicInfoReplacementSchema = {
+  type: 'object',
+  properties: {
+    field: {
+      type: 'string',
+      enum: ['title', 'logline', 'genre'],
+      description: 'Field to patch',
     },
-    required: ["id", "name", "description"]
-  }
+    old: {
+      type: 'string',
+      description:
+        'Text to find. Include surrounding context to ensure uniqueness.',
+    },
+    new: {
+      type: 'string',
+      description: 'Replacement text',
+    },
+  },
+  required: ['field', 'old', 'new'],
 };
 
-export const EDIT_LOCATION_FUNCTION: FunctionCallSchema = {
-  name: "edit_location",
-  description: "Edit a single location's information",
-  parameters: {
-    type: "object",
-    properties: {
-      id: {
-        type: "string",
-        description: "The ID of the location to edit (keep existing ID)"
-      },
-      name: {
-        type: "string",
-        description: "The location's name"
-      },
-      description: {
-        type: "string",
-        description: "The location's description"
-      }
+/** Schema for manuscript replacement (no field, just old/new) */
+const manuscriptReplacementSchema = {
+  type: 'object',
+  properties: {
+    old: {
+      type: 'string',
+      description:
+        'Text to find. Include surrounding context to ensure uniqueness.',
     },
-    required: ["id", "name", "description"]
-  }
-};
-
-export const EDIT_LOREBOOK_FUNCTION: FunctionCallSchema = {
-  name: "edit_lorebook",
-  description: "Edit a single lorebook entry",
-  parameters: {
-    type: "object",
-    properties: {
-      id: {
-        type: "string",
-        description: "The ID of the lorebook entry to edit (keep existing ID)"
-      },
-      name: {
-        type: "string",
-        description: "The lorebook entry's name"
-      },
-      description: {
-        type: "string",
-        description: "The lorebook entry's description"
-      }
+    new: {
+      type: 'string',
+      description: 'Replacement text',
     },
-    required: ["id", "name", "description"]
-  }
-};
-
-export const EDIT_ACT_FUNCTION: FunctionCallSchema = {
-  name: "edit_act",
-  description: "Edit a single act's information including its name, description, and chapters",
-  parameters: {
-    type: "object",
-    properties: {
-      id: {
-        type: "string",
-        description: "The ID of the act to edit (keep existing ID)"
-      },
-      name: {
-        type: "string",
-        description: "The act's name"
-      },
-      description: {
-        type: "string",
-        description: "The act's description"
-      },
-      order: {
-        type: "integer",
-        description: "The act's position within the outline (0-based). Optional; defaults to the existing order."
-      },
-      chapters: {
-        type: "array",
-        description: "The chapters within this act",
-        items: {
-          type: "object",
-          properties: {
-            id: {
-              type: "string",
-              description: "The chapter ID (keep existing ID for updates, use null for new chapters)"
-            },
-            name: {
-              type: "string",
-              description: "The chapter's name"
-            },
-            description: {
-              type: "string",
-              description: "The chapter's description"
-            },
-            order: {
-              type: "integer",
-              description: "The chapter's position within the act (0-based). Optional; defaults to the order implied by this list."
-            }
-          },
-          required: ["id", "name", "description", "order"]
-        }
-      }
-    },
-    required: ["id", "name", "description", "order", "chapters"]
-  }
-};
-
-export const EDIT_CHAPTER_METADATA_FUNCTION: FunctionCallSchema = {
-  name: "edit_chapter_metadata",
-  description: "Edit a single chapter's metadata (name and description only, not content)",
-  parameters: {
-    type: "object",
-    properties: {
-      id: {
-        type: "string",
-        description: "The ID of the chapter to edit (keep existing ID)"
-      },
-      name: {
-        type: "string",
-        description: "The chapter's name"
-      },
-      description: {
-        type: "string",
-        description: "The chapter's description"
-      }
-    },
-    required: ["id", "name", "description"]
-  }
-};
-
-export const EDIT_OUTLINE_FUNCTION: FunctionCallSchema = {
-  name: "edit_outline",
-  description: "Edit the entire story outline including all acts and chapters",
-  parameters: {
-    type: "object",
-    properties: {
-      acts: {
-        type: "array",
-        description: "All acts in the story",
-        items: {
-          type: "object",
-          properties: {
-            id: {
-              type: "string",
-              description: "The act ID (keep existing ID for updates, use null for new acts)"
-            },
-            name: {
-              type: "string",
-              description: "The act's name"
-            },
-            description: {
-              type: "string",
-              description: "The act's description"
-            },
-            order: {
-              type: "integer",
-              description: "The act's position within the outline (0-based). Optional; defaults to the existing order."
-            },
-            chapters: {
-              type: "array",
-              description: "The chapters within this act",
-              items: {
-                type: "object",
-                properties: {
-                  id: {
-                    type: "string",
-                    description: "The chapter ID (keep existing ID for updates, use null for new chapters)"
-                  },
-                  name: {
-                    type: "string",
-                    description: "The chapter's name"
-                  },
-                  description: {
-                    type: "string",
-                    description: "The chapter's description"
-                  },
-                  order: {
-                    type: "integer",
-                    description: "The chapter's position within the act (0-based). Optional; defaults to the order implied by this list."
-                  }
-                },
-                required: ["id", "name", "description", "order"]
-              }
-            }
-          },
-          required: ["id", "name", "description", "order", "chapters"]
-        }
-      }
-    },
-    required: ["acts"]
-  }
+  },
+  required: ['old', 'new'],
 };
 
 // ============================================
-// BATCH EDIT FUNCTIONS
+// SINGLE ITEM FUNCTIONS
 // ============================================
 
-export const EDIT_CHARACTERS_BATCH_FUNCTION: FunctionCallSchema = {
-  name: "edit_characters_batch",
-  description: "Edit multiple characters at once. Can modify existing characters or add new ones.",
+// ----- Basic Info -----
+
+export const REPLACE_BASIC_INFO_FUNCTION: FunctionCallSchema = {
+  name: 'replace_basic_info',
+  description:
+    'Replace project basic info fields. Only include fields you want to change.',
   parameters: {
-    type: "object",
+    type: 'object',
     properties: {
-      characters: {
-        type: "array",
-        description: "Array of characters to edit or create",
-        items: {
-          type: "object",
-          properties: {
-            id: {
-              type: ["string", "null"],
-              description: "The character ID. Use existing ID to modify, null to create new character"
-            },
-            name: {
-              type: "string",
-              description: "The character's name"
-            },
-            description: {
-              type: "string",
-              description: "The character's description"
-            }
-          },
-          required: ["id", "name", "description"]
-        }
-      }
+      title: { type: 'string', description: 'New project title' },
+      logline: { type: 'string', description: 'New project logline' },
+      genre: { type: 'string', description: 'New project genre' },
     },
-    required: ["characters"]
-  }
+    required: [],
+  },
 };
 
-export const EDIT_ORGANIZATIONS_BATCH_FUNCTION: FunctionCallSchema = {
-  name: "edit_organizations_batch",
-  description: "Edit multiple organizations at once. Can modify existing organizations or add new ones.",
+export const PATCH_BASIC_INFO_FUNCTION: FunctionCallSchema = {
+  name: 'patch_basic_info',
+  description:
+    'Patch basic info fields using search and replace. Each replacement finds text and replaces it.',
   parameters: {
-    type: "object",
+    type: 'object',
     properties: {
-      organizations: {
-        type: "array",
-        description: "Array of organizations to edit or create",
-        items: {
-          type: "object",
-          properties: {
-            id: {
-              type: ["string", "null"],
-              description: "The organization ID. Use existing ID to modify, null to create new organization"
-            },
-            name: {
-              type: "string",
-              description: "The organization's name"
-            },
-            description: {
-              type: "string",
-              description: "The organization's description"
-            }
-          },
-          required: ["id", "name", "description"]
-        }
-      }
+      replacements: {
+        type: 'array',
+        items: basicInfoReplacementSchema,
+        description: 'List of replacements to apply',
+      },
     },
-    required: ["organizations"]
-  }
+    required: ['replacements'],
+  },
 };
 
-export const EDIT_LOCATIONS_BATCH_FUNCTION: FunctionCallSchema = {
-  name: "edit_locations_batch",
-  description: "Edit multiple locations at once. Can modify existing locations or add new ones.",
+// ----- Story Object -----
+
+export const REPLACE_STORY_OBJECT_FUNCTION: FunctionCallSchema = {
+  name: 'replace_story_object',
+  description:
+    'Replace story object fields. Only include fields you want to change.',
   parameters: {
-    type: "object",
+    type: 'object',
     properties: {
-      locations: {
-        type: "array",
-        description: "Array of locations to edit or create",
-        items: {
-          type: "object",
-          properties: {
-            id: {
-              type: ["string", "null"],
-              description: "The location ID. Use existing ID to modify, null to create new location"
-            },
-            name: {
-              type: "string",
-              description: "The location's name"
-            },
-            description: {
-              type: "string",
-              description: "The location's description"
-            }
-          },
-          required: ["id", "name", "description"]
-        }
-      }
+      id: { type: 'string', description: 'ID of the object' },
+      type: storyObjectTypeSchema,
+      name: { type: 'string', description: 'New name' },
+      description: { type: 'string', description: 'New description' },
     },
-    required: ["locations"]
-  }
+    required: ['id', 'type'],
+  },
 };
 
-export const EDIT_LOREBOOK_BATCH_FUNCTION: FunctionCallSchema = {
-  name: "edit_lorebook_batch",
-  description: "Edit multiple lorebook entries at once. Can modify existing entries or add new ones.",
+export const PATCH_STORY_OBJECT_FUNCTION: FunctionCallSchema = {
+  name: 'patch_story_object',
+  description:
+    'Patch story object fields using search and replace. Include enough context in "old" to ensure uniqueness.',
   parameters: {
-    type: "object",
+    type: 'object',
     properties: {
-      entries: {
-        type: "array",
-        description: "Array of lorebook entries to edit or create",
-        items: {
-          type: "object",
-          properties: {
-            id: {
-              type: ["string", "null"],
-              description: "The lorebook entry ID. Use existing ID to modify, null to create new entry"
-            },
-            name: {
-              type: "string",
-              description: "The entry's name"
-            },
-            description: {
-              type: "string",
-              description: "The entry's description"
-            }
-          },
-          required: ["id", "name", "description"]
-        }
-      }
+      id: { type: 'string', description: 'ID of the object' },
+      type: storyObjectTypeSchema,
+      replacements: {
+        type: 'array',
+        items: replacementWithFieldSchema,
+        description: 'List of replacements to apply',
+      },
     },
-    required: ["entries"]
-  }
+    required: ['id', 'type', 'replacements'],
+  },
 };
 
-export const EDIT_ACTS_BATCH_FUNCTION: FunctionCallSchema = {
-  name: "edit_acts_batch",
-  description: "Edit multiple acts at once. Can modify existing acts or add new ones.",
+// ----- Chapter -----
+
+export const REPLACE_CHAPTER_FUNCTION: FunctionCallSchema = {
+  name: 'replace_chapter',
+  description:
+    'Replace chapter fields. Only include fields you want to change.',
   parameters: {
-    type: "object",
+    type: 'object',
     properties: {
-      acts: {
-        type: "array",
-        description: "Array of acts to edit or create",
-        items: {
-          type: "object",
-          properties: {
-            id: {
-              type: ["string", "null"],
-              description: "The act ID. Use existing ID to modify, null to create new act"
-            },
-            name: {
-              type: "string",
-              description: "The act's name"
-            },
-            description: {
-              type: "string",
-              description: "The act's description"
-            },
-            order: {
-              type: "integer",
-              description: "The act's position within the outline (0-based). Optional; defaults to the existing order."
-            },
-            chapters: {
-              type: "array",
-              description: "The chapters within this act",
-              items: {
-                type: "object",
-                properties: {
-                  id: {
-                    type: ["string", "null"],
-                    description: "The chapter ID (keep existing ID for updates, use null for new chapters)"
-                  },
-                  name: {
-                    type: "string",
-                    description: "The chapter's name"
-                  },
-                  description: {
-                    type: "string",
-                    description: "The chapter's description"
-                  },
-                  order: {
-                    type: "integer",
-                    description: "The chapter's position within the act (0-based). Optional; defaults to the order implied by this list."
-                  }
-                },
-                required: ["id", "name", "description", "order"]
-              }
-            }
-          },
-          required: ["id", "name", "description", "order", "chapters"]
-        }
-      }
+      id: { type: 'string', description: 'ID of the chapter' },
+      actId: { type: 'string', description: 'New parent act ID' },
+      name: { type: 'string', description: 'New chapter name' },
+      description: { type: 'string', description: 'New chapter description' },
     },
-    required: ["acts"]
-  }
+    required: ['id'],
+  },
 };
 
-export const EDIT_CHAPTERS_BATCH_FUNCTION: FunctionCallSchema = {
-  name: "edit_chapters_batch",
-  description: "Edit multiple chapter metadata entries at once (name and description only, not content). Can modify existing chapters or add new ones.",
+export const PATCH_CHAPTER_FUNCTION: FunctionCallSchema = {
+  name: 'patch_chapter',
+  description:
+    'Patch chapter fields using search and replace. Include enough context in "old" to ensure uniqueness.',
   parameters: {
-    type: "object",
+    type: 'object',
     properties: {
-      chapters: {
-        type: "array",
-        description: "Array of chapters to edit or create",
-        items: {
-          type: "object",
-          properties: {
-            id: {
-              type: ["string", "null"],
-              description: "The chapter ID. Use existing ID to modify, null to create new chapter"
-            },
-            actId: {
-              type: "string",
-              description: "The ID of the act this chapter belongs to (required for new chapters)"
-            },
-            name: {
-              type: "string",
-              description: "The chapter's name"
-            },
-            description: {
-              type: "string",
-              description: "The chapter's description"
-            },
-            order: {
-              type: "integer",
-              description: "The chapter's position within its act (0-based). Optional; defaults to the existing order or the order of this list."
-            }
-          },
-          required: ["id", "name", "description", "order"]
-        }
-      }
+      id: { type: 'string', description: 'ID of the chapter' },
+      replacements: {
+        type: 'array',
+        items: replacementWithFieldSchema,
+        description: 'List of replacements to apply',
+      },
     },
-    required: ["chapters"]
-  }
+    required: ['id', 'replacements'],
+  },
+};
+
+// ----- Manuscript -----
+
+export const REPLACE_MANUSCRIPT_FUNCTION: FunctionCallSchema = {
+  name: 'replace_manuscript',
+  description: 'Replace the entire manuscript content of a chapter.',
+  parameters: {
+    type: 'object',
+    properties: {
+      chapterId: { type: 'string', description: 'ID of the chapter' },
+      content: {
+        type: 'string',
+        description: 'Complete new manuscript content',
+      },
+    },
+    required: ['chapterId', 'content'],
+  },
+};
+
+export const PATCH_MANUSCRIPT_FUNCTION: FunctionCallSchema = {
+  name: 'patch_manuscript',
+  description:
+    'Patch manuscript content using search and replace. Include enough context in "old" to ensure uniqueness.',
+  parameters: {
+    type: 'object',
+    properties: {
+      chapterId: { type: 'string', description: 'ID of the chapter' },
+      replacements: {
+        type: 'array',
+        items: manuscriptReplacementSchema,
+        description: 'List of replacements to apply',
+      },
+    },
+    required: ['chapterId', 'replacements'],
+  },
 };
 
 // ============================================
-// CHAPTER CONTENT EDIT FUNCTION
+// BATCH FUNCTIONS (for editing multiple items)
+// ============================================
+
+/** Schema for a single story object in batch operations */
+const storyObjectBatchItemSchema = {
+  type: 'object',
+  properties: {
+    id: {
+      type: 'string',
+      description: 'ID of the object. Use empty string "" to create new.',
+    },
+    type: storyObjectTypeSchema,
+    name: { type: 'string', description: 'Name' },
+    description: { type: 'string', description: 'Description' },
+  },
+  required: ['id', 'type'],
+};
+
+/** Schema for a single chapter in batch operations */
+const chapterBatchItemSchema = {
+  type: 'object',
+  properties: {
+    id: {
+      type: 'string',
+      description: 'ID of the chapter. Use empty string "" to create new.',
+    },
+    actId: { type: 'string', description: 'Parent act ID' },
+    name: { type: 'string', description: 'Chapter name' },
+    description: { type: 'string', description: 'Chapter description' },
+  },
+  required: ['id'],
+};
+
+export const REPLACE_STORY_OBJECTS_BATCH_FUNCTION: FunctionCallSchema = {
+  name: 'replace_story_objects_batch',
+  description:
+    'Replace multiple story objects at once. Can modify existing or create new ones.',
+  parameters: {
+    type: 'object',
+    properties: {
+      items: {
+        type: 'array',
+        description: 'Array of story objects to replace or create',
+        items: storyObjectBatchItemSchema,
+      },
+    },
+    required: ['items'],
+  },
+};
+
+export const REPLACE_CHAPTERS_BATCH_FUNCTION: FunctionCallSchema = {
+  name: 'replace_chapters_batch',
+  description:
+    'Replace multiple chapters at once. Can modify existing or create new ones.',
+  parameters: {
+    type: 'object',
+    properties: {
+      items: {
+        type: 'array',
+        description: 'Array of chapters to replace or create',
+        items: chapterBatchItemSchema,
+      },
+    },
+    required: ['items'],
+  },
+};
+
+// ============================================
+// CHAPTER CONTENT EDIT FUNCTIONS
 // ============================================
 
 export const CHAPTER_EDIT_FUNCTIONS: FunctionCallSchema[] = [
-  {
-    name: "update_manuscript",
-    description: "Update the manuscript content of a specific chapter.",
-    parameters: {
-      type: "object",
-      properties: {
-        chapterId: {
-          type: "string",
-          description: "The ID of the chapter to update",
-        },
-        content: {
-          type: "string",
-          description: "The new content for the chapter",
-        },
-      },
-      required: ["chapterId", "content"],
-    },
-  },
+  REPLACE_MANUSCRIPT_FUNCTION,
+  PATCH_MANUSCRIPT_FUNCTION,
 ];
 
 // ============================================
@@ -530,30 +326,29 @@ export const CHAPTER_EDIT_FUNCTIONS: FunctionCallSchema[] = [
 // ============================================
 
 /**
- * Get the appropriate function schema based on category and edit scope
+ * Get the appropriate function schemas based on category and edit scope.
+ * Returns both replace and patch functions.
  */
-export function getEditFunctionSchema(
+export function getEditFunctionSchemas(
   category: string,
   isSingleItem: boolean
-): FunctionCallSchema {
+): FunctionCallSchema[] {
   if (isSingleItem) {
     switch (category) {
       case 'basicInfo':
-        return EDIT_BASIC_INFO_FUNCTION;
+        return [REPLACE_BASIC_INFO_FUNCTION, PATCH_BASIC_INFO_FUNCTION];
       case 'character':
-        return EDIT_CHARACTER_FUNCTION;
-      case 'organization':
-        return EDIT_ORGANIZATION_FUNCTION;
       case 'location':
-        return EDIT_LOCATION_FUNCTION;
-      case 'lorebook':
-        return EDIT_LOREBOOK_FUNCTION;
+      case 'item':
+      case 'event':
       case 'act':
-        return EDIT_ACT_FUNCTION;
+      case 'other':
+      case 'storyObject':
+        return [REPLACE_STORY_OBJECT_FUNCTION, PATCH_STORY_OBJECT_FUNCTION];
       case 'chapter':
-        return EDIT_CHAPTER_METADATA_FUNCTION;
-      case 'outline':
-        return EDIT_OUTLINE_FUNCTION;
+        return [REPLACE_CHAPTER_FUNCTION, PATCH_CHAPTER_FUNCTION];
+      case 'manuscript':
+        return [REPLACE_MANUSCRIPT_FUNCTION, PATCH_MANUSCRIPT_FUNCTION];
       default:
         throw new Error(`Unknown category: ${category}`);
     }
@@ -561,21 +356,17 @@ export function getEditFunctionSchema(
     // Batch editing
     switch (category) {
       case 'basicInfo':
-        return EDIT_BASIC_INFO_FUNCTION; // Basic info is always single
+        return [REPLACE_BASIC_INFO_FUNCTION, PATCH_BASIC_INFO_FUNCTION];
       case 'character':
-        return EDIT_CHARACTERS_BATCH_FUNCTION;
-      case 'organization':
-        return EDIT_ORGANIZATIONS_BATCH_FUNCTION;
       case 'location':
-        return EDIT_LOCATIONS_BATCH_FUNCTION;
-      case 'lorebook':
-        return EDIT_LOREBOOK_BATCH_FUNCTION;
+      case 'item':
+      case 'event':
       case 'act':
-        return EDIT_ACTS_BATCH_FUNCTION;
+      case 'other':
+      case 'storyObject':
+        return [REPLACE_STORY_OBJECTS_BATCH_FUNCTION];
       case 'chapter':
-        return EDIT_CHAPTERS_BATCH_FUNCTION;
-      case 'outline':
-        return EDIT_OUTLINE_FUNCTION; // Outline is always the full structure
+        return [REPLACE_CHAPTERS_BATCH_FUNCTION];
       default:
         throw new Error(`Unknown category: ${category}`);
     }
@@ -583,35 +374,50 @@ export function getEditFunctionSchema(
 }
 
 /**
- * Get edit functions for a specific category
- * Returns single or batch function based on whether targetId is provided
+ * Get edit functions for a specific category.
+ * Returns single or batch function based on whether targetId is provided.
  */
 export function getEditFunctionsForCategory(
   category: string,
   targetId?: string
 ): FunctionCallSchema[] {
   const isSingleItem = !!targetId;
-  return [getEditFunctionSchema(category, isSingleItem)];
+  return getEditFunctionSchemas(category, isSingleItem);
 }
 
 /**
- * Get all edit function schemas as an array
+ * Get all edit function schemas as an array.
  */
 export function getAllEditFunctionSchemas(): FunctionCallSchema[] {
   return [
-    EDIT_BASIC_INFO_FUNCTION,
-    EDIT_CHARACTER_FUNCTION,
-    EDIT_ORGANIZATION_FUNCTION,
-    EDIT_LOCATION_FUNCTION,
-    EDIT_LOREBOOK_FUNCTION,
-    EDIT_ACT_FUNCTION,
-    EDIT_CHAPTER_METADATA_FUNCTION,
-    EDIT_OUTLINE_FUNCTION,
-    EDIT_CHARACTERS_BATCH_FUNCTION,
-    EDIT_ORGANIZATIONS_BATCH_FUNCTION,
-    EDIT_LOCATIONS_BATCH_FUNCTION,
-    EDIT_LOREBOOK_BATCH_FUNCTION,
-    EDIT_ACTS_BATCH_FUNCTION,
-    EDIT_CHAPTERS_BATCH_FUNCTION
+    REPLACE_BASIC_INFO_FUNCTION,
+    PATCH_BASIC_INFO_FUNCTION,
+    REPLACE_STORY_OBJECT_FUNCTION,
+    PATCH_STORY_OBJECT_FUNCTION,
+    REPLACE_CHAPTER_FUNCTION,
+    PATCH_CHAPTER_FUNCTION,
+    REPLACE_MANUSCRIPT_FUNCTION,
+    PATCH_MANUSCRIPT_FUNCTION,
+    REPLACE_STORY_OBJECTS_BATCH_FUNCTION,
+    REPLACE_CHAPTERS_BATCH_FUNCTION,
   ];
+}
+
+// ============================================
+// LEGACY COMPATIBILITY
+// ============================================
+
+// These exports maintain compatibility with existing code that uses the old names.
+// TODO: Remove these after updating all consumers.
+
+/** @deprecated Use REPLACE_BASIC_INFO_FUNCTION or PATCH_BASIC_INFO_FUNCTION */
+export const EDIT_BASIC_INFO_FUNCTION = REPLACE_BASIC_INFO_FUNCTION;
+
+/** @deprecated Use getEditFunctionSchemas */
+export function getEditFunctionSchema(
+  category: string,
+  isSingleItem: boolean
+): FunctionCallSchema {
+  const schemas = getEditFunctionSchemas(category, isSingleItem);
+  return schemas[0]; // Return first schema for backward compatibility
 }

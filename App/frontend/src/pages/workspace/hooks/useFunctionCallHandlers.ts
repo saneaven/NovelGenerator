@@ -239,6 +239,7 @@ export function useFunctionCallHandlers(
       createFunctionCallApplyHandler,
       createFunctionCallRejectHandler,
       setMessageEditCards,
+      storyObjects,
     ]
   );
 

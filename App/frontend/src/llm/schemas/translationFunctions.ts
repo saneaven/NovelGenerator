@@ -5,7 +5,7 @@
  * Each object type has its own translation function with exact parameters.
  */
 
-import type { FunctionCallSchema } from './functionCalling';
+import type { FunctionCallSchema } from './chatFunctions';
 
 // ============================================================================
 // BASE FIELDS

@@ -5,7 +5,7 @@
  * 2. Scene Image Prompt - for scene images in novel editor
  */
 
-import type { FunctionCallSchema } from './functionCalling';
+import type { FunctionCallSchema } from './chatFunctions';
 
 /**
  * Function schema for generating image prompts for story objects.

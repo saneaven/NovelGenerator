@@ -4,7 +4,7 @@ import type { SystemInsertConfig, EditCard } from '../chat/types';
 import { ChatManager, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
 import { DefaultDisplayProcessor } from '../chat/processors/DisplayProcessor';
 import { areEditCardMapsEqual } from '../chat/utils/editCardUtils';
-import { WORKSPACE_FUNCTIONS } from '../llm/schemas/functionCalling';
+import { WORKSPACE_FUNCTIONS } from '../llm/schemas/chatFunctions';
 import { useChatStore } from '../store/chatStore';
 import { useChatUIStore } from '../store/chatUIStore';
 import { useSidebarStore } from '../store/sidebarStore';

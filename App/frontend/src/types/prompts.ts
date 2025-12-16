@@ -1,4 +1,4 @@
-export type FunctionType = 'chat' | 'translation' | 'storyObjectEdit' | 'chapterGen' | 'imagePrompt';
+export type FunctionType = 'chat' | 'translation' | 'storyObjectEdit' | 'manuscriptEdit' | 'imagePrompt';
 export type PromptCategory = 'systemPrompt' | 'userPrompt' | 'nonLastUserPrompt' | 'prefill';
 
 /**

@@ -5,9 +5,11 @@ import { useSettingsStore } from '../store/settingsStore';
 import type { ObjectType } from '../types/unifiedObject';
 import type { FunctionCallMetadata } from '../llm/requestTypes';
 import type { StoryObjectCategory } from '../types/storyObject';
+import type { PatchRetryContext } from '../types/patchTypes';
 import { applyEditFunctionCalls } from '../chat/utils/editFunctionApplicator';
 import { parseJsonOutput, extractRawContent } from '../utils/nativeOutputParser';
 import { LLMTask, LLMTaskMode, LLMTaskManager, type StoryObjectEditPromptContext, type TaskHandle } from '../llm';
+import { shouldRetry, buildRetryPrompt, summarizePatchFailures } from '../llm/patchRetryHandler';
 import { Lightbulb } from './icons';
 import { TextButton } from './TextButton';
 import './AIEditModal.css';
@@ -188,7 +190,12 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   };
 
   const handleFunctionCallResults = useCallback(
-    async (functionCalls: FunctionCallMetadata[], task: TaskHandle) => {
+    async (
+      functionCalls: FunctionCallMetadata[],
+      task: TaskHandle,
+      attemptCount: number = 0,
+      retryCallback?: (retryContexts: PatchRetryContext[], attemptCount: number) => Promise<void>
+    ) => {
       if (!functionCalls?.length) {
         task.error('AI response did not include structured edits to apply.');
         return;
@@ -196,10 +203,34 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
 
       try {
         const results = await applyEditFunctionCalls(projectId, functionCalls);
-        const failedResults = results.filter((result) => !result.success);
 
+        // Collect all retry contexts from results
+        const allRetryContexts: PatchRetryContext[] = [];
+        for (const result of results) {
+          if (result.retryContexts?.length) {
+            allRetryContexts.push(...result.retryContexts);
+          }
+        }
+
+        // Check if we should retry with replace mode
+        if (allRetryContexts.length > 0 && shouldRetry(allRetryContexts, attemptCount)) {
+          console.log('Patch failures detected, retrying with replace mode:', summarizePatchFailures(allRetryContexts));
+          if (retryCallback) {
+            await retryCallback(allRetryContexts, attemptCount + 1);
+            return;
+          }
+        }
+
+        // Check for other failures (non-retry)
+        const failedResults = results.filter((result) => !result.success && !result.retryContexts?.length);
         if (failedResults.length > 0) {
           task.error(`Failed to apply some edits: ${failedResults.map(r => r.error || r.message).join(', ')}`);
+          return;
+        }
+
+        // If there were retry contexts but retry was not possible, report them
+        if (allRetryContexts.length > 0) {
+          task.error(`Patch application failed: ${summarizePatchFailures(allRetryContexts)}`);
           return;
         }
 
@@ -269,62 +300,93 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       const contextData = await generateContext();
       const currentData = await getCurrentData();
 
-      const promptContext: StoryObjectEditPromptContext = {
-        userInput: userRequest.trim(),
-        category: category as StoryObjectCategory,
-        targetId,
-        contextData,
-        currentData,
-        isNativeOutput,
-        outputLanguage: settingsStore.settings.mainLanguage,
-        enablePrefill: storyObjectEditConfig.advanced.enablePrefill,
-        enableThinking: storyObjectEditConfig.advanced.thinkingMode === 'model',
-        enableCustomThinking: storyObjectEditConfig.advanced.thinkingMode === 'custom',
+      // Function to run the LLM task with optional retry prompt
+      const runLLMTask = async (
+        attemptCount: number = 0,
+        retryContexts?: PatchRetryContext[]
+      ): Promise<void> => {
+        // Build user input with retry instructions if needed
+        let effectiveUserInput = userRequest.trim();
+        if (retryContexts?.length) {
+          effectiveUserInput = buildRetryPrompt(effectiveUserInput, retryContexts);
+        }
+
+        const promptContext: StoryObjectEditPromptContext = {
+          userInput: effectiveUserInput,
+          category: category as StoryObjectCategory,
+          targetId,
+          contextData,
+          currentData,
+          isNativeOutput,
+          outputLanguage: settingsStore.settings.mainLanguage,
+          enablePrefill: storyObjectEditConfig.advanced.enablePrefill,
+          enableThinking: storyObjectEditConfig.advanced.thinkingMode === 'model',
+          enableCustomThinking: storyObjectEditConfig.advanced.thinkingMode === 'custom',
+        };
+
+        return new Promise((resolve, reject) => {
+          taskRef.current = new LLMTask(
+            {
+              mode: LLMTaskMode.STORY_OBJECT_EDIT,
+              projectId,
+              promptContext,
+              abortControllerRef,
+              sessionId: task.sessionId,
+              provider: storyObjectEditConfig.provider,
+              providerConfig,
+              model: storyObjectEditConfig.model,
+              temperature: storyObjectEditConfig.temperature,
+              thinkingMode: storyObjectEditConfig.advanced.thinkingMode as any,
+              thinkingConfig: storyObjectEditConfig.advanced.thinkingConfig,
+              retryConfig: settingsStore.settings.retryConfig,
+            },
+            {
+              onUpdate: () => {},
+              onComplete: async (result) => {
+                try {
+                  if (isNativeOutput) {
+                    const text = result.contentParts
+                      .filter(part => part.type === 'content')
+                      .map(part => part.text)
+                      .join('');
+                    if (text.trim()) {
+                      await handleNativeOutput(text.trim(), task);
+                    } else {
+                      task.error('AI did not generate any output.');
+                    }
+                  } else {
+                    // Pass retry callback for patch failure retry
+                    await handleFunctionCallResults(
+                      result.functionCalls,
+                      task,
+                      attemptCount,
+                      async (newRetryContexts, newAttemptCount) => {
+                        console.log(`Retrying with replace mode (attempt ${newAttemptCount})...`);
+                        await runLLMTask(newAttemptCount, newRetryContexts);
+                      }
+                    );
+                  }
+                  resolve();
+                } catch (err) {
+                  reject(err);
+                }
+              },
+              onError: (err) => {
+                if (err.name === 'AbortError') {
+                  task.cancel();
+                } else {
+                  task.error(err.message);
+                }
+                reject(err);
+              },
+            }
+          );
+
+          taskRef.current.run().catch(reject);
+        });
       };
 
-      taskRef.current = new LLMTask(
-        {
-          mode: LLMTaskMode.STORY_OBJECT_EDIT,
-          projectId,
-          promptContext,
-          abortControllerRef,
-          sessionId: task.sessionId,
-          provider: storyObjectEditConfig.provider,
-          providerConfig,
-          model: storyObjectEditConfig.model,
-          temperature: storyObjectEditConfig.temperature,
-          thinkingMode: storyObjectEditConfig.advanced.thinkingMode as any,
-          thinkingConfig: storyObjectEditConfig.advanced.thinkingConfig,
-          retryConfig: settingsStore.settings.retryConfig,
-        },
-        {
-          onUpdate: () => {},
-          onComplete: async (result) => {
-            if (isNativeOutput) {
-              const text = result.contentParts
-                .filter(part => part.type === 'content')
-                .map(part => part.text)
-                .join('');
-              if (text.trim()) {
-                await handleNativeOutput(text.trim(), task);
-              } else {
-                task.error('AI did not generate any output.');
-              }
-            } else {
-              await handleFunctionCallResults(result.functionCalls, task);
-            }
-          },
-          onError: (err) => {
-            if (err.name === 'AbortError') {
-              task.cancel();
-            } else {
-              task.error(err.message);
-            }
-          },
-        }
-      );
-
-      await taskRef.current.run();
+      await runLLMTask();
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
         task.cancel();

@@ -66,7 +66,7 @@ async def get_user_settings(
                         'thinkingConfig': {'effort': 'medium'}
                     }
                 },
-                'chapterGen': {
+                'manuscriptEdit': {
                     'provider': 'openrouter',
                     'model': 'gpt-4o',
                     'temperature': 0.7,
@@ -126,7 +126,9 @@ async def get_user_settings(
         theme=settings.theme,
         retryConfig=retry_config_dict,  # type: ignore
         imageGenConfig=image_gen_config_dict,  # type: ignore
-        nativeOutputMode=settings.native_output_mode
+        nativeOutputMode=settings.native_output_mode,
+        patchAutoRetry=getattr(settings, 'patch_auto_retry', True),
+        llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False)
     )
 
 
@@ -188,6 +190,12 @@ async def update_user_settings(
     if update_data.nativeOutputMode is not None:
         settings.native_output_mode = update_data.nativeOutputMode  # type: ignore
 
+    if update_data.patchAutoRetry is not None:
+        settings.patch_auto_retry = update_data.patchAutoRetry  # type: ignore
+
+    if update_data.llmLoggingEnabled is not None:
+        settings.llm_logging_enabled = update_data.llmLoggingEnabled  # type: ignore
+
     db.commit()
     db.refresh(settings)
 
@@ -222,7 +230,9 @@ async def update_user_settings(
         theme=settings.theme,
         retryConfig=retry_config_dict,  # type: ignore
         imageGenConfig=image_gen_config_dict,  # type: ignore
-        nativeOutputMode=settings.native_output_mode
+        nativeOutputMode=settings.native_output_mode,
+        patchAutoRetry=getattr(settings, 'patch_auto_retry', True),
+        llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False)
     )
 
 
@@ -284,7 +294,9 @@ async def update_function_config(
         theme=settings.theme,
         retryConfig=retry_config_dict,  # type: ignore
         imageGenConfig=image_gen_config_dict,  # type: ignore
-        nativeOutputMode=settings.native_output_mode
+        nativeOutputMode=settings.native_output_mode,
+        patchAutoRetry=getattr(settings, 'patch_auto_retry', True),
+        llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False)
     )
 
 
@@ -338,7 +350,9 @@ async def sync_settings_from_client(
             theme=client_settings.get('theme', 'system'),
             retry_config=client_settings.get('retryConfig', default_retry_config),
             image_gen_config=client_settings.get('imageGenConfig', default_image_gen_config),
-            native_output_mode=client_settings.get('nativeOutputMode', False)
+            native_output_mode=client_settings.get('nativeOutputMode', False),
+            patch_auto_retry=client_settings.get('patchAutoRetry', True),
+            llm_logging_enabled=client_settings.get('llmLoggingEnabled', False)
         )
         db.add(settings)
     else:
@@ -353,6 +367,8 @@ async def sync_settings_from_client(
         settings.retry_config = client_settings.get('retryConfig', settings.retry_config or default_retry_config)  # type: ignore
         settings.image_gen_config = client_settings.get('imageGenConfig', settings.image_gen_config or default_image_gen_config)  # type: ignore
         settings.native_output_mode = client_settings.get('nativeOutputMode', settings.native_output_mode)  # type: ignore
+        settings.patch_auto_retry = client_settings.get('patchAutoRetry', getattr(settings, 'patch_auto_retry', True))  # type: ignore
+        settings.llm_logging_enabled = client_settings.get('llmLoggingEnabled', getattr(settings, 'llm_logging_enabled', False))  # type: ignore
 
     db.commit()
     db.refresh(settings)

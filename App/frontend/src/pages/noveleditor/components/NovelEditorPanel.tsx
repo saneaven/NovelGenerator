@@ -121,7 +121,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     originalSrc: string;
     originalAsset: Asset;
     newAsset: Asset;
-    position: DOMRect;
   } | null>(null);
   // Image replace state
   const [replaceImageSrc, setReplaceImageSrc] = useState<string | null>(null);
@@ -552,7 +551,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         originalSrc: `${API_BASE_URL}${regenerateAsset.file_url}`,
         originalAsset: regenerateAsset,
         newAsset: asset,
-        position: pendingRegenerationBounds,
       });
       setShowImageGeneratorModal(false);
       return;
@@ -1081,14 +1079,12 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       />
 
       {/* Regeneration Comparison Overlay */}
-      {regenerationComparison && (
-        <RegenerationComparisonOverlay
-          newAsset={regenerationComparison.newAsset}
-          position={regenerationComparison.position}
-          onUse={handleUseRegeneratedImage}
-          onDiscard={handleDiscardRegeneratedImage}
-        />
-      )}
+      <RegenerationComparisonOverlay
+        isOpen={!!regenerationComparison}
+        newAsset={regenerationComparison?.newAsset ?? null}
+        onUse={handleUseRegeneratedImage}
+        onDiscard={handleDiscardRegeneratedImage}
+      />
     </>
   );
 };

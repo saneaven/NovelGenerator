@@ -1,4 +1,4 @@
-import type { FunctionCallSchema } from './schemas/functionCalling';
+import type { FunctionCallSchema } from './schemas/chatFunctions';
 import type { StoryObjectCategory } from '../types/storyObject';
 import { getEditFunctionsForCategory, CHAPTER_EDIT_FUNCTIONS } from './schemas/editFunctions';
 import { TRANSLATION_FUNCTIONS, CHAT_TRANSLATION_FUNCTIONS } from './schemas/translationFunctions';
@@ -30,7 +30,7 @@ export class PromptManager {
    * Load a prompt template from store or fallback to bundled default
    */
   private static async getTemplate(
-    functionType: 'chat' | 'translation' | 'storyObjectEdit' | 'chapterGen' | 'imagePrompt',
+    functionType: 'chat' | 'translation' | 'storyObjectEdit' | 'manuscriptEdit' | 'imagePrompt',
     category: 'systemPrompt' | 'prefill' | 'userPrompt' | 'nonLastUserPrompt',
     name?: string
   ): Promise<string | null> {
@@ -262,9 +262,9 @@ export class PromptManager {
     context: ChapterEditPromptContext
   ): Promise<PromptBundle> {
     const [systemTemplate, userTemplate, prefillTemplate] = await Promise.all([
-      this.getTemplate('chapterGen', 'systemPrompt'),
-      this.getTemplate('chapterGen', 'userPrompt'),
-      this.getTemplate('chapterGen', 'prefill'),
+      this.getTemplate('manuscriptEdit', 'systemPrompt'),
+      this.getTemplate('manuscriptEdit', 'userPrompt'),
+      this.getTemplate('manuscriptEdit', 'prefill'),
     ]);
 
     const mainLanguage = this.resolveLanguage(context.outputLanguage);
@@ -274,8 +274,9 @@ export class PromptManager {
         mainLanguage,
         userInput: context.userInput,
         today: new Date().toISOString().split('T')[0],
-        chapterName: context.chapterName,
-        currentContent: context.currentContent,
+        currentChapterId: context.currentChapterId,
+        currentChapterName: context.currentChapterName,
+        currentChapterContent: context.currentChapterContent,
       },
       state: {
         enableThinking: context.enableThinking ?? false,

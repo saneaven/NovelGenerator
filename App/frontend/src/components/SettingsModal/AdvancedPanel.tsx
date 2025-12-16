@@ -11,6 +11,8 @@ interface AdvancedPanelProps {
     onRetryConfigChange: (config: RetryConfig) => void;
     nativeOutputMode: boolean;
     onNativeOutputModeChange: (enabled: boolean) => void;
+    patchAutoRetry: boolean;
+    onPatchAutoRetryChange: (enabled: boolean) => void;
 }
 
 const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
@@ -18,6 +20,8 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
     onRetryConfigChange,
     nativeOutputMode,
     onNativeOutputModeChange,
+    patchAutoRetry,
+    onPatchAutoRetryChange,
 }) => {
     const [newErrorCode, setNewErrorCode] = useState('');
 
@@ -196,6 +200,23 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                     <p className="field-hint">
                         When enabled, AI features (except chat) will output raw text instead of using function calls.
                         This can improve compatibility with some models but may reduce structured output reliability.
+                    </p>
+                </div>
+            </div>
+
+            {/* Patch Auto-Retry */}
+            <div className="advanced-settings-card">
+                <h3>Patch Auto-Retry</h3>
+                <div className="form-field">
+                    <ToggleSwitch
+                        checked={patchAutoRetry}
+                        onChange={onPatchAutoRetryChange}
+                        label="Auto-retry with replace mode on patch failure"
+                        icon={<Refresh size="sm" />}
+                    />
+                    <p className="field-hint">
+                        When enabled, if a unified diff patch fails to apply during AI editing, the system will
+                        automatically retry the request forcing the AI to use full replacement mode instead.
                     </p>
                 </div>
             </div>

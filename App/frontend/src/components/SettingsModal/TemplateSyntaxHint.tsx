@@ -32,7 +32,7 @@ function getSchemaKey(functionType: string, name?: string): PromptType | null {
         case 'chat': return 'chat';
         case 'translation': return 'translation';
         case 'storyEdit': return 'storyObjectEdit';
-        case 'chapterGen': return 'chapterEdit';
+        case 'manuscriptEdit': return 'manuscriptEdit';
         case 'imagePrompt':
             if (name === 'object') return 'objectImagePrompt';
             if (name === 'scene') return 'sceneImagePrompt';

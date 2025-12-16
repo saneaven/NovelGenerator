@@ -1,7 +1,7 @@
 import type { MutableRefObject } from 'react';
 import type { ContentPart, FunctionCallMetadata, FunctionCallProgress, FunctionCallResultSummary } from './requestTypes';
 import type { ProviderConfig, ProviderType, ThinkingConfig, RetryConfig } from '../store/settingsStore';
-import type { FunctionCallSchema } from './schemas/functionCalling';
+import type { FunctionCallSchema } from './schemas/chatFunctions';
 import type { StoryObjectCategory } from '../types/storyObject';
 
 /**
@@ -74,8 +74,9 @@ export interface StoryObjectEditPromptContext extends BasePromptContext {
  * Context for chapter editing
  */
 export interface ChapterEditPromptContext extends BasePromptContext {
-  chapterName: string;
-  currentContent: string;
+  currentChapterId: string;
+  currentChapterName: string;
+  currentChapterContent: string;
   contextData?: Record<string, unknown>;
   isNativeOutput?: boolean;
 }

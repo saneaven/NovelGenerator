@@ -19,7 +19,7 @@ class AIFunctionType(str, Enum):
     CHAT = "chat"
     TRANSLATION = "translation"
     STORY_OBJECT_EDIT = "storyObjectEdit"
-    CHAPTER_GEN = "chapterGen"
+    MANUSCRIPT_EDIT = "manuscriptEdit"
 
 
 class ProviderPreference(BaseModel):
@@ -182,6 +182,8 @@ class UserSettingsResponse(BaseModel):
     retryConfig: RetryConfig = Field(default_factory=RetryConfig)
     imageGenConfig: ImageGenConfig = Field(default_factory=ImageGenConfig)
     nativeOutputMode: bool = False
+    patchAutoRetry: bool = True
+    llmLoggingEnabled: bool = False
 
     class Config:
         from_attributes = True
@@ -198,3 +200,5 @@ class UserSettingsUpdate(BaseModel):
     retryConfig: Optional[RetryConfig] = None
     imageGenConfig: Optional[ImageGenConfig] = None
     nativeOutputMode: Optional[bool] = None
+    patchAutoRetry: Optional[bool] = None
+    llmLoggingEnabled: Optional[bool] = None

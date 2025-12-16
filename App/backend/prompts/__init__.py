@@ -58,10 +58,10 @@ _TRANSLATION_PREFILL_CHAT = _load_prompt_file('translation/chat/prefill.md')
 _STORY_EDIT_SYSTEM_PROMPT = _load_prompt_file('storyObjectEdit/systemPrompt.md')
 _STORY_EDIT_USER_PROMPT = _load_prompt_file('storyObjectEdit/userPrompt.md')
 _STORY_EDIT_PREFILL = _load_prompt_file('storyObjectEdit/prefill.md')
-# Chapter Generation
-_CHAPTER_EDIT_SYSTEM_PROMPT = _load_prompt_file('chapterGen/systemPrompt.md')
-_CHAPTER_EDIT_USER_PROMPT = _load_prompt_file('chapterGen/userPrompt.md')
-_CHAPTER_EDIT_PREFILL = _load_prompt_file('chapterGen/prefill.md')
+# Manuscript Edit
+_MANUSCRIPT_EDIT_SYSTEM_PROMPT = _load_prompt_file('manuscriptEdit/systemPrompt.md')
+_MANUSCRIPT_EDIT_USER_PROMPT = _load_prompt_file('manuscriptEdit/userPrompt.md')
+_MANUSCRIPT_EDIT_PREFILL = _load_prompt_file('manuscriptEdit/prefill.md')
 # Image Prompt - Object
 _OBJECT_IMAGE_PROMPT_SYSTEM_PROMPT = _load_prompt_file('imagePrompt/object/systemPrompt.md')
 _OBJECT_IMAGE_PROMPT_USER_PROMPT = _load_prompt_file('imagePrompt/object/userPrompt.md')
@@ -111,10 +111,10 @@ DEFAULT_PROMPTS = {
         'userPrompt': _STORY_EDIT_USER_PROMPT,
         'prefill': _STORY_EDIT_PREFILL,
     },
-    'chapterGen': {
-        'systemPrompt': _CHAPTER_EDIT_SYSTEM_PROMPT,
-        'userPrompt': _CHAPTER_EDIT_USER_PROMPT,
-        'prefill': _CHAPTER_EDIT_PREFILL,
+    'manuscriptEdit': {
+        'systemPrompt': _MANUSCRIPT_EDIT_SYSTEM_PROMPT,
+        'userPrompt': _MANUSCRIPT_EDIT_USER_PROMPT,
+        'prefill': _MANUSCRIPT_EDIT_PREFILL,
     },
     'imagePrompt': {
         'systemPrompt': {

@@ -6,76 +6,54 @@
 import React from 'react';
 import type { Asset } from '../../api/assetService';
 import { API_BASE_URL } from '../../api/client';
+import BaseModal from '../BaseModal/BaseModal';
 import { TextButton } from '../TextButton';
 import './RegenerationComparisonOverlay.css';
 
 interface RegenerationComparisonOverlayProps {
-    newAsset: Asset;
-    position: DOMRect;
+    isOpen: boolean;
+    newAsset: Asset | null;
     onUse: () => void;      // Replace original with new
     onDiscard: () => void;  // Keep original, new stays in library
 }
 
 const RegenerationComparisonOverlay: React.FC<RegenerationComparisonOverlayProps> = ({
+    isOpen,
     newAsset,
-    position,
     onUse,
     onDiscard,
 }) => {
-    // Handle backdrop click - treat as discard
-    const handleBackdropClick = (e: React.MouseEvent) => {
-        if (e.target === e.currentTarget) {
-            onDiscard();
-        }
-    };
-
-    // Prevent propagation from dialog
-    const handleDialogClick = (e: React.MouseEvent) => {
-        e.stopPropagation();
-    };
+    const footer = (
+        <div className="comparison-actions">
+            <TextButton variant="secondary" onClick={onDiscard}>
+                Discard
+            </TextButton>
+            <TextButton variant="primary" onClick={onUse}>
+                Use This
+            </TextButton>
+        </div>
+    );
 
     return (
-        <div className="regeneration-overlay" onClick={handleBackdropClick}>
-            {/* Semi-transparent backdrop */}
-            <div className="regeneration-backdrop" />
-
-            {/* Positioned at original image location */}
-            <div
-                className="regeneration-comparison"
-                style={{
-                    top: position.top + window.scrollY,
-                    left: position.left + window.scrollX,
-                    width: Math.max(position.width, 280),
-                }}
-                onClick={handleDialogClick}
-            >
-                {/* New image */}
-                <img
-                    src={`${API_BASE_URL}${newAsset.file_url}`}
-                    alt="Regenerated"
-                    className="new-image"
-                />
-
-                {/* Action buttons */}
-                <div className="comparison-actions">
-                    <TextButton
-                        variant="primary"
-                        onClick={onUse}
-                    >
-                        Use This
-                    </TextButton>
-                    <TextButton
-                        variant="secondary"
-                        onClick={onDiscard}
-                    >
-                        Discard
-                    </TextButton>
-                </div>
-
-                {/* Hint text */}
-                <p className="hint">New image will be saved to library either way</p>
-            </div>
-        </div>
+        <BaseModal
+            isOpen={isOpen}
+            onClose={onDiscard}
+            title="Regenerated Image"
+            size="small"
+            footer={footer}
+            className="regeneration-comparison-modal"
+        >
+            {newAsset && (
+                <>
+                    <img
+                        src={`${API_BASE_URL}${newAsset.file_url}`}
+                        alt="Regenerated"
+                        className="regeneration-new-image"
+                    />
+                    <p className="regeneration-hint">New image will be saved to library either way</p>
+                </>
+            )}
+        </BaseModal>
     );
 };
 

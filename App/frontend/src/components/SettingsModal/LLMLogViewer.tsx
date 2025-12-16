@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { useLLMLogStore, type LLMLogEntry, type LLMLogStatus } from '../../store/llmLogStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import { TextButton } from '../TextButton';
 import { Check, Warning, Loading, Clock, Trash, Document } from '../icons';
 import './LLMLogViewer.css';
 
 const LLMLogViewer: React.FC = () => {
-    const { logs, isLoggingEnabled, setLoggingEnabled, clearLogs } = useLLMLogStore();
+    const { logs, clearLogs } = useLLMLogStore();
+    const llmLoggingEnabled = useSettingsStore((state) => state.settings.llmLoggingEnabled);
+    const setLLMLoggingEnabled = useSettingsStore((state) => state.setLLMLoggingEnabled);
     const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
 
     const toggleExpand = (logId: string) => {
@@ -54,8 +57,8 @@ const LLMLogViewer: React.FC = () => {
                     <label className="toggle-label">
                         <input
                             type="checkbox"
-                            checked={isLoggingEnabled}
-                            onChange={(e) => setLoggingEnabled(e.target.checked)}
+                            checked={llmLoggingEnabled}
+                            onChange={(e) => setLLMLoggingEnabled(e.target.checked)}
                             className="toggle-input"
                         />
                         <span className="toggle-switch"></span>
@@ -73,7 +76,7 @@ const LLMLogViewer: React.FC = () => {
                 </TextButton>
             </div>
 
-            {!isLoggingEnabled && (
+            {!llmLoggingEnabled && (
                 <div className="log-disabled-notice">
                     Logging is disabled. Enable it to capture LLM requests and responses.
                 </div>

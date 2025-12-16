@@ -67,7 +67,7 @@ const NotificationButton: React.FC<NotificationButtonProps> = ({
       ) {
         // Check if click is on a modal (don't close panel when modal is open)
         const target = event.target as HTMLElement;
-        if (target.closest('.modal-overlay')) {
+        if (target.closest('.base-modal-overlay')) {
           return;
         }
         handleClose();

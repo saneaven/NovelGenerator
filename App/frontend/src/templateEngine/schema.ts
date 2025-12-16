@@ -157,12 +157,13 @@ export const PROMPT_SCHEMAS = {
       }
     }
   },
-  chapterEdit: {
+  manuscriptEdit: {
     variable: {
       mainLanguage: { desc: "Main language for responses", example: "Korean" },
       today: { desc: "Current date", example: "2025-11-22" },
-      chapterName: { desc: "Chapter title", example: "Chapter 1" },
-      currentContent: { desc: "Current chapter content", example: "Once upon a time..." },
+      currentChapterId: { desc: "ID of the chapter being edited", example: "chapter-123" },
+      currentChapterName: { desc: "Name of the chapter being edited", example: "Chapter 1" },
+      currentChapterContent: { desc: "Current content of the chapter being edited", example: "Once upon a time..." },
       userInput: { desc: "User's request", example: "Make it darker" },
     },
     state: {
@@ -172,7 +173,18 @@ export const PROMPT_SCHEMAS = {
       isNativeOutput: { desc: "Native output mode (no function calls)", example: false },
     },
     context: {
-      contextData: { desc: "World setting info", example: { world: "Magic" } as Record<string, any> }
+      contextData: {
+        desc: "Story context data. Contains: basicInfo (title, logline, genre), characters (id, name, description), organizations (id, name, description), locations (id, name, description), lorebook (id, name, description), outline.acts (id, name, description, chapters[]), existingNovelContent (chapterId, chapterName, chapterDescription, content, wordCount)",
+        example: {
+          basicInfo: { title: "The Story", logline: "A tale of adventure", genre: "Fantasy" },
+          characters: [{ id: "char1", name: "Hero", description: "The protagonist" }],
+          organizations: [{ id: "org1", name: "Guild", description: "A group of heroes" }],
+          locations: [{ id: "loc1", name: "Castle", description: "Ancient fortress" }],
+          lorebook: [{ id: "lore1", name: "Magic", description: "The power source" }],
+          outline: { acts: [{ id: "act1", name: "Act 1", description: "Beginning", chapters: [{ id: "ch1", name: "Chapter 1", description: "First chapter" }] }] },
+          existingNovelContent: [{ chapterId: "ch1", chapterName: "Chapter 1", chapterDescription: "The beginning", content: "Once upon a time...", wordCount: 100 }]
+        } as Record<string, any>
+      }
     }
   },
   objectImagePrompt: {
@@ -242,12 +254,12 @@ type ExtractSchema<T extends { variable: any; state: any; context: any }> = {
 export type ChatData = ExtractSchema<typeof PROMPT_SCHEMAS['chat']>;
 export type TranslationData = ExtractSchema<typeof PROMPT_SCHEMAS['translation']>;
 export type StoryObjectEditData = ExtractSchema<typeof PROMPT_SCHEMAS['storyObjectEdit']>;
-export type ChapterEditData = ExtractSchema<typeof PROMPT_SCHEMAS['chapterEdit']>;
+export type ManuscriptEditData = ExtractSchema<typeof PROMPT_SCHEMAS['manuscriptEdit']>;
 export type ObjectImagePromptData = ExtractSchema<typeof PROMPT_SCHEMAS['objectImagePrompt']>;
 export type SceneImagePromptData = ExtractSchema<typeof PROMPT_SCHEMAS['sceneImagePrompt']>;
 
 // Union type for all possible data
-export type PromptData = ChatData | TranslationData | StoryObjectEditData | ChapterEditData | ObjectImagePromptData | SceneImagePromptData;
+export type PromptData = ChatData | TranslationData | StoryObjectEditData | ManuscriptEditData | ObjectImagePromptData | SceneImagePromptData;
 
 /**
  * Helper to get schema for a specific prompt type

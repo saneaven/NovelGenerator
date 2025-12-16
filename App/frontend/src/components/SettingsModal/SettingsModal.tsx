@@ -211,6 +211,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             onNativeOutputModeChange={(enabled) =>
               setLocalSettings(prev => ({ ...prev, nativeOutputMode: enabled }))
             }
+            patchAutoRetry={localSettings.patchAutoRetry}
+            onPatchAutoRetryChange={(enabled) =>
+              setLocalSettings(prev => ({ ...prev, patchAutoRetry: enabled }))
+            }
           />
         )}
       </div>

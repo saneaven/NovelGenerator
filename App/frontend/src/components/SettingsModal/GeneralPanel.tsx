@@ -9,7 +9,7 @@ interface GeneralPanelProps {
     chat: FunctionAIConfig;
     translation: FunctionAIConfig;
     storyObjectEdit: FunctionAIConfig;
-    chapterGen: FunctionAIConfig;
+    manuscriptEdit: FunctionAIConfig;
     imagePrompt: FunctionAIConfig;
   };
   credentials: ProviderCredentials;
@@ -22,7 +22,7 @@ const FUNCTION_LABELS: Record<AIFunctionType, { icon: React.ReactNode; label: st
   chat: { icon: <Chat size="sm" />, label: 'Chat' },
   translation: { icon: <Globe size="sm" />, label: 'Translation' },
   storyObjectEdit: { icon: <Edit size="sm" />, label: 'Story Object Edit' },
-  chapterGen: { icon: <Document size="sm" />, label: 'Chapter Gen' },
+  manuscriptEdit: { icon: <Document size="sm" />, label: 'Manuscript Edit' },
   imagePrompt: { icon: <Palette size="sm" />, label: 'Image Prompt' },
 };
 
@@ -30,7 +30,7 @@ const FUNCTION_DESCRIPTIONS = {
   chat: 'General conversation and assistance for story planning and brainstorming',
   translation: 'Accurate language translation with context preservation',
   storyObjectEdit: 'Structured editing and refinement of story elements',
-  chapterGen: 'Creative generation of novel chapters and narrative content',
+  manuscriptEdit: 'Editing and refinement of manuscript content',
   imagePrompt: 'AI-assisted generation of detailed image prompts from story context',
 };
 

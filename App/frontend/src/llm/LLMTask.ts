@@ -28,7 +28,7 @@ const MODE_TO_FUNCTION_TYPE: Record<LLMTaskModeType, AIFunctionType> = {
   [LLMTaskMode.CHAT_WORKSPACE]: 'chat',
   [LLMTaskMode.CHAT_NOVEL_EDITOR]: 'chat',
   [LLMTaskMode.STORY_OBJECT_EDIT]: 'storyObjectEdit',
-  [LLMTaskMode.CHAPTER_EDIT]: 'chapterGen',
+  [LLMTaskMode.CHAPTER_EDIT]: 'manuscriptEdit',
   [LLMTaskMode.TRANSLATION]: 'translation',
   [LLMTaskMode.CHAT_TRANSLATION]: 'translation',
   [LLMTaskMode.OBJECT_IMAGE_PROMPT]: 'imagePrompt',
@@ -74,12 +74,13 @@ export class LLMTask {
 
     // Initialize logging variables outside try block for catch block access
     const logStore = useLLMLogStore.getState();
+    const settingsStore = useSettingsStore.getState();
+    const isLoggingEnabled = settingsStore.settings.llmLoggingEnabled;
     let logEntryId: string | undefined;
     const requestStartTime = Date.now();
 
     try {
       // 1. Get provider/model config (from settings or overrides)
-      const settingsStore = useSettingsStore.getState();
       const { settings, getProviderConfig } = settingsStore;
 
       // Get function type for this mode to lookup settings
@@ -121,7 +122,7 @@ export class LLMTask {
       });
 
       // Log to LLM Log Store if enabled
-      if (logStore.isLoggingEnabled) {
+      if (isLoggingEnabled) {
         logEntryId = logStore.addLogEntry({
           status: 'pending',
           request: {
