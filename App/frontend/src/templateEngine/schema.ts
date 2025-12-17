@@ -6,7 +6,7 @@
  * - config.* - Settings data (auto-loaded, available to ALL prompts)
  * - project.* - All project data (auto-loaded, available to ALL prompts)
  * - input.* - User input (available to ALL prompts)
- * - Mode-specific: chat.*, manuscriptEdit.*, translation.*, imagePrompt.*, storyObjectEdit.*
+ * - Mode-specific: chat.*, editAssistant.*, translation.*, imagePrompt.*
  */
 
 // Helper type for variable metadata
@@ -113,11 +113,26 @@ export const UNIFIED_SCHEMA = {
     mode: { desc: "Chat mode", example: "workspace" as "workspace" | "novelEditor" },
   },
 
-  manuscriptEdit: {
-    currentChapterId: { desc: "ID of chapter being edited", example: "ch-123" },
-    currentChapterName: { desc: "Name of chapter being edited", example: "Chapter 1: The Raid" },
-    currentChapterManuscript: { desc: "Current manuscript content", example: "The longships appeared at dawn..." },
-    objectIds: { desc: "IDs of selected objects (story objects, outline chapters, manuscripts)", example: ["char-1", "ch-1", "ms-1"] as string[] },
+  editAssistant: {
+    mode: { desc: "Edit assistant mode", example: "manuscript" as "manuscript" | "storyObject" },
+    manuscript: {
+      desc: "Manuscript editing context",
+      example: {
+        currentChapterId: "ch-123",
+        currentChapterName: "Chapter 1: The Raid",
+        currentChapterManuscript: "The longships appeared at dawn...",
+        objectIds: ["char-1", "ch-1", "ms-1"],
+      } as { currentChapterId: string; currentChapterName: string; currentChapterManuscript: string; objectIds?: string[] }
+    },
+    storyObject: {
+      desc: "Story object editing context",
+      example: {
+        targetIds: ["char-1", "char-2"],
+        contextIds: ["char-3", "loc-1"],
+        categoryName: "characters",
+        editScope: "selected",
+      } as { targetIds: string[]; contextIds?: string[]; categoryName?: string; editScope?: string }
+    },
   },
 
   translation: {
@@ -141,28 +156,22 @@ export const UNIFIED_SCHEMA = {
     scenePostContext: { desc: "Scene post-context (for scene mode)", example: "He finds the treasure chest." },
     selectedObjectIds: { desc: "IDs of selected reference objects", example: ["char-1", "loc-1"] as string[] },
   },
-
-  storyObjectEdit: {
-    targetIds: { desc: "IDs of objects to edit (filter from project.objects)", example: ["char-1", "char-2"] as string[] },
-    contextIds: { desc: "IDs of objects to show as context (filter from project.objects)", example: ["char-3", "loc-1"] as string[] },
-  },
 } as const;
 
 /**
  * Prompt types
  */
-export type PromptType = 'chat' | 'manuscriptEdit' | 'translation' | 'objectImagePrompt' | 'sceneImagePrompt' | 'storyObjectEdit';
+export type PromptType = 'chat' | 'editAssistant' | 'translation' | 'objectImagePrompt' | 'sceneImagePrompt';
 
 /**
  * Maps which variable groups are available for each prompt type.
  */
 export const PROMPT_TYPE_VARIABLES: Record<PromptType, string[]> = {
   chat: ['config', 'project', 'input', 'chat'],
-  manuscriptEdit: ['config', 'project', 'input', 'manuscriptEdit'],
+  editAssistant: ['config', 'project', 'input', 'editAssistant'],
   translation: ['config', 'project', 'input', 'translation'],
   objectImagePrompt: ['config', 'project', 'input', 'imagePrompt'],
   sceneImagePrompt: ['config', 'project', 'input', 'imagePrompt'],
-  storyObjectEdit: ['config', 'project', 'input', 'storyObjectEdit'],
 };
 
 // Type extraction helpers
@@ -177,10 +186,9 @@ export type ConfigData = ExtractProps<typeof UNIFIED_SCHEMA['config']>;
 export type ProjectData = ExtractProps<typeof UNIFIED_SCHEMA['project']>;
 export type InputData = ExtractProps<typeof UNIFIED_SCHEMA['input']>;
 export type ChatModeData = ExtractProps<typeof UNIFIED_SCHEMA['chat']>;
-export type ManuscriptEditModeData = ExtractProps<typeof UNIFIED_SCHEMA['manuscriptEdit']>;
+export type EditAssistantModeData = ExtractProps<typeof UNIFIED_SCHEMA['editAssistant']>;
 export type TranslationModeData = ExtractProps<typeof UNIFIED_SCHEMA['translation']>;
 export type ImagePromptModeData = ExtractProps<typeof UNIFIED_SCHEMA['imagePrompt']>;
-export type StoryObjectEditModeData = ExtractProps<typeof UNIFIED_SCHEMA['storyObjectEdit']>;
 
 // Full unified data structure (same as TemplateData in types.ts)
 export interface PromptData {
@@ -188,10 +196,9 @@ export interface PromptData {
   project: ProjectData;
   input: InputData;
   chat?: ChatModeData;
-  manuscriptEdit?: ManuscriptEditModeData;
+  editAssistant?: EditAssistantModeData;
   translation?: TranslationModeData;
   imagePrompt?: ImagePromptModeData;
-  storyObjectEdit?: StoryObjectEditModeData;
 }
 
 /**

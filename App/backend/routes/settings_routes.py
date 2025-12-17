@@ -56,22 +56,22 @@ async def get_user_settings(
                         'thinkingConfig': {'effort': 'medium'}
                     }
                 },
-                'storyObjectEdit': {
-                    'provider': 'openrouter',
-                    'model': 'gpt-4o',
-                    'temperature': 0.3,
-                    'advanced': {
-                        'enablePrefill': False,
-                        'thinkingMode': 'off',
-                        'thinkingConfig': {'effort': 'medium'}
-                    }
-                },
-                'manuscriptEdit': {
+                'editAssistant': {
                     'provider': 'openrouter',
                     'model': 'gpt-4o',
                     'temperature': 0.7,
                     'advanced': {
                         'enablePrefill': True,
+                        'thinkingMode': 'off',
+                        'thinkingConfig': {'effort': 'medium'}
+                    }
+                },
+                'imagePrompt': {
+                    'provider': 'openrouter',
+                    'model': 'gpt-4o',
+                    'temperature': 0.7,
+                    'advanced': {
+                        'enablePrefill': False,
                         'thinkingMode': 'off',
                         'thinkingConfig': {'effort': 'medium'}
                     }

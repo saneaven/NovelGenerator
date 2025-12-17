@@ -9,8 +9,8 @@ import type { FunctionCallSchema } from './schemas/chatFunctions';
 export const LLMTaskMode = {
   CHAT_WORKSPACE: 'chat_workspace',
   CHAT_NOVEL_EDITOR: 'chat_novel_editor',
-  STORY_OBJECT_EDIT: 'story_object_edit',
-  MANUSCRIPT_EDIT: 'MANUSCRIPT_EDIT',
+  EDIT_ASSISTANT_MANUSCRIPT: 'edit_assistant_manuscript',
+  EDIT_ASSISTANT_STORY_OBJECT: 'edit_assistant_story_object',
   TRANSLATION: 'translation',
   CHAT_TRANSLATION: 'chat_translation',
   OBJECT_IMAGE_PROMPT: 'object_image_prompt',
@@ -48,11 +48,20 @@ export interface TemplateData {
   chat?: {
     mode: 'workspace' | 'novelEditor';
   };
-  manuscriptEdit?: {
-    currentChapterId: string;
-    currentChapterName: string;
-    currentChapterManuscript: string;
-    objectIds?: string[];
+  editAssistant?: {
+    mode: 'manuscript' | 'storyObject';
+    manuscript?: {
+      currentChapterId: string;
+      currentChapterName: string;
+      currentChapterManuscript: string;
+      objectIds?: string[];
+    };
+    storyObject?: {
+      targetIds: string[];
+      contextIds?: string[];
+      categoryName?: string;
+      editScope?: string;
+    };
   };
   translation?: {
     sourceLanguage: string;
@@ -70,10 +79,6 @@ export interface TemplateData {
     scenePreContext?: string;
     scenePostContext?: string;
     selectedObjectIds?: string[];
-  };
-  storyObjectEdit?: {
-    targetIds: string[];
-    contextIds?: string[];
   };
 }
 
@@ -109,18 +114,20 @@ export interface ChatNovelEditorPromptContext extends BasePromptContext {
 }
 
 /**
- * Context for story object editing
+ * Context for story object editing (Edit Assistant - Story Object)
  */
-export interface StoryObjectEditPromptContext extends BasePromptContext {
+export interface EditAssistantStoryObjectPromptContext extends BasePromptContext {
   targetIds: string[];
   contextIds?: string[];
+  categoryName?: string;
+  editScope?: string;
   isNativeOutput?: boolean;
 }
 
 /**
- * Context for manuscript editing
+ * Context for manuscript editing (Edit Assistant - Manuscript)
  */
-export interface ManuscriptEditPromptContext extends BasePromptContext {
+export interface EditAssistantManuscriptPromptContext extends BasePromptContext {
   currentChapterId: string;
   currentChapterName: string;
   currentChapterContent: string;
@@ -192,8 +199,8 @@ export interface SceneImagePromptContext extends BasePromptContext {
 export type PromptContext =
   | ChatWorkspacePromptContext
   | ChatNovelEditorPromptContext
-  | StoryObjectEditPromptContext
-  | ManuscriptEditPromptContext
+  | EditAssistantStoryObjectPromptContext
+  | EditAssistantManuscriptPromptContext
   | StoryTranslationPromptContext
   | ChatTranslationPromptContext
   | ObjectImagePromptContext

@@ -1,15 +1,14 @@
 import React from 'react';
 import type { AIFunctionType, FunctionAIConfig, ProviderCredentials } from '../../store/settingsStore';
 import FunctionConfigForm from './FunctionConfigForm';
-import { Chat, Globe, Edit, Document, Palette } from '../icons';
+import { Chat, Globe, Edit, Palette } from '../icons';
 import './GeneralPanel.css';
 
 interface GeneralPanelProps {
   functionConfigs: {
     chat: FunctionAIConfig;
     translation: FunctionAIConfig;
-    storyObjectEdit: FunctionAIConfig;
-    manuscriptEdit: FunctionAIConfig;
+    editAssistant: FunctionAIConfig;
     imagePrompt: FunctionAIConfig;
   };
   credentials: ProviderCredentials;
@@ -21,16 +20,14 @@ interface GeneralPanelProps {
 const FUNCTION_LABELS: Record<AIFunctionType, { icon: React.ReactNode; label: string }> = {
   chat: { icon: <Chat size="sm" />, label: 'Chat' },
   translation: { icon: <Globe size="sm" />, label: 'Translation' },
-  storyObjectEdit: { icon: <Edit size="sm" />, label: 'Story Object Edit' },
-  manuscriptEdit: { icon: <Document size="sm" />, label: 'Manuscript Edit' },
+  editAssistant: { icon: <Edit size="sm" />, label: 'Edit Assistant' },
   imagePrompt: { icon: <Palette size="sm" />, label: 'Image Prompt' },
 };
 
-const FUNCTION_DESCRIPTIONS = {
+const FUNCTION_DESCRIPTIONS: Record<AIFunctionType, string> = {
   chat: 'General conversation and assistance for story planning and brainstorming',
   translation: 'Accurate language translation with context preservation',
-  storyObjectEdit: 'Structured editing and refinement of story elements',
-  manuscriptEdit: 'Editing and refinement of manuscript content',
+  editAssistant: 'Editing and refinement of story objects and manuscript content',
   imagePrompt: 'AI-assisted generation of detailed image prompts from story context',
 };
 

@@ -1,6 +1,4 @@
-# Chapter Editing Payload
-
-Chapter: **{{ manuscriptEdit.currentChapterName }}** (ID: `{{ manuscriptEdit.currentChapterId }}`)
+# Story Object Edit Request
 
 {{#if project.basicInfo}}
 ## Project Context
@@ -11,17 +9,14 @@ Chapter: **{{ manuscriptEdit.currentChapterName }}** (ID: `{{ manuscriptEdit.cur
 - **Logline**: {{ project.basicInfo.logline }}
 - **Genre**: {{ project.basicInfo.genre }}
 
-{{#if (hasItems manuscriptEdit.objectIds)}}
-{{#with (filterByIds project.objects manuscriptEdit.objectIds) as |selectedObjects|}}
+{{#if (hasItems editAssistant.storyObject.contextIds)}}
+{{#with (filterByIds project.objects editAssistant.storyObject.contextIds) as |selectedObjects|}}
 
 {{#if (hasItems (filterByType selectedObjects "character"))}}
 ### Characters
 
 {{#each (filterByType selectedObjects "character")}}
-#### {{ this.name }}
-
-{{ this.description }}
-
+- **{{ this.name }}** (ID: {{ this.id }}): {{ this.description }}
 {{/each}}
 {{/if}}
 
@@ -29,10 +24,7 @@ Chapter: **{{ manuscriptEdit.currentChapterName }}** (ID: `{{ manuscriptEdit.cur
 ### Organizations
 
 {{#each (filterByType selectedObjects "organization")}}
-#### {{ this.name }}
-
-{{ this.description }}
-
+- **{{ this.name }}** (ID: {{ this.id }}): {{ this.description }}
 {{/each}}
 {{/if}}
 
@@ -40,10 +32,7 @@ Chapter: **{{ manuscriptEdit.currentChapterName }}** (ID: `{{ manuscriptEdit.cur
 ### Locations
 
 {{#each (filterByType selectedObjects "location")}}
-#### {{ this.name }}
-
-{{ this.description }}
-
+- **{{ this.name }}** (ID: {{ this.id }}): {{ this.description }}
 {{/each}}
 {{/if}}
 
@@ -51,10 +40,7 @@ Chapter: **{{ manuscriptEdit.currentChapterName }}** (ID: `{{ manuscriptEdit.cur
 ### Lorebook
 
 {{#each (filterByType selectedObjects "lorebook")}}
-#### {{ this.name }}
-
-{{ this.description }}
-
+- **{{ this.name }}** (ID: {{ this.id }}): {{ this.description }}
 {{/each}}
 {{/if}}
 
@@ -62,17 +48,17 @@ Chapter: **{{ manuscriptEdit.currentChapterName }}** (ID: `{{ manuscriptEdit.cur
 
 {{#if project.outline}}
 {{#each project.outline.acts}}
-{{#with (filterByIds this.chapters @root.manuscriptEdit.objectIds) as |selectedChapters|}}
+{{#with (filterByIds this.chapters @root.editAssistant.storyObject.contextIds) as |selectedChapters|}}
 {{#if (hasItems selectedChapters)}}
 ### Story Outline
 
-#### Act: {{ ../name }}
+#### Act: {{ ../name }} (ID: {{ ../id }})
 
 {{ ../description }}
 
 **Chapters:**
 {{#each selectedChapters}}
-- **{{ this.name }}**: {{ this.description }}
+- **{{ this.name }}** (ID: {{ this.id }}): {{ this.description }}
 {{/each}}
 
 {{/if}}
@@ -80,26 +66,19 @@ Chapter: **{{ manuscriptEdit.currentChapterName }}** (ID: `{{ manuscriptEdit.cur
 {{/each}}
 {{/if}}
 
-{{#with (filterByIds project.manuscripts manuscriptEdit.objectIds) as |selectedManuscripts|}}
-{{#if (hasItems selectedManuscripts)}}
-### Reference Novel Content
+{{/if}}
+{{/if}}
 
-{{#each selectedManuscripts}}
-#### {{ this.chapterName }} ({{ this.wordCount }} words)
+## Target Objects to Edit
 
-{{ this.content }}
+{{#if (hasItems editAssistant.storyObject.targetIds)}}
+{{#each (filterByIds project.objects editAssistant.storyObject.targetIds)}}
+### {{ this.type }}: {{ this.name }} (ID: {{ this.id }})
 
----
+{{ this.description }}
+
 {{/each}}
 {{/if}}
-{{/with}}
-
-{{/if}}
-{{/if}}
-
-## Current Chapter Content
-
-{{ manuscriptEdit.currentChapterManuscript }}
 
 {{#if input.userMessage}}
 ## User Request

@@ -7,7 +7,7 @@ import type { ManuscriptObject } from '../types/unifiedObject';
 import type { PatchRetryContext } from '../types/patchTypes';
 import { applyPatch } from '../utils/patchUtils';
 import { extractRawContent, parseSingleJsonOutput, isReplacementOperation } from '../utils/nativeOutputParser';
-import { LLMTask, LLMTaskMode, LLMTaskManager, type ManuscriptEditPromptContext, type TaskHandle } from '../llm';
+import { LLMTask, LLMTaskMode, LLMTaskManager, type EditAssistantManuscriptPromptContext, type TaskHandle } from '../llm';
 import { shouldRetry, buildRetryPrompt, summarizePatchFailures } from '../llm/patchRetryHandler';
 import { Expand, Collapse } from './icons';
 import { ObjectPicker } from './ObjectPicker';
@@ -707,8 +707,8 @@ const ManuscriptAIEditModal: React.FC<ManuscriptAIEditModalProps> = ({
     onClose();
 
     try {
-      const manuscriptEditConfig = settingsStore.getFunctionConfig('manuscriptEdit');
-      const providerConfig = settingsStore.getProviderConfig(manuscriptEditConfig.provider);
+      const editAssistantConfig = settingsStore.getFunctionConfig('editAssistant');
+      const providerConfig = settingsStore.getProviderConfig(editAssistantConfig.provider);
       const isNativeOutput = settingsStore.settings.nativeOutputMode;
 
       const currentContent = getActiveLanguageContent(chapterId);
@@ -747,7 +747,7 @@ const ManuscriptAIEditModal: React.FC<ManuscriptAIEditModalProps> = ({
           }
         }
 
-        const promptContext: ManuscriptEditPromptContext = {
+        const promptContext: EditAssistantManuscriptPromptContext = {
           userInput: effectiveUserInput,
           projectId,
           currentChapterId: chapterId,
@@ -757,25 +757,25 @@ const ManuscriptAIEditModal: React.FC<ManuscriptAIEditModalProps> = ({
           contextData,
           isNativeOutput,
           outputLanguage: settingsStore.settings.mainLanguage,
-          enablePrefill: manuscriptEditConfig.advanced.enablePrefill,
-          enableThinking: manuscriptEditConfig.advanced.thinkingMode === 'model',
-          enableCustomThinking: manuscriptEditConfig.advanced.thinkingMode === 'custom',
+          enablePrefill: editAssistantConfig.advanced.enablePrefill,
+          enableThinking: editAssistantConfig.advanced.thinkingMode === 'model',
+          enableCustomThinking: editAssistantConfig.advanced.thinkingMode === 'custom',
         };
 
         return new Promise((resolve, reject) => {
           taskRef.current = new LLMTask(
             {
-              mode: LLMTaskMode.MANUSCRIPT_EDIT,
+              mode: LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT,
               projectId,
               promptContext,
               abortControllerRef,
               sessionId: task.sessionId,
-              provider: manuscriptEditConfig.provider,
+              provider: editAssistantConfig.provider,
               providerConfig,
-              model: manuscriptEditConfig.model,
-              temperature: manuscriptEditConfig.temperature,
-              thinkingMode: manuscriptEditConfig.advanced.thinkingMode as any,
-              thinkingConfig: manuscriptEditConfig.advanced.thinkingConfig,
+              model: editAssistantConfig.model,
+              temperature: editAssistantConfig.temperature,
+              thinkingMode: editAssistantConfig.advanced.thinkingMode as any,
+              thinkingConfig: editAssistantConfig.advanced.thinkingConfig,
               retryConfig: settingsStore.settings.retryConfig,
             },
             {

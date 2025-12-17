@@ -54,14 +54,14 @@ _TRANSLATION_PREFILL_OBJECT = _load_prompt_file('translation/object/prefill.md')
 _TRANSLATION_SYSTEM_PROMPT_CHAT = _load_prompt_file('translation/chat/systemPrompt.md')
 _TRANSLATION_USER_PROMPT_CHAT = _load_prompt_file('translation/chat/userPrompt.md')
 _TRANSLATION_PREFILL_CHAT = _load_prompt_file('translation/chat/prefill.md')
-# Story Object Edit
-_STORY_EDIT_SYSTEM_PROMPT = _load_prompt_file('storyObjectEdit/systemPrompt.md')
-_STORY_EDIT_USER_PROMPT = _load_prompt_file('storyObjectEdit/userPrompt.md')
-_STORY_EDIT_PREFILL = _load_prompt_file('storyObjectEdit/prefill.md')
-# Manuscript Edit
-_MANUSCRIPT_EDIT_SYSTEM_PROMPT = _load_prompt_file('manuscriptEdit/systemPrompt.md')
-_MANUSCRIPT_EDIT_USER_PROMPT = _load_prompt_file('manuscriptEdit/userPrompt.md')
-_MANUSCRIPT_EDIT_PREFILL = _load_prompt_file('manuscriptEdit/prefill.md')
+# Edit Assistant - Manuscript
+_EDIT_ASSISTANT_MANUSCRIPT_SYSTEM_PROMPT = _load_prompt_file('editAssistant/manuscript/systemPrompt.md')
+_EDIT_ASSISTANT_MANUSCRIPT_USER_PROMPT = _load_prompt_file('editAssistant/manuscript/userPrompt.md')
+_EDIT_ASSISTANT_MANUSCRIPT_PREFILL = _load_prompt_file('editAssistant/manuscript/prefill.md')
+# Edit Assistant - Story Object
+_EDIT_ASSISTANT_STORY_OBJECT_SYSTEM_PROMPT = _load_prompt_file('editAssistant/storyObject/systemPrompt.md')
+_EDIT_ASSISTANT_STORY_OBJECT_USER_PROMPT = _load_prompt_file('editAssistant/storyObject/userPrompt.md')
+_EDIT_ASSISTANT_STORY_OBJECT_PREFILL = _load_prompt_file('editAssistant/storyObject/prefill.md')
 # Image Prompt - Object
 _OBJECT_IMAGE_PROMPT_SYSTEM_PROMPT = _load_prompt_file('imagePrompt/object/systemPrompt.md')
 _OBJECT_IMAGE_PROMPT_USER_PROMPT = _load_prompt_file('imagePrompt/object/userPrompt.md')
@@ -106,15 +106,19 @@ DEFAULT_PROMPTS = {
             'chat': _TRANSLATION_PREFILL_CHAT,
         },
     },
-    'storyObjectEdit': {
-        'systemPrompt': _STORY_EDIT_SYSTEM_PROMPT,
-        'userPrompt': _STORY_EDIT_USER_PROMPT,
-        'prefill': _STORY_EDIT_PREFILL,
-    },
-    'manuscriptEdit': {
-        'systemPrompt': _MANUSCRIPT_EDIT_SYSTEM_PROMPT,
-        'userPrompt': _MANUSCRIPT_EDIT_USER_PROMPT,
-        'prefill': _MANUSCRIPT_EDIT_PREFILL,
+    'editAssistant': {
+        'systemPrompt': {
+            'manuscript': _EDIT_ASSISTANT_MANUSCRIPT_SYSTEM_PROMPT,
+            'storyObject': _EDIT_ASSISTANT_STORY_OBJECT_SYSTEM_PROMPT,
+        },
+        'userPrompt': {
+            'manuscript': _EDIT_ASSISTANT_MANUSCRIPT_USER_PROMPT,
+            'storyObject': _EDIT_ASSISTANT_STORY_OBJECT_USER_PROMPT,
+        },
+        'prefill': {
+            'manuscript': _EDIT_ASSISTANT_MANUSCRIPT_PREFILL,
+            'storyObject': _EDIT_ASSISTANT_STORY_OBJECT_PREFILL,
+        },
     },
     'imagePrompt': {
         'systemPrompt': {

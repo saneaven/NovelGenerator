@@ -7,7 +7,7 @@ import { getPromptKey } from '../types/prompts';
 
 // Types
 export type ProviderType = 'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom' | 'xai';
-export type AIFunctionType = 'chat' | 'translation' | 'storyObjectEdit' | 'manuscriptEdit' | 'imagePrompt';
+export type AIFunctionType = 'chat' | 'translation' | 'editAssistant' | 'imagePrompt';
 export type ImageProviderType = 'openai' | 'gemini' | 'xai' | 'novelai';
 export type PromptType = 'natural' | 'tag_based';
 export type ThemeMode = 'light' | 'dark' | 'system';
@@ -239,22 +239,8 @@ const defaultSettings: Settings = {
             },
         },
 
-        // Story Object Edit: Good at structured editing
-        storyObjectEdit: {
-            provider: 'openrouter',
-            model: 'gpt-4o',
-            temperature: 0.3,
-            advanced: {
-                enablePrefill: false,
-                thinkingMode: 'off',
-                thinkingConfig: {
-                    effort: 'medium',
-                },
-            },
-        },
-
-        // Manuscript Edit: Creative writing and editing
-        manuscriptEdit: {
+        // Edit Assistant: Unified editing for manuscripts and story objects
+        editAssistant: {
             provider: 'openrouter',
             model: 'gpt-4o',
             temperature: 0.7,
@@ -411,9 +397,23 @@ const mergeWithDefaults = (stored: any): Settings => {
         return defaultSettings;
     }
 
-    // Migration: chapterGen → manuscriptEdit
-    if (stored.functionConfigs?.chapterGen && !stored.functionConfigs?.manuscriptEdit) {
-        stored.functionConfigs.manuscriptEdit = stored.functionConfigs.chapterGen;
+    // Migration: storyObjectEdit/manuscriptEdit → editAssistant
+    if (stored.functionConfigs && !stored.functionConfigs.editAssistant) {
+        // Use manuscriptEdit settings if available (has prefill enabled), otherwise storyObjectEdit
+        if (stored.functionConfigs.manuscriptEdit) {
+            stored.functionConfigs.editAssistant = {
+                ...stored.functionConfigs.manuscriptEdit,
+                temperature: 0.7, // Force unified temperature
+            };
+        } else if (stored.functionConfigs.storyObjectEdit) {
+            stored.functionConfigs.editAssistant = {
+                ...stored.functionConfigs.storyObjectEdit,
+                temperature: 0.7, // Force unified temperature
+            };
+        }
+        // Clean up old keys
+        delete stored.functionConfigs.storyObjectEdit;
+        delete stored.functionConfigs.manuscriptEdit;
         delete stored.functionConfigs.chapterGen;
     }
 

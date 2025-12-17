@@ -5,7 +5,7 @@
 
 import React from 'react';
 import type { FunctionType, PromptCategory } from '../../types/prompts';
-import { Chat, Globe, Edit, Document, Palette } from '../icons';
+import { Chat, Globe, Edit, Palette } from '../icons';
 
 export interface PromptNode {
   id: string;
@@ -202,66 +202,79 @@ export const PROMPT_TREE: PromptNode[] = [
     ]
   },
   {
-    id: 'storyobjectedit',
-    label: 'Story Object Edit',
+    id: 'editassistant',
+    label: 'Edit Assistant',
     icon: <Edit size="sm" />,
     type: 'category',
     children: [
       {
-        id: 'storyobjectedit-system',
-        label: 'System Prompt',
-        type: 'prompt',
-        functionType: 'storyObjectEdit',
-        category: 'systemPrompt',
-        description: 'Instructions for story object editing behavior'
+        id: 'editassistant-manuscript',
+        label: 'Manuscript',
+        type: 'category',
+        defaultExpanded: true,
+        children: [
+          {
+            id: 'editassistant-manuscript-system',
+            label: 'System Prompt',
+            type: 'prompt',
+            functionType: 'editAssistant',
+            category: 'systemPrompt',
+            name: 'manuscript',
+            description: 'Instructions for manuscript editing behavior'
+          },
+          {
+            id: 'editassistant-manuscript-user',
+            label: 'User Prompt',
+            type: 'prompt',
+            functionType: 'editAssistant',
+            category: 'userPrompt',
+            name: 'manuscript',
+            description: 'Auto-generated user message that conveys manuscript content and requests'
+          },
+          {
+            id: 'editassistant-manuscript-prefill',
+            label: 'Prefill Template',
+            type: 'prompt',
+            functionType: 'editAssistant',
+            category: 'prefill',
+            name: 'manuscript',
+            description: 'Template for manuscript edit responses'
+          }
+        ]
       },
       {
-        id: 'storyobjectedit-user',
-        label: 'User Prompt',
-        type: 'prompt',
-        functionType: 'storyObjectEdit',
-        category: 'userPrompt',
-        description: 'Auto-generated user message that delivers object context and current data'
-      },
-      {
-        id: 'storyobjectedit-prefill',
-        label: 'Prefill Template',
-        type: 'prompt',
-        functionType: 'storyObjectEdit',
-        category: 'prefill',
-        description: 'Template for story object edit responses'
-      }
-    ]
-  },
-  {
-    id: 'manuscriptedit',
-    label: 'Manuscript Edit',
-    icon: <Document size="sm" />,
-    type: 'category',
-    children: [
-      {
-        id: 'manuscriptedit-system',
-        label: 'System Prompt',
-        type: 'prompt',
-        functionType: 'manuscriptEdit',
-        category: 'systemPrompt',
-        description: 'Instructions for manuscript editing behavior'
-      },
-      {
-        id: 'manuscriptedit-user',
-        label: 'User Prompt',
-        type: 'prompt',
-        functionType: 'manuscriptEdit',
-        category: 'userPrompt',
-        description: 'Auto-generated user message that conveys manuscript content and requests'
-      },
-      {
-        id: 'manuscriptedit-prefill',
-        label: 'Prefill Template',
-        type: 'prompt',
-        functionType: 'manuscriptEdit',
-        category: 'prefill',
-        description: 'Template for manuscript edit responses'
+        id: 'editassistant-storyobject',
+        label: 'Story Object',
+        type: 'category',
+        children: [
+          {
+            id: 'editassistant-storyobject-system',
+            label: 'System Prompt',
+            type: 'prompt',
+            functionType: 'editAssistant',
+            category: 'systemPrompt',
+            name: 'storyObject',
+            description: 'Instructions for story object editing behavior'
+          },
+          {
+            id: 'editassistant-storyobject-user',
+            label: 'User Prompt',
+            type: 'prompt',
+            functionType: 'editAssistant',
+            category: 'userPrompt',
+            name: 'storyObject',
+            description: 'Auto-generated user message that delivers object context and current data'
+          },
+          {
+            id: 'editassistant-storyobject-prefill',
+            label: 'Prefill Template',
+            type: 'prompt',
+            functionType: 'editAssistant',
+            category: 'prefill',
+            name: 'storyObject',
+            description: 'Template for story object edit responses'
+          }
+        ]
       }
     ]
   },

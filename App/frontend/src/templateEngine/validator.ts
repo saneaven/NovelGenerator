@@ -26,10 +26,8 @@ export function mapFunctionTypeToSchemaType(
       return 'chat';
     case 'translation':
       return 'translation';
-    case 'storyObjectEdit':
-      return 'storyObjectEdit';
-    case 'manuscriptEdit':
-      return 'manuscriptEdit';
+    case 'editAssistant':
+      return 'editAssistant';
     case 'imagePrompt':
       return name === 'scene' ? 'sceneImagePrompt' : 'objectImagePrompt';
     default:
@@ -38,7 +36,7 @@ export function mapFunctionTypeToSchemaType(
 }
 
 // All valid schema groups
-const SCHEMA_GROUPS = ['config', 'project', 'input', 'chat', 'manuscriptEdit', 'translation', 'imagePrompt', 'storyObjectEdit'] as const;
+const SCHEMA_GROUPS = ['config', 'project', 'input', 'chat', 'editAssistant', 'translation', 'imagePrompt'] as const;
 type SchemaGroup = typeof SCHEMA_GROUPS[number];
 
 /**

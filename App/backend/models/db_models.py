@@ -52,8 +52,8 @@ class UserSettings(Base):
     function_configs = Column(JSONB, nullable=False, server_default="""{
         "chat": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
         "translation": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.2, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
-        "storyObjectEdit": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.3, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
-        "manuscriptEdit": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "advanced": {"enablePrefill": true, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}}
+        "editAssistant": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "advanced": {"enablePrefill": true, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
+        "imagePrompt": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}}
     }""")
 
     # NEW: Provider credentials (shared across functions)
@@ -125,7 +125,7 @@ class PromptVersion(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
 
     # Prompt identification
-    function_type = Column(String(50), nullable=False)  # 'chat', 'translation', 'storyObjectEdit', 'chapterGen'
+    function_type = Column(String(50), nullable=False)  # 'chat', 'translation', 'editAssistant', 'imagePrompt'
     prompt_category = Column(String(50), nullable=False)  # 'systemPrompt', 'prefill', 'userMessageTag'
     prompt_name = Column(String(50), nullable=True)  # 'workspace', 'novelEditor', etc (nullable for single prompts)
 

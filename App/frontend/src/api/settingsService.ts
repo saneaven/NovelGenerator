@@ -32,7 +32,7 @@ export const settingsService = {
      * Update a specific function's configuration
      */
     async updateFunctionConfig(
-        functionType: 'chat' | 'translation' | 'storyObjectEdit' | 'manuscriptEdit',
+        functionType: 'chat' | 'translation' | 'editAssistant' | 'imagePrompt',
         config: Settings['functionConfigs']['chat']
     ): Promise<SettingsSyncResponse> {
         return await apiClient.patch<SettingsSyncResponse>(

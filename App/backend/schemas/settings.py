@@ -18,8 +18,8 @@ class AIFunctionType(str, Enum):
     """AI function types"""
     CHAT = "chat"
     TRANSLATION = "translation"
-    STORY_OBJECT_EDIT = "storyObjectEdit"
-    MANUSCRIPT_EDIT = "manuscriptEdit"
+    EDIT_ASSISTANT = "editAssistant"
+    IMAGE_PROMPT = "imagePrompt"
 
 
 class ProviderPreference(BaseModel):

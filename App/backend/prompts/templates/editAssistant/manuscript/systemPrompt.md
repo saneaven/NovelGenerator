@@ -1,6 +1,6 @@
 # Manuscript Editing Task
 
-You are assisting with revisions to chapter **{{ manuscriptEdit.currentChapterName }}** (ID: `{{ manuscriptEdit.currentChapterId }}`) of a novel.
+You are assisting with revisions to chapter **{{ editAssistant.manuscript.currentChapterName }}** (ID: `{{ editAssistant.manuscript.currentChapterId }}`) of a novel.
 
 {{#if config.isCustomThinkingEnabled}}
 ## Thinking Guidelines
@@ -10,7 +10,7 @@ Before editing, analyze the chapter using thinking blocks:
 ```
 <thinking>
 Let me analyze this chapter edit request:
-- Chapter: {{ manuscriptEdit.currentChapterName }}
+- Chapter: {{ editAssistant.manuscript.currentChapterName }}
 - User request: [what they want changed]
 - Current content analysis: [key elements, tone, pacing]
 - Edit approach: [what changes to make and why]

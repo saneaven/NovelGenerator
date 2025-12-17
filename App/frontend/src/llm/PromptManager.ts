@@ -14,8 +14,8 @@ import {
   type TemplateData,
   type ChatWorkspacePromptContext,
   type ChatNovelEditorPromptContext,
-  type StoryObjectEditPromptContext,
-  type ManuscriptEditPromptContext,
+  type EditAssistantStoryObjectPromptContext,
+  type EditAssistantManuscriptPromptContext,
   type StoryTranslationPromptContext,
   type ChatTranslationPromptContext,
   type ObjectImagePromptContext,
@@ -31,7 +31,7 @@ export class PromptManager {
    * Load a prompt template from store or fallback to bundled default
    */
   private static async getTemplate(
-    functionType: 'chat' | 'translation' | 'storyObjectEdit' | 'manuscriptEdit' | 'imagePrompt',
+    functionType: 'chat' | 'translation' | 'editAssistant' | 'imagePrompt',
     category: 'systemPrompt' | 'prefill' | 'userPrompt' | 'nonLastUserPrompt',
     name?: string
   ): Promise<string | null> {
@@ -65,10 +65,10 @@ export class PromptManager {
         return this.generateChatBundle(context as ChatWorkspacePromptContext, 'workspace');
       case LLMTaskMode.CHAT_NOVEL_EDITOR:
         return this.generateChatBundle(context as ChatNovelEditorPromptContext, 'novelEditor');
-      case LLMTaskMode.STORY_OBJECT_EDIT:
-        return this.generateStoryObjectEditBundle(context as StoryObjectEditPromptContext);
-      case LLMTaskMode.MANUSCRIPT_EDIT:
-        return this.generateManuscriptEditBundle(context as ManuscriptEditPromptContext);
+      case LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT:
+        return this.generateEditAssistantBundle(context as EditAssistantStoryObjectPromptContext, 'storyObject');
+      case LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT:
+        return this.generateEditAssistantBundle(context as EditAssistantManuscriptPromptContext, 'manuscript');
       case LLMTaskMode.TRANSLATION:
         return this.generateTranslationBundle(context as StoryTranslationPromptContext);
       case LLMTaskMode.CHAT_TRANSLATION:
@@ -94,10 +94,10 @@ export class PromptManager {
       case LLMTaskMode.CHAT_WORKSPACE:
       case LLMTaskMode.CHAT_NOVEL_EDITOR:
         return (context as ChatWorkspacePromptContext).functions;
-      case LLMTaskMode.STORY_OBJECT_EDIT:
-        return this.getStoryObjectEditFunctions(context as StoryObjectEditPromptContext);
-      case LLMTaskMode.MANUSCRIPT_EDIT:
-        return this.getManuscriptEditFunctions(context as ManuscriptEditPromptContext);
+      case LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT:
+        return this.getEditAssistantFunctions(context as EditAssistantStoryObjectPromptContext, 'storyObject');
+      case LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT:
+        return this.getEditAssistantFunctions(context as EditAssistantManuscriptPromptContext, 'manuscript');
       case LLMTaskMode.TRANSLATION:
         return this.getTranslationFunctions(context as StoryTranslationPromptContext);
       case LLMTaskMode.CHAT_TRANSLATION:
@@ -153,61 +153,55 @@ export class PromptManager {
     };
   }
 
-  // ==================== Story Object Edit ====================
+  // ==================== Edit Assistant (Manuscript & Story Object) ====================
 
-  private static async generateStoryObjectEditBundle(
-    context: StoryObjectEditPromptContext
+  private static async generateEditAssistantBundle(
+    context: EditAssistantManuscriptPromptContext | EditAssistantStoryObjectPromptContext,
+    mode: 'manuscript' | 'storyObject'
   ): Promise<PromptBundle> {
     const [systemTemplate, userTemplate, prefillTemplate] = await Promise.all([
-      this.getTemplate('storyObjectEdit', 'systemPrompt'),
-      this.getTemplate('storyObjectEdit', 'userPrompt'),
-      this.getTemplate('storyObjectEdit', 'prefill'),
+      this.getTemplate('editAssistant', 'systemPrompt', mode),
+      this.getTemplate('editAssistant', 'userPrompt', mode),
+      this.getTemplate('editAssistant', 'prefill', mode),
     ]);
 
     const settings = useSettingsStore.getState().settings;
-    const templateData: TemplateData = {
-      config: this.buildConfigData(context),
-      project: this.buildProjectData(context.projectId, settings.mainLanguage),
-      input: { userMessage: context.userInput },
-      storyObjectEdit: {
-        targetIds: context.targetIds,
-        contextIds: context.contextIds,
-      },
-    };
 
-    return {
-      systemPrompt: renderTemplate(systemTemplate!, templateData),
-      userPrompt: renderTemplate(userTemplate!, templateData),
-      prefill: prefillTemplate && context.enablePrefill
-        ? renderTemplate(prefillTemplate, templateData)
-        : undefined,
-      templateData,
-    };
-  }
+    let templateData: TemplateData;
 
-  // ==================== Chapter Edit ====================
-
-  private static async generateManuscriptEditBundle(
-    context: ManuscriptEditPromptContext
-  ): Promise<PromptBundle> {
-    const [systemTemplate, userTemplate, prefillTemplate] = await Promise.all([
-      this.getTemplate('manuscriptEdit', 'systemPrompt'),
-      this.getTemplate('manuscriptEdit', 'userPrompt'),
-      this.getTemplate('manuscriptEdit', 'prefill'),
-    ]);
-
-    const settings = useSettingsStore.getState().settings;
-    const templateData: TemplateData = {
-      config: this.buildConfigData(context),
-      project: this.buildProjectData(context.projectId, settings.mainLanguage),
-      input: { userMessage: context.userInput },
-      manuscriptEdit: {
-        currentChapterId: context.currentChapterId,
-        currentChapterName: context.currentChapterName,
-        currentChapterManuscript: context.currentChapterContent,
-        objectIds: context.objectIds,
-      },
-    };
+    if (mode === 'manuscript') {
+      const msContext = context as EditAssistantManuscriptPromptContext;
+      templateData = {
+        config: this.buildConfigData(context),
+        project: this.buildProjectData(context.projectId, settings.mainLanguage),
+        input: { userMessage: context.userInput },
+        editAssistant: {
+          mode: 'manuscript',
+          manuscript: {
+            currentChapterId: msContext.currentChapterId,
+            currentChapterName: msContext.currentChapterName,
+            currentChapterManuscript: msContext.currentChapterContent,
+            objectIds: msContext.objectIds,
+          },
+        },
+      };
+    } else {
+      const soContext = context as EditAssistantStoryObjectPromptContext;
+      templateData = {
+        config: this.buildConfigData(context),
+        project: this.buildProjectData(context.projectId, settings.mainLanguage),
+        input: { userMessage: context.userInput },
+        editAssistant: {
+          mode: 'storyObject',
+          storyObject: {
+            targetIds: soContext.targetIds,
+            contextIds: soContext.contextIds,
+            categoryName: soContext.categoryName,
+            editScope: soContext.editScope,
+          },
+        },
+      };
+    }
 
     return {
       systemPrompt: renderTemplate(systemTemplate!, templateData),
@@ -630,18 +624,12 @@ export class PromptManager {
 
   // ==================== Function Schemas ====================
 
-  private static getStoryObjectEditFunctions(
-    context: StoryObjectEditPromptContext
+  private static getEditAssistantFunctions(
+    context: EditAssistantStoryObjectPromptContext | EditAssistantManuscriptPromptContext,
+    mode: 'manuscript' | 'storyObject'
   ): FunctionCallSchema[] | undefined {
     if (context.isNativeOutput) return undefined;
-    return STORY_OBJECT_EDIT_FUNCTIONS;
-  }
-
-  private static getManuscriptEditFunctions(
-    context: ManuscriptEditPromptContext
-  ): FunctionCallSchema[] | undefined {
-    if (context.isNativeOutput) return undefined;
-    return MANUSCRIPT_EDIT_FUNCTIONS;
+    return mode === 'manuscript' ? MANUSCRIPT_EDIT_FUNCTIONS : STORY_OBJECT_EDIT_FUNCTIONS;
   }
 
   private static getTranslationFunctions(

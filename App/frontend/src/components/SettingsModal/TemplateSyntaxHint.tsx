@@ -16,10 +16,9 @@ const GROUP_LABELS: Record<string, string> = {
     project: 'Project Data',
     input: 'Input',
     chat: 'Chat Mode',
-    manuscriptEdit: 'Manuscript Edit',
+    editAssistant: 'Edit Assistant',
     translation: 'Translation',
     imagePrompt: 'Image Prompt',
-    storyObjectEdit: 'Story Object Edit',
 };
 
 // Handlebars helpers documentation
@@ -58,8 +57,7 @@ function getSchemaKey(functionType: string, name?: string): PromptType | null {
     switch (functionType) {
         case 'chat': return 'chat';
         case 'translation': return 'translation';
-        case 'storyObjectEdit': return 'storyObjectEdit';
-        case 'manuscriptEdit': return 'manuscriptEdit';
+        case 'editAssistant': return 'editAssistant';
         case 'imagePrompt':
             if (name === 'object') return 'objectImagePrompt';
             if (name === 'scene') return 'sceneImagePrompt';

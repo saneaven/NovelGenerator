@@ -7,7 +7,7 @@ import type { FunctionCallMetadata } from '../llm/requestTypes';
 import type { PatchRetryContext } from '../types/patchTypes';
 import { applyEditFunctionCalls } from '../chat/utils/editFunctionApplicator';
 import { parseJsonOutput, extractRawContent } from '../utils/nativeOutputParser';
-import { LLMTask, LLMTaskMode, LLMTaskManager, type StoryObjectEditPromptContext, type TaskHandle } from '../llm';
+import { LLMTask, LLMTaskMode, LLMTaskManager, type EditAssistantStoryObjectPromptContext, type TaskHandle } from '../llm';
 import { shouldRetry, buildRetryPrompt, summarizePatchFailures } from '../llm/patchRetryHandler';
 import { Expand, Collapse } from './icons';
 import { ObjectPicker } from './ObjectPicker';
@@ -440,8 +440,8 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     onClose();
 
     try {
-      const storyObjectEditConfig = settingsStore.getFunctionConfig('storyObjectEdit');
-      const providerConfig = settingsStore.getProviderConfig(storyObjectEditConfig.provider);
+      const editAssistantConfig = settingsStore.getFunctionConfig('editAssistant');
+      const providerConfig = settingsStore.getProviderConfig(editAssistantConfig.provider);
       const isNativeOutput = settingsStore.settings.nativeOutputMode;
 
       // Build targetIds and contextIds
@@ -459,32 +459,32 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
           effectiveUserInput = buildRetryPrompt(effectiveUserInput, retryContexts);
         }
 
-        const promptContext: StoryObjectEditPromptContext = {
+        const promptContext: EditAssistantStoryObjectPromptContext = {
           userInput: effectiveUserInput,
           projectId,
           targetIds,
           contextIds: contextIds.length > 0 ? contextIds : undefined,
           isNativeOutput,
           outputLanguage: settingsStore.settings.mainLanguage,
-          enablePrefill: storyObjectEditConfig.advanced.enablePrefill,
-          enableThinking: storyObjectEditConfig.advanced.thinkingMode === 'model',
-          enableCustomThinking: storyObjectEditConfig.advanced.thinkingMode === 'custom',
+          enablePrefill: editAssistantConfig.advanced.enablePrefill,
+          enableThinking: editAssistantConfig.advanced.thinkingMode === 'model',
+          enableCustomThinking: editAssistantConfig.advanced.thinkingMode === 'custom',
         };
 
         return new Promise((resolve, reject) => {
           taskRef.current = new LLMTask(
             {
-              mode: LLMTaskMode.STORY_OBJECT_EDIT,
+              mode: LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT,
               projectId,
               promptContext,
               abortControllerRef,
               sessionId: task.sessionId,
-              provider: storyObjectEditConfig.provider,
+              provider: editAssistantConfig.provider,
               providerConfig,
-              model: storyObjectEditConfig.model,
-              temperature: storyObjectEditConfig.temperature,
-              thinkingMode: storyObjectEditConfig.advanced.thinkingMode as any,
-              thinkingConfig: storyObjectEditConfig.advanced.thinkingConfig,
+              model: editAssistantConfig.model,
+              temperature: editAssistantConfig.temperature,
+              thinkingMode: editAssistantConfig.advanced.thinkingMode as any,
+              thinkingConfig: editAssistantConfig.advanced.thinkingConfig,
               retryConfig: settingsStore.settings.retryConfig,
             },
             {
