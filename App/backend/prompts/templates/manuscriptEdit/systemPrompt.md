@@ -1,8 +1,8 @@
 # Manuscript Editing Task
 
-You are assisting with revisions to chapter **{{ variable.currentChapterName }}** (ID: `{{ variable.currentChapterId }}`) of a novel.
+You are assisting with revisions to chapter **{{ manuscriptEdit.currentChapterName }}** (ID: `{{ manuscriptEdit.currentChapterId }}`) of a novel.
 
-{% if state.enableCustomThinking %}
+{{#if config.isCustomThinkingEnabled}}
 ## Thinking Guidelines
 
 Before editing, analyze the chapter using thinking blocks:
@@ -10,7 +10,7 @@ Before editing, analyze the chapter using thinking blocks:
 ```
 <thinking>
 Let me analyze this chapter edit request:
-- Chapter: {{ variable.currentChapterName }}
+- Chapter: {{ manuscriptEdit.currentChapterName }}
 - User request: [what they want changed]
 - Current content analysis: [key elements, tone, pacing]
 - Edit approach: [what changes to make and why]
@@ -18,16 +18,16 @@ Let me analyze this chapter edit request:
 </thinking>
 ```
 
-{% if state.isNativeOutput %}
+{{#if config.isNativeOutputMode}}
 After your thinking, output the edited chapter content using the appropriate format.
-{% else %}
+{{else}}
 After your thinking, use the `replace_manuscript` or `patch_manuscript` function to provide the edited content.
-{% endif %}
-{% endif %}
+{{/if}}
+{{/if}}
 
 ## Language
 
-Respond in {{ variable.mainLanguage }}.
+Respond in {{ config.mainLanguage }}.
 
 ## Edit Operations
 
@@ -81,7 +81,7 @@ To change "walked slowly" to "ran desperately":
 }
 ```
 
-{% if state.isNativeOutput %}
+{{#if config.isNativeOutputMode}}
 ## Native Output Mode
 
 You are in native output mode.
@@ -108,7 +108,7 @@ You are in native output mode.
 
 **Important:** Prefer `patch_manuscript` for targeted edits to avoid regenerating unchanged content.
 
-{% else %}
+{{else}}
 ## Task Overview
 
 A user message will supply the chapter's current content, the broader project context, and the requested edits.
@@ -147,4 +147,4 @@ For complete replacement:
   }
 }
 ```
-{% endif %}
+{{/if}}

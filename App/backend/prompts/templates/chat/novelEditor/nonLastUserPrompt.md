@@ -1,19 +1,21 @@
 # User Message
 
-{{ variable.userInput }}
+{{ input.userMessage }}
 
-{% if context.functionResults.size > 0 %}
+{{#if (hasItems input.functionResults)}}
 # Function Call Results
 
 Based on your previous suggestions, the user made the following decisions:
 
-{% for result in context.functionResults %}
-{% if result.success %}
-- {{ result.functionName }}: APPLIED - {{ result.resultMessage }}
-{% elsif result.isRejected %}
-- {{ result.functionName }}: REJECTED BY USER - User chose not to apply this change
-{% else %}
-- {{ result.functionName }}: FAILED - {{ result.resultMessage }}
-{% endif %}
-{% endfor %}
-{% endif %}
+{{#each input.functionResults}}
+{{#if this.success}}
+- {{ this.functionName }}: APPLIED - {{ this.resultMessage }}
+{{else}}
+{{#if this.isRejected}}
+- {{ this.functionName }}: REJECTED BY USER - User chose not to apply this change
+{{else}}
+- {{ this.functionName }}: FAILED - {{ this.resultMessage }}
+{{/if}}
+{{/if}}
+{{/each}}
+{{/if}}

@@ -7,7 +7,7 @@ import './ToastContainer.css';
 
 // Import modal types for retry functionality
 import AIEditModal from '../AIEditModal';
-import NovelChapterAIEditModal from '../NovelChapterAIEditModal';
+import ManuscriptAIEditModal from '../ManuscriptAIEditModal';
 import TranslationModal from '../TranslationModal';
 import ImagePromptBuilderModal from '../ImageGeneration/ImagePromptBuilderModal';
 
@@ -88,7 +88,7 @@ const ToastContainer: React.FC = () => {
 
       case 'chapter-edit':
         return (
-          <NovelChapterAIEditModal
+          <ManuscriptAIEditModal
             isOpen={true}
             onClose={handleRetryModalClose}
             projectId={modalProps.projectId}

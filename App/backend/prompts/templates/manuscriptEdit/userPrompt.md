@@ -1,104 +1,108 @@
 # Chapter Editing Payload
 
-Chapter: **{{ variable.currentChapterName }}** (ID: `{{ variable.currentChapterId }}`)
+Chapter: **{{ manuscriptEdit.currentChapterName }}** (ID: `{{ manuscriptEdit.currentChapterId }}`)
 
-{% if context.contextData %}
+{{#if project.basicInfo}}
 ## Project Context
 
-{% if context.contextData.basicInfo %}
 ### Basic Information
 
-- **Title**: {{ context.contextData.basicInfo.title }}
-- **Logline**: {{ context.contextData.basicInfo.logline }}
-- **Genre**: {{ context.contextData.basicInfo.genre }}
-{% endif %}
+- **Title**: {{ project.basicInfo.title }}
+- **Logline**: {{ project.basicInfo.logline }}
+- **Genre**: {{ project.basicInfo.genre }}
 
-{% if context.contextData.characters and context.contextData.characters.size > 0 %}
+{{#if (hasItems manuscriptEdit.objectIds)}}
+{{#with (filterByIds project.objects manuscriptEdit.objectIds) as |selectedObjects|}}
+
+{{#if (hasItems (filterByType selectedObjects "character"))}}
 ### Characters
 
-{% for char in context.contextData.characters %}
-#### {{ char.name }}
+{{#each (filterByType selectedObjects "character")}}
+#### {{ this.name }}
 
-{{ char.description }}
+{{ this.description }}
 
-{% endfor %}
-{% endif %}
+{{/each}}
+{{/if}}
 
-{% if context.contextData.organizations and context.contextData.organizations.size > 0 %}
+{{#if (hasItems (filterByType selectedObjects "organization"))}}
 ### Organizations
 
-{% for org in context.contextData.organizations %}
-#### {{ org.name }}
+{{#each (filterByType selectedObjects "organization")}}
+#### {{ this.name }}
 
-{{ org.description }}
+{{ this.description }}
 
-{% endfor %}
-{% endif %}
+{{/each}}
+{{/if}}
 
-{% if context.contextData.locations and context.contextData.locations.size > 0 %}
+{{#if (hasItems (filterByType selectedObjects "location"))}}
 ### Locations
 
-{% for loc in context.contextData.locations %}
-#### {{ loc.name }}
+{{#each (filterByType selectedObjects "location")}}
+#### {{ this.name }}
 
-{{ loc.description }}
+{{ this.description }}
 
-{% endfor %}
-{% endif %}
+{{/each}}
+{{/if}}
 
-{% if context.contextData.lorebook and context.contextData.lorebook.size > 0 %}
+{{#if (hasItems (filterByType selectedObjects "lorebook"))}}
 ### Lorebook
 
-{% for entry in context.contextData.lorebook %}
-#### {{ entry.name }}
+{{#each (filterByType selectedObjects "lorebook")}}
+#### {{ this.name }}
 
-{{ entry.description }}
+{{ this.description }}
 
-{% endfor %}
-{% endif %}
+{{/each}}
+{{/if}}
 
-{% if context.contextData.outline and context.contextData.outline.acts %}
+{{/with}}
+
+{{#if project.outline}}
+{{#each project.outline.acts}}
+{{#with (filterByIds this.chapters @root.manuscriptEdit.objectIds) as |selectedChapters|}}
+{{#if (hasItems selectedChapters)}}
 ### Story Outline
 
-{% for act in context.contextData.outline.acts %}
-#### Act: {{ act.name }}
+#### Act: {{ ../name }}
 
-{{ act.description }}
+{{ ../description }}
 
-{% if act.chapters and act.chapters.size > 0 %}
 **Chapters:**
-{% for chapter in act.chapters %}
-- **{{ chapter.name }}**: {{ chapter.description }}
-{% endfor %}
-{% endif %}
+{{#each selectedChapters}}
+- **{{ this.name }}**: {{ this.description }}
+{{/each}}
 
-{% endfor %}
-{% endif %}
+{{/if}}
+{{/with}}
+{{/each}}
+{{/if}}
 
-{% if context.contextData.existingNovelContent and context.contextData.existingNovelContent.size > 0 %}
-### Existing Novel Content
+{{#with (filterByIds project.manuscripts manuscriptEdit.objectIds) as |selectedManuscripts|}}
+{{#if (hasItems selectedManuscripts)}}
+### Reference Novel Content
 
-{% for chapterData in context.contextData.existingNovelContent %}
-#### {{ chapterData.chapterName }} ({{ chapterData.wordCount }} words)
+{{#each selectedManuscripts}}
+#### {{ this.chapterName }} ({{ this.wordCount }} words)
 
-{% if chapterData.chapterDescription %}
-*{{ chapterData.chapterDescription }}*
-{% endif %}
-
-{{ chapterData.content }}
+{{ this.content }}
 
 ---
-{% endfor %}
-{% endif %}
+{{/each}}
+{{/if}}
+{{/with}}
 
-{% endif %}
+{{/if}}
+{{/if}}
 
 ## Current Chapter Content
 
-{{ variable.currentChapterContent }}
+{{ manuscriptEdit.currentChapterManuscript }}
 
-{% if variable.userInput %}
+{{#if input.userMessage}}
 ## User Request
 
-{{ variable.userInput }}
-{% endif %}
+{{ input.userMessage }}
+{{/if}}

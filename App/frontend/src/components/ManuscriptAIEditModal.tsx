@@ -7,7 +7,7 @@ import type { ManuscriptObject } from '../types/unifiedObject';
 import type { PatchRetryContext } from '../types/patchTypes';
 import { applyPatch } from '../utils/patchUtils';
 import { extractRawContent, parseSingleJsonOutput, isReplacementOperation } from '../utils/nativeOutputParser';
-import { LLMTask, LLMTaskMode, LLMTaskManager, type ChapterEditPromptContext, type TaskHandle } from '../llm';
+import { LLMTask, LLMTaskMode, LLMTaskManager, type ManuscriptEditPromptContext, type TaskHandle } from '../llm';
 import { shouldRetry, buildRetryPrompt, summarizePatchFailures } from '../llm/patchRetryHandler';
 import { Expand, Collapse } from './icons';
 import { ObjectPicker } from './ObjectPicker';
@@ -25,7 +25,7 @@ interface OutlineAct {
 interface NovelContentAct {
   id: string;
   name: string;
-  chapters: Array<{ id: string; name: string; wordCount: number; isCurrent: boolean }>;
+  chapters: Array<{ id: string; manuscriptId: string | null; name: string; wordCount: number; isCurrent: boolean }>;
 }
 
 interface AvailableContextObjects {
@@ -49,7 +49,7 @@ interface SelectedContextObjects {
   novelContentChapters: Set<string>;
 }
 
-interface NovelChapterAIEditModalProps {
+interface ManuscriptAIEditModalProps {
   isOpen: boolean;
   onClose: () => void;
   projectId: string;
@@ -59,7 +59,7 @@ interface NovelChapterAIEditModalProps {
   defaultUserRequest?: string;
 }
 
-const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
+const ManuscriptAIEditModal: React.FC<ManuscriptAIEditModalProps> = ({
   isOpen,
   onClose,
   projectId,
@@ -178,6 +178,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
                 const manuscriptLangData = manuscript ? (manuscript.data[mainLanguage] || Object.values(manuscript.data)[0]) : null;
                 return {
                   id: ch.id,
+                  manuscriptId: manuscript?.id || null,
                   name: (ch.data[mainLanguage] || Object.values(ch.data)[0])?.name || 'Unnamed',
                   wordCount: manuscriptLangData?.wordCount ?? 0,
                   isCurrent: ch.id === chapterId
@@ -724,11 +725,35 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
           effectiveUserInput = buildRetryPrompt(effectiveUserInput, retryContexts);
         }
 
-        const promptContext: ChapterEditPromptContext = {
+        // Build combined objectIds from all selected sets
+        const objectIds: string[] = [
+          // Story objects
+          ...Array.from(selectedObjects.characters),
+          ...Array.from(selectedObjects.organizations),
+          ...Array.from(selectedObjects.locations),
+          ...Array.from(selectedObjects.lorebook),
+          // Outline chapters
+          ...Array.from(selectedObjects.outlineChapters),
+        ];
+
+        // Add manuscript IDs (convert from chapter IDs)
+        if (availableObjects && selectedObjects.novelContentChapters.size > 0) {
+          for (const act of availableObjects.novelContent) {
+            for (const ch of act.chapters) {
+              if (selectedObjects.novelContentChapters.has(ch.id) && ch.manuscriptId) {
+                objectIds.push(ch.manuscriptId);
+              }
+            }
+          }
+        }
+
+        const promptContext: ManuscriptEditPromptContext = {
           userInput: effectiveUserInput,
+          projectId,
           currentChapterId: chapterId,
           currentChapterName: chapterName,
           currentChapterContent: currentContent,
+          objectIds: objectIds.length > 0 ? objectIds : undefined,
           contextData,
           isNativeOutput,
           outputLanguage: settingsStore.settings.mainLanguage,
@@ -740,7 +765,7 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
         return new Promise((resolve, reject) => {
           taskRef.current = new LLMTask(
             {
-              mode: LLMTaskMode.CHAPTER_EDIT,
+              mode: LLMTaskMode.MANUSCRIPT_EDIT,
               projectId,
               promptContext,
               abortControllerRef,
@@ -957,4 +982,4 @@ const NovelChapterAIEditModal: React.FC<NovelChapterAIEditModalProps> = ({
   );
 };
 
-export default NovelChapterAIEditModal;
+export default ManuscriptAIEditModal;

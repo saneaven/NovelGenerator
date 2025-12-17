@@ -2,7 +2,6 @@ import type { MutableRefObject } from 'react';
 import type { ContentPart, FunctionCallMetadata, FunctionCallProgress, FunctionCallResultSummary } from './requestTypes';
 import type { ProviderConfig, ProviderType, ThinkingConfig, RetryConfig } from '../store/settingsStore';
 import type { FunctionCallSchema } from './schemas/chatFunctions';
-import type { StoryObjectCategory } from '../types/storyObject';
 
 /**
  * LLM Task Mode - determines which prompts and functions to use
@@ -11,7 +10,7 @@ export const LLMTaskMode = {
   CHAT_WORKSPACE: 'chat_workspace',
   CHAT_NOVEL_EDITOR: 'chat_novel_editor',
   STORY_OBJECT_EDIT: 'story_object_edit',
-  CHAPTER_EDIT: 'chapter_edit',
+  MANUSCRIPT_EDIT: 'MANUSCRIPT_EDIT',
   TRANSLATION: 'translation',
   CHAT_TRANSLATION: 'chat_translation',
   OBJECT_IMAGE_PROMPT: 'object_image_prompt',
@@ -22,11 +21,60 @@ export type LLMTaskModeType = typeof LLMTaskMode[keyof typeof LLMTaskMode];
 
 /**
  * Template data structure passed to all templates
+ * Uses unified schema: config/project/input + mode-specific groups
  */
 export interface TemplateData {
-  variable: Record<string, any>;
-  state: Record<string, boolean>;
-  context: Record<string, any>;
+  config: {
+    mainLanguage: string;
+    displayLanguage: string;
+    today: string;
+    isThinkingEnabled: boolean;
+    isPrefillEnabled: boolean;
+    isCustomThinkingEnabled: boolean;
+    isNativeOutputMode: boolean;
+  };
+  project: {
+    basicInfo: { id: string; title: string; logline: string; genre: string } | null;
+    objects: Array<{ type: string; id: string; name: string; description: string; imagePrompt?: string; imagePromptPositive?: string; imagePromptNegative?: string }>;
+    outline: { acts: Array<{ id: string; name: string; description: string; chapters: Array<{ id: string; name: string; description: string }> }> } | null;
+    manuscripts: Array<{ id: string; chapterId: string; chapterName: string; content: string; wordCount: number }>;
+    subLanguages: Record<string, any>;
+  };
+  input: {
+    userMessage: string;
+    functionResults?: Array<{ functionCallId: string; functionName: string; success: boolean; isRejected: boolean; resultMessage: string; appliedAt?: string }>;
+  };
+  // Mode-specific groups (only one should be set)
+  chat?: {
+    mode: 'workspace' | 'novelEditor';
+  };
+  manuscriptEdit?: {
+    currentChapterId: string;
+    currentChapterName: string;
+    currentChapterManuscript: string;
+    objectIds?: string[];
+  };
+  translation?: {
+    sourceLanguage: string;
+    targetLanguage: string;
+    objectIds?: string[];
+    chatMessages?: Array<{ id: string; content: string }>;
+  };
+  imagePrompt?: {
+    objectType?: string;
+    objectInfo?: string;
+    promptMode: 'natural' | 'positive' | 'negative';
+    currentPrompt?: string;
+    currentPromptPositive?: string;
+    currentPromptNegative?: string;
+    scenePreContext?: string;
+    scenePostContext?: string;
+    selectedObjectIds?: string[];
+  };
+  storyObjectEdit?: {
+    targetIds: string[];
+    contextIds?: string[];
+  };
 }
 
 /**
@@ -34,6 +82,7 @@ export interface TemplateData {
  */
 export interface BasePromptContext {
   userInput: string;
+  projectId?: string;  // For fetching project data from unifiedObjectStore
   outputLanguage?: string;
   enablePrefill?: boolean;
   enableThinking?: boolean;
@@ -63,20 +112,19 @@ export interface ChatNovelEditorPromptContext extends BasePromptContext {
  * Context for story object editing
  */
 export interface StoryObjectEditPromptContext extends BasePromptContext {
-  category: StoryObjectCategory;
-  targetId?: string;
-  contextData?: Record<string, unknown>;
-  currentData: unknown;
+  targetIds: string[];
+  contextIds?: string[];
   isNativeOutput?: boolean;
 }
 
 /**
- * Context for chapter editing
+ * Context for manuscript editing
  */
-export interface ChapterEditPromptContext extends BasePromptContext {
+export interface ManuscriptEditPromptContext extends BasePromptContext {
   currentChapterId: string;
   currentChapterName: string;
   currentChapterContent: string;
+  objectIds?: string[];
   contextData?: Record<string, unknown>;
   isNativeOutput?: boolean;
 }
@@ -145,7 +193,7 @@ export type PromptContext =
   | ChatWorkspacePromptContext
   | ChatNovelEditorPromptContext
   | StoryObjectEditPromptContext
-  | ChapterEditPromptContext
+  | ManuscriptEditPromptContext
   | StoryTranslationPromptContext
   | ChatTranslationPromptContext
   | ObjectImagePromptContext

@@ -29,7 +29,7 @@
     "axios": "^1.11.0",
     "diff": "^8.0.2",
     "dompurify": "^3.2.6",
-    "liquidjs": "^10.24.0",
+    "handlebars": "^4.7.8",
     "marked": "^16.3.0",
     "motion": "^12.23.25",
     "partial-json": "^0.1.7",
@@ -42,6 +42,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",
+    "@types/handlebars": "^4.0.40",
     "@types/node": "^24.10.1",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",

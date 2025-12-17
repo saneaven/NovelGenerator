@@ -52,16 +52,14 @@ export interface PatchRetryContext {
 export type StoryObjectType =
   | 'character'
   | 'location'
-  | 'item'
-  | 'event'
-  | 'act'
-  | 'other';
+  | 'organization'
+  | 'lorebook'
+  | 'act';
 
 export const STORY_OBJECT_TYPES: StoryObjectType[] = [
   'character',
   'location',
-  'item',
-  'event',
+  'organization',
+  'lorebook',
   'act',
-  'other',
 ];

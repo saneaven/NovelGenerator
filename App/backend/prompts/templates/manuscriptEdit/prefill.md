@@ -1,1 +1,1 @@
-I'll help you edit the chapter "{{ variable.chapterName }}". My response will be in {{ variable.mainLanguage }}.
+I'll help you edit the chapter "{{ manuscriptEdit.currentChapterName }}". My response will be in {{ config.mainLanguage }}.

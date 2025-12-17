@@ -62,10 +62,9 @@ export interface FunctionResultMessage {
 const STORY_OBJECT_TYPE_ENUM: StoryObjectType[] = [
   'character',
   'location',
-  'item',
-  'event',
+  'organization',
+  'lorebook',
   'act',
-  'other',
 ];
 
 /** Schema for story object type field */
@@ -137,70 +136,76 @@ const manuscriptReplacementSchema = {
 };
 
 // ============================================
-// WORKSPACE FUNCTIONS (13 functions)
+// CRUD FUNCTIONS (exported individually)
+// ============================================
+
+export const CREATE_STORY_OBJECT_FUNCTION: FunctionCallSchema = {
+  name: 'create_story_object',
+  description:
+    'Create a story object (character, location, organization, lorebook, or act).',
+  parameters: {
+    type: 'object',
+    properties: {
+      type: storyObjectTypeSchema,
+      name: { type: 'string', description: 'Name of the object' },
+      description: {
+        type: 'string',
+        description: 'Description of the object',
+      },
+    },
+    required: ['type', 'name', 'description'],
+  },
+};
+
+export const DELETE_STORY_OBJECT_FUNCTION: FunctionCallSchema = {
+  name: 'delete_story_object',
+  description: 'Delete a story object by ID and type.',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'ID of the object to delete' },
+      type: storyObjectTypeSchema,
+    },
+    required: ['id', 'type'],
+  },
+};
+
+export const CREATE_CHAPTER_FUNCTION: FunctionCallSchema = {
+  name: 'create_chapter',
+  description: 'Create a chapter within an act.',
+  parameters: {
+    type: 'object',
+    properties: {
+      actId: { type: 'string', description: 'ID of the parent act' },
+      name: { type: 'string', description: 'Chapter name' },
+      description: { type: 'string', description: 'Chapter description' },
+    },
+    required: ['actId', 'name', 'description'],
+  },
+};
+
+export const DELETE_CHAPTER_FUNCTION: FunctionCallSchema = {
+  name: 'delete_chapter',
+  description: 'Delete a chapter by ID.',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'ID of the chapter to delete' },
+    },
+    required: ['id'],
+  },
+};
+
+// ============================================
+// WORKSPACE FUNCTIONS
 // ============================================
 
 export const WORKSPACE_FUNCTIONS: FunctionCallSchema[] = [
-  // ----------------------------------------
-  // CRUD: Story Objects
-  // ----------------------------------------
-  {
-    name: 'create_story_object',
-    description:
-      'Create a story object (character, location, item, event, act, or other).',
-    parameters: {
-      type: 'object',
-      properties: {
-        type: storyObjectTypeSchema,
-        name: { type: 'string', description: 'Name of the object' },
-        description: {
-          type: 'string',
-          description: 'Description of the object',
-        },
-      },
-      required: ['type', 'name', 'description'],
-    },
-  },
-  {
-    name: 'delete_story_object',
-    description: 'Delete a story object by ID and type.',
-    parameters: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'ID of the object to delete' },
-        type: storyObjectTypeSchema,
-      },
-      required: ['id', 'type'],
-    },
-  },
-
-  // ----------------------------------------
-  // CRUD: Chapters
-  // ----------------------------------------
-  {
-    name: 'create_chapter',
-    description: 'Create a chapter within an act.',
-    parameters: {
-      type: 'object',
-      properties: {
-        actId: { type: 'string', description: 'ID of the parent act' },
-        name: { type: 'string', description: 'Chapter name' },
-        description: { type: 'string', description: 'Chapter description' },
-      },
-      required: ['actId', 'name', 'description'],
-    },
-  },
-  {
-    name: 'delete_chapter',
-    description: 'Delete a chapter by ID.',
-    parameters: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'ID of the chapter to delete' },
-      },
-      required: ['id'],
-    },
-  },
+  // CRUD
+  CREATE_STORY_OBJECT_FUNCTION,
+  DELETE_STORY_OBJECT_FUNCTION,
+  CREATE_CHAPTER_FUNCTION,
+  DELETE_CHAPTER_FUNCTION,
 
   // ----------------------------------------
   // Replace: Full field replacement

@@ -1,1 +1,1 @@
-I'll translate the chat message from {{ variable.sourceLanguage }} to {{ variable.targetLanguage }} and return the result using `translate_chat_message`.
+I'll translate the chat message from {{ translation.sourceLanguage }} to {{ translation.targetLanguage }} and return the result using `translate_chat_message`.

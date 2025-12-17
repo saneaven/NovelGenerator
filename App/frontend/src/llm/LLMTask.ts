@@ -28,7 +28,7 @@ const MODE_TO_FUNCTION_TYPE: Record<LLMTaskModeType, AIFunctionType> = {
   [LLMTaskMode.CHAT_WORKSPACE]: 'chat',
   [LLMTaskMode.CHAT_NOVEL_EDITOR]: 'chat',
   [LLMTaskMode.STORY_OBJECT_EDIT]: 'storyObjectEdit',
-  [LLMTaskMode.CHAPTER_EDIT]: 'manuscriptEdit',
+  [LLMTaskMode.MANUSCRIPT_EDIT]: 'manuscriptEdit',
   [LLMTaskMode.TRANSLATION]: 'translation',
   [LLMTaskMode.CHAT_TRANSLATION]: 'translation',
   [LLMTaskMode.OBJECT_IMAGE_PROMPT]: 'imagePrompt',
@@ -415,12 +415,12 @@ export class LLMTask {
       const msg = history[i];
 
       if (msg.role === 'user' && promptBundle.nonLastUserPrompt) {
-        // Render non-last user message with template, inheriting all templateData but overriding userInput
+        // Render non-last user message with template, inheriting all templateData but overriding userMessage
         const rendered = PromptManager.renderTemplate(promptBundle.nonLastUserPrompt, {
           ...promptBundle.templateData,
-          variable: {
-            ...promptBundle.templateData.variable,
-            userInput: this.getMessageText(msg),
+          input: {
+            ...promptBundle.templateData.input,
+            userMessage: this.getMessageText(msg),
           },
         });
         messages.push({

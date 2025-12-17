@@ -1,7 +1,12 @@
 /**
  * Schema definitions for prompt templates.
- * This file serves as the Single Source of Truth for available variables in templates.
- * It defines both the runtime types and the UI metadata (descriptions, examples).
+ * Single Source of Truth for available variables in templates.
+ *
+ * Variable Groups:
+ * - config.* - Settings data (auto-loaded, available to ALL prompts)
+ * - project.* - All project data (auto-loaded, available to ALL prompts)
+ * - input.* - User input (available to ALL prompts)
+ * - Mode-specific: chat.*, manuscriptEdit.*, translation.*, imagePrompt.*, storyObjectEdit.*
  */
 
 // Helper type for variable metadata
@@ -10,262 +15,204 @@ type VariableDef<T> = {
   example: T;
 };
 
-// The Single Source of Truth for all prompt variables
-export const PROMPT_SCHEMAS = {
+/**
+ * The Single Source of Truth for all prompt variables.
+ */
+export const UNIFIED_SCHEMA = {
+  config: {
+    mainLanguage: { desc: "Primary language", example: "Korean" },
+    displayLanguage: { desc: "Current display language", example: "English" },
+    today: { desc: "Current date (YYYY-MM-DD)", example: "2025-01-15" },
+    isThinkingEnabled: { desc: "Thinking mode enabled", example: true },
+    isPrefillEnabled: { desc: "Prefill enabled", example: true },
+    isCustomThinkingEnabled: { desc: "Custom thinking enabled", example: false },
+    isNativeOutputMode: { desc: "Native XML output mode (no function calls)", example: false },
+  },
+
+  project: {
+    basicInfo: {
+      desc: "Story basic info",
+      example: {
+        id: "proj-123",
+        title: "The Last Kingdom",
+        logline: "A warrior's journey to reclaim his homeland",
+        genre: "Fantasy"
+      } as { id: string; title: string; logline: string; genre: string }
+    },
+    objects: {
+      desc: "Main language objects array",
+      example: [{
+        type: "character" as "character" | "location" | "organization" | "lorebook",
+        id: "char-1",
+        name: "Uhtred",
+        description: "A Saxon lord raised by Danes...",
+        imagePrompt: "A tall warrior with long hair...",
+        imagePromptPositive: "warrior, medieval, armor",
+        imagePromptNegative: "modern, futuristic"
+      }] as Array<{ type: "character" | "location" | "organization" | "lorebook"; id: string; name: string; description: string; imagePrompt?: string; imagePromptPositive?: string; imagePromptNegative?: string }>
+    },
+    outline: {
+      desc: "Story outline with acts and chapters",
+      example: {
+        acts: [{
+          id: "act-1",
+          name: "Act 1: The Fall",
+          description: "Uhtred loses his birthright...",
+          chapters: [{
+            id: "ch-1",
+            name: "Chapter 1: The Raid",
+            description: "Danish raiders attack Bebbanburg..."
+          }]
+        }]
+      } as { acts: Array<{ id: string; name: string; description: string; chapters: Array<{ id: string; name: string; description: string }> }> }
+    },
+    manuscripts: {
+      desc: "All manuscripts array",
+      example: [{
+        id: "ms-1",
+        chapterId: "ch-1",
+        chapterName: "Chapter 1: The Raid",
+        content: "The longships appeared at dawn...",
+        wordCount: 1500
+      }] as Array<{ id: string; chapterId: string; chapterName: string; content: string; wordCount: number }>
+    },
+    subLanguages: {
+      desc: "Other language versions with same structure",
+      example: {
+        "Korean": {
+          basicInfo: { id: "proj-123", title: "마지막 왕국", logline: "고향을 되찾기 위한 전사의 여정", genre: "판타지" },
+          objects: [{ type: "character" as const, id: "char-1", name: "우트레드", description: "덴마크인에게 길러진 색슨 영주...", imagePrompt: "A tall warrior...", imagePromptPositive: "warrior", imagePromptNegative: "modern" }],
+          outline: { acts: [{ id: "act-1", name: "1막: 몰락", description: "우트레드가 권리를 잃다...", chapters: [] }] },
+          manuscripts: [{ id: "ms-1", chapterId: "ch-1", chapterName: "1장: 습격", content: "롱쉽들이 새벽에 나타났다...", wordCount: 1500 }]
+        }
+      } as Record<string, {
+        basicInfo: { id: string; title: string; logline: string; genre: string };
+        objects: Array<{ type: "character" | "location" | "organization" | "lorebook"; id: string; name: string; description: string; imagePrompt?: string; imagePromptPositive?: string; imagePromptNegative?: string }>;
+        outline: { acts: Array<{ id: string; name: string; description: string; chapters: Array<{ id: string; name: string; description: string }> }> };
+        manuscripts: Array<{ id: string; chapterId: string; chapterName: string; content: string; wordCount: number }>;
+      }>
+    },
+  },
+
+  input: {
+    userMessage: { desc: "User's input message", example: "Help me write a scene where..." },
+    functionResults: {
+      desc: "Previous function call results",
+      example: [{
+        functionCallId: "fc-1",
+        functionName: "update_manuscript",
+        success: true,
+        isRejected: false,
+        resultMessage: "Applied successfully",
+        appliedAt: "2025-01-02T00:00:00Z"
+      }] as Array<{ functionCallId: string; functionName: string; success: boolean; isRejected: boolean; resultMessage: string; appliedAt?: string }>
+    },
+  },
+
   chat: {
-    variable: {
-      mainLanguage: { desc: "Main language for responses", example: "Korean" },
-      mode: { desc: "Operation mode", example: "novelEditor" as "novelEditor" | "workspace" },
-      today: { desc: "Current date", example: "2025-11-22" },
-      userInput: { desc: "User's chat message", example: "Help me write a scene" },
-    },
-    state: {
-      enableThinking: { desc: "Enable thinking process", example: true },
-      enablePrefill: { desc: "Enable prefill", example: true },
-      enableCustomThinking: { desc: "Enable custom thinking", example: false },
-      hasFunctions: { desc: "Whether functions are available", example: true },
-    },
-    context: {
-      storyContext: {
-        desc: "Full story objects - template author chooses which fields to use. Contains: basicInfo (id, title, logline, genre), characters/organizations/locations/lorebook (id, name, description), outline.acts (id, name, description, chapters[]), outline.acts[].chapters (id, name, description, actId)",
-        example: {
-          basicInfo: {
-            id: "abc123",
-            title: "The Last Kingdom",
-            logline: "A warrior's journey to reclaim his homeland",
-            genre: "Fantasy"
-          },
-          characters: [{
-            id: "char1",
-            name: "Uhtred",
-            description: "A Saxon lord raised by Danes..."
-          }],
-          organizations: [{
-            id: "org1",
-            name: "The Saxon Army",
-            description: "King Alfred's military force..."
-          }],
-          locations: [{
-            id: "loc1",
-            name: "Bebbanburg",
-            description: "A fortress on the northern coast..."
-          }],
-          lorebook: [{
-            id: "lore1",
-            name: "Dane Law",
-            description: "The legal system of the Danish settlers..."
-          }],
-          outline: {
-            acts: [{
-              id: "act1",
-              name: "Act 1: The Fall",
-              description: "Uhtred loses his birthright...",
-              chapters: [{
-                id: "ch1",
-                name: "Chapter 1: The Raid",
-                description: "Danish raiders attack Bebbanburg...",
-                actId: "act1"
-              }]
-            }]
-          }
-        } as Record<string, any> | null
-      },
-      novelContent: {
-        desc: "Novel manuscripts keyed by chapter ID. Each manuscript has: id, content, wordCount",
-        example: {
-          "ch1": {
-            id: "ms1",
-            content: "The longships appeared at dawn...",
-            wordCount: 1500
-          },
-          "ch2": {
-            id: "ms2",
-            content: "Uhtred watched the flames...",
-            wordCount: 2000
-          }
-        } as Record<string, any> | null
-      },
-      functionResults: {
-        desc: "Previous function call results (applied/rejected/failed). Each result has: functionCallId, functionName, success, isRejected, resultMessage, appliedAt",
-        example: [{
-          functionCallId: "fc1",
-          functionName: "update_manuscript",
-          success: true,
-          isRejected: false,
-          resultMessage: "Applied successfully",
-          appliedAt: "2025-01-02T00:00:00Z"
-        }] as any[]
-      },
-    }
+    mode: { desc: "Chat mode", example: "workspace" as "workspace" | "novelEditor" },
   },
-  translation: {
-    variable: {
-      userInput: { desc: "User's translation request", example: "Translate naturally" },
-      today: { desc: "Current date", example: "2025-11-22" },
-      sourceLanguage: { desc: "Source language", example: "English" },
-      targetLanguage: { desc: "Target language", example: "Korean" },
-      objectCount: { desc: "Number of objects", example: 1 },
-      dataTypeName: { desc: "Human-friendly data type label", example: "Chat Message" },
-      sourceContent: { desc: "Source chat content", example: "Hello there" },
-    },
-    state: {
-      enableThinking: { desc: "Enable thinking process", example: true },
-      enablePrefill: { desc: "Enable prefill", example: true },
-      enableCustomThinking: { desc: "Enable custom thinking", example: false },
-      isNativeOutput: { desc: "Native output mode (no function calls, use XML format)", example: false },
-      hasContext: { desc: "Whether context data is provided for reference", example: false },
-    },
-    context: {
-      objectsArray: { desc: "Array of objects to translate", example: [] as Record<string, any>[] },
-      contextData: {
-        desc: "Already-translated objects in target language for reference. Contains: basicInfo, characters, organizations, locations, lorebook, outline",
-        example: {
-          basicInfo: { title: "The Story", logline: "A tale of adventure", genre: "Fantasy" },
-          characters: [{ id: "char1", name: "Hero", description: "The protagonist" }],
-          organizations: [{ id: "org1", name: "Guild", description: "A group of heroes" }],
-          locations: [{ id: "loc1", name: "Castle", description: "Ancient fortress" }],
-          lorebook: [{ id: "lore1", name: "Magic", description: "The power source" }],
-          outline: { acts: [{ id: "act1", name: "Act 1", description: "Beginning", chapters: [] }] }
-        } as Record<string, any>
-      },
-    }
-  },
-  storyObjectEdit: {
-    variable: {
-      mainLanguage: { desc: "Main language for responses", example: "Korean" },
-      today: { desc: "Current date", example: "2025-11-22" },
-      categoryName: { desc: "Category display name", example: "Character" },
-      editScope: { desc: "Edit scope", example: "item" as "item" | "list" },
-      targetId: { desc: "Target ID", example: "123" },
-      userInput: { desc: "User's modification request", example: "Change age to 21" },
-    },
-    state: {
-      enableThinking: { desc: "Enable thinking process", example: true },
-      enablePrefill: { desc: "Enable prefill", example: true },
-      enableCustomThinking: { desc: "Enable custom thinking", example: false },
-      isNativeOutput: { desc: "Native output mode (no function calls)", example: false },
-      isBatchEdit: { desc: "Whether editing multiple items", example: false },
-    },
-    context: {
-      currentData: {
-        desc: "Current data object being edited",
-        example: { name: "John Doe", age: 20 } as Record<string, any>
-      },
-      contextData: {
-        desc: "Related context data",
-        example: { locations: ["Seoul"] } as Record<string, any>
-      }
-    }
-  },
+
   manuscriptEdit: {
-    variable: {
-      mainLanguage: { desc: "Main language for responses", example: "Korean" },
-      today: { desc: "Current date", example: "2025-11-22" },
-      currentChapterId: { desc: "ID of the chapter being edited", example: "chapter-123" },
-      currentChapterName: { desc: "Name of the chapter being edited", example: "Chapter 1" },
-      currentChapterContent: { desc: "Current content of the chapter being edited", example: "Once upon a time..." },
-      userInput: { desc: "User's request", example: "Make it darker" },
-    },
-    state: {
-      enableThinking: { desc: "Enable thinking process", example: true },
-      enablePrefill: { desc: "Enable prefill", example: true },
-      enableCustomThinking: { desc: "Enable custom thinking", example: false },
-      isNativeOutput: { desc: "Native output mode (no function calls)", example: false },
-    },
-    context: {
-      contextData: {
-        desc: "Story context data. Contains: basicInfo (title, logline, genre), characters (id, name, description), organizations (id, name, description), locations (id, name, description), lorebook (id, name, description), outline.acts (id, name, description, chapters[]), existingNovelContent (chapterId, chapterName, chapterDescription, content, wordCount)",
-        example: {
-          basicInfo: { title: "The Story", logline: "A tale of adventure", genre: "Fantasy" },
-          characters: [{ id: "char1", name: "Hero", description: "The protagonist" }],
-          organizations: [{ id: "org1", name: "Guild", description: "A group of heroes" }],
-          locations: [{ id: "loc1", name: "Castle", description: "Ancient fortress" }],
-          lorebook: [{ id: "lore1", name: "Magic", description: "The power source" }],
-          outline: { acts: [{ id: "act1", name: "Act 1", description: "Beginning", chapters: [{ id: "ch1", name: "Chapter 1", description: "First chapter" }] }] },
-          existingNovelContent: [{ chapterId: "ch1", chapterName: "Chapter 1", chapterDescription: "The beginning", content: "Once upon a time...", wordCount: 100 }]
-        } as Record<string, any>
-      }
-    }
+    currentChapterId: { desc: "ID of chapter being edited", example: "ch-123" },
+    currentChapterName: { desc: "Name of chapter being edited", example: "Chapter 1: The Raid" },
+    currentChapterManuscript: { desc: "Current manuscript content", example: "The longships appeared at dawn..." },
+    objectIds: { desc: "IDs of selected objects (story objects, outline chapters, manuscripts)", example: ["char-1", "ch-1", "ms-1"] as string[] },
   },
-  objectImagePrompt: {
-    variable: {
-      mainLanguage: { desc: "Main language for responses", example: "Korean" },
-      today: { desc: "Current date", example: "2025-11-22" },
-      objectType: { desc: "Type of object", example: "character" as "character" | "location" | "organization" | "lorebook" },
-      objectInfo: { desc: "Object name and description", example: "Character: John Doe" },
-      userInput: { desc: "User's request", example: "Make it more detailed" },
-      currentPrompt: { desc: "Current natural language prompt", example: "A tall man with blue eyes" },
-      currentPromptPositive: { desc: "Current positive tags", example: "blue eyes, tall" },
-      currentPromptNegative: { desc: "Current negative tags", example: "blurry, low quality" },
-      promptMode: { desc: "Prompt mode", example: "natural" as "natural" | "positive" | "negative" },
+
+  translation: {
+    sourceLanguage: { desc: "Source language", example: "English" },
+    targetLanguage: { desc: "Target language", example: "Korean" },
+    objectIds: { desc: "IDs of story objects to translate (filter from project.objects)", example: ["char-1", "char-2"] as string[] },
+    chatMessages: {
+      desc: "Chat messages to translate (only for chat translation)",
+      example: [{ id: "msg-1", content: "Hello there" }] as Array<{ id: string; content: string }>
     },
-    state: {
-      enableThinking: { desc: "Enable thinking process", example: true },
-      enablePrefill: { desc: "Enable prefill", example: true },
-      enableCustomThinking: { desc: "Enable custom thinking", example: false },
-      isNaturalPrompt: { desc: "Natural language mode", example: true },
-      isPositivePrompt: { desc: "Positive tags mode", example: false },
-      isNegativePrompt: { desc: "Negative tags mode", example: false },
-      hasUserInput: { desc: "Has user input", example: true },
-      hasCurrentPrompt: { desc: "Has current prompt", example: false },
-      isNativeOutput: { desc: "Native output mode (no function calls)", example: false },
-    },
-    context: {}
   },
-  sceneImagePrompt: {
-    variable: {
-      mainLanguage: { desc: "Main language for responses", example: "Korean" },
-      today: { desc: "Current date", example: "2025-11-22" },
-      scenePreContext: { desc: "Scene pre-context", example: "The hero enters the dark cave..." },
-      scenePostContext: { desc: "Scene post-context", example: "He finds the treasure chest." },
-      userInput: { desc: "User's request", example: "Focus on the treasure" },
-      promptMode: { desc: "Prompt mode", example: "natural" as "natural" | "positive" | "negative" },
-    },
-    state: {
-      enableThinking: { desc: "Enable thinking process", example: true },
-      enablePrefill: { desc: "Enable prefill", example: true },
-      enableCustomThinking: { desc: "Enable custom thinking", example: false },
-      isNaturalPrompt: { desc: "Natural language mode", example: true },
-      isPositivePrompt: { desc: "Positive tags mode", example: false },
-      isNegativePrompt: { desc: "Negative tags mode", example: false },
-      hasUserInput: { desc: "Has user input", example: true },
-      hasSelectedObjects: { desc: "Has selected reference objects", example: true },
-      isNativeOutput: { desc: "Native output mode (no function calls)", example: false },
-    },
-    context: {
-      selectedObjects: { desc: "Selected reference objects", example: [] as any[] },
-    }
-  }
+
+  imagePrompt: {
+    objectType: { desc: "Object type", example: "character" as "character" | "location" | "organization" | "lorebook" },
+    objectInfo: { desc: "Object name and description", example: "Character: Uhtred - A Saxon lord raised by Danes..." },
+    promptMode: { desc: "Prompt mode", example: "natural" as "natural" | "positive" | "negative" },
+    currentPrompt: { desc: "Current natural language prompt", example: "A tall warrior with long dark hair..." },
+    currentPromptPositive: { desc: "Current positive tags", example: "warrior, long hair, armor, sword" },
+    currentPromptNegative: { desc: "Current negative tags", example: "blurry, low quality, deformed" },
+    scenePreContext: { desc: "Scene pre-context (for scene mode)", example: "The hero enters the dark cave..." },
+    scenePostContext: { desc: "Scene post-context (for scene mode)", example: "He finds the treasure chest." },
+    selectedObjectIds: { desc: "IDs of selected reference objects", example: ["char-1", "loc-1"] as string[] },
+  },
+
+  storyObjectEdit: {
+    targetIds: { desc: "IDs of objects to edit (filter from project.objects)", example: ["char-1", "char-2"] as string[] },
+    contextIds: { desc: "IDs of objects to show as context (filter from project.objects)", example: ["char-3", "loc-1"] as string[] },
+  },
 } as const;
 
-// --- Type Extraction Logic ---
-
-type ExtractProps<T> = {
-  [K in keyof T]: T[K] extends VariableDef<infer V> ? V : never;
-};
-
-type ExtractSchema<T extends { variable: any; state: any; context: any }> = {
-  variable: ExtractProps<T['variable']>;
-  state: ExtractProps<T['state']>;
-  context: ExtractProps<T['context']>;
-};
-
-// Exported Types for use in application code
-export type ChatData = ExtractSchema<typeof PROMPT_SCHEMAS['chat']>;
-export type TranslationData = ExtractSchema<typeof PROMPT_SCHEMAS['translation']>;
-export type StoryObjectEditData = ExtractSchema<typeof PROMPT_SCHEMAS['storyObjectEdit']>;
-export type ManuscriptEditData = ExtractSchema<typeof PROMPT_SCHEMAS['manuscriptEdit']>;
-export type ObjectImagePromptData = ExtractSchema<typeof PROMPT_SCHEMAS['objectImagePrompt']>;
-export type SceneImagePromptData = ExtractSchema<typeof PROMPT_SCHEMAS['sceneImagePrompt']>;
-
-// Union type for all possible data
-export type PromptData = ChatData | TranslationData | StoryObjectEditData | ManuscriptEditData | ObjectImagePromptData | SceneImagePromptData;
+/**
+ * Prompt types
+ */
+export type PromptType = 'chat' | 'manuscriptEdit' | 'translation' | 'objectImagePrompt' | 'sceneImagePrompt' | 'storyObjectEdit';
 
 /**
- * Helper to get schema for a specific prompt type
+ * Maps which variable groups are available for each prompt type.
  */
-export type PromptType = keyof typeof PROMPT_SCHEMAS;
+export const PROMPT_TYPE_VARIABLES: Record<PromptType, string[]> = {
+  chat: ['config', 'project', 'input', 'chat'],
+  manuscriptEdit: ['config', 'project', 'input', 'manuscriptEdit'],
+  translation: ['config', 'project', 'input', 'translation'],
+  objectImagePrompt: ['config', 'project', 'input', 'imagePrompt'],
+  sceneImagePrompt: ['config', 'project', 'input', 'imagePrompt'],
+  storyObjectEdit: ['config', 'project', 'input', 'storyObjectEdit'],
+};
 
-export function getSchema(type: PromptType) {
-  return PROMPT_SCHEMAS[type];
+// Type extraction helpers
+type ExtractExample<T> = T extends VariableDef<infer V> ? V : T extends { example: infer E } ? E : never;
+
+type ExtractProps<T> = {
+  [K in keyof T]: ExtractExample<T[K]>;
+};
+
+// Exported types from unified schema
+export type ConfigData = ExtractProps<typeof UNIFIED_SCHEMA['config']>;
+export type ProjectData = ExtractProps<typeof UNIFIED_SCHEMA['project']>;
+export type InputData = ExtractProps<typeof UNIFIED_SCHEMA['input']>;
+export type ChatModeData = ExtractProps<typeof UNIFIED_SCHEMA['chat']>;
+export type ManuscriptEditModeData = ExtractProps<typeof UNIFIED_SCHEMA['manuscriptEdit']>;
+export type TranslationModeData = ExtractProps<typeof UNIFIED_SCHEMA['translation']>;
+export type ImagePromptModeData = ExtractProps<typeof UNIFIED_SCHEMA['imagePrompt']>;
+export type StoryObjectEditModeData = ExtractProps<typeof UNIFIED_SCHEMA['storyObjectEdit']>;
+
+// Full unified data structure (same as TemplateData in types.ts)
+export interface PromptData {
+  config: ConfigData;
+  project: ProjectData;
+  input: InputData;
+  chat?: ChatModeData;
+  manuscriptEdit?: ManuscriptEditModeData;
+  translation?: TranslationModeData;
+  imagePrompt?: ImagePromptModeData;
+  storyObjectEdit?: StoryObjectEditModeData;
+}
+
+/**
+ * Get available variable groups for a prompt type
+ */
+export function getAvailableGroups(type: PromptType): string[] {
+  return PROMPT_TYPE_VARIABLES[type] || [];
+}
+
+/**
+ * Get all variables in a group from unified schema
+ */
+export function getGroupVariables(group: keyof typeof UNIFIED_SCHEMA): string[] {
+  const groupSchema = UNIFIED_SCHEMA[group];
+  return groupSchema ? Object.keys(groupSchema) : [];
+}
+
+/**
+ * Check if a variable group is available for a prompt type
+ */
+export function isGroupAvailableForType(group: string, type: PromptType): boolean {
+  const availableGroups = PROMPT_TYPE_VARIABLES[type];
+  return availableGroups?.includes(group) ?? false;
 }

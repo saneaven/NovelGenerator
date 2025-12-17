@@ -52,14 +52,16 @@ const NovelEditor: React.FC = () =>
     } = useChatStore();
     const unifiedObjects = useUnifiedObjectStore(state => state.objects);
     const listObjects = useUnifiedObjectStore(state => state.listObjects);
-    // UI state for selected chapter and display language
+    // UI state for selected chapter
     const selectedChapterByProject = useNovelEditorStore(state => state.selectedChapterByProject);
-    const displayLanguageByProject = useNovelEditorStore(state => state.displayLanguageByProject);
     const isSavingByProject = useNovelEditorStore(state => state.isSavingByProject);
     const hasUnsavedChangesByProject = useNovelEditorStore(state => state.hasUnsavedChangesByProject);
     const getSelectedChapterId = useNovelEditorStore(state => state.getSelectedChapterId);
     const selectChapter = useNovelEditorStore(state => state.selectChapter);
-    const setDisplayLanguage = useNovelEditorStore(state => state.setDisplayLanguage);
+
+    // Display language from settingsStore (global)
+    const displayLanguage = useSettingsStore(state => state.settings.displayLanguage);
+    const setDisplayLanguage = useSettingsStore(state => state.setDisplayLanguage);
 
     // Reactive subscription for selectedChapterId
     const selectedChapterId = selectedChapterByProject[projectId ?? '']
@@ -147,15 +149,8 @@ const NovelEditor: React.FC = () =>
         }
     }, [projectId, projects.length, fetchProjects]);
 
-    // Reactive subscription for display language
-    const currentDisplayLanguage = displayLanguageByProject[projectId ?? ''] || mainLanguage;
-
-    // Initialize display language in store from settings
-    useEffect(() => {
-        if (projectId && mainLanguage && !displayLanguageByProject[projectId]) {
-            setDisplayLanguage(projectId, mainLanguage);
-        }
-    }, [projectId, mainLanguage, displayLanguageByProject, setDisplayLanguage]);
+    // Use global display language from settingsStore
+    const currentDisplayLanguage = displayLanguage || mainLanguage;
 
     const [systemInsertConfig, setSystemInsertConfig] = useState<SystemInsertConfig>({
         enabled: true,
@@ -583,7 +578,7 @@ const NovelEditor: React.FC = () =>
                 pageTitle="Novel Editor"
                 availableLanguages={availableLanguages}
                 currentLanguage={currentDisplayLanguage}
-                onLanguageChange={(lang: string) => setDisplayLanguage(projectId ?? '', lang)}
+                onLanguageChange={(lang: string) => setDisplayLanguage(lang)}
                 showTranslateAll={subLanguages && subLanguages.length > 0 && objectsNeedingTranslation > 0}
                 translateCount={objectsNeedingTranslation}
                 onTranslateAllClick={() => setShowTranslateModal(true)}

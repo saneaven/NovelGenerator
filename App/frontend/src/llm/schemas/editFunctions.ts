@@ -7,12 +7,18 @@
  *
  * Categories:
  * - Basic Info: title, logline, genre
- * - Story Object: character, location, item, event, act, other
+ * - Story Object: character, location, organization, lorebook, act
  * - Chapter: id, actId, name, description
  * - Manuscript: chapterId, content
  */
 
 import type { FunctionCallSchema } from './chatFunctions';
+import {
+  CREATE_STORY_OBJECT_FUNCTION,
+  DELETE_STORY_OBJECT_FUNCTION,
+  CREATE_CHAPTER_FUNCTION,
+  DELETE_CHAPTER_FUNCTION,
+} from './chatFunctions';
 import type { StoryObjectType } from '../../types/patchTypes';
 
 // ============================================
@@ -23,10 +29,9 @@ import type { StoryObjectType } from '../../types/patchTypes';
 const STORY_OBJECT_TYPE_ENUM: StoryObjectType[] = [
   'character',
   'location',
-  'item',
-  'event',
+  'organization',
+  'lorebook',
   'act',
-  'other',
 ];
 
 /** Schema for story object type field */
@@ -244,180 +249,32 @@ export const PATCH_MANUSCRIPT_FUNCTION: FunctionCallSchema = {
   },
 };
 
-// ============================================
-// BATCH FUNCTIONS (for editing multiple items)
-// ============================================
-
-/** Schema for a single story object in batch operations */
-const storyObjectBatchItemSchema = {
-  type: 'object',
-  properties: {
-    id: {
-      type: 'string',
-      description: 'ID of the object. Use empty string "" to create new.',
-    },
-    type: storyObjectTypeSchema,
-    name: { type: 'string', description: 'Name' },
-    description: { type: 'string', description: 'Description' },
-  },
-  required: ['id', 'type'],
-};
-
-/** Schema for a single chapter in batch operations */
-const chapterBatchItemSchema = {
-  type: 'object',
-  properties: {
-    id: {
-      type: 'string',
-      description: 'ID of the chapter. Use empty string "" to create new.',
-    },
-    actId: { type: 'string', description: 'Parent act ID' },
-    name: { type: 'string', description: 'Chapter name' },
-    description: { type: 'string', description: 'Chapter description' },
-  },
-  required: ['id'],
-};
-
-export const REPLACE_STORY_OBJECTS_BATCH_FUNCTION: FunctionCallSchema = {
-  name: 'replace_story_objects_batch',
-  description:
-    'Replace multiple story objects at once. Can modify existing or create new ones.',
-  parameters: {
-    type: 'object',
-    properties: {
-      items: {
-        type: 'array',
-        description: 'Array of story objects to replace or create',
-        items: storyObjectBatchItemSchema,
-      },
-    },
-    required: ['items'],
-  },
-};
-
-export const REPLACE_CHAPTERS_BATCH_FUNCTION: FunctionCallSchema = {
-  name: 'replace_chapters_batch',
-  description:
-    'Replace multiple chapters at once. Can modify existing or create new ones.',
-  parameters: {
-    type: 'object',
-    properties: {
-      items: {
-        type: 'array',
-        description: 'Array of chapters to replace or create',
-        items: chapterBatchItemSchema,
-      },
-    },
-    required: ['items'],
-  },
-};
 
 // ============================================
-// CHAPTER CONTENT EDIT FUNCTIONS
+// FUNCTION GROUPS
 // ============================================
 
-export const CHAPTER_EDIT_FUNCTIONS: FunctionCallSchema[] = [
+/** Story object edit functions - excludes manuscript */
+export const STORY_OBJECT_EDIT_FUNCTIONS: FunctionCallSchema[] = [
+  // CRUD
+  CREATE_STORY_OBJECT_FUNCTION,
+  DELETE_STORY_OBJECT_FUNCTION,
+  CREATE_CHAPTER_FUNCTION,
+  DELETE_CHAPTER_FUNCTION,
+  // Replace
+  REPLACE_BASIC_INFO_FUNCTION,
+  REPLACE_STORY_OBJECT_FUNCTION,
+  REPLACE_CHAPTER_FUNCTION,
+  // Patch
+  PATCH_BASIC_INFO_FUNCTION,
+  PATCH_STORY_OBJECT_FUNCTION,
+  PATCH_CHAPTER_FUNCTION,
+];
+
+/** Manuscript edit functions */
+export const MANUSCRIPT_EDIT_FUNCTIONS: FunctionCallSchema[] = [
   REPLACE_MANUSCRIPT_FUNCTION,
   PATCH_MANUSCRIPT_FUNCTION,
 ];
 
-// ============================================
-// UTILITY FUNCTIONS
-// ============================================
 
-/**
- * Get the appropriate function schemas based on category and edit scope.
- * Returns both replace and patch functions.
- */
-export function getEditFunctionSchemas(
-  category: string,
-  isSingleItem: boolean
-): FunctionCallSchema[] {
-  if (isSingleItem) {
-    switch (category) {
-      case 'basicInfo':
-        return [REPLACE_BASIC_INFO_FUNCTION, PATCH_BASIC_INFO_FUNCTION];
-      case 'character':
-      case 'location':
-      case 'item':
-      case 'event':
-      case 'act':
-      case 'other':
-      case 'storyObject':
-        return [REPLACE_STORY_OBJECT_FUNCTION, PATCH_STORY_OBJECT_FUNCTION];
-      case 'chapter':
-        return [REPLACE_CHAPTER_FUNCTION, PATCH_CHAPTER_FUNCTION];
-      case 'manuscript':
-        return [REPLACE_MANUSCRIPT_FUNCTION, PATCH_MANUSCRIPT_FUNCTION];
-      default:
-        throw new Error(`Unknown category: ${category}`);
-    }
-  } else {
-    // Batch editing
-    switch (category) {
-      case 'basicInfo':
-        return [REPLACE_BASIC_INFO_FUNCTION, PATCH_BASIC_INFO_FUNCTION];
-      case 'character':
-      case 'location':
-      case 'item':
-      case 'event':
-      case 'act':
-      case 'other':
-      case 'storyObject':
-        return [REPLACE_STORY_OBJECTS_BATCH_FUNCTION];
-      case 'chapter':
-        return [REPLACE_CHAPTERS_BATCH_FUNCTION];
-      default:
-        throw new Error(`Unknown category: ${category}`);
-    }
-  }
-}
-
-/**
- * Get edit functions for a specific category.
- * Returns single or batch function based on whether targetId is provided.
- */
-export function getEditFunctionsForCategory(
-  category: string,
-  targetId?: string
-): FunctionCallSchema[] {
-  const isSingleItem = !!targetId;
-  return getEditFunctionSchemas(category, isSingleItem);
-}
-
-/**
- * Get all edit function schemas as an array.
- */
-export function getAllEditFunctionSchemas(): FunctionCallSchema[] {
-  return [
-    REPLACE_BASIC_INFO_FUNCTION,
-    PATCH_BASIC_INFO_FUNCTION,
-    REPLACE_STORY_OBJECT_FUNCTION,
-    PATCH_STORY_OBJECT_FUNCTION,
-    REPLACE_CHAPTER_FUNCTION,
-    PATCH_CHAPTER_FUNCTION,
-    REPLACE_MANUSCRIPT_FUNCTION,
-    PATCH_MANUSCRIPT_FUNCTION,
-    REPLACE_STORY_OBJECTS_BATCH_FUNCTION,
-    REPLACE_CHAPTERS_BATCH_FUNCTION,
-  ];
-}
-
-// ============================================
-// LEGACY COMPATIBILITY
-// ============================================
-
-// These exports maintain compatibility with existing code that uses the old names.
-// TODO: Remove these after updating all consumers.
-
-/** @deprecated Use REPLACE_BASIC_INFO_FUNCTION or PATCH_BASIC_INFO_FUNCTION */
-export const EDIT_BASIC_INFO_FUNCTION = REPLACE_BASIC_INFO_FUNCTION;
-
-/** @deprecated Use getEditFunctionSchemas */
-export function getEditFunctionSchema(
-  category: string,
-  isSingleItem: boolean
-): FunctionCallSchema {
-  const schemas = getEditFunctionSchemas(category, isSingleItem);
-  return schemas[0]; // Return first schema for backward compatibility
-}

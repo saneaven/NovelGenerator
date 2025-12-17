@@ -62,6 +62,8 @@ const Workspace: React.FC = () =>
     } = useChatStore();
     const listObjects = useUnifiedObjectStore(state => state.listObjects);
     const mainLanguage = useSettingsStore(state => state.settings.mainLanguage);
+    const displayLanguage = useSettingsStore(state => state.settings.displayLanguage);
+    const setDisplayLanguage = useSettingsStore(state => state.setDisplayLanguage);
     const chatFunctionConfig = useSettingsStore(state => state.settings.functionConfigs.chat);
     const providerCredentials = useSettingsStore(state => state.settings.providerCredentials);
     const { currentError, showError, hideError } = useErrorStore();
@@ -404,8 +406,8 @@ const Workspace: React.FC = () =>
                 projectName={currentProject.name}
                 pageTitle="Workspace"
                 availableLanguages={availableLanguages}
-                currentLanguage={uiState.globalDisplayLanguage}
-                onLanguageChange={uiActions.setGlobalDisplayLanguage}
+                currentLanguage={displayLanguage || mainLanguage}
+                onLanguageChange={setDisplayLanguage}
                 showTranslateAll={settings.subLanguages && settings.subLanguages.length > 0 && objectsNeedingTranslation > 0}
                 translateCount={objectsNeedingTranslation}
                 onTranslateAllClick={() => setShowTranslateModal(true)}
@@ -439,7 +441,7 @@ const Workspace: React.FC = () =>
                 <StoryPanel
                     activeStoryTab={uiState.activeStoryTab}
                     onTabChange={uiActions.setActiveStoryTab}
-                    globalDisplayLanguage={uiState.globalDisplayLanguage}
+                    globalDisplayLanguage={displayLanguage || mainLanguage}
                 />
             </div>
 

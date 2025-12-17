@@ -1,10 +1,11 @@
 import type { FunctionCallSchema } from './schemas/chatFunctions';
-import type { StoryObjectCategory } from '../types/storyObject';
-import { getEditFunctionsForCategory, CHAPTER_EDIT_FUNCTIONS } from './schemas/editFunctions';
+import { STORY_OBJECT_EDIT_FUNCTIONS, MANUSCRIPT_EDIT_FUNCTIONS } from './schemas/editFunctions';
 import { TRANSLATION_FUNCTIONS, CHAT_TRANSLATION_FUNCTIONS } from './schemas/translationFunctions';
 import { OBJECT_IMAGE_PROMPT_FUNCTIONS } from './schemas/imagePromptFunctions';
 import { renderTemplate } from '../templateEngine/engine';
 import { useSettingsStore } from '../store/settingsStore';
+import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
+import type { UnifiedObject } from '../types/unifiedObject';
 import {
   LLMTaskMode,
   type LLMTaskModeType,
@@ -14,7 +15,7 @@ import {
   type ChatWorkspacePromptContext,
   type ChatNovelEditorPromptContext,
   type StoryObjectEditPromptContext,
-  type ChapterEditPromptContext,
+  type ManuscriptEditPromptContext,
   type StoryTranslationPromptContext,
   type ChatTranslationPromptContext,
   type ObjectImagePromptContext,
@@ -23,7 +24,7 @@ import {
 
 /**
  * PromptManager - Renders prompt templates for all LLM task modes
- * Supports systemPrompt, userPrompt, nonLastUserPrompt, and prefill
+ * Uses unified schema: config/project/input + mode-specific groups
  */
 export class PromptManager {
   /**
@@ -36,17 +37,14 @@ export class PromptManager {
   ): Promise<string | null> {
     const store = useSettingsStore.getState();
 
-    // Try to get from cache first
     const cached = store.getPromptFromCache(functionType, category as any, name);
     if (cached) {
       return cached;
     }
 
-    // Load from backend (will cache automatically)
     try {
       return await store.loadPrompt(functionType, category as any, name);
     } catch (error) {
-      // nonLastUserPrompt is optional, return null if not found
       if (category === 'nonLastUserPrompt') {
         return null;
       }
@@ -64,13 +62,13 @@ export class PromptManager {
   ): Promise<PromptBundle> {
     switch (mode) {
       case LLMTaskMode.CHAT_WORKSPACE:
-        return this.generateChatWorkspaceBundle(context as ChatWorkspacePromptContext);
+        return this.generateChatBundle(context as ChatWorkspacePromptContext, 'workspace');
       case LLMTaskMode.CHAT_NOVEL_EDITOR:
-        return this.generateChatNovelEditorBundle(context as ChatNovelEditorPromptContext);
+        return this.generateChatBundle(context as ChatNovelEditorPromptContext, 'novelEditor');
       case LLMTaskMode.STORY_OBJECT_EDIT:
         return this.generateStoryObjectEditBundle(context as StoryObjectEditPromptContext);
-      case LLMTaskMode.CHAPTER_EDIT:
-        return this.generateChapterEditBundle(context as ChapterEditPromptContext);
+      case LLMTaskMode.MANUSCRIPT_EDIT:
+        return this.generateManuscriptEditBundle(context as ManuscriptEditPromptContext);
       case LLMTaskMode.TRANSLATION:
         return this.generateTranslationBundle(context as StoryTranslationPromptContext);
       case LLMTaskMode.CHAT_TRANSLATION:
@@ -84,16 +82,10 @@ export class PromptManager {
     }
   }
 
-  /**
-   * Render a template with the given data
-   */
   static renderTemplate(template: string, data: Record<string, any>): string {
     return renderTemplate(template, data);
   }
 
-  /**
-   * Get functions for a given mode
-   */
   static getFunctionsForMode(
     mode: LLMTaskModeType,
     context: PromptContext
@@ -104,8 +96,8 @@ export class PromptManager {
         return (context as ChatWorkspacePromptContext).functions;
       case LLMTaskMode.STORY_OBJECT_EDIT:
         return this.getStoryObjectEditFunctions(context as StoryObjectEditPromptContext);
-      case LLMTaskMode.CHAPTER_EDIT:
-        return this.getChapterEditFunctions(context as ChapterEditPromptContext);
+      case LLMTaskMode.MANUSCRIPT_EDIT:
+        return this.getManuscriptEditFunctions(context as ManuscriptEditPromptContext);
       case LLMTaskMode.TRANSLATION:
         return this.getTranslationFunctions(context as StoryTranslationPromptContext);
       case LLMTaskMode.CHAT_TRANSLATION:
@@ -113,94 +105,47 @@ export class PromptManager {
       case LLMTaskMode.OBJECT_IMAGE_PROMPT:
         return this.getObjectImagePromptFunctions(context as ObjectImagePromptContext);
       case LLMTaskMode.SCENE_IMAGE_PROMPT:
-        return undefined; // Native output
+        return undefined;
       default:
         return undefined;
     }
   }
 
-  // ==================== Chat Workspace ====================
+  // ==================== Chat (Workspace & NovelEditor) ====================
 
-  private static async generateChatWorkspaceBundle(
-    context: ChatWorkspacePromptContext
+  private static async generateChatBundle(
+    context: ChatWorkspacePromptContext | ChatNovelEditorPromptContext,
+    mode: 'workspace' | 'novelEditor'
   ): Promise<PromptBundle> {
     const [systemTemplate, userTemplate, nonLastTemplate, prefillTemplate] = await Promise.all([
-      this.getTemplate('chat', 'systemPrompt', 'workspace'),
-      this.getTemplate('chat', 'userPrompt', 'workspace'),
-      this.getTemplate('chat', 'nonLastUserPrompt', 'workspace'),
-      this.getTemplate('chat', 'prefill', 'workspace'),
+      this.getTemplate('chat', 'systemPrompt', mode),
+      this.getTemplate('chat', 'userPrompt', mode),
+      this.getTemplate('chat', 'nonLastUserPrompt', mode),
+      this.getTemplate('chat', 'prefill', mode),
     ]);
 
-    const mainLanguage = this.resolveLanguage(context.outputLanguage);
-
+    const settings = useSettingsStore.getState().settings;
     const templateData: TemplateData = {
-      variable: {
-        mainLanguage,
-        mode: 'workspace' as const,
-        userInput: context.userInput,
-        today: new Date().toISOString().split('T')[0],
+      config: this.buildConfigData(context),
+      project: this.buildProjectData(context.projectId, settings.mainLanguage),
+      input: {
+        userMessage: context.userInput,
+        functionResults: context.functionResults?.map(r => ({
+          functionCallId: r.functionCallId,
+          functionName: r.functionName,
+          success: r.success,
+          isRejected: r.isRejected ?? false,
+          resultMessage: r.resultMessage,
+          appliedAt: r.appliedAt ? (typeof r.appliedAt === 'string' ? r.appliedAt : r.appliedAt.toISOString()) : undefined,
+        })),
       },
-      state: {
-        enableThinking: context.enableThinking ?? false,
-        enableCustomThinking: context.enableCustomThinking ?? false,
-        enablePrefill: context.enablePrefill ?? false,
-        hasFunctions: !!(context.functions && context.functions.length > 0),
-      },
-      context: {
-        storyContext: context.storyObjects ?? null,
-        functionResults: context.functionResults ?? [],
-      },
+      chat: { mode },
     };
 
     return {
       systemPrompt: renderTemplate(systemTemplate!, templateData),
       userPrompt: userTemplate ? renderTemplate(userTemplate, templateData) : context.userInput,
-      nonLastUserPrompt: nonLastTemplate ? nonLastTemplate : undefined,
-      prefill: prefillTemplate && context.enablePrefill
-        ? renderTemplate(prefillTemplate, templateData)
-        : undefined,
-      templateData,
-    };
-  }
-
-  // ==================== Chat Novel Editor ====================
-
-  private static async generateChatNovelEditorBundle(
-    context: ChatNovelEditorPromptContext
-  ): Promise<PromptBundle> {
-    const [systemTemplate, userTemplate, nonLastTemplate, prefillTemplate] = await Promise.all([
-      this.getTemplate('chat', 'systemPrompt', 'novelEditor'),
-      this.getTemplate('chat', 'userPrompt', 'novelEditor'),
-      this.getTemplate('chat', 'nonLastUserPrompt', 'novelEditor'),
-      this.getTemplate('chat', 'prefill', 'novelEditor'),
-    ]);
-
-    const mainLanguage = this.resolveLanguage(context.outputLanguage);
-
-    const templateData: TemplateData = {
-      variable: {
-        mainLanguage,
-        mode: 'novelEditor' as const,
-        userInput: context.userInput,
-        today: new Date().toISOString().split('T')[0],
-      },
-      state: {
-        enableThinking: context.enableThinking ?? false,
-        enableCustomThinking: context.enableCustomThinking ?? false,
-        enablePrefill: context.enablePrefill ?? false,
-        hasFunctions: !!(context.functions && context.functions.length > 0),
-      },
-      context: {
-        storyContext: context.storyObjects ?? null,
-        novelContent: context.novelData ?? null,
-        functionResults: context.functionResults ?? [],
-      },
-    };
-
-    return {
-      systemPrompt: renderTemplate(systemTemplate!, templateData),
-      userPrompt: userTemplate ? renderTemplate(userTemplate, templateData) : context.userInput,
-      nonLastUserPrompt: nonLastTemplate ? nonLastTemplate : undefined,
+      nonLastUserPrompt: nonLastTemplate ?? undefined,
       prefill: prefillTemplate && context.enablePrefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
@@ -219,30 +164,14 @@ export class PromptManager {
       this.getTemplate('storyObjectEdit', 'prefill'),
     ]);
 
-    const categoryName = this.getCategoryDisplayName(context.category);
-    const editScope = context.targetId ? 'a specific item' : 'the entire category';
-    const mainLanguage = this.resolveLanguage(context.outputLanguage);
-    const isBatchEdit = !context.targetId;
-
+    const settings = useSettingsStore.getState().settings;
     const templateData: TemplateData = {
-      variable: {
-        mainLanguage,
-        userInput: context.userInput,
-        today: new Date().toISOString().split('T')[0],
-        categoryName,
-        editScope,
-        targetId: context.targetId ?? '',
-      },
-      state: {
-        enableThinking: context.enableThinking ?? false,
-        enableCustomThinking: context.enableCustomThinking ?? false,
-        enablePrefill: context.enablePrefill ?? false,
-        isNativeOutput: context.isNativeOutput ?? false,
-        isBatchEdit,
-      },
-      context: {
-        contextData: context.contextData,
-        currentData: context.currentData,
+      config: this.buildConfigData(context),
+      project: this.buildProjectData(context.projectId, settings.mainLanguage),
+      input: { userMessage: context.userInput },
+      storyObjectEdit: {
+        targetIds: context.targetIds,
+        contextIds: context.contextIds,
       },
     };
 
@@ -258,8 +187,8 @@ export class PromptManager {
 
   // ==================== Chapter Edit ====================
 
-  private static async generateChapterEditBundle(
-    context: ChapterEditPromptContext
+  private static async generateManuscriptEditBundle(
+    context: ManuscriptEditPromptContext
   ): Promise<PromptBundle> {
     const [systemTemplate, userTemplate, prefillTemplate] = await Promise.all([
       this.getTemplate('manuscriptEdit', 'systemPrompt'),
@@ -267,25 +196,16 @@ export class PromptManager {
       this.getTemplate('manuscriptEdit', 'prefill'),
     ]);
 
-    const mainLanguage = this.resolveLanguage(context.outputLanguage);
-
+    const settings = useSettingsStore.getState().settings;
     const templateData: TemplateData = {
-      variable: {
-        mainLanguage,
-        userInput: context.userInput,
-        today: new Date().toISOString().split('T')[0],
+      config: this.buildConfigData(context),
+      project: this.buildProjectData(context.projectId, settings.mainLanguage),
+      input: { userMessage: context.userInput },
+      manuscriptEdit: {
         currentChapterId: context.currentChapterId,
         currentChapterName: context.currentChapterName,
-        currentChapterContent: context.currentChapterContent,
-      },
-      state: {
-        enableThinking: context.enableThinking ?? false,
-        enableCustomThinking: context.enableCustomThinking ?? false,
-        enablePrefill: context.enablePrefill ?? false,
-        isNativeOutput: context.isNativeOutput ?? false,
-      },
-      context: {
-        contextData: context.contextData,
+        currentChapterManuscript: context.currentChapterContent,
+        objectIds: context.objectIds,
       },
     };
 
@@ -310,9 +230,9 @@ export class PromptManager {
 
     try {
       [systemTemplate, userTemplate, prefillTemplate] = await Promise.all([
-        this.getTemplate('translation', 'systemPrompt', 'story'),
-        this.getTemplate('translation', 'userPrompt', 'story'),
-        this.getTemplate('translation', 'prefill', 'story'),
+        this.getTemplate('translation', 'systemPrompt', 'object'),
+        this.getTemplate('translation', 'userPrompt', 'object'),
+        this.getTemplate('translation', 'prefill', 'object'),
       ]) as [string, string, string | null];
     } catch {
       [systemTemplate, userTemplate, prefillTemplate] = await Promise.all([
@@ -322,26 +242,15 @@ export class PromptManager {
       ]) as [string, string, string | null];
     }
 
-    const hasContext = !!(context.contextData && Object.keys(context.contextData).length > 0);
-
+    const settings = useSettingsStore.getState().settings;
     const templateData: TemplateData = {
-      variable: {
-        userInput: context.userInput,
-        today: new Date().toISOString().split('T')[0],
+      config: this.buildConfigData(context),
+      project: this.buildProjectData(context.projectId, settings.mainLanguage),
+      input: { userMessage: context.userInput },
+      translation: {
         sourceLanguage: context.sourceLanguage,
         targetLanguage: context.targetLanguage,
-        objectCount: context.objectCount,
-      },
-      state: {
-        enableThinking: context.enableThinking ?? false,
-        enableCustomThinking: context.enableCustomThinking ?? false,
-        enablePrefill: context.enablePrefill ?? false,
-        isNativeOutput: context.isNativeOutput ?? false,
-        hasContext,
-      },
-      context: {
-        objectsArray: context.objectsArray,
-        contextData: context.contextData,
+        objectIds: context.objectsArray.map(o => o.id),
       },
     };
 
@@ -366,22 +275,16 @@ export class PromptManager {
       this.getTemplate('translation', 'prefill', 'chat'),
     ]);
 
+    const settings = useSettingsStore.getState().settings;
     const templateData: TemplateData = {
-      variable: {
-        userInput: context.userInput,
-        today: new Date().toISOString().split('T')[0],
+      config: this.buildConfigData(context),
+      project: this.buildProjectData(context.projectId, settings.mainLanguage),
+      input: { userMessage: context.userInput },
+      translation: {
         sourceLanguage: context.sourceLanguage,
         targetLanguage: context.targetLanguage,
-        objectCount: 1,
-        sourceContent: context.sourceContent,
+        chatMessages: [{ id: 'source', content: context.sourceContent }],
       },
-      state: {
-        enableThinking: context.enableThinking ?? false,
-        enableCustomThinking: context.enableCustomThinking ?? false,
-        enablePrefill: context.enablePrefill ?? false,
-        isNativeOutput: context.isNativeOutput ?? false,
-      },
-      context: {},
     };
 
     return {
@@ -405,32 +308,19 @@ export class PromptManager {
       this.getTemplate('imagePrompt', 'prefill', 'object'),
     ]);
 
-    const mainLanguage = this.resolveLanguage(context.outputLanguage);
-
+    const settings = useSettingsStore.getState().settings;
     const templateData: TemplateData = {
-      variable: {
-        mainLanguage,
-        userInput: context.userInput,
-        today: new Date().toISOString().split('T')[0],
+      config: this.buildConfigData(context),
+      project: this.buildProjectData(context.projectId, settings.mainLanguage),
+      input: { userMessage: context.userInput },
+      imagePrompt: {
         objectType: context.objectType,
         objectInfo: context.objectInfo,
-        currentPrompt: context.currentPrompt,
-        currentPromptPositive: context.currentPromptPositive,
-        currentPromptNegative: context.currentPromptNegative,
         promptMode: context.promptMode,
+        currentPrompt: context.currentPrompt ?? undefined,
+        currentPromptPositive: context.currentPromptPositive ?? undefined,
+        currentPromptNegative: context.currentPromptNegative ?? undefined,
       },
-      state: {
-        enableThinking: context.enableThinking ?? false,
-        enableCustomThinking: context.enableCustomThinking ?? false,
-        enablePrefill: context.enablePrefill ?? false,
-        isNativeOutput: context.isNativeOutput ?? false,
-        isNaturalPrompt: context.promptMode === 'natural',
-        isPositivePrompt: context.promptMode === 'positive',
-        isNegativePrompt: context.promptMode === 'negative',
-        hasUserInput: !!context.userInput?.trim(),
-        hasCurrentPrompt: !!(context.currentPrompt || context.currentPromptPositive),
-      },
-      context: {},
     };
 
     return {
@@ -454,30 +344,16 @@ export class PromptManager {
       this.getTemplate('imagePrompt', 'prefill', 'scene'),
     ]);
 
-    const mainLanguage = this.resolveLanguage(context.outputLanguage);
-
+    const settings = useSettingsStore.getState().settings;
     const templateData: TemplateData = {
-      variable: {
-        mainLanguage,
-        userInput: context.userInput,
-        today: new Date().toISOString().split('T')[0],
+      config: this.buildConfigData(context),
+      project: this.buildProjectData(context.projectId, settings.mainLanguage),
+      input: { userMessage: context.userInput },
+      imagePrompt: {
+        promptMode: context.promptMode,
         scenePreContext: context.scenePreContext,
         scenePostContext: context.scenePostContext,
-        promptMode: context.promptMode,
-      },
-      state: {
-        enableThinking: context.enableThinking ?? false,
-        enableCustomThinking: context.enableCustomThinking ?? false,
-        enablePrefill: context.enablePrefill ?? false,
-        isNativeOutput: context.isNativeOutput ?? false,
-        isNaturalPrompt: context.promptMode === 'natural',
-        isPositivePrompt: context.promptMode === 'positive',
-        isNegativePrompt: context.promptMode === 'negative',
-        hasUserInput: !!context.userInput?.trim(),
-        hasSelectedObjects: context.selectedObjects && context.selectedObjects.length > 0,
-      },
-      context: {
-        selectedObjects: context.selectedObjects || [],
+        selectedObjectIds: context.selectedObjects.map(o => o.id),
       },
     };
 
@@ -493,23 +369,263 @@ export class PromptManager {
 
   // ==================== Helpers ====================
 
-  private static resolveLanguage(language?: string): string {
-    const trimmed = language ? language.trim() : '';
-    return trimmed.length > 0 ? trimmed : 'the language used by the user';
+  private static buildConfigData(context: {
+    enableThinking?: boolean;
+    enableCustomThinking?: boolean;
+    enablePrefill?: boolean;
+    isNativeOutput?: boolean;
+  }): TemplateData['config'] {
+    const store = useSettingsStore.getState();
+    const settings = store.settings;
+
+    return {
+      mainLanguage: settings.mainLanguage,
+      displayLanguage: settings.displayLanguage || settings.mainLanguage,
+      today: new Date().toISOString().split('T')[0],
+      isThinkingEnabled: context.enableThinking ?? false,
+      isPrefillEnabled: context.enablePrefill ?? false,
+      isCustomThinkingEnabled: context.enableCustomThinking ?? false,
+      isNativeOutputMode: context.isNativeOutput ?? false,
+    };
   }
 
-  private static getCategoryDisplayName(category: StoryObjectCategory): string {
-    const names: Record<string, string> = {
-      basicInfo: 'Basic Info',
-      character: 'Character',
-      organization: 'Organization',
-      location: 'Location',
-      lorebook: 'Lorebook',
-      outline: 'Outline',
-      act: 'Act',
-      chapter: 'Chapter',
+  /**
+   * Helper to get data for a specific language from an object.
+   * Falls back to first available language if requested language not found.
+   */
+  private static getObjectDataForLanguage(obj: UnifiedObject, language: string): Record<string, any> {
+    if (obj.data[language]) {
+      return obj.data[language];
+    }
+    const availableLanguages = Object.keys(obj.data);
+    if (availableLanguages.length > 0) {
+      return obj.data[availableLanguages[0]];
+    }
+    return {};
+  }
+
+  /**
+   * Build project data from unifiedObjectStore for template rendering.
+   * @param projectId - The project ID to filter objects by
+   * @param language - The language to extract data for (mainLanguage)
+   */
+  private static buildProjectData(projectId: string | undefined, language: string): TemplateData['project'] {
+    if (!projectId) {
+      return {
+        basicInfo: null,
+        objects: [],
+        outline: null,
+        manuscripts: [],
+        subLanguages: {},
+      };
+    }
+
+    const store = useUnifiedObjectStore.getState();
+    const allObjects = Object.values(store.objects);
+    const projectObjects = allObjects.filter(
+      obj => obj.metadata?.project_id === projectId
+    );
+
+    // Group by type
+    const basicInfoList = projectObjects.filter(obj => obj.type === 'basic_info');
+    const characters = projectObjects.filter(obj => obj.type === 'character');
+    const organizations = projectObjects.filter(obj => obj.type === 'organization');
+    const locations = projectObjects.filter(obj => obj.type === 'location');
+    const lorebook = projectObjects.filter(obj => obj.type === 'lorebook');
+    const acts = projectObjects.filter(obj => obj.type === 'act');
+    const chapters = projectObjects.filter(obj => obj.type === 'chapter');
+    const manuscripts = projectObjects.filter(obj => obj.type === 'manuscript');
+
+    // Build basic info
+    const basicInfo = basicInfoList.length > 0 ? (() => {
+      const data = this.getObjectDataForLanguage(basicInfoList[0], language);
+      return {
+        id: basicInfoList[0].id,
+        title: data.title || '',
+        logline: data.logline || '',
+        genre: data.genre || '',
+      };
+    })() : null;
+
+    // Build objects array (characters, organizations, locations, lorebook combined with type field)
+    const objects: TemplateData['project']['objects'] = [
+      ...characters.map(ch => {
+        const data = this.getObjectDataForLanguage(ch, language);
+        return {
+          type: 'character',
+          id: ch.id,
+          name: data.name || '',
+          description: data.description || '',
+          imagePrompt: ch.metadata?.image_prompt || undefined,
+          imagePromptPositive: ch.metadata?.image_prompt_positive || undefined,
+          imagePromptNegative: ch.metadata?.image_prompt_negative || undefined,
+        };
+      }),
+      ...organizations.map(org => {
+        const data = this.getObjectDataForLanguage(org, language);
+        return {
+          type: 'organization',
+          id: org.id,
+          name: data.name || '',
+          description: data.description || '',
+          imagePrompt: org.metadata?.image_prompt || undefined,
+          imagePromptPositive: org.metadata?.image_prompt_positive || undefined,
+          imagePromptNegative: org.metadata?.image_prompt_negative || undefined,
+        };
+      }),
+      ...locations.map(loc => {
+        const data = this.getObjectDataForLanguage(loc, language);
+        return {
+          type: 'location',
+          id: loc.id,
+          name: data.name || '',
+          description: data.description || '',
+          imagePrompt: loc.metadata?.image_prompt || undefined,
+          imagePromptPositive: loc.metadata?.image_prompt_positive || undefined,
+          imagePromptNegative: loc.metadata?.image_prompt_negative || undefined,
+        };
+      }),
+      ...lorebook.map(entry => {
+        const data = this.getObjectDataForLanguage(entry, language);
+        return {
+          type: 'lorebook',
+          id: entry.id,
+          name: data.name || '',
+          description: data.description || '',
+          imagePrompt: entry.metadata?.image_prompt || undefined,
+          imagePromptPositive: entry.metadata?.image_prompt_positive || undefined,
+          imagePromptNegative: entry.metadata?.image_prompt_negative || undefined,
+        };
+      }),
+    ];
+
+    // Build outline with acts and chapters
+    const outline: TemplateData['project']['outline'] = acts.length > 0 ? {
+      acts: acts
+        .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0))
+        .map(act => {
+          const actData = this.getObjectDataForLanguage(act, language);
+          return {
+            id: act.id,
+            name: actData.name || '',
+            description: actData.description || '',
+            chapters: chapters
+              .filter(ch => ch.metadata?.act_id === act.id)
+              .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0))
+              .map(chapter => {
+                const chapterData = this.getObjectDataForLanguage(chapter, language);
+                return {
+                  id: chapter.id,
+                  name: chapterData.name || '',
+                  description: chapterData.description || '',
+                };
+              }),
+          };
+        }),
+    } : null;
+
+    // Build manuscripts array
+    const manuscriptList: TemplateData['project']['manuscripts'] = manuscripts.map(ms => {
+      const data = this.getObjectDataForLanguage(ms, language);
+      const chapterId = ms.metadata?.chapter_id || '';
+      const chapter = chapters.find(ch => ch.id === chapterId);
+      const chapterData = chapter ? this.getObjectDataForLanguage(chapter, language) : {};
+      return {
+        id: ms.id,
+        chapterId,
+        chapterName: chapterData.name || '',
+        content: data.content || '',
+        wordCount: (data.content || '').length,
+      };
+    });
+
+    // Build subLanguages - same structure for other languages
+    const subLanguages: TemplateData['project']['subLanguages'] = {};
+
+    // Collect all available languages from all objects
+    const allLanguages = new Set<string>();
+    projectObjects.forEach(obj => {
+      Object.keys(obj.data || {}).forEach(lang => allLanguages.add(lang));
+    });
+
+    // Build data for each non-main language
+    allLanguages.forEach(lang => {
+      if (lang === language) return; // Skip main language
+
+      const langBasicInfo = basicInfoList.length > 0 ? (() => {
+        const data = this.getObjectDataForLanguage(basicInfoList[0], lang);
+        return {
+          id: basicInfoList[0].id,
+          title: data.title || '',
+          logline: data.logline || '',
+          genre: data.genre || '',
+        };
+      })() : null;
+
+      const langObjects = [
+        ...characters.map(ch => {
+          const data = ch.data[lang] || {};
+          return {
+            type: 'character',
+            id: ch.id,
+            name: data.name || '',
+            description: data.description || '',
+            imagePrompt: ch.metadata?.image_prompt || undefined,
+            imagePromptPositive: ch.metadata?.image_prompt_positive || undefined,
+            imagePromptNegative: ch.metadata?.image_prompt_negative || undefined,
+          };
+        }),
+        ...organizations.map(org => {
+          const data = org.data[lang] || {};
+          return {
+            type: 'organization',
+            id: org.id,
+            name: data.name || '',
+            description: data.description || '',
+            imagePrompt: org.metadata?.image_prompt || undefined,
+            imagePromptPositive: org.metadata?.image_prompt_positive || undefined,
+            imagePromptNegative: org.metadata?.image_prompt_negative || undefined,
+          };
+        }),
+        ...locations.map(loc => {
+          const data = loc.data[lang] || {};
+          return {
+            type: 'location',
+            id: loc.id,
+            name: data.name || '',
+            description: data.description || '',
+            imagePrompt: loc.metadata?.image_prompt || undefined,
+            imagePromptPositive: loc.metadata?.image_prompt_positive || undefined,
+            imagePromptNegative: loc.metadata?.image_prompt_negative || undefined,
+          };
+        }),
+        ...lorebook.map(entry => {
+          const data = entry.data[lang] || {};
+          return {
+            type: 'lorebook',
+            id: entry.id,
+            name: data.name || '',
+            description: data.description || '',
+            imagePrompt: entry.metadata?.image_prompt || undefined,
+            imagePromptPositive: entry.metadata?.image_prompt_positive || undefined,
+            imagePromptNegative: entry.metadata?.image_prompt_negative || undefined,
+          };
+        }),
+      ];
+
+      subLanguages[lang] = {
+        basicInfo: langBasicInfo,
+        objects: langObjects,
+      };
+    });
+
+    return {
+      basicInfo,
+      objects,
+      outline,
+      manuscripts: manuscriptList,
+      subLanguages,
     };
-    return names[category] || category;
   }
 
   // ==================== Function Schemas ====================
@@ -518,14 +634,14 @@ export class PromptManager {
     context: StoryObjectEditPromptContext
   ): FunctionCallSchema[] | undefined {
     if (context.isNativeOutput) return undefined;
-    return getEditFunctionsForCategory(context.category, context.targetId);
+    return STORY_OBJECT_EDIT_FUNCTIONS;
   }
 
-  private static getChapterEditFunctions(
-    context: ChapterEditPromptContext
+  private static getManuscriptEditFunctions(
+    context: ManuscriptEditPromptContext
   ): FunctionCallSchema[] | undefined {
     if (context.isNativeOutput) return undefined;
-    return CHAPTER_EDIT_FUNCTIONS;
+    return MANUSCRIPT_EDIT_FUNCTIONS;
   }
 
   private static getTranslationFunctions(
@@ -548,5 +664,4 @@ export class PromptManager {
     if (context.isNativeOutput) return undefined;
     return OBJECT_IMAGE_PROMPT_FUNCTIONS;
   }
-
 }

@@ -27,7 +27,6 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
   const [editingChapter, setEditingChapter] = useState<string | null>(null);
   const [showAddActForm, setShowAddActForm] = useState(false);
   const [showAddChapterForm, setShowAddChapterForm] = useState<string | null>(null);
-  const [showAIModal, setShowAIModal] = useState(false);
   const [showActAIModal, setShowActAIModal] = useState<string | null>(null);
   const [showChapterAIModal, setShowChapterAIModal] = useState<string | null>(null);
   const [showActVersionHistory, setShowActVersionHistory] = useState<string | null>(null);
@@ -288,14 +287,6 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
   // AI & VERSION HISTORY HANDLERS
   // ========================================================================
 
-  const handleAIResult = async (_result?: any) => {
-    if (!projectId) return;
-
-    // TODO: Implement full outline AI edit
-    // This would need to handle creating/updating multiple acts and chapters
-    console.warn('Full outline AI edit not yet implemented for unified system');
-  };
-
   const handleActAIResult = async (result: any) => {
     if (!projectId || !showActAIModal) return;
 
@@ -394,15 +385,6 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
             {allCollapsed ? "Expand" : "Collapse"}
           </TextButton>
           <TextButton
-            variant="primary"
-            size="sm"
-            onClick={() => setShowAIModal(true)}
-            iconLeft={<AIAssist size="sm" />}
-            className="desktop-only"
-          >
-            AI Edit
-          </TextButton>
-          <TextButton
             variant="secondary"
             size="sm"
             onClick={() => setShowAddActForm(true)}
@@ -427,11 +409,6 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
               onClick={toggleAllCards}
             />
             <DropdownDivider />
-            <DropdownItem
-              icon={<AIAssist size="sm" />}
-              label="AI Edit"
-              onClick={() => setShowAIModal(true)}
-            />
             <DropdownItem
               icon={<Plus size="sm" />}
               label="Add Act"
@@ -674,15 +651,6 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
           })
         )}
       </div>
-
-      <AIEditModal
-        isOpen={showAIModal}
-        onClose={() => setShowAIModal(false)}
-        category="act"
-        projectId={projectId || ''}
-        targetId={''} // Outline-level edit
-        onResult={handleAIResult}
-      />
 
       {/* Act AI Edit Modal */}
       {showActAIModal && (

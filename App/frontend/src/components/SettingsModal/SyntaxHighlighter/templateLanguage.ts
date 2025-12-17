@@ -2,8 +2,8 @@ import { StreamLanguage } from '@codemirror/language';
 import type { StreamParser } from '@codemirror/language';
 
 /**
- * CodeMirror StreamLanguage for LiquidJS template syntax highlighting
- * Supports: {{ variable }}, {% tag %}, XML tags, and Markdown
+ * CodeMirror StreamLanguage for Handlebars template syntax highlighting
+ * Supports: {{ variable }}, {{#block}}...{{/block}}, XML tags, and Markdown
  */
 
 interface TemplateState {
@@ -11,7 +11,7 @@ interface TemplateState {
 }
 
 const templateParser: StreamParser<TemplateState> = {
-  name: 'liquid',
+  name: 'handlebars',
 
   startState: (): TemplateState => ({
     inCodeBlock: false,
@@ -44,18 +44,29 @@ const templateParser: StreamParser<TemplateState> = {
       return 'list';
     }
 
-    // Try to match LiquidJS tag {% ... %}
-    if (stream.match(/^\{%/)) {
+    // Try to match Handlebars block helpers {{#...}}, {{/...}}, {{^...}}
+    if (stream.match(/^\{\{[#/^]/)) {
       while (!stream.eol()) {
-        if (stream.match(/^%\}/)) {
+        if (stream.match(/^\}\}/)) {
           return 'keyword';
         }
         stream.next();
       }
-      return 'keyword'; // Unclosed tag is still highlighted as keyword
+      return 'keyword';
     }
 
-    // Try to match LiquidJS output {{ ... }}
+    // Try to match Handlebars comments {{!-- ... --}} or {{! ... }}
+    if (stream.match(/^\{\{!/)) {
+      while (!stream.eol()) {
+        if (stream.match(/^--\}\}/) || stream.match(/^\}\}/)) {
+          return 'comment';
+        }
+        stream.next();
+      }
+      return 'comment';
+    }
+
+    // Try to match Handlebars output {{ ... }}
     if (stream.match(/^\{\{/)) {
       while (!stream.eol()) {
         if (stream.match(/^\}\}/)) {

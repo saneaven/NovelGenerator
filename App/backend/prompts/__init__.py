@@ -46,10 +46,10 @@ _NOVEL_EDITOR_SYSTEM_PROMPT = _load_prompt_file('chat/novelEditor/systemPrompt.m
 _NOVEL_EDITOR_USER_PROMPT = _load_prompt_file('chat/novelEditor/userPrompt.md')
 _NOVEL_EDITOR_NON_LAST_USER_PROMPT = _load_prompt_file('chat/novelEditor/nonLastUserPrompt.md')
 _NOVEL_EDITOR_PREFILL = _load_prompt_file('chat/novelEditor/prefill.md')
-# Translation - Story
-_TRANSLATION_SYSTEM_PROMPT_STORY = _load_prompt_file('translation/story/systemPrompt.md')
-_TRANSLATION_USER_PROMPT_STORY = _load_prompt_file('translation/story/userPrompt.md')
-_TRANSLATION_PREFILL_STORY = _load_prompt_file('translation/story/prefill.md')
+# Translation - Object
+_TRANSLATION_SYSTEM_PROMPT_OBJECT = _load_prompt_file('translation/object/systemPrompt.md')
+_TRANSLATION_USER_PROMPT_OBJECT = _load_prompt_file('translation/object/userPrompt.md')
+_TRANSLATION_PREFILL_OBJECT = _load_prompt_file('translation/object/prefill.md')
 # Translation - Chat
 _TRANSLATION_SYSTEM_PROMPT_CHAT = _load_prompt_file('translation/chat/systemPrompt.md')
 _TRANSLATION_USER_PROMPT_CHAT = _load_prompt_file('translation/chat/userPrompt.md')
@@ -94,15 +94,15 @@ DEFAULT_PROMPTS = {
     },
     'translation': {
         'systemPrompt': {
-            'story': _TRANSLATION_SYSTEM_PROMPT_STORY,
+            'object': _TRANSLATION_SYSTEM_PROMPT_OBJECT,
             'chat': _TRANSLATION_SYSTEM_PROMPT_CHAT,
         },
         'userPrompt': {
-            'story': _TRANSLATION_USER_PROMPT_STORY,
+            'object': _TRANSLATION_USER_PROMPT_OBJECT,
             'chat': _TRANSLATION_USER_PROMPT_CHAT,
         },
         'prefill': {
-            'story': _TRANSLATION_PREFILL_STORY,
+            'object': _TRANSLATION_PREFILL_OBJECT,
             'chat': _TRANSLATION_PREFILL_CHAT,
         },
     },

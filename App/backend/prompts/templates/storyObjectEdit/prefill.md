@@ -1,1 +1,1 @@
-I understand you want to edit {{ variable.categoryName }} ({{ variable.editScope }}). I'll provide the updated JSON in {{ variable.mainLanguage }}.
+I understand you want to edit {{ storyObjectEdit.categoryName }} ({{ storyObjectEdit.editScope }}). I'll provide the updated JSON in {{ config.mainLanguage }}.

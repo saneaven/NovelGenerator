@@ -6,7 +6,7 @@ import ToastErrorModal from '../Toast/ToastErrorModal';
 
 // Import modal types for retry functionality
 import AIEditModal from '../AIEditModal';
-import NovelChapterAIEditModal from '../NovelChapterAIEditModal';
+import ManuscriptAIEditModal from '../ManuscriptAIEditModal';
 import TranslationModal from '../TranslationModal';
 import ImagePromptBuilderModal from '../ImageGeneration/ImagePromptBuilderModal';
 
@@ -97,7 +97,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
 
       case 'chapter-edit':
         return (
-          <NovelChapterAIEditModal
+          <ManuscriptAIEditModal
             isOpen={true}
             onClose={handleRetryModalClose}
             projectId={modalProps.projectId}

@@ -131,36 +131,36 @@ export const PROMPT_TREE: PromptNode[] = [
     type: 'category',
     children: [
       {
-        id: 'translation-story',
+        id: 'translation-object',
         label: 'Story Objects',
         type: 'category',
         defaultExpanded: true,
         children: [
           {
-            id: 'translation-story-system',
+            id: 'translation-object-system',
             label: 'System Prompt',
             type: 'prompt',
             functionType: 'translation',
             category: 'systemPrompt',
-            name: 'story',
+            name: 'object',
             description: 'Instructions for translating story objects (single or batch)'
           },
           {
-            id: 'translation-story-user',
+            id: 'translation-object-user',
             label: 'User Prompt',
             type: 'prompt',
             functionType: 'translation',
             category: 'userPrompt',
-            name: 'story',
+            name: 'object',
             description: 'Auto-generated user message with story object payload'
           },
           {
-            id: 'translation-story-prefill',
+            id: 'translation-object-prefill',
             label: 'Prefill Template',
             type: 'prompt',
             functionType: 'translation',
             category: 'prefill',
-            name: 'story',
+            name: 'object',
             description: 'Template for story-object translation responses'
           }
         ]

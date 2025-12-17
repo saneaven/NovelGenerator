@@ -165,6 +165,7 @@ export interface Settings {
     mainLanguage: string;
     subLanguages: string[];
     defaultSubLanguage: string | null;
+    displayLanguage: string; // Currently active display language (defaults to mainLanguage)
 
     // Theme settings
     theme: ThemeMode;
@@ -313,6 +314,7 @@ const defaultSettings: Settings = {
     mainLanguage: 'English',
     subLanguages: [],
     defaultSubLanguage: null,
+    displayLanguage: 'English', // Defaults to mainLanguage
 
     // Default to system theme preference
     theme: 'system',
@@ -370,6 +372,7 @@ interface SettingsStore {
     setMainLanguage: (language: string) => void;
     setSubLanguages: (languages: string[]) => void;
     setDefaultSubLanguage: (language: string | null) => void;
+    setDisplayLanguage: (language: string) => void;
     addSubLanguage: (language: string) => void;
     removeSubLanguage: (language: string) => void;
 
@@ -459,6 +462,7 @@ const mergeWithDefaults = (stored: any): Settings => {
         mainLanguage: stored.mainLanguage ?? defaultSettings.mainLanguage,
         subLanguages: stored.subLanguages ?? defaultSettings.subLanguages,
         defaultSubLanguage: stored.defaultSubLanguage ?? defaultSettings.defaultSubLanguage,
+        displayLanguage: stored.displayLanguage ?? stored.mainLanguage ?? defaultSettings.mainLanguage,
         theme: stored.theme ?? defaultSettings.theme,
         retryConfig: {
             ...defaultSettings.retryConfig,
@@ -661,6 +665,12 @@ export const useSettingsStore = create<SettingsStore>()(
             setDefaultSubLanguage: (language: string | null) => {
                 set((state) => ({
                     settings: { ...state.settings, defaultSubLanguage: language },
+                }));
+            },
+
+            setDisplayLanguage: (language: string) => {
+                set((state) => ({
+                    settings: { ...state.settings, displayLanguage: language },
                 }));
             },
 

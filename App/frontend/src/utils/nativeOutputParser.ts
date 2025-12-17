@@ -40,6 +40,13 @@ export interface ParsedItem {
   // For manuscript patches
   chapterId?: string;
   replacements?: ReplacementOperation[];
+  // For storyObjectEdit native output (function call format)
+  function?: string;
+  type?: string;
+  // For basic info edits
+  title?: TextFieldValue;
+  logline?: TextFieldValue;
+  genre?: TextFieldValue;
 }
 
 export interface ParsedChapterItem {

@@ -15,7 +15,7 @@ export {
   type ChatWorkspacePromptContext,
   type ChatNovelEditorPromptContext,
   type StoryObjectEditPromptContext,
-  type ChapterEditPromptContext,
+  type ManuscriptEditPromptContext,
   type StoryTranslationPromptContext,
   type ChatTranslationPromptContext,
   type ObjectImagePromptContext,
@@ -56,7 +56,6 @@ export {
 } from './schemas/chatFunctions';
 
 export {
-  // New function schemas
   REPLACE_BASIC_INFO_FUNCTION,
   PATCH_BASIC_INFO_FUNCTION,
   REPLACE_STORY_OBJECT_FUNCTION,
@@ -65,15 +64,8 @@ export {
   PATCH_CHAPTER_FUNCTION,
   REPLACE_MANUSCRIPT_FUNCTION,
   PATCH_MANUSCRIPT_FUNCTION,
-  REPLACE_STORY_OBJECTS_BATCH_FUNCTION,
-  REPLACE_CHAPTERS_BATCH_FUNCTION,
-  CHAPTER_EDIT_FUNCTIONS,
-  getEditFunctionSchema,
-  getEditFunctionSchemas,
-  getEditFunctionsForCategory,
-  getAllEditFunctionSchemas,
-  // Legacy aliases (deprecated)
-  EDIT_BASIC_INFO_FUNCTION,
+  STORY_OBJECT_EDIT_FUNCTIONS,
+  MANUSCRIPT_EDIT_FUNCTIONS,
 } from './schemas/editFunctions';
 
 export {

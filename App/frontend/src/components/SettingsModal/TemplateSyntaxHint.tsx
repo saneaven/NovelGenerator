@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { PromptNode } from './promptTree';
-import { PROMPT_SCHEMAS } from '../../templateEngine/schema';
-import type { PromptType } from '../../templateEngine/schema';
+import { UNIFIED_SCHEMA, PROMPT_TYPE_VARIABLES, type PromptType } from '../../templateEngine/schema';
 import { IconButton } from '../IconButton';
 import { Info, Close } from '../icons';
 import './TemplateSyntaxHint.css';
@@ -11,27 +10,55 @@ interface TemplateSyntaxHintProps {
     selectedNode: PromptNode | null;
 }
 
-type PlaceholderGroupKey = 'variable' | 'context' | 'state';
-
-const GROUP_LABELS: Record<PlaceholderGroupKey, string> = {
-    variable: 'Variables (Settings)',
-    context: 'Context Data',
-    state: 'State (Logic)',
+// Variable groups and their labels
+const GROUP_LABELS: Record<string, string> = {
+    config: 'Config (Settings)',
+    project: 'Project Data',
+    input: 'Input',
+    chat: 'Chat Mode',
+    manuscriptEdit: 'Manuscript Edit',
+    translation: 'Translation',
+    imagePrompt: 'Image Prompt',
+    storyObjectEdit: 'Story Object Edit',
 };
 
-function buildTokenPreview(group: PlaceholderGroupKey, name: string): string {
+// Handlebars helpers documentation
+const HANDLEBARS_HELPERS = {
+    'Filtering Helpers': [
+        { name: 'filterByType', syntax: '{{#each (filterByType arr "type")}}', desc: 'Filter objects by type field' },
+        { name: 'filterByIds', syntax: '{{#each (filterByIds arr ids)}}', desc: 'Filter array by ID list' },
+        { name: 'getById', syntax: '{{#with (getById arr id)}}', desc: 'Get single object by ID' },
+        { name: 'getManuscript', syntax: '{{#with (getManuscript manuscripts chapterId)}}', desc: 'Get manuscript by chapter ID' },
+        { name: 'getSubLanguageObjects', syntax: '{{#each (getSubLanguageObjects project lang ids)}}', desc: 'Get objects from sub-language' },
+    ],
+    'Utility Helpers': [
+        { name: 'count', syntax: '{{count arr}}', desc: 'Count array items' },
+        { name: 'hasItems', syntax: '{{#if (hasItems arr)}}', desc: 'Check if array has items' },
+        { name: 'json', syntax: '{{json obj}}', desc: 'Output as JSON string' },
+    ],
+    'Logic Helpers': [
+        { name: 'eq', syntax: '{{#if (eq a b)}}', desc: 'Equal comparison' },
+        { name: 'neq', syntax: '{{#if (neq a b)}}', desc: 'Not equal comparison' },
+        { name: 'and', syntax: '{{#if (and a b)}}', desc: 'Logical AND' },
+        { name: 'or', syntax: '{{#if (or a b)}}', desc: 'Logical OR' },
+        { name: 'not', syntax: '{{#if (not a)}}', desc: 'Logical NOT' },
+    ],
+};
+
+function buildTokenPreview(group: string, name: string): string {
     return `{{ ${group}.${name} }}`;
 }
 
 function buildTooltip(desc: string, example: any): string {
-    return `${desc}\nExample: ${JSON.stringify(example)}`;
+    const exampleStr = typeof example === 'object' ? JSON.stringify(example, null, 2) : String(example);
+    return `${desc}\nExample: ${exampleStr}`;
 }
 
 function getSchemaKey(functionType: string, name?: string): PromptType | null {
     switch (functionType) {
         case 'chat': return 'chat';
         case 'translation': return 'translation';
-        case 'storyEdit': return 'storyObjectEdit';
+        case 'storyObjectEdit': return 'storyObjectEdit';
         case 'manuscriptEdit': return 'manuscriptEdit';
         case 'imagePrompt':
             if (name === 'object') return 'objectImagePrompt';
@@ -44,6 +71,7 @@ function getSchemaKey(functionType: string, name?: string): PromptType | null {
 const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<'variables' | 'helpers'>('variables');
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -83,10 +111,12 @@ const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode })
         return () => window.clearTimeout(timeout);
     }, [copyFeedback]);
 
-    const schema = useMemo(() => {
-        if (!selectedNode || selectedNode.type !== 'prompt') return null;
+    const availableGroups = useMemo(() => {
+        if (!selectedNode || selectedNode.type !== 'prompt') {
+            return [];
+        }
         const key = getSchemaKey(selectedNode.functionType || '', selectedNode.name);
-        return key ? PROMPT_SCHEMAS[key] : null;
+        return key ? PROMPT_TYPE_VARIABLES[key] : [];
     }, [selectedNode]);
 
     const hasPromptSelection = Boolean(selectedNode && selectedNode.type === 'prompt');
@@ -109,26 +139,21 @@ const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode })
         }
     };
 
-    const renderGroup = (group: PlaceholderGroupKey) => {
-        if (!schema) return null;
-        const entries = (schema as any)[group];
-        
-        if (!entries) return null;
+    const renderVariableGroup = (group: string) => {
+        const groupSchema = UNIFIED_SCHEMA[group as keyof typeof UNIFIED_SCHEMA];
+        if (!groupSchema) return null;
 
-        const keys = Object.keys(entries);
-        
-        if (keys.length === 0) {
-            return null;
-        }
+        const keys = Object.keys(groupSchema);
+        if (keys.length === 0) return null;
 
         return (
             <section key={group} className="syntax-section">
                 <header className="syntax-section-header">
-                    <span className="syntax-section-title">{GROUP_LABELS[group]}</span>
+                    <span className="syntax-section-title">{GROUP_LABELS[group] || group}</span>
                 </header>
                 <div className="syntax-token-grid">
                     {keys.map((key) => {
-                        const entry = entries[key];
+                        const entry = (groupSchema as Record<string, { desc: string; example: any }>)[key];
                         const preview = buildTokenPreview(group, key);
                         const tooltip = buildTooltip(entry.desc, entry.example);
 
@@ -149,16 +174,43 @@ const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode })
         );
     };
 
-    let content: React.ReactNode = null;
+    const renderHelpersSection = () => {
+        return (
+            <>
+                {Object.entries(HANDLEBARS_HELPERS).map(([category, helpers]) => (
+                    <section key={category} className="syntax-section">
+                        <header className="syntax-section-header">
+                            <span className="syntax-section-title">{category}</span>
+                        </header>
+                        <div className="syntax-token-grid">
+                            {helpers.map((helper) => (
+                                <button
+                                    key={helper.name}
+                                    type="button"
+                                    className="syntax-token-chip helper"
+                                    onClick={() => handleCopy(helper.syntax)}
+                                    title={`${helper.desc}\nSyntax: ${helper.syntax}`}
+                                >
+                                    <span className="syntax-token-text">{helper.name}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </section>
+                ))}
+            </>
+        );
+    };
 
-    if (!schema) {
-        content = <div className="syntax-empty">No variables available for this prompt type.</div>;
+    let variablesContent: React.ReactNode = null;
+
+    if (availableGroups.length === 0) {
+        variablesContent = <div className="syntax-empty">No variables available for this prompt type.</div>;
     } else {
-        const groups = (['variable', 'context', 'state'] as PlaceholderGroupKey[])
-            .map((group) => renderGroup(group))
+        const groups = availableGroups
+            .map((group) => renderVariableGroup(group))
             .filter(Boolean);
 
-        content = groups.length > 0 ? (
+        variablesContent = groups.length > 0 ? (
             groups
         ) : (
             <div className="syntax-empty">No variables available.</div>
@@ -175,9 +227,9 @@ const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode })
             />
 
             {isOpen && (
-                <div className="syntax-popover" role="dialog" aria-label="LiquidJS syntax tokens">
+                <div className="syntax-popover" role="dialog" aria-label="Handlebars syntax tokens">
                     <header className="syntax-popover-header">
-                        <h4>LiquidJS Syntax</h4>
+                        <h4>Handlebars Syntax</h4>
                         <IconButton
                             icon={<Close size="sm" />}
                             onClick={() => setIsOpen(false)}
@@ -185,7 +237,25 @@ const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode })
                             size="xs"
                         />
                     </header>
-                    <div className="syntax-popover-content">{content}</div>
+                    <div className="syntax-tabs">
+                        <button
+                            type="button"
+                            className={`syntax-tab ${activeTab === 'variables' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('variables')}
+                        >
+                            Variables
+                        </button>
+                        <button
+                            type="button"
+                            className={`syntax-tab ${activeTab === 'helpers' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('helpers')}
+                        >
+                            Helpers
+                        </button>
+                    </div>
+                    <div className="syntax-popover-content">
+                        {activeTab === 'variables' ? variablesContent : renderHelpersSection()}
+                    </div>
                     {copyFeedback && <div className="syntax-copy-feedback">{copyFeedback}</div>}
                 </div>
             )}

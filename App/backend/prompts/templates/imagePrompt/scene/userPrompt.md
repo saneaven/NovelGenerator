@@ -1,49 +1,51 @@
 ## Prompt Format Required
 
-{% if state.isNaturalPrompt %}
+{{#if (eq imagePrompt.promptMode "natural")}}
 Generate a **natural language prompt** (flowing descriptive sentences for DALL-E, Gemini, Grok, etc.)
-{% endif %}
-{% if state.isPositivePrompt %}
+{{/if}}
+{{#if (eq imagePrompt.promptMode "positive")}}
 Generate **positive tags** (comma-separated keywords for NovelAI describing what TO include)
-{% endif %}
-{% if state.isNegativePrompt %}
+{{/if}}
+{{#if (eq imagePrompt.promptMode "negative")}}
 Generate **negative tags** (comma-separated keywords for NovelAI describing what to AVOID)
-{% endif %}
+{{/if}}
 
 ## Scene Context
 
 The image will be inserted at the cursor position in the novel. Here is the surrounding text:
 
 ### Text Before Cursor
-{{ variable.scenePreContext }}
+{{ imagePrompt.scenePreContext }}
 
 ### Text After Cursor
-{{ variable.scenePostContext }}
+{{ imagePrompt.scenePostContext }}
 
-{% if state.hasUserInput %}
+{{#if input.userMessage}}
 ## User Request
 
-{{ variable.userInput }}
-{% endif %}
+{{ input.userMessage }}
+{{/if}}
 
-{% if state.hasSelectedObjects %}
+{{#if (hasItems imagePrompt.selectedObjectIds)}}
 ## Story Object Context
 
 The following objects are relevant to this scene. Use their descriptions and saved image prompts (if available) to inform your generated prompt:
 
-{% for obj in context.selectedObjects %}
-### {{ obj.type | capitalize }}: {{ obj.name }}
-{{ obj.description }}
-{% if obj.imagePrompt %}
-**Saved Image Prompt:** {{ obj.imagePrompt }}
-{% endif %}
+{{#with (filterByIds project.objects imagePrompt.selectedObjectIds) as |selectedObjects|}}
+{{#each selectedObjects}}
+### {{ this.type }}: {{ this.name }}
+{{ this.description }}
+{{#if this.imagePrompt}}
+**Saved Image Prompt:** {{ this.imagePrompt }}
+{{/if}}
 
-{% endfor %}
-{% endif %}
+{{/each}}
+{{/with}}
+{{/if}}
 
 ---
 
 Generate an image prompt based on the scene context above.
-{% if state.hasSelectedObjects %}
+{{#if (hasItems imagePrompt.selectedObjectIds)}}
 Use the saved image prompts as reference for visual details when available.
-{% endif %}
+{{/if}}

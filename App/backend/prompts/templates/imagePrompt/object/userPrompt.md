@@ -1,45 +1,49 @@
 ## Prompt Format Required
 
-{% if state.isNaturalPrompt %}
+{{#if (eq imagePrompt.promptMode "natural")}}
 Generate a **natural language prompt** (flowing descriptive sentences for DALL-E, Gemini, Grok, etc.)
-{% endif %}
-{% if state.isPositivePrompt %}
+{{/if}}
+{{#if (eq imagePrompt.promptMode "positive")}}
 Generate **positive tags** (comma-separated keywords for NovelAI describing what TO include)
-{% endif %}
-{% if state.isNegativePrompt %}
+{{/if}}
+{{#if (eq imagePrompt.promptMode "negative")}}
 Generate **negative tags** (comma-separated keywords for NovelAI describing what to AVOID)
-{% endif %}
+{{/if}}
 
 ## Object Type
 
-{{ variable.objectType | capitalize }}
+{{ imagePrompt.objectType }}
 
 ## Object Information
 
-{{ variable.objectInfo }}
+{{ imagePrompt.objectInfo }}
 
-{% if state.hasUserInput %}
+{{#if input.userMessage}}
 ## User Request
 
-{{ variable.userInput }}
-{% endif %}
+{{ input.userMessage }}
+{{/if}}
 
-{% if state.hasCurrentPrompt %}
+{{#if (or imagePrompt.currentPrompt imagePrompt.currentPromptPositive imagePrompt.currentPromptNegative)}}
 ## Current Saved Prompts (for reference)
 
-{% if variable.currentPrompt %}
-**Natural Language:** {{ variable.currentPrompt }}
-{% endif %}
-{% if variable.currentPromptPositive %}
-**Positive Tags:** {{ variable.currentPromptPositive }}
-{% endif %}
-{% if variable.currentPromptNegative %}
-**Negative Tags:** {{ variable.currentPromptNegative }}
-{% endif %}
+{{#if imagePrompt.currentPrompt}}
+**Natural Language:** {{ imagePrompt.currentPrompt }}
+{{/if}}
+{{#if imagePrompt.currentPromptPositive}}
+**Positive Tags:** {{ imagePrompt.currentPromptPositive }}
+{{/if}}
+{{#if imagePrompt.currentPromptNegative}}
+**Negative Tags:** {{ imagePrompt.currentPromptNegative }}
+{{/if}}
 
 You may use these as a starting point or create something entirely new based on the user's request.
-{% endif %}
+{{/if}}
 
 ---
 
+{{#if config.isNativeOutputMode}}
+Output ONLY the generated prompt text directly.
+{{else}}
 Call the `generate_object_image_prompt` function with your generated prompt.
+{{/if}}

@@ -30,7 +30,7 @@ import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
-import NovelChapterAIEditModal from '../../../components/NovelChapterAIEditModal';
+import ManuscriptAIEditModal from '../../../components/ManuscriptAIEditModal';
 import TranslationModal from '../../../components/TranslationModal';
 import { AssetManagerModal, SceneAssetManagerModal } from '../../../components/AssetManager';
 import SceneImageGeneratorModal from '../../../components/ImageGeneration/SceneImageGeneratorModal';
@@ -91,7 +91,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const addTranslation = useUnifiedObjectStore.getState().addTranslation;
   const { settings } = useSettingsStore();
   const { showError } = useErrorStore();
-  const editorStore = useNovelEditorStore();
   // Get stable action references to avoid infinite loops in effects
   const setHasUnsavedChangesAction = useNovelEditorStore((state) => state.setHasUnsavedChanges);
   const setIsSavingAction = useNovelEditorStore((state) => state.setIsSaving);
@@ -99,8 +98,9 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   // Sidebar state from unified sidebar store
   const toggleSidebar = useSidebarStore((state) => state.toggleSidebar);
 
-  // Get UI state from store
-  const globalDisplayLanguage = editorStore.getDisplayLanguage(projectId) || settings.mainLanguage;
+  // Get display language from settings store (global)
+  const displayLanguage = useSettingsStore(state => state.settings.displayLanguage);
+  const globalDisplayLanguage = displayLanguage || settings.mainLanguage;
 
   // State
   const [manuscriptId, setManuscriptId] = useState<string | null>(null);
@@ -1019,7 +1019,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
       {/* AI Edit Modal */}
       {selectedChapter && (
-        <NovelChapterAIEditModal
+        <ManuscriptAIEditModal
           isOpen={isAIEditModalOpen}
           onClose={() => setIsAIEditModalOpen(false)}
           projectId={projectId}

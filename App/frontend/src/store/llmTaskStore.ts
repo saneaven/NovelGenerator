@@ -9,7 +9,7 @@ const abortControllers = new Map<string, AbortController>();
 // Task types for different LLM operations
 export type LLMTaskType =
   | 'ai-edit'           // AIEditModal
-  | 'chapter-edit'      // NovelChapterAIEditModal
+  | 'chapter-edit'      // ManuscriptAIEditModal
   | 'translation'       // TranslationModal (story objects)
   | 'chat-translation'  // ChatPanel inline (single message)
   | 'image-prompt'      // ImagePromptBuilderModal

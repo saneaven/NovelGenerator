@@ -1,87 +1,88 @@
-# User Message
-
-{{ variable.userInput }}
-
-{% if context.functionResults.size > 0 %}
+{{#if (hasItems input.functionResults)}}
 # Function Call Results
 
 Based on your previous suggestions, the user made the following decisions:
 
-{% for result in context.functionResults %}
-{% if result.success %}
-- {{ result.functionName }}: APPLIED - {{ result.resultMessage }}
-{% elsif result.isRejected %}
-- {{ result.functionName }}: REJECTED BY USER - User chose not to apply this change
-{% else %}
-- {{ result.functionName }}: FAILED - {{ result.resultMessage }}
-{% endif %}
-{% endfor %}
-{% endif %}
+{{#each input.functionResults}}
+{{#if this.success}}
+- {{ this.functionName }}: APPLIED - {{ this.resultMessage }}
+{{else}}
+{{#if this.isRejected}}
+- {{ this.functionName }}: REJECTED BY USER - User chose not to apply this change
+{{else}}
+- {{ this.functionName }}: FAILED - {{ this.resultMessage }}
+{{/if}}
+{{/if}}
+{{/each}}
+{{/if}}
 
-{% if context.storyContext %}
+{{#if project.basicInfo}}
 # Current Project Status
 
-{% if context.storyContext.basicInfo %}
 ## Basic Info
-- **Title**: {{ context.storyContext.basicInfo.title }}
-{% if context.storyContext.basicInfo.logline %}- **Logline**: {{ context.storyContext.basicInfo.logline }}{% endif %}
-{% if context.storyContext.basicInfo.genre %}- **Genre**: {{ context.storyContext.basicInfo.genre }}{% endif %}
-{% endif %}
+- **Title**: {{ project.basicInfo.title }}
+{{#if project.basicInfo.logline}}- **Logline**: {{ project.basicInfo.logline }}{{/if}}
+{{#if project.basicInfo.genre}}- **Genre**: {{ project.basicInfo.genre }}{{/if}}
 
-{% if context.storyContext.characters.size > 0 %}
+{{#if (hasItems (filterByType project.objects "character"))}}
 ## Characters
-{% for char in context.storyContext.characters %}
-### {{ char.name }}
-{{ char.description }}
-{% endfor %}
-{% endif %}
+{{#each (filterByType project.objects "character")}}
+### {{ this.name }}
+{{ this.description }}
+{{/each}}
+{{/if}}
 
-{% if context.storyContext.organizations.size > 0 %}
+{{#if (hasItems (filterByType project.objects "organization"))}}
 ## Organizations
-{% for org in context.storyContext.organizations %}
-### {{ org.name }}
-{{ org.description }}
-{% endfor %}
-{% endif %}
+{{#each (filterByType project.objects "organization")}}
+### {{ this.name }}
+{{ this.description }}
+{{/each}}
+{{/if}}
 
-{% if context.storyContext.locations.size > 0 %}
+{{#if (hasItems (filterByType project.objects "location"))}}
 ## Locations
-{% for loc in context.storyContext.locations %}
-### {{ loc.name }}
-{{ loc.description }}
-{% endfor %}
-{% endif %}
+{{#each (filterByType project.objects "location")}}
+### {{ this.name }}
+{{ this.description }}
+{{/each}}
+{{/if}}
 
-{% if context.storyContext.lorebook.size > 0 %}
+{{#if (hasItems (filterByType project.objects "lorebook"))}}
 ## Lorebook
-{% for entry in context.storyContext.lorebook %}
-### {{ entry.name }}
-{{ entry.description }}
-{% endfor %}
-{% endif %}
+{{#each (filterByType project.objects "lorebook")}}
+### {{ this.name }}
+{{ this.description }}
+{{/each}}
+{{/if}}
 
-{% if context.storyContext.outline and context.storyContext.outline.acts.size > 0 %}
+{{#if project.outline}}
+{{#if (hasItems project.outline.acts)}}
 ## Story Outline
-{% for act in context.storyContext.outline.acts %}
-### {{ act.name }}
-{{ act.description }}
-{% for ch in act.chapters %}
-- **{{ ch.name }}**: {{ ch.description }}
-{% endfor %}
-{% endfor %}
-{% endif %}
-{% endif %}
+{{#each project.outline.acts}}
+### {{ this.name }}
+{{ this.description }}
+{{#each this.chapters}}
+- **{{ this.name }}**: {{ this.description }}
+{{/each}}
+{{/each}}
+{{/if}}
+{{/if}}
+{{/if}}
 
-{% if context.novelContent.size > 0 %}
+{{#if (hasItems project.manuscripts)}}
 # Current Novel Content
 
-{% for item in context.novelContent %}
-{% assign manuscript = item[1] %}
-## {{ manuscript.chapterName }} [ID: {{ manuscript.chapterId }}]
-{{ manuscript.content }}
+{{#each project.manuscripts}}
+## {{ this.chapterName }} [ID: {{ this.chapterId }}]
+{{ this.content }}
 
-{% endfor %}
-{% endif %}
+{{/each}}
+{{/if}}
 
 # Language Instruction
-You must use {{ variable.mainLanguage }} only.
+You must use {{ config.mainLanguage }} only.
+
+# User Message
+
+{{ input.userMessage }}

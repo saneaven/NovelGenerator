@@ -36,6 +36,36 @@
     color: var(--color-text-primary);
 }
 
+.syntax-tabs {
+    display: flex;
+    gap: var(--spacing-xs);
+    margin-bottom: var(--spacing-md);
+    border-bottom: 1px solid var(--color-border-default);
+    padding-bottom: var(--spacing-sm);
+}
+
+.syntax-tab {
+    padding: var(--spacing-xs) var(--spacing-md);
+    border: none;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    border-radius: var(--border-radius-sm);
+    transition: all var(--transition-base);
+}
+
+.syntax-tab:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text-primary);
+}
+
+.syntax-tab.active {
+    background: var(--color-primary-soft);
+    color: var(--color-primary-main);
+}
+
 .syntax-popover-close {
     border: none;
     background: transparent;
@@ -110,6 +140,11 @@
 
 .syntax-token-chip.optional {
     border-color: var(--color-border-default);
+}
+
+.syntax-token-chip.helper {
+    border-color: var(--color-success);
+    background: var(--color-success-light);
 }
 
 .syntax-token-chip:hover {

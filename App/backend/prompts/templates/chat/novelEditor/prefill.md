@@ -1,10 +1,9 @@
-{% if state.enableThinking %}<thinking>
+{{#if config.isThinkingEnabled}}<thinking>
 Let me understand the context:
 - Mode: Novel Editor
-- Language: {{ variable.mainLanguage }}
-- Has functions: {{ state.hasFunctions }}
+- Language: {{ config.mainLanguage }}
 
 I'll analyze the user's request carefully and provide a thoughtful response focused on the novel content.
 </thinking>
 
-{% endif %}I'll assist you in Novel Editor mode. I'll respond in {{ variable.mainLanguage }}.
+{{/if}}I'll assist you in Novel Editor mode. I'll respond in {{ config.mainLanguage }}.
