@@ -274,10 +274,14 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     if (!isOpen) {
       setUserInput('');
       setSelectedIds(new Set());
+      setSelectedContextIds(new Set());
       hasInitializedSelectionRef.current = false;
       abortControllerRef.current = null;
+      // Reset languages so they re-initialize from props on next open
+      setSourceLanguage(defaultSourceLanguage || '');
+      setTargetLanguage(defaultTargetLanguage || '');
     }
-  }, [isOpen]);
+  }, [isOpen, defaultSourceLanguage, defaultTargetLanguage]);
 
   const handleStart = async () => {
     if (objectsToTranslate.length === 0) {
@@ -309,6 +313,8 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     // Auto-close modal - request continues in background, toast shows progress
     onClose();
 
+    let hasError = false;
+
     try {
       await TranslationService.translateBatch(objectsToTranslate, {
         projectId,
@@ -322,10 +328,12 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
           task.updateProgress(completed.length, objectsToTranslate.length);
         },
         onError: (err) => {
+          hasError = true;
           task.error(err.message);
         },
         onPartialSuccess: (translations, err) => {
           // Partial success - apply what we got
+          hasError = true;
           task.error(err.message);
           TranslationService.applyPartialTranslations(translations, targetLanguage)
             .then(() => onComplete())
@@ -334,9 +342,11 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
         abortControllerRef,
       });
 
-      // Success
-      task.complete();
-      onComplete();
+      // Only mark complete if no error occurred
+      if (!hasError) {
+        task.complete();
+        onComplete();
+      }
     } catch {
       // Error already handled by onError callback
     }

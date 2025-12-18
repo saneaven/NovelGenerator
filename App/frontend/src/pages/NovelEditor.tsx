@@ -147,10 +147,14 @@ const NovelEditor: React.FC = () =>
 
     const handleCloseChat = useCallback(() => {
         setIsOverlayClosing(true);
-        setTimeout(() => {
+        chatUI.setChatVisible(projectId ?? '', false);
+    }, [projectId, chatUI]);
+
+    const handleOverlayAnimationEnd = useCallback((e: React.AnimationEvent) => {
+        if (e.animationName === 'overlayFadeOut') {
             chatUI.setChatVisible(projectId ?? '', false);
             setIsOverlayClosing(false);
-        }, 200);
+        }
     }, [projectId, chatUI]);
 
     // Fetch projects if not loaded
@@ -677,13 +681,18 @@ const NovelEditor: React.FC = () =>
                 <div
                     className={`chat-overlay mobile-only ${isOverlayClosing ? 'closing' : ''}`}
                     onClick={handleCloseChat}
+                    onAnimationEnd={handleOverlayAnimationEnd}
                 />
             )}
 
             <MobileFooter
                 isChatVisible={chatUI.isChatVisible(projectId ?? '')}
                 onChatToggle={() => {
-                    chatUI.toggleChatVisible(projectId ?? '');
+                    if (chatUI.isChatVisible(projectId ?? '')) {
+                        handleCloseChat();
+                    } else {
+                        chatUI.toggleChatVisible(projectId ?? '');
+                    }
                     sidebarStore.closeSidebar(projectId ?? '');
                 }}
                 onSettingsClick={() => uiActions.setIsSettingsOpen(true)}

@@ -11,22 +11,22 @@
         bottom: 0;
         left: 0;
         width: 100%;
-        height: 95dvh;
+        height: 98dvh;
         z-index: var(--z-mobile-chat);
         transform: translateY(100%);
-        transition: transform 300ms var(--ease-out);
+        transition: transform var(--transition-get-in);
         border-radius: 16px 16px 0 0;
         box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
         overflow: hidden; /* Clip content to rounded corners */
     }
 
     .chat-panel.visible {
-        transition: transform 300ms var(--ease-out);
+        transition: transform var(--transition-get-in);
         transform: translateY(0);
     }
 
     .chat-panel.hidden {
-        transition: transform 300ms var(--ease-in);
+        transition: transform var(--transition-get-out);
         transform: translateY(100%);
         display: flex; /* Override utilities.css .hidden { display: none } */
     }
@@ -40,12 +40,12 @@
         height: 100%;
         background: rgba(0, 0, 0, 0.5);
         z-index: calc(var(--z-mobile-chat) - 1);
-        opacity: 1;
-        transition: opacity var(--transition-base);
+        opacity: 0;
+        animation: overlayFadeIn 400ms ease-out forwards;
     }
 
     .chat-overlay.closing {
-        opacity: 0;
+        animation: overlayFadeOut 200ms ease-out forwards;
     }
 
     /* ===== Sidebar Overlay ===== */
@@ -81,4 +81,14 @@
     to {
         opacity: 1;
     }
+}
+
+@keyframes overlayFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes overlayFadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
 }

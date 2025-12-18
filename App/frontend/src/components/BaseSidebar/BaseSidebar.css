@@ -33,7 +33,7 @@
   flex-direction: column;
   z-index: var(--z-sidebar);
   box-shadow: var(--shadow-lg, 0 10px 25px rgba(0, 0, 0, 0.15));
-  transition: transform var(--transition-base, 0.2s ease);
+  transition: transform var(--transition-get-out);
   overflow: hidden;
 }
 
@@ -45,6 +45,7 @@
 }
 
 .base-sidebar--left.base-sidebar--open {
+  transition: transform var(--transition-get-in);
   transform: translateX(0);
 }
 
@@ -56,6 +57,7 @@
 }
 
 .base-sidebar--right.base-sidebar--open {
+  transition: transform var(--transition-get-in);
   transform: translateX(0);
 }
 

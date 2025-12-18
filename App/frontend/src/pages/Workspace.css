@@ -245,7 +245,6 @@
 }
 
 /* ===== Overlays ===== */
-.chat-overlay,
 .sidebar-overlay,
 .desktop-chat-overlay {
     position: fixed;
@@ -256,10 +255,6 @@
     background: var(--overlay-dark-heavy);
     backdrop-filter: blur(4px);
     animation: fadeIn var(--transition-base);
-}
-
-.chat-overlay {
-    z-index: calc(var(--z-mobile-chat) - 1);
 }
 
 .sidebar-overlay {
@@ -307,6 +302,11 @@
         content: '';
         display: block;
         height: var(--size-mobile-footer-height);
+    }
+
+    /* Account for mobile footer when expanded card overlay is open */
+    .story-card-expanded-container {
+        padding-bottom: calc(var(--spacing-md) + var(--size-mobile-footer-height));
     }
 }
 

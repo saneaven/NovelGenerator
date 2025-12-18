@@ -100,10 +100,14 @@ const Workspace: React.FC = () =>
 
     const handleCloseChat = useCallback(() => {
         setIsOverlayClosing(true);
-        setTimeout(() => {
+        setChatVisible(projectId ?? '', false);
+    }, [projectId, setChatVisible]);
+
+    const handleOverlayAnimationEnd = useCallback((e: React.AnimationEvent) => {
+        if (e.animationName === 'overlayFadeOut') {
             setChatVisible(projectId ?? '', false);
             setIsOverlayClosing(false);
-        }, 200);
+        }
     }, [projectId, setChatVisible]);
     const unifiedStore = useUnifiedObjectStore();
 
@@ -506,13 +510,18 @@ const Workspace: React.FC = () =>
                 <div
                     className={`chat-overlay mobile-only ${isOverlayClosing ? 'closing' : ''}`}
                     onClick={handleCloseChat}
+                    onAnimationEnd={handleOverlayAnimationEnd}
                 />
             )}
 
             <MobileFooter
                 isChatVisible={isChatVisible}
                 onChatToggle={() => {
-                    toggleChatVisible(projectId ?? '');
+                    if (isChatVisible) {
+                        handleCloseChat();
+                    } else {
+                        toggleChatVisible(projectId ?? '');
+                    }
                     sidebarStore.closeSidebar(projectId ?? '');
                 }}
                 onSettingsClick={() => uiActions.setIsSettingsOpen(true)}

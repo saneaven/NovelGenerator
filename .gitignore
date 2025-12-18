@@ -1,3 +1,4 @@
 *.pyc
 *.env
 /App/backend/storage/assets
+nul
