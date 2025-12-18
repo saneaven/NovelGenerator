@@ -316,6 +316,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
         targetLanguage,
         userInput: userInput.trim() || undefined,
         contextData,
+        contextObjectIds: Array.from(selectedContextIds),
         sessionId: task.sessionId,
         onProgress: (completed) => {
           task.updateProgress(completed.length, objectsToTranslate.length);

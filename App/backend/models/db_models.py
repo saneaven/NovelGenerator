@@ -144,6 +144,41 @@ class PromptVersion(Base):
 
 
 # ============================================================================
+# PROMPT FRAGMENTS
+# ============================================================================
+
+class PromptFragment(Base):
+    """Reusable prompt fragments organized in folders with version control"""
+    __tablename__ = 'prompt_fragments'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    # Fragment identification
+    folder_path = Column(String(200), nullable=True)  # e.g., 'common', 'thinking/custom', null for root
+    fragment_name = Column(String(100), nullable=False)
+
+    # Content
+    content = Column(Text, nullable=False)
+    description = Column(Text, nullable=True)
+
+    # Flags
+    is_system_default = Column(Boolean, default=False, nullable=False)
+
+    # Version control (same pattern as PromptVersion)
+    version_number = Column(Integer, nullable=False)
+    is_active = Column(Boolean, default=False, nullable=False)
+    note = Column(Text, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Relationships
+    user = relationship("User")
+
+
+# ============================================================================
 # PROJECTS
 # ============================================================================
 

@@ -323,6 +323,21 @@ class ClaudeProvider(BaseProvider):
                     yield self._format_error("Claude refused to generate due to safety concerns (refusal)")
                     return  # Don't yield [DONE] after error
 
+                # Emit usage information before [DONE]
+                msg = getattr(stream, "current_message_snapshot", None)
+                if msg and hasattr(msg, "usage") and msg.usage:
+                    usage = msg.usage
+                    input_tokens = getattr(usage, "input_tokens", 0) or 0
+                    output_tokens = getattr(usage, "output_tokens", 0) or 0
+                    usage_payload = {
+                        "usage": {
+                            "prompt_tokens": input_tokens,
+                            "completion_tokens": output_tokens,
+                            "total_tokens": input_tokens + output_tokens,
+                        }
+                    }
+                    yield self._format_sse(usage_payload)
+
                 yield b"data: [DONE]\n\n"
 
         except Exception as exc:  # Broad catch to stream error via SSE

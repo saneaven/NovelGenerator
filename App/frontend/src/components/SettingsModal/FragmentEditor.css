@@ -1,0 +1,208 @@
+/* Fragment Editor Styles */
+.fragment-editor {
+  background: var(--color-surface-base);
+  text-align: left;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.fragment-editor.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.fragment-editor .loading-indicator {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+  padding: var(--spacing-md);
+}
+
+/* Header with path */
+.fragment-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  flex-shrink: 0;
+}
+
+.fragment-path-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex: 1;
+  min-width: 0;
+}
+
+.fragment-path {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  background: var(--color-surface-muted);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy-path-btn {
+  background: none;
+  border: none;
+  padding: var(--spacing-xs);
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  border-radius: var(--border-radius-sm);
+  transition: all var(--transition-base);
+}
+
+.copy-path-btn:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.fragment-editor-header .badge {
+  font-size: var(--font-size-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--border-radius-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.fragment-editor-header .badge.default {
+  background: var(--color-info-light);
+  color: var(--color-info-dark);
+}
+
+/* Description field */
+.fragment-description-field {
+  margin-bottom: var(--spacing-md);
+  flex-shrink: 0;
+}
+
+.fragment-description-field label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.fragment-description-field input {
+  width: 100%;
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-sm);
+  background: var(--color-surface-base);
+  color: var(--color-text-primary);
+}
+
+.fragment-description-field input:focus {
+  outline: none;
+  border-color: var(--color-primary-main);
+  box-shadow: var(--shadow-focus);
+}
+
+/* CodeMirror wrapper */
+.fragment-editor > div:nth-child(3) {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  position: relative;
+}
+
+.fragment-editor > div:nth-child(3) > div {
+  height: 100%;
+}
+
+.fragment-editor .cm-editor {
+  height: 100%;
+}
+
+.fragment-editor .cm-scroller {
+  position: absolute;
+  inset: 0;
+}
+
+/* Editor Actions - reuse from PromptEditor */
+.fragment-editor .editor-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-md);
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.fragment-editor .editor-left-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex: 1;
+}
+
+.fragment-editor .editor-right-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.fragment-editor .note-input {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-sm);
+  min-width: 180px;
+  max-width: 350px;
+  flex: 1;
+  background: var(--color-surface-base);
+  color: var(--color-text-primary);
+}
+
+.fragment-editor .note-input:focus {
+  outline: none;
+  border-color: var(--color-primary-main);
+  box-shadow: var(--shadow-focus);
+}
+
+.fragment-editor .char-count {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+}
+
+.fragment-editor .unsaved-indicator {
+  color: var(--color-warning);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .fragment-editor .editor-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .fragment-editor .editor-left-actions,
+  .fragment-editor .editor-right-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .fragment-editor .note-input {
+    min-width: 100%;
+  }
+
+  .fragment-editor-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

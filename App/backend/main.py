@@ -28,6 +28,9 @@ from .routes.translation_routes import router as translation_router
 # Asset management routes
 from .routes.asset_routes import router as asset_router
 
+# Fragment management routes
+from .routes.fragment_routes import router as fragment_router
+
 load_dotenv()
 
 app = FastAPI(
@@ -49,6 +52,9 @@ app.include_router(translation_router, prefix="/api/v1", tags=["translations"])
 
 # Include asset management router
 app.include_router(asset_router)
+
+# Include fragment management router
+app.include_router(fragment_router)
 
 # Mount static files for asset storage
 storage_path = Path(__file__).parent / "storage" / "assets"

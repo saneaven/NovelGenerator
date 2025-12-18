@@ -66,6 +66,17 @@ const templateParser: StreamParser<TemplateState> = {
       return 'comment';
     }
 
+    // Try to match {{prompt "..."}} helper (fragment inclusion)
+    if (stream.match(/^\{\{\s*prompt\s+"/)) {
+      while (!stream.eol()) {
+        if (stream.match(/^\}\}/)) {
+          return 'atom'; // Different color for prompt fragments
+        }
+        stream.next();
+      }
+      return 'atom';
+    }
+
     // Try to match Handlebars output {{ ... }}
     if (stream.match(/^\{\{/)) {
       while (!stream.eol()) {

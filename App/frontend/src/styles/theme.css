@@ -339,6 +339,7 @@
     --z-sticky: 1010;
     --z-fixed: 1020;
     --z-overlay: 1030;
+    --z-mobile-chat: 1032;
     --z-sidebar-backdrop: 1035;
     --z-sidebar: 1036;
     --z-modal: 1040;

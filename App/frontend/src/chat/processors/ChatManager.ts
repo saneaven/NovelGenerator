@@ -21,6 +21,7 @@ export interface ChatManagerConfig {
   getStoryObjects: () => any;
   getNovelData?: () => any;
   getPendingFunctionCallResults?: () => FunctionCallResultSummary[];
+  getSelectedContextIds?: () => string[];
   getIsLoading: () => boolean;
   setIsLoading: (loading: boolean) => void;
   abortControllerRef: MutableRefObject<AbortController | null>;
@@ -41,7 +42,7 @@ export interface ChatManagerConfig {
 export interface ChatManagerCallbacks {
   onUpdateMessage: (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, thinking_details?: any[]) => void;
   onSyncMessageToBackend: (projectId: string, chatId: string, messageId: string, contentParts: ContentPart[], language: string, thinking_details?: any[]) => Promise<void>;
-  onFunctionCalls: (projectId: string, chatId: string, messageId: string, functionCalls: FunctionCallMetadata[]) => void;
+  onFunctionCalls: (projectId: string, chatId: string, messageId: string, functionCalls: FunctionCallMetadata[], sessionId?: string) => void;
   onAddMessage: (projectId: string, chatId: string, message: ChatMessage, language: string) => Promise<string>;
   onGetChatHistory: (projectId: string, chatId: string, language: string) => ChatMessage[];
   onError: (error: Error) => void;
@@ -211,9 +212,11 @@ export class ChatManager {
     const storyObjects = this.config.getStoryObjects();
     const novelData = this.config.getNovelData?.();
     const functionResults = this.config.getPendingFunctionCallResults?.() ?? [];
+    const contextObjectIds = this.config.getSelectedContextIds?.();
 
     const base = {
       userInput,
+      projectId: this.config.projectId,
       outputLanguage: language,
       enablePrefill: this.config.enablePrefill,
       enableThinking: this.config.thinkingMode === 'model',
@@ -221,6 +224,7 @@ export class ChatManager {
       functions: this.config.functions,
       storyObjects,
       functionResults,
+      contextObjectIds,
     };
 
     if (this.config.mode === 'novelEditor') {
@@ -265,7 +269,7 @@ export class ChatManager {
 
     // Process function calls
     if (result.functionCalls.length > 0) {
-      this.callbacks.onFunctionCalls(this.config.projectId, chatId, messageId, result.functionCalls);
+      this.callbacks.onFunctionCalls(this.config.projectId, chatId, messageId, result.functionCalls, this.taskHandle?.sessionId);
     }
   }
 

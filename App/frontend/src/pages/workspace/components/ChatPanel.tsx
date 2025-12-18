@@ -7,26 +7,26 @@ import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useLLMTaskStore } from '../../../store/llmTaskStore';
-import type { SystemInsertConfig, EditCard } from '../../../chat/types';
+import type { EditCard } from '../../../chat/types';
+import ObjectPicker from '../../../components/ObjectPicker/ObjectPicker';
 import { TranslationService } from '../../../services/translationService';
 import { DefaultDisplayProcessor } from '../../../chat/processors/DisplayProcessor';
 import type { StoryObjects } from '../../../types/storyObject';
 import type { ChatMessage, FunctionCallProgress } from '../../../llm/requestTypes';
-import ToggleSwitch from '../../../components/ToggleSwitch';
 import ThinkingDisplay from '../../../components/ThinkingDisplay';
 import GroupedFunctionCallCard from '../../../components/functionCall/GroupedFunctionCallCard';
 import { TextButton } from '../../../components/TextButton';
 import { IconButton } from '../../../components/IconButton';
 import { collapseContentParts } from '../../../chat/utils/contentParts';
-import { Settings, Books, Book, Edit, Trash, Globe, CircularArrow, ChevronUp, ChevronDown } from '../../../components/icons';
+import { Settings, Edit, Trash, Globe, CircularArrow, ChevronUp, ChevronDown } from '../../../components/icons';
 
 interface ChatPanelProps
 {
     projectId: string;
-    systemInsertConfig: SystemInsertConfig;
-    setSystemInsertConfig: (config: SystemInsertConfig | ((prev: SystemInsertConfig) => SystemInsertConfig)) => void;
+    selectedContextIds: string[];
+    onContextIdsChange: (ids: string[]) => void;
+    totalObjectCount: number;
     storyObjects: StoryObjects;
-    novelData?: Record<string, unknown>;
     messageEditCards: Record<string, EditCard[]>;
     activeFunctionCalls: Record<string, FunctionCallProgress[]>;
     onBatchConfirm: (messageId: string, selections: Record<string, boolean>) => Promise<void>;
@@ -40,53 +40,53 @@ interface ChatPanelProps
     onDeleteMessage: (messageId: string) => void;
     editTextareaRef: React.RefObject<HTMLTextAreaElement>;
     mode: 'novelEditor' | 'workspace';
+    onClose?: () => void;
 }
 
-// Separate component to avoid re-rendering the entire ChatPanel on collapse toggle
-interface ChatControlsProps {
-    systemInsertConfig: SystemInsertConfig;
-    setSystemInsertConfig: (config: SystemInsertConfig | ((prev: SystemInsertConfig) => SystemInsertConfig)) => void;
+// Context picker component for selecting which objects to include in chat context
+interface ChatContextPickerProps {
+    projectId: string;
+    language: string;
+    selectedIds: string[];
+    totalCount: number;
+    onChange: (ids: string[]) => void;
 }
 
-const ChatControls: React.FC<ChatControlsProps> = React.memo(({ systemInsertConfig, setSystemInsertConfig }) => {
+const ChatContextPicker: React.FC<ChatContextPickerProps> = React.memo(({
+    projectId,
+    language,
+    selectedIds,
+    totalCount,
+    onChange
+}) => {
     const [isCollapsed, setIsCollapsed] = useState(true);
 
     return (
         <div className={`chat-controls ${isCollapsed ? 'collapsed' : 'expanded'}`}>
             <div className="chat-controls-header" onClick={() => setIsCollapsed(!isCollapsed)}>
                 <span className="chat-controls-title">
-                    <Settings size="sm" /> Context Configs
+                    <Settings size="sm" /> Context ({selectedIds.length}/{totalCount})
                 </span>
                 <button
                     type="button"
                     className="chat-controls-toggle"
-                    aria-label={isCollapsed ? "Expand context configs" : "Collapse context configs"}
+                    aria-label={isCollapsed ? "Expand context picker" : "Collapse context picker"}
                 >
                     {isCollapsed ? <ChevronUp size="xs" /> : <ChevronDown size="xs" />}
                 </button>
             </div>
             <div className="chat-controls-content">
                 <div className="chat-controls-content-inner">
-                    <div className="chat-controls-content-body">
-                        <ToggleSwitch
-                            checked={systemInsertConfig.enabled}
-                            onChange={(checked) => setSystemInsertConfig(prev => ({
-                                ...prev,
-                                enabled: checked
-                            }))}
-                            label="Include story context in messages"
-                            icon={<Books size="sm" />}
-                        />
-                        <ToggleSwitch
-                            checked={systemInsertConfig.includeNovelContent}
-                            onChange={(checked) => setSystemInsertConfig(prev => ({
-                                ...prev,
-                                includeNovelContent: checked
-                            }))}
-                            label="Include novel content in messages"
-                            icon={<Book size="sm" />}
-                        />
-                    </div>
+                    <ObjectPicker
+                        mode="all"
+                        selectionMode="multi"
+                        selectedIds={selectedIds}
+                        onChange={(ids) => onChange(ids as string[])}
+                        projectId={projectId}
+                        language={language}
+                        maxHeight="300px"
+                        showSearch={true}
+                    />
                 </div>
             </div>
         </div>
@@ -130,11 +130,11 @@ const ChatInputForm: React.FC<ChatInputFormProps> = React.memo(({ projectId, mai
                     onKeyDown={handleKeyDown}
                 />
                 {isLoading ? (
-                    <TextButton type="button" variant="danger" onClick={onStop} className="chat-submit-btn">
+                    <TextButton key="stop" type="button" variant="danger" onClick={onStop} className="chat-submit-btn">
                         Stop
                     </TextButton>
                 ) : (
-                    <TextButton type="submit" variant="primary" className="chat-submit-btn">
+                    <TextButton key="send" type="submit" variant="primary" className="chat-submit-btn">
                         Send
                     </TextButton>
                 )}
@@ -199,10 +199,10 @@ interface DisplayMessageInfo
 
 const ChatPanel: React.FC<ChatPanelProps> = ({
     projectId,
-    systemInsertConfig,
-    setSystemInsertConfig,
+    selectedContextIds,
+    onContextIdsChange,
+    totalObjectCount,
     storyObjects,
-    novelData,
     messageEditCards,
     activeFunctionCalls,
     onBatchConfirm,
@@ -216,6 +216,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     onDeleteMessage,
     editTextareaRef,
     mode,
+    onClose,
 }) =>
 {
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -302,14 +303,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         }
     }, [storedMessages, isLoading]);
 
-    // Display context for the display processor (context is unused but kept for type compatibility)
-    const displayContext = useMemo(() => ({
-        projectId,
-        storyObjects,
-        systemInsertConfig,
-        mode,
-        novelData,
-    }), [projectId, storyObjects, mode, systemInsertConfig, novelData]);
 
     const resolveDisplayInfo = useCallback(
         (message: StoredChatMessage): DisplayMessageInfo =>
@@ -503,7 +496,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                     variant="secondary"
                     size="sm"
                     className="mobile-only"
-                    onClick={() => setChatVisible(projectId, false)}
+                    onClick={() => onClose ? onClose() : setChatVisible(projectId, false)}
                 >
                     Close
                 </TextButton>
@@ -526,7 +519,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 {
                     const isUser = message.chatMessage.role === 'user';
                     const isEditing = editingMessageId === message.chatMessage.id;
-                    const processingResult = displayProcessor.process(message.chatMessage as any, displayContext as any);
+                    const processingResult = displayProcessor.process(message.chatMessage as any, { projectId, mode } as any);
                     const isTranslating = Boolean(translatingMessages[message.storedMessage.id]);
                     const primaryMessage = message.storedMessage.data[mainLanguage]
                         ? convertToDisplayMessage(message.storedMessage, mainLanguage)
@@ -661,9 +654,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             </div>
 
             <div className="chat-input-container">
-                <ChatControls
-                    systemInsertConfig={systemInsertConfig}
-                    setSystemInsertConfig={setSystemInsertConfig}
+                <ChatContextPicker
+                    projectId={projectId}
+                    language={mainLanguage}
+                    selectedIds={selectedContextIds}
+                    totalCount={totalObjectCount}
+                    onChange={onContextIdsChange}
                 />
                 <ChatInputForm
                     projectId={projectId}
@@ -677,5 +673,4 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 };
 
 export default ChatPanel;
-
 

@@ -2,12 +2,14 @@
  * ScenePromptAssistModal - Modal for AI-assisted scene image prompt generation
  */
 
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { BaseModal } from '../BaseModal';
 import { useProjectStore } from '../../store/projectStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { LLMTask, LLMTaskMode, LLMTaskManager, type SceneImagePromptContext, type SelectedObjectContext } from '../../llm';
 import { TextButton } from '../TextButton';
+import { ObjectPicker } from '../ObjectPicker';
+import type { ObjectPickerGroup } from '../ObjectPicker/types';
 import './ScenePromptAssistModal.css';
 
 export type PromptMode = 'natural' | 'positive' | 'negative';
@@ -64,24 +66,91 @@ const ScenePromptAssistModal: React.FC<ScenePromptAssistModalProps> = ({
   const { settings } = useSettingsStore();
 
   const [userRequest, setUserRequest] = useState('');
-  const [excludedObjectIds, setExcludedObjectIds] = useState<Set<string>>(new Set());
+  const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const taskRef = useRef<LLMTask | null>(null);
 
-  const handleToggleObject = useCallback((objId: string) => {
-    setExcludedObjectIds(prev => {
-      const next = new Set(prev);
-      if (next.has(objId)) next.delete(objId);
-      else next.add(objId);
-      return next;
-    });
-  }, []);
+  // Initialize with all objects selected when modal opens
+  useEffect(() => {
+    if (allStoryObjects.length > 0) {
+      const allIds = allStoryObjects.map(o => `${o.type}:${o.id}`);
+      setSelectedObjectIds(allIds);
+    }
+  }, [allStoryObjects]);
 
-  const selectedObjects = useMemo(() =>
-    allStoryObjects.filter(obj => !excludedObjectIds.has(obj.id)),
-    [allStoryObjects, excludedObjectIds]
-  );
+  // Build ObjectPicker groups from flat allStoryObjects array
+  const storyObjectGroups = useMemo((): ObjectPickerGroup[] => {
+    const groups: ObjectPickerGroup[] = [];
+
+    const characters = allStoryObjects.filter(o => o.type === 'character');
+    if (characters.length > 0) {
+      groups.push({
+        id: 'characters',
+        label: 'Characters',
+        type: 'character',
+        items: characters.map(c => ({
+          id: `character:${c.id}`,
+          name: c.name,
+          type: 'character',
+        })),
+      });
+    }
+
+    const locations = allStoryObjects.filter(o => o.type === 'location');
+    if (locations.length > 0) {
+      groups.push({
+        id: 'locations',
+        label: 'Locations',
+        type: 'location',
+        items: locations.map(l => ({
+          id: `location:${l.id}`,
+          name: l.name,
+          type: 'location',
+        })),
+      });
+    }
+
+    const organizations = allStoryObjects.filter(o => o.type === 'organization');
+    if (organizations.length > 0) {
+      groups.push({
+        id: 'organizations',
+        label: 'Organizations',
+        type: 'organization',
+        items: organizations.map(o => ({
+          id: `organization:${o.id}`,
+          name: o.name,
+          type: 'organization',
+        })),
+      });
+    }
+
+    const lorebook = allStoryObjects.filter(o => o.type === 'lorebook');
+    if (lorebook.length > 0) {
+      groups.push({
+        id: 'lorebook',
+        label: 'Lorebook',
+        type: 'lorebook',
+        items: lorebook.map(l => ({
+          id: `lorebook:${l.id}`,
+          name: l.name,
+          type: 'lorebook',
+        })),
+      });
+    }
+
+    return groups;
+  }, [allStoryObjects]);
+
+  // Convert selected prefixed IDs back to objects for LLM context
+  const selectedObjects = useMemo(() => {
+    return selectedObjectIds
+      .map(prefixedId => {
+        const [type, id] = prefixedId.split(':');
+        return allStoryObjects.find(o => o.id === id && o.type === type);
+      })
+      .filter((obj): obj is ImageReferenceObject => obj !== undefined);
+  }, [selectedObjectIds, allStoryObjects]);
 
   const getPromptModeLabel = (): string => {
     switch (promptMode) {
@@ -99,7 +168,7 @@ const ScenePromptAssistModal: React.FC<ScenePromptAssistModalProps> = ({
       retryContext: {
         taskType: 'scene-image',
         modalProps: { sceneContext, allStoryObjects, onPromptGenerated, promptMode },
-        formState: { userRequest, excludedObjectIds: Array.from(excludedObjectIds) },
+        formState: { userRequest, selectedObjectIds },
       },
     });
 
@@ -116,8 +185,13 @@ const ScenePromptAssistModal: React.FC<ScenePromptAssistModalProps> = ({
       imagePrompt: getSavedImagePrompt(obj, promptMode),
     }));
 
+    if (!currentProjectId) {
+      throw new Error('Project ID is required');
+    }
+
     const promptContext: SceneImagePromptContext = {
       userInput: userRequest,
+      projectId: currentProjectId,
       promptMode,
       scenePreContext: sceneContext.preContext,
       scenePostContext: sceneContext.postContext,
@@ -133,7 +207,7 @@ const ScenePromptAssistModal: React.FC<ScenePromptAssistModalProps> = ({
       taskRef.current = new LLMTask(
         {
           mode: LLMTaskMode.SCENE_IMAGE_PROMPT,
-          projectId: currentProjectId || '',
+          projectId: currentProjectId,
           promptContext,
           abortControllerRef,
           sessionId: task.sessionId,
@@ -188,7 +262,7 @@ const ScenePromptAssistModal: React.FC<ScenePromptAssistModalProps> = ({
     selectedObjects,
     userRequest,
     promptMode,
-    excludedObjectIds,
+    selectedObjectIds,
     onClose,
     onPromptGenerated,
   ]);
@@ -228,31 +302,21 @@ const ScenePromptAssistModal: React.FC<ScenePromptAssistModalProps> = ({
             )}
           </div>
 
-          {allStoryObjects.length > 0 && (
+          {storyObjectGroups.length > 0 && (
             <div className="form-group object-context-section">
               <label>Include Story Objects</label>
               <span className="section-hint">Uncheck objects you don't want to include</span>
-              <div className="object-context-list">
-                {allStoryObjects.map(obj => {
-                  const isChecked = !excludedObjectIds.has(obj.id);
-                  const savedPrompt = getSavedImagePrompt(obj, promptMode);
-                  return (
-                    <label key={obj.id} className={`object-checkbox-item ${isChecked ? 'checked' : ''}`}>
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => handleToggleObject(obj.id)}
-                      />
-                      <span className={`object-type-badge ${obj.type}`}>{obj.type}</span>
-                      <span className="object-name">{obj.name}</span>
-                      {savedPrompt && <span className="has-prompt-badge" title="Has saved image prompt">P</span>}
-                      <span className="object-preview">
-                        {obj.description ? obj.description.slice(0, 40) + '...' : '(no description)'}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
+              <ObjectPicker
+                mode="story-objects"
+                projectId={currentProjectId || ''}
+                language={settings.mainLanguage}
+                customGroups={storyObjectGroups}
+                selectedIds={selectedObjectIds}
+                onChange={(ids) => setSelectedObjectIds(Array.isArray(ids) ? ids : [ids])}
+                selectionMode="multi"
+                maxHeight="200px"
+                showSearch={false}
+              />
               <div className="selection-summary">
                 {selectedObjects.length} of {allStoryObjects.length} objects selected
               </div>

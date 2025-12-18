@@ -1,7 +1,47 @@
+/* Wrapper for the entire panel */
+.prompts-templates-panel-wrapper {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Sub-tabs for switching between Prompts and Fragments */
+.prompts-sub-tabs {
+    display: flex;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-bottom: 1px solid var(--color-border-secondary);
+    flex-shrink: 0;
+}
+
+.prompts-sub-tab {
+    padding: var(--spacing-xs) var(--spacing-md);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.prompts-sub-tab:hover {
+    color: var(--color-text-primary);
+    background: var(--color-surface-hover);
+}
+
+.prompts-sub-tab.active {
+    color: var(--color-primary);
+    background: var(--color-primary-subtle);
+}
+
 .prompts-templates-panel {
     display: grid;
     grid-template-columns: 1fr 280px;
-    height: 100%;
+    flex: 1;
     min-height: 0;
     gap: 0;
     overflow: hidden;

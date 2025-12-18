@@ -15,6 +15,7 @@ import type {
     ImageTaskType,
     ProcessedImageResult,
     ImagePipelineContext,
+    ImageRetryContext,
 } from '../types';
 
 export interface UseImageGenerationOptions {
@@ -78,8 +79,18 @@ export function useImageGeneration(options: UseImageGenerationOptions = {}) {
                 selectedTagBasedStyleId: settings.imageGenConfig.selectedTagBasedStyleId,
             };
 
-            // Start task in store
-            startTask(taskId, options.taskType || 'object-image', 'Generating image...');
+            // Build retry context for notification retry support
+            const retryContext: ImageRetryContext = {
+                request,
+                projectId: currentProjectId,
+                provider: request.provider,
+                model: request.model,
+                size: request.size,
+                styleId: request.styleId,
+            };
+
+            // Start task in store with retry context
+            startTask(taskId, options.taskType || 'object-image', 'Generating image...', retryContext);
 
             // Create manager
             managerRef.current = new ImageRequestManager(
@@ -97,6 +108,7 @@ export function useImageGeneration(options: UseImageGenerationOptions = {}) {
                         completeTask(taskId, {
                             assetId: result.asset?.id,
                             revisedPrompt: result.revisedPrompt,
+                            thumbnailUrl: result.asset?.thumbnailUrl ?? undefined,
                         });
 
                         // Add asset to asset store for display

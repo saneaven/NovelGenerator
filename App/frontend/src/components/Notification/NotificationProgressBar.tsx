@@ -1,18 +1,18 @@
 import React from 'react';
-import './ToastProgressBar.css';
+import './NotificationProgressBar.css';
 
-interface ToastProgressBarProps {
+interface NotificationProgressBarProps {
   current: number;
   total: number;
 }
 
-const ToastProgressBar: React.FC<ToastProgressBarProps> = ({ current, total }) => {
+const NotificationProgressBar: React.FC<NotificationProgressBarProps> = ({ current, total }) => {
   const percentage = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
 
   return (
-    <div className="toast-progress-bar">
+    <div className="notification-progress-bar">
       <div
-        className="toast-progress-bar-fill"
+        className="notification-progress-bar-fill"
         style={{ width: `${percentage}%` }}
         role="progressbar"
         aria-valuenow={current}
@@ -23,4 +23,4 @@ const ToastProgressBar: React.FC<ToastProgressBarProps> = ({ current, total }) =
   );
 };
 
-export default ToastProgressBar;
+export default NotificationProgressBar;

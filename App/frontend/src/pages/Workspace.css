@@ -259,7 +259,7 @@
 }
 
 .chat-overlay {
-    z-index: calc(var(--z-modal) - 1);
+    z-index: calc(var(--z-mobile-chat) - 1);
 }
 
 .sidebar-overlay {

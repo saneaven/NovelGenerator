@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useLLMTaskStore } from '../../store/llmTaskStore';
+import { useImageTaskStore } from '../../imageGeneration/store/imageTaskStore';
 import { Bell } from '../icons';
 import { IconButton } from '../IconButton';
 import NotificationPanel from './NotificationPanel';
@@ -19,17 +20,38 @@ const NotificationButton: React.FC<NotificationButtonProps> = ({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Select raw sessions object (stable reference) and derive values with useMemo
-  const sessionsMap = useLLMTaskStore((state) => state.sessions);
-  const hasUnread = useMemo(() =>
-    Object.values(sessionsMap).some(s => s && !s.isRead && s.status !== 'running'),
-    [sessionsMap]
+  // LLM task store
+  const llmSessionsMap = useLLMTaskStore((state) => state.sessions);
+  const llmHasUnread = useMemo(() =>
+    Object.values(llmSessionsMap).some(s => s && !s.isRead && s.status !== 'running'),
+    [llmSessionsMap]
   );
-  const hasRunning = useMemo(() =>
-    Object.values(sessionsMap).some(s => s && s.status === 'running'),
-    [sessionsMap]
+  const llmHasRunning = useMemo(() =>
+    Object.values(llmSessionsMap).some(s => s && s.status === 'running'),
+    [llmSessionsMap]
   );
-  const markAllAsRead = useLLMTaskStore((state) => state.markAllAsRead);
+  const markAllLLMAsRead = useLLMTaskStore((state) => state.markAllAsRead);
+
+  // Image task store
+  const imageTasksMap = useImageTaskStore((state) => state.tasks);
+  const imageHasUnread = useMemo(() =>
+    Object.values(imageTasksMap).some(t => t && !t.isRead && t.status !== 'idle'),
+    [imageTasksMap]
+  );
+  const imageHasRunning = useMemo(() =>
+    Object.values(imageTasksMap).some(t => t && (t.status === 'preparing' || t.status === 'generating' || t.status === 'processing')),
+    [imageTasksMap]
+  );
+  const markAllImageAsRead = useImageTaskStore((state) => state.markAllAsRead);
+
+  // Combined state
+  const hasUnread = llmHasUnread || imageHasUnread;
+  const hasRunning = llmHasRunning || imageHasRunning;
+
+  const markAllAsRead = useCallback(() => {
+    markAllLLMAsRead();
+    markAllImageAsRead();
+  }, [markAllLLMAsRead, markAllImageAsRead]);
 
   const handleToggle = () => {
     if (!isOpen) {

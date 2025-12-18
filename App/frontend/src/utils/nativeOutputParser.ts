@@ -120,7 +120,7 @@ export function parseSingleJsonOutput(content: string): ParsedItem {
 }
 
 /**
- * Extract raw content, stripping any thinking blocks and code fences.
+ * Extract raw content, stripping any thinking blocks and extracting JSON from code fences.
  * Also handles common AI response patterns.
  */
 export function extractRawContent(content: string): string {
@@ -129,9 +129,17 @@ export function extractRawContent(content: string): string {
   // Remove thinking blocks (Claude-style)
   result = result.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
 
-  // Remove markdown code blocks with language specifier
-  result = result.replace(/^```(?:json)?\n?/gm, '');
-  result = result.replace(/\n?```$/gm, '');
+  // Extract JSON from markdown code blocks if present
+  const jsonBlockMatch = result.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (jsonBlockMatch) {
+    result = jsonBlockMatch[1].trim();
+  } else {
+    // Fallback: try to extract raw JSON object/array
+    const jsonMatch = result.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+    if (jsonMatch) {
+      result = jsonMatch[1].trim();
+    }
+  }
 
   return result.trim();
 }

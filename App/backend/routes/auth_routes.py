@@ -14,7 +14,8 @@ from ..auth import (
     get_current_user
 )
 from ..services.prompt_service import prompt_service
-from ..prompts import get_default_prompts
+from ..services.fragment_service import fragment_service
+from ..prompts import get_default_prompts, get_default_fragments
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 
@@ -89,6 +90,18 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     except Exception as e:
         # Log error but don't fail registration - prompts can be initialized later
         print(f"Warning: Failed to initialize default prompts for user {new_user.id}: {e}")
+
+    # Initialize default fragments for new user
+    try:
+        default_fragments = get_default_fragments()
+        fragment_service.initialize_default_fragments(
+            db=db,
+            user_id=new_user.id,
+            default_fragments=default_fragments
+        )
+    except Exception as e:
+        # Log error but don't fail registration - fragments can be initialized later
+        print(f"Warning: Failed to initialize default fragments for user {new_user.id}: {e}")
 
     db.commit()
     db.refresh(new_user)

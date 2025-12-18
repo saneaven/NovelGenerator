@@ -88,7 +88,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const fetchObject = useUnifiedObjectStore.getState().fetchObject;
   const updateObject = useUnifiedObjectStore.getState().updateObject;
   const createObject = useUnifiedObjectStore.getState().createObject;
-  const addTranslation = useUnifiedObjectStore.getState().addTranslation;
   const { settings } = useSettingsStore();
   const { showError } = useErrorStore();
   // Get stable action references to avoid infinite loops in effects
@@ -695,26 +694,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     }
   }, [manuscriptId]);
 
-  // Handle "Write from scratch" - create new translation with empty content
-  const handleWriteFromScratch = useCallback(async () => {
-    if (!manuscriptId) return;
-
-    try {
-      // Add the current language as a new translation with empty content
-      await addTranslation('manuscript', manuscriptId, {
-        language: globalDisplayLanguage,
-        data: { content: '', wordCount: 0 }
-      });
-
-      // Re-fetch to get the new translation
-      // isMissingTranslation will be computed automatically after fetch
-      await fetchObject('manuscript', manuscriptId);
-    } catch (err) {
-      console.error('Failed to create new translation:', err);
-      showError('Error', 'Failed to create new content. Please try again.');
-    }
-  }, [manuscriptId, globalDisplayLanguage, showError]);
-
   // ============================================================================
   // RENDER
   // ============================================================================
@@ -983,12 +962,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                         Translate from {availableSourceLanguages[0]}
                       </TextButton>
                     )}
-                    <TextButton
-                      variant="secondary"
-                      onClick={handleWriteFromScratch}
-                    >
-                      Write from scratch
-                    </TextButton>
                   </div>
                 </div>
               </div>

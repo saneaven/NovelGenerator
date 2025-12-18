@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { SystemInsertConfig, EditCard } from '../chat/types';
+import type { EditCard } from '../chat/types';
 import { ChatManager, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
 import { DefaultDisplayProcessor } from '../chat/processors/DisplayProcessor';
 import { areEditCardMapsEqual } from '../chat/utils/editCardUtils';
@@ -142,6 +142,17 @@ const NovelEditor: React.FC = () =>
     const [isOutlineInitialized, setIsOutlineInitialized] = useState(false);
     const [showTranslateModal, setShowTranslateModal] = useState(false);
 
+    // Mobile chat overlay closing animation state
+    const [isOverlayClosing, setIsOverlayClosing] = useState(false);
+
+    const handleCloseChat = useCallback(() => {
+        setIsOverlayClosing(true);
+        setTimeout(() => {
+            chatUI.setChatVisible(projectId ?? '', false);
+            setIsOverlayClosing(false);
+        }, 200);
+    }, [projectId, chatUI]);
+
     // Fetch projects if not loaded
     useEffect(() => {
         if (projectId && projects.length === 0) {
@@ -152,12 +163,42 @@ const NovelEditor: React.FC = () =>
     // Use global display language from settingsStore
     const currentDisplayLanguage = displayLanguage || mainLanguage;
 
-    const [systemInsertConfig, setSystemInsertConfig] = useState<SystemInsertConfig>({
-        enabled: true,
-        includeProjectInfo: true,
-        includeStoryObjects: true,
-        includeNovelContent: false,
+    // Selected context IDs for chat - initialized with all project objects
+    const [selectedContextIds, setSelectedContextIds] = useState<string[]>(() => {
+        return Object.keys(unifiedObjects)
+            .filter(id => unifiedObjects[id].metadata?.project_id === projectId);
     });
+
+    // Track previous object IDs to auto-select newly created objects
+    const prevObjectIdsRef = useRef<Set<string>>(new Set(selectedContextIds));
+    // Ref to always get current selectedContextIds (avoid stale closure in ChatManager)
+    const selectedContextIdsRef = useRef(selectedContextIds);
+    selectedContextIdsRef.current = selectedContextIds;
+
+    // Auto-select new objects when they're created during the session
+    useEffect(() => {
+        const currentIds = new Set(
+            Object.keys(unifiedObjects)
+                .filter(id => unifiedObjects[id].metadata?.project_id === projectId)
+        );
+
+        // Find new IDs that weren't in the previous set
+        const newIds = [...currentIds].filter(id => !prevObjectIdsRef.current.has(id));
+
+        if (newIds.length > 0) {
+            setSelectedContextIds(prev => [...new Set([...prev, ...newIds])]);
+        }
+
+        prevObjectIdsRef.current = currentIds;
+    }, [unifiedObjects, projectId]);
+
+    // Total count of all project objects for display
+    const totalObjectCount = useMemo(() => {
+        return Object.keys(unifiedObjects)
+            .filter(id => unifiedObjects[id].metadata?.project_id === projectId)
+            .length;
+    }, [unifiedObjects, projectId]);
+
     const displayProcessor = useMemo(() => new DefaultDisplayProcessor(), []);
     const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -234,6 +275,7 @@ const NovelEditor: React.FC = () =>
                 thinkingConfig: chatFunctionConfig.advanced.thinkingConfig as any,
                 retryConfig: settings.retryConfig,
                 getPendingFunctionCallResults: () => pendingFunctionCallResults,
+                getSelectedContextIds: () => selectedContextIdsRef.current,
             },
             chatManagerCallbacks
         );
@@ -490,8 +532,6 @@ const NovelEditor: React.FC = () =>
         {
             const processed = displayProcessor.process(message as any, {
                 projectId,
-                storyObjects,
-                systemInsertConfig,
                 mode: 'novelEditor',
             } as any);
 
@@ -543,7 +583,6 @@ const NovelEditor: React.FC = () =>
         mainLanguage,
         displayProcessor,
         storyObjects,
-        systemInsertConfig,
         createFunctionCallApplyHandler,
         createFunctionCallRejectHandler,
         // Note: messageEditCards and setMessageEditCards intentionally omitted to prevent render loops
@@ -599,10 +638,10 @@ const NovelEditor: React.FC = () =>
             <div className={`novel-editor-content ${chatUI.isChatVisible(projectId ?? '') ? 'chat-visible' : ''}`}>
                 <ChatPanel
                     projectId={projectId ?? ''}
-                    systemInsertConfig={systemInsertConfig}
-                    setSystemInsertConfig={setSystemInsertConfig}
+                    selectedContextIds={selectedContextIds}
+                    onContextIdsChange={setSelectedContextIds}
+                    totalObjectCount={totalObjectCount}
                     storyObjects={storyObjects}
-                    novelData={getAllManuscripts(projectId ?? '', mainLanguage)}
                     messageEditCards={messageEditCards}
                     activeFunctionCalls={activeFunctionCalls}
                     onBatchConfirm={handleBatchConfirm}
@@ -616,6 +655,7 @@ const NovelEditor: React.FC = () =>
                     onDeleteMessage={chatHandlers.handleDeleteMessage}
                     editTextareaRef={chatHandlers.editTextareaRef as React.RefObject<HTMLTextAreaElement>}
                     mode="novelEditor"
+                    onClose={handleCloseChat}
                 />
 
                 <NovelEditorPanel
@@ -633,8 +673,11 @@ const NovelEditor: React.FC = () =>
                 onSelectChat={chatHandlers.handleSelectChat}
             />
 
-            {chatUI.isChatVisible(projectId ?? '') && (
-                <div className="chat-overlay mobile-only" onClick={() => chatUI.setChatVisible(projectId ?? '', false)} />
+            {(chatUI.isChatVisible(projectId ?? '') || isOverlayClosing) && (
+                <div
+                    className={`chat-overlay mobile-only ${isOverlayClosing ? 'closing' : ''}`}
+                    onClick={handleCloseChat}
+                />
             )}
 
             <MobileFooter

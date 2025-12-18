@@ -33,30 +33,31 @@ const ObjectPickerGroup: React.FC<ObjectPickerGroupProps> = ({
   onToggleExpand,
   preSelectedIds,
   highlightIds,
+  excludedIds,
   disabled = false,
   level = 0,
 }) => {
   const isExpanded = expandedGroups.has(group.id);
 
-  // Calculate selection state
+  // Calculate selection state (excluding excludedIds from calculation)
   const selectionState = useMemo((): SelectionState => {
-    const allIds = getAllItemIds(group);
+    const allIds = getAllItemIds(group).filter(id => !excludedIds.has(id));
     if (allIds.length === 0) return 'unchecked';
 
     const selectedCount = allIds.filter(id => selectedIds.has(id)).length;
     if (selectedCount === 0) return 'unchecked';
     if (selectedCount === allIds.length) return 'checked';
     return 'indeterminate';
-  }, [group, selectedIds]);
+  }, [group, selectedIds, excludedIds]);
 
-  // Count selected items
+  // Count selected items (excluding excludedIds from calculation)
   const { selectedCount, totalCount } = useMemo(() => {
-    const allIds = getAllItemIds(group);
+    const allIds = getAllItemIds(group).filter(id => !excludedIds.has(id));
     return {
       selectedCount: allIds.filter(id => selectedIds.has(id)).length,
       totalCount: allIds.length,
     };
-  }, [group, selectedIds]);
+  }, [group, selectedIds, excludedIds]);
 
   const handleHeaderClick = useCallback(() => {
     onToggleExpand(group.id);
@@ -101,9 +102,12 @@ const ObjectPickerGroup: React.FC<ObjectPickerGroupProps> = ({
         {/* Group name */}
         <span className="object-picker-group-name">{group.label}</span>
 
-        {/* Checkbox with count (right side) */}
+        {/* Count and checkbox (right side) */}
         {selectionMode === 'multi' && (
           <div className="object-picker-group-checkbox" onClick={handleCheckboxClick}>
+            <span className="object-picker-group-count">
+              {selectedCount}/{totalCount}
+            </span>
             <input
               type="checkbox"
               ref={checkboxRef}
@@ -112,9 +116,6 @@ const ObjectPickerGroup: React.FC<ObjectPickerGroupProps> = ({
               disabled={disabled}
               aria-label={`Select all in ${group.label}`}
             />
-            <span className="object-picker-group-count">
-              {selectedCount}/{totalCount}
-            </span>
           </div>
         )}
 
@@ -137,6 +138,7 @@ const ObjectPickerGroup: React.FC<ObjectPickerGroupProps> = ({
               isSelected={selectedIds.has(item.id)}
               isPreSelected={preSelectedIds.has(item.id)}
               isHighlighted={highlightIds.has(item.id)}
+              isExcluded={excludedIds.has(item.id)}
               selectionMode={selectionMode}
               onToggle={onToggleItem}
               disabled={disabled}
@@ -156,6 +158,7 @@ const ObjectPickerGroup: React.FC<ObjectPickerGroupProps> = ({
               onToggleExpand={onToggleExpand}
               preSelectedIds={preSelectedIds}
               highlightIds={highlightIds}
+              excludedIds={excludedIds}
               disabled={disabled}
               level={level + 1}
             />

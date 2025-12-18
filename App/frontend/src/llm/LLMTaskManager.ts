@@ -133,6 +133,21 @@ export const LLMTaskManager = {
   cancelTask(sessionId: string) {
     useLLMTaskStore.getState().cancelTask(sessionId);
   },
+
+  /**
+   * Set session error status - useful for propagating function call errors to toast
+   * Only updates if session is in success state (to not override existing error)
+   * @param sessionId Session ID
+   * @param message Error message
+   */
+  setSessionError(sessionId: string, message: string) {
+    const session = useLLMTaskStore.getState().getSessionById(sessionId);
+    // Only update if session exists and is in success state
+    // (don't override existing error states)
+    if (session && session.status === 'success') {
+      useLLMTaskStore.getState().setTaskError(sessionId, message);
+    }
+  },
 };
 
 export default LLMTaskManager;

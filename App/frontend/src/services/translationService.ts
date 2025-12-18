@@ -2,30 +2,35 @@
  * Unified Translation Service
  *
  * Handles all translation operations using LLMTask.
- * - Story objects: type-specific translation functions (translate_character, etc.)
- * - Chat messages: dedicated chat translation flow via translate_chat_message.
+ * - Story objects: set_* and patch_* translation functions
+ * - Chat messages: dedicated chat translation flow via set_chat_message_translation
  */
 
 import type { MutableRefObject } from 'react';
 import type { LanguageData } from '../types/multilingual';
 import {
-  TRANSLATION_FUNCTION_TO_TYPE,
-  TRANSLATION_FUNCTION_NAMES,
-  TRANSLATE_CHAT_MESSAGE_FUNCTION,
+  SET_FUNCTION_NAMES,
+  PATCH_FUNCTION_NAMES,
+  ALL_TRANSLATION_FUNCTION_NAMES,
+  SET_CHAT_MESSAGE_TRANSLATION,
+  FUNCTION_TO_OBJECT_TYPE,
 } from '../llm/schemas/translationFunctions';
 import { useSettingsStore } from '../store/settingsStore';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
-import type { ObjectType } from '../types/unifiedObject';
+import type { ObjectType, UnifiedObject } from '../types/unifiedObject';
 import type { FunctionCallMetadata, FunctionCallProgress, ContentPart } from '../llm/requestTypes';
 import { translationService as translationAPI } from '../api/unifiedObjectService';
 import { parseJsonOutput, parseStreamingItems, extractRawContent, type ParsedItem } from '../utils/nativeOutputParser';
 import { LLMTask, LLMTaskMode, type StoryTranslationPromptContext, type ChatTranslationPromptContext } from '../llm';
+import { applyTranslationFunctionCalls } from '../chat/utils/translationFunctionApplicator';
 
 export interface StoryObjectToTranslate {
   objectType: ObjectType;
   objectId: string;
   sourceData: Record<string, any>;
   versionNumber?: number;
+  /** Current translation in target language (if exists) */
+  currentTranslation?: Record<string, any>;
 }
 
 export interface TranslationOptions {
@@ -34,6 +39,8 @@ export interface TranslationOptions {
   targetLanguage: string;
   userInput?: string;
   contextData?: Record<string, any>;
+  /** IDs of objects to use as translation context (for terminology consistency) */
+  contextObjectIds?: string[];
   onProgress?: (completed: string[]) => void;
   onError?: (error: Error) => void;
   onPartialSuccess?: (translations: TranslationResult[], error: Error) => void;
@@ -123,6 +130,44 @@ export class TranslationService {
     return { ...existingLanguageData, [targetLanguage]: translatedData };
   }
 
+  /**
+   * Get current translation data for objects that have translations in target language
+   */
+  static getCurrentTranslatedContents(
+    objects: StoryObjectToTranslate[],
+    targetLanguage: string
+  ): Array<{ id: string; type: string; name: string; translatedContent: string }> {
+    const store = useUnifiedObjectStore.getState();
+    const result: Array<{ id: string; type: string; name: string; translatedContent: string }> = [];
+
+    for (const obj of objects) {
+      const storeObj = store.objects[obj.objectId] as UnifiedObject | undefined;
+      if (!storeObj) continue;
+
+      const translatedData = storeObj.data[targetLanguage];
+      if (!translatedData) continue;
+
+      // Format based on object type
+      let translatedContent = '';
+      if (obj.objectType === 'basic_info') {
+        translatedContent = `Title: ${translatedData.title || ''}\nLogline: ${translatedData.logline || ''}\nGenre: ${translatedData.genre || ''}`;
+      } else if (obj.objectType === 'manuscript') {
+        translatedContent = translatedData.content || '';
+      } else {
+        translatedContent = `Name: ${translatedData.name || ''}\nDescription: ${translatedData.description || ''}`;
+      }
+
+      result.push({
+        id: obj.objectId,
+        type: obj.objectType,
+        name: translatedData.name || translatedData.title || obj.objectId,
+        translatedContent,
+      });
+    }
+
+    return result;
+  }
+
   static async translateObjects(
     objects: StoryObjectToTranslate[],
     options: TranslationOptions
@@ -133,6 +178,7 @@ export class TranslationService {
       targetLanguage,
       userInput,
       contextData,
+      contextObjectIds,
       onProgress,
       onError,
       onPartialSuccess,
@@ -153,11 +199,15 @@ export class TranslationService {
     const providerConfig = settingsStore.getProviderConfig(translationConfig.provider);
     const isNativeOutput = settingsStore.settings.nativeOutputMode;
 
+    // Build objects array for prompt
     const objectsArray = objects.map(obj => ({
       objectType: obj.objectType,
       objectId: obj.objectId,
       ...obj.sourceData,
     }));
+
+    // Get current translated contents for objects that have translations
+    const currentTranslatedContents = this.getCurrentTranslatedContents(objects, targetLanguage);
 
     const abortController = new AbortController();
     const abortControllerRef: MutableRefObject<AbortController | null> = providedAbortRef || { current: abortController };
@@ -175,28 +225,72 @@ export class TranslationService {
       }
 
       const translations: TranslationResult[] = [];
-      for (const item of parsedItems) {
-        if (!item.id) continue;
 
-        const originalObj = objects.find(o => o.objectId === item.id);
+      for (const item of parsedItems) {
+        // Handle function-style output
+        const functionName = item.function;
+        const id = item.id;
+
+        if (!id) continue;
+
+        const originalObj = objects.find(o => o.objectId === id);
         if (!originalObj) continue;
 
+        // Determine object type from function name or item.type
+        let objectType = originalObj.objectType;
+        if (functionName && FUNCTION_TO_OBJECT_TYPE[functionName]) {
+          const funcType = FUNCTION_TO_OBJECT_TYPE[functionName];
+          if (funcType === 'object' && item.type) {
+            objectType = item.type as ObjectType;
+          } else if (funcType !== 'object' && funcType !== 'chapter') {
+            objectType = funcType as ObjectType;
+          } else if (funcType === 'chapter' && item.type) {
+            objectType = item.type as ObjectType;
+          }
+        }
+
+        // Build translation data
         const translationData: Record<string, any> = {};
-        if (item.name !== undefined) translationData.name = item.name;
-        if (item.description !== undefined) translationData.description = item.description;
-        if (item.content !== undefined) {
-          translationData.content = item.content;
-          if (originalObj.objectType === 'manuscript') {
+
+        // Handle set functions
+        if (!functionName || SET_FUNCTION_NAMES.has(functionName)) {
+          if (item.name !== undefined) translationData.name = item.name;
+          if (item.description !== undefined) translationData.description = item.description;
+          if (item.title !== undefined) translationData.title = item.title;
+          if (item.logline !== undefined) translationData.logline = item.logline;
+          if (item.genre !== undefined) translationData.genre = item.genre;
+          if (item.content !== undefined) {
+            translationData.content = item.content;
             translationData.wordCount = item.content.split(/\s+/).filter(Boolean).length;
           }
         }
 
-        translations.push({
-          objectType: originalObj.objectType,
-          objectId: item.id,
-          versionNumber: originalObj.versionNumber,
-          ...translationData,
-        });
+        // Handle patch functions - apply patches
+        if (functionName && PATCH_FUNCTION_NAMES.has(functionName) && item.replacements) {
+          // For patch, we need to apply replacements to current translation
+          // This is handled by applyTranslationFunctionCalls, so convert to function call format
+          const mockFunctionCall: FunctionCallMetadata = {
+            id: crypto.randomUUID(),
+            function_name: functionName,
+            arguments: item,
+            isApplied: false,
+          };
+          const results = await applyTranslationFunctionCalls([mockFunctionCall], targetLanguage);
+          if (results[0]?.success && results[0]?.data) {
+            Object.assign(translationData, results[0].data);
+          }
+          onProgress?.([id]);
+          continue;
+        }
+
+        if (Object.keys(translationData).length > 0) {
+          translations.push({
+            objectType,
+            objectId: id,
+            versionNumber: originalObj.versionNumber,
+            ...translationData,
+          });
+        }
 
         onProgress?.(translations.map(t => t.objectId));
       }
@@ -212,7 +306,7 @@ export class TranslationService {
 
       const result = await translationAPI.addTranslations(batchData);
 
-      // Update store directly with returned objects (no separate GET needed)
+      // Update store directly with returned objects
       if (result.objects?.length) {
         const store = useUnifiedObjectStore.getState();
         result.objects.forEach(obj => {
@@ -225,61 +319,36 @@ export class TranslationService {
     };
 
     const handleFunctionCalls = async (functionCalls: FunctionCallMetadata[]) => {
-      const translationCalls = functionCalls.filter(fc => TRANSLATION_FUNCTION_NAMES.has(fc.function_name));
+      const translationCalls = functionCalls.filter(fc => ALL_TRANSLATION_FUNCTION_NAMES.has(fc.function_name));
 
       if (translationCalls.length === 0) {
         throw new Error('AI did not call any translation functions');
       }
 
-      const translations: TranslationResult[] = [];
+      // Use the applicator for all function calls
+      const results = await applyTranslationFunctionCalls(translationCalls, targetLanguage);
 
-      for (const call of translationCalls) {
-        const objectType = TRANSLATION_FUNCTION_TO_TYPE[call.function_name];
-        if (!objectType) continue;
+      const successfulIds = results
+        .filter(r => r.success && r.objectId)
+        .map(r => r.objectId as string);
 
-        const args = typeof call.arguments === 'string' ? JSON.parse(call.arguments) : call.arguments;
-        if (!args.id) continue;
-
-        const { id, ...data } = args;
-        if (objectType === 'manuscript' && data.content) {
-          data.wordCount = data.content.split(/\s+/).filter(Boolean).length;
-        }
-
-        const originalObj = objects.find(o => o.objectId === id);
-        translations.push({ objectType, objectId: id, versionNumber: originalObj?.versionNumber, ...data });
-        onProgress?.(translations.map(t => t.objectId));
-      }
-
-      if (translations.length === 0) {
+      if (successfulIds.length === 0) {
         throw new Error('No valid translations received from AI');
       }
 
-      const batchData = translations.map(trans => {
-        const { objectType, objectId, versionNumber, ...data } = trans;
-        return { objectType: objectType as ObjectType, objectId, language: targetLanguage, data, targetVersionNumber: versionNumber };
-      });
-
-      const result = await translationAPI.addTranslations(batchData);
-
-      // Update store directly with returned objects (no separate GET needed)
-      if (result.objects?.length) {
-        const store = useUnifiedObjectStore.getState();
-        result.objects.forEach(obj => {
-          store.objects[obj.id] = obj;
-        });
-        useUnifiedObjectStore.setState({ objects: { ...store.objects } });
-      }
-
-      onProgress?.(translations.map(t => t.objectId));
+      onProgress?.(successfulIds);
     };
 
     const promptContext: StoryTranslationPromptContext = {
+      projectId,
       userInput: userInput || 'Translate the following objects.',
       sourceLanguage,
       targetLanguage,
       objectCount: objects.length,
       objectsArray,
       contextData,
+      contextObjectIds,
+      currentTranslatedContents,
       isNativeOutput,
       outputLanguage: targetLanguage,
       enablePrefill: translationConfig.advanced.enablePrefill,
@@ -352,15 +421,27 @@ export class TranslationService {
             const args = progress.draft.parsedArguments;
             const functionName = progress.draft.functionName;
 
-            if (args?.id && !completed.includes(args.id)) {
+            if (args?.id && !completed.includes(args.id) && ALL_TRANSLATION_FUNCTION_NAMES.has(functionName)) {
               newIds.push(args.id);
 
-              const objectType = TRANSLATION_FUNCTION_TO_TYPE[functionName];
+              const funcType = FUNCTION_TO_OBJECT_TYPE[functionName];
+              let objectType = funcType;
+
+              // For object and chapter types, use the type from args
+              if ((funcType === 'object' || funcType === 'chapter') && args.type) {
+                objectType = args.type;
+              }
+
               if (objectType && args.id) {
-                const { id, ...data } = args;
+                const { id, type, ...data } = args;
                 const originalObj = objects.find(o => o.objectId === id);
                 const existingIndex = collectedTranslations.findIndex(t => t.objectId === id);
-                const translationResult: TranslationResult = { objectType, objectId: id, versionNumber: originalObj?.versionNumber, ...data };
+                const translationResult: TranslationResult = {
+                  objectType,
+                  objectId: id,
+                  versionNumber: originalObj?.versionNumber,
+                  ...data,
+                };
 
                 if (existingIndex >= 0) {
                   collectedTranslations[existingIndex] = translationResult;
@@ -405,7 +486,7 @@ export class TranslationService {
 
     const result = await translationAPI.addTranslations(batchData);
 
-    // Update store directly with returned objects (no separate GET needed)
+    // Update store directly with returned objects
     if (result.objects?.length) {
       const store = useUnifiedObjectStore.getState();
       result.objects.forEach(obj => {
@@ -439,6 +520,7 @@ export class TranslationService {
     return new Promise<{ content: string }>((resolve, reject) => {
       const promptContext: ChatTranslationPromptContext = {
         userInput: userInput || 'Translate the following message.',
+        projectId,
         sourceLanguage,
         targetLanguage,
         sourceContent: source.content,
@@ -474,9 +556,9 @@ export class TranslationService {
                 reject(new Error('AI did not generate any translation'));
               }
             } else {
-              const translationCall = result.functionCalls.find(fc => fc.function_name === TRANSLATE_CHAT_MESSAGE_FUNCTION.name);
+              const translationCall = result.functionCalls.find(fc => fc.function_name === SET_CHAT_MESSAGE_TRANSLATION.name);
               if (!translationCall) {
-                reject(new Error('AI did not call translate_chat_message function'));
+                reject(new Error('AI did not call set_chat_message_translation function'));
                 return;
               }
 
@@ -518,3 +600,4 @@ export const translateSingle = TranslationService.translateSingle.bind(Translati
 export const translateBatch = TranslationService.translateBatch.bind(TranslationService);
 export const translateChatMessage = TranslationService.translateChatMessage.bind(TranslationService);
 export const applyPartialTranslations = TranslationService.applyPartialTranslations.bind(TranslationService);
+export const getCurrentTranslatedContents = TranslationService.getCurrentTranslatedContents.bind(TranslationService);

@@ -1,4 +1,4 @@
-import { type ConversationBlock, type ThinkingDetail } from "./requestTypes";
+import { type ConversationBlock, type ThinkingDetail, type TokenUsage } from "./requestTypes";
 import { type ProviderType, type ProviderConfig, type ProviderPreference, type ThinkingConfig, type RetryConfig } from "../store/settingsStore";
 
 const API_BASE = `http://${window.location.hostname}:8000/api/v1`;
@@ -43,7 +43,7 @@ export async function* streamLLM(
         thinkingMode?: 'off' | 'custom' | 'model';
         retryConfig?: RetryConfig;
     }
-): AsyncGenerator<string | { content: string | null; tool_calls?: any[]; thinking?: string; thinking_details?: ThinkingDetail[]; thinking_text?: string; thinking_signature?: string }>
+): AsyncGenerator<string | { content: string | null; tool_calls?: any[]; thinking?: string; thinking_details?: ThinkingDetail[]; thinking_text?: string; thinking_signature?: string; usage?: TokenUsage }>
 {
     const endpoint = `${API_BASE}/chat/completions/${provider}/stream`;
 
@@ -197,6 +197,15 @@ export async function* streamLLM(
                                 const errMsg = chunk.error.message || chunk.error.code || JSON.stringify(chunk.error);
                                 const statusCode = chunk.error.status || chunk.error.code || null;
                                 throw new BackendError(`Backend Error: ${errMsg}`, typeof statusCode === 'number' ? statusCode : null);
+                            }
+
+                            // Handle usage information (emitted before [DONE])
+                            if (chunk?.usage) {
+                                yield {
+                                    content: null,
+                                    usage: chunk.usage,
+                                };
+                                continue;
                             }
 
                             const delta = chunk?.choices?.[0]?.delta;

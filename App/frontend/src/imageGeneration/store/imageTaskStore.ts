@@ -1,18 +1,18 @@
 /**
  * Image Task Store
- * Zustand store for tracking image generation tasks
+ * Zustand store for tracking image generation tasks with notification support
  */
 
 import { create } from 'zustand';
-import type { ImageTaskState, ImageTaskStatus, ImageTaskType } from '../types';
+import type { ImageTaskState, ImageTaskStatus, ImageTaskType, ImageRetryContext } from '../types';
 
 interface ImageTaskStore {
     tasks: Record<string, ImageTaskState | undefined>;
 
     // Task lifecycle
-    startTask: (id: string, taskType: ImageTaskType, label: string) => void;
+    startTask: (id: string, taskType: ImageTaskType, label: string, retryContext?: ImageRetryContext) => void;
     updateProgress: (id: string, stage: string, message: string, percentage?: number) => void;
-    completeTask: (id: string, result?: { assetId?: string; revisedPrompt?: string }) => void;
+    completeTask: (id: string, result?: { assetId?: string; revisedPrompt?: string; thumbnailUrl?: string }) => void;
     failTask: (id: string, error: string) => void;
     cancelTask: (id: string) => void;
     clearTask: (id: string) => void;
@@ -21,12 +21,20 @@ interface ImageTaskStore {
     getTask: (id: string) => ImageTaskState | undefined;
     getActiveTasks: () => ImageTaskState[];
     isAnyTaskGenerating: () => boolean;
+
+    // Notification support
+    getNotifiableTasks: () => ImageTaskState[];
+    markAsRead: (id: string) => void;
+    markAllAsRead: () => void;
+    hasUnread: () => boolean;
+    hasRunningTasks: () => boolean;
+    clearAllTasks: () => void;
 }
 
 export const useImageTaskStore = create<ImageTaskStore>()((set, get) => ({
     tasks: {},
 
-    startTask: (id, taskType, label) =>
+    startTask: (id, taskType, label, retryContext) =>
         set((state) => ({
             tasks: {
                 ...state.tasks,
@@ -37,6 +45,8 @@ export const useImageTaskStore = create<ImageTaskStore>()((set, get) => ({
                     label,
                     createdAt: Date.now(),
                     updatedAt: Date.now(),
+                    isRead: false,
+                    retryContext,
                 },
             },
         })),
@@ -131,6 +141,55 @@ export const useImageTaskStore = create<ImageTaskStore>()((set, get) => ({
                 t !== undefined &&
                 (t.status === 'preparing' || t.status === 'generating' || t.status === 'processing')
         ),
+
+    // Notification support methods
+    getNotifiableTasks: () =>
+        Object.values(get().tasks)
+            .filter(
+                (t): t is ImageTaskState =>
+                    t !== undefined && t.status !== 'idle'
+            )
+            .sort((a, b) => b.createdAt - a.createdAt),
+
+    markAsRead: (id) =>
+        set((state) => {
+            const task = state.tasks[id];
+            if (!task) return state;
+            return {
+                tasks: {
+                    ...state.tasks,
+                    [id]: {
+                        ...task,
+                        isRead: true,
+                    },
+                },
+            };
+        }),
+
+    markAllAsRead: () =>
+        set((state) => {
+            const updated: Record<string, ImageTaskState> = {};
+            for (const [id, task] of Object.entries(state.tasks)) {
+                if (task) {
+                    updated[id] = { ...task, isRead: true };
+                }
+            }
+            return { tasks: updated };
+        }),
+
+    hasUnread: () =>
+        Object.values(get().tasks).some(
+            (t) => t !== undefined && t.status !== 'idle' && !t.isRead
+        ),
+
+    hasRunningTasks: () =>
+        Object.values(get().tasks).some(
+            (t) =>
+                t !== undefined &&
+                (t.status === 'preparing' || t.status === 'generating' || t.status === 'processing')
+        ),
+
+    clearAllTasks: () => set({ tasks: {} }),
 }));
 
 export default useImageTaskStore;

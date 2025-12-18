@@ -10,111 +10,51 @@ Translate the following content from **{{ translation.sourceLanguage }}** to **{
 
 ## Content to Translate ({{ translation.sourceLanguage }})
 
-{{#if project.basicInfo}}
-{{#if (hasItems (filterByIds (array project.basicInfo) translation.objectIds))}}
-### Basic Information
+{{prompt "common/projectContext/filtered" translation.objectIds}}
 
-- **Title**: {{ project.basicInfo.title }}
-- **Logline**: {{ project.basicInfo.logline }}
-- **Genre**: {{ project.basicInfo.genre }}
+{{#if (hasItems translation.currentTranslatedContents)}}
+## Current Translations ({{ translation.targetLanguage }})
 
-{{/if}}
-{{/if}}
+Review these existing translations to decide whether to use `set_*` (full rewrite) or `patch_*` (minor fixes):
 
-{{#if (hasItems (filterByIds project.objects translation.objectIds))}}
-### Story Objects
-
-{{#with (filterByIds project.objects translation.objectIds) as |objectsToTranslate|}}
-{{#each objectsToTranslate}}
-#### {{ this.type }}: {{ this.name }} (ID: `{{ this.id }}`)
-
-{{ this.description }}
-
-{{/each}}
-{{/with}}
-{{/if}}
-
-{{#if project.outline}}
-{{#each project.outline.acts}}
-{{#if (hasItems (filterByIds (array this) @root.translation.objectIds))}}
-### Act: {{ this.name }} (ID: `{{ this.id }}`)
-
-{{ this.description }}
-
-{{/if}}
-{{#if (hasItems (filterByIds this.chapters @root.translation.objectIds))}}
-{{#with (filterByIds this.chapters @root.translation.objectIds) as |chaptersToTranslate|}}
-{{#each chaptersToTranslate}}
-### Chapter: {{ this.name }} (ID: `{{ this.id }}`)
-
-{{ this.description }}
-
-{{/each}}
-{{/with}}
-{{/if}}
-{{/each}}
-{{/if}}
-
-{{#if (hasItems (filterByIds project.manuscripts translation.objectIds))}}
-### Manuscripts
-
-{{#with (filterByIds project.manuscripts translation.objectIds) as |manuscriptsToTranslate|}}
-{{#each manuscriptsToTranslate}}
-#### {{ this.chapterName }} (ID: `{{ this.id }}`)
-
-{{ this.content }}
-
----
-{{/each}}
-{{/with}}
-{{/if}}
-
-{{#if (hasItems (getSubLanguageObjects project translation.targetLanguage translation.objectIds))}}
-## Existing Translations ({{ translation.targetLanguage }}) - For Reference
-
-Use these existing translations to maintain consistency in terminology and style:
-
-{{#each (getSubLanguageObjects project translation.targetLanguage translation.objectIds)}}
+{{#each translation.currentTranslatedContents}}
 ### {{ this.type }}: {{ this.name }} (ID: `{{ this.id }}`)
 
-{{ this.description }}
+{{ this.translatedContent }}
 
 {{/each}}
 {{/if}}
 
-## Critical Instructions
+{{#if (hasItems translation.contextObjectIds)}}
+## Translation Context ({{ translation.targetLanguage }}) - Reference Only
 
-**You MUST translate ALL content above** - do not skip any items.
+Use these previously translated items for terminology consistency (do not re-translate):
+
+{{prompt "translation/filteredContext" translation.targetLanguage translation.contextObjectIds}}
+{{/if}}
+
+## Instructions
+
+**You MUST process ALL content above** - do not skip any items.
+
+For each item:
+1. Check if there is an existing translation in "Current Translations" section
+2. If NO existing translation → use `set_*` function
+3. If existing translation needs FULL rewrite → use `set_*` function
+4. If existing translation needs only MINOR fixes → use `patch_*` function
 
 {{#if config.isNativeOutputMode}}
-Output your translations as a JSON array.
+Output your translations as a JSON array with a `function` field for each item.
 
-Requirements:
-- Use the `id` from the source as the `id` field in your JSON output
-- Maintain consistency in terminology, character names, and style across all content
-- Include the appropriate translated fields based on object type:
-  - For basic_info: id, title, logline, genre
-  - For story objects (character, location, organization, lorebook): id, name, description
-  - For act/chapter: id, name, description
-  - For manuscript: id (chapterId), content
-
-Example output format:
+Example:
 ```json
 [
-  {"id": "basic-info-id", "title": "...", "logline": "...", "genre": "..."},
-  {"id": "char-1", "name": "Translated Name", "description": "Translated description"},
-  {"id": "chapter-1", "content": "Translated manuscript content..."}
+  {"function": "set_object_translation", "id": "char-1", "type": "character", "name": "...", "description": "..."},
+  {"function": "patch_object_translation", "id": "char-2", "type": "character", "replacements": [{"field": "name", "old": "...", "new": "..."}]}
 ]
 ```
 {{else}}
-You will make function calls (one per item).
-
-Requirements:
-- Use the `id` from the source as the `id` parameter
-- Maintain consistency in terminology, character names, and style across all content
-- Include the appropriate translated fields based on object type:
-  - For basic_info: id, title, logline, genre
-  - For story objects (character, location, organization, lorebook): id, name, description
-  - For act/chapter: id, name, description
-  - For manuscript: id (chapterId), content
+Make appropriate function calls (one per item):
+- `set_*` functions for new translations or full rewrites
+- `patch_*` functions for minor corrections
 {{/if}}

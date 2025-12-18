@@ -68,6 +68,7 @@ export interface ObjectPickerProps {
   filterIds?: string[];            // If provided, only show items with these IDs
   preSelectedIds?: string[];       // IDs that cannot be deselected
   highlightIds?: string[];         // IDs to highlight (e.g., current chapter)
+  excludedIds?: string[];          // IDs shown without checkbox (edit targets, excluded from selection)
   disabled?: boolean;
   loading?: boolean;
 
@@ -95,6 +96,7 @@ export interface ObjectPickerGroupProps {
   onToggleExpand: (groupId: string) => void;
   preSelectedIds: Set<string>;
   highlightIds: Set<string>;       // IDs to highlight
+  excludedIds: Set<string>;        // IDs excluded from selection (edit targets)
   disabled?: boolean;
   level?: number;  // Nesting level for indentation
 }
@@ -105,6 +107,7 @@ export interface ObjectPickerItemProps {
   isSelected: boolean;
   isPreSelected?: boolean;
   isHighlighted?: boolean;         // Whether to highlight this item
+  isExcluded?: boolean;            // Whether this item is an edit target (no checkbox)
   selectionMode: SelectionMode;
   onToggle: (id: string) => void;
   disabled?: boolean;

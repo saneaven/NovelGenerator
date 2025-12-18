@@ -145,3 +145,50 @@ def get_default_prompts():
         dict: Default prompts in the format {function_type: {category: {name?: content}}}
     """
     return DEFAULT_PROMPTS
+
+
+# ============================================================================
+# DEFAULT FRAGMENTS
+# ============================================================================
+
+FRAGMENTS_DIR = CURRENT_DIR / 'default_fragments'
+
+
+def _load_fragment_file(relative_path: str) -> str:
+    """
+    Load a fragment file from the default_fragments directory.
+
+    Args:
+        relative_path: Path relative to the default_fragments directory
+
+    Returns:
+        str: Content of the fragment file
+    """
+    file_path = FRAGMENTS_DIR / relative_path
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        print(f"Warning: Fragment file not found: {file_path}")
+        return f"# Default fragment (file not found: {relative_path})"
+
+
+# Load all default fragments
+# Format: {'path/to/fragment': content}
+DEFAULT_FRAGMENTS = {
+    'common/customThinkingInstruction': _load_fragment_file('common/customThinkingInstruction.md'),
+    'common/projectContext/full': _load_fragment_file('common/projectContext/full.md'),
+    'common/projectContext/filtered': _load_fragment_file('common/projectContext/filtered.md'),
+    'common/editOperations/manuscript': _load_fragment_file('common/editOperations/manuscript.md'),
+    'common/editOperations/storyObject': _load_fragment_file('common/editOperations/storyObject.md'),
+}
+
+
+def get_default_fragments():
+    """
+    Get the default fragments dictionary.
+
+    Returns:
+        dict: Default fragments in the format {'folder/name': content}
+    """
+    return DEFAULT_FRAGMENTS

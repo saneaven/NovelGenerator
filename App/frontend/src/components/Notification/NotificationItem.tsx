@@ -1,13 +1,18 @@
 import React from 'react';
 import type { LLMTaskSessionState } from '../../store/llmTaskStore';
+import type { ImageTaskState } from '../../imageGeneration/types';
 import { Check, Close } from '../icons';
 
+// Unified task type for notifications
+export type NotificationTask =
+  | (LLMTaskSessionState & { kind: 'llm' })
+  | (ImageTaskState & { kind: 'image' });
+
 interface NotificationItemProps {
-  session: LLMTaskSessionState;
+  task: NotificationTask;
   style?: React.CSSProperties;
   onDismiss: () => void;
   onOpenDetail: () => void;
-  onOpenError: () => void;
 }
 
 const formatRelativeTime = (timestamp: number): string => {
@@ -24,25 +29,38 @@ const formatRelativeTime = (timestamp: number): string => {
   return `${days}d ago`;
 };
 
+// Type guards
+const isImageTask = (task: NotificationTask): task is ImageTaskState & { kind: 'image' } =>
+  task.kind === 'image';
+
+// Normalize status for display (image tasks have more statuses)
+const normalizeStatus = (task: NotificationTask): 'running' | 'success' | 'error' | 'cancelled' | 'idle' => {
+  if (isImageTask(task)) {
+    if (task.status === 'preparing' || task.status === 'generating' || task.status === 'processing') {
+      return 'running';
+    }
+  }
+  return task.status as 'running' | 'success' | 'error' | 'cancelled' | 'idle';
+};
+
 const NotificationItem: React.FC<NotificationItemProps> = ({
-  session,
+  task,
   style,
   onDismiss,
   onOpenDetail,
-  onOpenError,
 }) => {
-  const { status, label, progress, error, isRead, updatedAt } = session;
+  const { label, error, isRead, updatedAt } = task;
+  const normalizedStatus = normalizeStatus(task);
 
   const handleClick = () => {
-    if (status === 'running') {
+    // All clickable states open the same detail modal
+    if (normalizedStatus === 'running' || normalizedStatus === 'success' || normalizedStatus === 'error') {
       onOpenDetail();
-    } else if (status === 'error') {
-      onOpenError();
     }
   };
 
   const getStatusIcon = () => {
-    switch (status) {
+    switch (normalizedStatus) {
       case 'running':
         return (
           <div className="notification-spinner">
@@ -61,10 +79,31 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   };
 
   const getStatusMessage = () => {
-    switch (status) {
+    // Image task specific messages
+    if (isImageTask(task)) {
+      switch (task.status) {
+        case 'preparing':
+          return 'Preparing...';
+        case 'generating':
+          return task.progress?.message || 'Generating...';
+        case 'processing':
+          return 'Processing...';
+        case 'success':
+          return 'Image generated';
+        case 'error':
+          return error || 'Generation failed';
+        case 'cancelled':
+          return 'Cancelled';
+        default:
+          return '';
+      }
+    }
+
+    // LLM task messages
+    switch (task.status) {
       case 'running':
-        if (progress) {
-          return progress.currentItemLabel || `${progress.current}/${progress.total}`;
+        if (task.progress) {
+          return task.progress.currentItemLabel || `${task.progress.current}/${task.progress.total}`;
         }
         return 'Processing...';
       case 'success':
@@ -78,11 +117,14 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
     }
   };
 
-  const isClickable = status === 'running' || status === 'error';
+  // Get thumbnail URL for image tasks
+  const thumbnailUrl = isImageTask(task) && task.status === 'success' ? task.result?.thumbnailUrl : undefined;
+
+  const isClickable = normalizedStatus === 'running' || normalizedStatus === 'success' || normalizedStatus === 'error';
 
   return (
     <div
-      className={`notification-item notification-item--${status} ${isClickable ? 'notification-item--clickable' : ''} ${!isRead ? 'notification-item--unread' : ''}`}
+      className={`notification-item notification-item--${normalizedStatus} notification-item--${task.kind} ${isClickable ? 'notification-item--clickable' : ''} ${!isRead ? 'notification-item--unread' : ''}`}
       style={style}
       onClick={isClickable ? handleClick : undefined}
       role={isClickable ? 'button' : undefined}
@@ -105,6 +147,14 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
           <div className="notification-item-message">{getStatusMessage()}</div>
           <div className="notification-item-time">{formatRelativeTime(updatedAt)}</div>
         </div>
+
+        {/* Thumbnail preview for completed image tasks */}
+        {thumbnailUrl && (
+          <div className="notification-item-thumbnail">
+            <img src={thumbnailUrl} alt="Generated" />
+          </div>
+        )}
+
         <button
           className="notification-item-close"
           onClick={(e) => {

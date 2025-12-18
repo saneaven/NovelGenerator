@@ -2,10 +2,11 @@
  * Search and filter bar for ObjectPicker
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ObjectType } from '../../types/unifiedObject';
 import type { ObjectPickerSearchProps } from './types';
 import { CATEGORY_CONFIG } from './types';
+import CustomSelect from '../ui/CustomSelect';
 
 const ObjectPickerSearch: React.FC<ObjectPickerSearchProps> = ({
   value,
@@ -41,10 +42,19 @@ const ObjectPickerSearch: React.FC<ObjectPickerSearchProps> = ({
     onChange('');
   }, [onChange]);
 
-  const handleTypeChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newValue = e.target.value;
+  const handleTypeChange = useCallback((newValue: string) => {
     onTypeFilterChange?.(newValue ? (newValue as ObjectType) : null);
   }, [onTypeFilterChange]);
+
+  const typeOptions = useMemo(() => {
+    return [
+      { value: '', label: 'All Types' },
+      ...availableTypes.map(type => ({
+        value: type,
+        label: CATEGORY_CONFIG[type]?.label || type,
+      })),
+    ];
+  }, [availableTypes]);
 
   return (
     <div className="object-picker-search">
@@ -69,18 +79,12 @@ const ObjectPickerSearch: React.FC<ObjectPickerSearchProps> = ({
       </div>
 
       {onTypeFilterChange && availableTypes.length > 1 && (
-        <select
+        <CustomSelect
           className="object-picker-type-filter"
           value={typeFilter || ''}
           onChange={handleTypeChange}
-        >
-          <option value="">All Types</option>
-          {availableTypes.map(type => (
-            <option key={type} value={type}>
-              {CATEGORY_CONFIG[type]?.label || type}
-            </option>
-          ))}
-        </select>
+          options={typeOptions}
+        />
       )}
     </div>
   );

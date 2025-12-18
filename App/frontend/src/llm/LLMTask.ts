@@ -155,6 +155,7 @@ export class LLMTask {
       let currentPartType: ContentPartType | null = null;
       let currentBuffer = '';
       let accumulatedThinkingDetails: any[] | undefined;
+      let capturedUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined;
 
       const finalizeCurrentBuffer = () => {
         if (currentPartType && currentBuffer) {
@@ -298,6 +299,12 @@ export class LLMTask {
           }
           accumulatedThinkingDetails.push(...thinkingDetails);
         }
+
+        // Handle usage information
+        const usage = (chunk as any).usage;
+        if (usage) {
+          capturedUsage = usage;
+        }
       }
 
       // 8. Finalize
@@ -347,6 +354,15 @@ export class LLMTask {
             functionCalls,
             thinkingDetails: accumulatedThinkingDetails,
           },
+        });
+      }
+
+      // Store debug info (provider, model, usage) in session
+      if (this.config.sessionId) {
+        useLLMTaskStore.getState().updateSession(this.config.sessionId, {
+          provider,
+          model,
+          usage: capturedUsage,
         });
       }
 

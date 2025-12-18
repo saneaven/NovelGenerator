@@ -1,186 +1,288 @@
 /**
  * Translation Function Schemas
  *
- * Type-specific translation functions following CRUD pattern.
- * Each object type has its own translation function with exact parameters.
+ * Functions for translating story content between languages.
+ * - Set functions: Full translation (new or replace existing)
+ * - Patch functions: Search-replace edits for minor corrections
  */
 
 import type { FunctionCallSchema } from './chatFunctions';
 
 // ============================================================================
-// BASE FIELDS
+// SET FUNCTIONS - Full translation (new or replace existing)
 // ============================================================================
 
-const baseIdField = {
-  id: { type: "string", description: "ID of the object to translate" },
+export const SET_BASIC_INFO_TRANSLATION: FunctionCallSchema = {
+  name: 'set_basic_info_translation',
+  description: 'Set translation for project basic info.',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'ID of the basic info object' },
+      title: { type: 'string', description: 'Translated title' },
+      logline: { type: 'string', description: 'Translated logline' },
+      genre: { type: 'string', description: 'Translated genre' },
+    },
+    required: ['id', 'title', 'logline', 'genre'],
+  },
 };
 
-const baseNameDescFields = {
-  name: { type: "string", description: "Translated name" },
-  description: { type: "string", description: "Translated description" },
+export const SET_OBJECT_TRANSLATION: FunctionCallSchema = {
+  name: 'set_object_translation',
+  description: 'Set translation for story objects (character, organization, location, lorebook).',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'ID of the object' },
+      type: {
+        type: 'string',
+        enum: ['character', 'organization', 'location', 'lorebook'],
+        description: 'Type of the object',
+      },
+      name: { type: 'string', description: 'Translated name' },
+      description: { type: 'string', description: 'Translated description' },
+    },
+    required: ['id', 'type', 'name', 'description'],
+  },
+};
+
+export const SET_CHAPTER_TRANSLATION: FunctionCallSchema = {
+  name: 'set_chapter_translation',
+  description: 'Set translation for acts or chapters.',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'ID of the act or chapter' },
+      type: {
+        type: 'string',
+        enum: ['act', 'chapter'],
+        description: 'Type: act or chapter',
+      },
+      name: { type: 'string', description: 'Translated name' },
+      description: { type: 'string', description: 'Translated description' },
+    },
+    required: ['id', 'type', 'name', 'description'],
+  },
+};
+
+export const SET_MANUSCRIPT_TRANSLATION: FunctionCallSchema = {
+  name: 'set_manuscript_translation',
+  description: 'Set translation for manuscript content.',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'ID of the manuscript' },
+      content: { type: 'string', description: 'Translated manuscript content' },
+    },
+    required: ['id', 'content'],
+  },
 };
 
 // ============================================================================
-// TYPE-SPECIFIC TRANSLATION FUNCTIONS
+// PATCH FUNCTIONS - Search-replace edits
 // ============================================================================
 
-/**
- * Translation functions for story objects - one function per object type
- */
-export const TRANSLATION_FUNCTIONS: FunctionCallSchema[] = [
-  // Character
-  {
-    name: "translate_character",
-    description: "Translate a character's name and description.",
-    parameters: {
-      type: "object",
-      properties: { ...baseIdField, ...baseNameDescFields },
-      required: ["id", "name", "description"],
-    },
-  },
-
-  // Organization
-  {
-    name: "translate_organization",
-    description: "Translate an organization's name and description.",
-    parameters: {
-      type: "object",
-      properties: { ...baseIdField, ...baseNameDescFields },
-      required: ["id", "name", "description"],
-    },
-  },
-
-  // Location
-  {
-    name: "translate_location",
-    description: "Translate a location's name and description.",
-    parameters: {
-      type: "object",
-      properties: { ...baseIdField, ...baseNameDescFields },
-      required: ["id", "name", "description"],
-    },
-  },
-
-  // Lorebook Entry
-  {
-    name: "translate_lorebook_entry",
-    description: "Translate a lorebook entry's name and description.",
-    parameters: {
-      type: "object",
-      properties: { ...baseIdField, ...baseNameDescFields },
-      required: ["id", "name", "description"],
-    },
-  },
-
-  // Act
-  {
-    name: "translate_act",
-    description: "Translate an act's name and description.",
-    parameters: {
-      type: "object",
-      properties: { ...baseIdField, ...baseNameDescFields },
-      required: ["id", "name", "description"],
-    },
-  },
-
-  // Chapter
-  {
-    name: "translate_chapter",
-    description: "Translate a chapter's name and description.",
-    parameters: {
-      type: "object",
-      properties: { ...baseIdField, ...baseNameDescFields },
-      required: ["id", "name", "description"],
-    },
-  },
-
-  // Basic Info
-  {
-    name: "translate_basic_info",
-    description: "Translate the project's basic info (title, logline, genre).",
-    parameters: {
-      type: "object",
-      properties: {
-        ...baseIdField,
-        title: { type: "string", description: "Translated title" },
-        logline: { type: "string", description: "Translated logline" },
-        genre: { type: "string", description: "Translated genre" },
+export const PATCH_BASIC_INFO_TRANSLATION: FunctionCallSchema = {
+  name: 'patch_basic_info_translation',
+  description: 'Patch basic info translation with search-replace.',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'ID of the basic info object' },
+      replacements: {
+        type: 'array',
+        description: 'List of search-replace operations',
+        items: {
+          type: 'object',
+          properties: {
+            field: {
+              type: 'string',
+              enum: ['title', 'logline', 'genre'],
+              description: 'Field to patch',
+            },
+            old: { type: 'string', description: 'Text to find' },
+            new: { type: 'string', description: 'Replacement text' },
+          },
+          required: ['field', 'old', 'new'],
+        },
       },
-      required: ["id", "title", "logline", "genre"],
     },
+    required: ['id', 'replacements'],
   },
+};
 
-  // Manuscript
-  {
-    name: "translate_manuscript",
-    description: "Translate the manuscript content of a chapter.",
-    parameters: {
-      type: "object",
-      properties: {
-        ...baseIdField,
-        content: { type: "string", description: "Translated manuscript content" },
+export const PATCH_OBJECT_TRANSLATION: FunctionCallSchema = {
+  name: 'patch_object_translation',
+  description: 'Patch object translation with search-replace.',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'ID of the object' },
+      type: {
+        type: 'string',
+        enum: ['character', 'organization', 'location', 'lorebook'],
+        description: 'Type of the object',
       },
-      required: ["id", "content"],
+      replacements: {
+        type: 'array',
+        description: 'List of search-replace operations',
+        items: {
+          type: 'object',
+          properties: {
+            field: {
+              type: 'string',
+              enum: ['name', 'description'],
+              description: 'Field to patch',
+            },
+            old: { type: 'string', description: 'Text to find' },
+            new: { type: 'string', description: 'Replacement text' },
+          },
+          required: ['field', 'old', 'new'],
+        },
+      },
     },
+    required: ['id', 'type', 'replacements'],
   },
-];
+};
+
+export const PATCH_CHAPTER_TRANSLATION: FunctionCallSchema = {
+  name: 'patch_chapter_translation',
+  description: 'Patch act/chapter translation with search-replace.',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'ID of the act or chapter' },
+      type: {
+        type: 'string',
+        enum: ['act', 'chapter'],
+        description: 'Type: act or chapter',
+      },
+      replacements: {
+        type: 'array',
+        description: 'List of search-replace operations',
+        items: {
+          type: 'object',
+          properties: {
+            field: {
+              type: 'string',
+              enum: ['name', 'description'],
+              description: 'Field to patch',
+            },
+            old: { type: 'string', description: 'Text to find' },
+            new: { type: 'string', description: 'Replacement text' },
+          },
+          required: ['field', 'old', 'new'],
+        },
+      },
+    },
+    required: ['id', 'type', 'replacements'],
+  },
+};
+
+export const PATCH_MANUSCRIPT_TRANSLATION: FunctionCallSchema = {
+  name: 'patch_manuscript_translation',
+  description: 'Patch manuscript translation with search-replace.',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'ID of the manuscript' },
+      replacements: {
+        type: 'array',
+        description: 'List of search-replace operations',
+        items: {
+          type: 'object',
+          properties: {
+            old: { type: 'string', description: 'Text to find' },
+            new: { type: 'string', description: 'Replacement text' },
+          },
+          required: ['old', 'new'],
+        },
+      },
+    },
+    required: ['id', 'replacements'],
+  },
+};
 
 // ============================================================================
 // CHAT MESSAGE TRANSLATION
 // ============================================================================
 
-/**
- * Chat message translation function schema
- */
-export const TRANSLATE_CHAT_MESSAGE_FUNCTION: FunctionCallSchema = {
-  name: "translate_chat_message",
-  description: "Translate a chat message from one language to another.",
+export const SET_CHAT_MESSAGE_TRANSLATION: FunctionCallSchema = {
+  name: 'set_chat_message_translation',
+  description: 'Translate a chat message from one language to another.',
   parameters: {
-    type: "object",
+    type: 'object',
     properties: {
       content: {
-        type: "string",
-        description: "Translated message content"
-      }
+        type: 'string',
+        description: 'Translated message content',
+      },
     },
-    required: ["content"]
-  }
+    required: ['content'],
+  },
 };
 
-/**
- * Get chat translation functions
- */
+// ============================================================================
+// FUNCTION GROUPS
+// ============================================================================
+
+export const SET_TRANSLATION_FUNCTIONS: FunctionCallSchema[] = [
+  SET_BASIC_INFO_TRANSLATION,
+  SET_OBJECT_TRANSLATION,
+  SET_CHAPTER_TRANSLATION,
+  SET_MANUSCRIPT_TRANSLATION,
+];
+
+export const PATCH_TRANSLATION_FUNCTIONS: FunctionCallSchema[] = [
+  PATCH_BASIC_INFO_TRANSLATION,
+  PATCH_OBJECT_TRANSLATION,
+  PATCH_CHAPTER_TRANSLATION,
+  PATCH_MANUSCRIPT_TRANSLATION,
+];
+
+export const TRANSLATION_FUNCTIONS: FunctionCallSchema[] = [
+  ...SET_TRANSLATION_FUNCTIONS,
+  ...PATCH_TRANSLATION_FUNCTIONS,
+];
+
 export const CHAT_TRANSLATION_FUNCTIONS: FunctionCallSchema[] = [
-  TRANSLATE_CHAT_MESSAGE_FUNCTION
+  SET_CHAT_MESSAGE_TRANSLATION,
 ];
 
 // ============================================================================
-// UTILITIES
+// FUNCTION NAME SETS
 // ============================================================================
 
-/**
- * Map function names to object types
- */
-export const TRANSLATION_FUNCTION_TO_TYPE: Record<string, string> = {
-  'translate_character': 'character',
-  'translate_organization': 'organization',
-  'translate_location': 'location',
-  'translate_lorebook_entry': 'lorebook',
-  'translate_act': 'act',
-  'translate_chapter': 'chapter',
-  'translate_basic_info': 'basic_info',
-  'translate_manuscript': 'manuscript',
+export const SET_FUNCTION_NAMES = new Set([
+  'set_basic_info_translation',
+  'set_object_translation',
+  'set_chapter_translation',
+  'set_manuscript_translation',
+]);
+
+export const PATCH_FUNCTION_NAMES = new Set([
+  'patch_basic_info_translation',
+  'patch_object_translation',
+  'patch_chapter_translation',
+  'patch_manuscript_translation',
+]);
+
+export const ALL_TRANSLATION_FUNCTION_NAMES = new Set([
+  ...SET_FUNCTION_NAMES,
+  ...PATCH_FUNCTION_NAMES,
+]);
+
+// ============================================================================
+// TYPE MAPPING
+// ============================================================================
+
+export const FUNCTION_TO_OBJECT_TYPE: Record<string, string> = {
+  set_basic_info_translation: 'basic_info',
+  set_object_translation: 'object',
+  set_chapter_translation: 'chapter',
+  set_manuscript_translation: 'manuscript',
+  patch_basic_info_translation: 'basic_info',
+  patch_object_translation: 'object',
+  patch_chapter_translation: 'chapter',
+  patch_manuscript_translation: 'manuscript',
 };
-
-/**
- * Get translation function names as a Set for quick lookup
- */
-export const TRANSLATION_FUNCTION_NAMES = new Set(
-  TRANSLATION_FUNCTIONS.map(f => f.name)
-);
-
-// ============================================================================
-// EXPORTS
-// ============================================================================
-
-export default TRANSLATION_FUNCTIONS;

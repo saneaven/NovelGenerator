@@ -23,12 +23,17 @@ const GROUP_LABELS: Record<string, string> = {
 
 // Handlebars helpers documentation
 const HANDLEBARS_HELPERS = {
+    'Fragment Helpers': [
+        { name: 'prompt', syntax: '{{prompt "folder/name"}}', desc: 'Include a reusable prompt fragment' },
+        { name: 'prompt (with args)', syntax: '{{prompt "path" arg1 arg2}}', desc: 'Include fragment with positional arguments (accessible via params.[0], params.[1])' },
+    ],
     'Filtering Helpers': [
         { name: 'filterByType', syntax: '{{#each (filterByType arr "type")}}', desc: 'Filter objects by type field' },
         { name: 'filterByIds', syntax: '{{#each (filterByIds arr ids)}}', desc: 'Filter array by ID list' },
         { name: 'getById', syntax: '{{#with (getById arr id)}}', desc: 'Get single object by ID' },
         { name: 'getManuscript', syntax: '{{#with (getManuscript manuscripts chapterId)}}', desc: 'Get manuscript by chapter ID' },
-        { name: 'getSubLanguageObjects', syntax: '{{#each (getSubLanguageObjects project lang ids)}}', desc: 'Get objects from sub-language' },
+        { name: 'getObjectsOfLanguage', syntax: '{{#each (getObjectsOfLanguage project lang ids)}}', desc: 'Get objects for a specific language' },
+        { name: 'getManuscriptsOfLanguage', syntax: '{{#each (getManuscriptsOfLanguage project lang ids)}}', desc: 'Get manuscripts for a specific language' },
     ],
     'Utility Helpers': [
         { name: 'count', syntax: '{{count arr}}', desc: 'Count array items' },

@@ -217,17 +217,17 @@ export const PATCH_CHAPTER_FUNCTION: FunctionCallSchema = {
 
 export const REPLACE_MANUSCRIPT_FUNCTION: FunctionCallSchema = {
   name: 'replace_manuscript',
-  description: 'Replace the entire manuscript content of a chapter.',
+  description: 'Replace the entire manuscript content.',
   parameters: {
     type: 'object',
     properties: {
-      chapterId: { type: 'string', description: 'ID of the chapter' },
+      id: { type: 'string', description: 'ID of the manuscript' },
       content: {
         type: 'string',
         description: 'Complete new manuscript content',
       },
     },
-    required: ['chapterId', 'content'],
+    required: ['id', 'content'],
   },
 };
 
@@ -238,14 +238,14 @@ export const PATCH_MANUSCRIPT_FUNCTION: FunctionCallSchema = {
   parameters: {
     type: 'object',
     properties: {
-      chapterId: { type: 'string', description: 'ID of the chapter' },
+      id: { type: 'string', description: 'ID of the manuscript' },
       replacements: {
         type: 'array',
         items: manuscriptReplacementSchema,
         description: 'List of replacements to apply',
       },
     },
-    required: ['chapterId', 'replacements'],
+    required: ['id', 'replacements'],
   },
 };
 

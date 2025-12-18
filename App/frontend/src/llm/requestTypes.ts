@@ -28,6 +28,13 @@ export interface ThinkingDetail {
   signature?: string;
 }
 
+// Token usage information from LLM response
+export interface TokenUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
 export interface FunctionCallMetadata {
   id: string;
   function_name: string;

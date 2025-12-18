@@ -131,11 +131,29 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       const backendChats = await chatService.listChats(projectId);
       const chats = Array.isArray(backendChats) ? backendChats.map(convertBackendChat) : [];
 
+      // Restore selected chat from localStorage
+      const storedChatId = localStorage.getItem(`selectedChat_${projectId}`);
+      const validStoredChatId = storedChatId && chats.some(chat => chat.id === storedChatId)
+        ? storedChatId
+        : undefined;
+
+      // Clean up invalid stored chat ID
+      if (storedChatId && !validStoredChatId) {
+        localStorage.removeItem(`selectedChat_${projectId}`);
+      }
+
       set((state) => ({
         chatsByProject: {
           ...state.chatsByProject,
           [projectId]: chats,
         },
+        // Only set selectedChatByProject if we have a valid stored chat
+        ...(validStoredChatId && {
+          selectedChatByProject: {
+            ...state.selectedChatByProject,
+            [projectId]: validStoredChatId,
+          },
+        }),
         isLoading: false,
       }));
     } catch (error) {

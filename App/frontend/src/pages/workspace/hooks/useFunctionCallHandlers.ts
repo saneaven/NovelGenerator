@@ -5,6 +5,7 @@ import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { FunctionCallApplicator } from '../../../chat/utils/functionCallApplicator';
 import { FunctionCallService } from '../services/FunctionCallService';
+import { LLMTaskManager } from '../../../llm/LLMTaskManager';
 import type { FunctionCallMetadata, FunctionCallResultSummary, FunctionCallProgress } from '../../../llm/requestTypes';
 import type { EditCard } from '../../../chat/types';
 
@@ -25,6 +26,9 @@ export function useFunctionCallHandlers(
 
   // Store function calls by message ID for batch operations
   const functionCallsByMessage = useRef<Record<string, FunctionCallMetadata[]>>({});
+
+  // Store sessionId by message ID for propagating function call errors to toast
+  const messageSessionMap = useRef<Record<string, string>>({});
 
   const getActiveChatId = useCallback(
     () => (projectId ? getSelectedChatId(projectId) : undefined),
@@ -72,6 +76,12 @@ export function useFunctionCallHandlers(
             console.error('Failed to apply function call:', result.error || result.message);
             showError('Function Call Failed', `Failed to apply changes: ${result.error || result.message}`);
 
+            // Propagate error to toast if sessionId is available
+            const sessionId = messageSessionMap.current[messageId];
+            if (sessionId) {
+              LLMTaskManager.setSessionError(sessionId, `Function call failed: ${result.error || result.message}`);
+            }
+
             updateFunctionCallStatus(projectId, chatId, messageId, functionCall.id, false, result, result.error, result.error || result.message);
 
             setPendingFunctionCallResults(prev => [...prev,
@@ -105,6 +115,12 @@ export function useFunctionCallHandlers(
 
           // Show error modal
           showError('Function Call Error', `Failed to apply ${FunctionCallService.getFunctionDisplayName(functionCall.function_name)}: ${errorMessage}`);
+
+          // Propagate error to toast if sessionId is available
+          const sessionId = messageSessionMap.current[messageId];
+          if (sessionId) {
+            LLMTaskManager.setSessionError(sessionId, `Function call error: ${errorMessage}`);
+          }
 
           // Update chat store status (mark as not applied due to error)
           const chatIdForError = getActiveChatId();
@@ -455,6 +471,16 @@ export function useFunctionCallHandlers(
     []
   );
 
+  /**
+   * Register a sessionId for a message to enable propagating function call errors to toast
+   */
+  const registerSessionForMessage = useCallback(
+    (messageId: string, sessionId: string) => {
+      messageSessionMap.current[messageId] = sessionId;
+    },
+    []
+  );
+
   return {
     messageEditCards,
     setMessageEditCards,
@@ -468,5 +494,6 @@ export function useFunctionCallHandlers(
     setConfirmedMessages,
     createFunctionCallApplyHandler,
     createFunctionCallRejectHandler,
+    registerSessionForMessage,
   };
 }

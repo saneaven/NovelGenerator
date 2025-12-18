@@ -1,0 +1,205 @@
+/* Fragment Tree Navigation Styles */
+.fragment-tree-nav {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface-subtle);
+  opacity: 1;
+  transition: opacity var(--transition-base);
+}
+
+.fragment-tree-nav.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fragment-tree-nav .loading-indicator {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+}
+
+/* Header */
+.fragment-tree-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--color-border-default);
+  flex-shrink: 0;
+}
+
+.fragment-tree-header h3 {
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.add-fragment-btn {
+  background: none;
+  border: none;
+  padding: var(--spacing-xs);
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  border-radius: var(--border-radius-sm);
+  transition: all var(--transition-base);
+}
+
+.add-fragment-btn:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-primary-main);
+}
+
+/* Content */
+.fragment-tree-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-sm) 0;
+}
+
+/* Empty state */
+.empty-tree-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--spacing-xl);
+  gap: var(--spacing-md);
+}
+
+.empty-tree-state p {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+}
+
+/* Fragment item */
+.fragment-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  cursor: pointer;
+  transition: background var(--transition-base);
+}
+
+.fragment-item:hover {
+  background: var(--color-surface-hover);
+}
+
+.fragment-item.selected {
+  background: var(--color-brand-primary-soft);
+}
+
+.fragment-item-bullet {
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
+
+.fragment-item-name {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.fragment-badge {
+  font-size: var(--font-size-xs);
+  padding: 1px 6px;
+  border-radius: var(--border-radius-lg);
+  font-weight: var(--font-weight-medium);
+  flex-shrink: 0;
+}
+
+.fragment-badge.default {
+  background: var(--color-info-light);
+  color: var(--color-info-dark);
+}
+
+/* Folder node */
+.folder-node {
+  user-select: none;
+}
+
+.folder-node-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  cursor: pointer;
+  transition: background var(--transition-base);
+}
+
+.folder-node-header:hover {
+  background: var(--color-surface-hover);
+}
+
+.folder-expand-icon {
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+  width: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.folder-icon {
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
+
+.folder-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-add-btn {
+  background: none;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  border-radius: var(--border-radius-sm);
+  opacity: 0;
+  transition: all var(--transition-base);
+}
+
+.folder-node-header:hover .folder-add-btn {
+  opacity: 1;
+}
+
+.folder-add-btn:hover {
+  background: var(--color-surface-muted);
+  color: var(--color-primary-main);
+}
+
+.folder-children {
+  /* Children are indented via paddingLeft style */
+}
+
+/* Scrollbar styling */
+.fragment-tree-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.fragment-tree-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.fragment-tree-content::-webkit-scrollbar-thumb {
+  background: var(--color-border-default);
+  border-radius: 3px;
+}
+
+.fragment-tree-content::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-medium);
+}

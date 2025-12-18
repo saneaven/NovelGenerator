@@ -236,8 +236,18 @@ class GeminiProvider(BaseProvider):
             )
 
             last_finish_reason = None
+            captured_usage: Optional[Dict] = None
 
             async for chunk in stream:
+                # Capture usage_metadata from each chunk (the last one will have final totals)
+                usage_meta = getattr(chunk, "usage_metadata", None)
+                if usage_meta:
+                    captured_usage = {
+                        "prompt_tokens": getattr(usage_meta, "prompt_token_count", 0) or 0,
+                        "completion_tokens": getattr(usage_meta, "candidates_token_count", 0) or 0,
+                        "total_tokens": getattr(usage_meta, "total_token_count", 0) or 0,
+                    }
+
                 candidates = getattr(chunk, "candidates", None) or []
                 for cand in candidates:
                     # Track finish_reason from each candidate
@@ -365,6 +375,11 @@ class GeminiProvider(BaseProvider):
                 if reason_str in GEMINI_ERROR_REASONS:
                     yield self._format_error(f"{GEMINI_ERROR_REASONS[reason_str]} ({reason_str})")
                     return  # Don't yield [DONE] after error
+
+            # Emit usage information before [DONE]
+            if captured_usage:
+                usage_payload = {"usage": captured_usage}
+                yield self._format_sse(usage_payload)
 
             yield b"data: [DONE]\n\n"
 

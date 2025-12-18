@@ -37,13 +37,22 @@ handlebars.registerHelper('getManuscript', (manuscripts: any[] | undefined, chap
   return manuscripts.find(m => m?.chapterId === chapterId);
 });
 
-// getSubLanguageObjects(project, language, ids?) - Get objects from subLanguage
-handlebars.registerHelper('getSubLanguageObjects', (project: any, language: string | undefined, ids?: string | string[]) => {
+// getObjectsOfLanguage(project, language, ids?) - Get objects for any language
+handlebars.registerHelper('getObjectsOfLanguage', (project: any, language: string | undefined, ids?: string | string[]) => {
   if (!project || !language) return [];
-  const langObjects = project?.subLanguages?.[language]?.objects || [];
+  const langObjects = project?.languages?.[language]?.objects || [];
   if (!ids) return langObjects;
   const idSet = new Set(Array.isArray(ids) ? ids : [ids]);
   return langObjects.filter((obj: any) => idSet.has(obj?.id));
+});
+
+// getManuscriptsOfLanguage(project, language, ids?) - Get manuscripts for any language
+handlebars.registerHelper('getManuscriptsOfLanguage', (project: any, language: string | undefined, ids?: string | string[]) => {
+  if (!project || !language) return [];
+  const langManuscripts = project?.languages?.[language]?.manuscripts || [];
+  if (!ids) return langManuscripts;
+  const idSet = new Set(Array.isArray(ids) ? ids : [ids]);
+  return langManuscripts.filter((ms: any) => idSet.has(ms?.id));
 });
 
 // count(array) - Count array items
@@ -82,6 +91,100 @@ handlebars.registerHelper('array', (item: any) => item ? [item] : []);
 handlebars.registerHelper('includes', (arr: any[] | undefined, value: any) => {
   if (!arr || !Array.isArray(arr)) return false;
   return arr.includes(value);
+});
+
+// ============================================================================
+// FRAGMENT SYSTEM
+// ============================================================================
+
+/**
+ * Fragment interface for the registry
+ */
+export interface PromptFragment {
+  id: string;
+  folderPath: string | null;
+  fragmentName: string;
+  content: string;
+  description: string | null;
+  isSystemDefault: boolean;
+}
+
+/**
+ * Fragment registry - stores fragment content keyed by path
+ */
+let fragmentRegistry: Map<string, string> = new Map();
+
+/**
+ * Register fragments for use in templates.
+ * Call this before rendering templates that use {{prompt ...}}.
+ * @param fragments Array of fragments to register
+ */
+export function registerFragments(fragments: PromptFragment[]): void {
+  fragmentRegistry.clear();
+  for (const fragment of fragments) {
+    const path = fragment.folderPath
+      ? `${fragment.folderPath}/${fragment.fragmentName}`
+      : fragment.fragmentName;
+    fragmentRegistry.set(path, fragment.content);
+  }
+}
+
+/**
+ * Clear all registered fragments
+ */
+export function clearFragments(): void {
+  fragmentRegistry.clear();
+}
+
+/**
+ * Get the current fragment registry (for validation)
+ */
+export function getFragmentRegistry(): Map<string, string> {
+  return new Map(fragmentRegistry);
+}
+
+// prompt("path/to/fragment", ...args) - Include a fragment with optional parameters
+// Usage: {{prompt "common/projectContext/full"}}
+// Usage: {{prompt "common/projectContext/filtered" editAssistant.manuscript.objectIds}}
+// Usage: {{prompt "common/format" title="Hello" items=someArray}}
+handlebars.registerHelper('prompt', function (this: any, ...args: any[]) {
+  // Last argument is always the Handlebars options object
+  const options = args.pop() as Handlebars.HelperOptions;
+  const path = args[0] as string | undefined;
+  const positionalParams = args.slice(1);
+
+  if (!path || typeof path !== 'string') {
+    return new Handlebars.SafeString(`[Fragment Error: Missing path]`);
+  }
+
+  const fragmentContent = fragmentRegistry.get(path);
+  if (!fragmentContent) {
+    return new Handlebars.SafeString(`[Fragment Error: Not found - ${path}]`);
+  }
+
+  // Check for circular reference (simple depth check)
+  const depth = ((this as any).__fragmentDepth || 0) + 1;
+  if (depth > 10) {
+    return new Handlebars.SafeString(`[Fragment Error: Max depth exceeded (${depth}) - possible circular reference at ${path}]`);
+  }
+
+  // Build context for fragment rendering
+  // - Inherit parent context (this)
+  // - Add positional params as 'params' array
+  // - Add named params (hash) as top-level properties
+  const fragmentContext: Record<string, any> = {
+    ...this,
+    params: positionalParams,
+    ...options.hash,
+    __fragmentDepth: depth,
+  };
+
+  try {
+    const compiled = handlebars.compile(fragmentContent, { noEscape: true });
+    return new Handlebars.SafeString(compiled(fragmentContext));
+  } catch (error) {
+    return new Handlebars.SafeString(`[Fragment Error: ${error instanceof Error ? error.message : String(error)}]`);
+  }
 });
 
 // ============================================================================
@@ -280,8 +383,9 @@ function extractPathsFromExpression(
   const builtinHelpers = new Set([
     'if', 'unless', 'each', 'with', 'lookup', 'log',
     'filterByType', 'filterByIds', 'getById', 'getManuscript',
-    'getSubLanguageObjects', 'count', 'hasItems', 'eq', 'neq',
-    'and', 'or', 'not', 'json', 'array', 'includes'
+    'getObjectsOfLanguage', 'count', 'hasItems', 'eq', 'neq',
+    'and', 'or', 'not', 'json', 'array', 'includes',
+    'prompt'  // Fragment inclusion helper
   ]);
 
   const firstPart = String(parts[0]);
@@ -386,5 +490,115 @@ export const validateTemplate = async (
     warnings
   };
 };
+
+// ============================================================================
+// FRAGMENT VALIDATION
+// ============================================================================
+
+/**
+ * Result of fragment reference validation
+ */
+export interface FragmentValidationResult {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+  referencedFragments: string[];
+}
+
+/**
+ * Extract all fragment references from a template
+ * @param template The template content to analyze
+ * @returns Array of fragment paths referenced via {{prompt ...}}
+ */
+export function extractFragmentReferences(template: string): string[] {
+  // First, remove Handlebars comments to avoid matching prompt references inside comments
+  const withoutComments = template.replace(/\{\{!--[\s\S]*?--\}\}/g, '');
+
+  const regex = /\{\{\s*prompt\s+"([^"]+)"/g;
+  const refs: string[] = [];
+  let match;
+  while ((match = regex.exec(withoutComments)) !== null) {
+    refs.push(match[1]);
+  }
+  return [...new Set(refs)]; // Remove duplicates
+}
+
+/**
+ * Validate fragment references in content.
+ * Checks if referenced fragments exist and detects circular references.
+ * @param content The content to validate
+ * @param currentPath Optional path of current fragment (for self-reference detection)
+ * @returns Validation result with errors, warnings, and referenced fragments
+ */
+export function validateFragmentReferences(
+  content: string,
+  currentPath?: string
+): FragmentValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const referencedFragments = extractFragmentReferences(content);
+
+  // Check if referenced fragments exist
+  for (const ref of referencedFragments) {
+    if (!fragmentRegistry.has(ref)) {
+      warnings.push(`Referenced fragment not found: "${ref}"`);
+    }
+  }
+
+  // Check for self-reference
+  if (currentPath && referencedFragments.includes(currentPath)) {
+    errors.push(`Self-reference detected: fragment "${currentPath}" references itself`);
+  }
+
+  // Detect circular references using DFS
+  if (currentPath) {
+    const circularPath = detectCircularReferences(currentPath, new Set());
+    if (circularPath) {
+      errors.push(`Circular reference detected: ${circularPath.join(' -> ')}`);
+    }
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings,
+    referencedFragments
+  };
+}
+
+/**
+ * Detect circular references in fragment dependencies
+ * @param startPath The fragment path to start from
+ * @param visited Set of already visited paths
+ * @param path Current path for error message
+ * @returns Array representing the circular path, or null if no cycle
+ */
+function detectCircularReferences(
+  startPath: string,
+  visited: Set<string>,
+  path: string[] = []
+): string[] | null {
+  if (visited.has(startPath)) {
+    return [...path, startPath];
+  }
+
+  const content = fragmentRegistry.get(startPath);
+  if (!content) {
+    return null; // Fragment doesn't exist, no cycle possible
+  }
+
+  visited.add(startPath);
+  path.push(startPath);
+
+  const refs = extractFragmentReferences(content);
+  for (const ref of refs) {
+    const cycle = detectCircularReferences(ref, new Set(visited), [...path]);
+    if (cycle) {
+      return cycle;
+    }
+  }
+
+  return null;
+}
 
 export default handlebars;

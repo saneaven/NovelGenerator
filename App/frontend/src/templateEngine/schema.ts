@@ -76,19 +76,25 @@ export const UNIFIED_SCHEMA = {
         wordCount: 1500
       }] as Array<{ id: string; chapterId: string; chapterName: string; content: string; wordCount: number }>
     },
-    subLanguages: {
-      desc: "Other language versions with same structure",
+    languages: {
+      desc: "All language versions (keyed by language name)",
       example: {
+        "English": {
+          basicInfo: { id: "proj-123", title: "The Last Kingdom", logline: "A warrior's journey", genre: "Fantasy" },
+          objects: [{ type: "character" as const, id: "char-1", name: "Uhtred", description: "A Saxon lord..." }],
+          outline: { acts: [{ id: "act-1", name: "Act 1", description: "...", chapters: [] }] },
+          manuscripts: [{ id: "ms-1", chapterId: "ch-1", chapterName: "Chapter 1", content: "...", wordCount: 100 }],
+        },
         "Korean": {
-          basicInfo: { id: "proj-123", title: "마지막 왕국", logline: "고향을 되찾기 위한 전사의 여정", genre: "판타지" },
-          objects: [{ type: "character" as const, id: "char-1", name: "우트레드", description: "덴마크인에게 길러진 색슨 영주...", imagePrompt: "A tall warrior...", imagePromptPositive: "warrior", imagePromptNegative: "modern" }],
-          outline: { acts: [{ id: "act-1", name: "1막: 몰락", description: "우트레드가 권리를 잃다...", chapters: [] }] },
-          manuscripts: [{ id: "ms-1", chapterId: "ch-1", chapterName: "1장: 습격", content: "롱쉽들이 새벽에 나타났다...", wordCount: 1500 }]
+          basicInfo: { id: "proj-123", title: "마지막 왕국", logline: "전사의 여정", genre: "판타지" },
+          objects: [{ type: "character" as const, id: "char-1", name: "우트레드", description: "색슨 영주..." }],
+          outline: { acts: [{ id: "act-1", name: "1막", description: "...", chapters: [] }] },
+          manuscripts: [{ id: "ms-1", chapterId: "ch-1", chapterName: "1장", content: "...", wordCount: 100 }],
         }
       } as Record<string, {
-        basicInfo: { id: string; title: string; logline: string; genre: string };
+        basicInfo: { id: string; title: string; logline: string; genre: string } | null;
         objects: Array<{ type: "character" | "location" | "organization" | "lorebook"; id: string; name: string; description: string; imagePrompt?: string; imagePromptPositive?: string; imagePromptNegative?: string }>;
-        outline: { acts: Array<{ id: string; name: string; description: string; chapters: Array<{ id: string; name: string; description: string }> }> };
+        outline: { acts: Array<{ id: string; name: string; description: string; chapters: Array<{ id: string; name: string; description: string }> }> } | null;
         manuscripts: Array<{ id: string; chapterId: string; chapterName: string; content: string; wordCount: number }>;
       }>
     },
@@ -111,6 +117,7 @@ export const UNIFIED_SCHEMA = {
 
   chat: {
     mode: { desc: "Chat mode", example: "workspace" as "workspace" | "novelEditor" },
+    contextObjectIds: { desc: "IDs of objects to include in context", example: ["char-1", "loc-1"] as string[] },
   },
 
   editAssistant: {
@@ -118,11 +125,12 @@ export const UNIFIED_SCHEMA = {
     manuscript: {
       desc: "Manuscript editing context",
       example: {
+        currentId: "ms-123",
         currentChapterId: "ch-123",
         currentChapterName: "Chapter 1: The Raid",
         currentChapterManuscript: "The longships appeared at dawn...",
         objectIds: ["char-1", "ch-1", "ms-1"],
-      } as { currentChapterId: string; currentChapterName: string; currentChapterManuscript: string; objectIds?: string[] }
+      } as { currentId: string; currentChapterId: string; currentChapterName: string; currentChapterManuscript: string; objectIds?: string[] }
     },
     storyObject: {
       desc: "Story object editing context",
@@ -139,6 +147,16 @@ export const UNIFIED_SCHEMA = {
     sourceLanguage: { desc: "Source language", example: "English" },
     targetLanguage: { desc: "Target language", example: "Korean" },
     objectIds: { desc: "IDs of story objects to translate (filter from project.objects)", example: ["char-1", "char-2"] as string[] },
+    contextObjectIds: { desc: "IDs of reference objects for terminology consistency", example: ["char-3", "loc-1"] as string[] },
+    currentTranslatedContents: {
+      desc: "Current translations of objects being edited (for set/patch decision)",
+      example: [{
+        id: "char-1",
+        type: "character",
+        name: "Character Name",
+        translatedContent: "Name: 캐릭터\nDescription: 설명..."
+      }] as Array<{ id: string; type: string; name: string; translatedContent: string }>
+    },
     chatMessages: {
       desc: "Chat messages to translate (only for chat translation)",
       example: [{ id: "msg-1", content: "Hello there" }] as Array<{ id: string; content: string }>

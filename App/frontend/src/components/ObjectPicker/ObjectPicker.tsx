@@ -138,6 +138,7 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
   filterIds,
   preSelectedIds = [],
   highlightIds = [],
+  excludedIds = [],
   disabled = false,
   loading: externalLoading,
   customGroups,
@@ -189,6 +190,7 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
 
   const preSelectedIdSet = useMemo(() => new Set(preSelectedIds), [preSelectedIds]);
   const highlightIdSet = useMemo(() => new Set(highlightIds), [highlightIds]);
+  const excludedIdSet = useMemo(() => new Set(excludedIds), [excludedIds]);
 
   // Filter groups based on search
   const filteredGroups = useMemo(() => {
@@ -197,7 +199,8 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
 
   // Toggle single item
   const handleToggleItem = useCallback((id: string) => {
-    if (disabled || preSelectedIdSet.has(id)) return;
+    // Excluded items are not selectable
+    if (disabled || preSelectedIdSet.has(id) || excludedIdSet.has(id)) return;
 
     if (selectionMode === 'single') {
       onChange(id);
@@ -210,7 +213,7 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
       }
       onChange(Array.from(newSelection));
     }
-  }, [selectionMode, selectedIdSet, onChange, disabled, preSelectedIdSet]);
+  }, [selectionMode, selectedIdSet, onChange, disabled, preSelectedIdSet, excludedIdSet]);
 
   // Toggle entire group
   const handleToggleGroup = useCallback((groupId: string, select: boolean) => {
@@ -230,7 +233,8 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
     const newSelection = new Set(selectedIdSet);
 
     groupItemIds.forEach(id => {
-      if (preSelectedIdSet.has(id)) return; // Skip pre-selected
+      // Skip pre-selected and excluded items
+      if (preSelectedIdSet.has(id) || excludedIdSet.has(id)) return;
       if (select) {
         newSelection.add(id);
       } else {
@@ -239,7 +243,7 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
     });
 
     onChange(Array.from(newSelection));
-  }, [filteredGroups, selectedIdSet, onChange, disabled, selectionMode, preSelectedIdSet]);
+  }, [filteredGroups, selectedIdSet, onChange, disabled, selectionMode, preSelectedIdSet, excludedIdSet]);
 
   // Toggle expand/collapse
   const handleToggleExpand = useCallback((groupId: string) => {
@@ -300,6 +304,7 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
               onToggleExpand={handleToggleExpand}
               preSelectedIds={preSelectedIdSet}
               highlightIds={highlightIdSet}
+              excludedIds={excludedIdSet}
               disabled={disabled}
             />
           ))}

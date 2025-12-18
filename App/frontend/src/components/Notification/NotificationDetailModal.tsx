@@ -1,13 +1,13 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useState } from 'react';
 import { BaseModal } from '../BaseModal';
 import { useLLMTaskStore, type LLMTaskSessionState } from '../../store/llmTaskStore';
 import ThinkingDisplay from '../ThinkingDisplay';
-import ToastProgressBar from './ToastProgressBar';
+import NotificationProgressBar from './NotificationProgressBar';
 import { parsePartialJson } from '../../utils/nativeOutputParser';
-import { Close } from '../icons';
+import { Close, ChevronDown, ChevronUp } from '../icons';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
-import './ToastDetailModal.css';
+import './NotificationDetailModal.css';
 
 // Content segment types for mixed text/JSON content
 interface ContentSegment {
@@ -82,7 +82,7 @@ const JsonValue: React.FC<JsonValueProps> = ({ value, isLast, isStreaming, depth
     return (
       <>
         {value}
-        {isLast && isStreaming && <span className="toast-detail-cursor">|</span>}
+        {isLast && isStreaming && <span className="notification-detail-cursor">|</span>}
       </>
     );
   }
@@ -164,18 +164,34 @@ const JsonObjectViewer: React.FC<JsonObjectViewerProps> = ({ data, isStreaming }
   );
 };
 
-interface ToastDetailModalProps {
+interface NotificationDetailModalProps {
   session: LLMTaskSessionState;
   onClose: () => void;
+  onDismissToast: () => void;
+  onRetry: (session: LLMTaskSessionState) => void;
 }
 
-const ToastDetailModal: React.FC<ToastDetailModalProps> = ({ session, onClose }) => {
+const NotificationDetailModal: React.FC<NotificationDetailModalProps> = ({
+  session,
+  onClose,
+  onDismissToast,
+  onRetry
+}) => {
   const cancelTask = useLLMTaskStore((state) => state.cancelTask);
+  const [errorExpanded, setErrorExpanded] = useState(false);
 
   const handleCancel = useCallback(() => {
     cancelTask(session.id);
     onClose();
   }, [cancelTask, session.id, onClose]);
+
+  const handleRetry = useCallback(() => {
+    if (!session.retryContext) {
+      console.warn('No retry context available');
+      return;
+    }
+    onRetry(session);
+  }, [session, onRetry]);
 
   const streamContent = useMemo(() => {
     if (!session.contentParts || session.contentParts.length === 0) {
@@ -197,6 +213,8 @@ const ToastDetailModal: React.FC<ToastDetailModalProps> = ({ session, onClose })
     return session.contentParts?.some((part) => part.type === 'thinking') ?? false;
   }, [session.contentParts]);
 
+  const hasContent = streamContent || hasThinking;
+
   const getStatusLabel = () => {
     switch (session.status) {
       case 'running':
@@ -212,40 +230,89 @@ const ToastDetailModal: React.FC<ToastDetailModalProps> = ({ session, onClose })
     }
   };
 
+  // Truncate error message for summary display
+  const getErrorSummary = () => {
+    if (!session.error) return '';
+    const maxLength = 100;
+    if (session.error.length <= maxLength) return session.error;
+    return session.error.slice(0, maxLength) + '...';
+  };
+
+  const renderFooter = () => {
+    if (session.status === 'running') {
+      return (
+        <div className="notification-detail-footer-actions">
+          <TextButton variant="danger" onClick={handleCancel}>
+            Cancel Task
+          </TextButton>
+          <TextButton variant="secondary" onClick={onClose}>
+            Continue in Background
+          </TextButton>
+        </div>
+      );
+    }
+
+    if (session.status === 'error') {
+      return (
+        <div className="notification-detail-footer-actions">
+          <TextButton variant="secondary" onClick={onDismissToast}>
+            Dismiss
+          </TextButton>
+          {session.retryContext && (
+            <TextButton variant="primary" onClick={handleRetry}>
+              Retry
+            </TextButton>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <TextButton variant="secondary" onClick={onClose}>
+        Close
+      </TextButton>
+    );
+  };
+
   return (
     <BaseModal
       isOpen={true}
       onClose={onClose}
       size="medium"
       showHeader={false}
-      className="toast-detail-modal"
-      footer={
-        session.status === 'running' ? (
-          <div className="toast-detail-footer-actions">
-            <TextButton variant="danger" onClick={handleCancel}>
-              Cancel Task
-            </TextButton>
-            <TextButton variant="secondary" onClick={onClose}>
-              Continue in Background
-            </TextButton>
-          </div>
-        ) : (
-          <TextButton variant="secondary" onClick={onClose}>
-            Close
-          </TextButton>
-        )
-      }
+      className="notification-detail-modal"
+      footer={renderFooter()}
     >
-      {/* Custom Header */}
-      <div className="toast-detail-header">
-        <div className="toast-detail-title">
-          <span className={`toast-detail-status toast-detail-status--${session.status}`}>
+      {/* Fixed Header */}
+      <div className="notification-detail-header">
+        <div className="notification-detail-title">
+          <span className={`notification-detail-status notification-detail-status--${session.status}`}>
             {session.status === 'running' && (
-              <span className="toast-detail-spinner" />
+              <span className="notification-detail-spinner" />
             )}
             {getStatusLabel()}
           </span>
           <h3>{session.label || 'Task'}</h3>
+          {/* Error Summary in Header - expandable */}
+          {session.status === 'error' && session.error && (
+            <div className="notification-detail-error-container">
+              <button
+                className="notification-detail-error-summary"
+                onClick={() => setErrorExpanded(!errorExpanded)}
+                type="button"
+              >
+                <span className="notification-detail-error-summary-text">
+                  {errorExpanded ? 'Hide Details' : getErrorSummary()}
+                </span>
+                {errorExpanded ? <ChevronUp size="xs" /> : <ChevronDown size="xs" />}
+              </button>
+              {errorExpanded && (
+                <div className="notification-detail-error-expanded">
+                  <pre>{session.error}</pre>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <IconButton
           icon={<Close size="sm" />}
@@ -255,19 +322,21 @@ const ToastDetailModal: React.FC<ToastDetailModalProps> = ({ session, onClose })
         />
       </div>
 
+      {/* Fixed Progress */}
       {session.progress && (
-        <div className="toast-detail-progress">
-          <div className="toast-detail-progress-text">
+        <div className="notification-detail-progress">
+          <div className="notification-detail-progress-text">
             {session.progress.currentItemLabel || `${session.progress.current} / ${session.progress.total}`}
           </div>
-          <ToastProgressBar current={session.progress.current} total={session.progress.total} />
+          <NotificationProgressBar current={session.progress.current} total={session.progress.total} />
         </div>
       )}
 
-      <div className="toast-detail-content">
+      {/* Scrollable Body */}
+      <div className="notification-detail-body">
         {/* Thinking Display */}
         {hasThinking && session.contentParts && (
-          <div className="toast-detail-thinking">
+          <div className="notification-detail-thinking">
             <ThinkingDisplay
               messageId={session.id}
               contentParts={session.contentParts}
@@ -279,9 +348,9 @@ const ToastDetailModal: React.FC<ToastDetailModalProps> = ({ session, onClose })
 
         {/* Streaming Content - Mixed Text/JSON */}
         {contentSegments.length > 0 && (
-          <div className="toast-detail-stream">
-            <div className="toast-detail-stream-label">Output</div>
-            <div className="toast-detail-segments">
+          <div className="notification-detail-stream">
+            <div className="notification-detail-stream-label">Output</div>
+            <div className="notification-detail-segments">
               {contentSegments.map((segment, index) => {
                 const isLastSegment = index === contentSegments.length - 1;
                 const isStreaming = session.status === 'running';
@@ -298,10 +367,10 @@ const ToastDetailModal: React.FC<ToastDetailModalProps> = ({ session, onClose })
 
                 // Text segment
                 return (
-                  <div key={index} className="toast-detail-text-segment">
+                  <div key={index} className="notification-detail-text-segment">
                     {segment.content}
                     {isLastSegment && isStreaming && (
-                      <span className="toast-detail-cursor">|</span>
+                      <span className="notification-detail-cursor">|</span>
                     )}
                   </div>
                 );
@@ -310,11 +379,56 @@ const ToastDetailModal: React.FC<ToastDetailModalProps> = ({ session, onClose })
           </div>
         )}
 
-        {/* No content yet */}
-        {!streamContent && !hasThinking && session.status === 'running' && (
-          <div className="toast-detail-waiting">
-            <div className="toast-detail-waiting-spinner" />
+        {/* No content yet - only for running state */}
+        {!hasContent && session.status === 'running' && (
+          <div className="notification-detail-waiting">
+            <div className="notification-detail-waiting-spinner" />
             <span>Waiting for response...</span>
+          </div>
+        )}
+
+        {/* No content for error state */}
+        {!hasContent && session.status === 'error' && (
+          <div className="notification-detail-no-content">
+            <span>No output was generated before the error occurred.</span>
+          </div>
+        )}
+
+        {/* Debug Information - shown for completed/error states */}
+        {(session.status === 'success' || session.status === 'error') &&
+         (session.provider || session.model || session.usage) && (
+          <div className="notification-detail-metadata">
+            <div className="notification-detail-metadata-header">Debug Information</div>
+            <div className="notification-detail-metadata-grid">
+              {session.provider && (
+                <div className="notification-detail-metadata-item">
+                  <span className="label">Provider</span>
+                  <span className="value">{session.provider}</span>
+                </div>
+              )}
+              {session.model && (
+                <div className="notification-detail-metadata-item">
+                  <span className="label">Model</span>
+                  <span className="value">{session.model}</span>
+                </div>
+              )}
+              {session.usage && (
+                <>
+                  <div className="notification-detail-metadata-item">
+                    <span className="label">Prompt Tokens</span>
+                    <span className="value">{session.usage.prompt_tokens.toLocaleString()}</span>
+                  </div>
+                  <div className="notification-detail-metadata-item">
+                    <span className="label">Completion Tokens</span>
+                    <span className="value">{session.usage.completion_tokens.toLocaleString()}</span>
+                  </div>
+                  <div className="notification-detail-metadata-item">
+                    <span className="label">Total Tokens</span>
+                    <span className="value">{session.usage.total_tokens.toLocaleString()}</span>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -322,4 +436,4 @@ const ToastDetailModal: React.FC<ToastDetailModalProps> = ({ session, onClose })
   );
 };
 
-export default React.memo(ToastDetailModal);
+export default React.memo(NotificationDetailModal);

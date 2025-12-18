@@ -8,6 +8,18 @@
 import type { Replacement, PatchResult } from '../types/patchTypes';
 
 /**
+ * Normalize text for consistent matching.
+ * - Converts CRLF and CR to LF
+ * - Applies Unicode NFC normalization
+ */
+function normalizeText(text: string): string {
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .normalize('NFC');
+}
+
+/**
  * Apply a single search-replace operation to text.
  *
  * @param text - The text to modify
@@ -20,10 +32,23 @@ export function applySingleReplacement(
   old: string,
   newText: string
 ): PatchResult {
+  // Normalize all inputs for consistent matching
+  const normalizedText = normalizeText(text);
+  const normalizedOld = normalizeText(old);
+  const normalizedNew = normalizeText(newText);
+
   // Find the first occurrence
-  const index = text.indexOf(old);
+  const index = normalizedText.indexOf(normalizedOld);
 
   if (index === -1) {
+
+    // Try to find a partial match to see where it diverges
+    const searchLen = Math.min(50, normalizedOld.length);
+    for (let i = searchLen; i >= 10; i -= 5) {
+      const partial = normalizedOld.slice(0, i);
+      const partialIndex = normalizedText.indexOf(partial);
+    }
+
     return {
       success: false,
       value: text,
@@ -33,7 +58,7 @@ export function applySingleReplacement(
   }
 
   // Check for multiple occurrences
-  const secondIndex = text.indexOf(old, index + 1);
+  const secondIndex = normalizedText.indexOf(normalizedOld, index + 1);
   if (secondIndex !== -1) {
     return {
       success: false,
@@ -43,8 +68,8 @@ export function applySingleReplacement(
     };
   }
 
-  // Apply the replacement
-  const result = text.slice(0, index) + newText + text.slice(index + old.length);
+  // Apply the replacement to normalized text
+  const result = normalizedText.slice(0, index) + normalizedNew + normalizedText.slice(index + normalizedOld.length);
 
   return {
     success: true,

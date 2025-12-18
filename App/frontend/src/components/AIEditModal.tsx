@@ -282,6 +282,26 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     return ids;
   }, [selectedObjects.characters, selectedObjects.organizations, selectedObjects.locations, selectedObjects.lorebook]);
 
+  // Determine excludedIds for the story objects picker (edit target, no checkbox)
+  const storyObjectExcludedIds = useMemo((): string[] => {
+    if (!targetId) return [];
+    // Story object types use prefixed IDs
+    if (['character', 'organization', 'location', 'lorebook'].includes(category)) {
+      return [`${category}:${targetId}`];
+    }
+    return [];
+  }, [targetId, category]);
+
+  // Determine excludedIds for the outlines picker
+  const outlineExcludedIds = useMemo((): string[] => {
+    if (!targetId) return [];
+    // Chapters use raw IDs
+    if (category === 'chapter') {
+      return [targetId];
+    }
+    return [];
+  }, [targetId, category]);
+
   // Handle story objects selection change
   const handleStoryObjectsChange = useCallback((ids: string[] | string) => {
     const idArray = Array.isArray(ids) ? ids : [ids];
@@ -319,16 +339,26 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     }));
   }, []);
 
-  // Build contextIds from selected objects
+  // Build contextIds from selected objects (excluding targetId to avoid duplication)
   const buildContextIds = useCallback((): string[] => {
     const ids: string[] = [];
-    selectedObjects.characters.forEach(id => ids.push(id));
-    selectedObjects.organizations.forEach(id => ids.push(id));
-    selectedObjects.locations.forEach(id => ids.push(id));
-    selectedObjects.lorebook.forEach(id => ids.push(id));
-    selectedObjects.outlineChapters.forEach(id => ids.push(id));
+    selectedObjects.characters.forEach(id => {
+      if (id !== targetId) ids.push(id);
+    });
+    selectedObjects.organizations.forEach(id => {
+      if (id !== targetId) ids.push(id);
+    });
+    selectedObjects.locations.forEach(id => {
+      if (id !== targetId) ids.push(id);
+    });
+    selectedObjects.lorebook.forEach(id => {
+      if (id !== targetId) ids.push(id);
+    });
+    selectedObjects.outlineChapters.forEach(id => {
+      if (id !== targetId) ids.push(id);
+    });
     return ids;
-  }, [selectedObjects]);
+  }, [selectedObjects, targetId]);
 
   const handleFunctionCallResults = useCallback(
     async (
@@ -618,6 +648,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
                         projectId={projectId}
                         language={settingsStore.settings.mainLanguage}
                         customGroups={storyObjectGroups}
+                        excludedIds={storyObjectExcludedIds}
                         showSearch={false}
                         maxHeight="200px"
                         emptyMessage="No story objects available"
@@ -646,6 +677,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
                         projectId={projectId}
                         language={settingsStore.settings.mainLanguage}
                         customGroups={outlineGroups}
+                        excludedIds={outlineExcludedIds}
                         showSearch={false}
                         maxHeight="200px"
                         emptyMessage="No outlines available"

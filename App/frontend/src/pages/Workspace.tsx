@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { SystemInsertConfig, EditCard } from '../chat/types';
+import type { EditCard } from '../chat/types';
 import { ChatManager, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
 import { DefaultDisplayProcessor } from '../chat/processors/DisplayProcessor';
 import { areEditCardMapsEqual } from '../chat/utils/editCardUtils';
@@ -94,6 +94,17 @@ const Workspace: React.FC = () =>
 
     // Translation modal state
     const [showTranslateModal, setShowTranslateModal] = useState(false);
+
+    // Mobile chat overlay closing animation state
+    const [isOverlayClosing, setIsOverlayClosing] = useState(false);
+
+    const handleCloseChat = useCallback(() => {
+        setIsOverlayClosing(true);
+        setTimeout(() => {
+            setChatVisible(projectId ?? '', false);
+            setIsOverlayClosing(false);
+        }, 200);
+    }, [projectId, setChatVisible]);
     const unifiedStore = useUnifiedObjectStore();
 
     // Build available languages list (main + all sub languages)
@@ -154,12 +165,42 @@ const Workspace: React.FC = () =>
         }
     }, [projectId, projects.length, fetchProjects]);
 
-    const [systemInsertConfig, setSystemInsertConfig] = useState<SystemInsertConfig>({
-        enabled: true,
-        includeProjectInfo: true,
-        includeStoryObjects: true,
-        includeNovelContent: false,
+    // Selected context IDs for chat - initialized with all project objects
+    const [selectedContextIds, setSelectedContextIds] = useState<string[]>(() => {
+        return Object.keys(unifiedStore.objects)
+            .filter(id => unifiedStore.objects[id].metadata?.project_id === projectId);
     });
+
+    // Track previous object IDs to auto-select newly created objects
+    const prevObjectIdsRef = useRef<Set<string>>(new Set(selectedContextIds));
+    // Ref to always get current selectedContextIds (avoid stale closure in ChatManager)
+    const selectedContextIdsRef = useRef(selectedContextIds);
+    selectedContextIdsRef.current = selectedContextIds;
+
+    // Auto-select new objects when they're created during the session
+    useEffect(() => {
+        const currentIds = new Set(
+            Object.keys(unifiedStore.objects)
+                .filter(id => unifiedStore.objects[id].metadata?.project_id === projectId)
+        );
+
+        // Find new IDs that weren't in the previous set
+        const newIds = [...currentIds].filter(id => !prevObjectIdsRef.current.has(id));
+
+        if (newIds.length > 0) {
+            setSelectedContextIds(prev => [...new Set([...prev, ...newIds])]);
+        }
+
+        prevObjectIdsRef.current = currentIds;
+    }, [unifiedStore.objects, projectId]);
+
+    // Total count of all project objects for display
+    const totalObjectCount = useMemo(() => {
+        return Object.keys(unifiedStore.objects)
+            .filter(id => unifiedStore.objects[id].metadata?.project_id === projectId)
+            .length;
+    }, [unifiedStore.objects, projectId]);
+
     const displayProcessor = useMemo(() => new DefaultDisplayProcessor(), []);
     const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -176,6 +217,7 @@ const Workspace: React.FC = () =>
         setConfirmedMessages,
         createFunctionCallApplyHandler,
         createFunctionCallRejectHandler,
+        registerSessionForMessage,
     } = useFunctionCallHandlers(projectId);
 
     const chatManagerCallbacks = useMemo<ChatManagerCallbacks>(() => ({
@@ -187,8 +229,12 @@ const Workspace: React.FC = () =>
         {
             await updateMessage(projId, chatId, messageId, contentParts, language, thinking_details);
         },
-        onFunctionCalls: (_projId, _chatId, messageId, functionCalls) =>
+        onFunctionCalls: (_projId, _chatId, messageId, functionCalls, sessionId) =>
         {
+            // Register sessionId for this message so function call errors can update the toast
+            if (sessionId) {
+                registerSessionForMessage(messageId, sessionId);
+            }
             handleFunctionCalls(messageId, functionCalls);
         },
         onAddMessage: async (projId, chatId, message, language) =>
@@ -206,7 +252,7 @@ const Workspace: React.FC = () =>
         {
             handleFunctionCallProgress(messageId, progressEvents);
         },
-    }), [updateMessageContentLocal, updateMessage, handleFunctionCalls, addMessage, getMessages, showError, handleFunctionCallProgress]);
+    }), [updateMessageContentLocal, updateMessage, handleFunctionCalls, addMessage, getMessages, showError, handleFunctionCallProgress, registerSessionForMessage]);
 
     const chatManager = useMemo(() =>
     {
@@ -235,6 +281,7 @@ const Workspace: React.FC = () =>
                 thinkingConfig: chatFunctionConfig.advanced.thinkingConfig,
                 retryConfig: settings.retryConfig,
                 getPendingFunctionCallResults: () => pendingFunctionCallResults,
+                getSelectedContextIds: () => selectedContextIdsRef.current,
             },
             chatManagerCallbacks
         );
@@ -319,8 +366,6 @@ const Workspace: React.FC = () =>
         {
             const processed = displayProcessor.process(message as any, {
                 projectId,
-                storyObjects,
-                systemInsertConfig,
                 mode: 'workspace',
             } as any);
 
@@ -372,7 +417,6 @@ const Workspace: React.FC = () =>
         mainLanguage,
         displayProcessor,
         storyObjects,
-        systemInsertConfig,
         createFunctionCallApplyHandler,
         createFunctionCallRejectHandler,
         // Note: messageEditCards, setMessageEditCards, setConfirmedMessages intentionally omitted to prevent render loops
@@ -420,8 +464,9 @@ const Workspace: React.FC = () =>
             <div className={`workspace-content ${isChatVisible ? 'chat-visible' : ''}`}>
                 <ChatPanel
                     projectId={projectId ?? ''}
-                    systemInsertConfig={systemInsertConfig}
-                    setSystemInsertConfig={setSystemInsertConfig}
+                    selectedContextIds={selectedContextIds}
+                    onContextIdsChange={setSelectedContextIds}
+                    totalObjectCount={totalObjectCount}
                     storyObjects={storyObjects as unknown as import('../types/storyObject').StoryObjects}
                     messageEditCards={messageEditCards}
                     activeFunctionCalls={activeFunctionCalls}
@@ -436,6 +481,7 @@ const Workspace: React.FC = () =>
                     onDeleteMessage={chatHandlers.handleDeleteMessage}
                     editTextareaRef={chatHandlers.editTextareaRef as React.RefObject<HTMLTextAreaElement>}
                     mode="workspace"
+                    onClose={handleCloseChat}
                 />
 
                 <StoryPanel
@@ -456,8 +502,11 @@ const Workspace: React.FC = () =>
                 onTabChange={uiActions.setActiveStoryTab}
             />
 
-            {isChatVisible && (
-                <div className="chat-overlay mobile-only" onClick={() => setChatVisible(projectId ?? '', false)} />
+            {(isChatVisible || isOverlayClosing) && (
+                <div
+                    className={`chat-overlay mobile-only ${isOverlayClosing ? 'closing' : ''}`}
+                    onClick={handleCloseChat}
+                />
             )}
 
             <MobileFooter

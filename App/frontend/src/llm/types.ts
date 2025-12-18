@@ -38,7 +38,7 @@ export interface TemplateData {
     objects: Array<{ type: string; id: string; name: string; description: string; imagePrompt?: string; imagePromptPositive?: string; imagePromptNegative?: string }>;
     outline: { acts: Array<{ id: string; name: string; description: string; chapters: Array<{ id: string; name: string; description: string }> }> } | null;
     manuscripts: Array<{ id: string; chapterId: string; chapterName: string; content: string; wordCount: number }>;
-    subLanguages: Record<string, any>;
+    languages: Record<string, any>;
   };
   input: {
     userMessage: string;
@@ -47,10 +47,12 @@ export interface TemplateData {
   // Mode-specific groups (only one should be set)
   chat?: {
     mode: 'workspace' | 'novelEditor';
+    contextObjectIds?: string[];
   };
   editAssistant?: {
     mode: 'manuscript' | 'storyObject';
     manuscript?: {
+      currentId: string;
       currentChapterId: string;
       currentChapterName: string;
       currentChapterManuscript: string;
@@ -67,6 +69,8 @@ export interface TemplateData {
     sourceLanguage: string;
     targetLanguage: string;
     objectIds?: string[];
+    contextObjectIds?: string[];
+    currentTranslatedContents?: Array<{ id: string; type: string; name: string; translatedContent: string }>;
     chatMessages?: Array<{ id: string; content: string }>;
   };
   imagePrompt?: {
@@ -101,6 +105,7 @@ export interface ChatWorkspacePromptContext extends BasePromptContext {
   functions?: FunctionCallSchema[];
   storyObjects?: Record<string, any>;
   functionResults?: FunctionCallResultSummary[];
+  contextObjectIds?: string[];
 }
 
 /**
@@ -111,6 +116,7 @@ export interface ChatNovelEditorPromptContext extends BasePromptContext {
   storyObjects?: Record<string, any>;
   novelData?: Record<string, any>;
   functionResults?: FunctionCallResultSummary[];
+  contextObjectIds?: string[];
 }
 
 /**
@@ -128,12 +134,23 @@ export interface EditAssistantStoryObjectPromptContext extends BasePromptContext
  * Context for manuscript editing (Edit Assistant - Manuscript)
  */
 export interface EditAssistantManuscriptPromptContext extends BasePromptContext {
+  currentId: string;
   currentChapterId: string;
   currentChapterName: string;
   currentChapterContent: string;
   objectIds?: string[];
   contextData?: Record<string, unknown>;
   isNativeOutput?: boolean;
+}
+
+/**
+ * Current translated content for objects being edited
+ */
+export interface CurrentTranslatedContent {
+  id: string;
+  type: string;
+  name: string;
+  translatedContent: string;
 }
 
 /**
@@ -144,6 +161,8 @@ export interface StoryTranslationPromptContext extends BasePromptContext {
   targetLanguage: string;
   objectCount: number;
   objectsArray: Record<string, any>[];
+  contextObjectIds?: string[];
+  currentTranslatedContents?: CurrentTranslatedContent[];
   contextData?: Record<string, any>;
   isNativeOutput?: boolean;
 }

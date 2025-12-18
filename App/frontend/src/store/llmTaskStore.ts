@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ContentPart, FunctionCallProgress } from '../llm/requestTypes';
+import type { ContentPart, FunctionCallProgress, TokenUsage } from '../llm/requestTypes';
 
 export type TaskSessionStatus = 'idle' | 'running' | 'success' | 'error' | 'cancelled';
 
@@ -46,6 +46,10 @@ export interface LLMTaskSessionState {
   retryContext?: RetryContext;
   isRead: boolean;
   createdAt: number;
+  // Debug info fields
+  provider?: string;
+  model?: string;
+  usage?: TokenUsage;
 }
 
 const createDefaultSession = (id: string): LLMTaskSessionState => ({
@@ -215,14 +219,32 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
   },
 
   setTaskError: (id, message) => {
+    // Log detailed error to console for debugging
+    const existing = get().sessions[id];
+    if (existing) {
+      console.error(`[LLM Task Error] ${existing.label || 'Unknown Task'}`, {
+        sessionId: id,
+        taskType: existing.taskType,
+        error: message,
+        provider: existing.provider,
+        model: existing.model,
+        usage: existing.usage,
+        hadContent: existing.contentParts && existing.contentParts.length > 0,
+        progress: existing.progress,
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      console.error(`[LLM Task Error] Session not found: ${id}`, message);
+    }
+
     set((state) => {
-      const existing = state.sessions[id];
-      if (!existing) return state;
+      const session = state.sessions[id];
+      if (!session) return state;
       return {
         sessions: {
           ...state.sessions,
           [id]: {
-            ...existing,
+            ...session,
             status: 'error',
             error: message,
             updatedAt: Date.now(),

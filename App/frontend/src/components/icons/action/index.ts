@@ -1,3 +1,4 @@
+export { Copy } from './Copy';
 export { Edit } from './Edit';
 export { Trash } from './Trash';
 export { Refresh } from './Refresh';

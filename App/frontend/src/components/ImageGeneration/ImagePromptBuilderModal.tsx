@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { BaseModal } from '../BaseModal';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { LLMTask, LLMTaskMode, LLMTaskManager, type ObjectImagePromptContext } from '../../llm';
 import { TextButton } from '../TextButton';
@@ -34,6 +35,7 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
   defaultUserRequest,
 }) => {
   const { settings } = useSettingsStore();
+  const { currentProjectId } = useProjectStore();
   const unifiedStore = useUnifiedObjectStore();
 
   const [userRequest, setUserRequest] = useState(defaultUserRequest || '');
@@ -102,8 +104,13 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
       ? `**${targetObject.name}**\n${targetObject.description}`
       : '';
 
+    if (!currentProjectId) {
+      throw new Error('Project ID is required');
+    }
+
     const promptContext: ObjectImagePromptContext = {
       userInput: userRequest,
+      projectId: currentProjectId,
       promptMode,
       objectType,
       objectInfo,
@@ -121,7 +128,7 @@ const ImagePromptBuilderModal: React.FC<ImagePromptBuilderModalProps> = ({
       taskRef.current = new LLMTask(
         {
           mode: LLMTaskMode.OBJECT_IMAGE_PROMPT,
-          projectId: '',
+          projectId: currentProjectId,
           promptContext,
           abortControllerRef,
           sessionId: task.sessionId,

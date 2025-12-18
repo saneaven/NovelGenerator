@@ -2,9 +2,10 @@ import type { FunctionCallSchema } from './schemas/chatFunctions';
 import { STORY_OBJECT_EDIT_FUNCTIONS, MANUSCRIPT_EDIT_FUNCTIONS } from './schemas/editFunctions';
 import { TRANSLATION_FUNCTIONS, CHAT_TRANSLATION_FUNCTIONS } from './schemas/translationFunctions';
 import { OBJECT_IMAGE_PROMPT_FUNCTIONS } from './schemas/imagePromptFunctions';
-import { renderTemplate } from '../templateEngine/engine';
+import { renderTemplate, registerFragments, type PromptFragment } from '../templateEngine/engine';
 import { useSettingsStore } from '../store/settingsStore';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
+import { fragmentService } from '../api/fragmentService';
 import type { UnifiedObject } from '../types/unifiedObject';
 import {
   LLMTaskMode,
@@ -27,6 +28,40 @@ import {
  * Uses unified schema: config/project/input + mode-specific groups
  */
 export class PromptManager {
+  private static fragmentsLoaded = false;
+
+  /**
+   * Ensure fragments are loaded and registered before rendering templates
+   */
+  private static async ensureFragmentsLoaded(): Promise<void> {
+    if (this.fragmentsLoaded) return;
+
+    try {
+      const fragments = await fragmentService.getAllFragmentsWithContent();
+      const fragmentData: PromptFragment[] = fragments.map(f => ({
+        id: f.id,
+        folderPath: f.folder_path,
+        fragmentName: f.fragment_name,
+        content: f.content,
+        description: f.description,
+        isSystemDefault: f.is_system_default,
+      }));
+      registerFragments(fragmentData);
+      this.fragmentsLoaded = true;
+    } catch (error) {
+      console.error('Failed to load fragments:', error);
+      // Continue without fragments - they're optional
+    }
+  }
+
+  /**
+   * Force reload of fragments (call when fragments are updated)
+   */
+  static async reloadFragments(): Promise<void> {
+    this.fragmentsLoaded = false;
+    await this.ensureFragmentsLoaded();
+  }
+
   /**
    * Load a prompt template from store or fallback to bundled default
    */
@@ -60,6 +95,9 @@ export class PromptManager {
     mode: LLMTaskModeType,
     context: PromptContext
   ): Promise<PromptBundle> {
+    // Ensure fragments are loaded before rendering any templates
+    await this.ensureFragmentsLoaded();
+
     switch (mode) {
       case LLMTaskMode.CHAT_WORKSPACE:
         return this.generateChatBundle(context as ChatWorkspacePromptContext, 'workspace');
@@ -139,7 +177,7 @@ export class PromptManager {
           appliedAt: r.appliedAt ? (typeof r.appliedAt === 'string' ? r.appliedAt : r.appliedAt.toISOString()) : undefined,
         })),
       },
-      chat: { mode },
+      chat: { mode, contextObjectIds: context.contextObjectIds },
     };
 
     return {
@@ -178,6 +216,7 @@ export class PromptManager {
         editAssistant: {
           mode: 'manuscript',
           manuscript: {
+            currentId: msContext.currentId,
             currentChapterId: msContext.currentChapterId,
             currentChapterName: msContext.currentChapterName,
             currentChapterManuscript: msContext.currentChapterContent,
@@ -244,7 +283,9 @@ export class PromptManager {
       translation: {
         sourceLanguage: context.sourceLanguage,
         targetLanguage: context.targetLanguage,
-        objectIds: context.objectsArray.map(o => o.id),
+        objectIds: context.objectsArray.map(o => o.objectId),
+        contextObjectIds: context.contextObjectIds,
+        currentTranslatedContents: context.currentTranslatedContents,
       },
     };
 
@@ -405,13 +446,7 @@ export class PromptManager {
    */
   private static buildProjectData(projectId: string | undefined, language: string): TemplateData['project'] {
     if (!projectId) {
-      return {
-        basicInfo: null,
-        objects: [],
-        outline: null,
-        manuscripts: [],
-        subLanguages: {},
-      };
+      throw new Error('projectId is required for buildProjectData. Ensure promptContext includes projectId.');
     }
 
     const store = useUnifiedObjectStore.getState();
@@ -533,8 +568,8 @@ export class PromptManager {
       };
     });
 
-    // Build subLanguages - same structure for other languages
-    const subLanguages: TemplateData['project']['subLanguages'] = {};
+    // Build languages - all languages including main
+    const languages: TemplateData['project']['languages'] = {};
 
     // Collect all available languages from all objects
     const allLanguages = new Set<string>();
@@ -542,10 +577,8 @@ export class PromptManager {
       Object.keys(obj.data || {}).forEach(lang => allLanguages.add(lang));
     });
 
-    // Build data for each non-main language
+    // Build data for ALL languages (including main)
     allLanguages.forEach(lang => {
-      if (lang === language) return; // Skip main language
-
       const langBasicInfo = basicInfoList.length > 0 ? (() => {
         const data = this.getObjectDataForLanguage(basicInfoList[0], lang);
         return {
@@ -607,9 +640,51 @@ export class PromptManager {
         }),
       ];
 
-      subLanguages[lang] = {
+      // Build outline for this language
+      const langOutline = acts.length > 0 ? {
+        acts: acts
+          .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0))
+          .map(act => {
+            const actData = act.data[lang] || {};
+            return {
+              id: act.id,
+              name: actData.name || '',
+              description: actData.description || '',
+              chapters: chapters
+                .filter(ch => ch.metadata?.act_id === act.id)
+                .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0))
+                .map(chapter => {
+                  const chapterData = chapter.data[lang] || {};
+                  return {
+                    id: chapter.id,
+                    name: chapterData.name || '',
+                    description: chapterData.description || '',
+                  };
+                }),
+            };
+          }),
+      } : null;
+
+      // Build manuscripts for this language
+      const langManuscripts = manuscripts.map(ms => {
+        const data = ms.data[lang] || {};
+        const chapterId = ms.metadata?.chapter_id || '';
+        const chapter = chapters.find(ch => ch.id === chapterId);
+        const chapterData = chapter?.data[lang] || {};
+        return {
+          id: ms.id,
+          chapterId,
+          chapterName: chapterData.name || '',
+          content: data.content || '',
+          wordCount: (data.content || '').length,
+        };
+      });
+
+      languages[lang] = {
         basicInfo: langBasicInfo,
         objects: langObjects,
+        outline: langOutline,
+        manuscripts: langManuscripts,
       };
     });
 
@@ -618,7 +693,7 @@ export class PromptManager {
       objects,
       outline,
       manuscripts: manuscriptList,
-      subLanguages,
+      languages,
     };
   }
 

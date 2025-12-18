@@ -354,7 +354,7 @@ export const PROMPT_TREE: PromptNode[] = [
         ]
       }
     ]
-  }
+  },
 ];
 
 /**

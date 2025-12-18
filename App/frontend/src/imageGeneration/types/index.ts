@@ -194,6 +194,16 @@ export interface ImagePipelineContext {
     selectedTagBasedStyleId?: string | null;
 }
 
+// Retry context for image generation (for notification retry support)
+export interface ImageRetryContext {
+    request: ImageGenerationRequest;
+    projectId: string;
+    provider: ImageProviderType;
+    model: string;
+    size?: string;
+    styleId?: string | null;
+}
+
 // Task state
 export interface ImageTaskState {
     id: string;
@@ -209,9 +219,13 @@ export interface ImageTaskState {
     result?: {
         assetId?: string;
         revisedPrompt?: string;
+        thumbnailUrl?: string;  // For notification preview
     };
     createdAt: number;
     updatedAt: number;
+    // Notification fields
+    isRead: boolean;
+    retryContext?: ImageRetryContext;
 }
 
 // Callbacks

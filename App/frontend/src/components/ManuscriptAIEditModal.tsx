@@ -502,8 +502,9 @@ const ManuscriptAIEditModal: React.FC<ManuscriptAIEditModalProps> = ({
           const contentChapterId = manuscriptObj.metadata?.chapter_id as string | undefined;
           if (!contentChapterId) return;
 
-          // Only include selected chapters
+          // Only include selected chapters, excluding current chapter (it's shown separately)
           if (!selectedObjects.novelContentChapters.has(contentChapterId)) return;
+          if (contentChapterId === chapterId) return;
 
           const chapterInfo = chapterMap.get(contentChapterId);
 
@@ -561,10 +562,9 @@ const ManuscriptAIEditModal: React.FC<ManuscriptAIEditModalProps> = ({
 
       try {
         const args = typeof functionCall.arguments === 'string' ? JSON.parse(functionCall.arguments) : functionCall.arguments;
-        const targetChapterId = args.chapterId || chapterId;
-        const manuscriptObj = unifiedStore.getManuscriptByChapterId(targetChapterId);
+        const manuscriptObj = unifiedStore.getObject(args.id);
         if (!manuscriptObj) {
-          task.error(`Manuscript not found for chapter ${targetChapterId}`);
+          task.error(`Manuscript not found: ${args.id}`);
           return;
         }
 
@@ -634,13 +634,15 @@ const ManuscriptAIEditModal: React.FC<ManuscriptAIEditModalProps> = ({
       const cleanedText = extractRawContent(text);
       const parsed = parseSingleJsonOutput(cleanedText);
 
-      const manuscriptObj = unifiedStore.getManuscriptByChapterId(chapterId);
+      const manuscriptObj = unifiedStore.getObject(parsed.id as string);
       if (!manuscriptObj) {
-        task.error(`Manuscript not found for chapter ${chapterId}`);
+        task.error(`Manuscript not found: ${parsed.id}`);
         return;
       }
 
-      const currentContent = getActiveLanguageContent(chapterId);
+      const mainLanguage = settingsStore.settings.mainLanguage;
+      const currentData = manuscriptObj.data[mainLanguage] || Object.values(manuscriptObj.data)[0] || {};
+      const currentContent = currentData.content || '';
       let finalContent: string;
 
       // Check for different output formats:
@@ -686,7 +688,7 @@ const ManuscriptAIEditModal: React.FC<ManuscriptAIEditModalProps> = ({
       task.complete();
       onResult?.();
     },
-    [chapterId, unifiedStore, settingsStore, onResult, getActiveLanguageContent]
+    [unifiedStore, settingsStore, onResult]
   );
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -712,6 +714,11 @@ const ManuscriptAIEditModal: React.FC<ManuscriptAIEditModalProps> = ({
       const isNativeOutput = settingsStore.settings.nativeOutputMode;
 
       const currentContent = getActiveLanguageContent(chapterId);
+      const manuscriptObj = unifiedStore.getManuscriptByChapterId(chapterId);
+      if (!manuscriptObj) {
+        task.error(`Manuscript not found for chapter ${chapterId}`);
+        return;
+      }
       const contextData = await generateNovelContext();
 
       // Function to run the LLM task with optional retry prompt
@@ -736,10 +743,11 @@ const ManuscriptAIEditModal: React.FC<ManuscriptAIEditModalProps> = ({
           ...Array.from(selectedObjects.outlineChapters),
         ];
 
-        // Add manuscript IDs (convert from chapter IDs)
+        // Add manuscript IDs (convert from chapter IDs), excluding current chapter
         if (availableObjects && selectedObjects.novelContentChapters.size > 0) {
           for (const act of availableObjects.novelContent) {
             for (const ch of act.chapters) {
+              if (ch.id === chapterId) continue; // Skip current chapter - it's shown separately
               if (selectedObjects.novelContentChapters.has(ch.id) && ch.manuscriptId) {
                 objectIds.push(ch.manuscriptId);
               }
@@ -750,6 +758,7 @@ const ManuscriptAIEditModal: React.FC<ManuscriptAIEditModalProps> = ({
         const promptContext: EditAssistantManuscriptPromptContext = {
           userInput: effectiveUserInput,
           projectId,
+          currentId: manuscriptObj.id,
           currentChapterId: chapterId,
           currentChapterName: chapterName,
           currentChapterContent: currentContent,
@@ -960,7 +969,7 @@ const ManuscriptAIEditModal: React.FC<ManuscriptAIEditModalProps> = ({
                         projectId={projectId}
                         language={settingsStore.settings.mainLanguage}
                         customGroups={novelContentGroups}
-                        highlightIds={[chapterId]}
+                        excludedIds={[chapterId]}
                         showSearch={false}
                         maxHeight="200px"
                         emptyMessage="No novel content available"

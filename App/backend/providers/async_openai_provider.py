@@ -72,6 +72,7 @@ class AsyncOpenAIProvider(BaseProvider):
             "model": model,
             "messages": messages,
             "stream": True,
+            "stream_options": {"include_usage": True},
         }
 
         # GPT-5 doesn't support temperature parameter
@@ -235,11 +236,16 @@ class AsyncOpenAIProvider(BaseProvider):
         parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking)
         last_finish_reason = None
         stream = None
+        captured_usage: Optional[Dict] = None
 
         try:
             stream = await client.chat.completions.create(**request_kwargs)
             async for chunk in stream:
                 chunk_dict = chunk.model_dump(exclude_none=True)
+
+                # Capture usage from final chunk (OpenAI sends it with stream_options.include_usage)
+                if "usage" in chunk_dict and chunk_dict["usage"]:
+                    captured_usage = chunk_dict["usage"]
 
                 # Track finish_reason from choices
                 for choice in chunk_dict.get("choices", []):
@@ -282,6 +288,17 @@ class AsyncOpenAIProvider(BaseProvider):
         if last_finish_reason == "content_filter":
             yield self._format_error("Content blocked by filter (content_filter)")
             return  # Don't yield [DONE] after error
+
+        # Emit usage information before [DONE]
+        if captured_usage:
+            usage_payload = {
+                "usage": {
+                    "prompt_tokens": captured_usage.get("prompt_tokens", 0),
+                    "completion_tokens": captured_usage.get("completion_tokens", 0),
+                    "total_tokens": captured_usage.get("total_tokens", 0),
+                }
+            }
+            yield self._format_sse(usage_payload)
 
         yield b"data: [DONE]\n\n"
 

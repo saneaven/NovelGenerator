@@ -4,25 +4,31 @@
    ======================================== */
 
 @media (max-width: 768px) {
-    /* ===== Chat Panel Mobile ===== */
+    /* ===== Chat Panel Mobile (Bottom Sheet) ===== */
     .chat-panel {
         position: fixed;
-        top: 0;
+        top: auto;
+        bottom: 0;
         left: 0;
         width: 100%;
-        height: 100dvh;
-        z-index: var(--z-modal);
-        transform: translateX(-100%);
-        transition: transform var(--transition-base, 0.2s) ease;
-        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+        height: 95dvh;
+        z-index: var(--z-mobile-chat);
+        transform: translateY(100%);
+        transition: transform 300ms var(--ease-out);
+        border-radius: 16px 16px 0 0;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+        overflow: hidden; /* Clip content to rounded corners */
     }
 
     .chat-panel.visible {
-        transform: translateX(0);
+        transition: transform 300ms var(--ease-out);
+        transform: translateY(0);
     }
 
     .chat-panel.hidden {
-        transform: translateX(-100%);
+        transition: transform 300ms var(--ease-in);
+        transform: translateY(100%);
+        display: flex; /* Override utilities.css .hidden { display: none } */
     }
 
     /* ===== Chat Overlay ===== */
@@ -33,9 +39,13 @@
         width: 100%;
         height: 100%;
         background: rgba(0, 0, 0, 0.5);
-        z-index: calc(var(--z-modal) - 1);
-        animation: fadeIn var(--duration-normal, 0.2s) ease-out;
-        pointer-events: none; /* Don't block interactions with chat panel */
+        z-index: calc(var(--z-mobile-chat) - 1);
+        opacity: 1;
+        transition: opacity var(--transition-base);
+    }
+
+    .chat-overlay.closing {
+        opacity: 0;
     }
 
     /* ===== Sidebar Overlay ===== */

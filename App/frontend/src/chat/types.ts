@@ -9,16 +9,6 @@ export interface ProcessedChatMessage extends ChatMessage {
 }
 
 /**
- * System insert configuration for chat context
- */
-export interface SystemInsertConfig {
-  enabled: boolean;
-  includeProjectInfo: boolean;
-  includeStoryObjects: boolean;
-  includeNovelContent: boolean;
-}
-
-/**
  * Result of display processing
  */
 export interface DisplayProcessingResult {
@@ -49,13 +39,10 @@ export interface EditCard {
 }
 
 /**
- * Context for display processing (simplified - most fields unused)
+ * Context for display processing
  */
 export interface LLMRequestPipelineContext {
   projectId: string;
-  storyObjects: any;
-  systemInsertConfig: SystemInsertConfig;
-  novelData?: any;
   mode: 'novelEditor' | 'workspace';
 }
 
