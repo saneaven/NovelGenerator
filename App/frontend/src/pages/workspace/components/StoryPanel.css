@@ -1,0 +1,219 @@
+/* ========================================
+   STORY PANEL STYLES
+   Panel header, tabs, and content container
+   ======================================== */
+
+/* ===== Story Panel ===== */
+.story-panel {
+    flex: 1 1 auto;
+    background: var(--color-surface-base);
+    display: flex;
+    flex-direction: column;
+    min-width: 300px;
+    overflow: hidden;
+}
+
+.story-header {
+    padding: var(--spacing-xl);
+    border-bottom: 1px solid var(--color-border-default);
+    background: var(--color-surface-elevated);
+    flex-shrink: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--spacing-md);
+    flex-wrap: wrap;
+}
+
+.story-header h2 {
+    margin: 0;
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    letter-spacing: -0.015em;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+/* ===== Story Tabs ===== */
+.story-tabs-container {
+    padding-top: var(--spacing-sm);
+    position: relative;
+    background: var(--color-surface-subtle);
+    flex-shrink: 0;
+}
+
+.story-tabs {
+    display: flex;
+    padding: 0 var(--spacing-lg);
+    gap: var(--spacing-xs);
+    overflow-x: auto;
+    flex-shrink: 0;
+    scrollbar-width: none;
+    scroll-behavior: smooth;
+}
+
+.story-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+/* Navigation Buttons */
+.tab-nav-button {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border-default);
+    color: var(--color-text-secondary);
+    width: 2rem;
+    height: 2rem;
+    border-radius: var(--border-radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    z-index: var(--z-content);
+    box-shadow: var(--shadow-md);
+    font-size: var(--font-size-base);
+    opacity: 0;
+    visibility: hidden;
+}
+
+.tab-nav-button.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.tab-nav-button:hover {
+    background: var(--color-surface-hover);
+    border-color: var(--color-border-medium);
+    color: var(--color-text-primary);
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-50%) scale(1.05);
+}
+
+.tab-nav-button:active {
+    transform: translateY(-50%) scale(0.95);
+}
+
+.tab-nav-button.left {
+    left: var(--spacing-xs);
+}
+
+.tab-nav-button.right {
+    right: var(--spacing-xs);
+}
+
+.tab-button {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md) var(--spacing-lg);
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: var(--color-text-tertiary);
+    border-bottom: 3px solid transparent;
+    white-space: nowrap;
+    transition: all var(--transition-base);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    position: relative;
+    box-shadow: var(--shadow-sm);
+}
+
+.tab-button:hover {
+    color: var(--color-text-secondary);
+    background: var(--color-surface-hover);
+    border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
+}
+
+.tab-button.active {
+    color: var(--color-brand-accent);
+    border-bottom-color: var(--color-brand-accent);
+    background: var(--color-surface-base);
+    font-weight: var(--font-weight-semibold);
+}
+
+.tab-icon {
+    font-size: var(--font-size-lg);
+    line-height: 1;
+}
+
+.tab-label {
+    line-height: 1;
+}
+
+.story-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: var(--spacing-xl);
+    background: var(--color-surface-base);
+    position: relative;
+}
+
+/* Story Card Expanded Overlay - State 3 full edit mode */
+.story-card-expanded-container {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-xl);
+}
+
+.story-card-expanded-container > * {
+    width: 100%;
+    max-width: 900px;
+    max-height: 90dvh;
+    overflow: auto;
+}
+
+/* ===== Responsive Design ===== */
+@media (max-width: 768px) {
+    /* Hide tabs container on mobile - use sidebar instead */
+    .story-tabs-container {
+        display: none;
+    }
+
+    .story-header {
+        display: none;
+    }
+
+    .story-tabs {
+        padding: 0 var(--spacing-sm);
+    }
+
+    .tab-button {
+        padding: var(--spacing-sm) var(--spacing-md);
+        font-size: var(--font-size-xs);
+    }
+
+    .tab-icon {
+        font-size: var(--font-size-base);
+    }
+
+    .story-content {
+        padding: var(--spacing-lg);
+    }
+
+    /* Prevent last content line/card from being hidden behind fixed MobileFooter */
+    .story-content::after {
+        content: '';
+        display: block;
+        height: var(--size-mobile-footer-height);
+    }
+
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+    .story-content {
+        padding: var(--spacing-xl);
+    }
+}

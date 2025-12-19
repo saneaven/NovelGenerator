@@ -1,0 +1,329 @@
+/* ========================================
+   STORY CARDS - GRID LAYOUT
+   Dynamic grid-based card display
+   ======================================== */
+
+.story-cards-grid {
+    margin: var(--spacing-3xl);
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(20dvh, 1fr));
+    grid-auto-rows: 30dvh;
+    grid-auto-flow: dense;
+    gap: var(--spacing-2xl);
+    align-items: stretch;
+    position: relative;
+}
+
+/* Span types for dynamic grid sizing */
+.story-card[data-span="horizontal"] {
+    grid-column: span 2;
+}
+
+.story-card[data-span="vertical"] {
+    grid-row: span 2;
+}
+
+/* Mobile: single column, vertical images span 2 rows */
+@media (max-width: 768px) {
+    .story-cards-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .story-card[data-span="horizontal"] {
+        grid-column: span 1;
+    }
+}
+
+/* Story Card */
+.story-card {
+    position: relative;
+    height: 100%;
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow var(--transition-base), border-color var(--transition-base);
+    isolation: isolate;
+}
+
+/* Cards with image need clip to handle transformed content */
+.story-card[data-has-image="true"] {
+    overflow: clip;
+}
+
+.story-card:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--color-border-medium);
+}
+
+/* Animating card - elevated z-index during layout animation */
+.story-card--animating {
+    z-index: var(--z-card-animating);
+}
+
+/* Image Container - fills the card */
+.story-card__image-container {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    background: var(--color-surface-subtle);
+}
+
+/* Image - fills container, crops to fit */
+.story-card__image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* Content - Normal position */
+.story-card__content {
+    padding: var(--spacing-md) var(--spacing-lg) var(--spacing-lg);
+    z-index: var(--z-content);
+    position: relative;
+}
+
+/* Cards WITH image: Content positioned at bottom */
+.story-card[data-has-image="true"] .story-card__content {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--color-surface-elevated);
+    border-radius: var(--border-radius-lg);
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Header */
+.story-card__header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+/* Title */
+.story-card__title {
+    margin: 0;
+    font-size: var(--font-size-2xl);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    cursor: pointer;
+    transition: color var(--transition-fast);
+    padding: var(--spacing-sm) 0;
+    flex: 1;
+    min-width: 0;
+    /* Collapsed: truncate */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.story-card[data-expanded="true"] .story-card__title {
+    white-space: normal;
+    overflow: visible;
+}
+
+.story-card__title:hover {
+    color: var(--color-brand-primary);
+}
+
+/* Expand Toggle */
+.story-card__expand-toggle {
+    background: none;
+    border: none;
+    padding: var(--spacing-xs);
+    cursor: pointer;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--border-radius-sm);
+    transition: background-color var(--transition-fast), color var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.story-card__expand-toggle:hover {
+    background-color: var(--color-surface-subtle);
+    color: var(--color-text-primary);
+}
+
+/* Full Expand Button - positioning only (styling from IconButton) */
+.story-card__full-expand-btn.icon-button {
+    position: absolute;
+    top: var(--spacing-sm);
+    right: var(--spacing-sm);
+    z-index: var(--z-button);
+}
+
+/* Description wrapper - collapsed by default for ALL cards */
+.story-card__description-wrapper {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 300ms ease-out;
+}
+
+/* Expanded: show description (independent of data-has-image) */
+.story-card[data-expanded="true"] .story-card__description-wrapper {
+    max-height: 250px;
+}
+
+/* Description */
+.story-card__description {
+    margin-top: var(--spacing-md);
+    padding: var(--spacing-md);
+    background: var(--color-surface-base);
+    border-radius: var(--border-radius-lg);
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.story-card__description p {
+    margin: 0;
+    font-size: var(--font-size-base);
+    line-height: var(--line-height-relaxed);
+    color: var(--color-text-secondary);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* Metadata */
+.story-card__metadata {
+    display: flex;
+    gap: var(--spacing-md);
+    margin-top: var(--spacing-md);
+    padding-top: var(--spacing-sm);
+    border-top: 1px solid var(--color-border-subtle);
+    flex-wrap: wrap;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+}
+
+.story-card__metadata span {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.story-card__language {
+    font-weight: var(--font-weight-medium);
+}
+
+.story-card__version {
+    padding: 2px 6px;
+    background: var(--color-surface-subtle);
+    border-radius: var(--border-radius-sm);
+    font-weight: var(--font-weight-medium);
+}
+
+.story-card__fallback-warning {
+    color: var(--color-warning);
+}
+
+/* Actions */
+.story-card__actions {
+    flex-shrink: 0;
+}
+
+/* Mobile Responsive */
+@media (max-width: 640px) {
+    .story-card__content {
+        padding: var(--spacing-sm) var(--spacing-md) var(--spacing-md);
+    }
+
+    .story-card__title {
+        font-size: var(--font-size-base);
+    }
+
+    .story-card__expand-toggle {
+        min-width: 44px;
+        min-height: 44px;
+    }
+}
+
+/* ===== TEXT-ONLY CARDS (No Image) ===== */
+
+.story-card[data-span="text-only"] {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: var(--spacing-lg);
+}
+
+.story-card[data-span="text-only"] .story-card__content {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.story-card[data-span="text-only"] .story-card__header {
+    flex-shrink: 0;
+}
+
+/* Text-only cards: fixed height title container for dynamic font scaling */
+.story-card[data-span="text-only"] .story-card__title-container {
+    height: 4.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    margin-bottom: var(--spacing-lg);
+    overflow: hidden;
+}
+
+/* Text-only cards: dynamically sized title */
+.story-card[data-span="text-only"] .story-card__title--fit {
+    font-size: var(--font-size-4xl);
+    white-space: normal;
+    word-break: break-word;
+    overflow: hidden;
+    margin-bottom: 0;
+    transition: opacity 0.15s ease-out;
+}
+
+/* Text-only cards: title is not clickable (no State 1) */
+.story-card__title--no-toggle {
+    cursor: default;
+}
+
+.story-card__title--no-toggle:hover {
+    color: var(--color-text-primary);
+}
+
+.story-card[data-span="text-only"] .story-card__description-wrapper {
+    display: block;
+    visibility: visible;
+    opacity: 1;
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    overflow: hidden;
+}
+
+.story-card[data-span="text-only"] .story-card__description {
+    height: 100%;
+    max-height: none;
+    overflow-y: auto;
+    margin-top: 0;
+}
+
+.story-card[data-span="text-only"] .story-card__expand-toggle {
+    display: none;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .story-card,
+    .story-card__description-wrapper,
+    .story-card__image,
+    .story-card__expand-toggle,
+    .story-card__full-expand-btn {
+        transition: none;
+        animation: none;
+    }
+}

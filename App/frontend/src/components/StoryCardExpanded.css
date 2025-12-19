@@ -16,9 +16,9 @@
     isolation: isolate; /* Create stacking context */
 }
 
-/* WITH IMAGE: 2-column layout */
+/* WITH IMAGE: 2-column layout (9:16 ratio - image:content) */
 .story-card-expanded.has-image {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 9fr 16fr;
     grid-template-rows: 1fr;
 }
 
@@ -103,6 +103,7 @@
     flex: 1;
     overflow-y: auto;
     min-height: 0;
+    padding: var(--spacing-md);
 }
 
 /* Edit content */
@@ -184,6 +185,12 @@
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
+    margin-top: auto;
+}
+
+.expanded-actions-row .expanded-metadata {
+    flex: 1;
+    justify-content: center;
 }
 
 /* AI button styling now comes from TextButton component */
@@ -210,18 +217,6 @@
     min-height: 250px;
 }
 
-/* Footer */
-.expanded-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-md) var(--spacing-lg);
-    border-top: 1px solid var(--color-border-subtle);
-    background: var(--color-surface-subtle);
-    flex-shrink: 0;
-}
-
-/* Cancel/Save button styling now comes from TextButton component */
 
 /* ===== MOBILE RESPONSIVE ===== */
 @media (max-width: 768px) {
@@ -229,15 +224,14 @@
         max-height: 95vh;
     }
 
-    /* Stack layout on mobile */
+    /* Stack layout on mobile (9:16 ratio - image:content) */
     .story-card-expanded.has-image {
         grid-template-columns: 1fr;
-        grid-template-rows: auto 1fr;
+        grid-template-rows: 5fr 16fr;
     }
 
     .expanded-image-section {
-        min-height: 200px;
-        max-height: 250px;
+        min-height: 150px;
     }
 
     .expanded-close-btn.icon-button {
@@ -255,10 +249,6 @@
 
     .expanded-actions-row {
         flex-wrap: wrap;
-    }
-
-    .expanded-footer {
-        padding: var(--spacing-sm) var(--spacing-md);
     }
 }
 

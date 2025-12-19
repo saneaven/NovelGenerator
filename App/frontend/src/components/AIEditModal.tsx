@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { BaseModal } from './BaseModal';
-import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import type { ObjectType } from '../types/unifiedObject';
 import type { FunctionCallMetadata } from '../llm/requestTypes';
@@ -12,35 +11,7 @@ import { shouldRetry, buildRetryPrompt, summarizePatchFailures } from '../llm/pa
 import { Expand, Collapse } from './icons';
 import { ObjectPicker } from './ObjectPicker';
 import { TextButton } from './TextButton';
-import CollapsibleSection from './ui/CollapsibleSection';
-import type { ObjectPickerGroup } from './ObjectPicker/types';
 import './AIEditModal.css';
-
-// Available objects fetched on modal open
-interface OutlineAct {
-  id: string;
-  name: string;
-  chapters: Array<{ id: string; name: string }>;
-}
-
-interface AvailableContextObjects {
-  basicInfo: { id: string; title: string } | null;
-  characters: Array<{ id: string; name: string }>;
-  organizations: Array<{ id: string; name: string }>;
-  locations: Array<{ id: string; name: string }>;
-  lorebook: Array<{ id: string; name: string }>;
-  outlines: Array<OutlineAct>;
-}
-
-// User's selection state
-interface SelectedContextObjects {
-  basicInfo: boolean;
-  characters: Set<string>;
-  organizations: Set<string>;
-  locations: Set<string>;
-  lorebook: Set<string>;
-  outlineChapters: Set<string>;
-}
 
 interface AIEditModalProps {
   isOpen: boolean;
@@ -76,25 +47,10 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   defaultUserRequest,
 }) => {
   const [userRequest, setUserRequest] = useState(defaultUserRequest ?? '');
-  const [availableObjects, setAvailableObjects] = useState<AvailableContextObjects | null>(null);
-  const [selectedObjects, setSelectedObjects] = useState<SelectedContextObjects>({
-    basicInfo: true,
-    characters: new Set<string>(),
-    organizations: new Set<string>(),
-    locations: new Set<string>(),
-    lorebook: new Set<string>(),
-    outlineChapters: new Set<string>(),
-  });
+  const [selectedContextIds, setSelectedContextIds] = useState<string[]>([]);
   const [isContextExpanded, setIsContextExpanded] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [pickerLoading, setPickerLoading] = useState(true);
 
-  // Section collapse state
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
-    storyObjects: true,
-    outlines: true,
-  });
-
-  const unifiedStore = useUnifiedObjectStore();
   const settingsStore = useSettingsStore();
   const abortControllerRef = useRef<AbortController | null>(null);
   const taskRef = useRef<LLMTask | null>(null);
@@ -102,92 +58,14 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   const categoryDisplayName = getCategoryDisplayName(category);
   const editTypeText = targetId ? 'Item' : 'All';
 
-  // Load available objects when modal opens
-  const loadAvailableObjects = useCallback(async () => {
-    setIsLoading(true);
-    const mainLanguage = settingsStore.settings.mainLanguage;
-
-    try {
-      const [basicInfoList, characters, organizations, locations, lorebook, acts, chapters] = await Promise.all([
-        unifiedStore.listObjects('basic_info', projectId),
-        unifiedStore.listObjects('character', projectId),
-        unifiedStore.listObjects('organization', projectId),
-        unifiedStore.listObjects('location', projectId),
-        unifiedStore.listObjects('lorebook', projectId),
-        unifiedStore.listObjects('act', projectId),
-        unifiedStore.listObjects('chapter', projectId),
-      ]);
-
-      // Build sorted chapters
-      const sortedChapters = [...chapters].sort((a, b) => {
-        const actOrderA = acts.find(act => act.id === a.metadata.act_id)?.metadata.order || 0;
-        const actOrderB = acts.find(act => act.id === b.metadata.act_id)?.metadata.order || 0;
-        if (actOrderA !== actOrderB) return actOrderA - actOrderB;
-        return (a.metadata.order || 0) - (b.metadata.order || 0);
-      });
-
-      const available: AvailableContextObjects = {
-        basicInfo: basicInfoList.length > 0 ? {
-          id: basicInfoList[0].id,
-          title: (basicInfoList[0].data[mainLanguage] || Object.values(basicInfoList[0].data)[0])?.title || 'Basic Info'
-        } : null,
-        characters: characters.map(c => ({
-          id: c.id,
-          name: (c.data[mainLanguage] || Object.values(c.data)[0])?.name || 'Unnamed'
-        })),
-        organizations: organizations.map(o => ({
-          id: o.id,
-          name: (o.data[mainLanguage] || Object.values(o.data)[0])?.name || 'Unnamed'
-        })),
-        locations: locations.map(l => ({
-          id: l.id,
-          name: (l.data[mainLanguage] || Object.values(l.data)[0])?.name || 'Unnamed'
-        })),
-        lorebook: lorebook.map(l => ({
-          id: l.id,
-          name: (l.data[mainLanguage] || Object.values(l.data)[0])?.name || 'Unnamed'
-        })),
-        outlines: [...acts]
-          .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-          .map(act => ({
-            id: act.id,
-            name: (act.data[mainLanguage] || Object.values(act.data)[0])?.name || 'Unnamed Act',
-            chapters: sortedChapters
-              .filter(ch => ch.metadata.act_id === act.id)
-              .map(ch => ({
-                id: ch.id,
-                name: (ch.data[mainLanguage] || Object.values(ch.data)[0])?.name || 'Unnamed'
-              }))
-          })),
-      };
-
-      setAvailableObjects(available);
-
-      // Select all objects by default
-      const allOutlineChapterIds = available.outlines.flatMap(act => act.chapters.map(ch => ch.id));
-      setSelectedObjects({
-        basicInfo: available.basicInfo !== null,
-        characters: new Set(available.characters.map(c => c.id)),
-        organizations: new Set(available.organizations.map(o => o.id)),
-        locations: new Set(available.locations.map(l => l.id)),
-        lorebook: new Set(available.lorebook.map(l => l.id)),
-        outlineChapters: new Set(allOutlineChapterIds),
-      });
-    } catch (err) {
-      console.error('Error loading available objects:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [projectId, settingsStore.settings.mainLanguage, unifiedStore]);
-
+  // Reset state when modal closes
   useEffect(() => {
-    if (isOpen) {
-      loadAvailableObjects();
-    } else {
+    if (!isOpen) {
       setUserRequest('');
-      setAvailableObjects(null);
+      setSelectedContextIds([]);
+      setPickerLoading(true);
     }
-  }, [isOpen, loadAvailableObjects]);
+  }, [isOpen]);
 
   useEffect(() => {
     return () => {
@@ -195,170 +73,26 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     };
   }, []);
 
-  // Build ObjectPicker groups for story objects
-  const storyObjectGroups = useMemo((): ObjectPickerGroup[] => {
-    if (!availableObjects) return [];
-
-    const groups: ObjectPickerGroup[] = [];
-
-    if (availableObjects.characters.length > 0) {
-      groups.push({
-        id: 'characters',
-        label: 'Characters',
-        type: 'character',
-        items: availableObjects.characters.map(c => ({
-          id: `character:${c.id}`,
-          name: c.name,
-          type: 'character',
-        })),
-      });
-    }
-
-    if (availableObjects.organizations.length > 0) {
-      groups.push({
-        id: 'organizations',
-        label: 'Organizations',
-        type: 'organization',
-        items: availableObjects.organizations.map(o => ({
-          id: `organization:${o.id}`,
-          name: o.name,
-          type: 'organization',
-        })),
-      });
-    }
-
-    if (availableObjects.locations.length > 0) {
-      groups.push({
-        id: 'locations',
-        label: 'Locations',
-        type: 'location',
-        items: availableObjects.locations.map(l => ({
-          id: `location:${l.id}`,
-          name: l.name,
-          type: 'location',
-        })),
-      });
-    }
-
-    if (availableObjects.lorebook.length > 0) {
-      groups.push({
-        id: 'lorebook',
-        label: 'Lorebook',
-        type: 'lorebook',
-        items: availableObjects.lorebook.map(l => ({
-          id: `lorebook:${l.id}`,
-          name: l.name,
-          type: 'lorebook',
-        })),
-      });
-    }
-
-    return groups;
-  }, [availableObjects]);
-
-  // Build ObjectPicker groups for outlines
-  const outlineGroups = useMemo((): ObjectPickerGroup[] => {
-    if (!availableObjects || availableObjects.outlines.length === 0) return [];
-
-    return availableObjects.outlines.map(act => ({
-      id: `outline-act-${act.id}`,
-      label: act.name,
-      type: 'act' as any,
-      items: act.chapters.map(ch => ({
-        id: ch.id,
-        name: ch.name,
-        type: 'chapter' as any,
-      })),
-    }));
-  }, [availableObjects]);
-
-  // Convert selected story objects to ObjectPicker format (with prefixes)
-  const selectedStoryObjectIds = useMemo((): string[] => {
-    const ids: string[] = [];
-    selectedObjects.characters.forEach(id => ids.push(`character:${id}`));
-    selectedObjects.organizations.forEach(id => ids.push(`organization:${id}`));
-    selectedObjects.locations.forEach(id => ids.push(`location:${id}`));
-    selectedObjects.lorebook.forEach(id => ids.push(`lorebook:${id}`));
-    return ids;
-  }, [selectedObjects.characters, selectedObjects.organizations, selectedObjects.locations, selectedObjects.lorebook]);
-
-  // Determine excludedIds for the story objects picker (edit target, no checkbox)
-  const storyObjectExcludedIds = useMemo((): string[] => {
-    if (!targetId) return [];
-    // Story object types use prefixed IDs
-    if (['character', 'organization', 'location', 'lorebook'].includes(category)) {
-      return [`${category}:${targetId}`];
-    }
-    return [];
-  }, [targetId, category]);
-
-  // Determine excludedIds for the outlines picker
-  const outlineExcludedIds = useMemo((): string[] => {
-    if (!targetId) return [];
-    // Chapters use raw IDs
-    if (category === 'chapter') {
-      return [targetId];
-    }
-    return [];
-  }, [targetId, category]);
-
-  // Handle story objects selection change
-  const handleStoryObjectsChange = useCallback((ids: string[] | string) => {
-    const idArray = Array.isArray(ids) ? ids : [ids];
-
-    const characters = new Set<string>();
-    const organizations = new Set<string>();
-    const locations = new Set<string>();
-    const lorebook = new Set<string>();
-
-    idArray.forEach(prefixedId => {
-      const [category, id] = prefixedId.split(':');
-      switch (category) {
-        case 'character': characters.add(id); break;
-        case 'organization': organizations.add(id); break;
-        case 'location': locations.add(id); break;
-        case 'lorebook': lorebook.add(id); break;
-      }
-    });
-
-    setSelectedObjects(prev => ({
-      ...prev,
-      characters,
-      organizations,
-      locations,
-      lorebook,
-    }));
+  // Simple handler for context selection
+  const handleContextChange = useCallback((ids: string[] | string) => {
+    setSelectedContextIds(Array.isArray(ids) ? ids : [ids]);
   }, []);
 
-  // Handle outline chapters selection change
-  const handleOutlineChaptersChange = useCallback((ids: string[] | string) => {
-    const idArray = Array.isArray(ids) ? ids : [ids];
-    setSelectedObjects(prev => ({
-      ...prev,
-      outlineChapters: new Set(idArray),
-    }));
-  }, []);
+  // Exclude target ID from selection
+  const excludedIds = useMemo(() => {
+    if (!targetId) return [];
+    return [targetId];
+  }, [targetId]);
 
-  // Build contextIds from selected objects (excluding targetId to avoid duplication)
+  // Build contextIds for LLM (filter out targetId)
   const buildContextIds = useCallback((): string[] => {
-    const ids: string[] = [];
-    selectedObjects.characters.forEach(id => {
-      if (id !== targetId) ids.push(id);
-    });
-    selectedObjects.organizations.forEach(id => {
-      if (id !== targetId) ids.push(id);
-    });
-    selectedObjects.locations.forEach(id => {
-      if (id !== targetId) ids.push(id);
-    });
-    selectedObjects.lorebook.forEach(id => {
-      if (id !== targetId) ids.push(id);
-    });
-    selectedObjects.outlineChapters.forEach(id => {
-      if (id !== targetId) ids.push(id);
-    });
-    return ids;
-  }, [selectedObjects, targetId]);
+    return selectedContextIds.filter(id => id !== targetId);
+  }, [selectedContextIds, targetId]);
+
+  // On picker load complete
+  const handlePickerLoadComplete = useCallback(() => {
+    setPickerLoading(false);
+  }, []);
 
   const handleFunctionCallResults = useCallback(
     async (
@@ -463,7 +197,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       retryContext: {
         taskType: 'ai-edit',
         modalProps: { category, projectId, targetId, onResult },
-        formState: { userRequest: userRequest.trim(), selectedObjects },
+        formState: { userRequest: userRequest.trim(), selectedContextIds },
       },
     });
 
@@ -591,7 +325,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
             variant="primary"
             type="submit"
             form="ai-edit-form"
-            disabled={!userRequest.trim() || isLoading}
+            disabled={!userRequest.trim() || pickerLoading}
           >
             Request AI Edit
           </TextButton>
@@ -623,71 +357,21 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
           </div>
           {isContextExpanded && (
             <>
-              {isLoading ? (
-                <div className="context-loading">Loading available objects...</div>
-              ) : availableObjects ? (
-                <div className="context-selector">
-                  {/* Story Objects (Characters, Organizations, Locations, Lorebook) */}
-                  {storyObjectGroups.length > 0 && (
-                    <CollapsibleSection
-                      label="Story Objects"
-                      expanded={!collapsedSections.storyObjects}
-                      onExpandChange={(expanded) => setCollapsedSections(prev => ({ ...prev, storyObjects: !expanded }))}
-                      selectedCount={selectedStoryObjectIds.length}
-                      totalCount={storyObjectGroups.reduce((sum, g) => sum + g.items.length, 0)}
-                      onToggleAll={(selectAll) => {
-                        const allIds = storyObjectGroups.flatMap(g => g.items.map(i => i.id));
-                        handleStoryObjectsChange(selectAll ? allIds : []);
-                      }}
-                    >
-                      <ObjectPicker
-                        mode="story-objects"
-                        selectionMode="multi"
-                        selectedIds={selectedStoryObjectIds}
-                        onChange={handleStoryObjectsChange}
-                        projectId={projectId}
-                        language={settingsStore.settings.mainLanguage}
-                        customGroups={storyObjectGroups}
-                        excludedIds={storyObjectExcludedIds}
-                        showSearch={false}
-                        maxHeight="200px"
-                        emptyMessage="No story objects available"
-                      />
-                    </CollapsibleSection>
-                  )}
-
-                  {/* Outlines (Chapter descriptions) */}
-                  {outlineGroups.length > 0 && (
-                    <CollapsibleSection
-                      label="Outlines"
-                      expanded={!collapsedSections.outlines}
-                      onExpandChange={(expanded) => setCollapsedSections(prev => ({ ...prev, outlines: !expanded }))}
-                      selectedCount={selectedObjects.outlineChapters.size}
-                      totalCount={outlineGroups.reduce((sum, g) => sum + g.items.length, 0)}
-                      onToggleAll={(selectAll) => {
-                        const allIds = outlineGroups.flatMap(g => g.items.map(i => i.id));
-                        handleOutlineChaptersChange(selectAll ? allIds : []);
-                      }}
-                    >
-                      <ObjectPicker
-                        mode="manuscript"
-                        selectionMode="multi"
-                        selectedIds={Array.from(selectedObjects.outlineChapters)}
-                        onChange={handleOutlineChaptersChange}
-                        projectId={projectId}
-                        language={settingsStore.settings.mainLanguage}
-                        customGroups={outlineGroups}
-                        excludedIds={outlineExcludedIds}
-                        showSearch={false}
-                        maxHeight="200px"
-                        emptyMessage="No outlines available"
-                      />
-                    </CollapsibleSection>
-                  )}
-                </div>
-              ) : (
-                <div className="context-error">Failed to load objects</div>
-              )}
+              <div className="context-selector">
+                <ObjectPicker
+                  mode="story-objects"
+                  selectionMode="multi"
+                  selectedIds={selectedContextIds}
+                  onChange={handleContextChange}
+                  projectId={projectId}
+                  language={settingsStore.settings.mainLanguage}
+                  excludedIds={excludedIds}
+                  showSearch={true}
+                  maxHeight="300px"
+                  emptyMessage="No context objects available"
+                  onLoadComplete={handlePickerLoadComplete}
+                />
+              </div>
               <p className="context-help">
                 Select individual objects to include as context for the AI.
               </p>

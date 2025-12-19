@@ -33,8 +33,11 @@ function getObjectDataForLanguage(obj: UnifiedObject, language: string): Record<
  * Get the types to fetch based on mode
  */
 function getTypesForMode(mode: ObjectPickerMode, excludeTypes: ObjectType[]): ObjectType[] {
-  const storyTypes: ObjectType[] = ['basic_info', 'character', 'organization', 'location', 'lorebook'];
-  const outlineTypes: ObjectType[] = ['act', 'chapter', 'manuscript'];
+  // Story objects now includes act and chapter (novel structure)
+  const storyTypes: ObjectType[] = ['basic_info', 'character', 'organization', 'location', 'lorebook', 'act', 'chapter'];
+
+  // Chapter hierarchy types for manuscript mode display
+  const chapterHierarchyTypes: ObjectType[] = ['act', 'chapter', 'manuscript'];
 
   let types: ObjectType[];
   switch (mode) {
@@ -42,10 +45,11 @@ function getTypesForMode(mode: ObjectPickerMode, excludeTypes: ObjectType[]): Ob
       types = storyTypes;
       break;
     case 'manuscript':
-      types = outlineTypes;
+      types = chapterHierarchyTypes;
       break;
     case 'all':
-      types = [...storyTypes, ...outlineTypes];
+      // All unique types (storyTypes already has act/chapter, just add manuscript)
+      types = [...storyTypes, 'manuscript'];
       break;
   }
 
@@ -82,9 +86,10 @@ function buildGroups(
 
   // Group story objects by type
   if (mode === 'story-objects' || mode === 'all') {
-    const storyTypes: ObjectType[] = ['basic_info', 'character', 'organization', 'location', 'lorebook'];
+    // Flat groups for basic story objects
+    const flatStoryTypes: ObjectType[] = ['basic_info', 'character', 'organization', 'location', 'lorebook'];
 
-    storyTypes.forEach(type => {
+    flatStoryTypes.forEach(type => {
       const typeObjects = objects.filter(obj => obj.type === type);
       if (typeObjects.length > 0) {
         availableTypes.push(type);
@@ -98,9 +103,42 @@ function buildGroups(
         });
       }
     });
+
+    // Outline group with Act > Chapter hierarchy
+    const acts = objects
+      .filter(obj => obj.type === 'act')
+      .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0));
+    const chapters = objects.filter(obj => obj.type === 'chapter');
+
+    if (acts.length > 0 || chapters.length > 0) {
+      const outlineChildGroups: ObjectPickerGroup[] = acts.map(act => {
+        const actData = getObjectDataForLanguage(act, language);
+        const actChapters = chapters
+          .filter(ch => ch.metadata?.act_id === act.id)
+          .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0));
+
+        return {
+          id: `act-${act.id}`,
+          label: (actData.name as string) || 'Unnamed Act',
+          type: 'act' as const,
+          items: actChapters.map(ch => objectToItem(ch, language)),
+        };
+      });
+
+      if (outlineChildGroups.length > 0) {
+        availableTypes.push('act', 'chapter');
+        groups.push({
+          id: 'group-outline',
+          label: CATEGORY_CONFIG['outline']?.label || 'Outline',
+          type: 'act',
+          items: [],
+          childGroups: outlineChildGroups,
+        });
+      }
+    }
   }
 
-  // Group manuscripts by act
+  // Group manuscripts by act (for manuscript mode)
   if (mode === 'manuscript' || mode === 'all') {
     const acts = objects
       .filter(obj => obj.type === 'act')
@@ -115,22 +153,31 @@ function buildGroups(
           .filter(ch => ch.metadata?.act_id === act.id)
           .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0));
 
-        // Find manuscripts for each chapter
-        const items: ObjectPickerItem[] = actChapters.map(ch => {
-          const chapterData = getObjectDataForLanguage(ch, language);
-          const manuscript = manuscripts.find(m => m.metadata?.chapter_id === ch.id);
-          const manuscriptData = manuscript ? getObjectDataForLanguage(manuscript, language) : null;
+        // Find manuscripts for each chapter - ONLY include if manuscript exists
+        const items: ObjectPickerItem[] = actChapters
+          .map(ch => {
+            const chapterData = getObjectDataForLanguage(ch, language);
+            const manuscript = manuscripts.find(m => m.metadata?.chapter_id === ch.id);
 
-          return {
-            id: manuscript?.id || ch.id,
-            name: (chapterData.name as string) || 'Unnamed Chapter',
-            description: chapterData.description as string | undefined,
-            type: 'manuscript' as ObjectType,
-            parentId: ch.id,
-            order: ch.metadata?.order as number | undefined,
-            wordCount: manuscriptData?.wordCount as number | undefined,
-          };
-        });
+            // Skip chapters without manuscripts - do NOT use chapter ID as fallback!
+            if (!manuscript) {
+              return null;
+            }
+
+            const manuscriptData = getObjectDataForLanguage(manuscript, language);
+
+            const item: ObjectPickerItem = {
+              id: manuscript.id,
+              name: (chapterData.name as string) || 'Unnamed Chapter',
+              description: chapterData.description as string | undefined,
+              type: 'manuscript' as ObjectType,
+              parentId: ch.id,
+              order: ch.metadata?.order as number | undefined,
+              wordCount: manuscriptData?.wordCount as number | undefined,
+            };
+            return item;
+          })
+          .filter((item): item is ObjectPickerItem => item !== null);
 
         return {
           id: `act-${act.id}`,
@@ -140,11 +187,11 @@ function buildGroups(
         };
       });
 
-      // Only add outline group if there are acts with chapters
+      // Only add manuscripts group if there are manuscripts
       if (childGroups.some(g => g.items.length > 0)) {
         groups.push({
-          id: 'group-outline',
-          label: `Manuscripts`,
+          id: 'group-manuscripts',
+          label: CATEGORY_CONFIG['manuscript']?.label || 'Manuscripts',
           type: 'manuscript',
           items: [],
           childGroups,

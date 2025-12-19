@@ -129,13 +129,13 @@
     color: var(--color-text-muted);
 }
 
-.asset-grid {
+.asset-modal .asset-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: var(--spacing-lg);
 }
 
-.asset-item {
+.asset-modal .asset-item {
     position: relative;
     background: var(--color-surface-elevated);
     border: 2px solid transparent;
@@ -145,22 +145,22 @@
     transition: all var(--transition-base);
 }
 
-.asset-item:hover {
+.asset-modal .asset-item:hover {
     border-color: var(--color-border-medium);
     box-shadow: var(--shadow-md);
 }
 
-.asset-item.main {
+.asset-modal .asset-item.main {
     border-color: var(--color-brand-primary);
 }
 
-.asset-item.clickable:hover {
+.asset-modal .asset-item.clickable:hover {
     border-color: var(--color-brand-primary);
     transform: scale(1.02);
 }
 
 /* Main image badge */
-.asset-item .main-badge {
+.asset-modal .asset-item .main-badge {
     position: absolute;
     top: var(--spacing-xs);
     left: var(--spacing-xs);
@@ -177,19 +177,19 @@
     box-shadow: var(--shadow-sm);
 }
 
-.asset-thumbnail {
+.asset-modal .asset-thumbnail {
     aspect-ratio: 1;
     overflow: hidden;
     background: var(--color-surface-subtle);
 }
 
-.asset-thumbnail img {
+.asset-modal .asset-thumbnail img {
     width: 100%;
     height: 100%;
     object-fit: cover;
 }
 
-.asset-info {
+.asset-modal .asset-info {
     padding: var(--spacing-sm) var(--spacing-md);
     display: flex;
     flex-direction: row;
@@ -198,7 +198,7 @@
     min-height: 32px;
 }
 
-.asset-name {
+.asset-modal .asset-name {
     flex: 1;
     font-size: var(--font-size-xs);
     font-weight: var(--font-weight-medium);
@@ -209,7 +209,7 @@
 }
 
 /* Rename button */
-.asset-info .rename-button {
+.asset-modal .asset-info .rename-button {
     background: none;
     border: none;
     color: var(--color-text-tertiary);
@@ -220,16 +220,16 @@
     transition: opacity var(--transition-base), color var(--transition-base);
 }
 
-.asset-item:hover .rename-button {
+.asset-modal .asset-item:hover .rename-button {
     opacity: 1;
 }
 
-.asset-info .rename-button:hover {
+.asset-modal .asset-info .rename-button:hover {
     color: var(--color-brand-primary);
 }
 
 /* Rename input */
-.asset-info .rename-input {
+.asset-modal .asset-info .rename-input {
     flex: 1;
     padding: 2px 6px;
     font-size: var(--font-size-xs);
@@ -241,7 +241,7 @@
 }
 
 /* Asset actions row */
-.asset-actions {
+.asset-modal .asset-actions {
     display: flex;
     align-items: center;
     gap: var(--spacing-xs);
@@ -250,7 +250,7 @@
     background: var(--color-surface-subtle);
 }
 
-.asset-actions .set-main-button {
+.asset-modal .asset-actions .set-main-button {
     flex: 1;
     padding: 4px 8px;
     font-size: 11px;
@@ -262,13 +262,13 @@
     transition: all var(--transition-base);
 }
 
-.asset-actions .set-main-button:hover {
+.asset-modal .asset-actions .set-main-button:hover {
     background: var(--color-brand-primary);
     color: white;
     border-color: var(--color-brand-primary);
 }
 
-.asset-actions .main-label {
+.asset-modal .asset-actions .main-label {
     flex: 1;
     font-size: 11px;
     color: var(--color-brand-primary);
@@ -276,7 +276,7 @@
     text-align: center;
 }
 
-.asset-actions .delete-button {
+.asset-modal .asset-actions .delete-button {
     width: 22px;
     height: 22px;
     background: transparent;
@@ -291,7 +291,7 @@
     transition: all var(--transition-base);
 }
 
-.asset-actions .delete-button:hover {
+.asset-modal .asset-actions .delete-button:hover {
     background: var(--color-feedback-error-soft);
     color: var(--color-feedback-error-base);
 }

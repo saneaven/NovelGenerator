@@ -1,15 +1,36 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useAssetStore } from '../../store/assetStore';
 import { useProjectStore } from '../../store/projectStore';
 import { ImageGenerationPanel } from '../ImageGeneration';
 import ImagePromptManager from './ImagePromptManager';
 import { TextButton } from '../TextButton';
+import { IconButton } from '../IconButton';
 import { formatStyledPrompt, type Asset, type StoryObjectAsset } from '../../api/assetService';
 import { API_BASE_URL } from '../../api/client';
-import { Star, Edit } from '../icons';
+import { Star, Edit, Folder, AIAssistMini, Close } from '../icons';
 import './ImageTabContent.css';
 
-type SubTabType = 'library' | 'upload' | 'generate' | 'prompt';
+// Calculate grid span based on image aspect ratio
+function calculateGridSpan(asset: Asset | null, baseRowHeight: number = 10): { rowSpan: number; colSpan: number } {
+    if (!asset?.width || !asset?.height) {
+        return { rowSpan: 15, colSpan: 1 }; // Default square-ish
+    }
+
+    const ratio = asset.width / asset.height;
+    const baseWidth = 150; // Approximate column width in pixels
+
+    // Landscape images span 2 columns
+    const colSpan = ratio > 1.5 ? 2 : 1;
+
+    // Calculate row span based on aspect ratio
+    const effectiveWidth = baseWidth * colSpan;
+    const calculatedHeight = effectiveWidth / ratio;
+    const rowSpan = Math.ceil(calculatedHeight / baseRowHeight);
+
+    return { rowSpan, colSpan };
+}
+
+type SubTabType = 'library' | 'prompt';
 
 export interface RegenerateSettings {
     provider: string;
@@ -55,7 +76,13 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     const [editingName, setEditingName] = useState('');
     const [detailAsset, setDetailAsset] = useState<Asset | null>(null);
     const [regenerateSettings, setRegenerateSettings] = useState<RegenerateSettings | null>(null);
+    const [showImportDropdown, setShowImportDropdown] = useState(false);
+    const [showGeneratePanel, setShowGeneratePanel] = useState(false);
+    const [isDragOver, setIsDragOver] = useState(false);
+    const [activeAssetId, setActiveAssetId] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    const importButtonRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (currentProjectId && objectType && objectId) {
@@ -76,7 +103,8 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         );
     }, [linkedAssets, searchQuery]);
 
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Dropdown file upload handler
+    const handleDropdownFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files || !currentProjectId) return;
 
@@ -85,6 +113,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                 const newAsset = await uploadAsset(currentProjectId, file, file.name);
                 setSuccessModalAsset(newAsset);
                 setAssetName(file.name.replace(/\.[^/.]+$/, ''));
+                setShowImportDropdown(false);
             } catch (err) {
                 // Error handled in store
             }
@@ -94,6 +123,81 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
             fileInputRef.current.value = '';
         }
     };
+
+    // Drag and drop handlers
+    const handleDrop = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOver(false);
+
+        const files = e.dataTransfer.files;
+        if (files.length > 0 && currentProjectId) {
+            const file = files[0];
+            if (file.type.startsWith('image/')) {
+                uploadAsset(currentProjectId, file, file.name).then((newAsset) => {
+                    setSuccessModalAsset(newAsset);
+                    setAssetName(file.name.replace(/\.[^/.]+$/, ''));
+                    setShowImportDropdown(false);
+                });
+            }
+        }
+    }, [currentProjectId, uploadAsset]);
+
+    const handleDragOver = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOver(true);
+    }, []);
+
+    const handleDragLeave = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOver(false);
+    }, []);
+
+    // Close dropdown on click outside
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node) &&
+                importButtonRef.current && !importButtonRef.current.contains(e.target as Node)) {
+                setShowImportDropdown(false);
+            }
+        };
+
+        if (showImportDropdown) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }
+    }, [showImportDropdown]);
+
+    // Close dropdown on Escape key
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setShowImportDropdown(false);
+            }
+        };
+
+        if (showImportDropdown) {
+            document.addEventListener('keydown', handleKeyDown);
+            return () => document.removeEventListener('keydown', handleKeyDown);
+        }
+    }, [showImportDropdown]);
+
+    // Clear active asset when clicking outside the grid (for mobile)
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            if (!target.closest('.asset-grid')) {
+                setActiveAssetId(null);
+            }
+        };
+
+        if (activeAssetId) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }
+    }, [activeAssetId]);
 
     const handleSetMain = async (assetId: string) => {
         if (!currentProjectId) return;
@@ -167,7 +271,8 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
 
         setRegenerateSettings(settings);
         setDetailAsset(null);
-        setActiveSubTab('generate');
+        setShowImportDropdown(false);
+        setShowGeneratePanel(true);
     };
 
     const formatFileSize = (bytes: number | null): string => {
@@ -221,32 +326,73 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
 
     return (
         <div className="image-tab-content">
-            {/* Sub-tabs */}
-            <div className="image-tab-subtabs">
-                <button
-                    className={`subtab-button ${activeSubTab === 'library' ? 'active' : ''}`}
-                    onClick={() => setActiveSubTab('library')}
-                >
-                    Library
-                </button>
-                <button
-                    className={`subtab-button ${activeSubTab === 'upload' ? 'active' : ''}`}
-                    onClick={() => setActiveSubTab('upload')}
-                >
-                    Upload
-                </button>
-                <button
-                    className={`subtab-button ${activeSubTab === 'generate' ? 'active' : ''}`}
-                    onClick={() => setActiveSubTab('generate')}
-                >
-                    Generate
-                </button>
-                <button
-                    className={`subtab-button ${activeSubTab === 'prompt' ? 'active' : ''}`}
-                    onClick={() => setActiveSubTab('prompt')}
-                >
-                    Prompt
-                </button>
+            {/* Tab header with subtabs and import button */}
+            <div className="image-tab-header">
+                <div className="image-tab-subtabs">
+                    <button
+                        className={`subtab-button ${activeSubTab === 'library' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('library')}
+                    >
+                        Library
+                    </button>
+                    <button
+                        className={`subtab-button ${activeSubTab === 'prompt' ? 'active' : ''}`}
+                        onClick={() => setActiveSubTab('prompt')}
+                    >
+                        Prompt
+                    </button>
+                </div>
+                <div className="import-button-wrapper" ref={importButtonRef}>
+                    <TextButton
+                        variant="primary"
+                        size="sm"
+                        onClick={() => setShowImportDropdown(!showImportDropdown)}
+                    >
+                        + Import
+                    </TextButton>
+
+                    {/* Import Dropdown */}
+                    {showImportDropdown && (
+                        <div className="import-dropdown" ref={dropdownRef}>
+                            <div
+                                className={`import-dropzone ${isDragOver ? 'drag-over' : ''}`}
+                                onDrop={handleDrop}
+                                onDragOver={handleDragOver}
+                                onDragLeave={handleDragLeave}
+                                onClick={() => fileInputRef.current?.click()}
+                            >
+                                <div className="dropzone-icon"><Folder size="2xl" /></div>
+                                <div className="dropzone-text">
+                                    <span className="dropzone-primary">Drop image here</span>
+                                    <span className="dropzone-secondary">or click to browse</span>
+                                </div>
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={handleDropdownFileUpload}
+                                    style={{ display: 'none' }}
+                                />
+                            </div>
+
+                            <div className="import-dropdown-divider" />
+
+                            <TextButton
+                                variant="primary"
+                                size="sm"
+                                fullWidth
+                                iconLeft={<AIAssistMini size="md" />}
+                                onClick={() => {
+                                    setShowGeneratePanel(true);
+                                    setShowImportDropdown(false);
+                                }}
+                            >
+                                Generate with AI
+                            </TextButton>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Sub-tab content */}
@@ -273,80 +419,86 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                         )}
 
                         <div className="asset-grid">
-                            {filteredAssets.map((link) => (
-                                <div
-                                    key={link.id}
-                                    className={`asset-item ${link.is_main ? 'main' : ''}`}
-                                    onClick={() => handleAssetClick(link.asset)}
-                                >
-                                    {link.is_main && <span className="main-badge"><Star size="xs" /></span>}
-                                    <div className="asset-thumbnail">
-                                        <img
-                                            src={`${API_BASE_URL}${link.asset.thumbnail_url || link.asset.file_url}`}
-                                            alt={link.asset.name}
-                                            loading="lazy"
-                                        />
-                                    </div>
-                                    <div className="asset-info">
-                                        {editingAssetId === link.asset.id ? (
-                                            <input
-                                                className="rename-input"
-                                                value={editingName}
-                                                onChange={(e) => setEditingName(e.target.value)}
-                                                onBlur={() => handleSaveRename(link.asset.id)}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') handleSaveRename(link.asset.id);
-                                                    if (e.key === 'Escape') setEditingAssetId(null);
-                                                }}
-                                                autoFocus
-                                                onClick={(e) => e.stopPropagation()}
+                            {filteredAssets.map((link) => {
+                                const { rowSpan, colSpan } = calculateGridSpan(link.asset);
+                                return (
+                                    <div
+                                        key={link.id}
+                                        className={`asset-item ${link.is_main ? 'main' : ''} ${activeAssetId === link.id ? 'active' : ''}`}
+                                        style={{
+                                            gridRow: `span ${rowSpan}`,
+                                            gridColumn: `span ${colSpan}`,
+                                        }}
+                                        onClick={() => {
+                                            // On mobile: first tap shows actions, second tap opens detail
+                                            if (activeAssetId === link.id) {
+                                                handleAssetClick(link.asset);
+                                            } else {
+                                                setActiveAssetId(link.id);
+                                            }
+                                        }}
+                                    >
+                                        <div className={`star-button-wrapper ${link.is_main ? 'is-main' : ''}`} onClick={(e) => e.stopPropagation()}>
+                                            <IconButton
+                                                size="xs"
+                                                icon={<Star size="xs" />}
+                                                onClick={() => !link.is_main && handleSetMain(link.asset.id)}
+                                                title={link.is_main ? 'Main Image' : 'Set as Main'}
+                                                isActive={link.is_main}
                                             />
-                                        ) : (
-                                            <>
-                                                <span className="asset-name" title={link.asset.name}>
-                                                    {link.asset.name}
-                                                </span>
-                                                <button
-                                                    className="rename-button"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleStartRename(link.asset);
+                                        </div>
+                                        <div className="asset-thumbnail">
+                                            <img
+                                                src={`${API_BASE_URL}${link.asset.thumbnail_url || link.asset.file_url}`}
+                                                alt={link.asset.name}
+                                                loading="lazy"
+                                            />
+                                        </div>
+                                        <div className="asset-info">
+                                            {editingAssetId === link.asset.id ? (
+                                                <input
+                                                    className="rename-input"
+                                                    value={editingName}
+                                                    onChange={(e) => setEditingName(e.target.value)}
+                                                    onBlur={() => handleSaveRename(link.asset.id)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') handleSaveRename(link.asset.id);
+                                                        if (e.key === 'Escape') setEditingAssetId(null);
                                                     }}
-                                                    title="Rename"
-                                                >
-                                                    <Edit size="xs" />
-                                                </button>
-                                            </>
-                                        )}
+                                                    autoFocus
+                                                    onClick={(e) => e.stopPropagation()}
+                                                />
+                                            ) : (
+                                                <>
+                                                    <span className="asset-name" title={link.asset.name}>
+                                                        {link.asset.name}
+                                                    </span>
+                                                    <button
+                                                        className="rename-button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleStartRename(link.asset);
+                                                        }}
+                                                        title="Rename"
+                                                    >
+                                                        <Edit size="xs" />
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                        <div className="asset-actions">
+                                            <div onClick={(e) => e.stopPropagation()}>
+                                                <IconButton
+                                                    size="xs"
+                                                    icon={<Close size="xs" />}
+                                                    onClick={() => handleUnlink(link)}
+                                                    title="Remove"
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="asset-actions">
-                                        {!link.is_main && (
-                                            <button
-                                                className="set-main-button"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleSetMain(link.asset.id);
-                                                }}
-                                            >
-                                                Set as Main
-                                            </button>
-                                        )}
-                                        {link.is_main && (
-                                            <span className="main-label">Main Image</span>
-                                        )}
-                                        <button
-                                            className="delete-button"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleUnlink(link);
-                                            }}
-                                            title="Remove"
-                                        >
-                                            &times;
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
 
                             {filteredAssets.length === 0 && !isLoading && (
                                 <div className="empty-state">
@@ -356,38 +508,6 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                                 </div>
                             )}
                         </div>
-                    </div>
-                )}
-
-                {activeSubTab === 'upload' && (
-                    <div className="upload-subtab">
-                        <div className="upload-area">
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/*"
-                                multiple
-                                onChange={handleFileUpload}
-                                className="file-input"
-                                id="image-tab-file-input"
-                            />
-                            <label htmlFor="image-tab-file-input" className="upload-label">
-                                <div className="upload-icon">+</div>
-                                <span>Click to upload images</span>
-                                <span className="upload-hint">PNG, JPG, GIF, WebP</span>
-                            </label>
-                        </div>
-                    </div>
-                )}
-
-                {activeSubTab === 'generate' && (
-                    <div className="generate-subtab">
-                        <ImageGenerationPanel
-                            onImageGenerated={handleImageGenerated}
-                            objectType={objectType}
-                            objectId={objectId}
-                            initialSettings={regenerateSettings}
-                        />
                     </div>
                 )}
 
@@ -407,9 +527,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                     <div className="success-modal" onClick={(e) => e.stopPropagation()}>
                         <div className="success-modal-header">
                             <h3>Image Created</h3>
-                            <button className="close-button" onClick={() => setSuccessModalAsset(null)}>
-                                &times;
-                            </button>
+                            <IconButton size="xs" icon={<Close size="sm" />} onClick={() => setSuccessModalAsset(null)} />
                         </div>
                         <div className="success-modal-body">
                             <div className="success-image-preview">
@@ -446,9 +564,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                     <div className="asset-detail-modal" onClick={(e) => e.stopPropagation()}>
                         <div className="asset-detail-header">
                             <h3>Image Details</h3>
-                            <button className="close-button" onClick={() => setDetailAsset(null)}>
-                                &times;
-                            </button>
+                            <IconButton size="xs" icon={<Close size="sm" />} onClick={() => setDetailAsset(null)} />
                         </div>
                         <div className="asset-detail-body">
                             <div className="asset-detail-image">
@@ -550,6 +666,29 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                                 Close
                             </TextButton>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Generate Panel (shown when Generate with AI is clicked) */}
+            {showGeneratePanel && (
+                <div className="generate-panel-overlay" onClick={() => setShowGeneratePanel(false)}>
+                    <div className="generate-panel" onClick={(e) => e.stopPropagation()}>
+                        <IconButton
+                            className="generate-panel-close"
+                            size="xs"
+                            icon={<Close size="sm" />}
+                            onClick={() => {
+                                setShowGeneratePanel(false);
+                                setRegenerateSettings(null);
+                            }}
+                        />
+                        <ImageGenerationPanel
+                            onImageGenerated={handleImageGenerated}
+                            objectType={objectType}
+                            objectId={objectId}
+                            initialSettings={regenerateSettings}
+                        />
                     </div>
                 </div>
             )}

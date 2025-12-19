@@ -1,0 +1,231 @@
+/* ========================================
+   OUTLINE MANAGER STYLES
+   Acts and Chapters structure
+   ======================================== */
+
+.outline-manager {
+    display: flex;
+    flex-direction: column;
+}
+
+.acts-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2xl);
+}
+
+/* ===== Act Card ===== */
+.act-card {
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    transition: all var(--transition-base);
+}
+
+.act-card:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--color-border-medium);
+}
+
+.act-header {
+    background: var(--color-surface-elevated);
+    padding: var(--spacing-xl);
+    padding-bottom: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+    flex-wrap: wrap;
+}
+
+.act-title {
+    flex: 1;
+    min-width: 250px;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+}
+
+.act-card .act-number {
+    display: inline-block;
+    padding: var(--spacing-xs) var(--spacing-md);
+    background: var(--color-surface-subtle);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-radius: var(--border-radius-md);
+    border: 1px solid var(--color-border-default);
+    margin-bottom: var(--spacing-sm);
+}
+
+.act-title h3 {
+    margin: 0;
+    font-size: var(--font-size-2xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    letter-spacing: -0.02em;
+}
+
+.act-actions {
+    display: flex;
+    gap: var(--spacing-xs);
+    flex-wrap: wrap;
+}
+
+.act-content {
+    padding: var(--spacing-xl);
+    padding-top: 0;
+}
+
+.act-description {
+    margin: 0;
+    font-size: var(--font-size-base);
+    line-height: var(--line-height-relaxed);
+    color: var(--color-text-secondary);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* ===== Chapters List ===== */
+.workspace-content .chapters-list {
+    background: var(--color-surface-subtle);
+    padding: var(--spacing-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+/* ===== Chapter Card ===== */
+.chapter-card {
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border-default);
+    border-left: 2px solid var(--color-border-medium);
+    border-radius: var(--border-radius-lg);
+    padding: var(--spacing-lg);
+    transition: all var(--transition-base);
+    box-shadow: var(--shadow-xs);
+}
+
+.chapter-card:hover {
+    box-shadow: var(--shadow-sm);
+    border-color: var(--color-border-medium);
+}
+
+.chapter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--spacing-md);
+    gap: var(--spacing-md);
+    flex-wrap: wrap;
+}
+
+.chapter-title {
+    flex: 1;
+    min-width: 200px;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+}
+
+.chapter-number {
+    display: inline-block;
+    padding-bottom: var(--spacing-xs);
+    color: var(--color-text-tertiary);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--color-border-default);
+    margin-bottom: var(--spacing-xs);
+}
+
+.chapter-title h4 {
+    margin: 0;
+    padding-top: var(--spacing-xs);
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+}
+
+.chapter-actions {
+    display: flex;
+    gap: var(--spacing-xs);
+    flex-wrap: wrap;
+}
+
+.chapter-content {
+    margin-top: var(--spacing-md);
+}
+
+.chapter-description {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    line-height: var(--line-height-relaxed);
+    color: var(--color-text-secondary);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* ===== Act Edit Form ===== */
+.act-card .item-form.edit-form {
+    padding: var(--spacing-lg) var(--spacing-xl);
+}
+
+/* Act title input - larger font */
+.act-card .item-form.edit-form .form-group:first-child input[type="text"] {
+    font-size: var(--font-size-2xl);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: -0.02em;
+}
+
+/* ===== Chapter Form ===== */
+.chapter-form {
+    margin: 0;
+    padding: var(--spacing-md) var(--spacing-lg);
+}
+
+.chapter-form.add-form {
+    margin: 0;
+    padding: var(--spacing-lg);
+    background: var(--color-surface-subtle);
+    border-top: 1px solid var(--color-border-default);
+    border-radius: 0;
+    box-shadow: none;
+    animation: slideDown 0.2s ease;
+}
+
+.chapter-form.add-form h4 {
+    margin: 0 0 var(--spacing-md) 0;
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-secondary);
+}
+
+.chapter-form.edit-form {
+    padding: var(--spacing-md) 0;
+}
+
+/* Chapter title input - medium font */
+.chapter-card .chapter-form.edit-form .form-group:first-child input[type="text"] {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+}
+
+/* Chapter textarea - smaller */
+.chapter-card .chapter-form.edit-form .form-group textarea {
+    min-height: 80px;
+}
+
+/* ===== Responsive Design ===== */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .act-title h3 {
+        font-size: var(--font-size-xl);
+    }
+}

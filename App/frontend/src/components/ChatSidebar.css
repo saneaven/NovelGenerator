@@ -1,0 +1,184 @@
+.chat-sidebar {
+  /* Reset/Base */
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--color-surface-base);
+  border-right: 1px solid var(--color-border-subtle);
+  font-family: var(--font-family-base);
+}
+
+.chat-sidebar .base-sidebar-header {
+  border-bottom: none;
+}
+
+.chat-sidebar-header {
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-base);
+  /* Sticky header if needed, but sidebar structure handles scroll */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  backdrop-filter: blur(10px); /* Subtle glass effect if transparent */
+}
+
+.sidebar-title h3 {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.sidebar-controls button {
+  /* Inherits TextButton styles, but we can override specific tweaks here */
+  font-weight: var(--font-weight-medium);
+}
+
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  
+  /* Custom Scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+}
+
+.chat-list::-webkit-scrollbar {
+  width: 6px;
+}
+.chat-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.chat-list::-webkit-scrollbar-thumb {
+  background-color: var(--color-scrollbar-thumb);
+  border-radius: var(--border-radius-full);
+}
+
+/* Chat Item Card */
+.chat-item {
+  position: relative;
+  display: flex;
+  align-items: flex-start; /* Top align content */
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  border-radius: var(--border-radius-lg);
+  background-color: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  
+  /* Animation */
+  opacity: 0;
+  animation: slideInFade 0.4s cubic-bezier(0.2, 0, 0.2, 1) forwards;
+}
+
+/* Staggered animation delays are handled in JS or via nth-child loops if fixed count, 
+   but JS style prop is better for dynamic lists. For now, simple CSS for first few. */
+.chat-item:nth-child(1) { animation-delay: 0.05s; }
+.chat-item:nth-child(2) { animation-delay: 0.1s; }
+.chat-item:nth-child(3) { animation-delay: 0.15s; }
+.chat-item:nth-child(4) { animation-delay: 0.2s; }
+.chat-item:nth-child(5) { animation-delay: 0.25s; }
+/* ... and so on, or just let them cascade naturally if fast enough */
+
+@keyframes slideInFade {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.chat-item:hover {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border-subtle);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.chat-item.selected {
+  background-color: var(--color-surface-elevated);
+  border-color: var(--color-border-default); /* Monotone selection */
+  box-shadow: var(--shadow-md);
+}
+
+
+/* Icon */
+.chat-item-icon {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+  transition: color var(--transition-base);
+}
+
+.chat-item:hover .chat-item-icon,
+.chat-item.selected .chat-item-icon {
+  color: var(--color-primary-main);
+}
+
+/* Content */
+.chat-item-main {
+  flex: 1;
+  min-width: 0; /* Text truncation fix */
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-preview {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+  
+  /* Multi-line truncation */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.chat-time {
+  font-size: 0.7rem; /* Very small */
+  color: var(--color-text-disabled);
+  margin-top: 4px;
+}
+
+/* Actions */
+.chat-actions {
+  position: absolute;
+  right: var(--spacing-sm);
+  top: var(--spacing-sm);
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+/* Edit Input */
+.chat-name-edit {
+  width: 100%;
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--color-primary-main);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-surface-base);
+  color: var(--color-text-primary);
+  outline: none;
+}

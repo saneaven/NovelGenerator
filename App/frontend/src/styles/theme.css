@@ -361,6 +361,8 @@
     --gradient-modal-content-secondary: linear-gradient(135deg, var(--color-secondary-50) 0%, var(--color-primary-50) 100%);
     --gradient-modal-timeline: linear-gradient(180deg, var(--color-primary-400) 0%, var(--color-neutral-300) 100%);
 
+    --mobile-threadshold: 768px;
+
     /* ===== Breakpoints (for reference in JS) ===== */
     --breakpoint-sm: 640px;
     --breakpoint-md: 768px;

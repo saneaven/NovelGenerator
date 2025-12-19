@@ -17,11 +17,14 @@ export type SelectionMode = 'single' | 'multi';
 /** Selection state for checkboxes */
 export type SelectionState = 'checked' | 'unchecked' | 'indeterminate';
 
-/** Story object types (excludes manuscript/chapter/act structure) */
-export type StoryObjectType = 'basic_info' | 'character' | 'organization' | 'location' | 'lorebook';
+/** Novel structure types (acts and chapters) */
+export type NovelStructureType = 'act' | 'chapter';
 
-/** Outline structure types */
-export type OutlineObjectType = 'act' | 'chapter' | 'manuscript';
+/** Chapter hierarchy types for manuscript mode display */
+export type ChapterHierarchyType = 'outline' | 'manuscript';
+
+/** Story object types (includes novel structure) */
+export type StoryObjectType = 'basic_info' | 'character' | 'organization' | 'location' | 'lorebook' | NovelStructureType;
 
 // ============================================================================
 // DATA STRUCTURES
@@ -163,7 +166,8 @@ export const CATEGORY_CONFIG: Record<string, { label: string; order: number }> =
   organization: { label: 'Organizations', order: 2 },
   location: { label: 'Locations', order: 3 },
   lorebook: { label: 'Lorebook', order: 4 },
-  act: { label: 'Acts', order: 5 },
-  chapter: { label: 'Chapters', order: 6 },
-  manuscript: { label: 'Manuscripts', order: 7 },
+  outline: { label: 'Outline', order: 5 },
+  act: { label: 'Acts', order: 6 },
+  chapter: { label: 'Chapters', order: 7 },
+  manuscript: { label: 'Manuscripts', order: 8 },
 };

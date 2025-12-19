@@ -13,6 +13,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
+import './StoryCards.css';
 import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -28,6 +29,8 @@ import { IconButton } from './IconButton';
 import { TextButton } from './TextButton';
 import { Expand, Collapse, Plus, AIAssist, MoreHorizontal } from './icons';
 import { getSpanType, type SpanType } from '../hooks/useCardSpanType';
+import { useFitText } from '../hooks/useFitText';
+import { useGridColumnCount } from '../hooks/useGridColumnCount';
 import type { UnifiedObject, ObjectType } from '../types/unifiedObject';
 import type { Asset } from '../api/assetService';
 import { API_BASE_URL } from '../api/client';
@@ -78,6 +81,9 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 
   // Grid ref for layout
   const gridRef = useRef<HTMLDivElement>(null);
+
+  // Detect grid column count for responsive span adjustments
+  const columnCount = useGridColumnCount(gridRef);
 
   // Asset store for story object images
   // Note: storyObjectAssets subscription triggers re-render when assets are loaded
@@ -484,7 +490,9 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
                 const { effectiveLanguage } = getEffectiveLanguage(item);
                 const itemData = getDataForLanguage(item, effectiveLanguage);
                 const mainAsset = getMainAsset(category, item.id);
-                const spanType = getSpanType(mainAsset);
+                const baseSpanType = getSpanType(mainAsset);
+                // When only 1 column fits, horizontal cards should not span 2
+                const spanType = (baseSpanType === 'horizontal' && columnCount < 2) ? 'normal' : baseSpanType;
                 const isExpanded = expandedItems.has(item.id);
 
                 return (
@@ -713,6 +721,15 @@ const ItemDisplay = React.memo<ItemDisplayProps>(({
   onOpenFullExpand,
   onAnimationComplete,
 }) => {
+  const isTextOnly = spanType === 'text-only';
+
+  // Dynamic font scaling for text-only cards
+  const { containerRef, textRef, fontSize, isReady } = useFitText({
+    minFontSize: 16,
+    maxFontSize: 48,
+    text: itemData.name,
+  });
+
   return (
     <motion.article
       layoutId={`card-${item.id}`}
@@ -740,15 +757,33 @@ const ItemDisplay = React.memo<ItemDisplayProps>(({
       <div className="story-card__content">
         {/* Header - always visible */}
         <header className="story-card__header">
-          <h4
-            className={`story-card__title ${spanType === 'text-only' ? 'story-card__title--no-toggle' : ''}`}
-            onClick={spanType !== 'text-only' ? onToggleExpand : undefined}
-            role={spanType !== 'text-only' ? 'button' : undefined}
-            tabIndex={spanType !== 'text-only' ? 0 : undefined}
-            onKeyDown={spanType !== 'text-only' ? (e) => e.key === 'Enter' && onToggleExpand() : undefined}
-          >
-            {itemData.name}
-          </h4>
+          {isTextOnly ? (
+            <div
+              ref={containerRef}
+              className="story-card__title-container"
+            >
+              <h4
+                ref={textRef as React.RefObject<HTMLHeadingElement>}
+                className="story-card__title story-card__title--no-toggle story-card__title--fit"
+                style={{
+                  fontSize: isReady ? `${fontSize}px` : undefined,
+                  opacity: isReady ? 1 : 0,
+                }}
+              >
+                {itemData.name}
+              </h4>
+            </div>
+          ) : (
+            <h4
+              className="story-card__title"
+              onClick={onToggleExpand}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && onToggleExpand()}
+            >
+              {itemData.name}
+            </h4>
+          )}
         </header>
 
         {/* Description - always in DOM, CSS controls visibility via max-height */}

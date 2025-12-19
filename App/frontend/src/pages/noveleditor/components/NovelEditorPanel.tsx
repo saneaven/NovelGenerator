@@ -32,6 +32,7 @@ import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import ManuscriptAIEditModal from '../../../components/ManuscriptAIEditModal';
 import TranslationModal from '../../../components/TranslationModal';
+import VersionHistoryModal from '../../../components/VersionHistoryModal';
 import { AssetManagerModal, SceneAssetManagerModal } from '../../../components/AssetManager';
 import SceneImageGeneratorModal from '../../../components/ImageGeneration/SceneImageGeneratorModal';
 import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
@@ -43,7 +44,7 @@ import type { ManuscriptObject } from '../../../types/unifiedObject';
 import type { InitialGenerationSettings } from '../../../components/ImageGeneration/SceneImageGeneratorModal';
 import { API_BASE_URL } from '../../../api/client';
 import ChapterSidebar from './ChapterSidebar';
-import { Save, Check, Bullet, Warning, HamburgerMenu, AIAssist, Refresh, Globe, Lightbulb, MoreHorizontal } from '../../../components/icons';
+import { Save, Check, Bullet, Warning, HamburgerMenu, AIAssist, Refresh, Globe, Lightbulb, MoreHorizontal, Clock } from '../../../components/icons';
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
 
@@ -112,6 +113,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const [showSceneAssetManagerModal, setShowSceneAssetManagerModal] = useState(false);
   const [cursorContext, setCursorContext] = useState<{ before: string; after: string }>({ before: '', after: '' });
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  const [showVersionsModal, setShowVersionsModal] = useState(false);
 
   // Image overlay regeneration state
   const [regenerateAsset, setRegenerateAsset] = useState<Asset | null>(null);
@@ -943,6 +945,13 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                         />
                       )
                     )}
+                    {/* Versions */}
+                    <DropdownItem
+                      icon={<Clock size="sm" />}
+                      label="Versions"
+                      onClick={() => setShowVersionsModal(true)}
+                      disabled={isSaving || !selectedChapter || !manuscriptId}
+                    />
                   </DropdownMenu>
                 </>
               }
@@ -1017,6 +1026,22 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
               : manuscriptLanguages[0] || settings.mainLanguage
           }
           defaultTargetLanguage={globalDisplayLanguage}
+        />
+      )}
+
+      {/* Version History Modal */}
+      {manuscriptId && (
+        <VersionHistoryModal
+          isOpen={showVersionsModal}
+          onClose={() => setShowVersionsModal(false)}
+          objectType="manuscript"
+          objectId={manuscriptId}
+          onRestoreVersion={() => {
+            // Reload manuscript after restore
+            if (manuscriptId) {
+              fetchObject('manuscript', manuscriptId);
+            }
+          }}
         />
       )}
 

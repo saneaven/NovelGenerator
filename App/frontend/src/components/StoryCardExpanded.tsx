@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { useProjectStore } from '../store/projectStore';
 import { DropdownMenu, DropdownItem, DropdownSection } from './ui/DropdownMenu';
-import { AIAssistMini, Scroll, Refresh, Trash, Collapse, MoreHorizontal } from './icons';
+import { AIAssistMini, Scroll, Refresh, Trash, Collapse, MoreHorizontal, Save } from './icons';
 import { IconButton } from './IconButton';
 import { TextButton } from './TextButton';
 import ImageTabContent from './AssetManager/ImageTabContent';
@@ -148,7 +148,6 @@ const StoryCardExpanded: React.FC<StoryCardExpandedProps> = ({
                                     onChange={(e) => setName(e.target.value)}
                                     placeholder="Enter name..."
                                     className="expanded-input expanded-input-name"
-                                    autoFocus
                                 />
                             </div>
 
@@ -166,16 +165,6 @@ const StoryCardExpanded: React.FC<StoryCardExpandedProps> = ({
 
                             {/* Actions row */}
                             <div className="expanded-actions-row">
-                                <TextButton
-                                    variant="primary"
-                                    size="sm"
-                                    onClick={onAIEdit}
-                                    title="AI Edit"
-                                    iconLeft={<AIAssistMini size="sm" />}
-                                >
-                                    AI Edit
-                                </TextButton>
-
                                 <DropdownMenu
                                     trigger={
                                         <IconButton
@@ -209,16 +198,36 @@ const StoryCardExpanded: React.FC<StoryCardExpandedProps> = ({
                                         />
                                     </DropdownSection>
                                 </DropdownMenu>
-                            </div>
 
-                            {/* Metadata */}
-                            <div className="expanded-metadata">
-                                <span className="metadata-item">
-                                    Language: {effectiveLanguage}
-                                </span>
-                                <span className="metadata-item">
-                                    Version: {versionNumber}
-                                </span>
+                                <TextButton
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={onAIEdit}
+                                    title="AI Edit"
+                                    iconLeft={<AIAssistMini size="sm" />}
+                                >
+                                    AI Edit
+                                </TextButton>
+
+                                <div className="expanded-metadata">
+                                    <span className="metadata-item">
+                                        Language: {effectiveLanguage}
+                                    </span>
+                                    <span className="metadata-item">
+                                        Version: {versionNumber}
+                                    </span>
+                                </div>
+
+                                <TextButton
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={handleSave}
+                                    disabled={loading || !name.trim()}
+                                    loading={loading}
+                                    iconLeft={<Save size="sm" />}
+                                >
+                                    Save
+                                </TextButton>
                             </div>
                         </div>
                     )}
@@ -232,24 +241,6 @@ const StoryCardExpanded: React.FC<StoryCardExpandedProps> = ({
                             />
                         </div>
                     )}
-                </div>
-
-                {/* Footer with save/cancel */}
-                <div className="expanded-footer">
-                    <TextButton
-                        variant="secondary"
-                        onClick={handleCancel}
-                    >
-                        Cancel
-                    </TextButton>
-                    <TextButton
-                        variant="primary"
-                        onClick={handleSave}
-                        disabled={loading || !name.trim()}
-                        loading={loading}
-                    >
-                        Save
-                    </TextButton>
                 </div>
             </div>
 

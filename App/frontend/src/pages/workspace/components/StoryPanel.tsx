@@ -1,4 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
+import './StoryPanel.css';
+import '../../../components/ManagerCommon.css';
 import BasicInfoManager from '../../../components/BasicInfoManager';
 import NameDescriptionManager from '../../../components/NameDescriptionManager';
 import OutlineManager from '../../../components/OutlineManager';
