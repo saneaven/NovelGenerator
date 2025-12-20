@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import { useSettingsStore } from '../../../store/settingsStore';
@@ -23,127 +23,85 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
 }) => {
   const store = useUnifiedObjectStore();
   const closeSidebar = useSidebarStore((state) => state.closeSidebar);
-  const mainLanguage = useSettingsStore(state => state.settings.mainLanguage);
+  const mainLanguage = useSettingsStore((state) => state.settings.mainLanguage);
+  
   const handleClose = () => {
     closeSidebar(projectId);
   };
 
-  // Helper to get data for language with fallback (displayLanguage -> mainLanguage -> first available)
-  const getActData = (act: ActObject) => {
-    if (act.data[displayLanguage]) return act.data[displayLanguage];
-    if (act.data[mainLanguage]) return act.data[mainLanguage];
-    const available = Object.keys(act.data);
-    return available.length > 0 ? act.data[available[0]] : { name: '', description: '' };
+  // Helper to get data with fallback
+  const getLocalizedData = <T extends { data: Record<string, any> }>(obj: T, fallback: any) => {
+    if (obj.data[displayLanguage]) return obj.data[displayLanguage];
+    if (obj.data[mainLanguage]) return obj.data[mainLanguage];
+    const available = Object.keys(obj.data);
+    return available.length > 0 ? obj.data[available[0]] : fallback;
   };
 
-  const getChapterData = (chapter: ChapterObject) => {
-    if (chapter.data[displayLanguage]) return chapter.data[displayLanguage];
-    if (chapter.data[mainLanguage]) return chapter.data[mainLanguage];
-    const available = Object.keys(chapter.data);
-    return available.length > 0 ? chapter.data[available[0]] : { name: '', description: '' };
-  };
-
-  const getManuscriptData = (manuscript: ManuscriptObject) => {
-    if (manuscript.data[displayLanguage]) return manuscript.data[displayLanguage];
-    if (manuscript.data[mainLanguage]) return manuscript.data[mainLanguage];
-    const available = Object.keys(manuscript.data);
-    return available.length > 0 ? manuscript.data[available[0]] : { content: '', wordCount: 0 };
-  };
   const [actIds, setActIds] = useState<string[]>([]);
   const [chapterIds, setChapterIds] = useState<string[]>([]);
+  const [collapsedActs, setCollapsedActs] = useState<Set<string>>(new Set());
+  const [expandCount, setExpandCount] = useState<Record<string, number>>({});
 
-  // Load acts and chapters on mount
+  const toggleAct = (actId: string) => {
+    const newCollapsed = new Set(collapsedActs);
+    if (newCollapsed.has(actId)) {
+      // Expanding - increment counter to trigger animation
+      newCollapsed.delete(actId);
+      setExpandCount(prev => ({ ...prev, [actId]: (prev[actId] || 0) + 1 }));
+    } else {
+      newCollapsed.add(actId);
+    }
+    setCollapsedActs(newCollapsed);
+  };
+
+  // Load data
   useEffect(() => {
     const loadOutlineData = async () => {
       if (!projectId) return;
-
       try {
-        // Load all acts for this project
         const acts = await store.listObjects('act', projectId);
-        const sortedActIds = acts
-          .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-          .map(act => act.id);
-        setActIds(sortedActIds);
-
-        // Load all chapters for this project
+        setActIds(acts.sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0)).map(a => a.id));
+        
         const chapters = await store.listObjects('chapter', projectId);
-        const sortedChapterIds = chapters
-          .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-          .map(chapter => chapter.id);
-        setChapterIds(sortedChapterIds);
-
-        // Also load manuscript objects
+        setChapterIds(chapters.sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0)).map(c => c.id));
+        
         await store.listObjects('manuscript', projectId);
       } catch (error) {
         console.error('Failed to load outline data:', error);
       }
     };
-
     loadOutlineData();
-  }, [projectId]);
+  }, [projectId, store]);
 
-  // Get acts and chapters from store
-  const acts = actIds
-    .map(id => store.objects[id] as ActObject)
-    .filter(Boolean);
+  const { acts, chaptersByAct } = useMemo(() => {
+    const loadedActs = actIds.map(id => store.objects[id] as ActObject).filter(Boolean);
+    const loadedChapters = chapterIds.map(id => store.objects[id] as ChapterObject).filter(Boolean);
+    
+    const grouped = loadedActs.reduce((acc, act) => {
+      acc[act.id] = loadedChapters
+        .filter(c => c.metadata.act_id === act.id)
+        .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0));
+      return acc;
+    }, {} as Record<string, ChapterObject[]>);
 
-  const chapters = chapterIds
-    .map(id => store.objects[id] as ChapterObject)
-    .filter(Boolean);
+    return { acts: loadedActs, chaptersByAct: grouped };
+  }, [actIds, chapterIds, store.objects]);
 
-  // Get chapters for a specific act
-  const getChaptersForAct = (actId: string): ChapterObject[] => {
-    return chapters
-      .filter(chapter => chapter.metadata.act_id === actId)
-      .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0));
-  };
-
-  // Get manuscript from unified store
-  const getManuscript = (chapterId: string): ManuscriptObject | null => {
-    return store.getManuscriptByChapterId(chapterId) as ManuscriptObject | null;
-  };
-
-  const sidebarHeader = (
+  const headerContent = (
     <div className="chapter-sidebar-header">
-      <h3>Chapters</h3>
+      <div className="header-title-group">
+        <h3 className="header-title">Timeline</h3>
+        <span className="header-subtitle">Story Outline</span>
+      </div>
       <IconButton
         icon={<Close size="sm" />}
         onClick={handleClose}
         title="Close sidebar"
+        className="close-button"
         size="sm"
       />
     </div>
   );
-
-  if (acts.length === 0) {
-    return (
-      <BaseSidebar
-        id="chapter"
-        projectId={projectId}
-        position="right"
-        className="chapter-sidebar"
-        header={
-          <div className="chapter-sidebar-header">
-            <h3>Chapters</h3>
-            <IconButton
-              icon={<Close size="sm" />}
-              onClick={handleClose}
-              title="Close chapter list"
-              size="sm"
-            />
-          </div>
-        }
-        onClose={handleClose}
-      >
-        <div className="chapter-sidebar-content">
-          <div className="no-chapters-message">
-            <p>No chapters available.</p>
-            <p>Create acts and chapters in the Workspace first.</p>
-          </div>
-        </div>
-      </BaseSidebar>
-    );
-  }
 
   return (
     <BaseSidebar
@@ -151,74 +109,102 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
       projectId={projectId}
       position="right"
       className="chapter-sidebar"
-      header={sidebarHeader}
+      header={headerContent}
       onClose={handleClose}
     >
-      <div className="chapter-sidebar-content">
-        {acts.map((act, actIndex) => {
-          const actChapters = getChaptersForAct(act.id);
-          const actData = getActData(act);
+      <div className="timeline-container">
+        <div className="timeline-line"></div>
+        {acts.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-content">
+              <span className="empty-icon">📝</span>
+              <h4>No Content Yet</h4>
+              <p>Create your first Act and Chapter to get started.</p>
+            </div>
+          </div>
+        ) : (
+          acts.map((act, actIndex) => {
+            const actData = getLocalizedData(act, { name: 'Untitled Act', description: '' });
+            const actChapters = chaptersByAct[act.id] || [];
+            const isCollapsed = collapsedActs.has(act.id);
 
-          return (
-            <div key={act.id} className="act-section">
-              <div className="act-header">
-                <div className="act-info">
-                  <h4 className="act-title">
-                    Act {actIndex + 1}: {actData.name || 'Untitled Act'}
-                  </h4>
-                  {actData.description && (
-                    <p className="act-description">{actData.description}</p>
-                  )}
+            // Calculate global chapter offset (sum of chapters in previous acts)
+            const globalChapterOffset = acts
+              .slice(0, actIndex)
+              .reduce((sum, prevAct) => sum + (chaptersByAct[prevAct.id]?.length || 0), 0);
+
+            return (
+              <div 
+                key={act.id} 
+                className={`act-group ${isCollapsed ? 'is-collapsed' : ''}`}
+                style={{ '--anim-index': actIndex } as React.CSSProperties}
+              >
+                <div 
+                  className="act-header"
+                  onClick={() => toggleAct(act.id)}
+                >
+                  <div className="timeline-node act-node">
+                    <span className="node-inner"></span>
+                  </div>
+                  <div className="act-header-content">
+                    <span className="act-overline">ACT {actIndex + 1}</span>
+                    <div className="act-title-row">
+                      <h4 className="act-title">{actData.name || 'Untitled Act'}</h4>
+                      <div className="act-toggle-icon">
+                        <span className="toggle-chevron"></span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="chapter-group-wrapper">
+                  <div className="chapter-group" key={`${act.id}-${expandCount[act.id] || 0}`}>
+                    {actChapters.length > 0 ? (
+                      actChapters.map((chapter, chapIndex) => {
+                        const chapData = getLocalizedData(chapter, { name: 'Untitled Chapter', description: '' });
+                        const manuscript = store.getManuscriptByChapterId(chapter.id) as ManuscriptObject | null;
+                        const manuData = manuscript ? getLocalizedData(manuscript, { wordCount: 0 }) : { wordCount: 0 };
+                        const isSelected = selectedChapterId === chapter.id;
+
+                        return (
+                          <div
+                            key={chapter.id}
+                            className="chapter-item-container"
+                            style={{ '--chapter-index': chapIndex } as React.CSSProperties}
+                          >
+                            <div className="timeline-node chapter-node"></div>
+                            <button
+                              className={`chapter-card ${isSelected ? 'is-active' : ''}`}
+                              onClick={() => onSelectChapter(chapter.id)}
+                            >
+                              <div className="chapter-card-header">
+                                <span className="chapter-number">Ch.{globalChapterOffset + chapIndex + 1}</span>
+                                <span className="word-count">{manuData.wordCount || 0}w</span>
+                              </div>
+                              <div className="chapter-card-main">
+                                <span className="chapter-name">{chapData.name || 'Untitled'}</span>
+                              </div>
+                              <div className="chapter-card-description-wrapper">
+                                <div className="chapter-card-description">
+                                  {chapData.description || "No description available."}
+                                </div>
+                              </div>
+                            </button>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="chapter-empty-placeholder">
+                        <div className="timeline-node chapter-node empty"></div>
+                        <span className="empty-text">No chapters</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-
-              <div className="chapters-list">
-                {actChapters.length > 0 ? (
-                  actChapters.map((chapter, chapterIndex) => {
-                    const manuscript = getManuscript(chapter.id);
-                    const manuscriptData = manuscript ? getManuscriptData(manuscript) : null;
-                    const wordCount = manuscriptData?.wordCount || 0;
-                    const isSelected = selectedChapterId === chapter.id;
-                    const chapterData = getChapterData(chapter);
-
-                    return (
-                      <div
-                        key={chapter.id}
-                        className={`chapter-item ${isSelected ? 'selected' : ''}`}
-                        onClick={() => onSelectChapter(chapter.id)}
-                      >
-                        <div className="chapter-header">
-                          <div className="chapter-title">
-                            <span className="chapter-number">
-                              Chapter {chapterIndex + 1}
-                            </span>
-                            <span className="chapter-name">
-                              {chapterData.name || 'Untitled Chapter'}
-                            </span>
-                          </div>
-                          <div className="chapter-meta">
-                            <span className="word-count">
-                              {wordCount} words
-                            </span>
-                          </div>
-                        </div>
-                        {chapterData.description && (
-                          <div className="chapter-description">
-                            {chapterData.description}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="no-chapters">
-                    <span className="empty-message">No chapters in this act</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </BaseSidebar>
   );

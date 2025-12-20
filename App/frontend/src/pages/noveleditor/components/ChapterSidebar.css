@@ -1,0 +1,388 @@
+/* ChapterSidebar.css */
+/* All styles scoped to .chapter-sidebar */
+
+/* Container */
+.chapter-sidebar {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--color-surface-base);
+}
+
+.chapter-sidebar .chapter-sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-lg) var(--spacing-xl);
+    border-bottom: 1px solid var(--color-border-subtle);
+    background-color: var(--color-surface-base);
+    z-index: 10;
+}
+
+.chapter-sidebar .header-title-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.chapter-sidebar .header-title {
+    font-family: var(--font-family-heading);
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin: 0;
+    line-height: 1.2;
+}
+
+.chapter-sidebar .header-subtitle {
+    font-family: var(--font-family-base);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    font-weight: var(--font-weight-medium);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 2px;
+}
+
+/* Timeline Container */
+.chapter-sidebar .timeline-container {
+    position: relative;
+    padding: var(--spacing-xl) var(--spacing-xl) var(--spacing-3xl) var(--spacing-md);
+    flex: 1;
+    overflow-y: auto;
+}
+
+/* Vertical Timeline Line */
+.chapter-sidebar .timeline-line {
+    position: absolute;
+    top: 0;
+    bottom: var(--spacing-3xl);
+    left: calc(var(--spacing-md) + 24px - 1px);
+    width: 2px;
+    background-color: var(--color-border-default);
+    z-index: 0;
+}
+
+/* Act Group */
+.chapter-sidebar .act-group {
+    position: relative;
+    margin-bottom: var(--spacing-2xl);
+    z-index: 1;
+    opacity: 0;
+    transform: translateY(20px);
+    animation: chapterSidebarSlideInFade 0.5s ease forwards;
+    animation-delay: calc(var(--anim-index) * 0.1s);
+}
+
+.chapter-sidebar .act-group:last-child {
+    margin-bottom: 0;
+}
+
+@keyframes chapterSidebarSlideInFade {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Act Header (Timeline Node) */
+.chapter-sidebar .act-header {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    padding: var(--spacing-sm) 0;
+    margin-bottom: var(--spacing-md);
+    transition: opacity var(--transition-fast);
+    background: transparent;
+}
+
+.chapter-sidebar .act-header:hover {
+    opacity: 0.8;
+}
+
+.chapter-sidebar .act-node {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background-color: var(--color-surface-base);
+    border: 2px solid var(--color-text-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: var(--spacing-lg);
+    position: relative;
+    z-index: 2;
+    margin-left: 12px;
+}
+
+.chapter-sidebar .act-node .node-inner {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--color-text-primary);
+}
+
+.chapter-sidebar .act-header-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.chapter-sidebar .act-overline {
+    font-size: 10px;
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.chapter-sidebar .act-title-row {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+}
+
+.chapter-sidebar .act-title {
+    font-family: var(--font-family-heading);
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin: 0;
+    min-width: unset;
+}
+
+.chapter-sidebar .act-toggle-icon {
+    color: var(--color-text-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.chapter-sidebar .toggle-chevron {
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(45deg);
+    transition: transform var(--transition-base);
+    margin-top: -4px;
+}
+
+.chapter-sidebar .act-group.is-collapsed .toggle-chevron {
+    transform: rotate(-135deg);
+    margin-top: 2px;
+}
+
+/* Chapter Group Wrapper for Collapse Animation */
+.chapter-sidebar .chapter-group-wrapper {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 0.35s ease-in-out;
+    overflow: hidden;
+}
+
+.chapter-sidebar .act-group.is-collapsed .chapter-group-wrapper {
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.2s ease-in-out;
+}
+
+.chapter-sidebar .chapter-group {
+    min-height: 0;
+}
+
+/* Chapter Items */
+.chapter-sidebar .chapter-item-container {
+    display: flex;
+    position: relative;
+    margin-bottom: var(--spacing-md);
+    align-items: flex-start;
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+/* Opening animation - staggered cascade from top */
+.chapter-sidebar .act-group:not(.is-collapsed) .chapter-item-container {
+    animation: chapterSidebarChapterSlideIn 0.35s ease backwards;
+    animation-delay: calc(var(--chapter-index, 0) * 0.06s);
+}
+
+/* Closing state - all fade out together */
+.chapter-sidebar .act-group.is-collapsed .chapter-item-container {
+    opacity: 0;
+    transform: translateY(-8px);
+    animation: none;
+}
+
+@keyframes chapterSidebarChapterSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.chapter-sidebar .chapter-node {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: var(--color-border-strong);
+    border: 2px solid var(--color-surface-base);
+    margin-left: 18px;
+    margin-right: var(--spacing-lg);
+    margin-top: 24px;
+    position: relative;
+    z-index: 2;
+    flex-shrink: 0;
+    transition: background-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.chapter-sidebar .chapter-item-container:hover .chapter-node {
+    background-color: var(--color-primary-main);
+}
+
+.chapter-sidebar .chapter-card {
+    flex: 1;
+    background-color: var(--color-surface-elevated);
+    border: 1px solid transparent;
+    border-radius: var(--border-radius-lg);
+    padding: var(--spacing-md) var(--spacing-lg);
+    text-align: left;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    position: relative;
+    overflow: hidden;
+    margin-right: var(--spacing-md);
+    box-shadow: var(--shadow-sm);
+}
+
+.chapter-sidebar .chapter-card:hover {
+    background-color: var(--color-surface-base);
+    border-color: var(--color-border-default);
+    box-shadow: var(--shadow-md);
+}
+
+.chapter-sidebar .chapter-card.is-active {
+    background-color: var(--color-surface-base);
+    border-color: var(--color-primary-main);
+    box-shadow: var(--shadow-md);
+}
+
+/* Chapter Card Content */
+.chapter-sidebar .chapter-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-xs);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-tertiary);
+}
+
+.chapter-sidebar .chapter-number {
+    font-weight: var(--font-weight-bold);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.chapter-sidebar .word-count {
+    font-family: var(--font-family-mono);
+    opacity: 0.8;
+}
+
+.chapter-sidebar .chapter-card-main {
+    margin-bottom: var(--spacing-xs);
+}
+
+.chapter-sidebar .chapter-name {
+    font-family: var(--font-family-base);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    line-height: 1.4;
+    display: block;
+}
+
+/* Hover Expand Description */
+.chapter-sidebar .chapter-card-description-wrapper {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--transition-base);
+    opacity: 0.8;
+}
+
+.chapter-sidebar .chapter-card:hover .chapter-card-description-wrapper,
+.chapter-sidebar .chapter-card.is-active .chapter-card-description-wrapper {
+    grid-template-rows: 1fr;
+    margin-top: var(--spacing-sm);
+    padding-top: var(--spacing-xs);
+    border-top: 1px dashed var(--color-border-subtle);
+}
+
+.chapter-sidebar .chapter-card-description {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+}
+
+/* Empty States */
+.chapter-sidebar .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-3xl);
+    text-align: center;
+    color: var(--color-text-muted);
+}
+
+.chapter-sidebar .empty-icon {
+    font-size: var(--font-size-4xl);
+    margin-bottom: var(--spacing-md);
+    opacity: 0.5;
+}
+
+.chapter-sidebar .chapter-empty-placeholder {
+    display: flex;
+    align-items: center;
+    padding: var(--spacing-md);
+    color: var(--color-text-disabled);
+    font-size: var(--font-size-sm);
+    font-style: italic;
+}
+
+.chapter-sidebar .chapter-node.empty {
+    background-color: var(--color-border-subtle);
+    border-color: var(--color-surface-base);
+}
+
+.chapter-sidebar .empty-text {
+    margin-left: var(--spacing-sm);
+}
+
+/* Scrollbar styling */
+.chapter-sidebar .timeline-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chapter-sidebar .timeline-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.chapter-sidebar .timeline-container::-webkit-scrollbar-thumb {
+    background-color: var(--color-border-default);
+    border-radius: var(--border-radius-full);
+}
+
+.chapter-sidebar .timeline-container::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-text-muted);
+}

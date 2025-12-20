@@ -103,7 +103,6 @@
 .search-bar {
     position: sticky;
     top: 0;
-    background: var(--color-surface-base);
     padding-bottom: var(--spacing-sm);
     z-index: 1;
 }

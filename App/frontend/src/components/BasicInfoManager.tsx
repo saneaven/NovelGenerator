@@ -360,7 +360,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
 
       <div className="basic-info-content">
         {/* Title */}
-        <div className="form-group">
+        <div className="form-group area-title">
           <label htmlFor="title">Title</label>
           {isEditing ? (
             <input
@@ -372,14 +372,14 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
               disabled={isSaving}
             />
           ) : (
-            <div className="display-value">
+            <div className="display-value title-text">
               {currentData.title || 'Title not set.'}
             </div>
           )}
         </div>
 
         {/* Genre */}
-        <div className="form-group">
+        <div className="form-group area-genre">
           <label htmlFor="genre">Genre</label>
           {isEditing ? (
             <input
@@ -391,14 +391,14 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
               disabled={isSaving}
             />
           ) : (
-            <div className="display-value">
+            <div className="display-value genre-tag">
               {currentData.genre || 'Genre not set.'}
             </div>
           )}
         </div>
 
         {/* Logline */}
-        <div className="form-group">
+        <div className="form-group area-logline">
           <label htmlFor="logline">Logline</label>
           {isEditing ? (
             <textarea
@@ -417,7 +417,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
         </div>
 
         {/* Metadata */}
-        <div className="metadata">
+        <div className="metadata-footer">
           <span className="item-language">
             {isFallback && <span className="fallback-warning" title={`${globalDisplayLanguage} not available, showing ${effectiveLanguage}`}><Warning size="sm" /> </span>}
             Language: {effectiveLanguage}

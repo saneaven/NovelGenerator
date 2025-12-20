@@ -741,7 +741,7 @@ const ItemDisplay = React.memo<ItemDisplayProps>(({
       animate={{ opacity: isFullExpanded ? 0 : 1 }}
       whileHover={{ y: -4 }}
       transition={{ opacity: { duration: 0.15 } }}
-      onLayoutAnimationComplete={onAnimationComplete}
+      onAnimationComplete={onAnimationComplete}
     >
       {/* Expand button - top right, always visible */}
       <IconButton

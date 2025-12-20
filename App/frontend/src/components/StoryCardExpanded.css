@@ -25,7 +25,6 @@
 /* WITHOUT IMAGE: single column */
 .story-card-expanded.no-image {
     grid-template-columns: 1fr;
-    max-width: 500px;
 }
 
 /* Close button - positioning only (styling from IconButton) */
@@ -166,11 +165,11 @@
     border-radius: var(--border-radius-md);
     background: var(--color-surface-base);
     color: var(--color-text-primary);
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-md);
     font-family: inherit;
     resize: none;
     min-height: 120px;
-    line-height: 1.6;
+    line-height: var(--line-height-relaxed);
     transition: border-color var(--transition-base), box-shadow var(--transition-base);
 }
 

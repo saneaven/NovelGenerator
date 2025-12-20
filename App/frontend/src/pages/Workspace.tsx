@@ -33,7 +33,6 @@ import './workspace/styles/ChatHeader.css';
 import './workspace/styles/ChatMessages.css';
 import './workspace/styles/MessageEdit.css';
 import './workspace/styles/ChatInput.css';
-import './workspace/styles/ChatSidebar.css';
 import './workspace/styles/MessageEditCards.css';
 import '../components/MobileChat.css';
 

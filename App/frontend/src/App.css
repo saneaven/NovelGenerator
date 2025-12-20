@@ -199,25 +199,6 @@
     transition: all var(--transition-base);
 }
 
-.form-actions button[type="submit"] {
-    background: var(--gradient-accent);
-    color: var(--color-text-inverse);
-}
-
-.form-actions button[type="submit"]:hover {
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
-}
-
-.form-actions button[type="button"] {
-    background: var(--color-surface-muted);
-    color: var(--color-text-secondary);
-}
-
-.form-actions button[type="button"]:hover {
-    background: var(--color-surface-hover);
-}
-
 /* ===== Projects Section ===== */
 .projects-section h2 {
     color: var(--color-text);
@@ -481,79 +462,4 @@
     padding: var(--spacing-xl);
     box-sizing: border-box;
     overflow-y: auto;
-}
-
-@media (min-width: 768px) {
-    .story-objects-container {
-        padding: var(--spacing-2xl) var(--spacing-3xl);
-    }
-}
-
-@media (min-width: 1200px) {
-    .story-objects-container {
-        padding: calc(var(--spacing-2xl) * 1.25) var(--spacing-5xl);
-    }
-}
-
-.story-objects-header {
-    background: var(--color-surface-elevated);
-    padding: var(--spacing-2xl);
-    border-radius: var(--border-radius-xl);
-    margin-bottom: var(--spacing-2xl);
-    box-shadow: var(--shadow-md);
-}
-
-.story-objects-tabs {
-    display: flex;
-    gap: var(--spacing-md);
-    margin-top: var(--spacing-2xl);
-    flex-wrap: wrap;
-    justify-content: center;
-}
-
-@media (min-width: 768px) {
-    .story-objects-tabs {
-        justify-content: flex-start;
-    }
-}
-
-.tab-button {
-    background: var(--color-surface-base);
-    border: none;
-    padding: var(--spacing-lg) var(--spacing-xl);
-    border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    transition: all var(--transition-base);
-    box-shadow: var(--shadow-sm);
-    color: var(--color-text-secondary);
-    font-weight: var(--font-weight-medium);
-}
-
-.tab-button:hover {
-    background: var(--color-surface-hover);
-    box-shadow: var(--shadow-md);
-}
-
-.tab-button.active {
-    background: var(--gradient-accent);
-    color: var(--color-text-inverse);
-    box-shadow: var(--shadow-lg);
-}
-
-.tab-icon {
-    font-size: var(--font-size-xl);
-}
-
-.tab-label {
-    font-weight: var(--font-weight-medium);
-}
-
-.story-objects-content {
-    background: var(--color-surface-elevated);
-    border-radius: var(--border-radius-xl);
-    box-shadow: var(--shadow-md);
-    min-height: 400px;
 }

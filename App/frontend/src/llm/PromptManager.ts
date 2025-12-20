@@ -553,8 +553,16 @@ export class PromptManager {
         }),
     } : null;
 
-    // Build manuscripts array
-    const manuscriptList: TemplateData['project']['manuscripts'] = manuscripts.map(ms => {
+    // Build manuscripts array - sorted by chapter order
+    const manuscriptList: TemplateData['project']['manuscripts'] = manuscripts
+      .sort((a, b) => {
+        const chapterA = chapters.find(ch => ch.id === a.metadata?.chapter_id);
+        const chapterB = chapters.find(ch => ch.id === b.metadata?.chapter_id);
+        const orderA = chapterA?.metadata?.order || 0;
+        const orderB = chapterB?.metadata?.order || 0;
+        return orderA - orderB;
+      })
+      .map(ms => {
       const data = this.getObjectDataForLanguage(ms, language);
       const chapterId = ms.metadata?.chapter_id || '';
       const chapter = chapters.find(ch => ch.id === chapterId);

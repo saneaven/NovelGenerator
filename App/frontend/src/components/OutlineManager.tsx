@@ -6,10 +6,10 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
 import AIEditModal from './AIEditModal';
 import TranslationModal from './TranslationModal';
-import { DropdownMenu, DropdownItem, DropdownDivider, DropdownSection } from './ui/DropdownMenu';
+import { DropdownMenu, DropdownItem, DropdownDivider } from './ui/DropdownMenu';
 import { IconButton } from './IconButton';
 import { TextButton } from './TextButton';
-import { Expand, Collapse, Plus, Edit, Trash, Refresh, AIAssist, Books, MoreHorizontal } from './icons';
+import { Expand, Collapse, Plus, Edit, Trash, AIAssist, Books, MoreHorizontal } from './icons';
 import { Warning } from './icons';
 import type { ActObject, ChapterObject } from '../types/unifiedObject';
 
@@ -35,17 +35,37 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
   const [showActRetranslateModal, setShowActRetranslateModal] = useState<string | null>(null);
   const [showChapterRetranslateModal, setShowChapterRetranslateModal] = useState<string | null>(null);
 
-  // Collapse/expand state - empty Set means all collapsed (default)
-  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  // Collapse/expand state - track collapsed items (empty = all expanded)
+  const [collapsedItems, setCollapsedItems] = useState<Set<string>>(new Set());
+  const [expandCount, setExpandCount] = useState<Record<string, number>>({});
+
+  // Chapter expand state - track expanded chapters (empty = all collapsed by default)
+  const [expandedChapters, setExpandedChapters] = useState<Set<string>>(new Set());
 
   // Toggle single item expand/collapse
   const toggleItemExpand = (itemId: string) => {
-    setExpandedItems(prev => {
+    setCollapsedItems(prev => {
       const next = new Set(prev);
       if (next.has(itemId)) {
+        // Expanding - remove from collapsed set and increment counter to trigger animation
         next.delete(itemId);
+        setExpandCount(prevCount => ({ ...prevCount, [itemId]: (prevCount[itemId] || 0) + 1 }));
       } else {
+        // Collapsing - add to collapsed set
         next.add(itemId);
+      }
+      return next;
+    });
+  };
+
+  // Toggle chapter expand/collapse
+  const toggleChapterExpand = (chapterId: string) => {
+    setExpandedChapters(prev => {
+      const next = new Set(prev);
+      if (next.has(chapterId)) {
+        next.delete(chapterId);
+      } else {
+        next.add(chapterId);
       }
       return next;
     });
@@ -109,20 +129,24 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
       .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0));
   };
 
-  // Check if all items are collapsed
-  const allCollapsed = expandedItems.size === 0;
+  // Check if all items are collapsed (all acts are in the collapsed set)
+  const allCollapsed = acts.length > 0 && collapsedItems.size === acts.length;
 
   // Toggle function: expand all if collapsed, otherwise collapse all
   const toggleAllCards = () => {
     if (allCollapsed) {
-      const allIds = new Set<string>();
+      // Expand all - clear collapsed set
+      setCollapsedItems(new Set());
+      // Trigger animation for all
+      const newExpandCount: Record<string, number> = {};
       acts.forEach(act => {
-        allIds.add(act.id);
-        getChaptersForAct(act.id).forEach(chapter => allIds.add(chapter.id));
+        newExpandCount[act.id] = (expandCount[act.id] || 0) + 1;
       });
-      setExpandedItems(allIds);
+      setExpandCount(prev => ({ ...prev, ...newExpandCount }));
     } else {
-      setExpandedItems(new Set());
+      // Collapse all - add all act IDs to collapsed set
+      const allActIds = new Set<string>(acts.map(act => act.id));
+      setCollapsedItems(allActIds);
     }
   };
 
@@ -372,6 +396,7 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
 
   return (
     <div className="outline-manager">
+    <div className="timeline-container">
       <div className="section-header">
         <h2>Story Outline</h2>
         <div className="header-buttons">
@@ -381,16 +406,17 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
             onClick={toggleAllCards}
             title={allCollapsed ? "Expand All" : "Collapse All"}
             iconLeft={allCollapsed ? <Collapse size="xs" /> : <Expand size="xs" />}
-            className="desktop-only"
+            className="desktop-only action-button"
           >
             {allCollapsed ? "Expand" : "Collapse"}
           </TextButton>
           <TextButton
-            variant="secondary"
+            variant="primary"
             size="sm"
             onClick={() => setShowAddActForm(true)}
             disabled={showAddActForm}
-            className="desktop-only"
+            iconLeft={<Plus size="xs" />}
+            className="desktop-only action-button"
           >
             Add Act
           </TextButton>
@@ -421,232 +447,221 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
       </div>
 
       {showAddActForm && (
-        <AddActForm
-          onAdd={handleAddAct}
-          onCancel={() => setShowAddActForm(false)}
-        />
+        <div className="timeline-creation-panel">
+          <AddActForm
+            onAdd={handleAddAct}
+            onCancel={() => setShowAddActForm(false)}
+          />
+        </div>
       )}
 
-      <div className="acts-list">
+      <div className="timeline-track">
         {acts.length === 0 ? (
-          <div className="empty-state">
-            <p>No acts have been created yet.</p>
-            <p>Add a new act to build your story structure!</p>
+          <div className="empty-timeline-state">
+            <div className="empty-icon"><Books size="lg" /></div>
+            <h3>Start Your Story</h3>
+            <p>Create the first act to begin outlining your masterpiece.</p>
+            <TextButton 
+              variant="primary" 
+              onClick={() => setShowAddActForm(true)}
+              disabled={showAddActForm}
+            >
+              Create First Act
+            </TextButton>
           </div>
         ) : (
           acts.map((act, actIndex) => {
             const actChapters = getChaptersForAct(act.id);
             const { effectiveLanguage: actEffectiveLang, isFallback: actIsFallback } = getActEffectiveLanguage(act);
             const actData = getActData(act, actEffectiveLang);
+            const isExpanded = !collapsedItems.has(act.id);
+
+            // Calculate global chapter offset (sum of chapters in previous acts)
+            const globalChapterOffset = acts
+              .slice(0, actIndex)
+              .reduce((sum, prevAct) => sum + getChaptersForAct(prevAct.id).length, 0);
 
             return (
-              <div key={act.id} className="act-card">
-                <div className="act-header">
-                  <div className="act-title">
-                    <IconButton
-                      icon={expandedItems.has(act.id) ? <Collapse size="xs" /> : <Expand size="xs" />}
-                      onClick={() => toggleItemExpand(act.id)}
-                      title={expandedItems.has(act.id) ? 'Collapse' : 'Expand'}
-                      size="xs"
-                      className="collapse-toggle"
-                    />
-                    <span className="act-number">Act {actIndex + 1}</span>
-                    <h3 onClick={() => toggleItemExpand(act.id)} className="item-name-clickable">{actData.name}</h3>
-                    {actIsFallback && <span className="fallback-warning" title={`${globalDisplayLanguage} not available`}><Warning size="sm" /></span>}
+              <div key={act.id} className={`timeline-act-group ${isExpanded ? 'is-expanded' : 'is-collapsed'}`}>
+                
+                {/* Act Node */}
+                <div className="timeline-act-node">
+                  <div className="node-marker">
+                    <span className="act-index">{actIndex + 1}</span>
                   </div>
-                  <div className="card-actions">
-                    <TextButton
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setEditingAct(act.id)}
-                      disabled={!!store.loading[act.id]}
-                      className="desktop-only"
-                    >
-                      Edit
-                    </TextButton>
-                    <TextButton
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setShowAddChapterForm(act.id)}
-                      disabled={showAddChapterForm === act.id}
-                      className="desktop-only"
-                    >
-                      + Chapter
-                    </TextButton>
-                    <DropdownMenu
-                      trigger={
-                        <IconButton
-                          icon={<MoreHorizontal size="sm" />}
-                          disabled={!!store.loading[act.id]}
-                          title="More actions"
-                          size="sm"
-                        />
-                      }
-                    >
-                      <DropdownSection>
-                        <DropdownItem
-                          icon={<Edit size="sm" />}
-                          label="Edit"
-                          onClick={() => setEditingAct(act.id)}
-                          disabled={!!store.loading[act.id]}
-                          className="mobile-only"
-                        />
-                        <DropdownItem
-                          icon={<Plus size="sm" />}
-                          label="Add Chapter"
-                          onClick={() => setShowAddChapterForm(act.id)}
-                          disabled={showAddChapterForm === act.id}
-                          className="mobile-only"
-                        />
-                        <DropdownDivider className="mobile-only" />
-                        {settings.settings.defaultSubLanguage &&
-                          Object.keys(act.data).includes(settings.settings.defaultSubLanguage) && (
-                            <DropdownItem
-                              icon={<Refresh size="sm" />}
-                              label="Retranslate"
-                              onClick={() => setShowActRetranslateModal(act.id)}
-                              disabled={!!store.loading[act.id]}
-                            />
-                        )}
-                        <DropdownItem
-                          icon={<Books size="sm" />}
-                          label="History"
-                          onClick={() => setShowActVersionHistory(act.id)}
-                          disabled={!!store.loading[act.id]}
-                        />
-                      </DropdownSection>
-                      <DropdownSection>
-                        <DropdownItem
-                          icon={<Trash size="sm" />}
-                          label="Delete"
-                          onClick={() => handleDeleteAct(act.id)}
-                          variant="danger"
-                          disabled={!!store.loading[act.id]}
-                        />
-                      </DropdownSection>
-                    </DropdownMenu>
-                  </div>
-                </div>
-
-                {editingAct === act.id ? (
-                  <EditActForm
-                    actData={actData}
-                    onUpdate={(name, description) => handleUpdateAct(act.id, name, description)}
-                    onCancel={() => setEditingAct(null)}
-                    onAIEdit={() => setShowActAIModal(act.id)}
-                  />
-                ) : expandedItems.has(act.id) && (
-                  <div className="act-content">
-                    <p className="act-description">
-                      {actData.description || 'No description.'}
-                    </p>
-                  </div>
-                )}
-
-                {expandedItems.has(act.id) && showAddChapterForm === act.id && (
-                  <AddChapterForm
-                    actId={act.id}
-                    onAdd={handleAddChapter}
-                    onCancel={() => setShowAddChapterForm(null)}
-                  />
-                )}
-
-                {expandedItems.has(act.id) && <div className="chapters-list">
-                  {actChapters.map((chapter, chapterIndex) => {
-                    const { effectiveLanguage: chapterEffectiveLang, isFallback: chapterIsFallback } = getChapterEffectiveLanguage(chapter);
-                    const chapterData = getChapterData(chapter, chapterEffectiveLang);
-                    return (
-                    <div key={chapter.id} className="chapter-card">
-                      <div className="chapter-header">
-                        <div className="chapter-title">
-                          <IconButton
-                            icon={expandedItems.has(chapter.id) ? <Collapse size="xs" /> : <Expand size="xs" />}
-                            onClick={() => toggleItemExpand(chapter.id)}
-                            title={expandedItems.has(chapter.id) ? 'Collapse' : 'Expand'}
-                            size="xs"
-                            className="collapse-toggle"
-                          />
-                          <span className="chapter-number">
-                            Chapter {chapterIndex + 1}
-                          </span>
-                          <h4 onClick={() => toggleItemExpand(chapter.id)} className="item-name-clickable">{chapterData.name}</h4>
-                          {chapterIsFallback && <span className="fallback-warning" title={`${globalDisplayLanguage} not available`}><Warning size="sm" /></span>}
+                  
+                  <div className="node-content act-content-wrapper">
+                    <div className="content-card act-card">
+                      <div className="card-header">
+                        <div className="card-title-section" onClick={() => toggleItemExpand(act.id)}>
+                          <div className="title-row">
+                            <h3>{actData.name}</h3>
+                            {actIsFallback && <span className="fallback-badge" title="Translation missing"><Warning size="xs" /></span>}
+                          </div>
+                          <span className="card-meta">{actChapters.length} Chapters</span>
                         </div>
+                        
                         <div className="card-actions">
-                          <TextButton
-                            variant="secondary"
+                          <IconButton
+                            icon={isExpanded ? <Collapse size="sm" /> : <Expand size="sm" />}
+                            onClick={() => toggleItemExpand(act.id)}
                             size="sm"
-                            onClick={() => setEditingChapter(chapter.id)}
-                            disabled={!!store.loading[chapter.id]}
-                            className="desktop-only"
-                          >
-                            Edit
-                          </TextButton>
-                          <DropdownMenu
-                            trigger={
-                              <IconButton
-                                icon={<MoreHorizontal size="sm" />}
-                                disabled={!!store.loading[chapter.id]}
-                                title="More actions"
-                                size="sm"
-                              />
-                            }
-                          >
-                            <DropdownSection>
-                              <DropdownItem
-                                icon={<Edit size="sm" />}
-                                label="Edit"
-                                onClick={() => setEditingChapter(chapter.id)}
-                                disabled={!!store.loading[chapter.id]}
-                                className="mobile-only"
-                              />
-                              {settings.settings.defaultSubLanguage &&
-                                Object.keys(chapter.data).includes(settings.settings.defaultSubLanguage) && (
-                                  <DropdownItem
-                                    icon={<Refresh size="sm" />}
-                                    label="Retranslate"
-                                    onClick={() => setShowChapterRetranslateModal(chapter.id)}
-                                    disabled={!!store.loading[chapter.id]}
-                                  />
-                              )}
-                              <DropdownItem
-                                icon={<Books size="sm" />}
-                                label="History"
-                                onClick={() => setShowChapterVersionHistory(chapter.id)}
-                                disabled={!!store.loading[chapter.id]}
-                              />
-                            </DropdownSection>
-                            <DropdownSection>
-                              <DropdownItem
-                                icon={<Trash size="sm" />}
-                                label="Delete"
-                                onClick={() => handleDeleteChapter(chapter.id)}
-                                variant="danger"
-                                disabled={!!store.loading[chapter.id]}
-                              />
-                            </DropdownSection>
-                          </DropdownMenu>
+                          />
                         </div>
                       </div>
 
-                      {editingChapter === chapter.id ? (
-                        <EditChapterForm
-                          chapterData={chapterData}
-                          onUpdate={(name, description) => handleUpdateChapter(chapter.id, name, description)}
-                          onCancel={() => setEditingChapter(null)}
-                          onAIEdit={() => setShowChapterAIModal(chapter.id)}
-                        />
-                      ) : expandedItems.has(chapter.id) && (
-                        <div className="chapter-content">
-                          <p className="chapter-description">
-                            {chapterData.description || 'No description.'}
-                          </p>
+                      {editingAct === act.id ? (
+                        <div className="card-edit-mode">
+                          <EditActForm
+                            actData={actData}
+                            onUpdate={(name, description) => handleUpdateAct(act.id, name, description)}
+                            onCancel={() => setEditingAct(null)}
+                            onAIEdit={() => setShowActAIModal(act.id)}
+                          />
+                        </div>
+                      ) : (
+                        <div className={`card-body-wrapper ${isExpanded ? 'is-expanded' : ''}`}>
+                          <div className="card-body-content">
+                            <p>{actData.description || <span className="placeholder-text">No description provided.</span>}</p>
+                            <div className="card-footer-actions">
+                              <DropdownMenu
+                                trigger={
+                                  <TextButton size="sm" variant="ghost" iconLeft={<MoreHorizontal size="xs" />}>
+                                    More
+                                  </TextButton>
+                                }
+                              >
+                                <DropdownItem icon={<Books size="sm" />} label="History" onClick={() => setShowActVersionHistory(act.id)} />
+                                <DropdownDivider />
+                                <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => handleDeleteAct(act.id)} variant="danger" />
+                              </DropdownMenu>
+                              <TextButton
+                                size="sm"
+                                variant="secondary"
+                                iconLeft={<Edit size="xs"/>}
+                                onClick={() => setEditingAct(act.id)}
+                              >
+                                Edit
+                              </TextButton>
+                              <TextButton
+                                size="sm"
+                                variant="primary"
+                                iconLeft={<Plus size="xs"/>}
+                                onClick={() => setShowAddChapterForm(act.id)}
+                              >
+                                Add Chapter
+                              </TextButton>
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>
-                    );
-                  })}
-                </div>}
+                  </div>
+                </div>
+
+                {/* Chapter Stream with height animation */}
+                <div className="chapter-stream-wrapper">
+                  <div className="timeline-chapter-stream" key={`${act.id}-${expandCount[act.id] || 0}`}>
+                    <div className="stream-line"></div>
+
+                    {/* Add Chapter Form Inline */}
+                    {showAddChapterForm === act.id && (
+                       <div className="timeline-chapter-node creation-node">
+                          <div className="chapter-marker creation-marker"><Plus size="xs"/></div>
+                          <div className="chapter-content-wrapper">
+                            <AddChapterForm
+                              actId={act.id}
+                              onAdd={handleAddChapter}
+                              onCancel={() => setShowAddChapterForm(null)}
+                            />
+                          </div>
+                       </div>
+                    )}
+
+                    {actChapters.map((chapter, chapterIndex) => {
+                      const { effectiveLanguage: chLang, isFallback: chFallback } = getChapterEffectiveLanguage(chapter);
+                      const chData = getChapterData(chapter, chLang);
+
+                      return (
+                        <div
+                          key={chapter.id}
+                          className="timeline-chapter-node"
+                          style={{ '--chapter-index': chapterIndex } as React.CSSProperties}
+                        >
+                          <div className="chapter-marker"></div>
+                          <div className="chapter-content-wrapper">
+                            <div className={`content-card chapter-card ${editingChapter === chapter.id ? 'is-editing' : ''}`}>
+                              {editingChapter === chapter.id ? (
+                                <EditChapterForm
+                                  chapterData={chData}
+                                  onUpdate={(name, description) => handleUpdateChapter(chapter.id, name, description)}
+                                  onCancel={() => setEditingChapter(null)}
+                                  onAIEdit={() => setShowChapterAIModal(chapter.id)}
+                                />
+                              ) : (
+                                (() => {
+                                  const isChapterExpanded = expandedChapters.has(chapter.id);
+                                  return (
+                                    <>
+                                      <div className="chapter-header">
+                                        <div className="chapter-info" onClick={() => toggleChapterExpand(chapter.id)}>
+                                          <span className="chapter-index">CH {globalChapterOffset + chapterIndex + 1}</span>
+                                          <h4>{chData.name}</h4>
+                                          {chFallback && <Warning size="xs" className="warning-icon" />}
+                                        </div>
+                                        <div className="chapter-actions">
+                                          <IconButton
+                                            icon={isChapterExpanded ? <Collapse size="xs" /> : <Expand size="xs" />}
+                                            size="xs"
+                                            onClick={() => toggleChapterExpand(chapter.id)}
+                                          />
+                                        </div>
+                                      </div>
+                                      <div className={`chapter-expand-wrapper ${isChapterExpanded ? 'is-expanded' : ''}`}>
+                                        <div className="chapter-expand-content">
+                                          {chData.description && (
+                                            <p className="chapter-description">{chData.description}</p>
+                                          )}
+                                          <div className="chapter-footer-actions">
+                                            <DropdownMenu
+                                              trigger={
+                                                <TextButton size="sm" variant="ghost" iconLeft={<MoreHorizontal size="xs" />}>
+                                                  More
+                                                </TextButton>
+                                              }
+                                            >
+                                              <DropdownItem icon={<Books size="sm" />} label="History" onClick={() => setShowChapterVersionHistory(chapter.id)} />
+                                              <DropdownDivider />
+                                              <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => handleDeleteChapter(chapter.id)} variant="danger" />
+                                            </DropdownMenu>
+                                            <TextButton
+                                              size="sm"
+                                              variant="secondary"
+                                              iconLeft={<Edit size="xs" />}
+                                              onClick={() => setEditingChapter(chapter.id)}
+                                            >
+                                              Edit
+                                            </TextButton>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </>
+                                  );
+                                })()
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {actChapters.length === 0 && !showAddChapterForm && (
+                      <div className="empty-chapter-hint">
+                        <span onClick={() => setShowAddChapterForm(act.id)}>+ Add first chapter</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             );
           })
@@ -726,6 +741,7 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
           defaultTargetLanguage={globalDisplayLanguage}
         />
       )}
+    </div>
     </div>
   );
 };

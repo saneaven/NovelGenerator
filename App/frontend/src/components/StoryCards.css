@@ -6,7 +6,7 @@
 .story-cards-grid {
     margin: var(--spacing-3xl);
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(20dvh, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(25dvh, 1fr));
     grid-auto-rows: 30dvh;
     grid-auto-flow: dense;
     gap: var(--spacing-2xl);
@@ -251,7 +251,6 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    padding: var(--spacing-lg);
 }
 
 .story-card[data-span="text-only"] .story-card__content {

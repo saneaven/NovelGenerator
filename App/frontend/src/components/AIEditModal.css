@@ -499,19 +499,6 @@
   border-top: 2px solid var(--color-border-default);
 }
 
-.form-actions button {
-  padding: var(--spacing-md) var(--spacing-2xl);
-  border-radius: var(--border-radius-md);
-  font-size: var(--font-size-md);
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border: 2px solid;
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
 .cancel-button {
   padding: var(--spacing-md) var(--spacing-2xl);
   background: var(--color-surface-muted);
@@ -685,11 +672,6 @@
 
   .form-actions {
     flex-direction: column-reverse;
-  }
-
-  .form-actions button {
-    width: 100%;
-    justify-content: center;
   }
 
   .ai-edit-modal .modal-header {

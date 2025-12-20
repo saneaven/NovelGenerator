@@ -452,15 +452,15 @@
 
     /* Neutral Scale - Inverted for dark */
     --color-neutral-00: oklch(0.050 0.001 55.0);
-    --color-neutral-50: oklch(0.100 0.002 55.0);
-    --color-neutral-100: oklch(0.180 0.004 55.0);
-    --color-neutral-200: oklch(0.260 0.005 55.0);
-    --color-neutral-300: oklch(0.340 0.007 55.0);
-    --color-neutral-400: oklch(0.420 0.009 55.0);
-    --color-neutral-500: oklch(0.500 0.011 55.0);
-    --color-neutral-600: oklch(0.580 0.015 55.0);
-    --color-neutral-700: oklch(0.660 0.017 55.0);
-    --color-neutral-800: oklch(0.740 0.019 55.0);
+    --color-neutral-50: oklch(0.100 0.001 55.0);
+    --color-neutral-100: oklch(0.180 0.002 55.0);
+    --color-neutral-200: oklch(0.260 0.003 55.0);
+    --color-neutral-300: oklch(0.340 0.005 55.0);
+    --color-neutral-400: oklch(0.420 0.006 55.0);
+    --color-neutral-500: oklch(0.500 0.008 55.0);
+    --color-neutral-600: oklch(0.580 0.010 55.0);
+    --color-neutral-700: oklch(0.660 0.012 55.0);
+    --color-neutral-800: oklch(0.740 0.015 55.0);
     --color-neutral-900: oklch(0.820 0.013 55.0);
     --color-neutral-950: oklch(0.900 0.004 55.0);
     --color-neutral-1000: oklch(0.950 0.001 55.0);
