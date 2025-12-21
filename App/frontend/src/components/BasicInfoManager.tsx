@@ -1,5 +1,5 @@
 /**
- * BasicInfoManager - Using Global Language Toggle
+ * BasicInfoManager - Modern Image Card Design
  *
  * Uses global display language from parent (StoryPanel) instead of per-object switching.
  * Shows warning icon when displaying in fallback language.
@@ -19,7 +19,7 @@ import { UnifiedImageModal } from './AssetManager';
 import { DropdownMenu, DropdownItem } from './ui/DropdownMenu';
 import { IconButton } from './IconButton';
 import { TextButton } from './TextButton';
-import { Edit, Refresh, Books, AIAssist, Warning, MoreHorizontal, Image } from './icons';
+import { Edit, Refresh, Books, AIAssist, Warning, MoreHorizontal, Image, Save, Close } from './icons';
 import type { BasicInfoObject, BasicInfoData } from '../types/unifiedObject';
 
 interface BasicInfoManagerProps {
@@ -40,8 +40,6 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   const { showError } = useErrorStore();
 
   // Get basic info from unified store
-  // In real implementation, you'd need to get the basic info ID first
-  // For now, assuming there's one basic info per project
   const [basicInfoId, setBasicInfoId] = useState<string | null>(null);
   const basicInfo = basicInfoId ? (objects[basicInfoId] as BasicInfoObject) : null;
   const loading = basicInfoId ? (loadingMap[basicInfoId] || false) : false;
@@ -69,7 +67,6 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
     if (!basicInfo) return { title: '', logline: '', genre: '' };
     const data = basicInfo.data[lang];
     if (data) return data as BasicInfoData;
-    // Fallback to first available language
     const availableLanguages = Object.keys(basicInfo.data);
     if (availableLanguages.length > 0) {
       return basicInfo.data[availableLanguages[0]] as BasicInfoData;
@@ -86,14 +83,11 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
     if (available.includes(globalDisplayLanguage)) {
       return { effectiveLanguage: globalDisplayLanguage, isFallback: false };
     }
-    // Fallback to any available language
     return { effectiveLanguage: available[0] || globalDisplayLanguage, isFallback: true };
   }, [basicInfo, globalDisplayLanguage]);
 
-  // Get current data for effective language
   const currentData = useMemo(() => getDataForLanguage(effectiveLanguage), [getDataForLanguage, effectiveLanguage]);
 
-  // Fetch basic info ID on mount (you'll need to implement this based on your API)
   const initializeBasicInfo = useCallback(async () => {
     if (!projectId) {
       setBasicInfoId(null);
@@ -136,23 +130,17 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
     initializeBasicInfo();
   }, [initializeBasicInfo]);
 
-  // Fetch basic info when ID is available
   useEffect(() => {
     if (basicInfoId) {
       fetchObject('basic_info', basicInfoId);
     }
   }, [basicInfoId, fetchObject]);
 
-  // Sync edit form when basic info loads or language changes
   useEffect(() => {
     if (currentData) {
       setEditFormData(currentData);
     }
   }, [currentData]);
-
-  // ============================================================================
-  // HANDLERS
-  // ============================================================================
 
   const handleSave = async () => {
     if (!basicInfo || !basicInfoId) return;
@@ -213,7 +201,6 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
 
   const handleRestoreVersion = async (versionId: string) => {
     if (!basicInfo || !basicInfoId) return;
-
     try {
       await restoreVersion('basic_info', basicInfoId, versionId);
     } catch (err) {
@@ -222,70 +209,14 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
     }
   };
 
-  // Get cover image URL from metadata
   const coverImageUrl = basicInfo?.metadata?.cover_image_url;
 
-  // ============================================================================
-  // RENDER
-  // ============================================================================
-
-  if (!projectId) {
-    return (
-      <div className="error-container">
-        <p>Project ID not found.</p>
-      </div>
-    );
-  }
-
-  if (loading && !basicInfo) {
-    return (
-      <div className="basic-info-manager loading">
-        <div className="spinner" />
-        <p>Loading basic information...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="error-container">
-        <h3>Error Loading Basic Info</h3>
-        <p>{error}</p>
-        <button onClick={() => basicInfoId && fetchObject('basic_info', basicInfoId)}>
-          Retry
-        </button>
-      </div>
-    );
-  }
-
-  if (initializationError && !basicInfo) {
-    return (
-      <div className="error-container">
-        <h3>Unable to load basic info</h3>
-        <p>{initializationError}</p>
-        <button onClick={initializeBasicInfo} disabled={initializing}>
-          Retry
-        </button>
-      </div>
-    );
-  }
-
-  if (initializing && !basicInfo) {
-    return (
-      <div className="basic-info-manager loading">
-        <div className="spinner" />
-        <p>Loading basic information...</p>
-      </div>
-    );
-  }
-
-  if (!basicInfo) {
-    return (
-      <div className="error-container">
-        <p>Basic information not found for this project.</p>
-      </div>
-    );
-  }
+  if (!projectId) return <div className="error-container">Project ID not found.</div>;
+  if (loading && !basicInfo) return <div className="basic-info-skeleton"><div className="spinner" /></div>;
+  if (error) return <div className="error-container"><p>{error}</p><button onClick={() => basicInfoId && fetchObject('basic_info', basicInfoId)}>Retry</button></div>;
+  if (initializationError && !basicInfo) return <div className="error-container"><p>{initializationError}</p><button onClick={initializeBasicInfo} disabled={initializing}>Retry</button></div>;
+  if (initializing && !basicInfo) return <div className="basic-info-skeleton"><div className="spinner" /></div>;
+  if (!basicInfo) return <div className="error-container">Basic information not found.</div>;
 
   return (
     <div className="basic-info-manager">
@@ -313,6 +244,12 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
                 disabled={loading}
                 className="mobile-only"
               />
+              <DropdownItem 
+                icon={<AIAssist size="sm" />} 
+                label="AI Enhance" 
+                onClick={() => setShowAIModal(true)} 
+                disabled={loading}
+              />
               {settings.defaultSubLanguage &&
                 Object.keys(basicInfo.data).includes(settings.defaultSubLanguage) && (
                   <DropdownItem
@@ -331,144 +268,126 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
             </DropdownMenu>
           </div>
         ) : (
-          <div className="form-actions-split">
-            <TextButton
-              variant="primary"
-              size="sm"
-              onClick={() => setShowAIModal(true)}
-              disabled={isSaving}
-              iconLeft={<AIAssist size="sm" />}
-            >
-              AI Edit
-            </TextButton>
-            <div className="form-actions-right">
-              <TextButton
-                variant="secondary"
-                size="sm"
-                onClick={handleCancel}
-                disabled={isSaving}
-              >
-                Cancel
-              </TextButton>
-              <TextButton
-                variant="primary"
-                size="sm"
-                onClick={handleSave}
-                disabled={isSaving}
-                loading={isSaving}
-              >
-                Save
-              </TextButton>
+            <div className="form-actions-split" style={{ width: 'auto', margin: 0, padding: 0, border: 'none' }}>
+               {/* Actions are now mainly handled in the card footer, but we can keep some here or leave empty */}
             </div>
-          </div>
         )}
       </div>
-
-      <div className="basic-info-content">
-        {/* Cover Image */}
-        <div className="cover-image-section">
+      
+      <div className="basic-info-layout">
+      <div className={`basic-info-card ${isEditing ? 'is-editing' : ''}`}>
+        
+        {/* Left Column: Cover Image */}
+        <div className="basic-info-media">
           {coverImageUrl ? (
-            <div className="cover-image-preview">
-              <img src={`${API_BASE_URL}${coverImageUrl}`} alt="Cover" />
-              <div className="cover-image-overlay">
+            <div className="media-preview">
+              <img src={`${API_BASE_URL}${coverImageUrl}`} alt="Book Cover" className="book-cover-img" />
+              <button className="media-edit-overlay" onClick={() => setShowAssetPicker(true)}>
+                <Image size="md" />
+                <span>Change Cover</span>
+              </button>
+            </div>
+          ) : (
+            <div className="media-placeholder" onClick={() => setShowAssetPicker(true)}>
+              <Image size="xl" />
+              <span>Set Cover Image</span>
+            </div>
+          )}
+        </div>
+
+        {/* Right Column: Content */}
+        <div className="basic-info-details">
+          
+          {/* Header Section: Title & Genre */}
+          <header className="details-header">
+              <div className="meta-badge-group">
+                {isEditing ? (
+                  <input
+                    type="text"
+                    className="genre-input"
+                    value={editFormData.genre}
+                    onChange={(e) => handleChange('genre', e.target.value)}
+                    placeholder="Genre"
+                  />
+                ) : (
+                  <span className="genre-badge">{currentData.genre || 'Uncategorized'}</span>
+                )}
+                {isFallback && (
+                  <span className="language-badge warning" title={`Showing ${effectiveLanguage}`}>
+                    <Warning size="xs" /> {effectiveLanguage}
+                  </span>
+                )}
+              </div>
+
+            {isEditing ? (
+              <input
+                type="text"
+                className="title-input"
+                value={editFormData.title}
+                onChange={(e) => handleChange('title', e.target.value)}
+                placeholder="Book Title"
+                autoFocus
+              />
+            ) : (
+              <h1 className="title-display">{currentData.title || 'Untitled Story'}</h1>
+            )}
+          </header>
+
+          {/* Body Section: Logline */}
+          <div className="details-body">
+            <label className="section-label">Logline</label>
+            {isEditing ? (
+              <textarea
+                className="logline-input"
+                value={editFormData.logline}
+                onChange={(e) => handleChange('logline', e.target.value)}
+                placeholder="What is your story about?"
+                rows={5}
+              />
+            ) : (
+              <p className="logline-display">
+                {currentData.logline || <span className="placeholder-text">No logline provided. Click edit to add a description of your story.</span>}
+              </p>
+            )}
+          </div>
+
+          {/* Footer Section: Actions (Edit Mode) or Meta (View Mode) */}
+          <footer className="details-footer">
+            {isEditing ? (
+              <div className="edit-actions">
                 <TextButton
+                  onClick={handleCancel}
                   variant="secondary"
                   size="sm"
-                  onClick={() => setShowAssetPicker(true)}
+                  disabled={isSaving}
+                  iconLeft={<Close size="sm" />}
                 >
-                  Manage
+                  Cancel
+                </TextButton>
+                <TextButton
+                  onClick={handleSave}
+                  variant="primary"
+                  size="sm"
+                  loading={isSaving}
+                  disabled={isSaving}
+                  iconLeft={<Save size="sm" />}
+                >
+                  Save Changes
                 </TextButton>
               </div>
-            </div>
-          ) : (
-            <div
-              className="cover-image-placeholder"
-              onClick={() => setShowAssetPicker(true)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && setShowAssetPicker(true)}
-            >
-              <Image size="lg" />
-              <span>Add Cover Image</span>
-            </div>
-          )}
-        </div>
-
-        {/* Title */}
-        <div className="form-group area-title">
-          <label htmlFor="title">Title</label>
-          {isEditing ? (
-            <input
-              id="title"
-              type="text"
-              value={editFormData.title}
-              onChange={(e) => handleChange('title', e.target.value)}
-              placeholder="Enter the title of the novel"
-              disabled={isSaving}
-            />
-          ) : (
-            <div className="display-value title-text">
-              {currentData.title || 'Title not set.'}
-            </div>
-          )}
-        </div>
-
-        {/* Genre */}
-        <div className="form-group area-genre">
-          <label htmlFor="genre">Genre</label>
-          {isEditing ? (
-            <input
-              id="genre"
-              type="text"
-              value={editFormData.genre}
-              onChange={(e) => handleChange('genre', e.target.value)}
-              placeholder="Enter the genre (e.g., Fantasy, Romance, Sci-Fi)"
-              disabled={isSaving}
-            />
-          ) : (
-            <div className="display-value genre-tag">
-              {currentData.genre || 'Genre not set.'}
-            </div>
-          )}
-        </div>
-
-        {/* Logline */}
-        <div className="form-group area-logline">
-          <label htmlFor="logline">Logline</label>
-          {isEditing ? (
-            <textarea
-              id="logline"
-              value={editFormData.logline}
-              onChange={(e) => handleChange('logline', e.target.value)}
-              placeholder="Summarize the core content of the novel in one or two sentences"
-              rows={4}
-              disabled={isSaving}
-            />
-          ) : (
-            <div className="display-value multiline">
-              {currentData.logline || 'Logline not set.'}
-            </div>
-          )}
-        </div>
-
-        {/* Metadata */}
-        <div className="metadata-footer">
-          <span className="item-language">
-            {isFallback && <span className="fallback-warning" title={`${globalDisplayLanguage} not available, showing ${effectiveLanguage}`}><Warning size="sm" /> </span>}
-            Language: {effectiveLanguage}
-          </span>
-          <span className="version-info">
-            Version: {basicInfo.version.number}
-          </span>
-          {basicInfo.metadata.updated_at && (
-            <span className="last-updated">
-              Last updated: {new Date(basicInfo.metadata.updated_at).toLocaleString()}
-            </span>
-          )}
+            ) : (
+              <div className="meta-info">
+                 <span>v{basicInfo.version.number}</span>
+                 <span className="separator">•</span>
+                 <span>Last updated {new Date(basicInfo.metadata.updated_at || Date.now()).toLocaleDateString()}</span>
+              </div>
+            )}
+          </footer>
         </div>
       </div>
+      </div>
 
-      {/* AI Edit Modal */}
+      {/* Modals */}
       <AIEditModal
         isOpen={showAIModal}
         onClose={() => setShowAIModal(false)}
@@ -478,7 +397,6 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
         onResult={handleAIResult}
       />
 
-      {/* Version History Modal */}
       {basicInfoId && (
         <VersionHistoryModal
           isOpen={showVersionHistory}
@@ -489,7 +407,6 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
         />
       )}
 
-      {/* Translation Modal */}
       {basicInfo && basicInfoId && projectId && (
         <TranslationModal
           isOpen={showRetranslateModal}
@@ -503,7 +420,6 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
         />
       )}
 
-      {/* Asset Manager Modal for Cover Image */}
       {basicInfoId && (
         <UnifiedImageModal
           preset="objectManager"
@@ -512,7 +428,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
           objectType="basic_info"
           objectId={basicInfoId}
           onAssetChange={() => fetchObject('basic_info', basicInfoId)}
-          title="Manage Cover Images"
+          title="Manage Cover Image"
         />
       )}
     </div>

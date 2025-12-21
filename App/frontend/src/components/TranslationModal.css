@@ -372,12 +372,12 @@
   }
 
   .translation-modal .modal-actions {
-    flex-direction: column-reverse;
+    flex-direction: row;
     gap: var(--spacing-sm);
   }
 
   .translation-modal .modal-actions button {
-    width: 100%;
+    flex: 1;
     justify-content: center;
     padding: var(--spacing-md) var(--spacing-lg);
   }

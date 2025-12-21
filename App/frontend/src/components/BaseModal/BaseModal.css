@@ -190,11 +190,12 @@
 
   .base-modal-footer {
     padding: var(--spacing-md) var(--spacing-lg);
-    flex-direction: column-reverse;
+    flex-direction: row;
+    gap: var(--spacing-sm);
   }
 
   .base-modal-footer > * {
-    width: 100%;
+    flex: 1;
   }
 }
 

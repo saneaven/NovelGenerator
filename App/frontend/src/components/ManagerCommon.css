@@ -612,11 +612,12 @@ button:disabled {
     }
 
     .form-actions {
-        flex-direction: column-reverse;
+        flex-direction: row;
+        gap: var(--spacing-sm);
     }
 
     .form-actions>* {
-        width: 100%;
+        flex: 1;
     }
 
     .form-actions-split {

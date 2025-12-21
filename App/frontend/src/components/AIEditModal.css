@@ -671,7 +671,12 @@
   }
 
   .form-actions {
-    flex-direction: column-reverse;
+    flex-direction: row;
+    gap: var(--spacing-sm);
+  }
+
+  .form-actions > * {
+    flex: 1;
   }
 
   .ai-edit-modal .modal-header {
