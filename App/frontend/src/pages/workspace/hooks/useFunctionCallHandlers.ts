@@ -327,6 +327,7 @@ export function useFunctionCallHandlers(projectId: string | undefined) {
                   appliedAt: new Date(),
                 });
               } else {
+                console.error('Function call failed:', card.functionCall.functionName, result.error || result.message);
                 updateFunctionCallStatus(projectId, chatId, messageId, card.id, true, result, result.error, result.error || result.message, false);
 
                 store.applyResult(messageId, card.id, result, 'Apply Failed', result.error || result.message);

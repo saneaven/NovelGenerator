@@ -14,7 +14,7 @@ import { DefaultDisplayProcessor } from '../../../chat/processors/DisplayProcess
 import type { StoryObjects } from '../../../types/storyObject';
 import type { ChatMessage, FunctionCallProgress } from '../../../llm/requestTypes';
 import ThinkingDisplay from '../../../components/ThinkingDisplay';
-import GroupedFunctionCallCard from '../../../components/functionCall/GroupedFunctionCallCard';
+import { FunctionCallCard } from '../../../components/functionCall';
 import { TextButton } from '../../../components/TextButton';
 import { IconButton } from '../../../components/IconButton';
 import { collapseContentParts } from '../../../chat/utils/contentParts';
@@ -566,7 +566,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                         {renderMessageContent(message, processingResult)}
                                         {activeFunctionCalls[message.chatMessage.id] && activeFunctionCalls[message.chatMessage.id].length > 0 && (
                                             <div className="message-edit-cards">
-                                                <GroupedFunctionCallCard
+                                                <FunctionCallCard
                                                     mode="streaming"
                                                     streamingProgress={activeFunctionCalls[message.chatMessage.id]}
                                                     storyObjects={storyObjects}
@@ -576,10 +576,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
                                         {messageEditCards[message.chatMessage.id] && messageEditCards[message.chatMessage.id].length > 0 && (
                                             <div className="message-edit-cards">
-                                                <GroupedFunctionCallCard
+                                                <FunctionCallCard
                                                     mode={isMessageConfirmed(message.chatMessage.id) ? 'confirmed' : 'pending'}
                                                     cards={messageEditCards[message.chatMessage.id]}
-                                                    onConfirm={(selections) => onBatchConfirm(message.chatMessage.id, selections)}
+                                                    onConfirm={(selections: Record<string, boolean>) => onBatchConfirm(message.chatMessage.id, selections)}
                                                     storyObjects={storyObjects}
                                                     isApplyDisabled={hasUnsavedChanges}
                                                     applyDisabledReason={hasUnsavedChanges ? "Save your changes first - unsaved work will be overwritten" : undefined}

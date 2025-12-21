@@ -246,7 +246,7 @@ export const WORKSPACE_FUNCTIONS: FunctionCallSchema[] = [
     parameters: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'ID of the chapter' },
+        id: { type: 'string', description: 'ID of the manuscript' },
         actId: { type: 'string', description: 'New parent act ID' },
         name: { type: 'string', description: 'New chapter name' },
         description: { type: 'string', description: 'New chapter description' },
@@ -314,7 +314,7 @@ export const WORKSPACE_FUNCTIONS: FunctionCallSchema[] = [
     parameters: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'ID of the chapter' },
+        id: { type: 'string', description: 'ID of the manuscript' },
         replacements: {
           type: 'array',
           items: replacementWithFieldSchema,
@@ -331,14 +331,14 @@ export const WORKSPACE_FUNCTIONS: FunctionCallSchema[] = [
     parameters: {
       type: 'object',
       properties: {
-        chapterId: { type: 'string', description: 'ID of the chapter' },
+        id: { type: 'string', description: 'ID of the manuscript' },
         replacements: {
           type: 'array',
           items: manuscriptReplacementSchema,
           description: 'List of replacements to apply',
         },
       },
-      required: ['chapterId', 'replacements'],
+      required: ['id', 'replacements'],
     },
   },
 ];
@@ -374,14 +374,14 @@ export const NOVEL_EDITOR_FUNCTIONS: FunctionCallSchema[] = [
     parameters: {
       type: 'object',
       properties: {
-        chapterId: { type: 'string', description: 'ID of the chapter' },
+        id: { type: 'string', description: 'ID of the manuscript' },
         replacements: {
           type: 'array',
           items: manuscriptReplacementSchema,
           description: 'List of replacements to apply',
         },
       },
-      required: ['chapterId', 'replacements'],
+      required: ['id', 'replacements'],
     },
   },
 ];

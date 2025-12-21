@@ -271,20 +271,10 @@ export async function patchManuscript(
     return error('Missing required fields for patch_manuscript');
   }
 
-  const { store, projectId, language } = context;
+  const { store, language } = context;
 
-  // Get manuscript by ID
-  let manuscript = store.getObject(id) ?? null;
-
-  // If not found by ID, might be from legacy chapterId reference
-  if (!manuscript) {
-    const manuscripts = await store.listObjects('manuscript', projectId);
-    manuscript = manuscripts.find((m: UnifiedObject) => m.metadata?.chapter_id === id) ?? null;
-  }
-
-  if (!manuscript) {
-    return error(`No manuscript found with id ${id}`);
-  }
+  // Ensure manuscript is in cache (fetch from API if needed)
+  const manuscript = await ensureObject(store, 'manuscript', id);
 
   const currentData = getObjectData(manuscript, language);
   const currentContent = (currentData.content as string) ?? '';

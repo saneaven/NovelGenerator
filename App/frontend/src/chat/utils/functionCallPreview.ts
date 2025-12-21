@@ -1,6 +1,7 @@
 import type {
   FunctionCallOperationFieldPreview,
   FunctionCallOperationPreview,
+  FunctionCallReplacementPreview,
 } from '../../llm/requestTypes';
 import { isIdField } from './objectNameResolver';
 
@@ -58,6 +59,12 @@ export const buildPreviewFromOperation = (
 
   const summary = data?.description ?? '';
 
+  // Extract replacements for PATCH operations
+  const replacements = extractReplacements(operation);
+
+  // Extract target language for translation operations
+  const targetLanguage = operation?.targetLanguage || operation?.language;
+
   return {
     key: keySource,
     action: operation?.action,
@@ -70,7 +77,37 @@ export const buildPreviewFromOperation = (
     chapters,
     missingFields,
     rawSnippet: stringifySafe(operation),
+    replacements,
+    targetLanguage,
   };
+};
+
+/**
+ * Extract replacements array from PATCH operation arguments
+ */
+export const extractReplacements = (
+  operation: any
+): FunctionCallReplacementPreview[] | undefined => {
+  const replacements = operation?.replacements;
+  if (!Array.isArray(replacements) || replacements.length === 0) {
+    return undefined;
+  }
+
+  return replacements
+    .filter((r: any) => r && typeof r.old === 'string' && typeof r.new === 'string')
+    .map((r: any) => ({
+      field: r.field,
+      old: truncateText(r.old, 100),
+      new: truncateText(r.new, 100),
+    }));
+};
+
+/**
+ * Truncate text with ellipsis for preview display
+ */
+const truncateText = (text: string, maxLength: number): string => {
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength) + '...';
 };
 
 export const resolveOperationData = (operation: any): Record<string, any> | undefined => {

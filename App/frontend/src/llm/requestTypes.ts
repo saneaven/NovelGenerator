@@ -69,6 +69,12 @@ export interface FunctionCallOperationChapterPreview {
   description?: string;
 }
 
+export interface FunctionCallReplacementPreview {
+  field?: string;
+  old: string;
+  new: string;
+}
+
 export interface FunctionCallOperationPreview {
   key: string;
   action?: string;
@@ -81,6 +87,12 @@ export interface FunctionCallOperationPreview {
   chapters?: FunctionCallOperationChapterPreview[];
   missingFields?: string[];
   rawSnippet?: string;
+  /** For PATCH operations - array of search/replace pairs */
+  replacements?: FunctionCallReplacementPreview[];
+  /** For translation operations - target language code */
+  targetLanguage?: string;
+  /** Indices of failed replacements (for retry context display) */
+  failedReplacementIndices?: number[];
 }
 
 export interface FunctionCallProgress {
