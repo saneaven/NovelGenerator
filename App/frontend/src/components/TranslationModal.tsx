@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { BaseModal } from './BaseModal';
 import './TranslationModal.css';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
@@ -53,7 +54,8 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const hasInitializedSelectionRef = useRef(false);
-  const store = useUnifiedObjectStore();
+  // Use selector to only subscribe to objects, preventing re-renders from unrelated store changes
+  const objects = useUnifiedObjectStore(useShallow(state => state.objects));
   const settings = useSettingsStore((state) => state.settings);
 
   // Build available languages list
@@ -70,7 +72,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     if (!targetLanguage) return [];
 
     const ids: string[] = [];
-    const allObjects = Object.values(store.objects) as UnifiedObject<any>[];
+    const allObjects = Object.values(objects) as UnifiedObject<any>[];
 
     allObjects.forEach(obj => {
       if (obj.metadata?.project_id !== projectId) return;
@@ -84,7 +86,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     });
 
     return ids;
-  }, [store.objects, projectId, targetLanguage]);
+  }, [objects, projectId, targetLanguage]);
 
   const hasAnyContext = contextObjectIds.length > 0;
 
@@ -96,7 +98,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     const byType: Record<string, any[]> = {};
 
     selectedContextIds.forEach(id => {
-      const obj = store.objects[id];
+      const obj = objects[id];
       if (!obj || !obj.data[targetLanguage]) return;
 
       const data = obj.data[targetLanguage];
@@ -123,7 +125,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       const acts = (byType.act || []).map((act: any) => ({
         ...act,
         chapters: (byType.chapter || []).filter((ch: any) => {
-          const chObj = store.objects[ch.id];
+          const chObj = objects[ch.id];
           return chObj?.metadata?.act_id === act.id;
         }),
       }));
@@ -137,8 +139,10 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
 
   // Initialize languages from settings - detect which direction has objects to translate
   useEffect(() => {
-    if (isOpen && !sourceLanguage && settings.subLanguages && settings.subLanguages.length > 0) {
-      const allObjects = Object.values(store.objects) as UnifiedObject<any>[];
+    // Guard: only run when modal opens and languages not yet set
+    // Also require mainLanguage to be non-empty to avoid infinite loop
+    if (isOpen && !sourceLanguage && settings.mainLanguage && settings.subLanguages && settings.subLanguages.length > 0) {
+      const allObjects = Object.values(objects) as UnifiedObject<any>[];
 
       // Find the sub language that has the most objects needing translation
       let bestTargetLanguage = settings.subLanguages[0];
@@ -162,14 +166,14 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       setSourceLanguage(settings.mainLanguage);
       setTargetLanguage(bestTargetLanguage);
     }
-  }, [isOpen, settings.mainLanguage, settings.subLanguages, sourceLanguage, store.objects, projectId]);
+  }, [isOpen, settings.mainLanguage, settings.subLanguages, sourceLanguage, objects, projectId]);
 
   // Get all available objects that need translation (before selection filter)
   const availableObjects = useMemo(() => {
     if (!targetLanguage || !sourceLanguage) return [];
 
-    const objects: (StoryObjectToTranslate & { label: string; order?: number })[] = [];
-    const allObjects = Object.values(store.objects) as UnifiedObject<any>[];
+    const result: (StoryObjectToTranslate & { label: string; order?: number })[] = [];
+    const allObjects = Object.values(objects) as UnifiedObject<any>[];
 
     // When preSelectedObjectIds is provided, use those objects regardless of translation status
     const preSelectedSet = preSelectedObjectIds ? new Set(preSelectedObjectIds) : null;
@@ -199,7 +203,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       // For manuscripts, show chapter name instead of manuscript ID and derive order from chapter/act
       let order = obj.metadata.order;
       if (objType === 'manuscript' && obj.metadata?.chapter_id) {
-        const chapter = store.objects[obj.metadata.chapter_id as string];
+        const chapter = objects[obj.metadata.chapter_id as string];
         if (chapter) {
           const chapterData = chapter.data[sourceLanguage] || chapter.data[Object.keys(chapter.data)[0]];
           if (chapterData?.name) {
@@ -207,13 +211,13 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
           }
           // Derive order from parent chapter and act for proper hierarchical sorting
           const chapterOrder = chapter.metadata?.order ?? 0;
-          const act = chapter.metadata?.act_id ? store.objects[chapter.metadata.act_id as string] : null;
+          const act = chapter.metadata?.act_id ? objects[chapter.metadata.act_id as string] : null;
           const actOrder = act?.metadata?.order ?? 0;
           order = actOrder * 1000 + chapterOrder;
         }
       }
 
-      objects.push({
+      result.push({
         objectType: objType as ObjectType,
         objectId: obj.id,
         sourceData,
@@ -224,44 +228,41 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     });
 
     // Sort by order for acts and chapters (objects without order will be at the end)
-    return objects.sort((a, b) => {
+    return result.sort((a, b) => {
       const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
       const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
       return orderA - orderB;
     });
-  }, [store.objects, projectId, targetLanguage, sourceLanguage, allowedObjectTypes, preSelectedObjectIds]);
+  }, [objects, projectId, targetLanguage, sourceLanguage, allowedObjectTypes, preSelectedObjectIds]);
 
   // Get IDs of objects that need translation
   const availableObjectIds = useMemo(() => {
     return availableObjects.map(obj => obj.objectId);
   }, [availableObjects]);
 
-  // Initialize selectedIds when modal opens (select all by default, or use preSelectedObjectIds)
+  // Manage selectedIds: initialize on open, sync when objects change
   useEffect(() => {
-    if (!isOpen) return; // Don't initialize when closed
+    if (!isOpen) return;
 
     if (preSelectedObjectIds && preSelectedObjectIds.length > 0) {
-      // When preSelectedObjectIds is provided, use those directly
       setSelectedIds(new Set(preSelectedObjectIds));
       hasInitializedSelectionRef.current = true;
-    } else if (availableObjectIds.length > 0 && !hasInitializedSelectionRef.current) {
-      // Only auto-select all on initial load, not when user manually deselects
+      return;
+    }
+
+    if (!hasInitializedSelectionRef.current && availableObjectIds.length > 0) {
+      // First time: select all
       setSelectedIds(new Set(availableObjectIds));
       hasInitializedSelectionRef.current = true;
+    } else if (hasInitializedSelectionRef.current) {
+      // Already initialized: just filter out stale IDs
+      const availableSet = new Set(availableObjectIds);
+      setSelectedIds(prev => {
+        const filtered = new Set([...prev].filter(id => availableSet.has(id)));
+        return filtered.size === prev.size ? prev : filtered;
+      });
     }
   }, [isOpen, availableObjectIds, preSelectedObjectIds]);
-
-  // Sync selectedIds with availableObjects - remove stale selections
-  useEffect(() => {
-    const availableIds = new Set(availableObjects.map(obj => obj.objectId));
-    setSelectedIds(prev => {
-      const filtered = new Set([...prev].filter(id => availableIds.has(id)));
-      if (filtered.size !== prev.size) {
-        return filtered;
-      }
-      return prev;
-    });
-  }, [availableObjects]);
 
   // Get objects to translate based on selection
   const objectsToTranslate = useMemo((): StoryObjectToTranslate[] => {

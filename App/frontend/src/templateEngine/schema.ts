@@ -173,13 +173,21 @@ export const UNIFIED_SCHEMA = {
     scenePreContext: { desc: "Scene pre-context (for scene mode)", example: "The hero enters the dark cave..." },
     scenePostContext: { desc: "Scene post-context (for scene mode)", example: "He finds the treasure chest." },
     selectedObjectIds: { desc: "IDs of selected reference objects", example: ["char-1", "loc-1"] as string[] },
+    coverImage: {
+      desc: "Cover image context (title, logline, genre)",
+      example: {
+        title: "The Last Kingdom",
+        logline: "A warrior's journey to reclaim his homeland",
+        genre: "Fantasy"
+      } as { title: string; logline: string; genre: string }
+    },
   },
 } as const;
 
 /**
  * Prompt types
  */
-export type PromptType = 'chat' | 'editAssistant' | 'translation' | 'objectImagePrompt' | 'sceneImagePrompt';
+export type PromptType = 'chat' | 'editAssistant' | 'translation' | 'objectImagePrompt' | 'sceneImagePrompt' | 'coverImagePrompt';
 
 /**
  * Maps which variable groups are available for each prompt type.
@@ -190,6 +198,7 @@ export const PROMPT_TYPE_VARIABLES: Record<PromptType, string[]> = {
   translation: ['config', 'project', 'input', 'translation'],
   objectImagePrompt: ['config', 'project', 'input', 'imagePrompt'],
   sceneImagePrompt: ['config', 'project', 'input', 'imagePrompt'],
+  coverImagePrompt: ['config', 'project', 'input', 'imagePrompt'],
 };
 
 // Type extraction helpers

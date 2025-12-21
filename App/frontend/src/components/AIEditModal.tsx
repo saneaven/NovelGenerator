@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { BaseModal } from './BaseModal';
 import { useSettingsStore } from '../store/settingsStore';
+import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import type { ObjectType } from '../types/unifiedObject';
 import type { FunctionCallMetadata } from '../llm/requestTypes';
 import type { PatchRetryContext } from '../types/patchTypes';
-import { applyEditFunctionCalls } from '../chat/utils/editFunctionApplicator';
+import { UnifiedApplicator, type StoreActions, type ApplicationResult } from '../functionCall';
 import { parseJsonOutput, extractRawContent } from '../utils/nativeOutputParser';
 import { LLMTask, LLMTaskMode, LLMTaskManager, type EditAssistantStoryObjectPromptContext, type TaskHandle } from '../llm';
 import { shouldRetry, buildRetryPrompt, summarizePatchFailures } from '../llm/patchRetryHandler';
@@ -12,6 +13,41 @@ import { Expand, Collapse } from './icons';
 import { ObjectPicker } from './ObjectPicker';
 import { TextButton } from './TextButton';
 import './AIEditModal.css';
+
+/**
+ * Helper to apply edit function calls using UnifiedApplicator
+ */
+async function applyEditFunctionCalls(
+  projectId: string,
+  functionCalls: FunctionCallMetadata[],
+  language: string
+): Promise<ApplicationResult[]> {
+  const store = useUnifiedObjectStore.getState();
+
+  const storeActions: StoreActions = {
+    getObject: (id) => store.getObject(id),
+    fetchObject: (type, id) => store.fetchObject(type, id),
+    listObjects: (type, projectId) => store.listObjects(type, projectId),
+    createObject: (type, projectId, data, language, metadata, userRequest) =>
+      store.createObject(type, projectId, data, language, metadata, userRequest),
+    updateObject: (type, id, request) => store.updateObject(type, id, request),
+    deleteObject: (type, id) => store.deleteObject(type, id),
+  };
+
+  const applicator = new UnifiedApplicator({ store: storeActions });
+  const results: ApplicationResult[] = [];
+
+  for (const fc of functionCalls) {
+    const args = typeof fc.arguments === 'string' ? JSON.parse(fc.arguments) : fc.arguments;
+    const result = await applicator.apply(
+      { id: fc.id, function_name: fc.function_name, arguments: args },
+      { projectId, language, mode: 'editAssistant' }
+    );
+    results.push(result);
+  }
+
+  return results;
+}
 
 interface AIEditModalProps {
   isOpen: boolean;
@@ -107,7 +143,8 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       }
 
       try {
-        const results = await applyEditFunctionCalls(projectId, functionCalls);
+        const mainLanguage = useSettingsStore.getState().settings.mainLanguage;
+        const results = await applyEditFunctionCalls(projectId, functionCalls, mainLanguage);
 
         // Collect all retry contexts from results
         const allRetryContexts: PatchRetryContext[] = [];
@@ -167,7 +204,8 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
           isApplied: false,
         }));
 
-        const results = await applyEditFunctionCalls(projectId, functionCalls);
+        const mainLanguage = useSettingsStore.getState().settings.mainLanguage;
+        const results = await applyEditFunctionCalls(projectId, functionCalls, mainLanguage);
         const failedResults = results.filter(r => !r.success);
 
         if (failedResults.length > 0) {

@@ -281,6 +281,31 @@
     transform: scale(1.1);
 }
 
+/* Project Cover Image */
+.project-cover-image {
+    width: calc(100% + 2 * var(--spacing-xl));
+    margin: calc(-1 * var(--spacing-xl));
+    margin-bottom: var(--spacing-lg);
+    height: 140px;
+    overflow: hidden;
+    border-radius: var(--border-radius-xl) var(--border-radius-xl) 0 0;
+}
+
+.project-cover-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Adjust card layout when cover image is present */
+.project-card:has(.project-cover-image) {
+    padding-top: 0;
+}
+
+.project-card:has(.project-cover-image) .project-info {
+    padding-top: var(--spacing-md);
+}
+
 /* ===== Project Menu Styles ===== */
 .project-menu-container {
     width: 100%;

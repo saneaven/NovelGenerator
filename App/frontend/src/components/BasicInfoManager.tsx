@@ -11,13 +11,15 @@ import './BasicInfoManager.css';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
+import { API_BASE_URL } from '../api/client';
 import AIEditModal from './AIEditModal';
 import VersionHistoryModal from './VersionHistoryModal';
 import TranslationModal from './TranslationModal';
+import { UnifiedImageModal } from './AssetManager';
 import { DropdownMenu, DropdownItem } from './ui/DropdownMenu';
 import { IconButton } from './IconButton';
 import { TextButton } from './TextButton';
-import { Edit, Refresh, Books, AIAssist, Warning, MoreHorizontal } from './icons';
+import { Edit, Refresh, Books, AIAssist, Warning, MoreHorizontal, Image } from './icons';
 import type { BasicInfoObject, BasicInfoData } from '../types/unifiedObject';
 
 interface BasicInfoManagerProps {
@@ -59,6 +61,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   const [showAIModal, setShowAIModal] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [showRetranslateModal, setShowRetranslateModal] = useState(false);
+  const [showAssetPicker, setShowAssetPicker] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // Helper to get data for a specific language
@@ -219,6 +222,9 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
     }
   };
 
+  // Get cover image URL from metadata
+  const coverImageUrl = basicInfo?.metadata?.cover_image_url;
+
   // ============================================================================
   // RENDER
   // ============================================================================
@@ -359,6 +365,35 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
       </div>
 
       <div className="basic-info-content">
+        {/* Cover Image */}
+        <div className="cover-image-section">
+          {coverImageUrl ? (
+            <div className="cover-image-preview">
+              <img src={`${API_BASE_URL}${coverImageUrl}`} alt="Cover" />
+              <div className="cover-image-overlay">
+                <TextButton
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowAssetPicker(true)}
+                >
+                  Manage
+                </TextButton>
+              </div>
+            </div>
+          ) : (
+            <div
+              className="cover-image-placeholder"
+              onClick={() => setShowAssetPicker(true)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && setShowAssetPicker(true)}
+            >
+              <Image size="lg" />
+              <span>Add Cover Image</span>
+            </div>
+          )}
+        </div>
+
         {/* Title */}
         <div className="form-group area-title">
           <label htmlFor="title">Title</label>
@@ -465,6 +500,19 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
           preSelectedObjectIds={[basicInfoId]}
           defaultSourceLanguage={settings.mainLanguage}
           defaultTargetLanguage={globalDisplayLanguage}
+        />
+      )}
+
+      {/* Asset Manager Modal for Cover Image */}
+      {basicInfoId && (
+        <UnifiedImageModal
+          preset="objectManager"
+          isOpen={showAssetPicker}
+          onClose={() => setShowAssetPicker(false)}
+          objectType="basic_info"
+          objectId={basicInfoId}
+          onAssetChange={() => fetchObject('basic_info', basicInfoId)}
+          title="Manage Cover Images"
         />
       )}
     </div>

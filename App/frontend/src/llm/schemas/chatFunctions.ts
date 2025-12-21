@@ -415,10 +415,3 @@ export const REPLACE_FUNCTION_NAMES = [
   'replace_manuscript',
 ] as const;
 
-/** All function names that perform patch operations */
-export const PATCH_FUNCTION_NAMES = [
-  'patch_basic_info',
-  'patch_story_object',
-  'patch_chapter',
-  'patch_manuscript',
-] as const;

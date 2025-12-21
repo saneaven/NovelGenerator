@@ -8,6 +8,7 @@ export interface Project {
   user_id: string;
   created_at: string;
   updated_at: string;
+  cover_image_url?: string;  // From BasicInfo's cover image
 }
 
 interface ProjectStore {

@@ -38,12 +38,6 @@ const areEditCardsEquivalent = (prev: EditCard[] = [], next: EditCard[] = []): b
     if (prevData !== nextData) {
       return false;
     }
-
-    const prevEditTag = JSON.stringify(prevCard.editTagData ?? null);
-    const nextEditTag = JSON.stringify(nextCard.editTagData ?? null);
-    if (prevEditTag !== nextEditTag) {
-      return false;
-    }
   }
 
   return true;

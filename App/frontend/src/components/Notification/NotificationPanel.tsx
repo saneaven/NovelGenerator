@@ -9,8 +9,8 @@ import NotificationDetailModal from './NotificationDetailModal';
 import AIEditModal from '../AIEditModal';
 import ManuscriptAIEditModal from '../ManuscriptAIEditModal';
 import TranslationModal from '../TranslationModal';
-import ImagePromptBuilderModal from '../ImageGeneration/ImagePromptBuilderModal';
-import SceneImageGeneratorModal from '../ImageGeneration/SceneImageGeneratorModal';
+import UnifiedImagePromptModal from '../ImageGeneration/UnifiedImagePromptModal';
+import { UnifiedImageModal } from '../AssetManager';
 
 interface NotificationPanelProps {
   onClose: () => void;
@@ -164,14 +164,16 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
 
       case 'image-prompt':
         return (
-          <ImagePromptBuilderModal
+          <UnifiedImagePromptModal
             isOpen={true}
             onClose={handleLLMRetryModalClose}
+            contextType={modalProps.contextType || 'object'}
             objectType={modalProps.objectType}
             objectId={modalProps.objectId}
             onPromptGenerated={modalProps.onPromptGenerated}
             promptMode={modalProps.promptMode}
             defaultUserRequest={formState?.userRequest}
+            sceneContext={modalProps.sceneContext}
           />
         );
 
@@ -186,40 +188,34 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
 
     const { request } = imageRetryTask.retryContext;
 
-    // Determine if this is a scene or object image based on taskType
-    if (imageRetryTask.taskType === 'scene-image') {
-      return (
-        <SceneImageGeneratorModal
-          isOpen={true}
-          onClose={handleImageRetryModalClose}
-          onImageGenerated={() => handleImageRetryModalClose()}
-          mode="regenerate"
-          initialSettings={{
-            provider: request.provider,
-            model: request.model,
-            size: request.size,
-            prompt: request.prompt,
-            positivePrompt: request.positivePrompt,
-            negativePrompt: request.negativePrompt,
+    // Use UnifiedImageModal for retry with initial settings from failed request
+    return (
+      <UnifiedImageModal
+        isOpen={true}
+        onClose={handleImageRetryModalClose}
+        preset={imageRetryTask.taskType === 'scene-image' ? 'sceneManager' : 'objectManager'}
+        onImageGenerated={() => handleImageRetryModalClose()}
+        title="Retry Image Generation"
+        initialGenerationSettings={{
+          provider: request.provider,
+          model: request.model,
+          size: request.size,
+          prompt: request.prompt,
+          positivePrompt: request.positivePrompt,
+          negativePrompt: request.negativePrompt,
+          settings: {
             // Provider-specific settings
-            openaiQuality: request.quality,
-            openaiStyle: request.style,
-            novelaiSampler: request.sampler,
-            novelaiSteps: request.steps,
-            novelaiScale: request.scale,
-            novelaiNoiseSchedule: request.noiseSchedule,
-            selectedNaturalStyleId: request.styleId,
-            selectedTagBasedStyleId: request.styleId,
-          }}
-        />
-      );
-    }
-
-    // For object-image, we could show a simpler retry or just dismiss
-    // For now, just close and let user retry from the original panel
-    console.warn('Object image retry from notification not yet implemented');
-    handleImageRetryModalClose();
-    return null;
+            quality: request.quality,
+            style: request.style,
+            sampler: request.sampler,
+            steps: request.steps,
+            scale: request.scale,
+            noiseSchedule: request.noiseSchedule,
+            styleId: request.styleId,
+          },
+        }}
+      />
+    );
   };
 
   const detailSession = detailSessionId

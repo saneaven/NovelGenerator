@@ -9,6 +9,7 @@ import type {
   EditCard,
   LLMRequestPipelineContext
 } from '../types';
+import type { FunctionCallWithStatus } from '../../functionCall/types';
 import { FunctionCallService } from '../../pages/workspace/services/FunctionCallService';
 
 marked.setOptions({
@@ -77,18 +78,34 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
   }
 
   generateEditCardsFromFunctionCalls(functionCalls: FunctionCallMetadata[]): EditCard[] {
-    return functionCalls.map(funcCall => ({
-      id: funcCall.id,
-      type: FunctionCallService.mapFunctionToEditType(funcCall.function_name),
-      title: FunctionCallService.getFunctionCallTitle(funcCall.function_name),
-      description: FunctionCallService.generateFunctionCallSummary(funcCall.function_name, funcCall.arguments),
-      isApplied: funcCall.isApplied,
-      isRejected: funcCall.isRejected,
-      data: funcCall.arguments,
-      functionCall: funcCall,
-      onApply: () => {},
-      onReject: () => {},
-    }));
+    return functionCalls.map(funcCall => {
+      // Convert FunctionCallMetadata to FunctionCallWithStatus
+      const functionCallWithStatus: FunctionCallWithStatus = {
+        id: funcCall.id,
+        functionName: funcCall.function_name,
+        arguments: typeof funcCall.arguments === 'string'
+          ? JSON.parse(funcCall.arguments)
+          : funcCall.arguments,
+        isApplied: funcCall.isApplied ?? false,
+        isRejected: funcCall.isRejected,
+        appliedAt: funcCall.appliedAt,
+      };
+
+      return {
+        id: funcCall.id,
+        type: FunctionCallService.mapFunctionToEditType(funcCall.function_name),
+        title: FunctionCallService.getFunctionCallTitle(funcCall.function_name),
+        description: FunctionCallService.generateFunctionCallSummary(funcCall.function_name, funcCall.arguments),
+        isApplied: funcCall.isApplied ?? false,
+        isRejected: funcCall.isRejected,
+        data: typeof funcCall.arguments === 'string'
+          ? JSON.parse(funcCall.arguments)
+          : funcCall.arguments,
+        functionCall: functionCallWithStatus,
+        onApply: () => {},
+        onReject: () => {},
+      };
+    });
   }
 }
 

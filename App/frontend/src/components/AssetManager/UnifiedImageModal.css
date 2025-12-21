@@ -1,0 +1,44 @@
+/* ========================================
+   UNIFIED IMAGE MODAL
+   ======================================== */
+
+.unified-image-modal .modal-content {
+    min-height: 400px;
+    display: flex;
+    flex-direction: column;
+}
+
+.unified-image-modal-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: var(--spacing-md);
+}
+
+/* Ensure ImageTabContent fills the space */
+.unified-image-modal-content .image-tab-content {
+    flex: 1;
+    min-height: 0;
+}
+
+/* Override z-index for nested modals (detail, success, generate) */
+.unified-image-modal .success-modal-overlay,
+.unified-image-modal .asset-detail-overlay,
+.unified-image-modal .generate-panel-overlay {
+    z-index: calc(var(--z-modal) + 30);
+}
+
+/* Footer with action buttons */
+.unified-image-modal-footer {
+    display: flex;
+    gap: var(--spacing-sm);
+    justify-content: flex-end;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .unified-image-modal-content {
+        padding: var(--spacing-sm);
+    }
+}

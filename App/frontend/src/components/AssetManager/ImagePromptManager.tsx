@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import ImagePromptBuilderModal, { type PromptMode } from '../ImageGeneration/ImagePromptBuilderModal';
+import UnifiedImagePromptModal, { type PromptMode } from '../ImageGeneration/UnifiedImagePromptModal';
 import type { ObjectType } from '../../types/unifiedObject';
 import { TextButton } from '../TextButton';
 import './ImagePromptManager.css';
@@ -41,12 +41,15 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
         return getObject(objectId);
     }, [objectId, objects, getObject]);
 
-    // Get object name for display
+    // Get object name for display (use title for basic_info, name for others)
     const objectName = useMemo(() => {
         if (!object) return 'Loading...';
         const data = object.data[settings.mainLanguage] || Object.values(object.data)[0] || {};
-        return data.name || 'Unnamed';
-    }, [object, settings.mainLanguage]);
+        return (objectType === 'basic_info' ? data.title : data.name) || 'Unnamed';
+    }, [object, objectType, settings.mainLanguage]);
+
+    // Determine if this is cover image mode (basic_info)
+    const isCoverImage = objectType === 'basic_info';
 
     // Load initial values from object metadata
     useEffect(() => {
@@ -106,14 +109,14 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
         setShowPromptBuilder(true);
     };
 
-    const handlePromptGenerated = (generatedPrompt: string) => {
-        // Determine which field to update based on current tab
-        if (activeTab === 'natural') {
-            setNaturalPrompt(generatedPrompt);
-        } else if (activeTab === 'positive') {
-            setPositivePrompt(generatedPrompt);
-        } else if (activeTab === 'negative') {
-            setNegativePrompt(generatedPrompt);
+    const handlePromptGenerated = (result: { prompt: string; mode: PromptMode }) => {
+        // Determine which field to update based on mode from result
+        if (result.mode === 'natural') {
+            setNaturalPrompt(result.prompt);
+        } else if (result.mode === 'positive') {
+            setPositivePrompt(result.prompt);
+        } else if (result.mode === 'negative') {
+            setNegativePrompt(result.prompt);
         }
     };
 
@@ -307,12 +310,14 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
             </div>
 
             {/* AI Prompt Builder Modal */}
-            <ImagePromptBuilderModal
+            <UnifiedImagePromptModal
                 isOpen={showPromptBuilder}
                 onClose={() => setShowPromptBuilder(false)}
                 onPromptGenerated={handlePromptGenerated}
-                objectType={objectType as 'character' | 'location' | 'organization' | 'lorebook'}
-                objectId={objectId}
+                contextType={isCoverImage ? 'cover_image' : 'object'}
+                objectType={isCoverImage ? undefined : objectType as 'character' | 'location' | 'organization' | 'lorebook'}
+                objectId={isCoverImage ? undefined : objectId}
+                basicInfoId={isCoverImage ? objectId : undefined}
                 promptMode={activeTab}
             />
         </div>

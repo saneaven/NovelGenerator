@@ -22,7 +22,59 @@ import type { FunctionCallMetadata, FunctionCallProgress, ContentPart } from '..
 import { translationService as translationAPI } from '../api/unifiedObjectService';
 import { parseJsonOutput, parseStreamingItems, extractRawContent, type ParsedItem } from '../utils/nativeOutputParser';
 import { LLMTask, LLMTaskMode, type StoryTranslationPromptContext, type ChatTranslationPromptContext } from '../llm';
-import { applyTranslationFunctionCalls } from '../chat/utils/translationFunctionApplicator';
+import { UnifiedApplicator, type StoreActions, type TranslationActions, type ApplicationResult } from '../functionCall';
+
+/**
+ * Helper to apply translation function calls using UnifiedApplicator
+ */
+async function applyTranslationFunctionCalls(
+  functionCalls: FunctionCallMetadata[],
+  targetLanguage: string
+): Promise<Array<ApplicationResult & { objectId?: string }>> {
+  const store = useUnifiedObjectStore.getState();
+
+  const storeActions: StoreActions = {
+    getObject: (id) => store.getObject(id),
+    fetchObject: (type, id) => store.fetchObject(type, id),
+    listObjects: (type, projectId) => store.listObjects(type, projectId),
+    createObject: (type, projectId, data, language, metadata, userRequest) =>
+      store.createObject(type, projectId, data, language, metadata, userRequest),
+    updateObject: (type, id, request) => store.updateObject(type, id, request),
+    deleteObject: (type, id) => store.deleteObject(type, id),
+  };
+
+  const translationActions: TranslationActions = {
+    addTranslations: async (translations) => {
+      const result = await translationAPI.addTranslations(translations);
+      // Update store with returned objects
+      if (result.objects?.length) {
+        result.objects.forEach((obj: UnifiedObject) => {
+          store.objects[obj.id] = obj;
+        });
+        useUnifiedObjectStore.setState({ objects: { ...store.objects } });
+      }
+      return result;
+    },
+  };
+
+  const applicator = new UnifiedApplicator({
+    store: storeActions,
+    translationService: translationActions,
+  });
+
+  const results: Array<ApplicationResult & { objectId?: string }> = [];
+
+  for (const fc of functionCalls) {
+    const args = typeof fc.arguments === 'string' ? JSON.parse(fc.arguments) : fc.arguments;
+    const result = await applicator.apply(
+      { id: fc.id, function_name: fc.function_name, arguments: args },
+      { projectId: '', language: targetLanguage, mode: 'translation', targetLanguage }
+    );
+    results.push({ ...result, objectId: args?.id });
+  }
+
+  return results;
+}
 
 export interface StoryObjectToTranslate {
   objectType: ObjectType;

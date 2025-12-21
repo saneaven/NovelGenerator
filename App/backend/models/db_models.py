@@ -218,6 +218,11 @@ class BasicInfo(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, unique=True)
 
+    # Image prompt fields (stored on base object, not versioned)
+    image_prompt = Column(Text, nullable=True)  # Natural language prompt
+    image_prompt_positive = Column(Text, nullable=True)  # NovelAI positive tags
+    image_prompt_negative = Column(Text, nullable=True)  # NovelAI negative tags
+
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

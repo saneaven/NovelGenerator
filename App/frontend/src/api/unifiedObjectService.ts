@@ -266,6 +266,7 @@ export const unifiedObjectService = {
       image_prompt_negative: string | null;
     }>(`/api/v1/objects/${type}/${id}/image-prompt`, prompts);
   },
+
 };
 
 // ============================================================================

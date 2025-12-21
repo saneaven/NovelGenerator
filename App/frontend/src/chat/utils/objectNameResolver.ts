@@ -1,9 +1,21 @@
 import type { SimplifiedStoryObjects } from '../../store/unifiedObjectStore';
+import type { StoryObjects } from '../../types/storyObject';
 
-/** Simplified act type for name resolution */
-type SimplifiedAct = SimplifiedStoryObjects['outline']['acts'][number];
-/** Simplified chapter type for name resolution */
-type SimplifiedChapter = SimplifiedAct['chapters'][number];
+// Common interface for both SimplifiedStoryObjects and StoryObjects
+type StoryObjectsLike = SimplifiedStoryObjects | StoryObjects;
+
+/** Generic act type for name resolution - only needs id, name, and chapters */
+interface ActLike {
+  id: string;
+  name: string;
+  chapters?: ChapterLike[];
+}
+
+/** Generic chapter type for name resolution - only needs id and name */
+interface ChapterLike {
+  id: string;
+  name: string;
+}
 
 /**
  * Parses a function name like "update_character" into { action: "update", objectType: "character" }
@@ -40,7 +52,7 @@ export const parseFunctionName = (
  * Used to display friendly names instead of UUIDs in function call previews.
  */
 export const resolveStoryObjectName = (
-  storyObjects: SimplifiedStoryObjects,
+  storyObjects: StoryObjectsLike,
   type?: string,
   id?: string
 ): string | undefined => {
@@ -76,16 +88,16 @@ export const resolveStoryObjectName = (
 /**
  * Finds an act by ID from the acts array.
  */
-const findAct = (acts: SimplifiedAct[] | undefined, id: string): SimplifiedAct | undefined =>
+const findAct = (acts: ActLike[] | undefined, id: string): ActLike | undefined =>
   acts?.find((act) => act.id === id);
 
 /**
  * Finds a chapter by ID, searching through all acts.
  */
-const findChapter = (acts: SimplifiedAct[] | undefined, id: string): SimplifiedChapter | undefined => {
+const findChapter = (acts: ActLike[] | undefined, id: string): ChapterLike | undefined => {
   if (!acts) return undefined;
   for (const act of acts) {
-    const chapter = act.chapters?.find((entry) => entry.id === id);
+    const chapter = act.chapters?.find((entry: ChapterLike) => entry.id === id);
     if (chapter) {
       return chapter;
     }

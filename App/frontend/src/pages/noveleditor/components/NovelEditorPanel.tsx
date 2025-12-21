@@ -33,15 +33,12 @@ import { useSidebarStore } from '../../../store/sidebarStore';
 import ManuscriptAIEditModal from '../../../components/ManuscriptAIEditModal';
 import TranslationModal from '../../../components/TranslationModal';
 import VersionHistoryModal from '../../../components/VersionHistoryModal';
-import { AssetManagerModal, SceneAssetManagerModal } from '../../../components/AssetManager';
-import SceneImageGeneratorModal from '../../../components/ImageGeneration/SceneImageGeneratorModal';
+import { UnifiedImageModal, type InitialGenerationSettings } from '../../../components/AssetManager';
 import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
 import RegenerationComparisonOverlay from '../../../components/RichTextEditor/RegenerationComparisonOverlay';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
-import { useAssetStore } from '../../../store/assetStore';
 import { assetService, type Asset } from '../../../api/assetService';
 import type { ManuscriptObject } from '../../../types/unifiedObject';
-import type { InitialGenerationSettings } from '../../../components/ImageGeneration/SceneImageGeneratorModal';
 import { API_BASE_URL } from '../../../api/client';
 import ChapterSidebar from './ChapterSidebar';
 import { Save, Check, Bullet, Warning, HamburgerMenu, AIAssist, Refresh, Globe, Lightbulb, MoreHorizontal, Clock } from '../../../components/icons';
@@ -108,9 +105,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const [contentIdError, setContentIdError] = useState<string | null>(null);
   const [isAIEditModalOpen, setIsAIEditModalOpen] = useState(false);
   const [showRetranslateModal, setShowRetranslateModal] = useState(false);
-  const [showAssetModal, setShowAssetModal] = useState(false);
-  const [showImageGeneratorModal, setShowImageGeneratorModal] = useState(false);
-  const [showSceneAssetManagerModal, setShowSceneAssetManagerModal] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
   const [cursorContext, setCursorContext] = useState<{ before: string; after: string }>({ before: '', after: '' });
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [showVersionsModal, setShowVersionsModal] = useState(false);
@@ -125,9 +120,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   } | null>(null);
   // Image replace state
   const [replaceImageSrc, setReplaceImageSrc] = useState<string | null>(null);
-
-  // Asset store for uploading images
-  const { uploadAsset } = useAssetStore();
 
   // Editor state
   const [content, setContent] = useState('');
@@ -495,7 +487,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       }
 
       setReplaceImageSrc(null);
-      setShowAssetModal(false);
+      setShowImageModal(false);
       return;
     }
 
@@ -503,48 +495,19 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     if (editorRef.current) {
       editorRef.current.insertImage(newSrc, asset.name);
     }
-    setShowAssetModal(false);
+    setShowImageModal(false);
   }, [replaceImageSrc]);
 
-  // Handle file upload from ImageInsertMenu drag-drop
-  const handleFileUpload = useCallback(async (file: File) => {
-    if (!projectId) return;
-
-    try {
-      const asset = await uploadAsset(projectId, file, file.name);
-      if (asset && editorRef.current) {
-        editorRef.current.insertImage(`${API_BASE_URL}${asset.file_url}`, asset.name);
-      }
-    } catch (err) {
-      console.error('Failed to upload image:', err);
-      showError('Upload Error', 'Failed to upload image. Please try again.');
-    }
-  }, [projectId, uploadAsset, showError]);
-
-  // Handle browse assets - opens AssetManagerModal in picker mode
+  // Handle browse assets - opens UnifiedImageModal in scene mode
   const handleBrowseAssets = useCallback(() => {
     if (editorRef.current) {
       const context = editorRef.current.getTextAroundCursor();
       setCursorContext(context);
     }
-    setShowAssetModal(true);
+    setShowImageModal(true);
   }, []);
 
-  // Handle generate image - opens SceneImageGeneratorModal
-  const handleGenerateImage = useCallback(() => {
-    if (editorRef.current) {
-      const context = editorRef.current.getTextAroundCursor();
-      setCursorContext(context);
-    }
-    setShowImageGeneratorModal(true);
-  }, []);
-
-  // Handle manage scene assets - opens SceneAssetManagerModal
-  const handleManageSceneAssets = useCallback(() => {
-    setShowSceneAssetManagerModal(true);
-  }, []);
-
-  // Handle generated image from SceneImageGeneratorModal
+  // Handle generated image from UnifiedImageModal
   const handleImageGenerated = useCallback((asset: Asset) => {
     // If we're in regeneration mode, show comparison UI instead of auto-inserting
     if (regenerateAsset && pendingRegenerationBounds) {
@@ -553,7 +516,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         originalAsset: regenerateAsset,
         newAsset: asset,
       });
-      setShowImageGeneratorModal(false);
+      setShowImageModal(false);
       return;
     }
 
@@ -561,24 +524,25 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     if (editorRef.current) {
       editorRef.current.insertImage(`${API_BASE_URL}${asset.file_url}`, asset.name);
     }
+    setShowImageModal(false);
   }, [regenerateAsset, pendingRegenerationBounds]);
 
-  // Handle replace image from overlay - opens AssetManagerModal
-  const handleReplaceImage = useCallback((currentSrc: string) => {
+  // Handle change image from overlay - unified handler for replace/regenerate
+  // Opens UnifiedImageModal where user can pick existing or generate new
+  const handleChangeImage = useCallback((currentSrc: string, asset: Asset | null, imageBounds: DOMRect | null) => {
     setReplaceImageSrc(currentSrc);
-    setShowAssetModal(true);
-  }, []);
-
-  // Handle regenerate image from overlay - opens SceneImageGeneratorModal with settings
-  const handleRegenerateImage = useCallback((asset: Asset, imageBounds: DOMRect) => {
-    setRegenerateAsset(asset);
-    setPendingRegenerationBounds(imageBounds);
+    if (asset) {
+      setRegenerateAsset(asset);
+    }
+    if (imageBounds) {
+      setPendingRegenerationBounds(imageBounds);
+    }
     // Get cursor context for scene context
     if (editorRef.current) {
       const context = editorRef.current.getTextAroundCursor();
       setCursorContext(context);
     }
-    setShowImageGeneratorModal(true);
+    setShowImageModal(true);
   }, []);
 
   // Get asset by URL for ImageNodeView overlay
@@ -864,13 +828,9 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
               onChange={handleContentChange}
               placeholder="Start writing your chapter..."
               disabled={isSaving || isMissingTranslation}
-              onFileUpload={handleFileUpload}
               onBrowseAssets={handleBrowseAssets}
-              onGenerateImage={handleGenerateImage}
-              onManageSceneAssets={handleManageSceneAssets}
               projectId={projectId}
-              onReplaceImage={handleReplaceImage}
-              onRegenerateImage={handleRegenerateImage}
+              onChangeImage={handleChangeImage}
               getAssetByUrl={getAssetByUrl}
               toolbarActions={
                 <>
@@ -1045,35 +1005,24 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         />
       )}
 
-      {/* Asset Manager Modal for browsing/selecting existing images */}
-      <AssetManagerModal
-        isOpen={showAssetModal}
-        onClose={() => setShowAssetModal(false)}
-        onSelect={handleImageSelect}
-        title="Select Image"
-      />
-
-      {/* Scene Image Generator Modal */}
-      <SceneImageGeneratorModal
-        isOpen={showImageGeneratorModal}
+      {/* Unified Image Modal - handles browse, insert, and regenerate */}
+      <UnifiedImageModal
+        preset="sceneManager"
+        isOpen={showImageModal}
         onClose={() => {
-          setShowImageGeneratorModal(false);
+          setShowImageModal(false);
           setRegenerateAsset(null);
           setPendingRegenerationBounds(null);
+          setReplaceImageSrc(null);
         }}
+        onSelect={handleImageSelect}
         onImageGenerated={handleImageGenerated}
         sceneContext={{
           preContext: cursorContext.before,
           postContext: cursorContext.after,
         }}
-        initialSettings={regenerateAsset ? getInitialSettings(regenerateAsset) : undefined}
-        mode={regenerateAsset ? 'regenerate' : 'generate'}
-      />
-
-      {/* Scene Asset Manager Modal */}
-      <SceneAssetManagerModal
-        isOpen={showSceneAssetManagerModal}
-        onClose={() => setShowSceneAssetManagerModal(false)}
+        initialGenerationSettings={regenerateAsset ? getInitialSettings(regenerateAsset) : undefined}
+        title={regenerateAsset ? 'Change Image' : 'Insert Image'}
       />
 
       {/* Regeneration Comparison Overlay */}

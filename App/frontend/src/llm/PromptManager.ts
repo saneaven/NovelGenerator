@@ -1,5 +1,5 @@
 import type { FunctionCallSchema } from './schemas/chatFunctions';
-import { STORY_OBJECT_EDIT_FUNCTIONS, MANUSCRIPT_EDIT_FUNCTIONS } from './schemas/editFunctions';
+import { STORY_OBJECT_EDIT_FUNCTIONS, MANUSCRIPT_EDIT_FUNCTIONS } from '../functionCall';
 import { TRANSLATION_FUNCTIONS, CHAT_TRANSLATION_FUNCTIONS } from './schemas/translationFunctions';
 import { OBJECT_IMAGE_PROMPT_FUNCTIONS } from './schemas/imagePromptFunctions';
 import { renderTemplate, registerFragments, type PromptFragment } from '../templateEngine/engine';
@@ -21,6 +21,7 @@ import {
   type ChatTranslationPromptContext,
   type ObjectImagePromptContext,
   type SceneImagePromptContext,
+  type CoverImagePromptContext,
 } from './types';
 
 /**
@@ -115,6 +116,8 @@ export class PromptManager {
         return this.generateObjectImagePromptBundle(context as ObjectImagePromptContext);
       case LLMTaskMode.SCENE_IMAGE_PROMPT:
         return this.generateSceneImagePromptBundle(context as SceneImagePromptContext);
+      case LLMTaskMode.COVER_IMAGE_PROMPT:
+        return this.generateCoverImagePromptBundle(context as CoverImagePromptContext);
       default:
         throw new Error(`Unknown LLM task mode: ${mode}`);
     }
@@ -144,6 +147,8 @@ export class PromptManager {
         return this.getObjectImagePromptFunctions(context as ObjectImagePromptContext);
       case LLMTaskMode.SCENE_IMAGE_PROMPT:
         return undefined;
+      case LLMTaskMode.COVER_IMAGE_PROMPT:
+        return undefined; // Cover image always uses native output
       default:
         return undefined;
     }
@@ -389,6 +394,46 @@ export class PromptManager {
         scenePreContext: context.scenePreContext,
         scenePostContext: context.scenePostContext,
         selectedObjectIds: context.selectedObjects.map(o => o.id),
+      },
+    };
+
+    return {
+      systemPrompt: renderTemplate(systemTemplate!, templateData),
+      userPrompt: renderTemplate(userTemplate!, templateData),
+      prefill: prefillTemplate && context.enablePrefill
+        ? renderTemplate(prefillTemplate, templateData)
+        : undefined,
+      templateData,
+    };
+  }
+
+  // ==================== Cover Image Prompt ====================
+
+  private static async generateCoverImagePromptBundle(
+    context: CoverImagePromptContext
+  ): Promise<PromptBundle> {
+    const [systemTemplate, userTemplate, prefillTemplate] = await Promise.all([
+      this.getTemplate('imagePrompt', 'systemPrompt', 'coverImage'),
+      this.getTemplate('imagePrompt', 'userPrompt', 'coverImage'),
+      this.getTemplate('imagePrompt', 'prefill', 'coverImage'),
+    ]);
+
+    const settings = useSettingsStore.getState().settings;
+    const templateData: TemplateData = {
+      config: this.buildConfigData(context),
+      project: this.buildProjectData(context.projectId, settings.mainLanguage),
+      input: { userMessage: context.userInput },
+      imagePrompt: {
+        promptMode: context.promptMode,
+        selectedObjectIds: context.selectedObjects.map(o => o.id),
+        currentPrompt: context.currentPrompt ?? undefined,
+        currentPromptPositive: context.currentPromptPositive ?? undefined,
+        currentPromptNegative: context.currentPromptNegative ?? undefined,
+        coverImage: {
+          title: context.basicInfo.title,
+          logline: context.basicInfo.logline,
+          genre: context.basicInfo.genre,
+        },
       },
     };
 

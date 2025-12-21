@@ -141,6 +141,16 @@ const ManuscriptAIEditModal: React.FC<ManuscriptAIEditModalProps> = ({
           resolvedContent = typeof args.content === 'string' ? args.content : currentContent;
         }
 
+        // ALWAYS save the resolved content first (even if some patches failed)
+        // This ensures successful patches are applied before retry/error handling
+        const wordCount = resolvedContent.trim().split(/\s+/).filter(Boolean).length;
+        await unifiedStore.updateObject('manuscript', manuscriptObj.id, {
+          data: { content: resolvedContent, wordCount },
+          language: mainLanguage,
+          create_new_version: true,
+          user_request: 'AI Generated Content',
+        });
+
         // Check if we should retry with replace mode
         if (retryContexts.length > 0 && shouldRetry(retryContexts, attemptCount)) {
           console.log('Patch failures detected, retrying with replace mode:', summarizePatchFailures(retryContexts));
@@ -155,14 +165,6 @@ const ManuscriptAIEditModal: React.FC<ManuscriptAIEditModalProps> = ({
           task.error(`Patch application failed: ${summarizePatchFailures(retryContexts)}`);
           return;
         }
-
-        const wordCount = resolvedContent.trim().split(/\s+/).filter(Boolean).length;
-        await unifiedStore.updateObject('manuscript', manuscriptObj.id, {
-          data: { content: resolvedContent, wordCount },
-          language: mainLanguage,
-          create_new_version: true,
-          user_request: 'AI Generated Content',
-        });
 
         task.complete();
         onResult?.();

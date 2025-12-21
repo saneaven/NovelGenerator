@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../store/projectStore';
 import { useAuthStore } from '../store/authStore';
+import { API_BASE_URL } from '../api/client';
 import SettingsModal from '../components/SettingsModal/SettingsModal';
 import { IconButton } from '../components/IconButton';
 import { Settings, Logout, Close } from '../components/icons';
@@ -173,11 +174,16 @@ const Home: React.FC = () => {
         ) : (
           <div className="projects-grid">
             {projects.map((project) => (
-              <div 
-                key={project.id} 
+              <div
+                key={project.id}
                 className="project-card"
                 onClick={() => handleOpenProject(project.id)}
               >
+                {project.cover_image_url && (
+                  <div className="project-cover-image">
+                    <img src={`${API_BASE_URL}${project.cover_image_url}`} alt="" />
+                  </div>
+                )}
                 <div className="project-info">
                   <h3>{project.name}</h3>
                   {project.description && (

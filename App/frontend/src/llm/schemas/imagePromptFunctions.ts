@@ -9,7 +9,7 @@ import type { FunctionCallSchema } from './chatFunctions';
 
 /**
  * Function schema for generating image prompts for story objects.
- * Used in ImagePromptBuilderModal for character, location, organization, lorebook.
+ * Used in UnifiedImagePromptModal for character, location, organization, lorebook.
  * Returns only the prompt string.
  */
 export const OBJECT_IMAGE_PROMPT_FUNCTION: FunctionCallSchema = {
@@ -29,7 +29,7 @@ export const OBJECT_IMAGE_PROMPT_FUNCTION: FunctionCallSchema = {
 
 /**
  * Function schema for generating scene image prompts.
- * Used in SceneImageGeneratorModal for novel editor scenes.
+ * Used in ImageGenerationPanel for novel editor scenes.
  * Returns the prompt and IDs of story objects that should be visually referenced.
  */
 export const SCENE_IMAGE_PROMPT_FUNCTION: FunctionCallSchema = {

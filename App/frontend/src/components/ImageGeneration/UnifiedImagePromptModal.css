@@ -1,0 +1,155 @@
+/**
+ * UnifiedImagePromptModal styles
+ * Merged from ImagePromptBuilderModal.css and ScenePromptAssistModal.css
+ */
+
+.unified-image-prompt-modal {
+  max-width: 600px;
+  width: 90%;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.unified-image-prompt-modal .modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Form Groups */
+.unified-image-prompt-modal .form-group {
+  margin-bottom: 16px;
+}
+
+.unified-image-prompt-modal .form-group > label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.unified-image-prompt-modal textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  transition: border-color 0.2s;
+  resize: vertical;
+  min-height: 60px;
+  font-family: inherit;
+}
+
+.unified-image-prompt-modal textarea:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.unified-image-prompt-modal textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Prompt Mode Indicator */
+.unified-image-prompt-modal .prompt-mode-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+
+.unified-image-prompt-modal .prompt-mode-indicator .mode-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.unified-image-prompt-modal .prompt-mode-indicator .mode-value {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent-color);
+}
+
+/* Context Indicator (for object and cover_image) */
+.unified-image-prompt-modal .context-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--accent-color-light, rgba(59, 130, 246, 0.1));
+  border: 1px solid var(--accent-color, #3b82f6);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.unified-image-prompt-modal .context-indicator .context-type {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent-color, #3b82f6);
+}
+
+.unified-image-prompt-modal .context-indicator .context-name {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.unified-image-prompt-modal .context-indicator.cover-image {
+  background: var(--success-bg, rgba(34, 197, 94, 0.1));
+  border-color: var(--success-color, #22c55e);
+}
+
+.unified-image-prompt-modal .context-indicator.cover-image .context-type {
+  color: var(--success-color, #22c55e);
+}
+
+/* Scene Context Preview */
+.unified-image-prompt-modal .context-preview {
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.unified-image-prompt-modal .context-preview .context-label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.unified-image-prompt-modal .context-preview .context-snippet {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Object Context Section */
+.unified-image-prompt-modal .object-context-section {
+  margin-bottom: 20px;
+}
+
+.unified-image-prompt-modal .section-hint {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  margin-bottom: 10px;
+}
+
+.unified-image-prompt-modal .selection-summary {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  text-align: right;
+}

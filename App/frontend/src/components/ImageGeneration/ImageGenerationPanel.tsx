@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
@@ -11,14 +11,28 @@ import {
     GEMINI_RESOLUTIONS,
     NOVELAI_SAMPLERS,
     NOVELAI_NOISE_SCHEDULES,
+    NOVELAI_REFERENCE_MODES,
+    DEFAULT_NOVELAI_SETTINGS,
     PROVIDER_PROMPT_TYPES,
+    listImageProviders,
     type ImageProviderType,
     type ImageGenerationRequest,
+    type ReferenceImage,
+    type NovelAIReferenceMode,
 } from '../../imageGeneration';
-import type { Asset } from '../../api/assetService';
-import ImagePromptBuilderModal from './ImagePromptBuilderModal';
-import { Check, AIAssistMini } from '../icons';
+import type { Asset, ImageProvider } from '../../api/assetService';
+import { UnifiedImageModal } from '../AssetManager';
+import UnifiedImagePromptModal, { type PromptResult } from './UnifiedImagePromptModal';
+import { Check, AIAssistMini, Close } from '../icons';
+import { TextButton } from '../TextButton';
+import { IconButton } from '../IconButton';
 import './ImageGenerationPanel.css';
+
+// Reference image item
+interface ReferenceImageItem {
+    assetId: string;
+    thumbnailUrl: string;
+}
 
 // Settings passed from asset detail for regeneration
 interface RegenerateSettings {
@@ -37,6 +51,10 @@ interface ImageGenerationPanelProps {
     objectType?: string;
     objectId?: string;
     initialSettings?: RegenerateSettings | null;
+    // Scene context for scene mode AI assist
+    sceneContext?: { preContext: string; postContext: string };
+    // Asset type for generated images ('object' or 'scene')
+    assetType?: 'object' | 'scene';
 }
 
 const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
@@ -45,6 +63,8 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
     objectType,
     objectId,
     initialSettings,
+    sceneContext,
+    assetType = 'object',
 }) => {
     const { currentProjectId } = useProjectStore();
     const { settings } = useSettingsStore();
@@ -129,8 +149,57 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
         settings.imageGenConfig.selectedTagBasedStyleId
     );
 
+    // Reference images - available for all providers that support it
+    const [referenceImages, setReferenceImages] = useState<ReferenceImageItem[]>([]);
+    const [showImagePicker, setShowImagePicker] = useState(false);
+    const [providers, setProviders] = useState<ImageProvider[]>([]);
+
+    // NovelAI reference image settings (i2i / Vibe Transfer)
+    const [novelaiReferenceMode, setNovelaiReferenceMode] = useState<NovelAIReferenceMode>(DEFAULT_NOVELAI_SETTINGS.referenceMode);
+    const [novelaiStrength, setNovelaiStrength] = useState(DEFAULT_NOVELAI_SETTINGS.strength);
+    const [novelaiI2iNoise, setNovelaiI2iNoise] = useState(DEFAULT_NOVELAI_SETTINGS.i2iNoise);
+    const [novelaiVibeStrength, setNovelaiVibeStrength] = useState(DEFAULT_NOVELAI_SETTINGS.vibeStrength);
+    const [novelaiVibeInfoExtracted, setNovelaiVibeInfoExtracted] = useState(DEFAULT_NOVELAI_SETTINGS.vibeInfoExtracted);
+
     const isInitialMount = useRef(true);
     const previousProvider = useRef(provider);
+
+    // Load providers to check image input support
+    useEffect(() => {
+        listImageProviders().then(setProviders).catch(console.error);
+    }, []);
+
+    // Check if current provider supports image input
+    const supportsImageInput = useMemo(() => {
+        const currentProvider = providers.find(p => p.name === provider);
+        return currentProvider?.supports_image_input ?? false;
+    }, [providers, provider]);
+
+    // Compute effective reference mode for NovelAI (auto mode resolves based on image count)
+    const effectiveReferenceMode = useMemo(() => {
+        if (novelaiReferenceMode === 'auto') {
+            return referenceImages.length === 1 ? 'i2i' : 'vibe';
+        }
+        return novelaiReferenceMode;
+    }, [novelaiReferenceMode, referenceImages.length]);
+
+    // Check if we should show NovelAI reference settings
+    const showNovelaiRefSettings = provider === 'novelai' && referenceImages.length > 0;
+
+    // Add reference image handler
+    const handleImageSelected = useCallback((assetId: string, thumbnailUrl: string) => {
+        if (referenceImages.some(img => img.assetId === assetId)) {
+            setShowImagePicker(false);
+            return;
+        }
+        setReferenceImages(prev => [...prev, { assetId, thumbnailUrl }]);
+        setShowImagePicker(false);
+    }, [referenceImages]);
+
+    // Remove reference image handler
+    const handleRemoveImage = useCallback((assetId: string) => {
+        setReferenceImages(prev => prev.filter(img => img.assetId !== assetId));
+    }, []);
 
     const currentPromptType = PROVIDER_PROMPT_TYPES[provider];
     const isTagBased = currentPromptType === 'tag_based';
@@ -219,6 +288,11 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
     const handleGenerate = async () => {
         if (!currentProjectId) return;
 
+        // Build reference images data
+        const referenceImagesData: ReferenceImage[] = supportsImageInput && referenceImages.length > 0
+            ? referenceImages.map(img => ({ assetId: img.assetId, strength: 0.7 }))
+            : [];
+
         if (isTagBased) {
             if (!positivePrompt.trim()) {
                 alert('Please enter a positive prompt');
@@ -236,8 +310,15 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                 steps: novelaiSteps,
                 scale: novelaiScale,
                 noiseSchedule: novelaiNoiseSchedule,
-                // Asset type for story object images
-                assetType: 'object',
+                // Reference images
+                referenceImages: referenceImagesData.length > 0 ? referenceImagesData : undefined,
+                // NovelAI reference settings
+                referenceMode: provider === 'novelai' ? novelaiReferenceMode : undefined,
+                strength: provider === 'novelai' ? novelaiStrength : undefined,
+                i2iNoise: provider === 'novelai' ? novelaiI2iNoise : undefined,
+                vibeStrength: provider === 'novelai' ? novelaiVibeStrength : undefined,
+                vibeInfoExtracted: provider === 'novelai' ? novelaiVibeInfoExtracted : undefined,
+                assetType,
             };
 
             await generate(request);
@@ -257,23 +338,26 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                 style: provider === 'openai' ? openaiStyle : undefined,
                 aspectRatio: provider === 'gemini' ? geminiAspectRatio : undefined,
                 resolution: provider === 'gemini' ? geminiResolution : undefined,
-                // Asset type for story object images
-                assetType: 'object',
+                // Reference images
+                referenceImages: referenceImagesData.length > 0 ? referenceImagesData : undefined,
+                assetType,
             };
 
             await generate(request);
         }
     };
 
-    const handlePromptBuilderGenerated = (generatedPrompt: string) => {
-        if (isTagBased) {
-            if (activePromptTab === 'negative') {
-                setNegativePrompt(generatedPrompt);
-            } else {
-                setPositivePrompt(generatedPrompt);
-            }
-        } else {
-            setPrompt(generatedPrompt);
+    const handlePromptBuilderGenerated = (result: PromptResult) => {
+        switch (result.mode) {
+            case 'natural':
+                setPrompt(result.prompt);
+                break;
+            case 'positive':
+                setPositivePrompt(result.prompt);
+                break;
+            case 'negative':
+                setNegativePrompt(result.prompt);
+                break;
         }
     };
 
@@ -580,6 +664,133 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                     </div>
                 )}
 
+                {/* Reference Images Section */}
+                {supportsImageInput && (
+                    <div className="form-section reference-images-section">
+                        <div className="section-header">
+                            <label>Reference Images</label>
+                            <TextButton
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => setShowImagePicker(true)}
+                            >
+                                + Add
+                            </TextButton>
+                        </div>
+                        {referenceImages.length === 0 ? (
+                            <div className="empty-hint">
+                                Add reference images for i2i or style transfer
+                            </div>
+                        ) : (
+                            <div className="reference-images-grid">
+                                {referenceImages.map(img => (
+                                    <div key={img.assetId} className="reference-image-item">
+                                        <img src={img.thumbnailUrl} alt="Reference" />
+                                        <IconButton
+                                            icon={<Close size="sm" />}
+                                            onClick={() => handleRemoveImage(img.assetId)}
+                                            title="Remove image"
+                                            size="sm"
+                                            className="remove-image-btn"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* NovelAI Reference Image Settings (i2i / Vibe Transfer) */}
+                {showNovelaiRefSettings && (
+                    <div className="novelai-ref-settings">
+                        <div className="ref-settings-header">
+                            <span className="ref-settings-label">Reference Image Mode</span>
+                            {referenceImages.length > 4 && effectiveReferenceMode === 'vibe' && (
+                                <span className="ref-warning">Extra Anlas cost for &gt;4 images</span>
+                            )}
+                        </div>
+                        <div className="form-row">
+                            <div className="form-field full-width">
+                                <select
+                                    value={novelaiReferenceMode}
+                                    onChange={(e) => setNovelaiReferenceMode(e.target.value as NovelAIReferenceMode)}
+                                    className="config-select"
+                                >
+                                    {NOVELAI_REFERENCE_MODES.map((m) => (
+                                        <option key={m.value} value={m.value}>
+                                            {m.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* i2i Settings */}
+                        {effectiveReferenceMode === 'i2i' && (
+                            <div className="form-row">
+                                <div className="form-field">
+                                    <label>Strength</label>
+                                    <input
+                                        type="range"
+                                        min={0}
+                                        max={1}
+                                        step={0.05}
+                                        value={novelaiStrength}
+                                        onChange={(e) => setNovelaiStrength(parseFloat(e.target.value))}
+                                        className="config-slider"
+                                    />
+                                    <span className="slider-value">{novelaiStrength.toFixed(2)}</span>
+                                </div>
+                                <div className="form-field">
+                                    <label>Noise</label>
+                                    <input
+                                        type="range"
+                                        min={0}
+                                        max={1}
+                                        step={0.05}
+                                        value={novelaiI2iNoise}
+                                        onChange={(e) => setNovelaiI2iNoise(parseFloat(e.target.value))}
+                                        className="config-slider"
+                                    />
+                                    <span className="slider-value">{novelaiI2iNoise.toFixed(2)}</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Vibe Transfer Settings */}
+                        {effectiveReferenceMode === 'vibe' && (
+                            <div className="form-row">
+                                <div className="form-field">
+                                    <label>Style Influence</label>
+                                    <input
+                                        type="range"
+                                        min={0}
+                                        max={1}
+                                        step={0.05}
+                                        value={novelaiVibeStrength}
+                                        onChange={(e) => setNovelaiVibeStrength(parseFloat(e.target.value))}
+                                        className="config-slider"
+                                    />
+                                    <span className="slider-value">{novelaiVibeStrength.toFixed(2)}</span>
+                                </div>
+                                <div className="form-field">
+                                    <label>Info Extraction</label>
+                                    <input
+                                        type="range"
+                                        min={0}
+                                        max={1}
+                                        step={0.05}
+                                        value={novelaiVibeInfoExtracted}
+                                        onChange={(e) => setNovelaiVibeInfoExtracted(parseFloat(e.target.value))}
+                                        className="config-slider"
+                                    />
+                                    <span className="slider-value">{novelaiVibeInfoExtracted.toFixed(2)}</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {/* Natural Style Preview */}
                 {!isTagBased && selectedNaturalStyleId && getCurrentNaturalStyle() && (
                     <div className="style-preview-box">
@@ -631,15 +842,47 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                 </div>
             </div>
 
-            {/* AI Prompt Builder Modal */}
-            {showPromptBuilder && objectType && objectId && (
-                <ImagePromptBuilderModal
+            {/* AI Prompt Builder Modal - supports object, cover_image, and scene contexts */}
+            {showPromptBuilder && (objectType && objectId ? (
+                objectType === 'basic_info' ? (
+                    <UnifiedImagePromptModal
+                        isOpen={showPromptBuilder}
+                        onClose={() => setShowPromptBuilder(false)}
+                        onPromptGenerated={handlePromptBuilderGenerated}
+                        contextType="cover_image"
+                        basicInfoId={objectId}
+                        promptMode={isTagBased ? activePromptTab : 'natural'}
+                    />
+                ) : (
+                    <UnifiedImagePromptModal
+                        isOpen={showPromptBuilder}
+                        onClose={() => setShowPromptBuilder(false)}
+                        onPromptGenerated={handlePromptBuilderGenerated}
+                        contextType="object"
+                        objectType={objectType as 'character' | 'location' | 'organization' | 'lorebook'}
+                        objectId={objectId}
+                        promptMode={isTagBased ? activePromptTab : 'natural'}
+                    />
+                )
+            ) : sceneContext ? (
+                <UnifiedImagePromptModal
                     isOpen={showPromptBuilder}
                     onClose={() => setShowPromptBuilder(false)}
                     onPromptGenerated={handlePromptBuilderGenerated}
-                    objectType={objectType as 'character' | 'location' | 'organization' | 'lorebook'}
-                    objectId={objectId}
+                    contextType="scene"
+                    sceneContext={sceneContext}
                     promptMode={isTagBased ? activePromptTab : 'natural'}
+                />
+            ) : null)}
+
+            {/* Reference Image Picker Modal */}
+            {showImagePicker && (
+                <UnifiedImageModal
+                    preset="assetPicker"
+                    isOpen={showImagePicker}
+                    onClose={() => setShowImagePicker(false)}
+                    onSelect={(asset: Asset) => handleImageSelected(asset.id, asset.thumbnail_url || asset.file_url || '')}
+                    title="Select Reference Image"
                 />
             )}
         </div>

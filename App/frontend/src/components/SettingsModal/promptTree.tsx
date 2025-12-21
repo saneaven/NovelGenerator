@@ -352,6 +352,40 @@ export const PROMPT_TREE: PromptNode[] = [
             description: 'Template for scene image prompt responses'
           }
         ]
+      },
+      {
+        id: 'imageprompt-coverimage',
+        label: 'Cover Image Prompt',
+        type: 'category',
+        children: [
+          {
+            id: 'imageprompt-coverimage-system',
+            label: 'System Prompt',
+            type: 'prompt',
+            functionType: 'imagePrompt',
+            category: 'systemPrompt',
+            name: 'coverImage',
+            description: 'Instructions for generating cover image prompts from story context'
+          },
+          {
+            id: 'imageprompt-coverimage-user',
+            label: 'User Prompt',
+            type: 'prompt',
+            functionType: 'imagePrompt',
+            category: 'userPrompt',
+            name: 'coverImage',
+            description: 'Template for cover image prompt requests with title, logline, and selected objects'
+          },
+          {
+            id: 'imageprompt-coverimage-prefill',
+            label: 'Prefill Template',
+            type: 'prompt',
+            functionType: 'imagePrompt',
+            category: 'prefill',
+            name: 'coverImage',
+            description: 'Template for cover image prompt responses'
+          }
+        ]
       }
     ]
   },

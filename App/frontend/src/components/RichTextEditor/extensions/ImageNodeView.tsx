@@ -9,7 +9,7 @@ import type { NodeViewProps } from '@tiptap/core';
 import type { Asset } from '../../../api/assetService';
 import { IconButton } from '../../IconButton';
 import { TextButton } from '../../TextButton';
-import { Refresh, Shuffle, Trash } from '../../icons';
+import { Shuffle, Trash } from '../../icons';
 import './ImageNodeView.css';
 
 // Storage keys for extension callbacks
@@ -17,8 +17,8 @@ export const IMAGE_OVERLAY_STORAGE_KEY = 'imageOverlayCallbacks';
 
 export interface ImageOverlayCallbacks {
     projectId?: string;
-    onReplace?: (currentSrc: string) => void;
-    onRegenerate?: (asset: Asset, imageBounds: DOMRect) => void;
+    // Unified callback for changing image (supports both pick and regenerate)
+    onChange?: (currentSrc: string, asset: Asset | null, imageBounds: DOMRect | null) => void;
     getAssetByUrl?: (src: string) => Promise<Asset | null>;
 }
 
@@ -99,22 +99,14 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
         }
     }, [isTouchDevice, showDeleteConfirm]);
 
-    // Handle regenerate
-    const handleRegenerate = useCallback(() => {
-        if (!asset || !callbacks?.onRegenerate || !imageRef.current) return;
+    // Handle change image (unified - opens modal for pick or regenerate)
+    const handleChangeImage = useCallback(() => {
+        if (!callbacks?.onChange) return;
 
-        const bounds = imageRef.current.getBoundingClientRect();
-        callbacks.onRegenerate(asset, bounds);
+        const bounds = imageRef.current?.getBoundingClientRect() || null;
+        callbacks.onChange(src, asset, bounds);
         setShowOverlay(false);
-    }, [asset, callbacks]);
-
-    // Handle replace
-    const handleReplace = useCallback(() => {
-        if (!callbacks?.onReplace) return;
-
-        callbacks.onReplace(src);
-        setShowOverlay(false);
-    }, [src, callbacks]);
+    }, [src, asset, callbacks]);
 
     // Handle delete (show confirmation)
     const handleDelete = useCallback(() => {
@@ -169,22 +161,12 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
             {!showDeleteConfirm && (
                 <div className="image-overlay" onClick={(e) => e.stopPropagation()}>
                     <div className="overlay-buttons">
-                        {/* Regenerate - only for generated images */}
-                        {canRegenerate && (
-                            <IconButton
-                                icon={<Refresh size="md" />}
-                                onClick={handleRegenerate}
-                                title="Regenerate image"
-                                disabled={isLoadingAsset}
-                                size="sm"
-                            />
-                        )}
-
-                        {/* Replace */}
+                        {/* Change image - unified button for pick/regenerate */}
                         <IconButton
                             icon={<Shuffle size="md" />}
-                            onClick={handleReplace}
-                            title="Replace image"
+                            onClick={handleChangeImage}
+                            title={canRegenerate ? "Change or regenerate image" : "Change image"}
+                            disabled={isLoadingAsset}
                             size="sm"
                         />
                     </div>

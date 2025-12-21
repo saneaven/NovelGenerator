@@ -360,3 +360,119 @@
     font-size: var(--font-size-xs);
     font-weight: var(--font-weight-medium);
 }
+
+/* ========================================
+   REFERENCE IMAGES SECTION
+   ======================================== */
+
+.image-generation-panel .form-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.image-generation-panel .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.image-generation-panel .section-header label {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.image-generation-panel .empty-hint {
+    padding: var(--spacing-md);
+    background: var(--color-surface-subtle);
+    border: 1px dashed var(--color-border-default);
+    border-radius: var(--border-radius-md);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    text-align: center;
+}
+
+.image-generation-panel .reference-images-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: var(--spacing-sm);
+}
+
+.image-generation-panel .reference-image-item {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: var(--border-radius-md);
+    overflow: hidden;
+    border: 1px solid var(--color-border-default);
+}
+
+.image-generation-panel .reference-image-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.image-generation-panel .reference-image-item .remove-image-btn {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity var(--transition-base);
+}
+
+.image-generation-panel .reference-image-item:hover .remove-image-btn {
+    opacity: 1;
+}
+
+/* ========================================
+   NOVELAI REFERENCE SETTINGS
+   ======================================== */
+
+.image-generation-panel .novelai-ref-settings {
+    margin-top: var(--spacing-md);
+    padding: var(--spacing-md);
+    background: var(--color-surface-subtle);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-md);
+}
+
+.image-generation-panel .ref-settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-sm);
+}
+
+.image-generation-panel .ref-settings-label {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.image-generation-panel .ref-warning {
+    font-size: var(--font-size-xs);
+    color: var(--color-feedback-warning-base);
+}
+
+.image-generation-panel .form-field.full-width {
+    width: 100%;
+}
+
+.image-generation-panel .config-slider {
+    width: 100%;
+    accent-color: var(--color-brand-primary);
+}
+
+.image-generation-panel .slider-value {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+}

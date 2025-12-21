@@ -19,7 +19,7 @@ export interface ReferenceObjectData {
     name: string;
 }
 
-export type AssetType = 'scene' | 'object' | null;
+export type AssetType = 'scene' | 'object' | 'cover' | null;
 
 export interface Asset {
     id: string;
@@ -145,7 +145,7 @@ export interface ImageGenerationRequest {
     // Reference objects used (stored in Asset metadata)
     reference_objects?: ReferenceObject[];
 
-    // Asset type for categorization ('scene' from SceneImageGeneratorModal, 'object' from AssetManager)
+    // Asset type for categorization ('scene' for novel editor scenes, 'object' from AssetManager)
     asset_type?: 'scene' | 'object';
 }
 

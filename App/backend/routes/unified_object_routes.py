@@ -21,7 +21,7 @@ from ..database import get_db
 from ..auth import get_current_user
 from ..models.db_models import (
     User, BasicInfo, Character, Organization, Location, LorebookEntry,
-    Act, Chapter, Manuscript, Outline
+    Act, Chapter, Manuscript, Outline, Asset, StoryObjectAsset
 )
 from ..schemas.story_objects import ImagePromptUpdate
 from ..models.translation_models import ObjectTranslation, ObjectVersion
@@ -134,7 +134,7 @@ def get_object_or_404(db: Session, object_type: str, object_id: UUID) -> Any:
     return obj
 
 
-def get_object_metadata(obj: Any, object_type: str) -> Dict[str, Any]:
+def get_object_metadata(obj: Any, object_type: str, db: Optional[Session] = None) -> Dict[str, Any]:
     """Extract metadata from object"""
     metadata = {
         'id': str(obj.id),
@@ -145,6 +145,25 @@ def get_object_metadata(obj: Any, object_type: str) -> Dict[str, Any]:
     # Add parent ID based on object type
     if object_type == 'basic_info':
         metadata['project_id'] = str(obj.project_id)
+        # Cover image from main StoryObjectAsset
+        metadata['cover_image_id'] = None
+        metadata['cover_image_url'] = None
+        if db:
+            main_link = db.query(StoryObjectAsset).filter(
+                StoryObjectAsset.object_type == 'basic_info',
+                StoryObjectAsset.object_id == obj.id,
+                StoryObjectAsset.is_main == True
+            ).first()
+            if main_link:
+                asset = db.query(Asset).filter(Asset.id == main_link.asset_id).first()
+                if asset:
+                    metadata['cover_image_id'] = str(asset.id)
+                    path = asset.thumbnail_path or asset.file_path
+                    metadata['cover_image_url'] = f"/storage/assets/{path}"
+        # Image prompt fields for cover image generation
+        metadata['image_prompt'] = getattr(obj, 'image_prompt', None)
+        metadata['image_prompt_positive'] = getattr(obj, 'image_prompt_positive', None)
+        metadata['image_prompt_negative'] = getattr(obj, 'image_prompt_negative', None)
     elif object_type in ['character', 'organization', 'location', LOREBOOK_TYPE]:
         metadata['project_id'] = str(obj.project_id)
         # Include image prompt fields for story objects that support them
@@ -384,7 +403,7 @@ async def get_object(
     obj = get_object_or_404(db, object_type, object_id)
 
     # Get metadata
-    metadata = get_object_metadata(obj, object_type)
+    metadata = get_object_metadata(obj, object_type, db)
 
     # Get latest version (contains all languages)
     latest_version = get_latest_version(db, object_type, object_id)
@@ -801,7 +820,7 @@ async def list_objects(
                 response_data = version_data
 
             # Get metadata
-            metadata = get_object_metadata(core_obj, object_type)
+            metadata = get_object_metadata(core_obj, object_type, db)
 
             # Get version info
             version_info = {
@@ -1107,7 +1126,7 @@ async def update_image_prompt(
     object_type = normalize_object_type(object_type)
 
     # Only allow for story objects that support images
-    allowed_types = ['character', 'organization', 'location', LOREBOOK_TYPE]
+    allowed_types = ['basic_info', 'character', 'organization', 'location', LOREBOOK_TYPE]
     if object_type not in allowed_types:
         raise HTTPException(
             status_code=400,
@@ -1134,3 +1153,5 @@ async def update_image_prompt(
         "image_prompt_positive": obj.image_prompt_positive,
         "image_prompt_negative": obj.image_prompt_negative
     }
+
+

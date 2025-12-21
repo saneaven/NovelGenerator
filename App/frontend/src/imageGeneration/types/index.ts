@@ -100,8 +100,8 @@ export interface ImageGenerationRequest {
     // Story object references (for metadata)
     referenceObjects?: ReferenceObject[];
 
-    // Asset type for categorization ('scene' from SceneImageGeneratorModal, 'object' from AssetManager)
-    assetType?: 'scene' | 'object';
+    // Asset type for categorization ('scene' for novel editor scenes, 'object' from AssetManager, 'cover' for project cover)
+    assetType?: 'scene' | 'object' | 'cover';
 }
 
 // Processed request (after PreProcessor)
@@ -119,7 +119,7 @@ export interface ProcessedImageRequest {
     provider_settings?: Record<string, unknown>;
     reference_images?: Array<{ asset_id: string; strength: number }>;
     reference_objects?: Array<{ id: string; type: string; name: string }>;
-    asset_type?: 'scene' | 'object';
+    asset_type?: 'scene' | 'object' | 'cover';
 }
 
 // Progress tracking
@@ -148,7 +148,7 @@ export interface ProcessedImageResult {
         filePath: string;
         thumbnailPath: string | null;
         mimeType: string;
-        assetType: 'scene' | 'object' | null;
+        assetType: 'scene' | 'object' | 'cover' | null;
         // Structured prompts (StyledPrompt with prefix/content/postfix)
         generationPrompt: StyledPrompt | null;
         generationPositivePrompt: StyledPrompt | null;

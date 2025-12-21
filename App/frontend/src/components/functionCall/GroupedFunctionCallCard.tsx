@@ -89,21 +89,31 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
     return initial;
   });
 
-  // Sync selections when cards change (e.g., streaming adds new cards)
+  // Sync selections when cards change - use card IDs as stable dependency
+  const cardIds = useMemo(() => cards.map(c => c.id).join(','), [cards]);
   useEffect(() => {
-    if (isStreaming) return; // No selections in streaming mode
+    if (isStreaming) return;
     setSelections(prev => {
+      const currentIds = new Set(cards.map(c => c.id));
       const updated = { ...prev };
       let hasChanges = false;
+      // Add new cards
       cards.forEach(card => {
         if (!(card.id in updated)) {
-          updated[card.id] = true; // New cards default to selected
+          updated[card.id] = true;
+          hasChanges = true;
+        }
+      });
+      // Remove stale cards
+      Object.keys(updated).forEach(id => {
+        if (!currentIds.has(id)) {
+          delete updated[id];
           hasChanges = true;
         }
       });
       return hasChanges ? updated : prev;
     });
-  }, [cards, isStreaming]);
+  }, [cardIds, isStreaming]); // Use stable cardIds string instead of cards array
 
   const [isConfirming, setIsConfirming] = useState(false);
 
@@ -126,7 +136,7 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
       const rawPreviews = buildOperationPreviewsFromArgs(card.data);
 
       // Parse action/type from function name (e.g., "update_character" -> {action: "update", objectType: "character"})
-      const functionName = card.functionCall?.function_name;
+      const functionName = card.functionCall?.functionName;
       const parsed = functionName ? parseFunctionName(functionName) : undefined;
 
       // Enrich previews with resolved names from storyObjects
@@ -135,7 +145,7 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
         const objectType = preview.type || parsed?.objectType;
         const action = preview.action || parsed?.action;
         // For update_manuscript, the ID is in chapterId field
-        const objectId = preview.id || card.data?.id || card.data?.chapterId;
+        const objectId = (preview.id || card.data?.id || card.data?.chapterId) as string | undefined;
 
         return {
           ...preview,
@@ -144,7 +154,7 @@ const GroupedFunctionCallCard: React.FC<GroupedFunctionCallCardProps> = ({
           id: objectId,
           // Only use resolved name from ID - validates ID actually exists
           targetName: resolveStoryObjectName(storyObjects, objectType, objectId),
-        };
+        } as FunctionCallOperationPreview;
       });
 
       return {

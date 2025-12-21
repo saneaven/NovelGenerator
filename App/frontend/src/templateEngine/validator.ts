@@ -29,7 +29,9 @@ export function mapFunctionTypeToSchemaType(
     case 'editAssistant':
       return 'editAssistant';
     case 'imagePrompt':
-      return name === 'scene' ? 'sceneImagePrompt' : 'objectImagePrompt';
+      if (name === 'scene') return 'sceneImagePrompt';
+      if (name === 'coverImage') return 'coverImagePrompt';
+      return 'objectImagePrompt';
     default:
       return null;
   }

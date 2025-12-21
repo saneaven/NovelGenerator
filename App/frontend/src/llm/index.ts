@@ -20,6 +20,7 @@ export {
   type ChatTranslationPromptContext,
   type ObjectImagePromptContext,
   type SceneImagePromptContext,
+  type CoverImagePromptContext,
   type SelectedObjectContext,
 } from './types';
 
@@ -55,18 +56,11 @@ export {
   NOVEL_EDITOR_FUNCTIONS,
 } from './schemas/chatFunctions';
 
+// Edit functions are now exported from functionCall module
 export {
-  REPLACE_BASIC_INFO_FUNCTION,
-  PATCH_BASIC_INFO_FUNCTION,
-  REPLACE_STORY_OBJECT_FUNCTION,
-  PATCH_STORY_OBJECT_FUNCTION,
-  REPLACE_CHAPTER_FUNCTION,
-  PATCH_CHAPTER_FUNCTION,
-  REPLACE_MANUSCRIPT_FUNCTION,
-  PATCH_MANUSCRIPT_FUNCTION,
   STORY_OBJECT_EDIT_FUNCTIONS,
   MANUSCRIPT_EDIT_FUNCTIONS,
-} from './schemas/editFunctions';
+} from '../functionCall';
 
 export {
   TRANSLATION_FUNCTIONS,

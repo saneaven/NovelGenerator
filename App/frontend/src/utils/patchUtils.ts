@@ -5,7 +5,7 @@
  * Used by patch_* function calls to perform partial text modifications.
  */
 
-import type { Replacement, PatchResult } from '../types/patchTypes';
+import type { Replacement, PatchResult, ReplacementResult } from '../types/patchTypes';
 
 /**
  * Normalize text for consistent matching.
@@ -80,40 +80,75 @@ export function applySingleReplacement(
 /**
  * Apply multiple search-replace operations sequentially.
  * Each replacement is applied to the result of the previous one.
+ * Continues processing even if some replacements fail, applying successful ones.
  *
  * @param text - The original text
  * @param replacements - Array of {old, new} pairs
- * @returns PatchResult with the final modified text or first error
+ * @returns PatchResult with the modified text (including successful patches) and detailed error info
  */
 export function applyPatch(
   text: string,
   replacements: Array<{ old: string; new: string }>
 ): PatchResult {
   if (!replacements || replacements.length === 0) {
-    return { success: true, value: text };
+    return { success: true, value: text, successCount: 0, failureCount: 0 };
   }
 
   let current = text;
+  const replacementResults: ReplacementResult[] = [];
+  let successCount = 0;
+  let failureCount = 0;
 
   for (let i = 0; i < replacements.length; i++) {
     const r = replacements[i];
     const result = applySingleReplacement(current, r.old, r.new);
 
     if (!result.success) {
-      return {
+      // Record failure but continue with other replacements
+      replacementResults.push({
+        index: i,
         success: false,
-        value: text, // Return original on failure
-        error: `Replacement ${i + 1}/${replacements.length} failed: ${result.error}`,
-        needsRetry: true,
-      };
+        old: r.old,
+        new: r.new,
+        error: result.error,
+      });
+      failureCount++;
+    } else {
+      current = result.value;
+      replacementResults.push({
+        index: i,
+        success: true,
+        old: r.old,
+        new: r.new,
+      });
+      successCount++;
     }
+  }
 
-    current = result.value;
+  if (failureCount > 0) {
+    // Build detailed error message
+    const failedItems = replacementResults
+      .filter(r => !r.success)
+      .map(r => `[${r.index + 1}] "${r.old.slice(0, 30)}${r.old.length > 30 ? '...' : ''}" - ${r.error}`)
+      .join('\n');
+
+    return {
+      success: false,
+      value: current,  // Return text with successful patches applied
+      error: `${failureCount}/${replacements.length} replacements failed:\n${failedItems}`,
+      needsRetry: true,
+      replacementResults,
+      successCount,
+      failureCount,
+    };
   }
 
   return {
     success: true,
     value: current,
+    replacementResults,
+    successCount,
+    failureCount: 0,
   };
 }
 

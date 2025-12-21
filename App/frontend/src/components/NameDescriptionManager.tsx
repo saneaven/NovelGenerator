@@ -22,7 +22,7 @@ import { useAssetStore } from '../store/assetStore';
 import AIEditModal from './AIEditModal';
 import VersionHistoryModal from './VersionHistoryModal';
 import TranslationModal from './TranslationModal';
-import { AssetManagerModal } from './AssetManager';
+import { UnifiedImageModal } from './AssetManager';
 import StoryCardExpanded from './StoryCardExpanded';
 import { DropdownMenu, DropdownItem, DropdownDivider } from './ui/DropdownMenu';
 import { IconButton } from './IconButton';
@@ -616,12 +616,13 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
       )}
 
       {assetTargetId && (
-        <AssetManagerModal
+        <UnifiedImageModal
+          preset="objectManager"
           isOpen={showAssetModal}
           onClose={handleAssetModalClose}
           objectType={category}
           objectId={assetTargetId}
-          title={`Images for ${singularName}`}
+          title={`${singularName} Images`}
         />
       )}
     </div>

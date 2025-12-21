@@ -118,7 +118,7 @@ function buildGroups(
           .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0));
 
         return {
-          id: `act-${act.id}`,
+          id: `outline-act-${act.id}`,
           label: (actData.name as string) || 'Unnamed Act',
           type: 'act' as const,
           items: actChapters.map(ch => objectToItem(ch, language)),
@@ -180,7 +180,7 @@ function buildGroups(
           .filter((item): item is ObjectPickerItem => item !== null);
 
         return {
-          id: `act-${act.id}`,
+          id: `manuscript-act-${act.id}`,
           label: (actData.name as string) || 'Unnamed Act',
           type: 'act' as const,
           items,

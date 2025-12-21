@@ -15,6 +15,7 @@ export const LLMTaskMode = {
   CHAT_TRANSLATION: 'chat_translation',
   OBJECT_IMAGE_PROMPT: 'object_image_prompt',
   SCENE_IMAGE_PROMPT: 'scene_image_prompt',
+  COVER_IMAGE_PROMPT: 'cover_image_prompt',
 } as const;
 
 export type LLMTaskModeType = typeof LLMTaskMode[keyof typeof LLMTaskMode];
@@ -83,6 +84,12 @@ export interface TemplateData {
     scenePreContext?: string;
     scenePostContext?: string;
     selectedObjectIds?: string[];
+    // For cover image prompts
+    coverImage?: {
+      title: string;
+      logline: string;
+      genre: string;
+    };
   };
 }
 
@@ -213,6 +220,23 @@ export interface SceneImagePromptContext extends BasePromptContext {
 }
 
 /**
+ * Context for cover image prompt generation
+ */
+export interface CoverImagePromptContext extends BasePromptContext {
+  promptMode: 'natural' | 'positive' | 'negative';
+  basicInfo: {
+    title: string;
+    logline: string;
+    genre: string;
+  };
+  selectedObjects: SelectedObjectContext[];
+  currentPrompt?: string | null;
+  currentPromptPositive?: string | null;
+  currentPromptNegative?: string | null;
+  isNativeOutput?: boolean;
+}
+
+/**
  * Union type of all prompt contexts
  */
 export type PromptContext =
@@ -223,7 +247,8 @@ export type PromptContext =
   | StoryTranslationPromptContext
   | ChatTranslationPromptContext
   | ObjectImagePromptContext
-  | SceneImagePromptContext;
+  | SceneImagePromptContext
+  | CoverImagePromptContext;
 
 /**
  * LLM Task configuration

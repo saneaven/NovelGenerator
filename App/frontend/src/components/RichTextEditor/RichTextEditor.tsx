@@ -4,7 +4,7 @@
  * Features:
  * - Rich text editing with basic formatting
  * - Inline image support
- * - Image insert menu with drag-drop, browse, and generate options
+ * - Image button opens unified image modal (via onBrowseAssets callback)
  * - Native markdown support via @tiptap/markdown
  */
 
@@ -20,7 +20,6 @@ import { TableHeader } from '@tiptap/extension-table-header';
 import { Markdown } from '@tiptap/markdown';
 import ImageWithOverlay from './extensions/ImageWithOverlay';
 import { IMAGE_OVERLAY_STORAGE_KEY, type ImageOverlayCallbacks } from './extensions/ImageNodeView';
-import ImageInsertMenu from './ImageInsertMenu';
 import type { Asset } from '../../api/assetService';
 import { Image } from '../icons';
 import './RichTextEditor.css';
@@ -39,17 +38,13 @@ interface RichTextEditorProps {
   onChange: (markdown: string) => void;
   placeholder?: string;
   disabled?: boolean;
-  // Image insert menu callbacks
-  onFileUpload?: (file: File) => void;
+  // Image insert callback - opens the unified image modal
   onBrowseAssets?: () => void;
-  onGenerateImage?: () => void;
-  onManageSceneAssets?: () => void;
   // Toolbar action props (optional - for integration with NovelEditorPanel)
   toolbarActions?: React.ReactNode;
-  // Image overlay callbacks (for replace, regenerate actions)
+  // Image overlay callbacks (for change image action)
   projectId?: string;
-  onReplaceImage?: (currentSrc: string) => void;
-  onRegenerateImage?: (asset: Asset, imageBounds: DOMRect) => void;
+  onChangeImage?: (currentSrc: string, asset: Asset | null, imageBounds: DOMRect | null) => void;
   getAssetByUrl?: (src: string) => Promise<Asset | null>;
 }
 
@@ -58,14 +53,10 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   onChange,
   placeholder = 'Start writing...',
   disabled = false,
-  onFileUpload,
   onBrowseAssets,
-  onGenerateImage,
-  onManageSceneAssets,
   toolbarActions,
   projectId,
-  onReplaceImage,
-  onRegenerateImage,
+  onChangeImage,
   getAssetByUrl,
 }, ref) => {
   // Use ref to hold onChange callback (prevents stale closure in onCreate)
@@ -89,20 +80,15 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   const tableTriggerRef = useRef<HTMLButtonElement>(null);
   const tableMenuRef = useRef<HTMLDivElement>(null);
 
-  // Image insert menu state
-  const [imageMenuOpen, setImageMenuOpen] = useState(false);
-  const imageButtonRef = useRef<HTMLButtonElement>(null);
-
-  // Check if new image menu should be used (all callbacks provided)
-  const useImageMenu = !!(onFileUpload && onBrowseAssets && onGenerateImage);
+  // Check if image button should be shown (browse callback provided)
+  const showImageButton = !!onBrowseAssets;
 
   // Memoize image overlay callbacks to prevent unnecessary re-renders
   const imageOverlayCallbacks = useMemo<ImageOverlayCallbacks>(() => ({
     projectId,
-    onReplace: onReplaceImage,
-    onRegenerate: onRegenerateImage,
+    onChange: onChangeImage,
     getAssetByUrl,
-  }), [projectId, onReplaceImage, onRegenerateImage, getAssetByUrl]);
+  }), [projectId, onChangeImage, getAssetByUrl]);
 
   // Open heading dropdown with position calculation
   const openHeadingDropdown = () => {
@@ -475,13 +461,12 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
 
         <div className="toolbar-divider" />
 
-        {/* Image button with menu */}
-        {useImageMenu && (
+        {/* Image button - opens image selection modal directly */}
+        {showImageButton && (
           <button
-            ref={imageButtonRef}
             type="button"
-            onClick={() => setImageMenuOpen(!imageMenuOpen)}
-            className={`format-btn image-btn ${imageMenuOpen ? 'active' : ''}`}
+            onClick={onBrowseAssets}
+            className="format-btn image-btn"
             disabled={disabled}
             title="Insert image"
           >
@@ -500,19 +485,6 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
           </>
         )}
       </div>
-
-      {/* Image Insert Menu */}
-      {useImageMenu && (
-        <ImageInsertMenu
-          isOpen={imageMenuOpen}
-          onClose={() => setImageMenuOpen(false)}
-          onUpload={onFileUpload}
-          onBrowseFiles={onBrowseAssets}
-          onGenerateImage={onGenerateImage}
-          onManageSceneAssets={onManageSceneAssets}
-          anchorRef={imageButtonRef}
-        />
-      )}
 
       {/* Editor Content */}
       <EditorContent editor={editor} className="editor-content-wrapper" />

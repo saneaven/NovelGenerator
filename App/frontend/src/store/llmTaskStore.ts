@@ -12,8 +12,8 @@ export type LLMTaskType =
   | 'chapter-edit'      // ManuscriptAIEditModal
   | 'translation'       // TranslationModal (story objects)
   | 'chat-translation'  // ChatPanel inline (single message)
-  | 'image-prompt'      // ImagePromptBuilderModal
-  | 'scene-image'       // SceneImageGeneratorModal
+  | 'image-prompt'      // UnifiedImagePromptModal
+  | 'scene-image'       // Novel editor scene image generation
   | 'chat';             // Main chat in Workspace
 
 export interface TaskProgress {

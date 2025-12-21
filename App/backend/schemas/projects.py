@@ -25,6 +25,7 @@ class ProjectResponse(BaseModel):
     description: Optional[str]
     created_at: datetime
     updated_at: datetime
+    cover_image_url: Optional[str] = None  # From BasicInfo's cover image
 
     class Config:
         from_attributes = True

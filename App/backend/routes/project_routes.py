@@ -1,13 +1,42 @@
 """Project CRUD routes"""
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 import uuid
 
 from ..database import get_db
-from ..models.db_models import User, Project
+from ..models.db_models import User, Project, StoryObjectAsset, Asset
 from ..schemas.projects import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse
 from ..auth import get_current_user
+
+
+def _get_cover_image_url(db: Session, project: Project) -> str | None:
+    """Extract cover image URL from project's basic_info using StoryObjectAsset"""
+    if project.basic_info:
+        main_link = db.query(StoryObjectAsset).filter(
+            StoryObjectAsset.object_type == 'basic_info',
+            StoryObjectAsset.object_id == project.basic_info.id,
+            StoryObjectAsset.is_main == True
+        ).first()
+        if main_link:
+            asset = db.query(Asset).filter(Asset.id == main_link.asset_id).first()
+            if asset:
+                path = asset.thumbnail_path or asset.file_path
+                return f"/storage/assets/{path}"
+    return None
+
+
+def _project_to_response(db: Session, project: Project) -> dict:
+    """Convert project to response dict with cover_image_url"""
+    return {
+        "id": project.id,
+        "user_id": project.user_id,
+        "name": project.name,
+        "description": project.description,
+        "created_at": project.created_at,
+        "updated_at": project.updated_at,
+        "cover_image_url": _get_cover_image_url(db, project)
+    }
 
 router = APIRouter(prefix="/api/v1/projects", tags=["Projects"])
 
@@ -48,14 +77,21 @@ async def list_projects(
     List all projects for the current user
 
     Returns paginated list of projects owned by the authenticated user.
+    Includes cover_image_url from BasicInfo if available.
     """
-    projects = db.query(Project).filter(
+    # Eager load basic_info (cover image is fetched via StoryObjectAsset in _get_cover_image_url)
+    projects = db.query(Project).options(
+        joinedload(Project.basic_info)
+    ).filter(
         Project.user_id == current_user.id
     ).offset(skip).limit(limit).all()
 
     total = db.query(Project).filter(Project.user_id == current_user.id).count()
 
-    return {"projects": projects, "total": total}
+    # Convert to response format with cover_image_url
+    project_responses = [_project_to_response(db, p) for p in projects]
+
+    return {"projects": project_responses, "total": total}
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -68,8 +104,11 @@ async def get_project(
     Get a specific project by ID
 
     Returns project details if the user owns it.
+    Includes cover_image_url from BasicInfo if available.
     """
-    project = db.query(Project).filter(
+    project = db.query(Project).options(
+        joinedload(Project.basic_info)
+    ).filter(
         Project.id == project_id,
         Project.user_id == current_user.id
     ).first()
@@ -80,7 +119,7 @@ async def get_project(
             detail="Project not found"
         )
 
-    return project
+    return _project_to_response(db, project)
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)
@@ -95,7 +134,9 @@ async def update_project(
 
     Updates project details (name and/or description).
     """
-    project = db.query(Project).filter(
+    project = db.query(Project).options(
+        joinedload(Project.basic_info)
+    ).filter(
         Project.id == project_id,
         Project.user_id == current_user.id
     ).first()
@@ -115,7 +156,7 @@ async def update_project(
     db.commit()
     db.refresh(project)
 
-    return project
+    return _project_to_response(db, project)
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)

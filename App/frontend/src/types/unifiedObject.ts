@@ -66,6 +66,9 @@ export interface ObjectMetadata {
   image_prompt?: string | null;  // Natural language prompt
   image_prompt_positive?: string | null;  // Tag-based positive (NovelAI)
   image_prompt_negative?: string | null;  // Tag-based negative (NovelAI)
+  // Cover image (for basic_info only)
+  cover_image_id?: string | null;
+  cover_image_url?: string | null;
 }
 
 // ============================================================================

@@ -33,6 +33,7 @@ const MODE_TO_FUNCTION_TYPE: Record<LLMTaskModeType, AIFunctionType> = {
   [LLMTaskMode.CHAT_TRANSLATION]: 'translation',
   [LLMTaskMode.OBJECT_IMAGE_PROMPT]: 'imagePrompt',
   [LLMTaskMode.SCENE_IMAGE_PROMPT]: 'imagePrompt',
+  [LLMTaskMode.COVER_IMAGE_PROMPT]: 'imagePrompt',
 };
 
 /**

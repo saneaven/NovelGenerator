@@ -256,10 +256,11 @@ export class FunctionCallStreamTracker {
     }
 
     const schema = this.schemaByName[state.draft.functionName];
-    const operationsSchema = schema?.parameters?.properties?.operations?.items;
+    const operationsProperty = schema?.parameters?.properties?.operations as Record<string, unknown> | undefined;
+    const operationsSchema = operationsProperty?.items;
 
     if (Array.isArray(args.operations)) {
-      return args.operations.map((operation: any, index: number) =>
+      return args.operations.map((operation: unknown, index: number) =>
         buildPreviewFromOperation(operation, index, operationsSchema)
       );
     }

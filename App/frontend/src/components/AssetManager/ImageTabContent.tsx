@@ -5,13 +5,31 @@ import { ImageGenerationPanel } from '../ImageGeneration';
 import ImagePromptManager from './ImagePromptManager';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
-import { formatStyledPrompt, type Asset, type StoryObjectAsset } from '../../api/assetService';
+import { formatStyledPrompt, type Asset, type SceneAsset } from '../../api/assetService';
 import { API_BASE_URL } from '../../api/client';
-import { Star, Edit, Folder, AIAssistMini, Close } from '../icons';
+import { Star, Edit, Folder, AIAssistMini, Close, MoreHorizontal, Trash, Info } from '../icons';
 import './ImageTabContent.css';
 
+// Basic asset info needed for display
+type AssetLike = {
+    id: string;
+    name: string;
+    width?: number | null;
+    height?: number | null;
+    file_url: string;
+    thumbnail_url?: string | null;
+    file_size?: number | null;
+    created_at: string;
+    generation_provider?: string | null;
+    generation_model?: string | null;
+    generation_prompt?: { prefix?: string; content?: string; postfix?: string } | null;
+    generation_positive_prompt?: { prefix?: string; content?: string; postfix?: string } | null;
+    generation_negative_prompt?: { prefix?: string; content?: string; postfix?: string } | null;
+    generation_settings?: Record<string, unknown> | null;
+};
+
 // Calculate grid span based on image aspect ratio
-function calculateGridSpan(asset: Asset | null, baseRowHeight: number = 10): { rowSpan: number; colSpan: number } {
+function calculateGridSpan(asset: AssetLike | null, baseRowHeight: number = 10): { rowSpan: number; colSpan: number } {
     if (!asset?.width || !asset?.height) {
         return { rowSpan: 15, colSpan: 1 }; // Default square-ish
     }
@@ -32,6 +50,9 @@ function calculateGridSpan(asset: Asset | null, baseRowHeight: number = 10): { r
 
 type SubTabType = 'library' | 'prompt';
 
+// Content mode determines what data to display and what actions are available
+export type ImageContentMode = 'object' | 'scene' | 'picker';
+
 export interface RegenerateSettings {
     provider: string;
     model: string;
@@ -43,30 +64,78 @@ export interface RegenerateSettings {
 }
 
 interface ImageTabContentProps {
-    objectType: string;
-    objectId: string;
+    // Mode (defaults to 'object' for backward compatibility)
+    mode?: ImageContentMode;
+
+    // Object mode props (existing)
+    objectType?: string;
+    objectId?: string;
     onAssetChange?: () => void;
+
+    // Picker mode props
+    onSelect?: (asset: Asset) => void;
+    excludeAssetIds?: string[];
+
+    // Selection change callback (for parent to track selected asset)
+    onSelectionChange?: (asset: Asset | null) => void;
+
+    // UI toggles (auto-determined by mode if not specified)
+    showImportButton?: boolean;
+    showPromptTab?: boolean;
+
+    // Scene context for AI assist (passed to ImageGenerationPanel)
+    sceneContext?: { preContext: string; postContext: string };
+
+    // Image generation callback (for parent to receive generated images)
+    onImageGenerated?: (asset: Asset) => void;
+    // Initial settings for regeneration mode
+    initialGenerationSettings?: {
+        prompt?: string;
+        positivePrompt?: string;
+        negativePrompt?: string;
+        provider?: string;
+        model?: string;
+        size?: string;
+        settings?: Record<string, any>;
+    };
 }
 
 const ImageTabContent: React.FC<ImageTabContentProps> = ({
+    mode = 'object',
     objectType,
     objectId,
     onAssetChange,
+    onSelect,
+    excludeAssetIds = [],
+    onSelectionChange,
+    showImportButton: showImportButtonProp,
+    showPromptTab: showPromptTabProp,
+    sceneContext,
+    onImageGenerated: onImageGeneratedProp,
+    initialGenerationSettings,
 }) => {
     const { currentProjectId } = useProjectStore();
     const {
+        assets,
         storyObjectAssets,
+        sceneAssets,
         isLoading,
         error,
+        fetchAssets,
         fetchStoryObjectAssets,
+        fetchSceneAssets,
         getStoryObjectAssets,
         uploadAsset,
         updateAsset,
+        deleteAsset,
         setMainAsset,
-        unlinkAssetFromObject,
         linkAssetToObject,
         clearError,
     } = useAssetStore();
+
+    // Determine UI visibility based on mode
+    const showImportButton = showImportButtonProp ?? (mode !== 'picker');
+    const showPromptTab = showPromptTabProp ?? (mode === 'object');
 
     const [activeSubTab, setActiveSubTab] = useState<SubTabType>('library');
     const [searchQuery, setSearchQuery] = useState('');
@@ -80,37 +149,88 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     const [showGeneratePanel, setShowGeneratePanel] = useState(false);
     const [isDragOver, setIsDragOver] = useState(false);
     const [activeAssetId, setActiveAssetId] = useState<string | null>(null);
+    const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+    const [moreDropdownAssetId, setMoreDropdownAssetId] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const importButtonRef = useRef<HTMLDivElement>(null);
+    const moreDropdownRef = useRef<HTMLDivElement>(null);
 
+    // Fetch data based on mode
     useEffect(() => {
-        if (currentProjectId && objectType && objectId) {
-            fetchStoryObjectAssets(currentProjectId, objectType, objectId);
-        }
-    }, [currentProjectId, objectType, objectId, fetchStoryObjectAssets]);
+        if (!currentProjectId) return;
 
-    // Get linked assets with is_main info
+        if (mode === 'object' && objectType && objectId) {
+            fetchStoryObjectAssets(currentProjectId, objectType, objectId);
+        } else if (mode === 'scene') {
+            fetchSceneAssets(currentProjectId);
+        } else if (mode === 'picker') {
+            // Picker mode: fetch all assets or scene assets
+            fetchAssets(currentProjectId);
+        }
+    }, [currentProjectId, mode, objectType, objectId, fetchStoryObjectAssets, fetchSceneAssets, fetchAssets]);
+
+    // Get linked assets with is_main info (for object mode)
     const linkedAssets = useMemo(() => {
+        if (mode !== 'object' || !objectType || !objectId) return [];
         return getStoryObjectAssets(objectType, objectId);
-    }, [objectType, objectId, storyObjectAssets, getStoryObjectAssets]);
+    }, [mode, objectType, objectId, storyObjectAssets, getStoryObjectAssets]);
+
+    // Unified asset list type for rendering
+    type DisplayAsset = {
+        id: string;
+        asset: Asset | SceneAsset;
+        is_main?: boolean;
+        usage_count?: number;
+        used_in_chapters?: Array<{ id: string; name: string; act_name?: string | null }>;
+        // For object mode, keep reference to original link for unlink operation
+        linkId?: string;
+    };
+
+    // Get display assets based on mode
+    const displayAssets = useMemo((): DisplayAsset[] => {
+        if (mode === 'object') {
+            return linkedAssets.map(link => ({
+                id: link.asset.id,
+                linkId: link.id,
+                asset: link.asset,
+                is_main: link.is_main,
+            }));
+        } else if (mode === 'scene') {
+            return sceneAssets.map(asset => ({
+                id: asset.id,
+                asset: asset,
+                usage_count: asset.usage_count,
+                used_in_chapters: asset.used_in_chapters,
+            }));
+        } else {
+            // Picker mode: show all assets
+            return assets.map(asset => ({
+                id: asset.id,
+                asset,
+            }));
+        }
+    }, [mode, linkedAssets, sceneAssets, assets]);
 
     // Filter by search query
     const filteredAssets = useMemo(() => {
-        if (!searchQuery) return linkedAssets;
-        return linkedAssets.filter((link) =>
-            link.asset.name.toLowerCase().includes(searchQuery.toLowerCase())
+        if (!searchQuery) return displayAssets;
+        return displayAssets.filter((item) =>
+            item.asset.name.toLowerCase().includes(searchQuery.toLowerCase())
         );
-    }, [linkedAssets, searchQuery]);
+    }, [displayAssets, searchQuery]);
 
     // Dropdown file upload handler
     const handleDropdownFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files || !currentProjectId) return;
 
+        // Determine asset type based on mode
+        const assetType = mode === 'scene' ? 'scene' : (mode === 'object' ? 'object' : undefined);
+
         for (const file of Array.from(files)) {
             try {
-                const newAsset = await uploadAsset(currentProjectId, file, file.name);
+                const newAsset = await uploadAsset(currentProjectId, file, file.name, assetType);
                 setSuccessModalAsset(newAsset);
                 setAssetName(file.name.replace(/\.[^/.]+$/, ''));
                 setShowImportDropdown(false);
@@ -134,14 +254,16 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         if (files.length > 0 && currentProjectId) {
             const file = files[0];
             if (file.type.startsWith('image/')) {
-                uploadAsset(currentProjectId, file, file.name).then((newAsset) => {
+                // Determine asset type based on mode
+                const assetType = mode === 'scene' ? 'scene' : (mode === 'object' ? 'object' : undefined);
+                uploadAsset(currentProjectId, file, file.name, assetType).then((newAsset) => {
                     setSuccessModalAsset(newAsset);
                     setAssetName(file.name.replace(/\.[^/.]+$/, ''));
                     setShowImportDropdown(false);
                 });
             }
         }
-    }, [currentProjectId, uploadAsset]);
+    }, [currentProjectId, uploadAsset, mode]);
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -190,6 +312,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
             const target = e.target as HTMLElement;
             if (!target.closest('.asset-grid')) {
                 setActiveAssetId(null);
+                setSelectedAssetId(null);
             }
         };
 
@@ -199,8 +322,32 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         }
     }, [activeAssetId]);
 
+    // Close more dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (moreDropdownRef.current && !moreDropdownRef.current.contains(e.target as Node)) {
+                setMoreDropdownAssetId(null);
+            }
+        };
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setMoreDropdownAssetId(null);
+            }
+        };
+
+        if (moreDropdownAssetId) {
+            document.addEventListener('mousedown', handleClickOutside);
+            document.addEventListener('keydown', handleKeyDown);
+            return () => {
+                document.removeEventListener('mousedown', handleClickOutside);
+                document.removeEventListener('keydown', handleKeyDown);
+            };
+        }
+    }, [moreDropdownAssetId]);
+
     const handleSetMain = async (assetId: string) => {
-        if (!currentProjectId) return;
+        if (!currentProjectId || !objectType || !objectId) return;
         try {
             await setMainAsset(currentProjectId, objectType, objectId, assetId);
             onAssetChange?.();
@@ -209,20 +356,36 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         }
     };
 
-    const handleUnlink = async (link: StoryObjectAsset) => {
+    const handleDeleteAsset = async (asset: AssetLike) => {
         if (!currentProjectId) return;
 
-        if (window.confirm(`Remove "${link.asset.name}" from this ${objectType}?`)) {
+        // Check if it's a scene asset with usage info
+        const sceneAsset = sceneAssets.find(sa => sa.id === asset.id);
+        const usageWarning = sceneAsset && sceneAsset.usage_count > 0
+            ? `\n\nWarning: This image is used in ${sceneAsset.usage_count} chapter${sceneAsset.usage_count > 1 ? 's' : ''}:\n${sceneAsset.used_in_chapters.map(ch => `• ${ch.act_name ? ch.act_name + ' - ' : ''}${ch.name}`).join('\n')}`
+            : '';
+
+        if (window.confirm(`Are you sure you want to delete "${asset.name}"?${usageWarning}`)) {
             try {
-                await unlinkAssetFromObject(currentProjectId, objectType, objectId, link.id);
+                await deleteAsset(currentProjectId, asset.id);
+                // Refresh the appropriate list
+                if (mode === 'scene') {
+                    await fetchSceneAssets(currentProjectId);
+                } else if (mode === 'object' && objectType && objectId) {
+                    await fetchStoryObjectAssets(currentProjectId, objectType, objectId);
+                } else {
+                    await fetchAssets(currentProjectId);
+                }
                 onAssetChange?.();
+                setDetailAsset(null);
+                setMoreDropdownAssetId(null);
             } catch (err) {
                 // Error handled in store
             }
         }
     };
 
-    const handleStartRename = (asset: Asset) => {
+    const handleStartRename = (asset: AssetLike) => {
         setEditingAssetId(asset.id);
         setEditingName(asset.name);
     };
@@ -234,7 +397,14 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         }
         try {
             await updateAsset(currentProjectId, assetId, editingName.trim());
-            await fetchStoryObjectAssets(currentProjectId, objectType, objectId);
+            // Refresh the appropriate list
+            if (mode === 'scene') {
+                await fetchSceneAssets(currentProjectId);
+            } else if (mode === 'object' && objectType && objectId) {
+                await fetchStoryObjectAssets(currentProjectId, objectType, objectId);
+            } else {
+                await fetchAssets(currentProjectId);
+            }
         } catch (err) {
             // Error handled in store
         }
@@ -245,13 +415,27 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         setSuccessModalAsset(asset);
         setAssetName('Generated Image');
         setRegenerateSettings(null);
+        // Also notify parent if callback provided
+        onImageGeneratedProp?.(asset);
     };
 
-    const handleAssetClick = (asset: Asset) => {
-        setDetailAsset(asset);
+    const handleAssetClick = (item: DisplayAsset) => {
+        if (mode === 'scene' || mode === 'picker') {
+            // For scene/picker: select the asset and fix hover state
+            setSelectedAssetId(item.id);
+            setActiveAssetId(item.id);
+            // Notify parent of selection change
+            onSelectionChange?.(item.asset as Asset);
+        }
+        // For object mode: just fix hover state (done in onClick)
     };
 
-    const handleRegenerateWithSettings = (asset: Asset) => {
+    const handleOpenDetail = (asset: AssetLike) => {
+        setDetailAsset(asset as Asset);
+        setMoreDropdownAssetId(null);
+    };
+
+    const handleRegenerateWithSettings = (asset: AssetLike) => {
         if (!asset.generation_provider) return;
 
         const settings: RegenerateSettings = {
@@ -260,11 +444,11 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
             prompt: asset.generation_prompt?.content || undefined,
             positive_prompt: asset.generation_positive_prompt?.content || undefined,
             negative_prompt: asset.generation_negative_prompt?.content || undefined,
-            settings: asset.generation_settings || undefined,
+            settings: asset.generation_settings as Record<string, unknown> | undefined,
         };
 
         if (asset.generation_settings?.size) {
-            settings.size = asset.generation_settings.size;
+            settings.size = String(asset.generation_settings.size);
         } else if (asset.width && asset.height) {
             settings.size = `${asset.width}x${asset.height}`;
         }
@@ -312,10 +496,25 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                 await updateAsset(currentProjectId, successModalAsset.id, assetName.trim());
             }
 
-            const isFirstImage = linkedAssets.length === 0;
-            await linkAssetToObject(currentProjectId, objectType, objectId, successModalAsset.id, isFirstImage);
-            await fetchStoryObjectAssets(currentProjectId, objectType, objectId);
+            if (mode === 'object' && objectType && objectId) {
+                // Object mode: link to object
+                const isFirstImage = linkedAssets.length === 0;
+                await linkAssetToObject(currentProjectId, objectType, objectId, successModalAsset.id, isFirstImage);
+                await fetchStoryObjectAssets(currentProjectId, objectType, objectId);
+            } else if (mode === 'scene') {
+                // Scene mode: refresh scene assets
+                await fetchSceneAssets(currentProjectId);
+            } else {
+                // Picker mode: just refresh all assets
+                await fetchAssets(currentProjectId);
+            }
+
             onAssetChange?.();
+
+            // If in picker/scene mode with onSelect, select the new asset
+            if (onSelect) {
+                onSelect(successModalAsset);
+            }
 
             setSuccessModalAsset(null);
             setActiveSubTab('library');
@@ -335,20 +534,23 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                     >
                         Library
                     </button>
-                    <button
-                        className={`subtab-button ${activeSubTab === 'prompt' ? 'active' : ''}`}
-                        onClick={() => setActiveSubTab('prompt')}
-                    >
-                        Prompt
-                    </button>
+                    {showPromptTab && (
+                        <button
+                            className={`subtab-button ${activeSubTab === 'prompt' ? 'active' : ''}`}
+                            onClick={() => setActiveSubTab('prompt')}
+                        >
+                            Prompt
+                        </button>
+                    )}
                 </div>
-                <div className="import-button-wrapper" ref={importButtonRef}>
-                    <TextButton
-                        variant="primary"
-                        size="sm"
-                        onClick={() => setShowImportDropdown(!showImportDropdown)}
-                    >
-                        + Import
+                {showImportButton && (
+                    <div className="import-button-wrapper" ref={importButtonRef}>
+                        <TextButton
+                            variant="primary"
+                            size="sm"
+                            onClick={() => setShowImportDropdown(!showImportDropdown)}
+                        >
+                            + Import
                     </TextButton>
 
                     {/* Import Dropdown */}
@@ -392,7 +594,8 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                             </TextButton>
                         </div>
                     )}
-                </div>
+                    </div>
+                )}
             </div>
 
             {/* Sub-tab content */}
@@ -419,50 +622,79 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                         )}
 
                         <div className="asset-grid">
-                            {filteredAssets.map((link) => {
-                                const { rowSpan, colSpan } = calculateGridSpan(link.asset);
+                            {filteredAssets.map((item) => {
+                                const { rowSpan, colSpan } = calculateGridSpan(item.asset);
+                                const isSelected = selectedAssetId === item.id;
+                                const isExcluded = excludeAssetIds.includes(item.asset.id);
+                                const isActive = activeAssetId === item.id;
+
                                 return (
                                     <div
-                                        key={link.id}
-                                        className={`asset-item ${link.is_main ? 'main' : ''} ${activeAssetId === link.id ? 'active' : ''}`}
+                                        key={item.id}
+                                        className={`asset-item ${item.is_main ? 'main' : ''} ${isActive ? 'active' : ''} ${isSelected ? 'selected' : ''} ${isExcluded ? 'excluded' : ''}`}
                                         style={{
                                             gridRow: `span ${rowSpan}`,
                                             gridColumn: `span ${colSpan}`,
                                         }}
                                         onClick={() => {
-                                            // On mobile: first tap shows actions, second tap opens detail
-                                            if (activeAssetId === link.id) {
-                                                handleAssetClick(link.asset);
+                                            if (isExcluded) return;
+
+                                            if (mode === 'object') {
+                                                // Object mode: first tap shows actions
+                                                setActiveAssetId(item.id);
                                             } else {
-                                                setActiveAssetId(link.id);
+                                                // Scene/Picker mode: tap to select + show actions
+                                                handleAssetClick(item);
                                             }
                                         }}
                                     >
-                                        <div className={`star-button-wrapper ${link.is_main ? 'is-main' : ''}`} onClick={(e) => e.stopPropagation()}>
-                                            <IconButton
-                                                size="xs"
-                                                icon={<Star size="xs" />}
-                                                onClick={() => !link.is_main && handleSetMain(link.asset.id)}
-                                                title={link.is_main ? 'Main Image' : 'Set as Main'}
-                                                isActive={link.is_main}
-                                            />
-                                        </div>
+                                        {/* Star button - only in object mode */}
+                                        {mode === 'object' && (
+                                            <div className={`star-button-wrapper ${item.is_main ? 'is-main' : ''}`} onClick={(e) => e.stopPropagation()}>
+                                                <IconButton
+                                                    size="xs"
+                                                    icon={<Star size="xs" />}
+                                                    onClick={() => !item.is_main && handleSetMain(item.asset.id)}
+                                                    title={item.is_main ? 'Main Image' : 'Set as Main'}
+                                                    isActive={item.is_main}
+                                                />
+                                            </div>
+                                        )}
+
+                                        {/* Usage badge - only in scene mode */}
+                                        {mode === 'scene' && item.usage_count && item.usage_count > 0 && (
+                                            <div
+                                                className="usage-badge"
+                                                title={`Used in: ${item.used_in_chapters?.map(ch => ch.name).join(', ')}`}
+                                            >
+                                                {item.usage_count}
+                                            </div>
+                                        )}
+
+                                        {/* Excluded overlay - only in picker mode */}
+                                        {isExcluded && (
+                                            <div className="excluded-overlay">
+                                                <span>Selected</span>
+                                            </div>
+                                        )}
+
                                         <div className="asset-thumbnail">
                                             <img
-                                                src={`${API_BASE_URL}${link.asset.thumbnail_url || link.asset.file_url}`}
-                                                alt={link.asset.name}
+                                                src={`${API_BASE_URL}${item.asset.thumbnail_url || item.asset.file_url}`}
+                                                alt={item.asset.name}
                                                 loading="lazy"
                                             />
                                         </div>
+
                                         <div className="asset-info">
-                                            {editingAssetId === link.asset.id ? (
+                                            {editingAssetId === item.asset.id ? (
                                                 <input
                                                     className="rename-input"
                                                     value={editingName}
                                                     onChange={(e) => setEditingName(e.target.value)}
-                                                    onBlur={() => handleSaveRename(link.asset.id)}
+                                                    onBlur={() => handleSaveRename(item.asset.id)}
                                                     onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') handleSaveRename(link.asset.id);
+                                                        if (e.key === 'Enter') handleSaveRename(item.asset.id);
                                                         if (e.key === 'Escape') setEditingAssetId(null);
                                                     }}
                                                     autoFocus
@@ -470,14 +702,14 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                                                 />
                                             ) : (
                                                 <>
-                                                    <span className="asset-name" title={link.asset.name}>
-                                                        {link.asset.name}
+                                                    <span className="asset-name" title={item.asset.name}>
+                                                        {item.asset.name}
                                                     </span>
                                                     <button
                                                         className="rename-button"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            handleStartRename(link.asset);
+                                                            handleStartRename(item.asset);
                                                         }}
                                                         title="Rename"
                                                     >
@@ -486,14 +718,35 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                                                 </>
                                             )}
                                         </div>
-                                        <div className="asset-actions">
-                                            <div onClick={(e) => e.stopPropagation()}>
+
+                                        {/* Action buttons */}
+                                        <div className="asset-actions" onClick={(e) => e.stopPropagation()}>
+                                            {/* More dropdown button */}
+                                            <div className="more-dropdown-wrapper" ref={moreDropdownAssetId === item.id ? moreDropdownRef : undefined}>
                                                 <IconButton
                                                     size="xs"
-                                                    icon={<Close size="xs" />}
-                                                    onClick={() => handleUnlink(link)}
-                                                    title="Remove"
+                                                    icon={<MoreHorizontal size="xs" />}
+                                                    onClick={() => setMoreDropdownAssetId(moreDropdownAssetId === item.id ? null : item.id)}
+                                                    title="More"
                                                 />
+                                                {moreDropdownAssetId === item.id && (
+                                                    <div className="more-dropdown">
+                                                        <button
+                                                            className="more-dropdown-item"
+                                                            onClick={() => handleOpenDetail(item.asset)}
+                                                        >
+                                                            <Info size="xs" />
+                                                            <span>Detail</span>
+                                                        </button>
+                                                        <button
+                                                            className="more-dropdown-item danger"
+                                                            onClick={() => handleDeleteAsset(item.asset)}
+                                                        >
+                                                            <Trash size="xs" />
+                                                            <span>Delete</span>
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -504,14 +757,16 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                                 <div className="empty-state">
                                     {searchQuery
                                         ? 'No images match your search'
-                                        : 'No images yet. Upload or generate one!'}
+                                        : mode === 'scene'
+                                            ? 'No scene images yet. Generate or upload scene images from the chapter editor.'
+                                            : 'No images yet. Upload or generate one!'}
                                 </div>
                             )}
                         </div>
                     </div>
                 )}
 
-                {activeSubTab === 'prompt' && (
+                {activeSubTab === 'prompt' && objectType && objectId && (
                     <div className="prompt-subtab">
                         <ImagePromptManager
                             objectType={objectType}
@@ -687,7 +942,17 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                             onImageGenerated={handleImageGenerated}
                             objectType={objectType}
                             objectId={objectId}
-                            initialSettings={regenerateSettings}
+                            initialSettings={regenerateSettings || (initialGenerationSettings && initialGenerationSettings.provider && initialGenerationSettings.model ? {
+                                provider: initialGenerationSettings.provider,
+                                model: initialGenerationSettings.model,
+                                prompt: initialGenerationSettings.prompt,
+                                positive_prompt: initialGenerationSettings.positivePrompt,
+                                negative_prompt: initialGenerationSettings.negativePrompt,
+                                size: initialGenerationSettings.size,
+                                settings: initialGenerationSettings.settings,
+                            } : null)}
+                            sceneContext={sceneContext}
+                            assetType={mode === 'scene' ? 'scene' : 'object'}
                         />
                     </div>
                 </div>

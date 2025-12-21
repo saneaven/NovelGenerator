@@ -23,6 +23,17 @@ export interface Replacement {
 }
 
 /**
+ * Result of a single replacement operation
+ */
+export interface ReplacementResult {
+  index: number;
+  success: boolean;
+  old: string;      // The 'old' text that was searched for
+  new: string;      // The 'new' text for replacement
+  error?: string;   // Error message if failed
+}
+
+/**
  * Result of applying patch operations
  */
 export interface PatchResult {
@@ -31,6 +42,12 @@ export interface PatchResult {
   error?: string;
   /** True if patch failed and retry with replace function should be attempted */
   needsRetry?: boolean;
+  /** Individual results for each replacement */
+  replacementResults?: ReplacementResult[];
+  /** Count of successful replacements */
+  successCount?: number;
+  /** Count of failed replacements */
+  failureCount?: number;
 }
 
 /**

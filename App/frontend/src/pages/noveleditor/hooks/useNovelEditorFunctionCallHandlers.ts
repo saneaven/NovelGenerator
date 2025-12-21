@@ -1,45 +1,96 @@
-import { useState, useCallback, useMemo, useRef } from 'react';
+/**
+ * Novel Editor Function Call Handlers Hook
+ *
+ * Manages function call application and EditCard state for novel editor chat.
+ * Uses the unified function call system.
+ */
+
+import { useCallback, useRef, useMemo, useState } from 'react';
 import { useChatStore } from '../../../store/chatStore';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
-import { NovelEditorFunctionCallApplicator } from '../services/NovelEditorFunctionCallApplicator';
-import { NovelEditorFunctionCallService } from '../services/NovelEditorFunctionCallService';
 import type { FunctionCallMetadata, FunctionCallResultSummary, FunctionCallProgress } from '../../../llm/requestTypes';
-import type { EditCard } from '../../../chat/types';
+import {
+  UnifiedApplicator,
+  useEditCardStore,
+  buildEditCards,
+  getFunctionDisplayName,
+  type StoreActions,
+  type RawFunctionCall,
+  type EditCard,
+} from '../../../functionCall';
 
-export function useNovelEditorFunctionCallHandlers(
-  projectId: string | undefined
-) {
+/**
+ * Create StoreActions adapter from Zustand store
+ */
+function createStoreActions(store: ReturnType<typeof useUnifiedObjectStore.getState>): StoreActions {
+  return {
+    getObject: (id) => store.getObject(id),
+    fetchObject: (type, id) => store.fetchObject(type, id),
+    listObjects: (type, projectId) => store.listObjects(type, projectId),
+    createObject: (type, projectId, data, language, metadata, userRequest) =>
+      store.createObject(type, projectId, data, language, metadata, userRequest),
+    updateObject: (type, id, request) => store.updateObject(type, id, request),
+    deleteObject: (type, id) => store.deleteObject(type, id),
+  };
+}
+
+export function useNovelEditorFunctionCallHandlers(projectId: string | undefined) {
   const { updateMessageFunctionCalls, updateFunctionCallStatus, getSelectedChatId } = useChatStore();
-  const store = useUnifiedObjectStore();
-  const { settings } = useSettingsStore();
   const { showError } = useErrorStore();
+  const mainLanguage = useSettingsStore(state => state.settings.mainLanguage);
 
-  const [messageEditCards, setMessageEditCards] = useState<Record<string, EditCard[]>>({});
-  const [confirmedMessages, setConfirmedMessages] = useState<Record<string, boolean>>({});
+  // EditCard store
+  const editCardStore = useEditCardStore();
 
-  // Store function calls by message ID for batch operations
-  const functionCallsByMessage = useRef<Record<string, FunctionCallMetadata[]>>({});
+  // Get cardsByMessage for reactivity - convert to Record when accessed
+  const cardsByMessage = useEditCardStore(state => state.cardsByMessage);
 
-  const functionCallApplicator = useMemo(() => new NovelEditorFunctionCallApplicator({
-    store: {
-      getManuscriptByChapterId: store.getManuscriptByChapterId,
-      updateObject: store.updateObject,
-      listObjects: store.listObjects,
-      createObject: store.createObject,
-    },
-    language: settings.mainLanguage,
-  }), [store.getManuscriptByChapterId, store.updateObject, store.listObjects, store.createObject, settings.mainLanguage]);
+  // Convert Map to Record for backward compatibility (computed on access, not every render)
+  const messageEditCards = useMemo(() => {
+    const record: Record<string, EditCard[]> = {};
+    cardsByMessage.forEach((cardMap, messageId) => {
+      record[messageId] = Array.from(cardMap.values());
+    });
+    return record;
+  }, [cardsByMessage]);
+
+  // Create applicator with memoized store actions
+  const applicator = useMemo(() => {
+    const storeActions = createStoreActions(useUnifiedObjectStore.getState());
+    return new UnifiedApplicator({ store: storeActions });
+  }, []);
+
+  // Pending function call results for next prompt (reactive state)
+  const [pendingFunctionCallResults, setPendingFunctionCallResultsState] = useState<FunctionCallResultSummary[]>([]);
+  const pendingResultsRef = useRef<FunctionCallResultSummary[]>([]);
+
+  // Wrapper to update both ref and state
+  const addPendingResult = useCallback((result: FunctionCallResultSummary) => {
+    pendingResultsRef.current.push(result);
+    setPendingFunctionCallResultsState([...pendingResultsRef.current]);
+  }, []);
+
+  // Direct setter for pending results
+  const setPendingFunctionCallResults = useCallback((results: FunctionCallResultSummary[]) => {
+    pendingResultsRef.current = results;
+    setPendingFunctionCallResultsState(results);
+  }, []);
+
+  // Active streaming function calls (with state for reactivity)
+  const activeFunctionCallsRef = useRef<Record<string, FunctionCallProgress[]>>({});
   const [activeFunctionCalls, setActiveFunctionCalls] = useState<Record<string, FunctionCallProgress[]>>({});
-  const [pendingFunctionCallResults, setPendingFunctionCallResults] = useState<FunctionCallResultSummary[]>([]);
 
   const getActiveChatId = useCallback(
     () => (projectId ? getSelectedChatId(projectId) : undefined),
     [projectId, getSelectedChatId]
   );
 
-  const createFunctionCallApplyHandler = useCallback(
+  /**
+   * Create apply handler for a function call
+   */
+  const createApplyHandler = useCallback(
     (messageId: string, functionCall: FunctionCallMetadata) => {
       return async () => {
         if (!projectId) return;
@@ -47,35 +98,39 @@ export function useNovelEditorFunctionCallHandlers(
         if (!chatId) return;
 
         try {
-          const result = await functionCallApplicator.applyFunctionCall(projectId, functionCall);
+          const rawFunctionCall: RawFunctionCall = {
+            id: functionCall.id,
+            function_name: functionCall.function_name,
+            arguments: functionCall.arguments,
+          };
+
+          const result = await applicator.apply(rawFunctionCall, {
+            projectId,
+            language: mainLanguage,
+            mode: 'novelEditor',
+          });
+
+          // Get fresh store reference for mutations
+          const cardStore = useEditCardStore.getState();
 
           if (result.success) {
             updateFunctionCallStatus(projectId, chatId, messageId, functionCall.id, true, result, undefined, result.message);
 
-            setMessageEditCards(prev => ({
-              ...prev,
-              [messageId]: prev[messageId]?.map(card =>
-                card.id === functionCall.id
-                  ? {
-                      ...card,
-                      isApplied: true,
-                      appliedAt: new Date(),
-                      title: 'Applied by User',
-                      description: `${NovelEditorFunctionCallService.getFunctionDisplayName(functionCall.function_name)} was successfully applied`
-                    }
-                  : card
-              ) || []
-            }));
+            cardStore.applyResult(
+              messageId,
+              functionCall.id,
+              result,
+              'Applied by User',
+              `${getFunctionDisplayName(functionCall.function_name)} was successfully applied`
+            );
 
-            setPendingFunctionCallResults(prev => [...prev,
-              {
-                functionCallId: functionCall.id,
-                functionName: functionCall.function_name,
-                success: true,
-                resultMessage: result.message,
-                appliedAt: new Date()
-              }
-            ]);
+            addPendingResult({
+              functionCallId: functionCall.id,
+              functionName: functionCall.function_name,
+              success: true,
+              resultMessage: result.message,
+              appliedAt: new Date(),
+            });
           } else {
             const failureMessage = result.error || result.message;
             console.error('Failed to apply function call:', failureMessage);
@@ -83,80 +138,43 @@ export function useNovelEditorFunctionCallHandlers(
 
             updateFunctionCallStatus(projectId, chatId, messageId, functionCall.id, false, result, result.error, failureMessage);
 
-            setPendingFunctionCallResults(prev => [...prev,
-              {
-                functionCallId: functionCall.id,
-                functionName: functionCall.function_name,
-                success: false,
-                resultMessage: failureMessage,
-                appliedAt: new Date()
-              }
-            ]);
+            addPendingResult({
+              functionCallId: functionCall.id,
+              functionName: functionCall.function_name,
+              success: false,
+              resultMessage: failureMessage,
+              appliedAt: new Date(),
+            });
 
-            setMessageEditCards(prev => ({
-              ...prev,
-              [messageId]: prev[messageId]?.map(card =>
-                card.id === functionCall.id
-                  ? {
-                      ...card,
-                      isApplied: true,
-                      appliedAt: new Date(),
-                      title: 'Apply Failed',
-                      description: `${NovelEditorFunctionCallService.getFunctionDisplayName(functionCall.function_name)} failed: ${failureMessage}`
-                    }
-                  : card
-              ) || []
-            }));
+            cardStore.applyResult(
+              messageId,
+              functionCall.id,
+              result,
+              'Apply Failed',
+              `${getFunctionDisplayName(functionCall.function_name)} failed: ${failureMessage}`
+            );
           }
         } catch (error) {
           console.error('Error applying function call:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           showError('Function Call Error', 'An error occurred while applying changes. Please try again.');
 
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           const chatIdForError = getActiveChatId();
           if (chatIdForError) {
             updateFunctionCallStatus(projectId, chatIdForError, messageId, functionCall.id, false, undefined, errorMessage, errorMessage);
           }
 
-          setPendingFunctionCallResults(prev => [...prev,
-            {
-              functionCallId: functionCall.id,
-              functionName: functionCall.function_name,
-              success: false,
-              resultMessage: errorMessage,
-              appliedAt: new Date()
-            }
-          ]);
-
-          setMessageEditCards(prev => ({
-            ...prev,
-            [messageId]: prev[messageId]?.map(card =>
-              card.id === functionCall.id
-                ? {
-                    ...card,
-                    isApplied: true,
-                    appliedAt: new Date(),
-                    title: 'Apply Error',
-                    description: `${NovelEditorFunctionCallService.getFunctionDisplayName(functionCall.function_name)} error: ${errorMessage}`
-                  }
-                : card
-            ) || []
-          }));
+          useEditCardStore.getState().setApplyError(messageId, functionCall.id, errorMessage);
         }
       };
     },
-    [
-      projectId,
-      getActiveChatId,
-      functionCallApplicator,
-      updateFunctionCallStatus,
-      setMessageEditCards,
-      setPendingFunctionCallResults,
-      showError,
-    ]
+    [projectId, getActiveChatId, applicator, mainLanguage, updateFunctionCallStatus, showError, addPendingResult]
   );
 
-  const createFunctionCallRejectHandler = useCallback(
+  /**
+   * Create reject handler for a function call
+   */
+  const createRejectHandler = useCallback(
     (messageId: string, functionCall: FunctionCallMetadata) => {
       return async () => {
         if (!projectId) return;
@@ -166,41 +184,27 @@ export function useNovelEditorFunctionCallHandlers(
         const rejectionMessage = 'User rejected the function call';
         updateFunctionCallStatus(projectId, chatId, messageId, functionCall.id, true, undefined, undefined, rejectionMessage);
 
-        setMessageEditCards(prev => ({
-          ...prev,
-          [messageId]: prev[messageId]?.map(card =>
-            card.id === functionCall.id
-              ? {
-                  ...card,
-                  isApplied: true,
-                  appliedAt: new Date(),
-                  title: 'Rejected by User',
-                  description: `${NovelEditorFunctionCallService.getFunctionDisplayName(functionCall.function_name)} was rejected by user`
-                }
-              : card
-          ) || []
-        }));
+        useEditCardStore.getState().rejectCard(
+          messageId,
+          functionCall.id,
+          `${getFunctionDisplayName(functionCall.function_name)} was rejected by user`
+        );
 
-        setPendingFunctionCallResults(prev => [...prev,
-          {
-            functionCallId: functionCall.id,
-            functionName: functionCall.function_name,
-            success: false,
-            resultMessage: rejectionMessage,
-            appliedAt: new Date()
-          }
-        ]);
+        addPendingResult({
+          functionCallId: functionCall.id,
+          functionName: functionCall.function_name,
+          success: false,
+          resultMessage: rejectionMessage,
+          appliedAt: new Date(),
+        });
       };
     },
-    [
-      projectId,
-      getActiveChatId,
-      updateFunctionCallStatus,
-      setMessageEditCards,
-      setPendingFunctionCallResults,
-    ]
+    [projectId, getActiveChatId, updateFunctionCallStatus, addPendingResult]
   );
 
+  /**
+   * Handle incoming function calls from LLM response
+   */
   const handleFunctionCalls = useCallback(
     (messageId: string, functionCalls: FunctionCallMetadata[]) => {
       if (!projectId) return;
@@ -209,46 +213,50 @@ export function useNovelEditorFunctionCallHandlers(
 
       updateMessageFunctionCalls(projectId, chatId, messageId, functionCalls);
 
-      // Store function calls for batch operations
-      functionCallsByMessage.current[messageId] = functionCalls;
-
-      const functionCallCards: EditCard[] = functionCalls.map(funcCall => ({
-        id: funcCall.id,
-        type: NovelEditorFunctionCallService.mapFunctionToEditType(funcCall.function_name),
-        title: NovelEditorFunctionCallService.getFunctionCallTitle(funcCall.function_name),
-        description: NovelEditorFunctionCallService.generateFunctionCallSummary(funcCall.function_name, funcCall.arguments),
-        isApplied: funcCall.isApplied,
-        isRejected: funcCall.isRejected,
-        data: funcCall.arguments,
-        appliedAt: funcCall.appliedAt,
-        functionCall: funcCall, // Include reference to full function call
-        onApply: createFunctionCallApplyHandler(messageId, funcCall),
-        onReject: createFunctionCallRejectHandler(messageId, funcCall)
+      const rawCalls: RawFunctionCall[] = functionCalls.map(fc => ({
+        id: fc.id,
+        function_name: fc.function_name,
+        arguments: fc.arguments,
       }));
 
-      setMessageEditCards(prev => ({
-        ...prev,
-        [messageId]: functionCallCards
-      }));
-
-      setActiveFunctionCalls(prev => {
-        const updated = { ...prev };
-        delete updated[messageId];
-        return updated;
+      const cards = buildEditCards(rawCalls, {
+        createApplyHandler: (normalized) => {
+          const original = functionCalls.find(fc => fc.id === normalized.id);
+          if (!original) return () => {};
+          return createApplyHandler(messageId, original);
+        },
+        createRejectHandler: (normalized) => {
+          const original = functionCalls.find(fc => fc.id === normalized.id);
+          if (!original) return () => {};
+          return createRejectHandler(messageId, original);
+        },
       });
+
+      // Restore applied status from original function calls
+      const restoredCards: EditCard[] = cards.map(card => {
+        const original = functionCalls.find(fc => fc.id === card.id);
+        if (original) {
+          return {
+            ...card,
+            isApplied: original.isApplied,
+            isRejected: original.isRejected,
+            appliedAt: original.appliedAt,
+          };
+        }
+        return card;
+      });
+
+      useEditCardStore.getState().setCardsForMessage(messageId, restoredCards);
+
+      // Clear active function calls for this message
+      delete activeFunctionCallsRef.current[messageId];
+      setActiveFunctionCalls({ ...activeFunctionCallsRef.current });
     },
-    [
-      projectId,
-      getActiveChatId,
-      updateMessageFunctionCalls,
-      createFunctionCallApplyHandler,
-      createFunctionCallRejectHandler,
-      setMessageEditCards,
-    ]
+    [projectId, getActiveChatId, updateMessageFunctionCalls, createApplyHandler, createRejectHandler]
   );
 
   /**
-   * Handle batch confirmation of function calls with user selections
+   * Handle batch confirmation of function calls
    */
   const handleBatchConfirm = useCallback(
     async (messageId: string, selections: Record<string, boolean>) => {
@@ -256,206 +264,225 @@ export function useNovelEditorFunctionCallHandlers(
       const chatId = getActiveChatId();
       if (!chatId) return;
 
-      // Get function calls from ref first, fallback to extracting from cards
-      let functionCalls = functionCallsByMessage.current[messageId];
-      if (!functionCalls || functionCalls.length === 0) {
-        // Fallback: extract function calls from the edit cards (for restored cards)
-        const cards = messageEditCards[messageId];
-        if (cards && cards.length > 0) {
-          functionCalls = cards
-            .filter(card => card.functionCall)
-            .map(card => card.functionCall!);
-        }
-      }
-      if (!functionCalls || functionCalls.length === 0) return;
+      const cardStore = useEditCardStore.getState();
+      const cards = cardStore.getCardsForMessage(messageId);
+      if (cards.length === 0) return;
 
-      const results: { cardId: string; success: boolean; isRejected: boolean; message: string }[] = [];
+      for (const card of cards) {
+        if (card.validationError) continue;
 
-      // Process each function call based on selection
-      for (const funcCall of functionCalls) {
-        const isSelected = selections[funcCall.id] ?? true;
+        const isSelected = selections[card.id] ?? true;
 
         if (isSelected) {
-          // Apply the function call
-          try {
-            const result = await functionCallApplicator.applyFunctionCall(projectId, funcCall);
+          if (card.functionCall) {
+            const rawFunctionCall: RawFunctionCall = {
+              id: card.functionCall.id,
+              function_name: card.functionCall.functionName,
+              arguments: card.functionCall.arguments,
+            };
 
-            if (result.success) {
-              updateFunctionCallStatus(
-                projectId, chatId, messageId, funcCall.id,
-                true, result, undefined, result.message, false
-              );
-              results.push({
-                cardId: funcCall.id,
-                success: true,
-                isRejected: false,
-                message: result.message
+            try {
+              const result = await applicator.apply(rawFunctionCall, {
+                projectId,
+                language: mainLanguage,
+                mode: 'novelEditor',
               });
 
-              setPendingFunctionCallResults(prev => [...prev, {
-                functionCallId: funcCall.id,
-                functionName: funcCall.function_name,
-                success: true,
-                isRejected: false,
-                resultMessage: result.message,
-                appliedAt: new Date()
-              }]);
-            } else {
-              updateFunctionCallStatus(
-                projectId, chatId, messageId, funcCall.id,
-                true, result, result.error, result.error || result.message, false
-              );
-              results.push({
-                cardId: funcCall.id,
-                success: false,
-                isRejected: false,
-                message: result.error || result.message
-              });
+              // Get fresh store reference after async operation
+              const store = useEditCardStore.getState();
 
-              setPendingFunctionCallResults(prev => [...prev, {
-                functionCallId: funcCall.id,
-                functionName: funcCall.function_name,
-                success: false,
-                isRejected: false,
-                resultMessage: result.error || result.message,
-                appliedAt: new Date()
-              }]);
+              if (result.success) {
+                updateFunctionCallStatus(projectId, chatId, messageId, card.id, true, result, undefined, result.message, false);
+                store.applyResult(messageId, card.id, result, 'Applied', result.message);
+
+                addPendingResult({
+                  functionCallId: card.id,
+                  functionName: card.functionCall.functionName,
+                  success: true,
+                  resultMessage: result.message,
+                  appliedAt: new Date(),
+                });
+              } else {
+                updateFunctionCallStatus(projectId, chatId, messageId, card.id, true, result, result.error, result.error || result.message, false);
+                store.applyResult(messageId, card.id, result, 'Apply Failed', result.error || result.message);
+
+                addPendingResult({
+                  functionCallId: card.id,
+                  functionName: card.functionCall.functionName,
+                  success: false,
+                  resultMessage: result.error || result.message,
+                  appliedAt: new Date(),
+                });
+              }
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+              useEditCardStore.getState().setApplyError(messageId, card.id, errorMessage);
             }
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            updateFunctionCallStatus(
-              projectId, chatId, messageId, funcCall.id,
-              true, undefined, errorMessage, errorMessage, false
-            );
-            results.push({
-              cardId: funcCall.id,
-              success: false,
-              isRejected: false,
-              message: errorMessage
-            });
-
-            setPendingFunctionCallResults(prev => [...prev, {
-              functionCallId: funcCall.id,
-              functionName: funcCall.function_name,
-              success: false,
-              isRejected: false,
-              resultMessage: errorMessage,
-              appliedAt: new Date()
-            }]);
           }
         } else {
-          // Reject the function call
-          const rejectionMessage = `User rejected: ${NovelEditorFunctionCallService.getFunctionDisplayName(funcCall.function_name)}`;
-          updateFunctionCallStatus(
-            projectId, chatId, messageId, funcCall.id,
-            true, undefined, undefined, rejectionMessage, true
-          );
-          results.push({
-            cardId: funcCall.id,
-            success: false,
-            isRejected: true,
-            message: rejectionMessage
-          });
+          const functionName = card.functionCall?.functionName ?? 'Unknown';
+          const rejectionMessage = `User rejected: ${getFunctionDisplayName(functionName)}`;
 
-          setPendingFunctionCallResults(prev => [...prev, {
-            functionCallId: funcCall.id,
-            functionName: funcCall.function_name,
+          updateFunctionCallStatus(projectId, chatId, messageId, card.id, true, undefined, undefined, rejectionMessage, true);
+          useEditCardStore.getState().rejectCard(messageId, card.id, rejectionMessage);
+
+          addPendingResult({
+            functionCallId: card.id,
+            functionName,
             success: false,
             isRejected: true,
             resultMessage: rejectionMessage,
-            appliedAt: new Date()
-          }]);
+            appliedAt: new Date(),
+          });
         }
       }
 
-      // Update edit cards with results
-      setMessageEditCards(prev => ({
-        ...prev,
-        [messageId]: prev[messageId]?.map(card => {
-          const result = results.find(r => r.cardId === card.id);
-          if (!result) return card;
-
-          return {
-            ...card,
-            isApplied: true,
-            isRejected: result.isRejected,
-            appliedAt: new Date(),
-            title: result.isRejected
-              ? 'Rejected by User'
-              : result.success
-                ? 'Applied'
-                : 'Apply Failed',
-            description: result.message
-          };
-        }) || []
-      }));
-
-      // Mark message as confirmed
-      setConfirmedMessages(prev => ({
-        ...prev,
-        [messageId]: true
-      }));
+      useEditCardStore.getState().confirmMessage(messageId);
     },
-    [
-      projectId,
-      getActiveChatId,
-      functionCallApplicator,
-      updateFunctionCallStatus,
-      setPendingFunctionCallResults,
-      setMessageEditCards,
-      setConfirmedMessages,
-      messageEditCards, // Added for fallback extraction of function calls
-    ]
+    [projectId, getActiveChatId, applicator, mainLanguage, updateFunctionCallStatus, addPendingResult]
   );
 
   /**
-   * Check if all function calls in a message have been confirmed
+   * Check if message is confirmed
    */
   const isMessageConfirmed = useCallback(
     (messageId: string): boolean => {
-      return confirmedMessages[messageId] ?? false;
+      return useEditCardStore.getState().isMessageConfirmed(messageId);
     },
-    [confirmedMessages]
+    []
   );
 
+  /**
+   * Handle function call progress during streaming
+   */
   const handleFunctionCallProgress = useCallback(
     (messageId: string, progressList: FunctionCallProgress[]) => {
-      if (progressList.length === 0) {
-        return;
-      }
+      if (progressList.length === 0) return;
 
-      setActiveFunctionCalls(prev => {
-        const current = prev[messageId] ? [...prev[messageId]] : [];
-        progressList.forEach(progress => {
-          const existingIndex = current.findIndex(item => item.draft.index === progress.draft.index);
-          if (existingIndex === -1) {
-            current.push(progress);
-          } else {
-            current[existingIndex] = progress;
-          }
-        });
+      const current = activeFunctionCallsRef.current[messageId] || [];
 
-        return {
-          ...prev,
-          [messageId]: current
-        };
+      progressList.forEach(progress => {
+        const existingIndex = current.findIndex(item => item.draft.index === progress.draft.index);
+        if (existingIndex === -1) {
+          current.push(progress);
+        } else {
+          current[existingIndex] = progress;
+        }
+      });
+
+      activeFunctionCallsRef.current[messageId] = current;
+
+      // Update state for reactivity
+      setActiveFunctionCalls({ ...activeFunctionCallsRef.current });
+    },
+    []
+  );
+
+  /**
+   * Get pending function call results
+   */
+  const getPendingResults = useCallback((): FunctionCallResultSummary[] => {
+    return [...pendingResultsRef.current];
+  }, []);
+
+  /**
+   * Clear pending function call results
+   */
+  const clearPendingResults = useCallback(() => {
+    pendingResultsRef.current = [];
+    setPendingFunctionCallResultsState([]);
+  }, []);
+
+  /**
+   * Get message EditCards
+   */
+  const getMessageEditCards = useCallback(
+    (messageId: string): EditCard[] => {
+      return useEditCardStore.getState().getCardsForMessage(messageId);
+    },
+    []
+  );
+
+  /**
+   * Set message EditCards (for restoration from persisted state)
+   */
+  const setMessageEditCards = useCallback(
+    (cards: Record<string, EditCard[]>) => {
+      const store = useEditCardStore.getState();
+      Object.entries(cards).forEach(([messageId, messageCards]) => {
+        store.setCardsForMessage(messageId, messageCards);
       });
     },
     []
   );
 
+  /**
+   * Set confirmed messages (for restoration from persisted state)
+   */
+  const setConfirmedMessages = useCallback(
+    (updater: (prev: Record<string, boolean>) => Record<string, boolean>) => {
+      const store = useEditCardStore.getState();
+      // Get current confirmed state
+      const current: Record<string, boolean> = {};
+      store.cardsByMessage.forEach((_cards, messageId) => {
+        current[messageId] = store.isMessageConfirmed(messageId);
+      });
+
+      // Apply updater
+      const updated = updater(current);
+
+      // Mark messages as confirmed
+      Object.entries(updated).forEach(([messageId, isConfirmed]) => {
+        if (isConfirmed) {
+          store.confirmMessage(messageId);
+        }
+      });
+    },
+    [] // No dependencies - uses getState() for fresh data
+  );
+
+  /**
+   * Get active function calls during streaming
+   */
+  const getActiveFunctionCalls = useCallback(
+    (messageId: string): FunctionCallProgress[] => {
+      return activeFunctionCallsRef.current[messageId] || [];
+    },
+    []
+  );
+
   return {
+    // Backward-compatible reactive state (for NovelEditor)
     messageEditCards,
-    setMessageEditCards,
     activeFunctionCalls,
     pendingFunctionCallResults,
+
+    // State setters (for restoration from persisted state)
+    setMessageEditCards,
+    setConfirmedMessages,
     setPendingFunctionCallResults,
+
+    // EditCard access (function-based)
+    getMessageEditCards,
+    getActiveFunctionCalls,
+
+    // Handlers
     handleFunctionCalls,
     handleFunctionCallProgress,
     handleBatchConfirm,
     isMessageConfirmed,
-    setConfirmedMessages,
-    createFunctionCallApplyHandler,
-    createFunctionCallRejectHandler,
+
+    // Individual card handlers (with aliases for backward compatibility)
+    createApplyHandler,
+    createRejectHandler,
+    createFunctionCallApplyHandler: createApplyHandler,
+    createFunctionCallRejectHandler: createRejectHandler,
+
+    // Pending results
+    getPendingResults,
+    clearPendingResults,
+
+    // Direct store access (for compatibility)
+    editCardStore,
   };
 }
