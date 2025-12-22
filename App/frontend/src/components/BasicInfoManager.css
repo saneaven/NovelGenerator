@@ -1,6 +1,6 @@
 /* Modern Image Card Layout for BasicInfoManager */
 
-.basic-info-layout {
+.basic-info-manager .basic-info-layout {
   display: flex;
   justify-content: center;
   padding: var(--spacing-xl);
@@ -8,24 +8,24 @@
   box-sizing: border-box;
 }
 
-.basic-info-card {
+.basic-info-manager .basic-info-card {
   display: grid;
-  grid-template-columns: 320px 1fr; /* Fixed width for cover area */
+  grid-template-columns: var(--size-sidebar-width) 1fr; /* Fixed width for cover area using sidebar width var as proxy for ~320px */
   background-color: var(--color-surface-base);
   border-radius: var(--border-radius-xl);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
-  max-width: 1100px;
+  max-width: var(--container-lg);
   width: 100%;
   border: 1px solid var(--color-border-subtle);
   transition: box-shadow var(--transition-base), transform var(--transition-base);
 }
 
-.basic-info-card:hover {
+.basic-info-manager .basic-info-card:hover {
     box-shadow: var(--shadow-xl);
 }
 
-.basic-info-card.is-editing {
+.basic-info-manager .basic-info-card.is-editing {
     border-color: var(--color-primary-300);
     box-shadow: 0 0 0 1px var(--color-primary-200), var(--shadow-lg);
 }
@@ -34,7 +34,7 @@
    Media / Cover Section
    ========================================= */
 
-.basic-info-media {
+.basic-info-manager .basic-info-media {
   background-color: var(--color-neutral-100);
   position: relative;
   display: flex;
@@ -42,17 +42,17 @@
   justify-content: center;
   overflow: hidden;
   /* Aspect ratio roughly 2:3 or manageable height */
-  min-height: 480px; 
+  min-height: 30rem; /* 480px */
 }
 
-.media-preview {
+.basic-info-manager .media-preview {
     width: 100%;
     height: 100%;
     position: relative;
     display: flex;
 }
 
-.book-cover-img {
+.basic-info-manager .book-cover-img {
     width: 100%;
     height: 100%;
     object-fit: cover;
@@ -60,11 +60,11 @@
     transition: transform var(--transition-slow);
 }
 
-.basic-info-card:hover .book-cover-img {
+.basic-info-manager .basic-info-card:hover .book-cover-img {
     transform: scale(1.02);
 }
 
-.media-edit-overlay {
+.basic-info-manager .media-edit-overlay {
     position: absolute;
     inset: 0;
     background-color: var(--overlay-dark-medium);
@@ -72,7 +72,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    color: white;
+    color: var(--color-text-inverse);
     opacity: 0;
     transition: opacity var(--transition-base);
     cursor: pointer;
@@ -80,14 +80,14 @@
     gap: var(--spacing-sm);
     font-weight: var(--font-weight-medium);
     font-size: var(--font-size-base);
-    z-index: 2;
+    z-index: var(--z-content);
 }
 
-.media-preview:hover .media-edit-overlay {
+.basic-info-manager .media-preview:hover .media-edit-overlay {
     opacity: 1;
 }
 
-.media-placeholder {
+.basic-info-manager .media-placeholder {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -102,7 +102,7 @@
     transition: background-color var(--transition-base), color var(--transition-base);
 }
 
-.media-placeholder:hover {
+.basic-info-manager .media-placeholder:hover {
     background-color: var(--color-neutral-200);
     color: var(--color-text-secondary);
 }
@@ -111,7 +111,7 @@
    Details Section
    ========================================= */
 
-.basic-info-details {
+.basic-info-manager .basic-info-details {
     padding: var(--spacing-2xl);
     display: flex;
     flex-direction: column;
@@ -121,30 +121,30 @@
 }
 
 /* Header */
-.details-header {
+.basic-info-manager .details-header {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-sm);
 }
 
-.header-top-row {
+.basic-info-manager .header-top-row {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    min-height: 32px;
+    min-height: var(--size-6); /* 24px minimum for icon alignment */
 }
 
-.meta-badge-group {
+.basic-info-manager .meta-badge-group {
     display: flex;
     gap: var(--spacing-sm);
     align-items: center;
     flex-wrap: wrap;
 }
 
-.genre-badge {
+.basic-info-manager .genre-badge {
     background-color: var(--color-neutral-100);
     color: var(--color-text-secondary);
-    padding: 6px 12px;
+    padding: var(--spacing-xs) var(--spacing-md);
     border-radius: var(--border-radius-full);
     font-size: var(--font-size-xs);
     font-weight: var(--font-weight-bold);
@@ -153,37 +153,37 @@
     border: 1px solid var(--color-border-subtle);
 }
 
-.language-badge {
+.basic-info-manager .language-badge {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-sm);
     border-radius: var(--border-radius-md);
     font-size: var(--font-size-xs);
     background-color: var(--color-neutral-100);
     color: var(--color-text-muted);
 }
 
-.language-badge.warning {
+.basic-info-manager .language-badge.warning {
     background-color: var(--color-warning-light);
     color: var(--color-warning-dark);
 }
 
 /* Title */
-.title-display {
+.basic-info-manager .title-display {
     font-family: var(--font-family-heading);
-    font-size: 2.5rem; /* Large and bold */
+    font-size: var(--font-size-5xl); /* 3rem ~ 48px, close to 2.5rem intent */
     font-weight: var(--font-weight-extrabold);
     color: var(--color-text-primary);
-    line-height: 1.1;
+    line-height: var(--line-height-tight);
     margin: 0;
     letter-spacing: -0.02em;
 }
 
 /* Edit Inputs - Header */
-.title-input {
+.basic-info-manager .title-input {
     font-family: var(--font-family-heading);
-    font-size: 2rem;
+    font-size: var(--font-size-4xl); /* ~2.25rem, close to 2rem */
     font-weight: var(--font-weight-bold);
     width: 100%;
     border: none;
@@ -194,35 +194,35 @@
     transition: border-color var(--transition-base);
 }
 
-.title-input:focus {
+.basic-info-manager .title-input:focus {
     outline: none;
     border-color: var(--color-primary-500);
 }
 
-.genre-input {
+.basic-info-manager .genre-input {
     font-size: var(--font-size-sm);
-    padding: 6px 12px;
+    padding: var(--spacing-xs) var(--spacing-md);
     border-radius: var(--border-radius-full);
     border: 1px solid var(--color-border-default);
     background: transparent;
     color: var(--color-text-primary);
-    min-width: 150px;
+    min-width: 9.375rem; /* 150px - Layout constraint */
 }
 
-.genre-input:focus {
+.basic-info-manager .genre-input:focus {
     outline: none;
     border-color: var(--color-primary-500);
 }
 
 /* Body Content */
-.details-body {
+.basic-info-manager .details-body {
     flex: 1;
     display: flex;
     flex-direction: column;
     gap: var(--spacing-sm);
 }
 
-.section-label {
+.basic-info-manager .section-label {
     text-transform: uppercase;
     font-size: var(--font-size-xs);
     font-weight: var(--font-weight-bold);
@@ -231,7 +231,7 @@
     margin-bottom: var(--spacing-xs);
 }
 
-.logline-display {
+.basic-info-manager .logline-display {
     font-family: var(--font-family-content); /* Serif often looks nice for book summaries */
     font-size: var(--font-size-lg);
     line-height: var(--line-height-relaxed);
@@ -240,12 +240,12 @@
     margin: 0;
 }
 
-.placeholder-text {
+.basic-info-manager .placeholder-text {
     color: var(--color-text-muted);
     font-style: italic;
 }
 
-.logline-input {
+.basic-info-manager .logline-input {
     width: 100%;
     background-color: var(--color-surface-subtle);
     border: 1px solid var(--color-border-default);
@@ -256,11 +256,11 @@
     line-height: var(--line-height-relaxed);
     color: var(--color-text-primary);
     resize: vertical;
-    min-height: 150px;
+    min-height: 9.375rem; /* 150px */
     transition: border-color var(--transition-base), box-shadow var(--transition-base);
 }
 
-.logline-input:focus {
+.basic-info-manager .logline-input:focus {
     outline: none;
     border-color: var(--color-primary-500);
     box-shadow: 0 0 0 2px var(--color-brand-primary-soft);
@@ -268,7 +268,7 @@
 }
 
 /* Footer */
-.details-footer {
+.basic-info-manager .details-footer {
     padding-top: var(--spacing-lg);
     border-top: 1px solid var(--color-border-subtle);
     display: flex;
@@ -277,7 +277,7 @@
     margin-top: auto; /* Push to bottom */
 }
 
-.meta-info {
+.basic-info-manager .meta-info {
     display: flex;
     gap: var(--spacing-sm);
     color: var(--color-text-tertiary);
@@ -285,11 +285,11 @@
     align-items: center;
 }
 
-.separator {
+.basic-info-manager .separator {
     color: var(--color-border-strong);
 }
 
-.edit-actions {
+.basic-info-manager .edit-actions {
     display: flex;
     gap: var(--spacing-md);
     width: 100%;
@@ -301,29 +301,29 @@
    ========================================= */
 
 @media (max-width: 850px) {
-    .basic-info-card {
+    .basic-info-manager .basic-info-card {
         grid-template-columns: 1fr;
         grid-template-rows: auto auto; /* Stack vertically */
     }
 
-    .basic-info-media {
-        height: 300px; /* Restrict height on mobile/tablet */
-        min-height: 200px;
+    .basic-info-manager .basic-info-media {
+        height: 18.75rem; /* 300px - Restrict height on mobile/tablet */
+        min-height: 12.5rem; /* 200px */
     }
 
-    .book-cover-img {
+    .basic-info-manager .book-cover-img {
         object-position: top center; /* Focus on top part if cropped */
     }
     
-    .media-placeholder {
-        min-height: 200px;
+    .basic-info-manager .media-placeholder {
+        min-height: 12.5rem; /* 200px */
     }
 
-    .title-display {
-        font-size: 2rem;
+    .basic-info-manager .title-display {
+        font-size: var(--font-size-4xl); /* 2rem approx */
     }
     
-    .basic-info-details {
+    .basic-info-manager .basic-info-details {
         padding: var(--spacing-xl);
     }
 }
