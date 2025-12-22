@@ -8,11 +8,15 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--spacing-xl);
     padding-bottom: var(--spacing-lg);
-    border-bottom: 2px solid var(--color-border-default);
     flex-wrap: wrap;
     gap: var(--spacing-md);
+}
+
+.section-divider {
+    width: 100%;
+    border-bottom: 2px solid var(--color-border-default);
+    margin-bottom: var(--spacing-xl);
 }
 
 .section-header h2 {

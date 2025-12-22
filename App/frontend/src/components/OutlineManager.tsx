@@ -9,7 +9,7 @@ import TranslationModal from './TranslationModal';
 import { DropdownMenu, DropdownItem, DropdownDivider } from './ui/DropdownMenu';
 import { IconButton } from './IconButton';
 import { TextButton } from './TextButton';
-import { Expand, Collapse, Plus, Edit, Trash, AIAssist, Books, MoreHorizontal } from './icons';
+import { Expand, Collapse, Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close } from './icons';
 import { Warning } from './icons';
 import type { ActObject, ChapterObject } from '../types/unifiedObject';
 
@@ -26,6 +26,8 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
 
   const [editingAct, setEditingAct] = useState<string | null>(null);
   const [editingChapter, setEditingChapter] = useState<string | null>(null);
+  const [editActData, setEditActData] = useState<{ name: string; description: string }>({ name: '', description: '' });
+  const [editChapterData, setEditChapterData] = useState<{ name: string; description: string }>({ name: '', description: '' });
   const [showAddActForm, setShowAddActForm] = useState(false);
   const [showAddChapterForm, setShowAddChapterForm] = useState<string | null>(null);
   const [showActAIModal, setShowActAIModal] = useState<string | null>(null);
@@ -205,17 +207,27 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
     }
   };
 
-  const handleUpdateAct = async (actId: string, name: string, description: string) => {
-    if (!name.trim()) return;
-
+  // Start editing an act - populate form data
+  const startEditingAct = (actId: string) => {
     const act = store.objects[actId] as ActObject;
+    if (!act) return;
+    const { effectiveLanguage } = getActEffectiveLanguage(act);
+    const actData = getActData(act, effectiveLanguage);
+    setEditActData({ name: actData.name, description: actData.description });
+    setEditingAct(actId);
+  };
+
+  const handleUpdateAct = async () => {
+    if (!editingAct || !editActData.name.trim()) return;
+
+    const act = store.objects[editingAct] as ActObject;
     if (!act) return;
 
     const { effectiveLanguage } = getActEffectiveLanguage(act);
 
     try {
-      await store.updateObject('act', actId, {
-        data: { name: name.trim(), description: description.trim() },
+      await store.updateObject('act', editingAct, {
+        data: { name: editActData.name.trim(), description: editActData.description.trim() },
         language: effectiveLanguage,
         create_new_version: true,
         user_request: 'Manual Edit',
@@ -225,6 +237,11 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
       console.error('Failed to update act:', error);
       showError('Update Error', 'Failed to update act. Please try again.');
     }
+  };
+
+  const cancelEditingAct = () => {
+    setEditingAct(null);
+    setEditActData({ name: '', description: '' });
   };
 
   const handleDeleteAct = async (actId: string) => {
@@ -273,17 +290,27 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
     }
   };
 
-  const handleUpdateChapter = async (chapterId: string, name: string, description: string) => {
-    if (!name.trim()) return;
-
+  // Start editing a chapter - populate form data
+  const startEditingChapter = (chapterId: string) => {
     const chapter = store.objects[chapterId] as ChapterObject;
+    if (!chapter) return;
+    const { effectiveLanguage } = getChapterEffectiveLanguage(chapter);
+    const chData = getChapterData(chapter, effectiveLanguage);
+    setEditChapterData({ name: chData.name, description: chData.description });
+    setEditingChapter(chapterId);
+  };
+
+  const handleUpdateChapter = async () => {
+    if (!editingChapter || !editChapterData.name.trim()) return;
+
+    const chapter = store.objects[editingChapter] as ChapterObject;
     if (!chapter) return;
 
     const { effectiveLanguage } = getChapterEffectiveLanguage(chapter);
 
     try {
-      await store.updateObject('chapter', chapterId, {
-        data: { name: name.trim(), description: description.trim() },
+      await store.updateObject('chapter', editingChapter, {
+        data: { name: editChapterData.name.trim(), description: editChapterData.description.trim() },
         language: effectiveLanguage,
         create_new_version: true,
         user_request: 'Manual Edit',
@@ -293,6 +320,11 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
       console.error('Failed to update chapter:', error);
       showError('Update Error', 'Failed to update chapter. Please try again.');
     }
+  };
+
+  const cancelEditingChapter = () => {
+    setEditingChapter(null);
+    setEditChapterData({ name: '', description: '' });
   };
 
   const handleDeleteChapter = async (chapterId: string) => {
@@ -396,7 +428,6 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
 
   return (
     <div className="outline-manager">
-    <div className="timeline-container">
       <div className="section-header">
         <h2>Story Outline</h2>
         <div className="header-buttons">
@@ -411,7 +442,7 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
             {allCollapsed ? "Expand" : "Collapse"}
           </TextButton>
           <TextButton
-            variant="primary"
+            variant="secondary"
             size="sm"
             onClick={() => setShowAddActForm(true)}
             disabled={showAddActForm}
@@ -445,6 +476,8 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
           </DropdownMenu>
         </div>
       </div>
+      <div className="section-divider" />
+      <div className="timeline-container">
 
       {showAddActForm && (
         <div className="timeline-creation-panel">
@@ -491,33 +524,79 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
                   </div>
                   
                   <div className="node-content act-content-wrapper">
-                    <div className="content-card act-card">
+                    <div className={`content-card act-card ${editingAct === act.id ? 'is-editing' : ''}`}>
                       <div className="card-header">
-                        <div className="card-title-section" onClick={() => toggleItemExpand(act.id)}>
-                          <div className="title-row">
-                            <h3>{actData.name}</h3>
-                            {actIsFallback && <span className="fallback-badge" title="Translation missing"><Warning size="xs" /></span>}
+                        {editingAct === act.id ? (
+                          <div className="card-title-section" style={{ flex: 1 }}>
+                            <input
+                              type="text"
+                              className="inline-title-input"
+                              value={editActData.name}
+                              onChange={(e) => setEditActData(prev => ({ ...prev, name: e.target.value }))}
+                              placeholder="Act Title"
+                              autoFocus
+                            />
                           </div>
-                          <span className="card-meta">{actChapters.length} Chapters</span>
-                        </div>
-                        
-                        <div className="card-actions">
-                          <IconButton
-                            icon={isExpanded ? <Collapse size="sm" /> : <Expand size="sm" />}
-                            onClick={() => toggleItemExpand(act.id)}
-                            size="sm"
-                          />
-                        </div>
+                        ) : (
+                          <div className="card-title-section" onClick={() => toggleItemExpand(act.id)}>
+                            <div className="title-row">
+                              <h3>{actData.name}</h3>
+                              {actIsFallback && <span className="fallback-badge" title="Translation missing"><Warning size="xs" /></span>}
+                            </div>
+                            <span className="card-meta">{actChapters.length} Chapters</span>
+                          </div>
+                        )}
+
+                        {editingAct !== act.id && (
+                          <div className="card-actions">
+                            <IconButton
+                              icon={isExpanded ? <Collapse size="sm" /> : <Expand size="sm" />}
+                              onClick={() => toggleItemExpand(act.id)}
+                              size="sm"
+                            />
+                          </div>
+                        )}
                       </div>
 
                       {editingAct === act.id ? (
-                        <div className="card-edit-mode">
-                          <EditActForm
-                            actData={actData}
-                            onUpdate={(name, description) => handleUpdateAct(act.id, name, description)}
-                            onCancel={() => setEditingAct(null)}
-                            onAIEdit={() => setShowActAIModal(act.id)}
-                          />
+                        <div className="card-body-wrapper is-expanded">
+                          <div className="card-body-content">
+                            <textarea
+                              className="inline-description-input"
+                              value={editActData.description}
+                              onChange={(e) => setEditActData(prev => ({ ...prev, description: e.target.value }))}
+                              placeholder="Describe the main events that happen in this act"
+                              rows={4}
+                            />
+                            <div className="edit-actions-split">
+                              <TextButton
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setShowActAIModal(act.id)}
+                                iconLeft={<AIAssist size="xs" />}
+                              >
+                                AI Edit
+                              </TextButton>
+                              <div className="edit-actions-right">
+                                <TextButton
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={cancelEditingAct}
+                                  iconLeft={<Close size="xs" />}
+                                >
+                                  Cancel
+                                </TextButton>
+                                <TextButton
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={handleUpdateAct}
+                                  iconLeft={<Save size="xs" />}
+                                >
+                                  Save
+                                </TextButton>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       ) : (
                         <div className={`card-body-wrapper ${isExpanded ? 'is-expanded' : ''}`}>
@@ -539,17 +618,9 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
                                 size="sm"
                                 variant="secondary"
                                 iconLeft={<Edit size="xs"/>}
-                                onClick={() => setEditingAct(act.id)}
+                                onClick={() => startEditingAct(act.id)}
                               >
                                 Edit
-                              </TextButton>
-                              <TextButton
-                                size="sm"
-                                variant="primary"
-                                iconLeft={<Plus size="xs"/>}
-                                onClick={() => setShowAddChapterForm(act.id)}
-                              >
-                                Add Chapter
                               </TextButton>
                             </div>
                           </div>
@@ -563,20 +634,6 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
                 <div className="chapter-stream-wrapper">
                   <div className="timeline-chapter-stream" key={`${act.id}-${expandCount[act.id] || 0}`}>
                     <div className="stream-line"></div>
-
-                    {/* Add Chapter Form Inline */}
-                    {showAddChapterForm === act.id && (
-                       <div className="timeline-chapter-node creation-node">
-                          <div className="chapter-marker creation-marker"><Plus size="xs"/></div>
-                          <div className="chapter-content-wrapper">
-                            <AddChapterForm
-                              actId={act.id}
-                              onAdd={handleAddChapter}
-                              onCancel={() => setShowAddChapterForm(null)}
-                            />
-                          </div>
-                       </div>
-                    )}
 
                     {actChapters.map((chapter, chapterIndex) => {
                       const { effectiveLanguage: chLang, isFallback: chFallback } = getChapterEffectiveLanguage(chapter);
@@ -592,12 +649,60 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
                           <div className="chapter-content-wrapper">
                             <div className={`content-card chapter-card ${editingChapter === chapter.id ? 'is-editing' : ''}`}>
                               {editingChapter === chapter.id ? (
-                                <EditChapterForm
-                                  chapterData={chData}
-                                  onUpdate={(name, description) => handleUpdateChapter(chapter.id, name, description)}
-                                  onCancel={() => setEditingChapter(null)}
-                                  onAIEdit={() => setShowChapterAIModal(chapter.id)}
-                                />
+                                <>
+                                  <div className="chapter-header">
+                                    <div className="chapter-info" style={{ flex: 1 }}>
+                                      <span className="chapter-index">CH {globalChapterOffset + chapterIndex + 1}</span>
+                                      <input
+                                        type="text"
+                                        className="inline-title-input"
+                                        value={editChapterData.name}
+                                        onChange={(e) => setEditChapterData(prev => ({ ...prev, name: e.target.value }))}
+                                        placeholder="Chapter Title"
+                                        autoFocus
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="chapter-expand-wrapper is-expanded">
+                                    <div className="chapter-expand-content">
+                                      <textarea
+                                        className="inline-description-input"
+                                        value={editChapterData.description}
+                                        onChange={(e) => setEditChapterData(prev => ({ ...prev, description: e.target.value }))}
+                                        placeholder="Describe what happens in this chapter"
+                                        rows={3}
+                                      />
+                                      <div className="edit-actions-split">
+                                        <TextButton
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => setShowChapterAIModal(chapter.id)}
+                                          iconLeft={<AIAssist size="xs" />}
+                                        >
+                                          AI Edit
+                                        </TextButton>
+                                        <div className="edit-actions-right">
+                                          <TextButton
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={cancelEditingChapter}
+                                            iconLeft={<Close size="xs" />}
+                                          >
+                                            Cancel
+                                          </TextButton>
+                                          <TextButton
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={handleUpdateChapter}
+                                            iconLeft={<Save size="xs" />}
+                                          >
+                                            Save
+                                          </TextButton>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </>
                               ) : (
                                 (() => {
                                   const isChapterExpanded = expandedChapters.has(chapter.id);
@@ -638,7 +743,7 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
                                               size="sm"
                                               variant="secondary"
                                               iconLeft={<Edit size="xs" />}
-                                              onClick={() => setEditingChapter(chapter.id)}
+                                              onClick={() => startEditingChapter(chapter.id)}
                                             >
                                               Edit
                                             </TextButton>
@@ -655,9 +760,29 @@ const OutlineManager: React.FC<OutlineManagerProps> = ({ globalDisplayLanguage }
                       );
                     })}
 
-                    {actChapters.length === 0 && !showAddChapterForm && (
-                      <div className="empty-chapter-hint">
-                        <span onClick={() => setShowAddChapterForm(act.id)}>+ Add first chapter</span>
+                    {/* Add Chapter Form or Button at the end */}
+                    {showAddChapterForm === act.id ? (
+                      <div className="timeline-chapter-node creation-node">
+                        <div className="chapter-marker creation-marker"><Plus size="xs"/></div>
+                        <div className="chapter-content-wrapper">
+                          <AddChapterForm
+                            actId={act.id}
+                            onAdd={handleAddChapter}
+                            onCancel={() => setShowAddChapterForm(null)}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="timeline-chapter-node add-chapter-node" onClick={() => setShowAddChapterForm(act.id)}>
+                        <div className="chapter-marker add-marker"><Plus size="xs"/></div>
+                        <div className="chapter-content-wrapper">
+                          <div className="content-card add-chapter-card">
+                            <div className="add-chapter-content">
+                              <Plus size="sm" />
+                              <span>Add Chapter</span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -792,74 +917,12 @@ const AddActForm: React.FC<AddActFormProps> = ({ onAdd, onCancel }) => {
           />
         </div>
         <div className="form-actions">
-          <TextButton variant="secondary" type="button" onClick={onCancel}>
+          <TextButton variant="ghost" type="button" onClick={onCancel}>
             Cancel
           </TextButton>
-          <TextButton variant="primary" type="submit">
+          <TextButton variant="secondary" type="submit">
             Add
           </TextButton>
-        </div>
-      </form>
-    </div>
-  );
-};
-
-// ============================================================================
-// EDIT ACT FORM
-// ============================================================================
-
-interface EditActFormProps {
-  actData: { name: string; description: string };
-  onUpdate: (name: string, description: string) => void;
-  onCancel: () => void;
-  onAIEdit: () => void;
-}
-
-const EditActForm: React.FC<EditActFormProps> = ({ actData, onUpdate, onCancel, onAIEdit }) => {
-  const [name, setName] = useState(actData.name);
-  const [description, setDescription] = useState(actData.description);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onUpdate(name, description);
-  };
-
-  return (
-    <div className="item-form edit-form">
-      <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label htmlFor="edit-act-name">Act Title</label>
-          <input
-            id="edit-act-name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Enter the title of the act"
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor="edit-act-description">Act Description</label>
-          <textarea
-            id="edit-act-description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Describe the main events that happen in this act"
-            rows={4}
-          />
-        </div>
-        <div className="form-actions-split">
-          <TextButton variant="primary" size="sm" type="button" onClick={onAIEdit} iconLeft={<AIAssist size="sm" />}>
-            AI Edit
-          </TextButton>
-          <div className="form-actions-right">
-            <TextButton variant="secondary" type="button" onClick={onCancel}>
-              Cancel
-            </TextButton>
-            <TextButton variant="primary" type="submit">
-              Save
-            </TextButton>
-          </div>
         </div>
       </form>
     </div>
@@ -913,74 +976,12 @@ const AddChapterForm: React.FC<AddChapterFormProps> = ({ actId, onAdd, onCancel 
           />
         </div>
         <div className="form-actions">
-          <TextButton variant="secondary" type="button" onClick={onCancel}>
+          <TextButton variant="ghost" type="button" onClick={onCancel}>
             Cancel
           </TextButton>
-          <TextButton variant="primary" type="submit">
+          <TextButton variant="secondary" type="submit">
             Add
           </TextButton>
-        </div>
-      </form>
-    </div>
-  );
-};
-
-// ============================================================================
-// EDIT CHAPTER FORM
-// ============================================================================
-
-interface EditChapterFormProps {
-  chapterData: { name: string; description: string };
-  onUpdate: (name: string, description: string) => void;
-  onCancel: () => void;
-  onAIEdit: () => void;
-}
-
-const EditChapterForm: React.FC<EditChapterFormProps> = ({ chapterData, onUpdate, onCancel, onAIEdit }) => {
-  const [name, setName] = useState(chapterData.name);
-  const [description, setDescription] = useState(chapterData.description);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onUpdate(name, description);
-  };
-
-  return (
-    <div className="item-form edit-form chapter-form">
-      <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label htmlFor="edit-chapter-name">Chapter Title</label>
-          <input
-            id="edit-chapter-name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Enter the title of the chapter"
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor="edit-chapter-description">Chapter Description</label>
-          <textarea
-            id="edit-chapter-description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Describe what happens in this chapter"
-            rows={3}
-          />
-        </div>
-        <div className="form-actions-split">
-          <TextButton variant="primary" size="sm" type="button" onClick={onAIEdit} iconLeft={<AIAssist size="sm" />}>
-            AI Edit
-          </TextButton>
-          <div className="form-actions-right">
-            <TextButton variant="secondary" type="button" onClick={onCancel}>
-              Cancel
-            </TextButton>
-            <TextButton variant="primary" type="submit">
-              Save
-            </TextButton>
-          </div>
         </div>
       </form>
     </div>

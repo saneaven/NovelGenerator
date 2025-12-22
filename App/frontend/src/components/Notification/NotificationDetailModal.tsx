@@ -322,6 +322,18 @@ const NotificationDetailModal: React.FC<NotificationDetailModalProps> = ({
         />
       </div>
 
+      {/* User Input Section */}
+      {session.retryContext?.formState && (
+        <div className="notification-detail-user-input">
+          <div className="notification-detail-user-input-label">Request</div>
+          <div className="notification-detail-user-input-content">
+            {(session.retryContext.formState as Record<string, any>).userRequest ||
+             (session.retryContext.formState as Record<string, any>).userInput ||
+             '(No input)'}
+          </div>
+        </div>
+      )}
+
       {/* Fixed Progress */}
       {session.progress && (
         <div className="notification-detail-progress">

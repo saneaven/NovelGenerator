@@ -159,6 +159,33 @@
   margin-bottom: var(--spacing-sm);
 }
 
+/* User Input Section */
+.notification-detail-user-input {
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--color-border-default);
+  background: var(--color-surface-subtle);
+  flex-shrink: 0;
+}
+
+.notification-detail-user-input-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--spacing-sm);
+}
+
+.notification-detail-user-input-content {
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 100px;
+  overflow-y: auto;
+}
+
 /* Scrollable Body Container */
 .notification-detail-body {
   flex: 1;
@@ -458,7 +485,8 @@
 
   .notification-detail-header,
   .notification-detail-body,
-  .notification-detail-footer {
+  .notification-detail-footer,
+  .notification-detail-user-input {
     padding: var(--spacing-md);
   }
 

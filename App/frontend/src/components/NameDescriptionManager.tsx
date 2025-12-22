@@ -414,11 +414,11 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
             {allCollapsed ? "Expand" : "Collapse"}
           </TextButton>
           <TextButton
-            variant="primary"
+            variant="ghost"
             size="sm"
             onClick={() => handleAIEdit()}
             disabled={showAddForm}
-            iconLeft={<AIAssist size="sm" />}
+            iconLeft={<AIAssist size="xs" />}
             className="desktop-only"
           >
             AI Edit All
@@ -463,6 +463,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
           </DropdownMenu>
         </div>
       </div>
+      <div className="section-divider" />
 
       {showAddForm && (
         <AddItemForm

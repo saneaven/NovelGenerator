@@ -2,7 +2,7 @@
 /* All styles scoped to .outline-manager */
 
 .outline-manager .timeline-container {
-  padding: var(--spacing-xl) var(--spacing-md);
+  padding: 0 var(--spacing-md) var(--spacing-xl);
   color: var(--color-text-primary);
 }
 
@@ -74,6 +74,7 @@
 .outline-manager .timeline-act-group {
   position: relative;
   z-index: var(--z-content);
+  overflow: visible;
 }
 
 /* Act Node */
@@ -88,30 +89,30 @@
   width: var(--size-12);
   height: var(--size-12);
   background-color: var(--color-surface-base);
-  border: 2px solid var(--color-primary-main);
+  border: 2px solid var(--color-border-default);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: var(--z-content);
   box-shadow: 0 0 0 var(--spacing-xs) var(--color-surface-base);
-  transition: transform var(--transition-base), box-shadow var(--transition-base);
+  transition: all var(--transition-base);
+  color: var(--color-text-tertiary);
 }
 
 .outline-manager .timeline-act-group.is-expanded .node-marker {
-  background-color: var(--color-primary-main);
-  color: var(--color-text-inverse);
-  box-shadow: 0 0 0 var(--spacing-xs) var(--color-surface-base), 0 0 0 var(--border-radius-sm) var(--color-primary-100);
+  border-color: var(--color-border-medium);
+  color: var(--color-text-primary);
 }
 
 .outline-manager .act-index {
   font-weight: var(--font-weight-bold);
   font-size: var(--font-size-lg);
-  color: var(--color-primary-main);
+  color: var(--color-text-tertiary);
 }
 
 .outline-manager .timeline-act-group.is-expanded .act-index {
-  color: var(--color-text-inverse);
+  color: var(--color-text-primary);
 }
 
 .outline-manager .act-content-wrapper {
@@ -121,12 +122,93 @@
 
 /* Cards */
 .outline-manager .content-card {
-  background-color: var(--color-surface-subtle);
-  border: 1px solid var(--color-border-subtle);
+  background-color: var(--color-surface-base);
+  border: 1px solid var(--color-border-default);
   border-radius: var(--border-radius-lg);
   padding: var(--spacing-lg);
   transition: all var(--transition-base);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Edit Mode Styling - similar to BasicInfoManager */
+.outline-manager .content-card.is-editing {
+  border-color: var(--color-brand-primary-border);
+  box-shadow: 0 0 0 1px var(--color-brand-primary-soft), var(--shadow-lg);
+}
+
+/* Inline Edit Inputs */
+.outline-manager .inline-title-input {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  width: 100%;
+  border: none;
+  border-bottom: 2px solid var(--color-border-default);
+  background: transparent;
+  padding: var(--spacing-xs) 0;
+  color: var(--color-text-primary);
+  transition: border-color var(--transition-base);
+  line-height: 1.2;
+}
+
+.outline-manager .inline-title-input:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+}
+
+.outline-manager .inline-description-input {
+  width: 100%;
+  background-color: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-md);
+  font-family: inherit;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text-primary);
+  resize: vertical;
+  min-height: 100px;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.outline-manager .inline-description-input:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 2px var(--color-brand-primary-soft);
+  background-color: var(--color-surface-base);
+}
+
+/* Edit Actions in Card */
+.outline-manager .edit-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  justify-content: flex-end;
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: var(--spacing-md);
+}
+
+.outline-manager .edit-actions-split {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: var(--spacing-md);
+}
+
+.outline-manager .edit-actions-right {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+/* Chapter Inline Edit Inputs - smaller variant */
+.outline-manager .chapter-card .inline-title-input {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.outline-manager .chapter-card .inline-description-input {
+  min-height: 80px;
 }
 
 .outline-manager .card-header {
@@ -225,7 +307,7 @@
   display: grid;
   grid-template-rows: 1fr;
   transition: grid-template-rows var(--transition-slow);
-  overflow: hidden;
+  overflow: show;
 }
 
 .outline-manager .timeline-act-group.is-collapsed .chapter-stream-wrapper {
@@ -293,11 +375,11 @@
   width: 14px;
   height: 14px;
   background-color: var(--color-surface-base);
-  border: 2px solid var(--color-secondary-main);
+  border: 2px solid var(--color-border-default);
   border-radius: 50%;
   z-index: var(--z-content);
   box-shadow: 0 0 0 var(--spacing-xs) var(--color-surface-base);
-  transition: background-color var(--transition-base);
+  transition: all var(--transition-base);
 }
 
 .outline-manager .chapter-content-wrapper {
@@ -375,30 +457,61 @@
 
 /* Creation Node (Add Chapter Inline) */
 .outline-manager .creation-node .chapter-marker {
-  border-color: var(--color-primary-main);
-  color: var(--color-primary-main);
+  border-color: var(--color-border-default);
+  color: var(--color-text-tertiary);
   display: flex;
   align-items: center;
   justify-content: center;
   background-color: var(--color-surface-base);
 }
 
-.outline-manager .empty-chapter-hint {
-  margin-left: 0;
-  padding: var(--spacing-md);
-  border: 1px dashed var(--color-border-default);
-  border-radius: var(--border-radius-md);
-  text-align: center;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-sm);
+/* Add Chapter Node */
+.outline-manager .add-chapter-node {
   cursor: pointer;
+}
+
+.outline-manager .add-chapter-node .chapter-marker {
+  border-color: var(--color-border-default);
+  border-style: dashed;
+  color: var(--color-text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-surface-base);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.outline-manager .add-chapter-card {
+  border: 1px dashed var(--color-border-default);
+  background: var(--color-surface-base);
+  padding: var(--spacing-md) var(--spacing-lg);
   transition: all var(--transition-base);
 }
 
-.outline-manager .empty-chapter-hint:hover {
-  background-color: var(--color-surface-hover);
-  border-color: var(--color-primary-300);
-  color: var(--color-primary-main);
+.outline-manager .add-chapter-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.outline-manager .add-chapter-node:hover .chapter-marker {
+  border-color: var(--color-border-medium);
+  border-style: solid;
+  color: var(--color-text-secondary);
+}
+
+.outline-manager .add-chapter-node:hover .add-chapter-card {
+  border-color: var(--color-border-medium);
+  border-style: solid;
+  background: var(--color-surface-hover);
+}
+
+.outline-manager .add-chapter-node:hover .add-chapter-content {
+  color: var(--color-text-secondary);
 }
 
 /* Edit Forms */

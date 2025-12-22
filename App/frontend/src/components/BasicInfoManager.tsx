@@ -223,8 +223,34 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
       <div className="section-header">
         <h2>Basic Information</h2>
         {!isEditing ? (
-          <div className="card-actions">
-            <TextButton variant="secondary" size="sm" onClick={handleEdit} disabled={loading} className="desktop-only">
+          <div className="header-buttons">
+            <TextButton
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowAIModal(true)}
+              disabled={loading}
+              iconLeft={<AIAssist size="xs" />}
+              className="desktop-only"
+            >
+              AI Edit
+            </TextButton>
+            <TextButton
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowVersionHistory(true)}
+              disabled={loading}
+              iconLeft={<Books size="xs" />}
+              className="desktop-only"
+            >
+              History
+            </TextButton>
+            <TextButton
+              variant="secondary"
+              size="sm"
+              onClick={handleEdit}
+              disabled={loading}
+              className="desktop-only"
+            >
               Edit
             </TextButton>
             <DropdownMenu
@@ -234,6 +260,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
                   disabled={loading}
                   title="More actions"
                   size="sm"
+                  className="mobile-only"
                 />
               }
             >
@@ -242,12 +269,11 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
                 label="Edit"
                 onClick={handleEdit}
                 disabled={loading}
-                className="mobile-only"
               />
-              <DropdownItem 
-                icon={<AIAssist size="sm" />} 
-                label="AI Enhance" 
-                onClick={() => setShowAIModal(true)} 
+              <DropdownItem
+                icon={<AIAssist size="sm" />}
+                label="AI Edit"
+                onClick={() => setShowAIModal(true)}
                 disabled={loading}
               />
               {settings.defaultSubLanguage &&
@@ -273,6 +299,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
             </div>
         )}
       </div>
+      <div className="section-divider" />
       
       <div className="basic-info-layout">
       <div className={`basic-info-card ${isEditing ? 'is-editing' : ''}`}>

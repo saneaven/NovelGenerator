@@ -149,3 +149,9 @@
 .text-button__label {
   display: inline-block;
 }
+
+/* Override utility classes that might change display */
+.text-button.desktop-only,
+.text-button.mobile-only {
+  display: inline-flex;
+}
