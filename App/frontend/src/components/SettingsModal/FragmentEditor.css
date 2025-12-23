@@ -1,208 +1,255 @@
-/* Fragment Editor Styles */
 .fragment-editor {
-  background: var(--color-surface-base);
-  text-align: left;
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+    background-color: var(--color-surface-base);
+    min-height: 0;
 }
 
-.fragment-editor.loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 200px;
+.fragment-editor--loading {
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-muted);
 }
 
-.fragment-editor .loading-indicator {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-tertiary);
-  padding: var(--spacing-md);
+/* Meta Header (Path & Copy) */
+.fragment-editor__meta-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-sm) var(--spacing-lg);
+    background-color: var(--color-surface-subtle);
+    border-bottom: 1px solid var(--color-border-subtle);
+    flex-shrink: 0;
 }
 
-/* Header with path */
-.fragment-editor-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-md);
-  margin-bottom: var(--spacing-md);
-  flex-shrink: 0;
+.fragment-editor__path-group {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    flex: 1;
+    min-width: 0;
 }
 
-.fragment-path-container {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  flex: 1;
-  min-width: 0;
+.fragment-editor__path {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    background-color: var(--color-surface-muted);
+    padding: 2px 6px;
+    border-radius: var(--border-radius-sm);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.fragment-path {
-  font-family: var(--font-family-mono);
-  font-size: var(--font-size-sm);
-  background: var(--color-surface-muted);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border-radius: var(--border-radius-sm);
-  color: var(--color-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.fragment-editor__copy-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--color-text-muted);
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    transition: color var(--transition-fast), background-color var(--transition-fast);
 }
 
-.copy-path-btn {
-  background: none;
-  border: none;
-  padding: var(--spacing-xs);
-  cursor: pointer;
-  color: var(--color-text-tertiary);
-  border-radius: var(--border-radius-sm);
-  transition: all var(--transition-base);
+.fragment-editor__copy-btn:hover {
+    color: var(--color-primary-main);
+    background-color: var(--color-surface-hover);
 }
 
-.copy-path-btn:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-text-primary);
+.fragment-editor__badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: var(--border-radius-full);
+    background-color: var(--color-info-soft);
+    color: var(--color-info-main);
+    font-weight: var(--font-weight-bold);
+    text-transform: uppercase;
+    flex-shrink: 0;
+    margin-left: var(--spacing-sm);
 }
 
-.fragment-editor-header .badge {
-  font-size: var(--font-size-xs);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border-radius: var(--border-radius-lg);
-  font-weight: var(--font-weight-semibold);
+/* Description Field */
+.fragment-editor__field-group {
+    padding: var(--spacing-sm) var(--spacing-lg);
+    border-bottom: 1px solid var(--color-border-subtle);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    flex-shrink: 0;
 }
 
-.fragment-editor-header .badge.default {
-  background: var(--color-info-light);
-  color: var(--color-info-dark);
+.fragment-editor__label {
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+    width: 80px;
+    flex-shrink: 0;
 }
 
-/* Description field */
-.fragment-description-field {
-  margin-bottom: var(--spacing-md);
-  flex-shrink: 0;
+.fragment-editor__input {
+    flex: 1;
+    height: 32px;
+    padding: 0 var(--spacing-sm);
+    border: 1px solid transparent;
+    border-radius: var(--border-radius-md);
+    background-color: transparent;
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    transition: all var(--transition-fast);
 }
 
-.fragment-description-field label {
-  display: block;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-secondary);
-  margin-bottom: var(--spacing-xs);
+.fragment-editor__input:hover {
+    background-color: var(--color-surface-hover);
 }
 
-.fragment-description-field input {
-  width: 100%;
-  padding: var(--spacing-sm);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--border-radius-sm);
-  font-size: var(--font-size-sm);
-  background: var(--color-surface-base);
-  color: var(--color-text-primary);
+.fragment-editor__input:focus {
+    outline: none;
+    background-color: var(--color-surface-base);
+    border-color: var(--color-primary-main);
+    box-shadow: var(--shadow-focus);
 }
 
-.fragment-description-field input:focus {
-  outline: none;
-  border-color: var(--color-primary-main);
-  box-shadow: var(--shadow-focus);
+/* Content Area */
+.fragment-editor__content {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
 }
 
-/* CodeMirror wrapper */
-.fragment-editor > div:nth-child(3) {
-  flex: 1;
-  min-height: 0;
-  height: 100%;
-  width: 100%;
-  position: relative;
+/* CodeMirror Container Override */
+.fragment-editor__content .syntax-highlighted-textarea {
+    flex: 1;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
-.fragment-editor > div:nth-child(3) > div {
-  height: 100%;
+/* Ensure internal CodeMirror elements fill height */
+.fragment-editor__content .cm-theme,
+.fragment-editor__content .cm-editor {
+    height: 100% !important;
 }
 
-.fragment-editor .cm-editor {
-  height: 100%;
+/* Validation Area */
+.fragment-editor__validation {
+    flex-shrink: 0;
+    max-height: 150px;
+    overflow-y: auto;
+    border-top: 1px solid var(--color-border-subtle);
+    background-color: var(--color-surface-subtle);
 }
 
-.fragment-editor .cm-scroller {
-  position: absolute;
-  inset: 0;
+/* Footer Actions */
+.fragment-editor__footer {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-sm) var(--spacing-lg);
+    background-color: var(--color-surface-base);
+    border-top: 1px solid var(--color-border-subtle);
+    gap: var(--spacing-md);
 }
 
-/* Editor Actions - reuse from PromptEditor */
-.fragment-editor .editor-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: var(--spacing-sm);
-  padding: var(--spacing-md);
-  gap: var(--spacing-sm);
-  flex-wrap: wrap;
-  flex-shrink: 0;
+.fragment-editor__actions-left,
+.fragment-editor__actions-right {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
 }
 
-.fragment-editor .editor-left-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  flex: 1;
+.fragment-editor__actions-left {
+    flex: 1;
+    min-width: 0;
 }
 
-.fragment-editor .editor-right-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
+.fragment-editor__note-input {
+    flex: 1;
+    max-width: 300px;
+    height: 32px;
+    padding: 0 var(--spacing-sm);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-md);
+    font-size: var(--font-size-sm);
+    background-color: var(--color-surface-base);
+    color: var(--color-text-primary);
+    transition: all var(--transition-fast);
 }
 
-.fragment-editor .note-input {
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--border-radius-sm);
-  font-size: var(--font-size-sm);
-  min-width: 180px;
-  max-width: 350px;
-  flex: 1;
-  background: var(--color-surface-base);
-  color: var(--color-text-primary);
+.fragment-editor__note-input:focus {
+    outline: none;
+    border-color: var(--color-primary-main);
+    box-shadow: var(--shadow-focus);
 }
 
-.fragment-editor .note-input:focus {
-  outline: none;
-  border-color: var(--color-primary-main);
-  box-shadow: var(--shadow-focus);
+.fragment-editor__meta {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    margin-right: var(--spacing-sm);
 }
 
-.fragment-editor .char-count {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-tertiary);
+.fragment-editor__unsaved-indicator {
+    color: var(--color-warning);
+    font-weight: var(--font-weight-medium);
 }
 
-.fragment-editor .unsaved-indicator {
-  color: var(--color-warning);
-  font-weight: var(--font-weight-semibold);
-}
-
-/* Responsive */
+/* ========================================
+   MOBILE STYLES
+   ======================================== */
 @media (max-width: 768px) {
-  .fragment-editor .editor-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
+    .fragment-editor__meta-header {
+        flex-direction: row;
+        align-items: center;
+        padding: var(--spacing-sm) var(--spacing-md);
+    }
+    
+    .fragment-editor__badge {
+        margin-left: var(--spacing-sm);
+    }
 
-  .fragment-editor .editor-left-actions,
-  .fragment-editor .editor-right-actions {
-    width: 100%;
-    justify-content: stretch;
-  }
+    .fragment-editor__field-group {
+        padding: var(--spacing-xs) var(--spacing-md);
+    }
+    
+    .fragment-editor__label {
+        width: 60px;
+    }
 
-  .fragment-editor .note-input {
-    min-width: 100%;
-  }
+    .fragment-editor__footer {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--spacing-sm) var(--spacing-md);
+        gap: var(--spacing-sm);
+        overflow-x: auto;
+    }
 
-  .fragment-editor-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
+    .fragment-editor__actions-left,
+    .fragment-editor__actions-right {
+        flex-direction: row;
+        align-items: center;
+        width: auto;
+        gap: var(--spacing-sm);
+    }
+    
+    .fragment-editor__note-input {
+        display: none;
+    }
+
+    .fragment-editor__meta {
+        display: none;
+    }
 }

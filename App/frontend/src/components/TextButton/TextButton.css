@@ -151,7 +151,20 @@
 }
 
 /* Override utility classes that might change display */
-.text-button.desktop-only,
+.text-button.desktop-only {
+  display: none;
+}
+
 .text-button.mobile-only {
   display: inline-flex;
+}
+
+@media (min-width: 768px) {
+  .text-button.desktop-only {
+    display: inline-flex;
+  }
+
+  .text-button.mobile-only {
+    display: none;
+  }
 }

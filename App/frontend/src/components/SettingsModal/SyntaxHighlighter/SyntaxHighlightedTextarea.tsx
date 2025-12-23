@@ -62,6 +62,8 @@ const SyntaxHighlightedTextarea: React.FC<SyntaxHighlightedTextareaProps> = ({
         <CodeMirror
             ref={editorRef}
             value={value}
+            height="100%"
+            className="syntax-highlighted-textarea"
             onChange={(value) => onChange(value)}
             placeholder={placeholder}
             extensions={[

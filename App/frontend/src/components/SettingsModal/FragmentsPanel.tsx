@@ -5,7 +5,7 @@ import { fragmentService } from '../../api/fragmentService';
 import { PromptManager } from '../../llm/PromptManager';
 import { IconButton } from '../IconButton';
 import { TextButton } from '../TextButton';
-import { ChevronLeft, ChevronRight, Document } from '../icons';
+import { ChevronLeft, ChevronRight, Document, Close } from '../icons';
 import TemplateSyntaxHint from './TemplateSyntaxHint';
 import './FragmentsPanel.css';
 
@@ -38,7 +38,6 @@ const CreateFragmentModal: React.FC<CreateFragmentModalProps> = ({
       return;
     }
 
-    // Validate name (alphanumeric, dash, underscore)
     if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
       setError('Fragment name can only contain letters, numbers, dashes, and underscores');
       return;
@@ -71,58 +70,66 @@ const CreateFragmentModal: React.FC<CreateFragmentModalProps> = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="create-fragment-modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Create New Fragment</h3>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <header className="modal-header">
+          <h3>Create New Fragment</h3>
+        </header>
 
-        <div className="form-group">
-          <label htmlFor="fragment-folder">Folder Path (optional)</label>
-          <input
-            id="fragment-folder"
-            type="text"
-            value={newFolderPath}
-            onChange={(e) => setNewFolderPath(e.target.value)}
-            placeholder="e.g., common/context"
-          />
-          <small>Use forward slashes to create nested folders</small>
+        <div className="modal-body">
+          <div className="form-group">
+            <label className="form-label" htmlFor="fragment-folder">Folder Path (optional)</label>
+            <input
+              id="fragment-folder"
+              className="form-input"
+              type="text"
+              value={newFolderPath}
+              onChange={(e) => setNewFolderPath(e.target.value)}
+              placeholder="e.g., common/context"
+            />
+            <small className="form-hint">Use forward slashes to create nested folders</small>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="fragment-name">Fragment Name *</label>
+            <input
+              id="fragment-name"
+              className="form-input"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., customThinkingInstruction"
+              autoFocus
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="fragment-desc">Description (optional)</label>
+            <input
+              id="fragment-desc"
+              className="form-input"
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Brief description of this fragment"
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="fragment-content">Initial Content (optional)</label>
+            <textarea
+              id="fragment-content"
+              className="form-textarea"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="{{! Your fragment content here }}"
+              rows={4}
+            />
+          </div>
+
+          {error && <div className="form-error">{error}</div>}
         </div>
 
-        <div className="form-group">
-          <label htmlFor="fragment-name">Fragment Name *</label>
-          <input
-            id="fragment-name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g., customThinkingInstruction"
-            autoFocus
-          />
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="fragment-desc">Description (optional)</label>
-          <input
-            id="fragment-desc"
-            type="text"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Brief description of this fragment"
-          />
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="fragment-content">Initial Content (optional)</label>
-          <textarea
-            id="fragment-content"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="{{! Your fragment content here }}"
-            rows={4}
-          />
-        </div>
-
-        {error && <div className="error-message">{error}</div>}
-
-        <div className="modal-actions">
+        <footer className="modal-footer">
           <TextButton variant="secondary" onClick={onClose}>
             Cancel
           </TextButton>
@@ -134,7 +141,7 @@ const CreateFragmentModal: React.FC<CreateFragmentModalProps> = ({
           >
             Create Fragment
           </TextButton>
-        </div>
+        </footer>
       </div>
     </div>
   );
@@ -149,6 +156,10 @@ const FragmentsPanel: React.FC = () => {
 
   const handleFragmentSelect = (folderPath: string | null, fragmentName: string) => {
     setSelectedFragment({ folderPath, fragmentName });
+    // On mobile, collapse sidebar after selection
+    if (window.innerWidth <= 768) {
+      setIsSidebarCollapsed(true);
+    }
   };
 
   const handleCreateFragment = (folderPath: string | null) => {
@@ -157,22 +168,18 @@ const FragmentsPanel: React.FC = () => {
   };
 
   const handleFragmentCreated = (folderPath: string | null, fragmentName: string) => {
-    // Refresh tree and select new fragment
     setRefreshTrigger((prev) => prev + 1);
     setSelectedFragment({ folderPath, fragmentName });
-    // Reload fragments in PromptManager
     PromptManager.reloadFragments();
   };
 
   const handleFragmentDeleted = () => {
     setSelectedFragment(null);
     setRefreshTrigger((prev) => prev + 1);
-    // Reload fragments in PromptManager
     PromptManager.reloadFragments();
   };
 
   const handleFragmentSaved = () => {
-    // Reload fragments in PromptManager after save
     PromptManager.reloadFragments();
   };
 
@@ -187,33 +194,36 @@ const FragmentsPanel: React.FC = () => {
     : null;
 
   return (
-    <div className={`fragments-panel ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-      {/* Left content: Fragment editor */}
-      <div className="fragments-content">
-        <div className="fragments-content-body">
-          {selectedFragment ? (
-            <div className="fragments-editor-container">
-              {/* Header */}
-              <div className="fragments-editor-header">
-                <div className="fragments-editor-header-text">
-                  <h3>Edit Fragment</h3>
-                  <p className="fragments-editor-description">
-                    Reusable template snippet that can be included in prompts using{' '}
-                    <code>{`{{prompt "${selectedPath}"}}`}</code>
-                  </p>
-                </div>
-                <div className="fragments-editor-header-actions">
-                  <TemplateSyntaxHint selectedNode={null} />
-                  <IconButton
-                    icon={isSidebarCollapsed ? <ChevronLeft size="sm" /> : <ChevronRight size="sm" />}
-                    onClick={toggleSidebar}
-                    title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                    size="sm"
-                  />
-                </div>
-              </div>
+    <div className={`panel-split ${isSidebarCollapsed ? 'panel-split--collapsed' : ''}`}>
+      {/* Mobile Backdrop */}
+      {!isSidebarCollapsed && (
+        <div className="panel-split__backdrop" onClick={() => setIsSidebarCollapsed(true)} />
+      )}
 
-              {/* Fragment editor */}
+      {/* Main Content Area */}
+      <main className="panel-split__main">
+        {selectedFragment ? (
+          <div className="editor-wrapper">
+            <header className="editor-wrapper__header">
+              <div className="editor-wrapper__title-group">
+                <h3 className="editor-wrapper__title">Edit Fragment</h3>
+                <p className="editor-wrapper__description">
+                  Reusable template snippet that can be included in prompts using{' '}
+                  <code>{`{{prompt "${selectedPath}"}}`}</code>
+                </p>
+              </div>
+              <div className="editor-wrapper__actions">
+                <TemplateSyntaxHint selectedNode={null} />
+                <IconButton
+                  icon={isSidebarCollapsed ? <ChevronLeft size="sm" /> : <ChevronRight size="sm" />}
+                  onClick={toggleSidebar}
+                  title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                  size="sm"
+                />
+              </div>
+            </header>
+
+            <div className="editor-wrapper__body">
               <FragmentEditor
                 key={selectedPath}
                 folderPath={selectedFragment.folderPath}
@@ -222,32 +232,33 @@ const FragmentsPanel: React.FC = () => {
                 onSave={handleFragmentSaved}
               />
             </div>
-          ) : (
-            <div className="fragments-empty-state">
-              <div className="empty-state-icon"><Document size="4xl" /></div>
-              <h3>Select a fragment to edit</h3>
-              <p>Choose a fragment from the sidebar or create a new one</p>
-              <TextButton
-                variant="primary"
-                size="md"
-                onClick={() => handleCreateFragment(null)}
-              >
-                Create New Fragment
-              </TextButton>
-            </div>
-          )}
-        </div>
-      </div>
+          </div>
+        ) : (
+          <div className="empty-state">
+            <div className="empty-state__icon"><Document size="4xl" /></div>
+            <h3 className="empty-state__title">Select a fragment to edit</h3>
+            <p className="empty-state__text">Choose a fragment from the sidebar or create a new one</p>
+            <TextButton
+              variant="primary"
+              size="md"
+              onClick={() => handleCreateFragment(null)}
+            >
+              Create New Fragment
+            </TextButton>
+          </div>
+        )}
+      </main>
 
-      {/* Right sidebar: Tree navigation */}
-      <div className="fragments-sidebar">
+      {/* Right Sidebar: Tree navigation */}
+      <aside className="panel-split__sidebar">
         <FragmentTreeNav
           selectedPath={selectedPath}
           onFragmentSelect={handleFragmentSelect}
           onCreateFragment={handleCreateFragment}
           refreshTrigger={refreshTrigger}
+          onClose={() => setIsSidebarCollapsed(true)}
         />
-      </div>
+      </aside>
 
       {/* Create fragment modal */}
       {showCreateModal && (

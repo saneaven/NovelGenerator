@@ -74,10 +74,7 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
 
     const validateContent = async (text: string) =>
     {
-        // Map functionType to schema type for variable validation
         const schemaType = mapFunctionTypeToSchemaType(functionType, name);
-
-        // Perform validation (with variable checking if schema type is available)
         const result = await validateTemplate(text, schemaType || undefined);
 
         if (result.isValid) {
@@ -127,14 +124,10 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
                 name
             );
 
-            // Invalidate cache so it will reload from backend
             invalidatePromptCache(functionType, category, name);
-
-            // Update original content to mark as saved
             setOriginalContent(content);
             setSaveNote('');
             setShowNoteInput(false);
-
             alert('Prompt saved successfully!');
         } catch (error)
         {
@@ -148,7 +141,6 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
 
     const handleRestore = useCallback(async () =>
     {
-        // Reload from backend after version restore
         await loadPromptContent();
         setShowVersionHistory(false);
     }, [functionType, category, name]);
@@ -158,31 +150,33 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
     if (isLoading)
     {
         return (
-            <div className="prompt-editor loading">
+            <div className="prompt-editor prompt-editor--loading">
+                 <div className="loading-indicator">Loading prompt...</div>
             </div>
         );
     }
 
     return (
-        <div className="prompt-editor">
-            {/* Syntax highlighted textarea */}
-            <SyntaxHighlightedTextarea
-                value={content}
-                onChange={setContent}
-                placeholder="Enter prompt template..."
-            />
-
-            {/* Validation warnings/errors */}
-            {validation && (
-                <ValidationWarnings
-                    errors={validation.errors}
-                    warnings={validation.warnings}
+        <section className="prompt-editor">
+            <div className="prompt-editor__content">
+                <SyntaxHighlightedTextarea
+                    value={content}
+                    onChange={setContent}
+                    placeholder="Enter prompt template..."
                 />
+            </div>
+
+            {validation && (
+                <div className="prompt-editor__validation">
+                    <ValidationWarnings
+                        errors={validation.errors}
+                        warnings={validation.warnings}
+                    />
+                </div>
             )}
 
-            {/* Action buttons */}
-            <div className="editor-actions">
-                <div className="editor-left-actions">
+            <footer className="prompt-editor__footer">
+                <div className="prompt-editor__actions-left">
                     <TextButton
                         variant="secondary"
                         size="sm"
@@ -197,16 +191,16 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
                             value={saveNote}
                             onChange={(e) => setSaveNote(e.target.value)}
                             placeholder="Version note (optional)..."
-                            className="note-input"
+                            className="prompt-editor__note-input"
                             maxLength={500}
                         />
                     )}
                 </div>
 
-                <div className="editor-right-actions">
-                    <span className="char-count">
-                        {content.length} characters
-                        {hasChanges && <span className="unsaved-indicator"> • Unsaved changes</span>}
+                <div className="prompt-editor__actions-right">
+                    <span className="prompt-editor__meta">
+                        {content.length} chars
+                        {hasChanges && <span className="prompt-editor__unsaved-indicator"> • Unsaved changes</span>}
                     </span>
                     <TextButton
                         variant="secondary"
@@ -225,9 +219,8 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
                         Save
                     </TextButton>
                 </div>
-            </div>
+            </footer>
 
-            {/* Version history modal */}
             {showVersionHistory && (
                 <VersionHistoryModal
                     functionType={functionType}
@@ -237,7 +230,7 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
                     onRestore={handleRestore}
                 />
             )}
-        </div>
+        </section>
     );
 };
 

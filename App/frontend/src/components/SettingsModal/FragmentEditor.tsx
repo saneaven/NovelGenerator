@@ -42,7 +42,6 @@ const FragmentEditor: React.FC<FragmentEditorProps> = ({
 
   const fullPath = folderPath ? `${folderPath}/${fragmentName}` : fragmentName;
 
-  // Load fragment on mount or when path changes
   useEffect(() => {
     loadFragmentContent();
   }, [folderPath, fragmentName]);
@@ -63,25 +62,19 @@ const FragmentEditor: React.FC<FragmentEditorProps> = ({
     }
   };
 
-  // Debounced validation
   useEffect(() => {
     const timer = setTimeout(() => {
       validateContent(content);
     }, 500);
-
     return () => clearTimeout(timer);
   }, [content]);
 
   const validateContent = async (text: string) => {
-    // Validate Handlebars syntax
     const syntaxResult = await validateTemplate(text);
-
-    // Validate fragment references (pass currentPath for self-reference detection)
     const refResult = validateFragmentReferences(text, fullPath);
 
     const warnings: ValidationResult['warnings'] = [];
 
-    // Add syntax warnings
     if (syntaxResult.warnings) {
       warnings.push(...syntaxResult.warnings.map(w => ({
         message: w.message,
@@ -91,7 +84,6 @@ const FragmentEditor: React.FC<FragmentEditorProps> = ({
       })));
     }
 
-    // Add fragment reference warnings from refResult
     if (refResult.warnings) {
       refResult.warnings.forEach(warning => {
         warnings.push({
@@ -101,7 +93,6 @@ const FragmentEditor: React.FC<FragmentEditorProps> = ({
       });
     }
 
-    // Add fragment reference errors
     const errors: ValidationResult['errors'] = [];
     if (refResult.errors) {
       refResult.errors.forEach(error => {
@@ -154,7 +145,6 @@ const FragmentEditor: React.FC<FragmentEditorProps> = ({
       setOriginalDescription(description);
       setSaveNote('');
       setShowNoteInput(false);
-
       onSave?.();
       alert('Fragment saved successfully!');
     } catch (error) {
@@ -169,7 +159,6 @@ const FragmentEditor: React.FC<FragmentEditorProps> = ({
     if (!confirm(`Are you sure you want to delete "${fullPath}"? This will delete all versions.`)) {
       return;
     }
-
     setIsDeleting(true);
     try {
       await fragmentService.deleteFragment(folderPath, fragmentName);
@@ -196,20 +185,20 @@ const FragmentEditor: React.FC<FragmentEditorProps> = ({
 
   if (isLoading) {
     return (
-      <div className="fragment-editor loading">
+      <div className="fragment-editor fragment-editor--loading">
         <div className="loading-indicator">Loading fragment...</div>
       </div>
     );
   }
 
   return (
-    <div className="fragment-editor">
-      {/* Header */}
-      <div className="fragment-editor-header">
-        <div className="fragment-path-container">
-          <code className="fragment-path">{fullPath}</code>
+    <section className="fragment-editor">
+      {/* Meta Header */}
+      <div className="fragment-editor__meta-header">
+        <div className="fragment-editor__path-group">
+          <code className="fragment-editor__path">{fullPath}</code>
           <button
-            className="copy-path-btn"
+            className="fragment-editor__copy-btn"
             onClick={handleCopyPath}
             title="Copy path for use in templates"
           >
@@ -217,15 +206,16 @@ const FragmentEditor: React.FC<FragmentEditorProps> = ({
           </button>
         </div>
         {isSystemDefault && (
-          <span className="badge default">System Default</span>
+          <span className="fragment-editor__badge">System Default</span>
         )}
       </div>
 
-      {/* Description field */}
-      <div className="fragment-description-field">
-        <label htmlFor="fragment-description">Description</label>
+      {/* Description Field */}
+      <div className="fragment-editor__field-group">
+        <label className="fragment-editor__label" htmlFor="fragment-description">Description</label>
         <input
           id="fragment-description"
+          className="fragment-editor__input"
           type="text"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -234,24 +224,28 @@ const FragmentEditor: React.FC<FragmentEditorProps> = ({
         />
       </div>
 
-      {/* Syntax highlighted textarea */}
-      <SyntaxHighlightedTextarea
-        value={content}
-        onChange={setContent}
-        placeholder="Enter fragment template..."
-      />
-
-      {/* Validation warnings/errors */}
-      {validation && (
-        <ValidationWarnings
-          errors={validation.errors}
-          warnings={validation.warnings}
+      {/* Content Area */}
+      <div className="fragment-editor__content">
+        <SyntaxHighlightedTextarea
+          value={content}
+          onChange={setContent}
+          placeholder="Enter fragment template..."
         />
+      </div>
+
+      {/* Validation */}
+      {validation && (
+        <div className="fragment-editor__validation">
+          <ValidationWarnings
+            errors={validation.errors}
+            warnings={validation.warnings}
+          />
+        </div>
       )}
 
-      {/* Action buttons */}
-      <div className="editor-actions">
-        <div className="editor-left-actions">
+      {/* Actions Footer */}
+      <footer className="fragment-editor__footer">
+        <div className="fragment-editor__actions-left">
           <TextButton
             variant="secondary"
             size="sm"
@@ -266,16 +260,16 @@ const FragmentEditor: React.FC<FragmentEditorProps> = ({
               value={saveNote}
               onChange={(e) => setSaveNote(e.target.value)}
               placeholder="Version note (optional)..."
-              className="note-input"
+              className="fragment-editor__note-input"
               maxLength={500}
             />
           )}
         </div>
 
-        <div className="editor-right-actions">
-          <span className="char-count">
-            {content.length} characters
-            {hasChanges && <span className="unsaved-indicator"> - Unsaved changes</span>}
+        <div className="fragment-editor__actions-right">
+          <span className="fragment-editor__meta">
+            {content.length} chars
+            {hasChanges && <span className="fragment-editor__unsaved-indicator"> • Unsaved changes</span>}
           </span>
           <TextButton
             variant="secondary"
@@ -304,9 +298,8 @@ const FragmentEditor: React.FC<FragmentEditorProps> = ({
             Save
           </TextButton>
         </div>
-      </div>
+      </footer>
 
-      {/* Version History Modal */}
       {showVersionHistory && (
         <FragmentVersionHistoryModal
           folderPath={folderPath}
@@ -315,7 +308,7 @@ const FragmentEditor: React.FC<FragmentEditorProps> = ({
           onRestore={handleRestore}
         />
       )}
-    </div>
+    </section>
   );
 };
 

@@ -3,6 +3,7 @@
   position: relative;
 }
 
+
 /* ===== Notification Panel Container ===== */
 .notification-panel-container {
   position: absolute;
@@ -11,6 +12,7 @@
   flex-direction: column;
   gap: var(--spacing-sm);
   width: 320px;
+  transition: opacity 0.15s ease;
 }
 
 .notification-button-wrapper--desktop .notification-panel-container {
@@ -21,7 +23,10 @@
 .notification-button-wrapper--mobile .notification-panel-container {
   bottom: calc(100% + var(--spacing-sm));
   left: 0;
-  flex-direction: column-reverse;
+}
+
+.notification-panel-container--closing {
+  pointer-events: none;
 }
 
 /* ===== Animations ===== */
@@ -97,14 +102,29 @@
 }
 
 /* ===== Notification Items Container ===== */
+.notification-items-viewport {
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  padding-right: 2px;
+  perspective: 650px;
+  perspective-origin: center top;
+  scrollbar-width: none;
+}
+
+.notification-button-wrapper--mobile .notification-items-viewport {
+  perspective-origin: center bottom;
+}
+
+.notification-items-viewport::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
 .notification-items-container {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
-}
-
-.notification-button-wrapper--mobile .notification-items-container {
-  flex-direction: column-reverse;
+  transform-style: preserve-3d;
 }
 
 /* ===== Notification Empty State ===== */
@@ -130,6 +150,10 @@
 
 /* ===== Notification Item (Floating Card) ===== */
 .notification-item {
+  will-change: transform, opacity, filter;
+}
+
+.notification-item-surface {
   background: var(--color-surface-elevated);
   border-radius: var(--border-radius-lg);
   box-shadow: var(--shadow-lg);
@@ -140,7 +164,7 @@
   opacity: 0;
 }
 
-.notification-panel-container--closing .notification-item {
+.notification-panel-container--closing .notification-item-surface {
   animation: notification-stack-out 0.15s ease-in forwards;
   animation-delay: 0ms;
   opacity: 1;
@@ -150,7 +174,7 @@
   cursor: pointer;
 }
 
-.notification-item--clickable:hover {
+.notification-item--clickable:hover .notification-item-surface {
   background: var(--color-surface-hover);
 }
 

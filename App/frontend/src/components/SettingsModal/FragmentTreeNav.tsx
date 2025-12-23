@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { fragmentService } from '../../api/fragmentService';
 import type { FragmentTreeResponse, FragmentListItem, FolderTreeNode } from '../../types/fragments';
-import { Expand, Collapse, Bullet, Plus, Folder } from '../icons';
+import { Expand, Collapse, Bullet, Plus, Folder, Close } from '../icons';
 import { TextButton } from '../TextButton';
 import './FragmentTreeNav.css';
 
@@ -10,6 +10,7 @@ interface FragmentTreeNavProps {
   onFragmentSelect: (folderPath: string | null, fragmentName: string) => void;
   onCreateFragment: (folderPath: string | null) => void;
   refreshTrigger?: number;
+  onClose?: () => void;
 }
 
 interface FolderNodeProps {
@@ -30,14 +31,14 @@ const FragmentItem: React.FC<{
 }> = ({ fragment, level, isSelected, onSelect }) => {
   return (
     <div
-      className={`fragment-item ${isSelected ? 'selected' : ''}`}
+      className={`tree-node__content tree-node__content--fragment ${isSelected ? 'tree-node__content--selected' : ''}`}
       style={{ paddingLeft: `${level * 16 + 24}px` }}
       onClick={onSelect}
     >
-      <span className="fragment-item-bullet"><Bullet size="xs" /></span>
-      <span className="fragment-item-name">{fragment.fragment_name}</span>
+      <span className="tree-node__bullet"><Bullet size="xs" /></span>
+      <span className="tree-node__label">{fragment.fragment_name}</span>
       {fragment.is_system_default && (
-        <span className="fragment-badge default">Default</span>
+        <span className="tree-node__badge">Default</span>
       )}
     </div>
   );
@@ -65,21 +66,19 @@ const FolderNode: React.FC<FolderNodeProps> = ({
   };
 
   return (
-    <div className="folder-node">
+    <div className="tree-node">
       <div
-        className="folder-node-header"
+        className="tree-node__content tree-node__content--folder"
         style={{ paddingLeft: `${level * 16 + 8}px` }}
         onClick={handleClick}
       >
-        {hasChildren && (
-          <span className="folder-expand-icon">
-            {isExpanded ? <Collapse size="xs" /> : <Expand size="xs" />}
-          </span>
-        )}
-        <span className="folder-icon"><Folder size="sm" /></span>
-        <span className="folder-name">{node.name}</span>
+        <span className="tree-node__expand-icon">
+          {hasChildren ? (isExpanded ? <Collapse size="xs" /> : <Expand size="xs" />) : <span style={{ width: 12 }} />}
+        </span>
+        <span className="tree-node__icon"><Folder size="sm" /></span>
+        <span className="tree-node__label">{node.name}</span>
         <button
-          className="folder-add-btn"
+          className="tree-node__action-btn"
           onClick={handleAddClick}
           title={`Add fragment to ${node.path}`}
         >
@@ -88,8 +87,7 @@ const FolderNode: React.FC<FolderNodeProps> = ({
       </div>
 
       {isExpanded && (
-        <div className="folder-children">
-          {/* Render subfolders */}
+        <div className="tree-node__children">
           {node.children?.map((child) => (
             <FolderNode
               key={child.path}
@@ -103,7 +101,6 @@ const FolderNode: React.FC<FolderNodeProps> = ({
             />
           ))}
 
-          {/* Render fragments in this folder */}
           {node.fragments?.map((fragment) => {
             const fragmentPath = fragment.folder_path
               ? `${fragment.folder_path}/${fragment.fragment_name}`
@@ -129,12 +126,12 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
   onFragmentSelect,
   onCreateFragment,
   refreshTrigger,
+  onClose,
 }) => {
   const [treeData, setTreeData] = useState<FragmentTreeResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
-  // Load tree data
   useEffect(() => {
     loadTree();
   }, [refreshTrigger]);
@@ -145,7 +142,6 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
       const tree = await fragmentService.getFolderTree();
       setTreeData(tree);
 
-      // Auto-expand all folders on first load
       const allPaths = new Set<string>();
       const collectPaths = (folders: FolderTreeNode[]) => {
         folders.forEach(folder => {
@@ -180,7 +176,7 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
 
   if (isLoading) {
     return (
-      <div className="fragment-tree-nav loading">
+      <div className="tree-nav tree-nav--loading">
         <div className="loading-indicator">Loading...</div>
       </div>
     );
@@ -191,21 +187,28 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
   );
 
   return (
-    <div className="fragment-tree-nav">
-      <div className="fragment-tree-header">
-        <h3>Fragments</h3>
-        <button
-          className="add-fragment-btn"
-          onClick={() => onCreateFragment(null)}
-          title="Add fragment to root"
-        >
-          <Plus size="sm" />
-        </button>
-      </div>
+    <nav className="tree-nav">
+      <header className="tree-nav__header">
+        <div className="tree-nav__header-left">
+          <h3 className="tree-nav__title">Fragments</h3>
+          <button
+            className="tree-nav__action-btn"
+            onClick={() => onCreateFragment(null)}
+            title="Add fragment to root"
+          >
+            <Plus size="sm" />
+          </button>
+        </div>
+        {onClose && (
+          <button className="tree-nav__close-btn" onClick={onClose} aria-label="Close sidebar">
+            <Close size="sm" />
+          </button>
+        )}
+      </header>
 
-      <div className="fragment-tree-content">
+      <div className="tree-nav__content">
         {!hasFragments ? (
-          <div className="empty-tree-state">
+          <div className="tree-nav__empty">
             <p>No fragments yet</p>
             <TextButton
               variant="primary"
@@ -217,7 +220,6 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
           </div>
         ) : (
           <>
-            {/* Root level fragments */}
             {treeData?.root_fragments.map((fragment) => {
               const fragmentPath = fragment.fragment_name;
               return (
@@ -231,7 +233,6 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
               );
             })}
 
-            {/* Folders */}
             {treeData?.folders.map((folder) => (
               <FolderNode
                 key={folder.path}
@@ -247,7 +248,7 @@ const FragmentTreeNav: React.FC<FragmentTreeNavProps> = ({
           </>
         )}
       </div>
-    </div>
+    </nav>
   );
 };
 

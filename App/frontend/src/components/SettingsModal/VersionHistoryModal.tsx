@@ -3,6 +3,7 @@ import { promptService, type VersionHistoryItem } from '../../api/promptService'
 import type { FunctionType, PromptCategory } from '../../types/prompts';
 import { useErrorStore } from '../../store/errorStore';
 import { TextButton } from '../TextButton';
+import './VersionHistoryModal.css';
 
 interface VersionHistoryModalProps {
   functionType: FunctionType;
@@ -34,6 +35,13 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     try {
       const history = await promptService.getVersionHistory(functionType, category, name);
       setVersions(history);
+      // Auto-select active version or first version
+      const active = history.find(v => v.is_active);
+      if (active) {
+        setSelectedVersion(active.version_number);
+      } else if (history.length > 0) {
+        setSelectedVersion(history[0].version_number);
+      }
     } catch (error) {
       console.error('Failed to load version history:', error);
       showError('Load Error', 'Failed to load version history');
@@ -69,89 +77,93 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content version-history-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
+      <div className="modal-content history-modal" onClick={(e) => e.stopPropagation()}>
+        <header className="modal-header">
           <h3>Version History</h3>
-          <button className="close-button" onClick={onClose}>
-            ×
-          </button>
-        </div>
+        </header>
 
-        <div className="modal-body">
+        <div className="modal-body history-modal__body">
           {isLoading ? (
             <div className="loading-indicator">Loading version history...</div>
           ) : versions.length === 0 ? (
             <div className="empty-state">No version history available</div>
           ) : (
-            <div className="version-history-content">
-              {/* Version list */}
-              <div className="version-list">
-                <h4>Versions ({versions.length})</h4>
-                {versions.map((version) => (
-                  <div
-                    key={version.version_number}
-                    className={`version-item ${version.is_active ? 'active' : ''} ${
-                      selectedVersion === version.version_number ? 'selected' : ''
-                    }`}
-                    onClick={() => setSelectedVersion(version.version_number)}
-                  >
-                    <div className="version-header">
-                      <span className="version-number">
-                        Version {version.version_number}
-                      </span>
-                      {version.is_active && <span className="badge active">Active</span>}
-                      {version.is_default && <span className="badge default">Default</span>}
+            <div className="history-layout">
+              {/* Version List Sidebar */}
+              <aside className="history-list">
+                <h4 className="history-list__title">Versions ({versions.length})</h4>
+                <div className="history-list__items">
+                  {versions.map((version) => (
+                    <div
+                      key={version.version_number}
+                      className={`history-item ${version.is_active ? 'history-item--active' : ''} ${
+                        selectedVersion === version.version_number ? 'history-item--selected' : ''
+                      }`}
+                      onClick={() => setSelectedVersion(version.version_number)}
+                    >
+                      <div className="history-item__header">
+                        <span className="history-item__number">
+                          v{version.version_number}
+                        </span>
+                        <div className="history-item__badges">
+                          {version.is_active && <span className="badge badge--active">Active</span>}
+                          {version.is_default && <span className="badge badge--default">Default</span>}
+                        </div>
+                      </div>
+                      <div className="history-item__date">{formatDate(version.created_at)}</div>
+                      {version.note && (
+                        <div className="history-item__note" title={version.note}>"{version.note}"</div>
+                      )}
                     </div>
-                    <div className="version-meta">
-                      <span className="version-date">{formatDate(version.created_at)}</span>
-                    </div>
-                    {version.note && (
-                      <div className="version-note">"{version.note}"</div>
-                    )}
-                    <div className="version-preview">{version.preview}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Preview panel */}
-              {selectedVersionData && (
-                <div className="version-details">
-                  <div className="details-header">
-                    <h4>Version {selectedVersionData.version_number} Details</h4>
-                    {!selectedVersionData.is_active && (
-                      <TextButton
-                        variant="primary"
-                        size="sm"
-                        onClick={() => handleRestore(selectedVersionData.version_number)}
-                        disabled={isRestoring}
-                        loading={isRestoring}
-                      >
-                        Restore This Version
-                      </TextButton>
-                    )}
-                  </div>
-                  <div className="details-meta">
-                    <p><strong>Created:</strong> {formatDate(selectedVersionData.created_at)}</p>
-                    {selectedVersionData.note && (
-                      <p><strong>Note:</strong> {selectedVersionData.note}</p>
-                    )}
-                    <p><strong>Status:</strong> {selectedVersionData.is_active ? 'Active' : 'Inactive'}</p>
-                  </div>
-                  <div className="details-preview">
-                    <h5>Preview (first 200 characters)</h5>
-                    <pre className="preview-content">{selectedVersionData.preview}</pre>
-                  </div>
+                  ))}
                 </div>
-              )}
+              </aside>
+
+              {/* Version Preview Area */}
+              <main className="history-preview">
+                {selectedVersionData ? (
+                  <>
+                    <div className="history-preview__header">
+                      <div className="history-preview__meta">
+                        <h4>Version {selectedVersionData.version_number} Details</h4>
+                        <span className="history-preview__date">{formatDate(selectedVersionData.created_at)}</span>
+                      </div>
+                      {!selectedVersionData.is_active && (
+                        <TextButton
+                          variant="primary"
+                          size="sm"
+                          onClick={() => handleRestore(selectedVersionData.version_number)}
+                          disabled={isRestoring}
+                          loading={isRestoring}
+                        >
+                          Restore This Version
+                        </TextButton>
+                      )}
+                    </div>
+
+                    {selectedVersionData.note && (
+                      <div className="history-preview__note">
+                        <strong>Note:</strong> {selectedVersionData.note}
+                      </div>
+                    )}
+
+                    <div className="history-preview__content">
+                      <pre>{selectedVersionData.preview}</pre>
+                    </div>
+                  </>
+                ) : (
+                  <div className="history-preview__empty">Select a version to view details</div>
+                )}
+              </main>
             </div>
           )}
         </div>
 
-        <div className="modal-footer">
+        <footer className="modal-footer">
           <TextButton variant="secondary" onClick={onClose}>
             Close
           </TextButton>
-        </div>
+        </footer>
       </div>
     </div>
   );

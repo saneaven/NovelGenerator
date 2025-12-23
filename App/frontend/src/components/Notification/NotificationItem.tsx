@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
+import { motion, useMotionTemplate, useTransform, type MotionValue } from 'motion/react';
 import type { LLMTaskSessionState } from '../../store/llmTaskStore';
 import type { ImageTaskState } from '../../imageGeneration/types';
 import { Check, Close } from '../icons';
@@ -10,7 +11,17 @@ export type NotificationTask =
 
 interface NotificationItemProps {
   task: NotificationTask;
-  style?: React.CSSProperties;
+  index: number;
+  totalCount: number;
+  scrollY: MotionValue<number>;
+  itemStride: number;
+  viewportHeight: number;
+  frontCount: number;
+  depthRange: number;
+  maxDepthZ: number;
+  stackLift: number;
+  maxBlur: number;
+  isMobile: boolean;
   onDismiss: () => void;
   onOpenDetail: () => void;
 }
@@ -45,12 +56,65 @@ const normalizeStatus = (task: NotificationTask): 'running' | 'success' | 'error
 
 const NotificationItem: React.FC<NotificationItemProps> = ({
   task,
-  style,
+  index,
+  totalCount,
+  scrollY,
+  itemStride,
+  viewportHeight,
+  frontCount,
+  depthRange,
+  maxDepthZ,
+  stackLift,
+  maxBlur,
+  isMobile,
   onDismiss,
   onOpenDetail,
 }) => {
   const { label, error, isRead, updatedAt } = task;
   const normalizedStatus = normalizeStatus(task);
+  const itemRef = useRef<HTMLDivElement>(null);
+  const [itemTop, setItemTop] = useState(0);
+  const [itemHeight, setItemHeight] = useState(0);
+
+  useLayoutEffect(() => {
+    const node = itemRef.current;
+    if (!node) return;
+
+    const measure = () => {
+      setItemTop(node.offsetTop);
+      setItemHeight(node.offsetHeight);
+    };
+
+    measure();
+    const resizeObserver = new ResizeObserver(measure);
+    resizeObserver.observe(node);
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [index, totalCount]);
+
+  const depth = useTransform(scrollY, (value) => {
+    const safeStride = itemStride > 0 ? itemStride : 1;
+    const safeRange = depthRange > 0 ? depthRange : 1;
+    const itemBottom = itemTop + (itemHeight || safeStride);
+    const distanceFromFront = isMobile
+      ? (value + viewportHeight) - itemBottom
+      : itemTop - value;
+    const relative = distanceFromFront / safeStride;
+    const depthRaw = relative - (frontCount - 1);
+    if (depthRaw <= 0) return 0;
+    const t = Math.min(1, depthRaw / safeRange);
+    return t * t * (3 - 2 * t);
+  });
+
+  const opacity = useTransform(depth, (value) => 1 - value);
+  const z = useTransform(depth, (value) => -value * maxDepthZ);
+  const y = useTransform(depth, (value) => (isMobile ? value * stackLift : -value * stackLift));
+  const blur = useTransform(depth, (value) => value * maxBlur);
+  const pointerEvents = useTransform(depth, (value) => (value > 0.92 ? 'none' : 'auto'));
+  const zIndex = isMobile ? (index + 1) : (totalCount - index);
+  const transform = useMotionTemplate`translateY(${y}px) translateZ(${z}px)`;
+  const filter = useMotionTemplate`blur(${blur}px)`;
 
   const handleClick = () => {
     // All clickable states open the same detail modal
@@ -122,10 +186,13 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
 
   const isClickable = normalizedStatus === 'running' || normalizedStatus === 'success' || normalizedStatus === 'error';
 
+  const animationIndex = isMobile ? (totalCount - 1 - index) : index;
+
   return (
-    <div
+    <motion.div
+      ref={itemRef}
       className={`notification-item notification-item--${normalizedStatus} notification-item--${task.kind} ${isClickable ? 'notification-item--clickable' : ''} ${!isRead ? 'notification-item--unread' : ''}`}
-      style={style}
+      style={{ opacity, transform, filter, pointerEvents, zIndex }}
       onClick={isClickable ? handleClick : undefined}
       role={isClickable ? 'button' : undefined}
       tabIndex={isClickable ? 0 : undefined}
@@ -140,34 +207,39 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
           : undefined
       }
     >
-      <div className="notification-item-content">
-        <div className="notification-item-icon">{getStatusIcon()}</div>
-        <div className="notification-item-text">
-          <div className="notification-item-label">{label || 'Task'}</div>
-          <div className="notification-item-message">{getStatusMessage()}</div>
-          <div className="notification-item-time">{formatRelativeTime(updatedAt)}</div>
-        </div>
-
-        {/* Thumbnail preview for completed image tasks */}
-        {thumbnailUrl && (
-          <div className="notification-item-thumbnail">
-            <img src={thumbnailUrl} alt="Generated" />
+      <div
+        className="notification-item-surface"
+        style={{ '--item-index': animationIndex } as React.CSSProperties}
+      >
+        <div className="notification-item-content">
+          <div className="notification-item-icon">{getStatusIcon()}</div>
+          <div className="notification-item-text">
+            <div className="notification-item-label">{label || 'Task'}</div>
+            <div className="notification-item-message">{getStatusMessage()}</div>
+            <div className="notification-item-time">{formatRelativeTime(updatedAt)}</div>
           </div>
-        )}
 
-        <button
-          className="notification-item-close"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDismiss();
-          }}
-          title="Dismiss"
-          aria-label="Dismiss notification"
-        >
-          <Close size="xs" />
-        </button>
+          {/* Thumbnail preview for completed image tasks */}
+          {thumbnailUrl && (
+            <div className="notification-item-thumbnail">
+              <img src={thumbnailUrl} alt="Generated" />
+            </div>
+          )}
+
+          <button
+            className="notification-item-close"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDismiss();
+            }}
+            title="Dismiss"
+            aria-label="Dismiss notification"
+          >
+            <Close size="xs" />
+          </button>
+        </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

@@ -1,205 +1,232 @@
-/* Fragment Tree Navigation Styles */
-.fragment-tree-nav {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: var(--color-surface-subtle);
-  opacity: 1;
-  transition: opacity var(--transition-base);
+.tree-nav {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    background-color: var(--color-surface-elevated);
 }
 
-.fragment-tree-nav.loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.tree-nav--loading {
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-muted);
 }
 
-.fragment-tree-nav .loading-indicator {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-tertiary);
+.tree-nav__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-bottom: 1px solid var(--color-border-subtle);
+    flex-shrink: 0;
+    min-height: 48px;
 }
 
-/* Header */
-.fragment-tree-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--spacing-md);
-  border-bottom: 1px solid var(--color-border-default);
-  flex-shrink: 0;
+.tree-nav__header-left {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
 }
 
-.fragment-tree-header h3 {
-  margin: 0;
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
+.tree-nav__title {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
-.add-fragment-btn {
-  background: none;
-  border: none;
-  padding: var(--spacing-xs);
-  cursor: pointer;
-  color: var(--color-text-tertiary);
-  border-radius: var(--border-radius-sm);
-  transition: all var(--transition-base);
+.tree-nav__action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--color-text-secondary);
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
 }
 
-.add-fragment-btn:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-primary-main);
+.tree-nav__action-btn:hover {
+    background-color: var(--color-surface-hover);
+    color: var(--color-primary-main);
 }
 
-/* Content */
-.fragment-tree-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--spacing-sm) 0;
+.tree-nav__content {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--spacing-xs) 0;
 }
 
-/* Empty state */
-.empty-tree-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: var(--spacing-xl);
-  gap: var(--spacing-md);
+.tree-nav__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-xl);
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    gap: var(--spacing-md);
 }
 
-.empty-tree-state p {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-tertiary);
+/* Close button for mobile */
+.tree-nav__close-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--color-text-muted);
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
 }
 
-/* Fragment item */
-.fragment-item {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  cursor: pointer;
-  transition: background var(--transition-base);
+/* Tree Node */
+.tree-node {
+    display: flex;
+    flex-direction: column;
+    font-size: var(--font-size-sm);
 }
 
-.fragment-item:hover {
-  background: var(--color-surface-hover);
+.tree-node__content {
+    display: flex;
+    align-items: center;
+    padding: var(--spacing-xs) var(--spacing-md);
+    cursor: pointer;
+    color: var(--color-text-secondary);
+    margin: 0;
+    transition: background-color var(--transition-fast), color var(--transition-fast);
+    position: relative;
+    height: 32px;
 }
 
-.fragment-item.selected {
-  background: var(--color-brand-primary-soft);
+.tree-node__content:hover {
+    background-color: var(--color-surface-hover);
+    color: var(--color-text-primary);
 }
 
-.fragment-item-bullet {
-  color: var(--color-text-tertiary);
-  flex-shrink: 0;
+/* Folder specific hover for adding button visibility if we had one on hover */
+.tree-node__content:hover .tree-node__action-btn {
+    opacity: 1;
 }
 
-.fragment-item-name {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
+.tree-node__content--selected {
+    background-color: var(--color-primary-soft);
+    color: var(--color-primary-main);
+    font-weight: var(--font-weight-medium);
 }
 
-.fragment-badge {
-  font-size: var(--font-size-xs);
-  padding: 1px 6px;
-  border-radius: var(--border-radius-lg);
-  font-weight: var(--font-weight-medium);
-  flex-shrink: 0;
+.tree-node__content--selected::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background-color: var(--color-primary-main);
 }
 
-.fragment-badge.default {
-  background: var(--color-info-light);
-  color: var(--color-info-dark);
+/* Icons */
+.tree-node__expand-icon,
+.tree-node__icon,
+.tree-node__bullet {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: currentColor;
+    opacity: 0.8;
 }
 
-/* Folder node */
-.folder-node {
-  user-select: none;
+.tree-node__expand-icon {
+    margin-right: var(--spacing-xs);
+    cursor: pointer;
 }
 
-.folder-node-header {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  cursor: pointer;
-  transition: background var(--transition-base);
+.tree-node__icon {
+    margin-right: var(--spacing-sm);
 }
 
-.folder-node-header:hover {
-  background: var(--color-surface-hover);
+.tree-node__bullet {
+    margin-right: var(--spacing-sm);
+    transform: scale(0.8);
 }
 
-.folder-expand-icon {
-  color: var(--color-text-tertiary);
-  flex-shrink: 0;
-  width: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.tree-node__label {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.5;
 }
 
-.folder-icon {
-  color: var(--color-text-tertiary);
-  flex-shrink: 0;
+/* Badge */
+.tree-node__badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: var(--border-radius-full);
+    background-color: var(--color-secondary-soft);
+    color: var(--color-secondary-main);
+    font-weight: var(--font-weight-bold);
+    text-transform: uppercase;
+    margin-left: var(--spacing-sm);
+    flex-shrink: 0;
 }
 
-.folder-name {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-primary);
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* Action Button inside Node */
+.tree-node__content .tree-node__action-btn {
+    width: 20px;
+    height: 20px;
+    margin-left: var(--spacing-xs);
+    opacity: 0; /* Hidden by default */
 }
 
-.folder-add-btn {
-  background: none;
-  border: none;
-  padding: 2px;
-  cursor: pointer;
-  color: var(--color-text-tertiary);
-  border-radius: var(--border-radius-sm);
-  opacity: 0;
-  transition: all var(--transition-base);
+.tree-node__content:hover .tree-node__action-btn {
+    opacity: 1;
 }
 
-.folder-node-header:hover .folder-add-btn {
-  opacity: 1;
+.tree-node__children {
+    display: flex;
+    flex-direction: column;
 }
 
-.folder-add-btn:hover {
-  background: var(--color-surface-muted);
-  color: var(--color-primary-main);
-}
+/* ========================================
+   MOBILE STYLES
+   ======================================== */
+@media (max-width: 768px) {
+    .tree-nav__close-btn {
+        display: flex;
+    }
 
-.folder-children {
-  /* Children are indented via paddingLeft style */
-}
+    .tree-node__content {
+        height: 48px; /* Larger tap target */
+        padding-top: var(--spacing-sm);
+        padding-bottom: var(--spacing-sm);
+    }
+    
+    .tree-node__expand-icon,
+    .tree-node__icon,
+    .tree-node__bullet {
+        width: 20px;
+        height: 20px;
+    }
 
-/* Scrollbar styling */
-.fragment-tree-content::-webkit-scrollbar {
-  width: 6px;
-}
-
-.fragment-tree-content::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.fragment-tree-content::-webkit-scrollbar-thumb {
-  background: var(--color-border-default);
-  border-radius: 3px;
-}
-
-.fragment-tree-content::-webkit-scrollbar-thumb:hover {
-  background: var(--color-border-medium);
+    /* Always show action buttons on mobile since there is no hover */
+    .tree-node__content .tree-node__action-btn {
+        opacity: 1;
+        width: 32px;
+        height: 32px;
+        background-color: var(--color-surface-subtle);
+    }
 }

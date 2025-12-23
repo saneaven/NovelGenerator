@@ -4,7 +4,7 @@ import PromptEditor from './PromptEditor';
 import FragmentsPanel from './FragmentsPanel';
 import { PROMPT_TREE, getFirstPromptNode, type PromptNode } from './promptTree';
 import { IconButton } from '../IconButton';
-import { ChevronLeft, ChevronRight, Document } from '../icons';
+import { ChevronLeft, ChevronRight, Document, Close } from '../icons';
 import './PromptsTemplatesPanel.css';
 import TemplateSyntaxHint from './TemplateSyntaxHint';
 
@@ -26,6 +26,10 @@ const PromptsTemplatesPanel: React.FC = () => {
   const handleNodeSelect = (node: PromptNode) => {
     if (node.type === 'prompt') {
       setSelectedNode(node);
+      // On mobile, collapse sidebar after selection
+      if (window.innerWidth <= 768) {
+        setIsSidebarCollapsed(true);
+      }
     }
   };
 
@@ -34,17 +38,17 @@ const PromptsTemplatesPanel: React.FC = () => {
   };
 
   return (
-    <div className="prompts-templates-panel-wrapper">
+    <div className="prompts-layout">
       {/* Sub-tabs for Prompts and Fragments */}
-      <div className="prompts-sub-tabs">
+      <div className="prompts-layout__tabs">
         <button
-          className={`prompts-sub-tab ${subTab === 'prompts' ? 'active' : ''}`}
+          className={`prompts-layout__tab-btn ${subTab === 'prompts' ? 'active' : ''}`}
           onClick={() => setSubTab('prompts')}
         >
           Prompts
         </button>
         <button
-          className={`prompts-sub-tab ${subTab === 'fragments' ? 'active' : ''}`}
+          className={`prompts-layout__tab-btn ${subTab === 'fragments' ? 'active' : ''}`}
           onClick={() => setSubTab('fragments')}
         >
           Prompt Fragments
@@ -52,26 +56,31 @@ const PromptsTemplatesPanel: React.FC = () => {
       </div>
 
       {/* Content based on selected sub-tab */}
-      {subTab === 'fragments' ? (
-        <FragmentsPanel />
-      ) : (
-        <div className={`prompts-templates-panel ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-          {/* Left content: Prompt editor */}
-          <div className="prompts-content">
-            <div className="prompts-content-body">
+      <div className="prompts-layout__content">
+        {subTab === 'fragments' ? (
+          <FragmentsPanel />
+        ) : (
+          <div className={`panel-split ${isSidebarCollapsed ? 'panel-split--collapsed' : ''}`}>
+            {/* Mobile Backdrop */}
+            {!isSidebarCollapsed && (
+              <div className="panel-split__backdrop" onClick={() => setIsSidebarCollapsed(true)} />
+            )}
+
+            {/* Main Content Area */}
+            <main className="panel-split__main">
               {selectedNode ? (
-                <div className="prompts-editor-container">
-                  {/* Header with description */}
-                  <div className="prompts-editor-header">
-                    <div className="prompts-editor-header-text">
-                      <h3>{selectedNode.label}</h3>
+                <div className="editor-wrapper">
+                  {/* Header */}
+                  <header className="editor-wrapper__header">
+                    <div className="editor-wrapper__title-group">
+                      <h3 className="editor-wrapper__title">{selectedNode.label}</h3>
                       {selectedNode.description && (
-                        <p className="prompts-editor-description">
+                        <p className="editor-wrapper__description">
                           {selectedNode.description}
                         </p>
                       )}
                     </div>
-                    <div className="prompts-editor-header-actions">
+                    <div className="editor-wrapper__actions">
                       <TemplateSyntaxHint selectedNode={selectedNode} />
                       <IconButton
                         icon={isSidebarCollapsed ? <ChevronLeft size="sm" /> : <ChevronRight size="sm" />}
@@ -80,9 +89,10 @@ const PromptsTemplatesPanel: React.FC = () => {
                         size="sm"
                       />
                     </div>
-                  </div>
+                  </header>
 
-                  {/* Prompt editor */}
+                  {/* Editor Component */}
+                  <div className="editor-wrapper__body">
                     <PromptEditor
                       key={`${selectedNode.functionType}-${selectedNode.category}-${selectedNode.name || ''}`}
                       functionType={selectedNode.functionType!}
@@ -91,27 +101,29 @@ const PromptsTemplatesPanel: React.FC = () => {
                       label={selectedNode.label}
                       description={selectedNode.description}
                     />
+                  </div>
                 </div>
               ) : (
-                <div className="prompts-empty-state">
-                  <div className="empty-state-icon"><Document size="4xl" /></div>
-                  <h3>Select a prompt to edit</h3>
-                  <p>Choose a prompt from the sidebar to view and edit its content</p>
+                <div className="empty-state">
+                  <div className="empty-state__icon"><Document size="4xl" /></div>
+                  <h3 className="empty-state__title">Select a prompt to edit</h3>
+                  <p className="empty-state__text">Choose a prompt from the sidebar to view and edit its content</p>
                 </div>
               )}
-            </div>
-          </div>
+            </main>
 
-          {/* Right sidebar: Tree navigation */}
-          <div className="prompts-sidebar">
-            <PromptTreeNav
-              tree={PROMPT_TREE}
-              selectedNodeId={selectedNode?.id || null}
-              onNodeSelect={handleNodeSelect}
-            />
+            {/* Sidebar Navigation */}
+            <aside className="panel-split__sidebar">
+              <PromptTreeNav
+                tree={PROMPT_TREE}
+                selectedNodeId={selectedNode?.id || null}
+                onNodeSelect={handleNodeSelect}
+                onClose={() => setIsSidebarCollapsed(true)}
+              />
+            </aside>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import type { PromptNode } from './promptTree';
-import { Expand, Collapse, Bullet } from '../icons';
+import { Expand, Collapse, Bullet, Close } from '../icons';
 import './PromptTreeNav.css';
 
 interface PromptTreeNavProps {
   tree: PromptNode[];
   selectedNodeId: string | null;
   onNodeSelect: (node: PromptNode) => void;
+  onClose?: () => void;
 }
 
 interface TreeNodeProps {
@@ -33,10 +34,8 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 
   const handleClick = () => {
     if (isCategory) {
-      // Toggle expand/collapse for categories
       onToggleExpand(node.id);
     } else {
-      // Select prompt nodes
       onNodeSelect(node);
     }
   };
@@ -44,34 +43,29 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   return (
     <div className="tree-node">
       <div
-        className={`tree-node-content ${isCategory ? 'category' : 'prompt'} ${isSelected ? 'selected' : ''}`}
-        style={{ paddingLeft: `${level * 16 + 8}px` }}
+        className={`tree-node__content ${isCategory ? 'tree-node__content--category' : 'tree-node__content--prompt'} ${isSelected ? 'tree-node__content--selected' : ''}`}
+        style={{ paddingLeft: `${level * 16 + 12}px` }}
         onClick={handleClick}
       >
-        {/* Expand/collapse icon for categories */}
-        {isCategory && hasChildren && (
-          <span className="tree-node-expand-icon">
-            {isExpanded ? <Collapse size="xs" /> : <Expand size="xs" />}
+        {isCategory && (
+          <span className="tree-node__expand-icon">
+             {hasChildren ? (isExpanded ? <Collapse size="xs" /> : <Expand size="xs" />) : <span style={{ width: 12 }} />}
           </span>
         )}
 
-        {/* Icon */}
         {node.icon && (
-          <span className="tree-node-icon">{node.icon}</span>
+          <span className="tree-node__icon">{node.icon}</span>
         )}
 
-        {/* Label */}
-        <span className="tree-node-label">{node.label}</span>
+        <span className="tree-node__label">{node.label}</span>
 
-        {/* Bullet for prompt nodes */}
         {!isCategory && (
-          <span className="tree-node-bullet"><Bullet size="xs" /></span>
+          <span className="tree-node__bullet"><Bullet size="xs" /></span>
         )}
       </div>
 
-      {/* Render children if category is expanded */}
       {isCategory && hasChildren && isExpanded && (
-        <div className="tree-node-children">
+        <div className="tree-node__children">
           {node.children!.map((child) => (
             <TreeNode
               key={child.id}
@@ -93,12 +87,10 @@ const PromptTreeNav: React.FC<PromptTreeNavProps> = ({
   tree,
   selectedNodeId,
   onNodeSelect,
+  onClose,
 }) => {
-  // Track which category nodes are expanded
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(() => {
     const initial = new Set<string>();
-
-    // Auto-expand nodes marked as defaultExpanded
     const collectDefaultExpanded = (nodes: PromptNode[]) => {
       nodes.forEach((node) => {
         if (node.defaultExpanded) {
@@ -109,7 +101,6 @@ const PromptTreeNav: React.FC<PromptTreeNavProps> = ({
         }
       });
     };
-
     collectDefaultExpanded(tree);
     return initial;
   });
@@ -127,11 +118,16 @@ const PromptTreeNav: React.FC<PromptTreeNavProps> = ({
   };
 
   return (
-    <div className="prompt-tree-nav">
-      <div className="prompt-tree-header">
-        <h3>Prompts</h3>
-      </div>
-      <div className="prompt-tree-content">
+    <nav className="tree-nav">
+      <header className="tree-nav__header">
+        <h3 className="tree-nav__title">Prompts</h3>
+        {onClose && (
+          <button className="tree-nav__close-btn" onClick={onClose} aria-label="Close sidebar">
+            <Close size="sm" />
+          </button>
+        )}
+      </header>
+      <div className="tree-nav__content">
         {tree.map((node) => (
           <TreeNode
             key={node.id}
@@ -144,7 +140,7 @@ const PromptTreeNav: React.FC<PromptTreeNavProps> = ({
           />
         ))}
       </div>
-    </div>
+    </nav>
   );
 };
 
