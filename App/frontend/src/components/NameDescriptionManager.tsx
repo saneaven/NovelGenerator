@@ -361,15 +361,14 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     setShowVersionHistory(true);
   };
 
-  const handleRestoreVersion = async (versionId: string) => {
+  // Called after modal restores a version - just refresh the object
+  const handleRestoreVersion = async () => {
     if (!versionHistoryTargetId) return;
 
     try {
-      await store.restoreVersion(category, versionHistoryTargetId, versionId);
-      console.log('Version restored');
+      await store.fetchObject(category, versionHistoryTargetId);
     } catch (error) {
-      console.error('Failed to restore version:', error);
-      showError('Restore Error', 'Failed to restore version. Please try again.');
+      console.error('Failed to refresh after restore:', error);
     }
   };
 

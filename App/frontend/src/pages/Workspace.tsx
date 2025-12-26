@@ -4,7 +4,7 @@ import type { EditCard } from '../chat/types';
 import { ChatManager, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
 import { DefaultDisplayProcessor } from '../chat/processors/DisplayProcessor';
 import { areEditCardMapsEqual } from '../chat/utils/editCardUtils';
-import { WORKSPACE_FUNCTIONS } from '../llm/schemas/chatFunctions';
+import { CHAT_FUNCTIONS } from '../llm/schemas/chatFunctions';
 import { useChatStore } from '../store/chatStore';
 import { useChatUIStore } from '../store/chatUIStore';
 import { useSidebarStore } from '../store/sidebarStore';
@@ -25,7 +25,6 @@ import { PageHeader, MobileFooter } from '../components/layout';
 import { useWorkspaceState } from './workspace/hooks/useWorkspaceState';
 import { useChatHandlers } from './workspace/hooks/useChatHandlers';
 import { useFunctionCallHandlers } from './workspace/hooks/useFunctionCallHandlers';
-import { BackendError } from '../llm/llmService';
 
 import './Workspace.css';
 import './workspace/styles/ChatPanel.css';
@@ -119,6 +118,9 @@ const Workspace: React.FC = () =>
         return languages;
     }, [settings.mainLanguage, settings.subLanguages]);
 
+    // Allowed types for translation (must match TranslationModal's allowedObjectTypes prop)
+    const WORKSPACE_TRANSLATION_TYPES = ['basic_info', 'character', 'organization', 'location', 'lorebook', 'act', 'chapter'];
+
     // Calculate count of objects needing translation to any sub language
     const objectsNeedingTranslation = useMemo(() => {
         if (!settings.subLanguages || settings.subLanguages.length === 0 || !projectId) return 0;
@@ -128,6 +130,9 @@ const Workspace: React.FC = () =>
 
         allObjects.forEach((obj: any) => {
             if (obj.metadata?.project_id !== projectId) return;
+
+            // Filter by allowed types (same as TranslationModal)
+            if (!WORKSPACE_TRANSLATION_TYPES.includes(obj.type)) return;
 
             // Check if object is missing any sub language translation
             const availableLangs = Object.keys(obj.data || {});
@@ -197,10 +202,14 @@ const Workspace: React.FC = () =>
         prevObjectIdsRef.current = currentIds;
     }, [unifiedStore.objects, projectId]);
 
-    // Total count of all project objects for display
+    // Total count of selectable project objects for display
+    // Note: 'act' type is excluded because acts are group headers in ObjectPicker, not selectable items
     const totalObjectCount = useMemo(() => {
         return Object.keys(unifiedStore.objects)
-            .filter(id => unifiedStore.objects[id].metadata?.project_id === projectId)
+            .filter(id => {
+                const obj = unifiedStore.objects[id];
+                return obj.metadata?.project_id === projectId && obj.type !== 'act';
+            })
             .length;
     }, [unifiedStore.objects, projectId]);
 
@@ -247,15 +256,25 @@ const Workspace: React.FC = () =>
         onGetChatHistory: (projId, chatId, language) => getMessages(projId, chatId, language),
         onError: (error) =>
         {
+            // Legacy callback - errors are now shown inline via onErrorMessage
             console.error('Runtime processing error:', error);
-            const detail = error instanceof BackendError ? error.detail : null;
-            showError('Chat Error', error.message || 'An error occurred during processing. Please try again.', detail);
+        },
+        onErrorMessage: (projId, chatId, messageId, errorMessage, language) =>
+        {
+            // Append error content part to the message for inline display
+            const messages = getMessages(projId, chatId, language);
+            const message = messages.find(m => m.id === messageId);
+            if (message) {
+                const errorPart = { type: 'error' as const, text: errorMessage };
+                const newParts = [...message.contentParts, errorPart];
+                updateMessageContentLocal(projId, chatId, messageId, newParts, language);
+            }
         },
         onFunctionCallProgress: (_projId, _chatId, messageId, progressEvents) =>
         {
             handleFunctionCallProgress(messageId, progressEvents);
         },
-    }), [updateMessageContentLocal, updateMessage, handleFunctionCalls, addMessage, getMessages, showError, handleFunctionCallProgress, registerSessionForMessage]);
+    }), [updateMessageContentLocal, updateMessage, handleFunctionCalls, addMessage, getMessages, handleFunctionCallProgress, registerSessionForMessage]);
 
     const chatManager = useMemo(() =>
     {
@@ -277,7 +296,7 @@ const Workspace: React.FC = () =>
                 temperature: chatFunctionConfig.temperature,
                 provider: chatFunctionConfig.provider,
                 providerConfig: providerCredentials[chatFunctionConfig.provider],
-                functions: WORKSPACE_FUNCTIONS,
+                functions: CHAT_FUNCTIONS,
                 mode: 'workspace',
                 enablePrefill: chatFunctionConfig.advanced.enablePrefill,
                 thinkingMode: chatFunctionConfig.advanced.thinkingMode,

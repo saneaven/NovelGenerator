@@ -56,6 +56,7 @@ class UpdateObjectRequest(BaseModel):
     language: str
     user_request: Optional[str] = "User Edit"
     create_new_version: bool = True
+    metadata: Optional[Dict[str, Any]] = None  # For structural updates like order
 
 
 class AddTranslationRequest(BaseModel):
@@ -441,6 +442,86 @@ async def get_object(
     )
 
 
+def handle_metadata_update(
+    db: Session,
+    object_type: str,
+    object_id: UUID,
+    obj: Any,
+    metadata: Dict[str, Any]
+) -> None:
+    """
+    Handle metadata updates for structural fields like order.
+    Automatically reorders siblings when order changes.
+    """
+    if object_type == 'chapter' and 'order' in metadata:
+        new_order = metadata['order']
+        if not isinstance(new_order, int) or new_order < 1:
+            raise HTTPException(status_code=400, detail="Invalid order value: must be positive integer")
+
+        current_order = obj.order
+        act_id = obj.act_id
+
+        if new_order != current_order:
+            # Get all sibling chapters in the same act (excluding current)
+            siblings = db.query(Chapter).filter(
+                Chapter.act_id == act_id,
+                Chapter.id != object_id
+            ).order_by(Chapter.order).all()
+
+            # Calculate max valid order (siblings + 1 for current chapter)
+            max_order = len(siblings) + 1
+
+            # Clamp new_order to valid range
+            new_order = min(new_order, max_order)
+            new_order = max(new_order, 1)
+
+            # Shift siblings to make room
+            if new_order < current_order:
+                # Moving up: shift chapters in [new_order, current_order) down by 1
+                for ch in siblings:
+                    if new_order <= ch.order < current_order:
+                        ch.order += 1
+            else:
+                # Moving down: shift chapters in (current_order, new_order] up by 1
+                for ch in siblings:
+                    if current_order < ch.order <= new_order:
+                        ch.order -= 1
+
+            obj.order = new_order
+            db.flush()
+
+    elif object_type == 'act' and 'order' in metadata:
+        new_order = metadata['order']
+        if not isinstance(new_order, int) or new_order < 1:
+            raise HTTPException(status_code=400, detail="Invalid order value: must be positive integer")
+
+        current_order = obj.order
+        outline_id = obj.outline_id
+
+        if new_order != current_order:
+            # Get all sibling acts in the same outline (excluding current)
+            siblings = db.query(Act).filter(
+                Act.outline_id == outline_id,
+                Act.id != object_id
+            ).order_by(Act.order).all()
+
+            max_order = len(siblings) + 1
+            new_order = min(new_order, max_order)
+            new_order = max(new_order, 1)
+
+            if new_order < current_order:
+                for act in siblings:
+                    if new_order <= act.order < current_order:
+                        act.order += 1
+            else:
+                for act in siblings:
+                    if current_order < act.order <= new_order:
+                        act.order -= 1
+
+            obj.order = new_order
+            db.flush()
+
+
 @router.put("/objects/{object_type}/{object_id}")
 async def update_object(
     object_type: str,
@@ -475,6 +556,10 @@ async def update_object(
 
     # Update object's updated_at timestamp
     obj.updated_at = datetime.utcnow()
+
+    # Handle metadata updates (structural changes like order)
+    if request.metadata:
+        handle_metadata_update(db, object_type, object_id, obj, request.metadata)
 
     # Create or update version
     # - create_new=True: New version with only edited language (translations become stale)

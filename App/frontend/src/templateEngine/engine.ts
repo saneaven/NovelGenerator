@@ -159,6 +159,7 @@ handlebars.registerHelper('prompt', function (this: any, ...args: any[]) {
 
   const fragmentContent = fragmentRegistry.get(path);
   if (!fragmentContent) {
+    console.log('[Template Debug] Fragment not found! Available fragments:', [...fragmentRegistry.keys()]);
     return new Handlebars.SafeString(`[Fragment Error: Not found - ${path}]`);
   }
 

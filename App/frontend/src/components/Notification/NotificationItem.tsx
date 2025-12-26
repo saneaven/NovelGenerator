@@ -1,8 +1,10 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { motion, useMotionTemplate, useTransform, type MotionValue } from 'motion/react';
-import type { LLMTaskSessionState } from '../../store/llmTaskStore';
+import { useLLMTaskStore, type LLMTaskSessionState } from '../../store/llmTaskStore';
+import { useImageTaskStore } from '../../imageGeneration/store/imageTaskStore';
 import type { ImageTaskState } from '../../imageGeneration/types';
 import { Check, Close } from '../icons';
+import { API_BASE_URL } from '../../api/client';
 
 // Unified task type for notifications
 export type NotificationTask =
@@ -10,7 +12,8 @@ export type NotificationTask =
   | (ImageTaskState & { kind: 'image' });
 
 interface NotificationItemProps {
-  task: NotificationTask;
+  taskId: string;
+  kind: 'llm' | 'image';
   index: number;
   totalCount: number;
   scrollY: MotionValue<number>;
@@ -22,8 +25,8 @@ interface NotificationItemProps {
   stackLift: number;
   maxBlur: number;
   isMobile: boolean;
-  onDismiss: () => void;
-  onOpenDetail: () => void;
+  onDismiss: (task: NotificationTask) => void;
+  onOpenDetail: (task: NotificationTask) => void;
 }
 
 const formatRelativeTime = (timestamp: number): string => {
@@ -55,7 +58,8 @@ const normalizeStatus = (task: NotificationTask): 'running' | 'success' | 'error
 };
 
 const NotificationItem: React.FC<NotificationItemProps> = ({
-  task,
+  taskId,
+  kind,
   index,
   totalCount,
   scrollY,
@@ -70,6 +74,24 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   onDismiss,
   onOpenDetail,
 }) => {
+  // Per-item subscription: each item subscribes to its own session/task
+  const llmSession = useLLMTaskStore((state) =>
+    kind === 'llm' ? state.sessions[taskId] : undefined
+  );
+  const imageTaskData = useImageTaskStore((state) =>
+    kind === 'image' ? state.tasks[taskId] : undefined
+  );
+
+  // Construct the full task with kind (memoized to prevent infinite loops)
+  const task: NotificationTask | null = useMemo(() => {
+    if (llmSession) return { ...llmSession, kind: 'llm' as const };
+    if (imageTaskData) return { ...imageTaskData, kind: 'image' as const };
+    return null;
+  }, [llmSession, imageTaskData]);
+
+  // Handle dismissed task (no longer in store)
+  if (!task) return null;
+
   const { label, error, isRead, updatedAt } = task;
   const normalizedStatus = normalizeStatus(task);
   const itemRef = useRef<HTMLDivElement>(null);
@@ -116,12 +138,12 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   const transform = useMotionTemplate`translateY(${y}px) translateZ(${z}px)`;
   const filter = useMotionTemplate`blur(${blur}px)`;
 
-  const handleClick = () => {
-    // All clickable states open the same detail modal
-    if (normalizedStatus === 'running' || normalizedStatus === 'success' || normalizedStatus === 'error') {
-      onOpenDetail();
+  const handleClick = useCallback(() => {
+    // All states except idle open the detail modal
+    if (normalizedStatus !== 'idle') {
+      onOpenDetail(task);
     }
-  };
+  }, [normalizedStatus, onOpenDetail, task]);
 
   const getStatusIcon = () => {
     switch (normalizedStatus) {
@@ -184,9 +206,12 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   // Get thumbnail URL for image tasks
   const thumbnailUrl = isImageTask(task) && task.status === 'success' ? task.result?.thumbnailUrl : undefined;
 
-  const isClickable = normalizedStatus === 'running' || normalizedStatus === 'success' || normalizedStatus === 'error';
+  const isClickable = normalizedStatus !== 'idle';
 
   const animationIndex = isMobile ? (totalCount - 1 - index) : index;
+  const surfaceStyle = {
+    '--item-index': animationIndex,
+  } as React.CSSProperties;
 
   return (
     <motion.div
@@ -209,7 +234,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
     >
       <div
         className="notification-item-surface"
-        style={{ '--item-index': animationIndex } as React.CSSProperties}
+        style={surfaceStyle}
       >
         <div className="notification-item-content">
           <div className="notification-item-icon">{getStatusIcon()}</div>
@@ -222,7 +247,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
           {/* Thumbnail preview for completed image tasks */}
           {thumbnailUrl && (
             <div className="notification-item-thumbnail">
-              <img src={thumbnailUrl} alt="Generated" />
+              <img src={`${API_BASE_URL}${thumbnailUrl}`} alt="Generated" />
             </div>
           )}
 
@@ -230,7 +255,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
             className="notification-item-close"
             onClick={(e) => {
               e.stopPropagation();
-              onDismiss();
+              onDismiss(task);
             }}
             title="Dismiss"
             aria-label="Dismiss notification"

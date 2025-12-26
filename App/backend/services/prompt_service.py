@@ -54,7 +54,7 @@ class PromptService:
             content=prompt.content,
             version_number=prompt.version_number,
             created_at=prompt.created_at,
-            is_default=prompt.is_default
+            is_system_default=prompt.is_default
         )
 
     @staticmethod
@@ -128,7 +128,7 @@ class PromptService:
             version_number=new_prompt.version_number,
             content=new_prompt.content,
             is_active=new_prompt.is_active,
-            is_default=new_prompt.is_default,
+            is_system_default=new_prompt.is_default,
             created_at=new_prompt.created_at,
             note=new_prompt.note
         )
@@ -169,7 +169,7 @@ class PromptService:
                 created_at=v.created_at,
                 note=v.note,
                 is_active=v.is_active,
-                is_default=v.is_default,
+                is_system_default=v.is_default,
                 preview=v.content[:200] + ('...' if len(v.content) > 200 else '')
             )
             for v in versions

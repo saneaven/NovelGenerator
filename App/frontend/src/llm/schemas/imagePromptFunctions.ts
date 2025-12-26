@@ -29,7 +29,7 @@ export const OBJECT_IMAGE_PROMPT_FUNCTION: FunctionCallSchema = {
 
 /**
  * Function schema for generating scene image prompts.
- * Used in ImageGenerationPanel for novel editor scenes.
+ * Used in ImageGenerationModal for novel editor scenes.
  * Returns the prompt and IDs of story objects that should be visually referenced.
  */
 export const SCENE_IMAGE_PROMPT_FUNCTION: FunctionCallSchema = {

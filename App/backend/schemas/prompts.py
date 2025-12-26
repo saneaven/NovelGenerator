@@ -17,7 +17,7 @@ class PromptContentResponse(BaseModel):
     content: str
     version_number: int
     created_at: datetime
-    is_default: bool = False
+    is_system_default: bool = False
 
     class Config:
         from_attributes = True
@@ -35,7 +35,7 @@ class PromptVersionResponse(BaseModel):
     version_number: int
     content: str
     is_active: bool
-    is_default: bool
+    is_system_default: bool
     created_at: datetime
     note: Optional[str]
 
@@ -49,7 +49,7 @@ class VersionHistoryItem(BaseModel):
     created_at: datetime
     note: Optional[str]
     is_active: bool
-    is_default: bool
+    is_system_default: bool
     preview: str  # First 200 characters
 
     class Config:

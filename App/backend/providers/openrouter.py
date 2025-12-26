@@ -42,6 +42,7 @@ class OpenRouterProvider(AsyncOpenAIProvider):
         self,
         provider_preference: Optional[Dict],
         thinking_config: Optional[Dict],
+        model: str = "",
     ) -> Optional[Dict]:
         extra: Dict[str, Dict] = {}
 
@@ -80,10 +81,24 @@ class OpenRouterProvider(AsyncOpenAIProvider):
             return chunk, []
 
         for detail in thinking_details:
-            if isinstance(detail, dict) and detail.get("type") == "text" and detail.get("text"):
-                thinking = delta.setdefault("thinking", {})
-                thinking["text"] = detail["text"]
-                break
+            if isinstance(detail, dict):
+                detail_type = detail.get("type")
+                text = None
+
+                # Format 1: reasoning.text type
+                if detail_type == "reasoning.text":
+                    text = detail.get("text")
+                # Format 2: reasoning.summary type
+                elif detail_type == "reasoning.summary":
+                    text = detail.get("summary")
+                # Format 3: content-based (no type field)
+                elif detail.get("content"):
+                    text = detail.get("content")
+
+                if text:
+                    thinking = delta.setdefault("thinking", {})
+                    thinking["text"] = text
+                    break
 
         # Normalize key for downstream consumers
         if "reasoning_details" in delta and "thinking_details" not in delta:

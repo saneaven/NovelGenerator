@@ -1,7 +1,7 @@
 
 export type Role = "system" | "user" | "assistant" | "function";
 
-export type ContentPartType = "content" | "thinking";
+export type ContentPartType = "content" | "thinking" | "error";
 
 export interface ContentPart {
   type: ContentPartType;

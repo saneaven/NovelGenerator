@@ -61,12 +61,6 @@
   transform: translateX(0);
 }
 
-/* Header section (optional) */
-.base-sidebar-header {
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--color-border-default, #e5e7eb);
-}
-
 /* Content area */
 .base-sidebar-content {
   flex: 1;

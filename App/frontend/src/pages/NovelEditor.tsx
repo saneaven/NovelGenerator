@@ -4,7 +4,7 @@ import type { EditCard } from '../chat/types';
 import { ChatManager, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
 import { DefaultDisplayProcessor } from '../chat/processors/DisplayProcessor';
 import { areEditCardMapsEqual } from '../chat/utils/editCardUtils';
-import { NOVEL_EDITOR_FUNCTIONS } from '../llm/schemas/chatFunctions';
+import { CHAT_FUNCTIONS } from '../llm/schemas/chatFunctions';
 import { useChatStore } from '../store/chatStore';
 import { useChatUIStore } from '../store/chatUIStore';
 import { useSidebarStore } from '../store/sidebarStore';
@@ -271,7 +271,7 @@ const NovelEditor: React.FC = () =>
                 temperature: chatFunctionConfig.temperature,
                 provider: chatFunctionConfig.provider,
                 providerConfig: providerCredentials[chatFunctionConfig.provider],
-                functions: NOVEL_EDITOR_FUNCTIONS,
+                functions: CHAT_FUNCTIONS,
                 mode: 'novelEditor',
                 enablePrefill: chatFunctionConfig.advanced.enablePrefill,
                 thinkingMode: chatFunctionConfig.advanced.thinkingMode,

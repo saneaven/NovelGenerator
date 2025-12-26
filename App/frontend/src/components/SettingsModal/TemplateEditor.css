@@ -1,0 +1,221 @@
+.template-editor {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+    background-color: var(--color-surface-base);
+    min-height: 0;
+}
+
+.template-editor--loading {
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-muted);
+}
+
+/* Description Field (Fragment only) */
+.template-editor__field-group {
+    padding: var(--spacing-sm) var(--spacing-lg);
+    border-bottom: 1px solid var(--color-border-subtle);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    flex-shrink: 0;
+}
+
+.template-editor__label {
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+    width: 80px;
+    flex-shrink: 0;
+}
+
+.template-editor__input {
+    flex: 1;
+    height: 32px;
+    padding: 0 var(--spacing-sm);
+    border: 1px solid transparent;
+    border-radius: var(--border-radius-md);
+    background-color: transparent;
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    transition: all var(--transition-fast);
+}
+
+.template-editor__input:hover {
+    background-color: var(--color-surface-hover);
+}
+
+.template-editor__input:focus {
+    outline: none;
+    background-color: var(--color-surface-base);
+    border-color: var(--color-primary-main);
+    box-shadow: var(--shadow-focus);
+}
+
+/* Content Area */
+.template-editor__content {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* CodeMirror Container Override */
+.template-editor__content .syntax-highlighted-textarea {
+    flex: 1;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Ensure internal CodeMirror elements fill height */
+.template-editor__content .cm-theme,
+.template-editor__content .cm-editor {
+    height: 100% !important;
+}
+
+/* Validation Area */
+.template-editor__validation {
+    flex-shrink: 0;
+    max-height: 150px;
+    overflow-y: auto;
+    border-top: 1px solid var(--color-border-subtle);
+    background-color: var(--color-surface-subtle);
+}
+
+/* Footer Actions */
+.template-editor__footer {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-sm) var(--spacing-lg);
+    background-color: var(--color-surface-base);
+    border-top: 1px solid var(--color-border-subtle);
+    gap: var(--spacing-md);
+}
+
+.template-editor__actions-left,
+.template-editor__actions-right {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.template-editor__actions-left {
+    flex: 1;
+    min-width: 0;
+}
+
+.template-editor__note-input {
+    flex: 1;
+    max-width: 300px;
+    height: 32px;
+    padding: 0 var(--spacing-sm);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-md);
+    font-size: var(--font-size-sm);
+    background-color: var(--color-surface-base);
+    color: var(--color-text-primary);
+    transition: all var(--transition-fast);
+}
+
+.template-editor__note-input:focus {
+    outline: none;
+    border-color: var(--color-primary-main);
+    box-shadow: var(--shadow-focus);
+}
+
+.template-editor__meta {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    margin-right: var(--spacing-sm);
+}
+
+.template-editor__unsaved-indicator {
+    color: var(--color-warning);
+    font-weight: var(--font-weight-medium);
+}
+
+/* ========================================
+   FLOATING SAVE BUTTON (Mobile)
+   ======================================== */
+.template-editor__fab {
+    display: none;
+}
+
+.template-editor__fab-spinner {
+    display: block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: fab-spin 0.6s linear infinite;
+}
+
+@keyframes fab-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ========================================
+   MOBILE STYLES
+   ======================================== */
+@media (max-width: 768px) {
+    /* Hide description field on mobile */
+    .template-editor__field-group {
+        display: none;
+    }
+
+    /* Hide footer on mobile */
+    .template-editor__footer {
+        display: none;
+    }
+
+    /* Show floating save button on mobile */
+    .template-editor__fab {
+        display: flex;
+        position: absolute;
+        bottom: var(--spacing-lg);
+        right: var(--spacing-lg);
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background-color: var(--color-surface-elevated);
+        border: 1px solid var(--color-border-default);
+        color: var(--color-text-muted);
+        box-shadow: var(--shadow-lg);
+        z-index: 10;
+        transition: all var(--transition-fast);
+    }
+
+    .template-editor__fab:hover:not(:disabled) {
+        background-color: var(--color-surface-hover);
+        color: var(--color-text-primary);
+    }
+
+    .template-editor__fab--active {
+        background-color: var(--color-brand-primary);
+        border-color: var(--color-brand-primary);
+        color: var(--color-text-inverse);
+    }
+
+    .template-editor__fab--active:hover:not(:disabled) {
+        background-color: var(--color-brand-primary-hover);
+        border-color: var(--color-brand-primary-hover);
+        color: var(--color-text-inverse);
+    }
+
+    .template-editor__fab:disabled {
+        opacity: var(--opacity-disabled);
+        cursor: not-allowed;
+    }
+}

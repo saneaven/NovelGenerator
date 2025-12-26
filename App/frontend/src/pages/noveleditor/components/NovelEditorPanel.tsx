@@ -34,6 +34,8 @@ import ManuscriptAIEditModal from '../../../components/ManuscriptAIEditModal';
 import TranslationModal from '../../../components/TranslationModal';
 import VersionHistoryModal from '../../../components/VersionHistoryModal';
 import { UnifiedImageModal, type InitialGenerationSettings } from '../../../components/AssetManager';
+import { ImageGenerationModal, type RegenerateSettings } from '../../../components/ImageGeneration';
+import { BaseModal } from '../../../components/BaseModal';
 import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
 import RegenerationComparisonOverlay from '../../../components/RichTextEditor/RegenerationComparisonOverlay';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
@@ -111,6 +113,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const [showVersionsModal, setShowVersionsModal] = useState(false);
 
   // Image overlay regeneration state
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   const [regenerateAsset, setRegenerateAsset] = useState<Asset | null>(null);
   const [pendingRegenerationBounds, setPendingRegenerationBounds] = useState<DOMRect | null>(null);
   const [regenerationComparison, setRegenerationComparison] = useState<{
@@ -520,20 +523,33 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       return;
     }
 
-    // Normal generation - insert at cursor
-    if (editorRef.current) {
-      editorRef.current.insertImage(`${API_BASE_URL}${asset.file_url}`, asset.name);
-    }
-    setShowImageModal(false);
+    // Normal generation - image is already saved to library by useImageGeneration hook
+    // Keep modal open so user can select/insert from library manually
   }, [regenerateAsset, pendingRegenerationBounds]);
 
-  // Handle change image from overlay - unified handler for replace/regenerate
-  // Opens UnifiedImageModal where user can pick existing or generate new
-  const handleChangeImage = useCallback((currentSrc: string, asset: Asset | null, imageBounds: DOMRect | null) => {
+  // Handle image generated during direct regeneration (bypasses library modal)
+  const handleRegenerationComplete = useCallback((asset: Asset) => {
+    setRegenerationComparison({
+      originalSrc: replaceImageSrc!,
+      originalAsset: regenerateAsset!,
+      newAsset: asset,
+    });
+    setShowRegenerateModal(false);
+  }, [replaceImageSrc, regenerateAsset]);
+
+  // Handle regeneration modal close (without generating)
+  const handleRegenerateModalClose = useCallback(() => {
+    setShowRegenerateModal(false);
+    setRegenerateAsset(null);
+    setPendingRegenerationBounds(null);
+    setReplaceImageSrc(null);
+  }, []);
+
+  // Handle swap image from overlay - opens modal with EMPTY prompts
+  // User can pick from library or generate new from scratch
+  const handleSwapImage = useCallback((currentSrc: string, _asset: Asset | null, imageBounds: DOMRect | null) => {
     setReplaceImageSrc(currentSrc);
-    if (asset) {
-      setRegenerateAsset(asset);
-    }
+    setRegenerateAsset(null); // null = empty prompts in generation modal
     if (imageBounds) {
       setPendingRegenerationBounds(imageBounds);
     }
@@ -543,6 +559,23 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       setCursorContext(context);
     }
     setShowImageModal(true);
+  }, []);
+
+  // Handle regenerate image from overlay - opens direct regeneration modal with PRE-FILLED prompts
+  // Bypasses library modal entirely for better UX
+  const handleRegenerateImage = useCallback((currentSrc: string, asset: Asset | null, imageBounds: DOMRect | null) => {
+    setReplaceImageSrc(currentSrc);
+    setRegenerateAsset(asset); // asset = pre-fill prompts from generation data
+    if (imageBounds) {
+      setPendingRegenerationBounds(imageBounds);
+    }
+    // Get cursor context for scene context
+    if (editorRef.current) {
+      const context = editorRef.current.getTextAroundCursor();
+      setCursorContext(context);
+    }
+    // Open direct regeneration modal (bypasses library)
+    setShowRegenerateModal(true);
   }, []);
 
   // Get asset by URL for ImageNodeView overlay
@@ -624,6 +657,23 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     }
 
     return settings;
+  }, []);
+
+  // Convert Asset to RegenerateSettings for direct regeneration modal
+  const getRegenerateSettings = useCallback((asset: Asset): RegenerateSettings | null => {
+    if (!asset.generation_provider || !asset.generation_model) return null;
+
+    const genSettings = asset.generation_settings as Record<string, unknown> | null;
+
+    return {
+      provider: asset.generation_provider,
+      model: asset.generation_model,
+      prompt: asset.generation_prompt?.content,
+      positive_prompt: asset.generation_positive_prompt?.content,
+      negative_prompt: asset.generation_negative_prompt?.content,
+      size: genSettings?.size as string | undefined,
+      settings: genSettings as Record<string, unknown> | undefined,
+    };
   }, []);
 
   // Handle use regenerated image - replace original with new in editor
@@ -830,7 +880,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
               disabled={isSaving || isMissingTranslation}
               onBrowseAssets={handleBrowseAssets}
               projectId={projectId}
-              onChangeImage={handleChangeImage}
+              onSwapImage={handleSwapImage}
+              onRegenerateImage={handleRegenerateImage}
               getAssetByUrl={getAssetByUrl}
               toolbarActions={
                 <>
@@ -1032,6 +1083,27 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         onUse={handleUseRegeneratedImage}
         onDiscard={handleDiscardRegeneratedImage}
       />
+
+      {/* Direct Regeneration Modal - bypasses library for better UX */}
+      {showRegenerateModal && regenerateAsset && (
+        <BaseModal
+          isOpen={showRegenerateModal}
+          onClose={handleRegenerateModalClose}
+          title="Regenerate Image"
+          size="large"
+        >
+          <ImageGenerationModal
+            onImageGenerated={handleRegenerationComplete}
+            onClose={handleRegenerateModalClose}
+            sceneContext={{
+              preContext: cursorContext.before,
+              postContext: cursorContext.after,
+            }}
+            initialSettings={getRegenerateSettings(regenerateAsset)}
+            assetType="scene"
+          />
+        </BaseModal>
+      )}
     </>
   );
 };

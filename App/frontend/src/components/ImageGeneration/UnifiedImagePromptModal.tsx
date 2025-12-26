@@ -38,6 +38,8 @@ interface UnifiedImagePromptModalProps {
   isOpen: boolean;
   onClose: () => void;
   onPromptGenerated: (result: PromptResult) => void;
+  onStreamingStart?: (sessionId: string, mode: PromptMode) => void;
+  onStreamingError?: (error: string, mode: PromptMode) => void;
   promptMode: PromptMode;
 
   // Context type determines which UI/LLM mode to use
@@ -55,12 +57,15 @@ interface UnifiedImagePromptModalProps {
 
   // Optional default values
   defaultUserRequest?: string;
+  defaultSelectedObjectIds?: string[];
 }
 
 const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   isOpen,
   onClose,
   onPromptGenerated,
+  onStreamingStart,
+  onStreamingError,
   promptMode,
   contextType,
   objectType,
@@ -68,13 +73,16 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   basicInfoId,
   sceneContext,
   defaultUserRequest,
+  defaultSelectedObjectIds,
 }) => {
   const { currentProjectId } = useProjectStore();
   const { settings } = useSettingsStore();
   const unifiedStore = useUnifiedObjectStore();
 
   const [userRequest, setUserRequest] = useState(defaultUserRequest || '');
-  const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
+  const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>(
+    defaultSelectedObjectIds ?? []
+  );
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const taskRef = useRef<LLMTask | null>(null);
@@ -125,10 +133,10 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   // Reset form when modal closes
   useEffect(() => {
     if (!isOpen) {
-      setUserRequest('');
-      setSelectedObjectIds([]);
+      setUserRequest(defaultUserRequest || '');
+      setSelectedObjectIds(defaultSelectedObjectIds ?? []);
     }
-  }, [isOpen]);
+  }, [isOpen, defaultUserRequest, defaultSelectedObjectIds]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -220,10 +228,13 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
       label: taskLabel,
       retryContext: {
         taskType,
-        modalProps: { contextType, objectType, objectId, basicInfoId, sceneContext, promptMode },
+        modalProps: { contextType, objectType, objectId, basicInfoId, sceneContext, promptMode, onPromptGenerated },
         formState: { userRequest, selectedObjectIds },
       },
     });
+
+    // Notify parent that streaming has started with session ID
+    onStreamingStart?.(task.sessionId, promptMode);
 
     onClose();
 
@@ -321,6 +332,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
                 onPromptGenerated({ prompt: text.trim(), mode: promptMode });
                 task.complete();
               } else {
+                onStreamingError?.('AI did not generate a prompt.', promptMode);
                 task.error('AI did not generate a prompt.');
               }
             } else {
@@ -334,6 +346,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
                     task.complete();
                   }
                 } catch {
+                  onStreamingError?.('Failed to parse generated prompt.', promptMode);
                   task.error('Failed to parse generated prompt.');
                 }
               } else {
@@ -342,6 +355,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
                   onPromptGenerated({ prompt: text.trim(), mode: promptMode });
                   task.complete();
                 } else {
+                  onStreamingError?.('AI did not generate a prompt.', promptMode);
                   task.error('AI did not generate a prompt.');
                 }
               }
@@ -351,7 +365,9 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
             if (err.name === 'AbortError') {
               task.cancel();
             } else {
-              task.error(err.message || 'Failed to generate prompt');
+              const errMsg = err.message || 'Failed to generate prompt';
+              onStreamingError?.(errMsg, promptMode);
+              task.error(errMsg);
             }
           },
         }
@@ -363,7 +379,9 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
         task.cancel();
         return;
       }
-      task.error(err instanceof Error ? err.message : 'Failed to generate prompt');
+      const errMsg = err instanceof Error ? err.message : 'Failed to generate prompt';
+      onStreamingError?.(errMsg, promptMode);
+      task.error(errMsg);
     } finally {
       taskRef.current = null;
     }
@@ -383,6 +401,8 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     selectedObjectIds,
     onClose,
     onPromptGenerated,
+    onStreamingStart,
+    onStreamingError,
   ]);
 
   const showObjectPicker = contextType === 'cover_image' || contextType === 'scene';
@@ -460,6 +480,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
               selectionMode="multi"
               maxHeight="200px"
               showSearch={false}
+              selectAllOnLoad={!defaultSelectedObjectIds?.length}
             />
             <div className="selection-summary">
               {selectedObjectIds.length} objects selected

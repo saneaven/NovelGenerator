@@ -57,6 +57,7 @@ interface AIEditModalProps {
   targetId?: string;
   onResult?: (result?: any) => void | Promise<void>;
   defaultUserRequest?: string;
+  defaultSelectedContextIds?: string[];
 }
 
 const getCategoryDisplayName = (cat: string): string => {
@@ -81,9 +82,12 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   targetId,
   onResult,
   defaultUserRequest,
+  defaultSelectedContextIds,
 }) => {
   const [userRequest, setUserRequest] = useState(defaultUserRequest ?? '');
-  const [selectedContextIds, setSelectedContextIds] = useState<string[]>([]);
+  const [selectedContextIds, setSelectedContextIds] = useState<string[]>(
+    defaultSelectedContextIds ?? []
+  );
   const [isContextExpanded, setIsContextExpanded] = useState(false);
   const [pickerLoading, setPickerLoading] = useState(true);
 
@@ -97,11 +101,11 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
-      setUserRequest('');
-      setSelectedContextIds([]);
+      setUserRequest(defaultUserRequest ?? '');
+      setSelectedContextIds(defaultSelectedContextIds ?? []);
       setPickerLoading(true);
     }
-  }, [isOpen]);
+  }, [isOpen, defaultUserRequest, defaultSelectedContextIds]);
 
   useEffect(() => {
     return () => {
@@ -408,6 +412,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
                   maxHeight="300px"
                   emptyMessage="No context objects available"
                   onLoadComplete={handlePickerLoadComplete}
+                  selectAllOnLoad={!defaultSelectedContextIds?.length}
                 />
               </div>
               <p className="context-help">

@@ -3,42 +3,18 @@
    ======================================== */
 
 /* Import component styles */
-@import './styles/modal-base.css';
+@import './styles/settings-modal-layout.css';
 @import './styles/tabs.css';
 @import './styles/forms.css';
 @import './styles/model-browser.css';
 
 /* ========================================
    RESPONSIVE DESIGN
+   (Modal base styles are in modal-base.css)
+   (Tab styles are in tabs.css)
    ======================================== */
 
 @media (max-width: 768px) {
-    .settings-modal {
-        width: 100%;
-        max-width: 100%;
-        height: 100dvh;
-        border-radius: 0;
-    }
-
-    .main-tabs {
-        padding: 0 var(--spacing-lg);
-        overflow-x: auto;
-    }
-
-    .main-tab {
-        padding: var(--spacing-md);
-        font-size: var(--font-size-xs);
-        white-space: nowrap;
-    }
-
-    .settings-panel-content {
-        padding: var(--spacing-lg);
-    }
-
-    .function-selector {
-        grid-template-columns: repeat(2, 1fr);
-    }
-
     .function-tab {
         flex-direction: column;
         padding: var(--spacing-sm);

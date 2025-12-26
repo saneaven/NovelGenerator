@@ -8,7 +8,7 @@ export interface PromptContent {
   content: string;
   version_number: number;
   created_at: string;
-  is_default: boolean;
+  is_system_default: boolean;
 }
 
 export interface PromptVersion {
@@ -16,7 +16,7 @@ export interface PromptVersion {
   version_number: number;
   content: string;
   is_active: boolean;
-  is_default: boolean;
+  is_system_default: boolean;
   created_at: string;
   note?: string;
 }
@@ -24,9 +24,9 @@ export interface PromptVersion {
 export interface VersionHistoryItem {
   version_number: number;
   created_at: string;
-  note?: string;
+  note: string | null;
   is_active: boolean;
-  is_default: boolean;
+  is_system_default: boolean;
   preview: string;
 }
 

@@ -28,6 +28,8 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
 
   // Detect if model is GPT-5 family (gpt-5, gpt-5-mini, gpt-5.1, etc.)
   const isGpt5 = config.provider === 'openai' && /gpt-?5/i.test(config.model);
+  // GPT-5.2+ supports additional effort levels (minimal, xhigh)
+  const isGpt52Plus = config.provider === 'openai' && /gpt-?5\.[2-9]/i.test(config.model);
 
   const handleProviderChange = (provider: ProviderType) => {
     // If switching to Gemini and thinking mode is 'off', change to 'model'
@@ -288,9 +290,11 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                         onChange={(value) => handleThinkingConfigChange('effort', value)}
                         options={[
                           ...(isGpt5 ? [{ value: 'none', label: 'None - No reasoning (fastest)' }] : []),
+                          ...(isGpt52Plus ? [{ value: 'minimal', label: 'Minimal - Very light reasoning' }] : []),
                           { value: 'low', label: isGpt5 ? 'Low - Quick reasoning' : 'Low (~20% of max tokens)' },
                           { value: 'medium', label: isGpt5 ? 'Medium - Balanced' : 'Medium (~50% of max tokens)' },
                           { value: 'high', label: isGpt5 ? 'High - Deep reasoning' : 'High (~80% of max tokens)' },
+                          ...(isGpt52Plus ? [{ value: 'xhigh', label: 'Extra High - Maximum reasoning' }] : []),
                         ]}
                       />
                       <p className="field-hint">

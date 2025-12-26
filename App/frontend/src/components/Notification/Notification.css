@@ -13,6 +13,7 @@
   gap: var(--spacing-sm);
   width: 320px;
   transition: opacity 0.15s ease;
+  pointer-events: none;
 }
 
 .notification-button-wrapper--desktop .notification-panel-container {
@@ -22,7 +23,7 @@
 
 .notification-button-wrapper--mobile .notification-panel-container {
   bottom: calc(100% + var(--spacing-sm));
-  left: 0;
+  right: 0;
 }
 
 .notification-panel-container--closing {
@@ -72,6 +73,7 @@
   box-shadow: var(--shadow-lg);
   border: 1px solid var(--color-border-default);
   animation: notification-stack-in 0.2s ease-out forwards;
+  pointer-events: auto;
 }
 
 .notification-panel-container--closing .notification-header {
@@ -109,6 +111,7 @@
   perspective: 650px;
   perspective-origin: center top;
   scrollbar-width: none;
+  pointer-events: none;
 }
 
 .notification-button-wrapper--mobile .notification-items-viewport {
@@ -125,6 +128,8 @@
   flex-direction: column;
   gap: var(--spacing-sm);
   transform-style: preserve-3d;
+  overflow: visible;
+  pointer-events: none;
 }
 
 /* ===== Notification Empty State ===== */
@@ -137,6 +142,7 @@
   box-shadow: var(--shadow-lg);
   border: 1px solid var(--color-border-default);
   animation: notification-stack-in 0.2s ease-out forwards;
+  pointer-events: auto;
 }
 
 .notification-panel-container--closing .notification-empty {
@@ -160,8 +166,11 @@
   border: 1px solid var(--color-border-default);
   transition: background var(--transition-fast), box-shadow var(--transition-fast);
   animation: notification-stack-in 0.2s ease-out forwards;
-  animation-delay: calc(var(--item-index, 0) * 50ms);
+  animation-delay: calc(var(--item-index) * 50ms);
   opacity: 0;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  pointer-events: auto;
 }
 
 .notification-panel-container--closing .notification-item-surface {

@@ -4,7 +4,7 @@
  * Handlers for full replacement operations:
  * - replace_basic_info
  * - replace_story_object
- * - replace_chapter
+ * - replace_chapter_outline
  * - replace_manuscript
  */
 
@@ -141,21 +141,22 @@ export async function replaceStoryObject(
 }
 
 /**
- * Replace chapter fields
+ * Replace chapter outline fields
  */
-export async function replaceChapter(
+export async function replaceChapterOutline(
   args: Record<string, unknown>,
   context: HandlerContext
 ): Promise<ApplicationResult> {
-  const { id, actId, name, description } = args as {
+  const { id, actId, name, description, order } = args as {
     id?: string;
     actId?: string;
     name?: string;
     description?: string;
+    order?: number;
   };
 
   if (!id) {
-    return error('Missing id for replace_chapter');
+    return error('Missing id for replace_chapter_outline');
   }
 
   const { store, language } = context;
@@ -168,15 +169,21 @@ export async function replaceChapter(
     description: description ?? currentData.description ?? '',
   };
 
-  // Handle actId change if provided
-  const metadata = actId ? { act_id: actId } : undefined;
+  // Build metadata for structural changes (actId, order)
+  const metadata: Record<string, unknown> = {};
+  if (actId) {
+    metadata.act_id = actId;
+  }
+  if (order !== undefined && typeof order === 'number') {
+    metadata.order = order;
+  }
 
   await store.updateObject('chapter', id, {
     data: updateData,
     language,
     create_new_version: true,
     user_request: 'AI Edit',
-    ...(metadata && { metadata }),
+    ...(Object.keys(metadata).length > 0 && { metadata }),
   });
 
   return ok('Updated chapter', { id });
@@ -240,6 +247,6 @@ export async function replaceManuscript(
 export const REPLACE_HANDLERS = {
   replace_basic_info: replaceBasicInfo,
   replace_story_object: replaceStoryObject,
-  replace_chapter: replaceChapter,
+  replace_chapter_outline: replaceChapterOutline,
   replace_manuscript: replaceManuscript,
 };

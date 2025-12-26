@@ -139,3 +139,114 @@
     font-size: var(--font-size-sm);
     line-height: var(--line-height-normal);
 }
+
+/* ========================================
+   MOBILE SIDEBAR NAVIGATION
+   (Uses BaseSidebar component)
+   ======================================== */
+
+/* Hamburger button - only visible on mobile */
+.settings-hamburger-btn {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    padding: var(--spacing-sm);
+    border-radius: var(--border-radius-md);
+    transition: all var(--transition-base);
+}
+
+.settings-hamburger-btn:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text-primary);
+}
+
+/* Settings Sidebar Header */
+.settings-mobile-sidebar .base-sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+    padding: var(--spacing-lg);
+    background: var(--color-surface-subtle);
+    border-bottom: 1px solid var(--color-border-default);
+}
+
+.settings-mobile-sidebar-title {
+    margin: 0;
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+}
+
+/* Sidebar List */
+.settings-mobile-sidebar-list {
+    list-style: none;
+    margin: 0;
+    padding: var(--spacing-md) 0;
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* Sidebar Item */
+.settings-mobile-sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    width: 100%;
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: none;
+    border: none;
+    text-align: left;
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-base);
+    position: relative;
+}
+
+.settings-mobile-sidebar-item:hover {
+    background-color: var(--color-surface-hover);
+    color: var(--color-text-primary);
+}
+
+.settings-mobile-sidebar-item.active {
+    background-color: var(--color-primary-soft);
+    color: var(--color-primary-main);
+    font-weight: var(--font-weight-semibold);
+}
+
+.settings-mobile-sidebar-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background-color: var(--color-primary-main);
+}
+
+/* ========================================
+   MOBILE RESPONSIVE - SHOW HAMBURGER
+   ======================================== */
+
+@media (max-width: 768px) {
+    /* Show hamburger button */
+    .settings-hamburger-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Hide horizontal tabs */
+    .main-tabs {
+        display: none;
+    }
+
+    /* Function selector adjustments */
+    .function-selector {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}

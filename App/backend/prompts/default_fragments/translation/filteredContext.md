@@ -55,6 +55,28 @@
 {{/each}}
 </lorebook-entries>
 {{/if}}
+
+{{#if (hasItems (filterByType filteredObjects "act"))}}
+<acts>
+{{#each (filterByType filteredObjects "act")}}
+<act id="{{ this.id }}">
+<name>{{ this.name }}</name>
+<description>{{ this.description }}</description>
+</act>
+{{/each}}
+</acts>
+{{/if}}
+
+{{#if (hasItems (filterByType filteredObjects "chapter"))}}
+<chapters>
+{{#each (filterByType filteredObjects "chapter")}}
+<chapter id="{{ this.id }}">
+<name>{{ this.name }}</name>
+<description>{{ this.description }}</description>
+</chapter>
+{{/each}}
+</chapters>
+{{/if}}
 {{/with}}
 
 {{#with (getManuscriptsOfLanguage project params.[0] params.[1]) as |filteredManuscripts|}}

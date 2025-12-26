@@ -33,7 +33,6 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   const errors = useUnifiedObjectStore((state) => state.errors);
   const fetchObject = useUnifiedObjectStore((state) => state.fetchObject);
   const updateObject = useUnifiedObjectStore((state) => state.updateObject);
-  const restoreVersion = useUnifiedObjectStore((state) => state.restoreVersion);
   const listObjects = useUnifiedObjectStore((state) => state.listObjects);
   const createObject = useUnifiedObjectStore((state) => state.createObject);
   const { settings } = useSettingsStore();
@@ -199,13 +198,13 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
     }
   };
 
-  const handleRestoreVersion = async (versionId: string) => {
-    if (!basicInfo || !basicInfoId) return;
+  // Called after modal restores a version - just refresh the object
+  const handleRestoreVersion = async () => {
+    if (!basicInfoId) return;
     try {
-      await restoreVersion('basic_info', basicInfoId, versionId);
+      await fetchObject('basic_info', basicInfoId);
     } catch (err) {
-      console.error('Failed to restore version:', err);
-      showError('Restore Error', 'Failed to restore version. Please try again.');
+      console.error('Failed to refresh after restore:', err);
     }
   };
 

@@ -17,7 +17,12 @@ const MobileFooter: React.FC<MobileFooterProps> = ({
 }) => {
   return (
     <footer className="mobile-footer">
-      <NotificationButton position="mobile" className="footer-notification-btn" />
+      <IconButton
+        icon={<Settings size="xl" />}
+        onClick={onSettingsClick}
+        title="Settings"
+        size="sm"
+      />
 
       <button
         className={`footer-chat-toggle-btn ${isChatVisible ? 'active' : ''}`}
@@ -26,12 +31,7 @@ const MobileFooter: React.FC<MobileFooterProps> = ({
         Chat
       </button>
 
-      <IconButton
-        icon={<Settings size="xl" />}
-        onClick={onSettingsClick}
-        title="Settings"
-        size="sm"
-      />
+      <NotificationButton position="mobile" className="footer-notification-btn" />
     </footer>
   );
 };

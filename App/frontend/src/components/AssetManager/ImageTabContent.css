@@ -779,8 +779,8 @@
     flex-direction: column;
 }
 
-/* Make ImageGenerationPanel fill available space */
-.generate-panel .image-generation-panel {
+/* Make ImageGenerationModal fill available space */
+.generate-panel .image-generation-modal {
     flex: 1;
     display: flex;
     flex-direction: column;

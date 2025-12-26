@@ -11,7 +11,7 @@ from .providers.openrouter import OpenRouterProvider
 from .providers.custom import CustomOpenAIProvider
 from .providers.claude_provider import ClaudeProvider
 from .providers.gemini_provider import GeminiProvider
-from .providers.openai_provider import OpenAIProvider
+from .providers.openai_responses_provider import OpenAIResponsesProvider
 from .providers.xai_provider import XAIProvider
 
 # Import database API routes

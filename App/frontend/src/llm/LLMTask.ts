@@ -187,7 +187,11 @@ export class LLMTask {
       )) {
         // Handle string chunk (content)
         if (typeof chunk === 'string') {
-          if (currentPartType !== 'content') {
+          // Apply trimStart() on first chunk after type switch
+          const isTypeSwitch = currentPartType !== 'content';
+          const chunkToAdd = isTypeSwitch ? chunk.trimStart() : chunk;
+
+          if (isTypeSwitch) {
             finalizeCurrentBuffer();
             // Merge with last content part if exists
             const lastPart = this.pendingParts[this.pendingParts.length - 1];
@@ -197,7 +201,7 @@ export class LLMTask {
             }
             currentPartType = 'content';
           }
-          currentBuffer += chunk;
+          currentBuffer += chunkToAdd;
 
           // Schedule RAF update with current state
           const currentParts = [
@@ -226,7 +230,11 @@ export class LLMTask {
         // Handle thinking chunk
         const thinkingText = (chunk as any).thinking_text;
         if (thinkingText) {
-          if (currentPartType !== 'thinking') {
+          // Apply trimStart() on first chunk after type switch
+          const isTypeSwitch = currentPartType !== 'thinking';
+          const textToAdd = isTypeSwitch ? thinkingText.trimStart() : thinkingText;
+
+          if (isTypeSwitch) {
             finalizeCurrentBuffer();
             const lastPart = this.pendingParts[this.pendingParts.length - 1];
             if (lastPart && lastPart.type === 'thinking') {
@@ -235,7 +243,7 @@ export class LLMTask {
             }
             currentPartType = 'thinking';
           }
-          currentBuffer += thinkingText;
+          currentBuffer += textToAdd;
 
           if (this.rafId === null) {
             this.rafId = requestAnimationFrame(() => {
@@ -256,7 +264,11 @@ export class LLMTask {
 
         // Handle content in object form
         if (chunk.content) {
-          if (currentPartType !== 'content') {
+          // Apply trimStart() on first chunk after type switch
+          const isTypeSwitch = currentPartType !== 'content';
+          const contentToAdd = isTypeSwitch ? chunk.content.trimStart() : chunk.content;
+
+          if (isTypeSwitch) {
             finalizeCurrentBuffer();
             const lastPart = this.pendingParts[this.pendingParts.length - 1];
             if (lastPart && lastPart.type === 'content') {
@@ -265,7 +277,7 @@ export class LLMTask {
             }
             currentPartType = 'content';
           }
-          currentBuffer += chunk.content;
+          currentBuffer += contentToAdd;
 
           if (this.rafId === null) {
             this.rafId = requestAnimationFrame(() => {

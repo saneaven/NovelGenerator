@@ -88,7 +88,7 @@
 ### Reference Novel Content
 
 {{#each selectedManuscripts}}
-#### {{ this.chapterName }} ({{ this.wordCount }} words)
+#### {{ this.chapterName }} (id: {{ this.id }})
 
 {{ this.content }}
 

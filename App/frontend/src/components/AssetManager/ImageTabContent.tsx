@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useAssetStore } from '../../store/assetStore';
 import { useProjectStore } from '../../store/projectStore';
-import { ImageGenerationPanel } from '../ImageGeneration';
+import { ImageGenerationModal } from '../ImageGeneration';
 import ImagePromptManager from './ImagePromptManager';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
@@ -83,7 +83,7 @@ interface ImageTabContentProps {
     showImportButton?: boolean;
     showPromptTab?: boolean;
 
-    // Scene context for AI assist (passed to ImageGenerationPanel)
+    // Scene context for AI assist (passed to ImageGenerationModal)
     sceneContext?: { preContext: string; postContext: string };
 
     // Image generation callback (for parent to receive generated images)
@@ -169,6 +169,13 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
             fetchAssets(currentProjectId);
         }
     }, [currentProjectId, mode, objectType, objectId, fetchStoryObjectAssets, fetchSceneAssets, fetchAssets]);
+
+    // Auto-open generate panel when regenerating (initialGenerationSettings provided)
+    useEffect(() => {
+        if (initialGenerationSettings) {
+            setShowGeneratePanel(true);
+        }
+    }, [initialGenerationSettings]);
 
     // Get linked assets with is_main info (for object mode)
     const linkedAssets = useMemo(() => {
@@ -411,10 +418,38 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         setEditingAssetId(null);
     };
 
-    const handleImageGenerated = (asset: Asset) => {
-        setSuccessModalAsset(asset);
-        setAssetName('Generated Image');
+    // Common helper for linking asset and refreshing
+    const linkAndRefreshAsset = async (asset: Asset) => {
+        if (!currentProjectId) return;
+
+        if (mode === 'object' && objectType && objectId) {
+            const isFirstImage = linkedAssets.length === 0;
+            await linkAssetToObject(currentProjectId, objectType, objectId, asset.id, isFirstImage);
+            await fetchStoryObjectAssets(currentProjectId, objectType, objectId);
+        } else if (mode === 'scene') {
+            await fetchSceneAssets(currentProjectId);
+        } else {
+            await fetchAssets(currentProjectId);
+        }
+
+        onAssetChange?.();
+
+        if (onSelect) {
+            onSelect(asset);
+        }
+
+        setActiveSubTab('library');
+    };
+
+    const handleImageGenerated = async (asset: Asset) => {
         setRegenerateSettings(null);
+
+        try {
+            await linkAndRefreshAsset(asset);
+        } catch (err) {
+            // Error handled in store
+        }
+
         // Also notify parent if callback provided
         onImageGeneratedProp?.(asset);
     };
@@ -492,32 +527,13 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         if (!successModalAsset || !currentProjectId) return;
 
         try {
+            // Rename if name changed
             if (assetName.trim() && assetName !== successModalAsset.name) {
                 await updateAsset(currentProjectId, successModalAsset.id, assetName.trim());
             }
 
-            if (mode === 'object' && objectType && objectId) {
-                // Object mode: link to object
-                const isFirstImage = linkedAssets.length === 0;
-                await linkAssetToObject(currentProjectId, objectType, objectId, successModalAsset.id, isFirstImage);
-                await fetchStoryObjectAssets(currentProjectId, objectType, objectId);
-            } else if (mode === 'scene') {
-                // Scene mode: refresh scene assets
-                await fetchSceneAssets(currentProjectId);
-            } else {
-                // Picker mode: just refresh all assets
-                await fetchAssets(currentProjectId);
-            }
-
-            onAssetChange?.();
-
-            // If in picker/scene mode with onSelect, select the new asset
-            if (onSelect) {
-                onSelect(successModalAsset);
-            }
-
+            await linkAndRefreshAsset(successModalAsset);
             setSuccessModalAsset(null);
-            setActiveSubTab('library');
         } catch (err) {
             // Error handled in store
         }
@@ -938,8 +954,12 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                                 setRegenerateSettings(null);
                             }}
                         />
-                        <ImageGenerationPanel
+                        <ImageGenerationModal
                             onImageGenerated={handleImageGenerated}
+                            onClose={() => {
+                                setShowGeneratePanel(false);
+                                setRegenerateSettings(null);
+                            }}
                             objectType={objectType}
                             objectId={objectId}
                             initialSettings={regenerateSettings || (initialGenerationSettings && initialGenerationSettings.provider && initialGenerationSettings.model ? {

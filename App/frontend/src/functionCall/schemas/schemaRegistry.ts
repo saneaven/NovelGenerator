@@ -124,9 +124,9 @@ const REPLACE_STORY_OBJECT: FunctionSchema = {
   },
 };
 
-const REPLACE_CHAPTER: FunctionSchema = {
-  name: 'replace_chapter',
-  description: 'Replace chapter fields. Only include fields you want to change.',
+const REPLACE_CHAPTER_OUTLINE: FunctionSchema = {
+  name: 'replace_chapter_outline',
+  description: 'Replace chapter outline fields. Only include fields you want to change.',
   category: 'replace',
   target: 'chapter',
   idParam: 'id',
@@ -137,6 +137,7 @@ const REPLACE_CHAPTER: FunctionSchema = {
       actId: { type: 'string', description: 'New parent act ID' },
       name: { type: 'string', description: 'New chapter name' },
       description: { type: 'string', description: 'New chapter description' },
+      order: { type: 'integer', description: 'New position (1-based). Chapters will be reordered automatically.' },
     },
     required: ['id'],
   },
@@ -201,9 +202,9 @@ const PATCH_STORY_OBJECT: FunctionSchema = {
   },
 };
 
-const PATCH_CHAPTER: FunctionSchema = {
-  name: 'patch_chapter',
-  description: 'Patch chapter fields using search and replace. Include enough context in "old" to ensure uniqueness.',
+const PATCH_CHAPTER_OUTLINE: FunctionSchema = {
+  name: 'patch_chapter_outline',
+  description: 'Patch chapter outline fields using search and replace. Can also change order.',
   category: 'patch',
   target: 'chapter',
   idParam: 'id',
@@ -216,6 +217,7 @@ const PATCH_CHAPTER: FunctionSchema = {
         items: nameDescReplacementSchema,
         description: 'List of replacements to apply',
       },
+      order: { type: 'integer', description: 'New position (1-based). Chapters will be reordered automatically.' },
     },
     required: ['id', 'replacements'],
   },
@@ -443,13 +445,13 @@ class SchemaRegistryClass {
     // Replace
     this.register(REPLACE_BASIC_INFO);
     this.register(REPLACE_STORY_OBJECT);
-    this.register(REPLACE_CHAPTER);
+    this.register(REPLACE_CHAPTER_OUTLINE);
     this.register(REPLACE_MANUSCRIPT);
 
     // Patch
     this.register(PATCH_BASIC_INFO);
     this.register(PATCH_STORY_OBJECT);
-    this.register(PATCH_CHAPTER);
+    this.register(PATCH_CHAPTER_OUTLINE);
     this.register(PATCH_MANUSCRIPT);
 
     // Translation Set
@@ -551,7 +553,7 @@ export const CRUD_FUNCTION_NAMES = new Set([
 export const REPLACE_FUNCTION_NAMES = new Set([
   'replace_basic_info',
   'replace_story_object',
-  'replace_chapter',
+  'replace_chapter_outline',
   'replace_manuscript',
 ]);
 
@@ -559,7 +561,7 @@ export const REPLACE_FUNCTION_NAMES = new Set([
 export const PATCH_FUNCTION_NAMES = new Set([
   'patch_basic_info',
   'patch_story_object',
-  'patch_chapter',
+  'patch_chapter_outline',
   'patch_manuscript',
 ]);
 
@@ -608,10 +610,10 @@ export const STORY_OBJECT_EDIT_FUNCTIONS = [
   DELETE_CHAPTER,
   REPLACE_BASIC_INFO,
   REPLACE_STORY_OBJECT,
-  REPLACE_CHAPTER,
+  REPLACE_CHAPTER_OUTLINE,
   PATCH_BASIC_INFO,
   PATCH_STORY_OBJECT,
-  PATCH_CHAPTER,
+  PATCH_CHAPTER_OUTLINE,
 ].map(s => ({ name: s.name, description: s.description, parameters: s.parameters }));
 
 /** Manuscript edit functions (for edit assistant) */

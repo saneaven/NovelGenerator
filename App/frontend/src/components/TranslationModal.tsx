@@ -24,6 +24,7 @@ interface TranslationModalProps {
   defaultTargetLanguage?: string;
   defaultUserInput?: string;
   preSelectedObjectIds?: string[];  // If provided, skip tree selector and show only these objects
+  defaultSelectedContextIds?: string[];  // For retry: pre-select context objects
 }
 
 // Category display names and order (use from ObjectPicker)
@@ -39,6 +40,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   defaultTargetLanguage,
   defaultUserInput,
   preSelectedObjectIds,
+  defaultSelectedContextIds,
 }) => {
   const [sourceLanguage, setSourceLanguage] = useState<string>(defaultSourceLanguage || '');
   const [targetLanguage, setTargetLanguage] = useState<string>(defaultTargetLanguage || '');
@@ -49,7 +51,9 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   const [isObjectsCollapsed, setIsObjectsCollapsed] = useState(false);
 
   // Context selection for target language reference
-  const [selectedContextIds, setSelectedContextIds] = useState<Set<string>>(new Set());
+  const [selectedContextIds, setSelectedContextIds] = useState<Set<string>>(
+    () => new Set(defaultSelectedContextIds)
+  );
   const [isContextCollapsed, setIsContextCollapsed] = useState(true);
 
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -273,16 +277,16 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   // Note: abort is handled by LLMTaskManager.cancelTask() via toast dismiss, not here
   useEffect(() => {
     if (!isOpen) {
-      setUserInput('');
-      setSelectedIds(new Set());
-      setSelectedContextIds(new Set());
+      setUserInput(defaultUserInput || '');
+      setSelectedIds(preSelectedObjectIds ? new Set(preSelectedObjectIds) : new Set());
+      setSelectedContextIds(new Set(defaultSelectedContextIds));
       hasInitializedSelectionRef.current = false;
       abortControllerRef.current = null;
       // Reset languages so they re-initialize from props on next open
       setSourceLanguage(defaultSourceLanguage || '');
       setTargetLanguage(defaultTargetLanguage || '');
     }
-  }, [isOpen, defaultSourceLanguage, defaultTargetLanguage]);
+  }, [isOpen, defaultSourceLanguage, defaultTargetLanguage, defaultUserInput, preSelectedObjectIds, defaultSelectedContextIds]);
 
   const handleStart = async () => {
     if (objectsToTranslate.length === 0) {
@@ -307,6 +311,8 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
           sourceLanguage,
           targetLanguage,
           userInput,
+          selectedIds: Array.from(selectedIds),
+          selectedContextIds: Array.from(selectedContextIds),
         },
       },
     });
@@ -465,6 +471,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
               showSearch={false}
               maxHeight="300px"
               emptyMessage="No objects available for translation"
+              selectAllOnLoad={true}
             />
           </CollapsibleSection>
         )}
@@ -511,6 +518,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
               showSearch={false}
               maxHeight="200px"
               emptyMessage="No translated objects available"
+              selectAllOnLoad={!defaultSelectedContextIds?.length}
             />
           </CollapsibleSection>
         )}

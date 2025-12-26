@@ -8,36 +8,36 @@
     overflow: hidden;
 }
 
-/* Tabs */
-.prompts-layout__tabs {
+/* Sidebar Toggle (segmented control) */
+.sidebar-toggle {
     display: flex;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-sm) var(--spacing-md);
+    gap: 2px;
+    padding: var(--spacing-sm);
     background-color: var(--color-surface-elevated);
     border-bottom: 1px solid var(--color-border-subtle);
-    overflow-x: auto; /* Allow scrolling on small screens */
-    white-space: nowrap;
-}
-
-.prompts-layout__tab-btn {
-    padding: var(--spacing-sm) var(--spacing-md);
-    border: none;
-    background: transparent;
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-    border-radius: var(--border-radius-md);
-    cursor: pointer;
-    transition: all var(--transition-fast);
     flex-shrink: 0;
 }
 
-.prompts-layout__tab-btn:hover {
+.sidebar-toggle__btn {
+    flex: 1;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: none;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    text-align: center;
+}
+
+.sidebar-toggle__btn:hover {
     background-color: var(--color-surface-hover);
     color: var(--color-text-primary);
 }
 
-.prompts-layout__tab-btn.active {
+.sidebar-toggle__btn--active {
     background-color: var(--color-primary-soft);
     color: var(--color-primary-main);
     font-weight: var(--font-weight-semibold);
@@ -76,7 +76,6 @@
     flex-direction: column;
     transition: transform var(--transition-base), width var(--transition-base), opacity var(--transition-base);
     flex-shrink: 0;
-    z-index: var(--z-sidebar);
 }
 
 /* Collapsed State - Desktop */
@@ -111,6 +110,13 @@
     padding-right: var(--spacing-md);
 }
 
+.editor-wrapper__title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    min-width: 0;
+}
+
 .editor-wrapper__title {
     margin: 0;
     font-size: var(--font-size-lg);
@@ -119,6 +125,10 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.editor-wrapper__copy-btn {
+    flex-shrink: 0;
 }
 
 .editor-wrapper__description {
@@ -176,14 +186,24 @@
    ======================================== */
 
 @media (max-width: 768px) {
-    /* Main Layout */
-    .prompts-layout__tabs {
-        padding: var(--spacing-xs) var(--spacing-sm);
+    /* Sidebar Toggle on mobile */
+    .sidebar-toggle {
+        padding: var(--spacing-xs);
     }
 
-    .prompts-layout__tab-btn {
-        padding: var(--spacing-sm);
-        font-size: var(--font-size-xs);
+    .sidebar-toggle__btn {
+        padding: var(--spacing-xs);
+        font-size: 11px;
+    }
+
+    /* Backdrop for sidebar (clickable to close) */
+    .panel-split__backdrop {
+        position: absolute;
+        inset: 0;
+        background-color: var(--overlay-dark-medium);
+        z-index: var(--z-content);
+        backdrop-filter: blur(2px);
+        animation: fadeIn var(--transition-fast) ease-out;
     }
 
     /* Split Panel becomes Overlay */
@@ -197,6 +217,7 @@
         box-shadow: var(--shadow-2xl);
         border-left: 1px solid var(--color-border-subtle);
         transform: translateX(0);
+        z-index: calc(var(--z-content) + 1);
     }
 
     /* Sidebar Hidden State (Mobile) */
@@ -204,17 +225,6 @@
         transform: translateX(100%);
         width: 85%; /* Maintain width for slide effect */
         opacity: 1; /* Opacity fade not needed for slide out */
-    }
-
-    /* Add backdrop when sidebar is open */
-    .panel-split:not(.panel-split--collapsed)::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background-color: var(--overlay-dark-medium);
-        z-index: calc(var(--z-sidebar) - 1);
-        backdrop-filter: blur(2px);
-        animation: fadeIn var(--transition-fast) ease-out;
     }
 
     /* Editor Header adjustments */
@@ -241,6 +251,30 @@
     .editor-wrapper__title {
         font-size: var(--font-size-base);
         white-space: normal;
+    }
+
+    /* Hide description on mobile */
+    .editor-wrapper__description {
+        display: none;
+    }
+
+    /* Make header action buttons ghost style and smaller */
+    .editor-wrapper__actions {
+        gap: var(--spacing-xs);
+    }
+
+    .editor-wrapper__actions .icon-button {
+        background: transparent;
+        border: none;
+        color: var(--color-text-secondary);
+        width: 32px;
+        height: 32px;
+        padding: 0;
+    }
+
+    .editor-wrapper__actions .icon-button:hover {
+        background-color: var(--color-surface-hover);
+        color: var(--color-text-primary);
     }
 }
 

@@ -5,7 +5,7 @@ import './BaseSidebar.css';
 
 const BaseSidebar: React.FC<BaseSidebarProps> = ({
   id,
-  projectId,
+  projectId = '__global__',
   position,
   className = '',
   children,

@@ -71,7 +71,7 @@ ${fieldList}
 
 For example:
 - Instead of \`patch_story_object\`, use \`replace_story_object\`
-- Instead of \`patch_chapter\`, use \`replace_chapter\`
+- Instead of \`patch_chapter_outline\`, use \`replace_chapter_outline\`
 - Instead of \`patch_manuscript\`, use \`replace_manuscript\`
 
 Provide the complete new value for each failed field.
@@ -88,11 +88,11 @@ export function buildForceReplaceSystemPrompt(): string {
 ## Editing Mode: Replace Only
 
 For this request, you MUST use replace_* functions instead of patch_* functions.
-Do NOT use patch_story_object, patch_chapter, or patch_manuscript.
+Do NOT use patch_story_object, patch_chapter_outline, or patch_manuscript.
 
 Instead, use:
 - replace_story_object - to replace story object fields
-- replace_chapter - to replace chapter fields
+- replace_chapter_outline - to replace chapter outline fields
 - replace_manuscript - to replace manuscript content
 - replace_basic_info - to replace basic info fields
 

@@ -4,7 +4,7 @@
  * Handlers for search-replace patch operations:
  * - patch_basic_info
  * - patch_story_object
- * - patch_chapter
+ * - patch_chapter_outline
  * - patch_manuscript
  */
 
@@ -202,19 +202,20 @@ export async function patchStoryObject(
 }
 
 /**
- * Patch chapter fields using search and replace
+ * Patch chapter outline fields using search and replace
  */
-export async function patchChapter(
+export async function patchChapterOutline(
   args: Record<string, unknown>,
   context: HandlerContext
 ): Promise<ApplicationResult> {
-  const { id, replacements } = args as {
+  const { id, replacements, order } = args as {
     id?: string;
     replacements?: Replacement[];
+    order?: number;
   };
 
   if (!id || !replacements) {
-    return error('Missing required fields for patch_chapter');
+    return error('Missing required fields for patch_chapter_outline');
   }
 
   const { store, language } = context;
@@ -245,11 +246,18 @@ export async function patchChapter(
     }
   }
 
+  // Build metadata for order change
+  const metadata: Record<string, unknown> = {};
+  if (order !== undefined && typeof order === 'number') {
+    metadata.order = order;
+  }
+
   await store.updateObject('chapter', id, {
     data: newData,
     language,
     create_new_version: true,
     user_request: 'AI Edit',
+    ...(Object.keys(metadata).length > 0 && { metadata }),
   });
 
   return buildPatchResult(id, 'chapter', retryContexts, replacements.length, 'Updated chapter');
@@ -328,6 +336,6 @@ export async function patchManuscript(
 export const PATCH_HANDLERS = {
   patch_basic_info: patchBasicInfo,
   patch_story_object: patchStoryObject,
-  patch_chapter: patchChapter,
+  patch_chapter_outline: patchChapterOutline,
   patch_manuscript: patchManuscript,
 };

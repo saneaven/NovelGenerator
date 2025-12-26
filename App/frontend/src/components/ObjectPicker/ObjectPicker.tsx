@@ -8,7 +8,7 @@
  * - all: Both story objects and manuscripts
  */
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { ObjectType } from '../../types/unifiedObject';
 import ObjectPickerSearch from './ObjectPickerSearch';
 import ObjectPickerGroup from './ObjectPickerGroup';
@@ -45,6 +45,22 @@ function filterGroupsByIds(groups: Group[], filterIds: Set<string>): Group[] {
       };
     })
     .filter(Boolean) as Group[];
+}
+
+/**
+ * Get all item IDs from groups (including nested child groups)
+ */
+function getAllItemIds(groups: Group[]): string[] {
+  const ids: string[] = [];
+  groups.forEach(group => {
+    ids.push(...group.items.map(item => item.id));
+    if (group.childGroups) {
+      group.childGroups.forEach(childGroup => {
+        ids.push(...childGroup.items.map(item => item.id));
+      });
+    }
+  });
+  return ids;
 }
 
 /**
@@ -143,6 +159,7 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
   loading: externalLoading,
   customGroups,
   onLoadComplete,
+  selectAllOnLoad = false,
   maxHeight = '400px',
   className = '',
   emptyMessage = 'No objects available',
@@ -153,6 +170,7 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
   const [typeFilter, setTypeFilter] = useState<ObjectType | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [previewItem, setPreviewItem] = useState<PickerItem | null>(null);
+  const hasInitializedSelectionRef = useRef(false);
 
   // Data fetching hook (only used when customGroups is not provided)
   const { groups: fetchedGroups, availableTypes: fetchedTypes, isLoading: fetchLoading, error } = useObjectPickerData({
@@ -191,6 +209,21 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
   const preSelectedIdSet = useMemo(() => new Set(preSelectedIds), [preSelectedIds]);
   const highlightIdSet = useMemo(() => new Set(highlightIds), [highlightIds]);
   const excludedIdSet = useMemo(() => new Set(excludedIds), [excludedIds]);
+
+  // Select all items on load if selectAllOnLoad is true (only on first load)
+  useEffect(() => {
+    if (selectAllOnLoad && !isLoading && groups.length > 0 && selectionMode === 'multi' && !hasInitializedSelectionRef.current) {
+      const allIds = getAllItemIds(groups);
+      // Filter out excluded and pre-selected IDs
+      const selectableIds = allIds.filter(
+        id => !excludedIdSet.has(id) && !preSelectedIdSet.has(id)
+      );
+      if (selectableIds.length > 0) {
+        hasInitializedSelectionRef.current = true;
+        onChange(selectableIds);
+      }
+    }
+  }, [selectAllOnLoad, isLoading, groups, selectionMode, excludedIdSet, preSelectedIdSet, onChange]);
 
   // Filter groups based on search
   const filteredGroups = useMemo(() => {

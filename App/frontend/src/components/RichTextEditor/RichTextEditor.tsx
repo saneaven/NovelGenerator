@@ -42,9 +42,12 @@ interface RichTextEditorProps {
   onBrowseAssets?: () => void;
   // Toolbar action props (optional - for integration with NovelEditorPanel)
   toolbarActions?: React.ReactNode;
-  // Image overlay callbacks (for change image action)
+  // Image overlay callbacks (for swap/regenerate actions)
   projectId?: string;
-  onChangeImage?: (currentSrc: string, asset: Asset | null, imageBounds: DOMRect | null) => void;
+  // Swap image - opens modal with EMPTY prompts (pick from library or generate new from scratch)
+  onSwapImage?: (currentSrc: string, asset: Asset | null, imageBounds: DOMRect | null) => void;
+  // Regenerate image - opens modal with PRE-FILLED prompts from original generation
+  onRegenerateImage?: (currentSrc: string, asset: Asset | null, imageBounds: DOMRect | null) => void;
   getAssetByUrl?: (src: string) => Promise<Asset | null>;
 }
 
@@ -56,7 +59,8 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   onBrowseAssets,
   toolbarActions,
   projectId,
-  onChangeImage,
+  onSwapImage,
+  onRegenerateImage,
   getAssetByUrl,
 }, ref) => {
   // Use ref to hold onChange callback (prevents stale closure in onCreate)
@@ -86,9 +90,10 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   // Memoize image overlay callbacks to prevent unnecessary re-renders
   const imageOverlayCallbacks = useMemo<ImageOverlayCallbacks>(() => ({
     projectId,
-    onChange: onChangeImage,
+    onSwapImage,
+    onRegenerateImage,
     getAssetByUrl,
-  }), [projectId, onChangeImage, getAssetByUrl]);
+  }), [projectId, onSwapImage, onRegenerateImage, getAssetByUrl]);
 
   // Open heading dropdown with position calculation
   const openHeadingDropdown = () => {

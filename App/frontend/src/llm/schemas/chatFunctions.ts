@@ -6,8 +6,8 @@
  *
  * Function Categories:
  * - CRUD: create_story_object, delete_story_object, create_chapter, delete_chapter
- * - Replace: replace_basic_info, replace_story_object, replace_chapter, replace_manuscript
- * - Patch: patch_basic_info, patch_story_object, patch_chapter, patch_manuscript
+ * - Replace: replace_basic_info, replace_story_object, replace_chapter_outline, replace_manuscript
+ * - Patch: patch_basic_info, patch_story_object, patch_chapter_outline, patch_manuscript
  */
 
 import type { StoryObjectType } from '../../types/patchTypes';
@@ -197,10 +197,10 @@ export const DELETE_CHAPTER_FUNCTION: FunctionCallSchema = {
 };
 
 // ============================================
-// WORKSPACE FUNCTIONS
+// CHAT FUNCTIONS
 // ============================================
 
-export const WORKSPACE_FUNCTIONS: FunctionCallSchema[] = [
+export const CHAT_FUNCTIONS: FunctionCallSchema[] = [
   // CRUD
   CREATE_STORY_OBJECT_FUNCTION,
   DELETE_STORY_OBJECT_FUNCTION,
@@ -240,16 +240,17 @@ export const WORKSPACE_FUNCTIONS: FunctionCallSchema[] = [
     },
   },
   {
-    name: 'replace_chapter',
+    name: 'replace_chapter_outline',
     description:
-      'Replace chapter fields. Only include fields you want to change.',
+      'Replace chapter outline fields. Only include fields you want to change.',
     parameters: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'ID of the manuscript' },
+        id: { type: 'string', description: 'ID of the chapter' },
         actId: { type: 'string', description: 'New parent act ID' },
         name: { type: 'string', description: 'New chapter name' },
         description: { type: 'string', description: 'New chapter description' },
+        order: { type: 'integer', description: 'New position (1-based). Chapters will be reordered automatically.' },
       },
       required: ['id'],
     },
@@ -260,13 +261,13 @@ export const WORKSPACE_FUNCTIONS: FunctionCallSchema[] = [
     parameters: {
       type: 'object',
       properties: {
-        chapterId: { type: 'string', description: 'ID of the chapter' },
+        id: { type: 'string', description: 'ID of the manuscript' },
         content: {
           type: 'string',
           description: 'Complete new manuscript content',
         },
       },
-      required: ['chapterId', 'content'],
+      required: ['id', 'content'],
     },
   },
 
@@ -308,63 +309,21 @@ export const WORKSPACE_FUNCTIONS: FunctionCallSchema[] = [
     },
   },
   {
-    name: 'patch_chapter',
+    name: 'patch_chapter_outline',
     description:
-      'Patch chapter fields using search and replace. Include enough context in "old" to ensure uniqueness.',
+      'Patch chapter outline fields using search and replace. Can also change order.',
     parameters: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'ID of the manuscript' },
+        id: { type: 'string', description: 'ID of the chapter' },
         replacements: {
           type: 'array',
           items: replacementWithFieldSchema,
           description: 'List of replacements to apply',
         },
+        order: { type: 'integer', description: 'New position (1-based). Chapters will be reordered automatically.' },
       },
       required: ['id', 'replacements'],
-    },
-  },
-  {
-    name: 'patch_manuscript',
-    description:
-      'Patch manuscript content using search and replace. Include enough context in "old" to ensure uniqueness.',
-    parameters: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'ID of the manuscript' },
-        replacements: {
-          type: 'array',
-          items: manuscriptReplacementSchema,
-          description: 'List of replacements to apply',
-        },
-      },
-      required: ['id', 'replacements'],
-    },
-  },
-];
-
-// ============================================
-// NOVEL EDITOR FUNCTIONS
-// ============================================
-
-/**
- * Novel editor functions for manuscript editing.
- * Uses the same replace/patch pattern as workspace functions.
- */
-export const NOVEL_EDITOR_FUNCTIONS: FunctionCallSchema[] = [
-  {
-    name: 'replace_manuscript',
-    description: 'Replace the entire manuscript content of a chapter.',
-    parameters: {
-      type: 'object',
-      properties: {
-        chapterId: { type: 'string', description: 'ID of the chapter' },
-        content: {
-          type: 'string',
-          description: 'Complete new manuscript content',
-        },
-      },
-      required: ['chapterId', 'content'],
     },
   },
   {
@@ -390,10 +349,7 @@ export const NOVEL_EDITOR_FUNCTIONS: FunctionCallSchema[] = [
 // FUNCTION NAME LISTS (for validation)
 // ============================================
 
-export const WORKSPACE_FUNCTION_NAMES = WORKSPACE_FUNCTIONS.map((f) => f.name);
-export const NOVEL_EDITOR_FUNCTION_NAMES = NOVEL_EDITOR_FUNCTIONS.map(
-  (f) => f.name
-);
+export const CHAT_FUNCTION_NAMES = CHAT_FUNCTIONS.map((f) => f.name);
 
 /** All function names that perform create operations */
 export const CREATE_FUNCTION_NAMES = [
@@ -411,7 +367,7 @@ export const DELETE_FUNCTION_NAMES = [
 export const REPLACE_FUNCTION_NAMES = [
   'replace_basic_info',
   'replace_story_object',
-  'replace_chapter',
+  'replace_chapter_outline',
   'replace_manuscript',
 ] as const;
 

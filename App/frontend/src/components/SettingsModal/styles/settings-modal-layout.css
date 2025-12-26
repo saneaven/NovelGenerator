@@ -108,3 +108,30 @@
 
 /* Note: btn-primary and btn-secondary have been migrated to TextButton component.
    Generic button styles are available in utilities.css if needed. */
+
+/* ========================================
+   MOBILE RESPONSIVE
+   ======================================== */
+
+@media (max-width: 768px) {
+    /* Remove overlay padding for full screen */
+    .base-modal-overlay:has(.settings-modal) {
+        padding: 0;
+    }
+
+    .settings-modal {
+        width: 100%;
+        max-width: 100%;
+        height: 100dvh;
+        max-height: 100dvh;
+        border-radius: 0;
+    }
+
+    .settings-modal-header {
+        padding: var(--spacing-md) var(--spacing-lg);
+    }
+
+    .settings-panel-content {
+        padding: var(--spacing-lg);
+    }
+}

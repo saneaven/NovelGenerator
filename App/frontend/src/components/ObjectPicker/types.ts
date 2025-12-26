@@ -80,6 +80,7 @@ export interface ObjectPickerProps {
 
   // Callbacks
   onLoadComplete?: () => void;
+  selectAllOnLoad?: boolean;     // If true, select all items when loading completes
 
   // Customization
   maxHeight?: string | number;

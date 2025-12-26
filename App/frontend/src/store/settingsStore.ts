@@ -53,7 +53,7 @@ export interface ProviderPreference {
 
 // Thinking configuration for model-native thinking
 export interface ThinkingConfig {
-    effort?: 'none' | 'low' | 'medium' | 'high';  // 'none' for GPT-5
+    effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';  // GPT-5.2+ supports minimal/xhigh
     maxTokens?: number;
     verbosity?: 'low' | 'medium' | 'high';  // GPT-5 output verbosity
     claudeBudgetTokens?: number;

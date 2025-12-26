@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useLLMTaskStore } from '../../store/llmTaskStore';
 import UnifiedImagePromptModal, { type PromptMode } from '../ImageGeneration/UnifiedImagePromptModal';
+import ThinkingDisplay from '../ThinkingDisplay';
 import type { ObjectType } from '../../types/unifiedObject';
 import { TextButton } from '../TextButton';
 import './ImagePromptManager.css';
@@ -35,6 +37,16 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
     const [isSaving, setIsSaving] = useState(false);
     const [hasChanges, setHasChanges] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
+
+    // Streaming state for AI Assist
+    const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
+    const [streamingMode, setStreamingMode] = useState<PromptMode | null>(null);
+    const [streamingError, setStreamingError] = useState<string | null>(null);
+
+    // Subscribe to streaming session from the store
+    const streamingSession = useLLMTaskStore((state) =>
+        streamingSessionId ? state.sessions[streamingSessionId] : undefined
+    );
 
     // Get object from store
     const object = useMemo(() => {
@@ -81,6 +93,48 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
         setHasChanges(changed);
     }, [naturalPrompt, positivePrompt, negativePrompt, object?.metadata]);
 
+    // Effect to extract and update prompt during streaming
+    useEffect(() => {
+        if (!streamingSession || !streamingSessionId || !streamingMode) return;
+
+        // Check for error status
+        if (streamingSession.status === 'error') {
+            setStreamingError(streamingSession.error || 'Failed to generate prompt');
+            setStreamingSessionId(null);
+            setStreamingMode(null);
+            return;
+        }
+
+        // Extract prompt from contentParts (for native output mode)
+        const textContent = streamingSession.contentParts
+            ?.filter(p => p.type === 'content')
+            .map(p => p.text)
+            .join('') || '';
+
+        // Extract prompt from functionCallProgress (for function call mode)
+        const functionProgress = streamingSession.functionCallProgress?.[0];
+        const parsedArgs = functionProgress?.draft?.parsedArguments;
+        const functionPrompt = (parsedArgs as any)?.prompt || '';
+
+        // Use whichever has content
+        const streamingPrompt = functionPrompt || textContent;
+
+        // Update the appropriate prompt field
+        if (streamingPrompt) {
+            switch (streamingMode) {
+                case 'natural': setNaturalPrompt(streamingPrompt); break;
+                case 'positive': setPositivePrompt(streamingPrompt); break;
+                case 'negative': setNegativePrompt(streamingPrompt); break;
+            }
+        }
+
+        // Clear streaming state when complete
+        if (streamingSession.status !== 'running') {
+            setStreamingSessionId(null);
+            setStreamingMode(null);
+        }
+    }, [streamingSession, streamingSessionId, streamingMode]);
+
     const handleSave = async () => {
         setIsSaving(true);
         setSaveSuccess(false);
@@ -109,6 +163,26 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
         setShowPromptBuilder(true);
     };
 
+    // Handler for when streaming starts
+    const handleStreamingStart = useCallback((sessionId: string, mode: PromptMode) => {
+        setStreamingSessionId(sessionId);
+        setStreamingMode(mode);
+        setStreamingError(null);
+        // Clear target prompt to show streaming from scratch
+        switch (mode) {
+            case 'natural': setNaturalPrompt(''); break;
+            case 'positive': setPositivePrompt(''); break;
+            case 'negative': setNegativePrompt(''); break;
+        }
+    }, []);
+
+    // Handler for streaming errors
+    const handleStreamingError = useCallback((error: string) => {
+        setStreamingError(error);
+        setStreamingSessionId(null);
+        setStreamingMode(null);
+    }, []);
+
     const handlePromptGenerated = (result: { prompt: string; mode: PromptMode }) => {
         // Determine which field to update based on mode from result
         if (result.mode === 'natural') {
@@ -129,6 +203,12 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
             setNegativePrompt('');
         }
     };
+
+    // Compute streaming states for UI
+    const isStreamingNatural = streamingSessionId !== null && streamingMode === 'natural';
+    const isStreamingPositive = streamingSessionId !== null && streamingMode === 'positive';
+    const isStreamingNegative = streamingSessionId !== null && streamingMode === 'negative';
+    const isStreaming = streamingSessionId !== null;
 
     const isLoading = loading[objectId];
     const error = errors[objectId];
@@ -189,10 +269,11 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                                     size="sm"
                                     onClick={handleAIAssist}
                                     title="Generate prompt with AI assistance"
+                                    disabled={isStreaming}
                                 >
-                                    AI Assist
+                                    {isStreamingNatural ? 'Generating...' : 'AI Assist'}
                                 </TextButton>
-                                {naturalPrompt && (
+                                {naturalPrompt && !isStreamingNatural && (
                                     <TextButton
                                         variant="ghost"
                                         size="sm"
@@ -204,12 +285,22 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                                 )}
                             </div>
                         </div>
+                        {/* Thinking display during streaming */}
+                        {isStreamingNatural && streamingSession && (
+                            <ThinkingDisplay
+                                messageId={streamingSessionId!}
+                                contentParts={streamingSession.contentParts}
+                                displayMode="separate"
+                                isStreaming={streamingSession.status === 'running'}
+                            />
+                        )}
                         <textarea
                             value={naturalPrompt}
-                            onChange={(e) => setNaturalPrompt(e.target.value)}
+                            onChange={(e) => !isStreamingNatural && setNaturalPrompt(e.target.value)}
                             placeholder="Describe the image in natural language. This works with OpenAI (DALL-E), Gemini, and xAI (Grok)..."
                             rows={6}
-                            className="prompt-textarea"
+                            className={`prompt-textarea ${isStreamingNatural ? 'streaming' : ''}`}
+                            readOnly={isStreamingNatural}
                         />
                         <p className="prompt-hint">
                             Example: "A detailed portrait with dramatic lighting, looking determined, wearing formal attire"
@@ -227,10 +318,11 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                                     size="sm"
                                     onClick={handleAIAssist}
                                     title="Generate prompt with AI assistance"
+                                    disabled={isStreaming}
                                 >
-                                    AI Assist
+                                    {isStreamingPositive ? 'Generating...' : 'AI Assist'}
                                 </TextButton>
-                                {positivePrompt && (
+                                {positivePrompt && !isStreamingPositive && (
                                     <TextButton
                                         variant="ghost"
                                         size="sm"
@@ -242,12 +334,22 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                                 )}
                             </div>
                         </div>
+                        {/* Thinking display during streaming */}
+                        {isStreamingPositive && streamingSession && (
+                            <ThinkingDisplay
+                                messageId={streamingSessionId!}
+                                contentParts={streamingSession.contentParts}
+                                displayMode="separate"
+                                isStreaming={streamingSession.status === 'running'}
+                            />
+                        )}
                         <textarea
                             value={positivePrompt}
-                            onChange={(e) => setPositivePrompt(e.target.value)}
+                            onChange={(e) => !isStreamingPositive && setPositivePrompt(e.target.value)}
                             placeholder="Enter comma-separated tags for NovelAI. These describe what you want in the image..."
                             rows={6}
-                            className="prompt-textarea"
+                            className={`prompt-textarea ${isStreamingPositive ? 'streaming' : ''}`}
+                            readOnly={isStreamingPositive}
                         />
                         <p className="prompt-hint">
                             Example: "1girl, solo, long hair, blue eyes, formal dress, detailed face, masterpiece, best quality"
@@ -265,10 +367,11 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                                     size="sm"
                                     onClick={handleAIAssist}
                                     title="Generate prompt with AI assistance"
+                                    disabled={isStreaming}
                                 >
-                                    AI Assist
+                                    {isStreamingNegative ? 'Generating...' : 'AI Assist'}
                                 </TextButton>
-                                {negativePrompt && (
+                                {negativePrompt && !isStreamingNegative && (
                                     <TextButton
                                         variant="ghost"
                                         size="sm"
@@ -280,12 +383,22 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                                 )}
                             </div>
                         </div>
+                        {/* Thinking display during streaming */}
+                        {isStreamingNegative && streamingSession && (
+                            <ThinkingDisplay
+                                messageId={streamingSessionId!}
+                                contentParts={streamingSession.contentParts}
+                                displayMode="separate"
+                                isStreaming={streamingSession.status === 'running'}
+                            />
+                        )}
                         <textarea
                             value={negativePrompt}
-                            onChange={(e) => setNegativePrompt(e.target.value)}
+                            onChange={(e) => !isStreamingNegative && setNegativePrompt(e.target.value)}
                             placeholder="Enter comma-separated tags for things to avoid in the image..."
                             rows={6}
-                            className="prompt-textarea"
+                            className={`prompt-textarea ${isStreamingNegative ? 'streaming' : ''}`}
+                            readOnly={isStreamingNegative}
                         />
                         <p className="prompt-hint">
                             Example: "lowres, bad anatomy, bad hands, missing fingers, extra digits, blurry"
@@ -309,11 +422,20 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                 </TextButton>
             </div>
 
+            {/* Streaming error display */}
+            {streamingError && (
+                <div className="error-banner">
+                    {streamingError}
+                </div>
+            )}
+
             {/* AI Prompt Builder Modal */}
             <UnifiedImagePromptModal
                 isOpen={showPromptBuilder}
                 onClose={() => setShowPromptBuilder(false)}
                 onPromptGenerated={handlePromptGenerated}
+                onStreamingStart={handleStreamingStart}
+                onStreamingError={handleStreamingError}
                 contextType={isCoverImage ? 'cover_image' : 'object'}
                 objectType={isCoverImage ? undefined : objectType as 'character' | 'location' | 'organization' | 'lorebook'}
                 objectId={isCoverImage ? undefined : objectId}

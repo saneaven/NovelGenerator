@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useSettingsStore } from '../../store/settingsStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { useLLMTaskStore } from '../../store/llmTaskStore';
 import {
     useImageGeneration,
     PROVIDER_LABELS,
@@ -22,11 +23,12 @@ import {
 } from '../../imageGeneration';
 import type { Asset, ImageProvider } from '../../api/assetService';
 import { UnifiedImageModal } from '../AssetManager';
-import UnifiedImagePromptModal, { type PromptResult } from './UnifiedImagePromptModal';
+import UnifiedImagePromptModal, { type PromptResult, type PromptMode } from './UnifiedImagePromptModal';
+import ThinkingDisplay from '../ThinkingDisplay';
 import { Check, AIAssistMini, Close } from '../icons';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
-import './ImageGenerationPanel.css';
+import './ImageGenerationModal.css';
 
 // Reference image item
 interface ReferenceImageItem {
@@ -35,7 +37,7 @@ interface ReferenceImageItem {
 }
 
 // Settings passed from asset detail for regeneration
-interface RegenerateSettings {
+export interface RegenerateSettings {
     provider: string;
     model: string;
     prompt?: string;
@@ -45,7 +47,7 @@ interface RegenerateSettings {
     settings?: Record<string, any>;
 }
 
-interface ImageGenerationPanelProps {
+interface ImageGenerationModalProps {
     onImageGenerated?: (asset: Asset) => void;
     onClose?: () => void;
     objectType?: string;
@@ -57,7 +59,7 @@ interface ImageGenerationPanelProps {
     assetType?: 'object' | 'scene';
 }
 
-const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
+const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     onImageGenerated,
     onClose,
     objectType,
@@ -125,6 +127,12 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
     const [activePromptTab, setActivePromptTab] = useState<'positive' | 'negative'>('positive');
 
     const [showPromptBuilder, setShowPromptBuilder] = useState(false);
+
+    // Streaming state for AI Assist
+    const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
+    const [streamingMode, setStreamingMode] = useState<PromptMode | null>(null);
+    const [streamingError, setStreamingError] = useState<string | null>(null);
+
     const [provider, setProvider] = useState<ImageProviderType>(settings.imageGenConfig.provider);
     const [model, setModel] = useState(settings.imageGenConfig.model);
     const [size, setSize] = useState(settings.imageGenConfig.size);
@@ -275,6 +283,79 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
         }
     }, [provider]);
 
+    // Subscribe to streaming session from the store
+    const streamingSession = useLLMTaskStore((state) =>
+        streamingSessionId ? state.sessions[streamingSessionId] : undefined
+    );
+
+    // Effect to extract and update prompt during streaming
+    useEffect(() => {
+        if (!streamingSession || !streamingSessionId || !streamingMode) return;
+
+        // Check for error status
+        if (streamingSession.status === 'error') {
+            setStreamingError(streamingSession.error || 'Failed to generate prompt');
+            setStreamingSessionId(null);
+            setStreamingMode(null);
+            return;
+        }
+
+        // Extract prompt from contentParts (for native output mode)
+        const textContent = streamingSession.contentParts
+            ?.filter(p => p.type === 'content')
+            .map(p => p.text)
+            .join('') || '';
+
+        // Extract prompt from functionCallProgress (for function call mode)
+        const functionProgress = streamingSession.functionCallProgress?.[0];
+        const parsedArgs = functionProgress?.draft?.parsedArguments;
+        const functionPrompt = (parsedArgs as any)?.prompt || '';
+
+        // Use whichever has content
+        const streamingPrompt = functionPrompt || textContent;
+
+        // Update the appropriate prompt field
+        if (streamingPrompt) {
+            switch (streamingMode) {
+                case 'natural': setPrompt(streamingPrompt); break;
+                case 'positive': setPositivePrompt(streamingPrompt); break;
+                case 'negative': setNegativePrompt(streamingPrompt); break;
+            }
+        }
+
+        // Clear streaming state when complete
+        if (streamingSession.status !== 'running') {
+            setStreamingSessionId(null);
+            setStreamingMode(null);
+        }
+    }, [streamingSession, streamingSessionId, streamingMode]);
+
+    // Handler for when streaming starts
+    const handleStreamingStart = useCallback((sessionId: string, mode: PromptMode) => {
+        setStreamingSessionId(sessionId);
+        setStreamingMode(mode);
+        setStreamingError(null);  // Clear previous error
+        // Clear target prompt to show streaming from scratch
+        switch (mode) {
+            case 'natural': setPrompt(''); break;
+            case 'positive': setPositivePrompt(''); break;
+            case 'negative': setNegativePrompt(''); break;
+        }
+    }, []);
+
+    // Handler for streaming errors (direct callback, no store subscription timing issues)
+    const handleStreamingError = useCallback((error: string) => {
+        setStreamingError(error);
+        setStreamingSessionId(null);
+        setStreamingMode(null);
+    }, []);
+
+    // Compute streaming states for UI
+    const isStreamingNatural = streamingSessionId !== null && streamingMode === 'natural';
+    const isStreamingPositive = streamingSessionId !== null && streamingMode === 'positive';
+    const isStreamingNegative = streamingSessionId !== null && streamingMode === 'negative';
+    const isStreaming = streamingSessionId !== null;
+
     const getCurrentNaturalStyle = () => {
         if (!selectedNaturalStyleId) return null;
         return naturalStyles.find((s) => s.id === selectedNaturalStyleId) || null;
@@ -321,7 +402,8 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                 assetType,
             };
 
-            await generate(request);
+            onClose?.();
+            generate(request);
         } else {
             if (!prompt.trim()) {
                 alert('Please enter a prompt');
@@ -343,7 +425,8 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                 assetType,
             };
 
-            await generate(request);
+            onClose?.();
+            generate(request);
         }
     };
 
@@ -365,7 +448,7 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
     const currentSizeOptions = SIZE_OPTIONS[provider] || ['1024x1024'];
 
     return (
-        <div className="image-generation-panel">
+        <div className="image-generation-modal">
             <div className="panel-header">
                 <h3>Generate Image</h3>
                 {onClose && (
@@ -387,21 +470,32 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                 {!isTagBased && (
                     <div className="form-field">
                         <label>Prompt</label>
+                        {/* Thinking display during streaming */}
+                        {isStreamingNatural && streamingSession && (
+                            <ThinkingDisplay
+                                messageId={streamingSessionId!}
+                                contentParts={streamingSession.contentParts}
+                                displayMode="separate"
+                                isStreaming={streamingSession.status === 'running'}
+                            />
+                        )}
                         <div className="prompt-input-wrapper">
                             <textarea
                                 value={prompt}
-                                onChange={(e) => setPrompt(e.target.value)}
+                                onChange={(e) => !isStreamingNatural && setPrompt(e.target.value)}
                                 placeholder="Describe the image you want to generate..."
                                 rows={4}
-                                className="prompt-input"
+                                className={`prompt-input ${isStreamingNatural ? 'streaming' : ''}`}
+                                readOnly={isStreamingNatural}
                             />
                             <button
                                 className="ai-assist-button"
                                 onClick={() => setShowPromptBuilder(true)}
                                 title="AI-assisted prompt generation"
                                 type="button"
+                                disabled={isStreaming}
                             >
-                                <AIAssistMini size="sm" /> AI Assist
+                                <AIAssistMini size="sm" /> {isStreamingNatural ? 'Generating...' : 'AI Assist'}
                             </button>
                         </div>
                     </div>
@@ -411,6 +505,15 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                 {isTagBased && (
                     <div className="form-field">
                         <label>Prompt</label>
+                        {/* Thinking display during streaming */}
+                        {(isStreamingPositive || isStreamingNegative) && streamingSession && (
+                            <ThinkingDisplay
+                                messageId={streamingSessionId!}
+                                contentParts={streamingSession.contentParts}
+                                displayMode="separate"
+                                isStreaming={streamingSession.status === 'running'}
+                            />
+                        )}
                         <div className="prompt-tabs">
                             <button
                                 className={`prompt-tab ${activePromptTab === 'positive' ? 'active' : ''}`}
@@ -429,18 +532,20 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                             {activePromptTab === 'positive' ? (
                                 <textarea
                                     value={positivePrompt}
-                                    onChange={(e) => setPositivePrompt(e.target.value)}
+                                    onChange={(e) => !isStreamingPositive && setPositivePrompt(e.target.value)}
                                     placeholder="1girl, solo, long hair, masterpiece, best quality, ..."
                                     rows={4}
-                                    className="prompt-input"
+                                    className={`prompt-input ${isStreamingPositive ? 'streaming' : ''}`}
+                                    readOnly={isStreamingPositive}
                                 />
                             ) : (
                                 <textarea
                                     value={negativePrompt}
-                                    onChange={(e) => setNegativePrompt(e.target.value)}
+                                    onChange={(e) => !isStreamingNegative && setNegativePrompt(e.target.value)}
                                     placeholder="lowres, bad anatomy, bad hands, missing fingers, ..."
                                     rows={4}
-                                    className="prompt-input"
+                                    className={`prompt-input ${isStreamingNegative ? 'streaming' : ''}`}
+                                    readOnly={isStreamingNegative}
                                 />
                             )}
                             <button
@@ -448,8 +553,9 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                                 onClick={() => setShowPromptBuilder(true)}
                                 title="AI-assisted prompt generation"
                                 type="button"
+                                disabled={isStreaming}
                             >
-                                <AIAssistMini size="sm" /> AI Assist
+                                <AIAssistMini size="sm" /> {(isStreamingPositive || isStreamingNegative) ? 'Generating...' : 'AI Assist'}
                             </button>
                         </div>
                     </div>
@@ -826,6 +932,7 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
 
                 {/* Error Display */}
                 {error && <div className="error-message">{error}</div>}
+                {streamingError && <div className="error-message">{streamingError}</div>}
 
                 {/* Generate Button */}
                 <div className="panel-actions">
@@ -849,6 +956,8 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                         isOpen={showPromptBuilder}
                         onClose={() => setShowPromptBuilder(false)}
                         onPromptGenerated={handlePromptBuilderGenerated}
+                        onStreamingStart={handleStreamingStart}
+                        onStreamingError={handleStreamingError}
                         contextType="cover_image"
                         basicInfoId={objectId}
                         promptMode={isTagBased ? activePromptTab : 'natural'}
@@ -858,6 +967,8 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                         isOpen={showPromptBuilder}
                         onClose={() => setShowPromptBuilder(false)}
                         onPromptGenerated={handlePromptBuilderGenerated}
+                        onStreamingStart={handleStreamingStart}
+                        onStreamingError={handleStreamingError}
                         contextType="object"
                         objectType={objectType as 'character' | 'location' | 'organization' | 'lorebook'}
                         objectId={objectId}
@@ -869,6 +980,8 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                     isOpen={showPromptBuilder}
                     onClose={() => setShowPromptBuilder(false)}
                     onPromptGenerated={handlePromptBuilderGenerated}
+                    onStreamingStart={handleStreamingStart}
+                    onStreamingError={handleStreamingError}
                     contextType="scene"
                     sceneContext={sceneContext}
                     promptMode={isTagBased ? activePromptTab : 'natural'}
@@ -889,4 +1002,4 @@ const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
     );
 };
 
-export default ImageGenerationPanel;
+export default ImageGenerationModal;

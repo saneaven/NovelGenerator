@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { BaseModal } from '../BaseModal';
+import { BaseSidebar } from '../BaseSidebar';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useSidebarStore } from '../../store/sidebarStore';
 import type { Settings, AIFunctionType } from '../../store/settingsStore';
 import CredentialsPanel from './CredentialsPanel';
 import GeneralPanel from './GeneralPanel';
@@ -9,7 +11,7 @@ import PromptsTemplatesPanel from './PromptsTemplatesPanel';
 import ThemePanel from './ThemePanel';
 import AdvancedPanel from './AdvancedPanel';
 import ImageGenPanel from './ImageGenPanel';
-import { Settings as SettingsIcon, Lock, Image, Document, Globe, Palette, Wrench } from '../icons';
+import { Settings as SettingsIcon, Lock, Image, Document, Globe, Palette, Wrench, HamburgerMenu } from '../icons';
 import { TextButton } from '../TextButton';
 import './SettingsModal.css';
 import './_shared-components.css';
@@ -27,6 +29,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [mainTab, setMainTab] = useState<MainTab>('general');
   const [activeFunction, setActiveFunction] = useState<AIFunctionType>('chat');
+
+  // Mobile sidebar state from store
+  const openSidebar = useSidebarStore((state) => state.openSidebar);
+  const closeSidebar = useSidebarStore((state) => state.closeSidebar);
 
   useEffect(() => {
     if (isOpen) {
@@ -73,11 +79,93 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     >
       {/* Custom Header */}
       <div className="settings-modal-header">
+        <button
+          className="settings-hamburger-btn"
+          onClick={() => openSidebar('__global__', 'settings-nav')}
+          aria-label="Open navigation menu"
+        >
+          <HamburgerMenu size="md" />
+        </button>
         <h2><SettingsIcon size="xl" /> Settings</h2>
         <button className="close-button" onClick={handleCancel}>
           ×
         </button>
       </div>
+
+      {/* Mobile Sidebar Navigation */}
+      <BaseSidebar
+        id="settings-nav"
+        position="left"
+        className="settings-mobile-sidebar"
+        header={<h3 className="settings-mobile-sidebar-title">Settings</h3>}
+        onClose={() => closeSidebar('__global__')}
+      >
+        <ul className="settings-mobile-sidebar-list">
+          <li>
+            <button
+              className={`settings-mobile-sidebar-item ${mainTab === 'credentials' ? 'active' : ''}`}
+              onClick={() => { setMainTab('credentials'); closeSidebar('__global__'); }}
+            >
+              <Lock size="md" />
+              <span>Credentials</span>
+            </button>
+          </li>
+          <li>
+            <button
+              className={`settings-mobile-sidebar-item ${mainTab === 'general' ? 'active' : ''}`}
+              onClick={() => { setMainTab('general'); closeSidebar('__global__'); }}
+            >
+              <SettingsIcon size="md" />
+              <span>General</span>
+            </button>
+          </li>
+          <li>
+            <button
+              className={`settings-mobile-sidebar-item ${mainTab === 'imageGen' ? 'active' : ''}`}
+              onClick={() => { setMainTab('imageGen'); closeSidebar('__global__'); }}
+            >
+              <Image size="md" />
+              <span>Image Gen</span>
+            </button>
+          </li>
+          <li>
+            <button
+              className={`settings-mobile-sidebar-item ${mainTab === 'prompts' ? 'active' : ''}`}
+              onClick={() => { setMainTab('prompts'); closeSidebar('__global__'); }}
+            >
+              <Document size="md" />
+              <span>Prompts & Templates</span>
+            </button>
+          </li>
+          <li>
+            <button
+              className={`settings-mobile-sidebar-item ${mainTab === 'language' ? 'active' : ''}`}
+              onClick={() => { setMainTab('language'); closeSidebar('__global__'); }}
+            >
+              <Globe size="md" />
+              <span>Language</span>
+            </button>
+          </li>
+          <li>
+            <button
+              className={`settings-mobile-sidebar-item ${mainTab === 'theme' ? 'active' : ''}`}
+              onClick={() => { setMainTab('theme'); closeSidebar('__global__'); }}
+            >
+              <Palette size="md" />
+              <span>Theme</span>
+            </button>
+          </li>
+          <li>
+            <button
+              className={`settings-mobile-sidebar-item ${mainTab === 'advanced' ? 'active' : ''}`}
+              onClick={() => { setMainTab('advanced'); closeSidebar('__global__'); }}
+            >
+              <Wrench size="md" />
+              <span>Advanced</span>
+            </button>
+          </li>
+        </ul>
+      </BaseSidebar>
 
       {/* Main Category Tabs */}
       <div className="main-tabs">

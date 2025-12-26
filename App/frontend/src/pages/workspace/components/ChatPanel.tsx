@@ -86,6 +86,7 @@ const ChatContextPicker: React.FC<ChatContextPickerProps> = React.memo(({
                         language={language}
                         maxHeight="300px"
                         showSearch={true}
+                        selectAllOnLoad={true}
                     />
                 </div>
             </div>
@@ -220,6 +221,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 }) =>
 {
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const isUserNearBottomRef = useRef(true);
+    const [showScrollButton, setShowScrollButton] = useState(false);
     const displayProcessor = useMemo(() => new DefaultDisplayProcessor(), []);
     const { convertToDisplayMessage, addTranslatedMessage } = useChatStore();
 
@@ -291,17 +295,44 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         }
     }, [defaultSubLanguage]);
 
+    // Scroll event handler to detect user's scroll position
+    const handleScroll = useCallback(() => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+
+        const threshold = 100; // pixels from bottom
+        const isNearBottom =
+            container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+
+        isUserNearBottomRef.current = isNearBottom;
+        // Show scroll button only when scrolled up AND streaming is active
+        setShowScrollButton(!isNearBottom && isLoading);
+    }, [isLoading]);
+
+    // Attach scroll listener to container
+    useEffect(() => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+
+        container.addEventListener('scroll', handleScroll);
+        return () => container.removeEventListener('scroll', handleScroll);
+    }, [handleScroll]);
+
+    // Auto-scroll only when user is near bottom
     useEffect(() =>
     {
-        if (messagesEndRef.current)
+        if (isUserNearBottomRef.current && scrollContainerRef.current)
         {
-            const chatMessagesContainer = messagesEndRef.current.closest('.chat-messages');
-            if (chatMessagesContainer)
-            {
-                chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
-            }
+            scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
         }
     }, [storedMessages, isLoading]);
+
+    // Hide scroll button when streaming stops
+    useEffect(() => {
+        if (!isLoading) {
+            setShowScrollButton(false);
+        }
+    }, [isLoading]);
 
 
     const resolveDisplayInfo = useCallback(
@@ -454,6 +485,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         processed: { displayContent: React.ReactNode }
     ) =>
     {
+        // Extract error parts from contentParts
+        const errorParts = message.chatMessage.contentParts?.filter(
+            (part: any) => part.type === 'error'
+        ) || [];
+
         return (
             <div className="message-content">
                 {!message.hasRequestedLanguage && (
@@ -471,6 +507,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                             </div>
                         </div>
                     )}
+                {errorParts.map((errorPart: any, index: number) => (
+                    <div key={`error-${index}`} className="message-error">
+                        {errorPart.text}
+                    </div>
+                ))}
             </div>
         );
     };
@@ -502,7 +543,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 </TextButton>
             </div>
 
-            <div className="chat-messages">
+            <div className="chat-messages" ref={scrollContainerRef}>
                 {displayMessages.length === 0 && (
                     <div className="welcome-message">
                         <div className="ai-avatar">AI</div>
@@ -651,6 +692,22 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 })}
 
                 <div ref={messagesEndRef} />
+
+                {showScrollButton && (
+                    <button
+                        className="scroll-to-bottom-button"
+                        onClick={() => {
+                            if (scrollContainerRef.current) {
+                                isUserNearBottomRef.current = true;
+                                scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+                                setShowScrollButton(false);
+                            }
+                        }}
+                        title="Scroll to bottom"
+                    >
+                        <ChevronDown size="sm" />
+                    </button>
+                )}
             </div>
 
             <div className="chat-input-container">

@@ -9,7 +9,6 @@ import { useCallback, useRef, useMemo, useState } from 'react';
 import { useChatStore } from '../../../store/chatStore';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../../store/settingsStore';
-import { useErrorStore } from '../../../store/errorStore';
 import { LLMTaskManager } from '../../../llm/LLMTaskManager';
 import type { FunctionCallMetadata, FunctionCallResultSummary, FunctionCallProgress } from '../../../llm/requestTypes';
 import {
@@ -39,7 +38,6 @@ function createStoreActions(store: ReturnType<typeof useUnifiedObjectStore.getSt
 
 export function useFunctionCallHandlers(projectId: string | undefined) {
   const { updateMessageFunctionCalls, updateFunctionCallStatus, getSelectedChatId } = useChatStore();
-  const { showError } = useErrorStore();
   const mainLanguage = useSettingsStore(state => state.settings.mainLanguage);
 
   // EditCard store
@@ -138,7 +136,6 @@ export function useFunctionCallHandlers(projectId: string | undefined) {
             });
           } else {
             console.error('Failed to apply function call:', result.error || result.message);
-            showError('Function Call Failed', `Failed to apply changes: ${result.error || result.message}`);
 
             // Propagate error to toast if sessionId is available
             const sessionId = messageSessionMap.current[messageId];
@@ -168,8 +165,6 @@ export function useFunctionCallHandlers(projectId: string | undefined) {
           console.error('Error applying function call:', error);
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-          showError('Function Call Error', `Failed to apply ${getFunctionDisplayName(functionCall.function_name)}: ${errorMessage}`);
-
           // Propagate error to toast if sessionId is available
           const sessionId = messageSessionMap.current[messageId];
           if (sessionId) {
@@ -187,7 +182,7 @@ export function useFunctionCallHandlers(projectId: string | undefined) {
         }
       };
     },
-    [projectId, getActiveChatId, applicator, mainLanguage, updateFunctionCallStatus, showError, addPendingResult]
+    [projectId, getActiveChatId, applicator, mainLanguage, updateFunctionCallStatus, addPendingResult]
   );
 
   /**
@@ -344,9 +339,7 @@ export function useFunctionCallHandlers(projectId: string | undefined) {
               const errorMessage = error instanceof Error ? error.message : 'Unknown error';
               console.error('Error applying function call in batch:', errorMessage);
 
-              showError('Function Call Error', `Failed to apply ${getFunctionDisplayName(card.functionCall.functionName)}: ${errorMessage}`);
-
-              // Keep card pending with error
+              // Keep card pending with error (error is shown via the card's error state)
               useEditCardStore.getState().setApplyError(messageId, card.id, errorMessage);
             }
           }
@@ -373,7 +366,7 @@ export function useFunctionCallHandlers(projectId: string | undefined) {
       // Mark message as confirmed
       useEditCardStore.getState().confirmMessage(messageId);
     },
-    [projectId, getActiveChatId, applicator, mainLanguage, updateFunctionCallStatus, showError, addPendingResult]
+    [projectId, getActiveChatId, applicator, mainLanguage, updateFunctionCallStatus, addPendingResult]
   );
 
   /**

@@ -52,8 +52,7 @@ export {
   type FunctionCallResult,
   type FunctionCallMessage,
   type FunctionResultMessage,
-  WORKSPACE_FUNCTIONS,
-  NOVEL_EDITOR_FUNCTIONS,
+  CHAT_FUNCTIONS,
 } from './schemas/chatFunctions';
 
 // Edit functions are now exported from functionCall module

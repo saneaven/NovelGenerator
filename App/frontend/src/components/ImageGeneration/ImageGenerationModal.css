@@ -1,15 +1,15 @@
 /* ========================================
-   IMAGE GENERATION PANEL STYLES
+   IMAGE GENERATION MODAL STYLES
    ======================================== */
 
-.image-generation-panel {
+.image-generation-modal {
     background: var(--color-surface-elevated);
     border-radius: var(--border-radius-lg);
     border: 1px solid var(--color-border-default);
     overflow: hidden;
 }
 
-.image-generation-panel .panel-header {
+.image-generation-modal .panel-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -18,14 +18,14 @@
     border-bottom: 1px solid var(--color-border-default);
 }
 
-.image-generation-panel .panel-header h3 {
+.image-generation-modal .panel-header h3 {
     margin: 0;
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-semibold);
     color: var(--color-text-primary);
 }
 
-.image-generation-panel .close-button {
+.image-generation-modal .close-button {
     background: none;
     border: none;
     font-size: var(--font-size-xl);
@@ -36,24 +36,24 @@
     transition: color var(--transition-base);
 }
 
-.image-generation-panel .close-button:hover {
+.image-generation-modal .close-button:hover {
     color: var(--color-text-primary);
 }
 
-.image-generation-panel .panel-body {
+.image-generation-modal .panel-body {
     padding: var(--spacing-lg);
     display: flex;
     flex-direction: column;
     gap: var(--spacing-lg);
 }
 
-.image-generation-panel .form-field {
+.image-generation-modal .form-field {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-xs);
 }
 
-.image-generation-panel .form-field label {
+.image-generation-modal .form-field label {
     font-size: var(--font-size-xs);
     font-weight: var(--font-weight-medium);
     color: var(--color-text-secondary);
@@ -61,22 +61,22 @@
     letter-spacing: 0.05em;
 }
 
-.image-generation-panel .form-row {
+.image-generation-modal .form-row {
     display: flex;
     gap: var(--spacing-md);
 }
 
-.image-generation-panel .form-row .form-field {
+.image-generation-modal .form-row .form-field {
     flex: 1;
 }
 
-.image-generation-panel .prompt-input-wrapper {
+.image-generation-modal .prompt-input-wrapper {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-sm);
 }
 
-.image-generation-panel .prompt-input {
+.image-generation-modal .prompt-input {
     width: 100%;
     padding: var(--spacing-md);
     border: 1px solid var(--color-border-default);
@@ -90,7 +90,7 @@
     transition: border-color var(--transition-base), box-shadow var(--transition-base);
 }
 
-.image-generation-panel .ai-assist-button {
+.image-generation-modal .ai-assist-button {
     align-self: flex-start;
     padding: var(--spacing-xs) var(--spacing-md);
     background: var(--color-surface-subtle);
@@ -106,7 +106,7 @@
     gap: var(--spacing-xs);
 }
 
-.image-generation-panel .ai-assist-button:hover {
+.image-generation-modal .ai-assist-button:hover {
     background: var(--color-brand-primary);
     color: var(--color-text-inverse);
     border-color: var(--color-brand-primary);
@@ -114,17 +114,17 @@
     box-shadow: var(--shadow-sm);
 }
 
-.image-generation-panel .prompt-input:focus {
+.image-generation-modal .prompt-input:focus {
     outline: none;
     border-color: var(--color-brand-primary);
     box-shadow: var(--shadow-focus-primary);
 }
 
-.image-generation-panel .prompt-input::placeholder {
+.image-generation-modal .prompt-input::placeholder {
     color: var(--color-text-muted);
 }
 
-.image-generation-panel .config-select {
+.image-generation-modal .config-select {
     width: 100%;
     padding: var(--spacing-sm) var(--spacing-md);
     border: 1px solid var(--color-border-default);
@@ -136,13 +136,13 @@
     transition: border-color var(--transition-base);
 }
 
-.image-generation-panel .config-select:focus {
+.image-generation-modal .config-select:focus {
     outline: none;
     border-color: var(--color-brand-primary);
     box-shadow: var(--shadow-focus-primary);
 }
 
-.image-generation-panel .error-message {
+.image-generation-modal .error-message {
     padding: var(--spacing-md);
     background: var(--color-feedback-error-soft);
     border: 1px solid var(--color-feedback-error-base);
@@ -151,13 +151,13 @@
     font-size: var(--font-size-sm);
 }
 
-.image-generation-panel .panel-actions {
+.image-generation-modal .panel-actions {
     display: flex;
     justify-content: flex-end;
     padding-top: var(--spacing-sm);
 }
 
-.image-generation-panel .generate-button {
+.image-generation-modal .generate-button {
     padding: var(--spacing-md) var(--spacing-xl);
     background: var(--color-brand-primary);
     color: var(--color-text-inverse);
@@ -169,19 +169,19 @@
     transition: background var(--transition-base), transform var(--transition-base), box-shadow var(--transition-base);
 }
 
-.image-generation-panel .generate-button:hover:not(:disabled) {
+.image-generation-modal .generate-button:hover:not(:disabled) {
     background: var(--color-brand-primary-hover);
     transform: translateY(-1px);
     box-shadow: var(--shadow-md);
 }
 
-.image-generation-panel .generate-button:disabled {
+.image-generation-modal .generate-button:disabled {
     opacity: var(--opacity-disabled);
     cursor: not-allowed;
 }
 
 /* Style Preview Box */
-.image-generation-panel .style-preview-box {
+.image-generation-modal .style-preview-box {
     padding: var(--spacing-sm) var(--spacing-md);
     background: var(--color-surface-subtle);
     border: 1px solid var(--color-border-default);
@@ -190,23 +190,23 @@
     color: var(--color-text-secondary);
 }
 
-.image-generation-panel .style-preview-box .preview-label {
+.image-generation-modal .style-preview-box .preview-label {
     font-weight: var(--font-weight-medium);
     margin-right: var(--spacing-xs);
 }
 
-.image-generation-panel .style-preview-box .preview-text {
+.image-generation-modal .style-preview-box .preview-text {
     font-family: var(--font-mono);
     word-break: break-all;
 }
 
-.image-generation-panel .style-preview-box .preview-text em {
+.image-generation-modal .style-preview-box .preview-text em {
     color: var(--color-brand-primary);
     font-style: normal;
 }
 
-.image-generation-panel .style-preview-box .prefix,
-.image-generation-panel .style-preview-box .postfix {
+.image-generation-modal .style-preview-box .prefix,
+.image-generation-modal .style-preview-box .postfix {
     color: var(--color-text-muted);
 }
 
@@ -214,13 +214,13 @@
    PROMPT TABS (for tag-based providers)
    ======================================== */
 
-.image-generation-panel .prompt-tabs {
+.image-generation-modal .prompt-tabs {
     display: flex;
     gap: 0;
     margin-bottom: var(--spacing-xs);
 }
 
-.image-generation-panel .prompt-tab {
+.image-generation-modal .prompt-tab {
     flex: 1;
     padding: var(--spacing-sm) var(--spacing-md);
     background: var(--color-surface-subtle);
@@ -233,21 +233,21 @@
     transition: all var(--transition-base);
 }
 
-.image-generation-panel .prompt-tab:first-child {
+.image-generation-modal .prompt-tab:first-child {
     border-radius: var(--border-radius-md) 0 0 0;
 }
 
-.image-generation-panel .prompt-tab:last-child {
+.image-generation-modal .prompt-tab:last-child {
     border-radius: 0 var(--border-radius-md) 0 0;
     border-left: none;
 }
 
-.image-generation-panel .prompt-tab:hover:not(.active) {
+.image-generation-modal .prompt-tab:hover:not(.active) {
     background: var(--color-surface-base);
     color: var(--color-text-primary);
 }
 
-.image-generation-panel .prompt-tab.active {
+.image-generation-modal .prompt-tab.active {
     background: var(--color-surface-base);
     color: var(--color-brand-primary);
     border-color: var(--color-brand-primary);
@@ -257,7 +257,7 @@
 }
 
 /* Connect tabs to textarea */
-.image-generation-panel .prompt-tabs + .prompt-input-wrapper .prompt-input {
+.image-generation-modal .prompt-tabs + .prompt-input-wrapper .prompt-input {
     border-top-left-radius: 0;
     border-top-right-radius: 0;
     margin-top: -1px;
@@ -267,7 +267,7 @@
    CONFIG INPUT (for number fields)
    ======================================== */
 
-.image-generation-panel .config-input {
+.image-generation-modal .config-input {
     width: 100%;
     padding: var(--spacing-sm) var(--spacing-md);
     border: 1px solid var(--color-border-default);
@@ -278,7 +278,7 @@
     transition: border-color var(--transition-base);
 }
 
-.image-generation-panel .config-input:focus {
+.image-generation-modal .config-input:focus {
     outline: none;
     border-color: var(--color-brand-primary);
     box-shadow: var(--shadow-focus-primary);
@@ -288,7 +288,7 @@
    NOVELAI SETTINGS SECTION
    ======================================== */
 
-.image-generation-panel .novelai-settings {
+.image-generation-modal .novelai-settings {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-md);
@@ -298,7 +298,7 @@
     border-radius: var(--border-radius-md);
 }
 
-.image-generation-panel .provider-settings {
+.image-generation-modal .provider-settings {
     padding: var(--spacing-md);
     background: var(--color-surface-subtle);
     border: 1px solid var(--color-border-default);
@@ -309,39 +309,39 @@
    TAG-BASED STYLE PREVIEW
    ======================================== */
 
-.image-generation-panel .style-preview-box.tag-based {
+.image-generation-modal .style-preview-box.tag-based {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-xs);
 }
 
-.image-generation-panel .style-preview-box .tag-preview-rows {
+.image-generation-modal .style-preview-box .tag-preview-rows {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-xs);
 }
 
-.image-generation-panel .style-preview-box .tag-row {
+.image-generation-modal .style-preview-box .tag-row {
     display: flex;
     align-items: flex-start;
     gap: var(--spacing-sm);
 }
 
-.image-generation-panel .style-preview-box .tag-indicator {
+.image-generation-modal .style-preview-box .tag-indicator {
     font-weight: var(--font-weight-bold);
     min-width: 16px;
     text-align: center;
 }
 
-.image-generation-panel .style-preview-box .tag-indicator.positive {
+.image-generation-modal .style-preview-box .tag-indicator.positive {
     color: var(--color-success-base);
 }
 
-.image-generation-panel .style-preview-box .tag-indicator.negative {
+.image-generation-modal .style-preview-box .tag-indicator.negative {
     color: var(--color-danger-base);
 }
 
-.image-generation-panel .style-preview-box .tag-text {
+.image-generation-modal .style-preview-box .tag-text {
     font-family: var(--font-mono);
     word-break: break-all;
     color: var(--color-text-primary);
@@ -351,7 +351,7 @@
    SAVED PROMPT INDICATOR
    ======================================== */
 
-.image-generation-panel .saved-prompt-indicator {
+.image-generation-modal .saved-prompt-indicator {
     padding: var(--spacing-sm) var(--spacing-md);
     background: var(--color-feedback-info-soft, rgba(99, 102, 241, 0.1));
     border: 1px solid var(--color-brand-primary);
@@ -365,19 +365,19 @@
    REFERENCE IMAGES SECTION
    ======================================== */
 
-.image-generation-panel .form-section {
+.image-generation-modal .form-section {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-sm);
 }
 
-.image-generation-panel .section-header {
+.image-generation-modal .section-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
-.image-generation-panel .section-header label {
+.image-generation-modal .section-header label {
     font-size: var(--font-size-xs);
     font-weight: var(--font-weight-medium);
     color: var(--color-text-secondary);
@@ -385,7 +385,7 @@
     letter-spacing: 0.05em;
 }
 
-.image-generation-panel .empty-hint {
+.image-generation-modal .empty-hint {
     padding: var(--spacing-md);
     background: var(--color-surface-subtle);
     border: 1px dashed var(--color-border-default);
@@ -395,13 +395,13 @@
     text-align: center;
 }
 
-.image-generation-panel .reference-images-grid {
+.image-generation-modal .reference-images-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
     gap: var(--spacing-sm);
 }
 
-.image-generation-panel .reference-image-item {
+.image-generation-modal .reference-image-item {
     position: relative;
     aspect-ratio: 1;
     border-radius: var(--border-radius-md);
@@ -409,13 +409,13 @@
     border: 1px solid var(--color-border-default);
 }
 
-.image-generation-panel .reference-image-item img {
+.image-generation-modal .reference-image-item img {
     width: 100%;
     height: 100%;
     object-fit: cover;
 }
 
-.image-generation-panel .reference-image-item .remove-image-btn {
+.image-generation-modal .reference-image-item .remove-image-btn {
     position: absolute;
     top: 4px;
     right: 4px;
@@ -426,7 +426,7 @@
     transition: opacity var(--transition-base);
 }
 
-.image-generation-panel .reference-image-item:hover .remove-image-btn {
+.image-generation-modal .reference-image-item:hover .remove-image-btn {
     opacity: 1;
 }
 
@@ -434,7 +434,7 @@
    NOVELAI REFERENCE SETTINGS
    ======================================== */
 
-.image-generation-panel .novelai-ref-settings {
+.image-generation-modal .novelai-ref-settings {
     margin-top: var(--spacing-md);
     padding: var(--spacing-md);
     background: var(--color-surface-subtle);
@@ -442,14 +442,14 @@
     border-radius: var(--border-radius-md);
 }
 
-.image-generation-panel .ref-settings-header {
+.image-generation-modal .ref-settings-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: var(--spacing-sm);
 }
 
-.image-generation-panel .ref-settings-label {
+.image-generation-modal .ref-settings-label {
     font-size: var(--font-size-xs);
     font-weight: var(--font-weight-medium);
     color: var(--color-text-secondary);
@@ -457,22 +457,38 @@
     letter-spacing: 0.05em;
 }
 
-.image-generation-panel .ref-warning {
+.image-generation-modal .ref-warning {
     font-size: var(--font-size-xs);
     color: var(--color-feedback-warning-base);
 }
 
-.image-generation-panel .form-field.full-width {
+.image-generation-modal .form-field.full-width {
     width: 100%;
 }
 
-.image-generation-panel .config-slider {
+.image-generation-modal .config-slider {
     width: 100%;
     accent-color: var(--color-brand-primary);
 }
 
-.image-generation-panel .slider-value {
+.image-generation-modal .slider-value {
     font-size: var(--font-size-xs);
     color: var(--color-text-muted);
     font-family: var(--font-mono);
+}
+
+/* ========================================
+   STREAMING STATE STYLES
+   ======================================== */
+
+.image-generation-modal .prompt-input.streaming {
+    border-color: var(--color-brand-primary);
+    background: var(--color-surface-subtle);
+    cursor: default;
+}
+
+.image-generation-modal .ai-assist-button:disabled {
+    opacity: var(--opacity-disabled);
+    cursor: not-allowed;
+    background: var(--color-surface-subtle);
 }

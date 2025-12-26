@@ -4,6 +4,7 @@ import { useImageTaskStore } from '../../imageGeneration/store/imageTaskStore';
 import type { ImageTaskState } from '../../imageGeneration/types';
 import NotificationItem, { type NotificationTask } from './NotificationItem';
 import NotificationDetailModal from './NotificationDetailModal';
+import ImagePreviewModal from './ImagePreviewModal';
 import { useScroll } from 'motion/react';
 
 // Import modal types for retry functionality
@@ -18,7 +19,6 @@ interface NotificationPanelProps {
 }
 
 const NotificationPanel: React.FC<NotificationPanelProps> = () => {
-  const shouldUseMocks = import.meta.env.DEV;
   const itemsViewportRef = useRef<HTMLDivElement>(null);
   const itemsContainerRef = useRef<HTMLDivElement>(null);
   const { scrollY } = useScroll({ container: itemsViewportRef });
@@ -30,182 +30,41 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
   const maxDepthZ = 260;
   const stackLift = 40;
   const maxBlur = 6;
-  // LLM Task Store
+  // LLM Task Store - get sessions map for deriving task refs
   const llmSessionsMap = useLLMTaskStore((state) => state.sessions);
-  const llmSessions = useMemo(() =>
-    Object.values(llmSessionsMap)
-      .filter((s): s is LLMTaskSessionState => s !== undefined && s.status !== 'idle'),
-    [llmSessionsMap]
-  );
   const clearLLMNotification = useLLMTaskStore((state) => state.clearNotification);
   const clearAllLLMNotifications = useLLMTaskStore((state) => state.clearAllNotifications);
   const cancelLLMTask = useLLMTaskStore((state) => state.cancelTask);
 
-  // Image Task Store
+  // Image Task Store - get tasks map for deriving task refs
   const imageTasksMap = useImageTaskStore((state) => state.tasks);
-  const imageTasks = useMemo(() =>
-    Object.values(imageTasksMap)
-      .filter((t): t is ImageTaskState => t !== undefined && t.status !== 'idle'),
-    [imageTasksMap]
-  );
   const clearImageTask = useImageTaskStore((state) => state.clearTask);
   const clearAllImageTasks = useImageTaskStore((state) => state.clearAllTasks);
   const cancelImageTask = useImageTaskStore((state) => state.cancelTask);
 
-  // Merge and sort all tasks
-  const allTasks = useMemo(() => {
-    const combined: NotificationTask[] = [
-      ...llmSessions.map(s => ({ ...s, kind: 'llm' as const })),
-      ...imageTasks.map(t => ({ ...t, kind: 'image' as const })),
-    ];
-    return combined.sort((a, b) => b.createdAt - a.createdAt);
-  }, [llmSessions, imageTasks]);
+  // Derive task refs from maps (memoized to prevent infinite loops)
+  const allTaskRefs = useMemo(() => {
+    const llmRefs = Object.entries(llmSessionsMap)
+      .filter(([_, s]) => s && s.status !== 'idle')
+      .map(([id, s]) => ({ id, kind: 'llm' as const, createdAt: s!.createdAt }));
+    const imageRefs = Object.entries(imageTasksMap)
+      .filter(([_, t]) => t && t.status !== 'idle')
+      .map(([id, t]) => ({ id, kind: 'image' as const, createdAt: t!.createdAt }));
+    return [...llmRefs, ...imageRefs].sort((a, b) => b.createdAt - a.createdAt);
+  }, [llmSessionsMap, imageTasksMap]);
 
-  const [mockTasks, setMockTasks] = useState<NotificationTask[]>(() => {
-    if (!shouldUseMocks) return [];
-    const now = Date.now();
-    const llmBase = {
-      contentParts: [],
-      thinkingParts: [],
-      functionCallProgress: [],
-      taskType: 'chat' as const,
-    };
-    const imageBase = {
-      taskType: 'scene-image' as const,
-    };
-    return [
-      {
-        ...llmBase,
-        id: 'mock-llm-1',
-        status: 'running',
-        label: 'Drafting chapter outline',
-        progress: { current: 2, total: 6, currentItemLabel: 'Section 2/6' },
-        createdAt: now - 1000 * 12,
-        updatedAt: now - 1000 * 4,
-        isRead: false,
-        kind: 'llm' as const,
-      },
-      {
-        ...llmBase,
-        id: 'mock-llm-2',
-        status: 'success',
-        label: 'Scene polish pass',
-        createdAt: now - 1000 * 60 * 3,
-        updatedAt: now - 1000 * 60 * 2,
-        isRead: true,
-        kind: 'llm' as const,
-      },
-      {
-        ...llmBase,
-        id: 'mock-llm-3',
-        status: 'error',
-        label: 'Translate excerpt',
-        error: 'Rate limit reached',
-        createdAt: now - 1000 * 60 * 6,
-        updatedAt: now - 1000 * 60 * 5,
-        isRead: false,
-        kind: 'llm' as const,
-      },
-      {
-        ...llmBase,
-        id: 'mock-llm-4',
-        status: 'cancelled',
-        label: 'Character summary',
-        createdAt: now - 1000 * 60 * 8,
-        updatedAt: now - 1000 * 60 * 7,
-        isRead: true,
-        kind: 'llm' as const,
-      },
-      {
-        ...imageBase,
-        id: 'mock-img-1',
-        status: 'generating',
-        label: 'Character portrait',
-        progress: { stage: 'generating', message: 'Generating... (35%)', percentage: 35 },
-        createdAt: now - 1000 * 20,
-        updatedAt: now - 1000 * 10,
-        isRead: false,
-        kind: 'image' as const,
-      },
-      {
-        ...imageBase,
-        id: 'mock-img-2',
-        status: 'processing',
-        label: 'Scene illustration',
-        progress: { stage: 'processing', message: 'Processing output' },
-        createdAt: now - 1000 * 90,
-        updatedAt: now - 1000 * 80,
-        isRead: false,
-        kind: 'image' as const,
-      },
-      {
-        ...imageBase,
-        id: 'mock-img-3',
-        status: 'success',
-        label: 'Location concept',
-        createdAt: now - 1000 * 60 * 9,
-        updatedAt: now - 1000 * 60 * 8,
-        isRead: true,
-        kind: 'image' as const,
-      },
-      {
-        ...imageBase,
-        id: 'mock-img-4',
-        status: 'error',
-        label: 'Cover art',
-        error: 'Failed to generate image',
-        createdAt: now - 1000 * 60 * 12,
-        updatedAt: now - 1000 * 60 * 11,
-        isRead: false,
-        kind: 'image' as const,
-      },
-      {
-        ...llmBase,
-        id: 'mock-llm-5',
-        status: 'success',
-        label: 'Dialogue pass',
-        createdAt: now - 1000 * 60 * 14,
-        updatedAt: now - 1000 * 60 * 13,
-        isRead: true,
-        kind: 'llm' as const,
-      },
-      {
-        ...llmBase,
-        id: 'mock-llm-6',
-        status: 'running',
-        label: 'Summarizing chapters',
-        progress: { current: 4, total: 10, currentItemLabel: 'Chapter 4/10' },
-        createdAt: now - 1000 * 40,
-        updatedAt: now - 1000 * 20,
-        isRead: false,
-        kind: 'llm' as const,
-      },
-    ];
-  });
-
-  const displayTasks = useMemo(() => {
-    if (!shouldUseMocks) return allTasks;
-    if (allTasks.length >= 10 || mockTasks.length === 0) return allTasks;
-    const needed = Math.max(0, 10 - allTasks.length);
-    const merged = [...allTasks, ...mockTasks.slice(0, needed)];
-    return merged.sort((a, b) => b.createdAt - a.createdAt);
-  }, [allTasks, mockTasks, shouldUseMocks]);
-
-  const orderedTasks = useMemo(() => {
-    if (!isMobile) return displayTasks;
-    return [...displayTasks].reverse();
-  }, [displayTasks, isMobile]);
+  const orderedTaskRefs = useMemo(() => {
+    if (!isMobile) return allTaskRefs;
+    return [...allTaskRefs].reverse();
+  }, [allTaskRefs, isMobile]);
 
   const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
   const [llmRetrySession, setLLMRetrySession] = useState<LLMTaskSessionState | null>(null);
   const [imageRetryTask, setImageRetryTask] = useState<ImageTaskState | null>(null);
+  const [previewAssetId, setPreviewAssetId] = useState<string | null>(null);
 
   const handleDismiss = useCallback(
     (task: NotificationTask) => {
-      if (task.id.startsWith('mock-')) {
-        setMockTasks((prev) => prev.filter((mock) => mock.id !== task.id));
-        return;
-      }
       if (task.kind === 'llm') {
         // If LLM task is running, cancel it first
         if (task.status === 'running') {
@@ -224,15 +83,16 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
   );
 
   const handleOpenDetail = useCallback((task: NotificationTask) => {
-    if (task.id.startsWith('mock-')) return;
     if (task.kind === 'llm') {
       setDetailSessionId(task.id);
     } else {
       // For image tasks, if error with retry context, open retry modal
       if (task.status === 'error' && task.retryContext) {
         setImageRetryTask(task);
+      } else if (task.status === 'success' && task.result?.assetId) {
+        // For success, show image preview
+        setPreviewAssetId(task.result.assetId);
       }
-      // For success, could show image preview (future enhancement)
     }
   }, []);
 
@@ -267,10 +127,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
   const handleClearAll = useCallback(() => {
     clearAllLLMNotifications();
     clearAllImageTasks();
-    if (shouldUseMocks) {
-      setMockTasks([]);
-    }
-  }, [clearAllLLMNotifications, clearAllImageTasks, shouldUseMocks]);
+  }, [clearAllLLMNotifications, clearAllImageTasks]);
 
   const renderLLMRetryModal = () => {
     if (!llmRetrySession?.retryContext) return null;
@@ -288,6 +145,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
             targetId={modalProps.targetId}
             onResult={modalProps.onResult}
             defaultUserRequest={formState?.userRequest}
+            defaultSelectedContextIds={formState?.selectedContextIds}
           />
         );
 
@@ -301,6 +159,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
             chapterName={modalProps.chapterName}
             onResult={modalProps.onResult}
             defaultUserRequest={formState?.userRequest}
+            defaultSelectedContextIds={formState?.selectedContextIds}
           />
         );
 
@@ -315,10 +174,13 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
             defaultSourceLanguage={formState?.sourceLanguage}
             defaultTargetLanguage={formState?.targetLanguage}
             defaultUserInput={formState?.userInput}
+            preSelectedObjectIds={formState?.selectedIds}
+            defaultSelectedContextIds={formState?.selectedContextIds}
           />
         );
 
       case 'image-prompt':
+      case 'scene-image':
         return (
           <UnifiedImagePromptModal
             isOpen={true}
@@ -329,6 +191,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
             onPromptGenerated={modalProps.onPromptGenerated}
             promptMode={modalProps.promptMode}
             defaultUserRequest={formState?.userRequest}
+            defaultSelectedObjectIds={formState?.selectedObjectIds}
             sceneContext={modalProps.sceneContext}
           />
         );
@@ -374,9 +237,10 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
     );
   };
 
-  const detailSession = detailSessionId
-    ? llmSessions.find((s) => s.id === detailSessionId)
-    : null;
+  // Get detail session directly from store (per-item subscription pattern)
+  const detailSession = useLLMTaskStore((state) =>
+    detailSessionId ? state.sessions[detailSessionId] : null
+  );
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(max-width: 480px)');
@@ -442,19 +306,19 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
       resizeObserver.disconnect();
       window.removeEventListener('resize', scheduleMeasure);
     };
-  }, [orderedTasks.length, orderedTasks[0]?.id]);
+  }, [orderedTaskRefs.length, orderedTaskRefs[0]?.id]);
 
   useLayoutEffect(() => {
     if (!isMobile) return;
     const viewport = itemsViewportRef.current;
     if (!viewport) return;
     viewport.scrollTop = viewport.scrollHeight;
-  }, [isMobile, orderedTasks.length]);
+  }, [isMobile, orderedTaskRefs.length]);
 
   const headerNode = (
     <div className="notification-header">
       <h3 className="notification-header-title">Notifications</h3>
-      {displayTasks.length > 0 && (
+      {allTaskRefs.length > 0 && (
         <button
           className="notification-header-clear"
           onClick={handleClearAll}
@@ -471,26 +335,27 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
       {!isMobile && headerNode}
 
       {/* Floating Items */}
-      {orderedTasks.length === 0 ? (
-        <div className="notification-empty">
-          <p>No notifications</p>
-        </div>
-      ) : (
-        <div className="notification-items-viewport" ref={itemsViewportRef}>
-          <div
-            className="notification-items-container"
-            ref={itemsContainerRef}
-            style={{
-              paddingTop: isMobile ? stackLift * (depthRange + 2) : undefined,
-              paddingBottom: !isMobile ? stackLift * (depthRange + 2) : undefined,
-            }}
-          >
-            {orderedTasks.map((task, index) => (
+      <div className="notification-items-viewport" ref={itemsViewportRef}>
+        <div
+          className="notification-items-container"
+          ref={itemsContainerRef}
+          style={{
+            paddingTop: isMobile ? stackLift * (depthRange + 2) : undefined,
+            paddingBottom: !isMobile ? stackLift * (depthRange + 2) : undefined,
+          }}
+        >
+          {orderedTaskRefs.length === 0 ? (
+            <div className="notification-empty">
+              <p>No notifications</p>
+            </div>
+          ) : (
+            orderedTaskRefs.map((ref, index) => (
               <NotificationItem
-                key={task.id}
-                task={task}
+                key={ref.id}
+                taskId={ref.id}
+                kind={ref.kind}
                 index={index}
-                totalCount={orderedTasks.length}
+                totalCount={orderedTaskRefs.length}
                 scrollY={scrollY}
                 itemStride={itemStride}
                 viewportHeight={viewportHeight}
@@ -500,13 +365,13 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
                 stackLift={stackLift}
                 maxBlur={maxBlur}
                 isMobile={isMobile}
-                onDismiss={() => handleDismiss(task)}
-                onOpenDetail={() => handleOpenDetail(task)}
+                onDismiss={handleDismiss}
+                onOpenDetail={handleOpenDetail}
               />
-            ))}
-          </div>
+            ))
+          )}
         </div>
-      )}
+      </div>
 
       {isMobile && headerNode}
 
@@ -521,6 +386,14 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
 
       {renderLLMRetryModal()}
       {renderImageRetryModal()}
+
+      {previewAssetId && (
+        <ImagePreviewModal
+          isOpen={true}
+          onClose={() => setPreviewAssetId(null)}
+          assetId={previewAssetId}
+        />
+      )}
     </>
   );
 };

@@ -21,6 +21,7 @@ interface ManuscriptAIEditModalProps {
   chapterName: string;
   onResult?: () => void;
   defaultUserRequest?: string;
+  defaultSelectedContextIds?: string[];
 }
 
 const ManuscriptAIEditModal: React.FC<ManuscriptAIEditModalProps> = ({
@@ -31,9 +32,12 @@ const ManuscriptAIEditModal: React.FC<ManuscriptAIEditModalProps> = ({
   chapterName,
   onResult,
   defaultUserRequest,
+  defaultSelectedContextIds,
 }) => {
   const [userRequest, setUserRequest] = useState(defaultUserRequest || '');
-  const [selectedContextIds, setSelectedContextIds] = useState<string[]>([]);
+  const [selectedContextIds, setSelectedContextIds] = useState<string[]>(
+    defaultSelectedContextIds ?? []
+  );
   const [isContextExpanded, setIsContextExpanded] = useState(false);
   const [pickerLoading, setPickerLoading] = useState(true);
 
@@ -53,11 +57,11 @@ const ManuscriptAIEditModal: React.FC<ManuscriptAIEditModalProps> = ({
   // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
-      setUserRequest('');
-      setSelectedContextIds([]);
+      setUserRequest(defaultUserRequest || '');
+      setSelectedContextIds(defaultSelectedContextIds ?? []);
       setPickerLoading(true);
     }
-  }, [isOpen]);
+  }, [isOpen, defaultUserRequest, defaultSelectedContextIds]);
 
   useEffect(() => {
     return () => {
@@ -425,6 +429,7 @@ const ManuscriptAIEditModal: React.FC<ManuscriptAIEditModalProps> = ({
                   maxHeight="300px"
                   emptyMessage="No context objects available"
                   onLoadComplete={handlePickerLoadComplete}
+                  selectAllOnLoad={!defaultSelectedContextIds?.length}
                 />
               </div>
               <p className="context-help">

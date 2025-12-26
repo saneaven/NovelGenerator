@@ -148,6 +148,12 @@
     box-shadow: var(--shadow-focus-primary);
 }
 
+.image-prompt-manager .prompt-textarea.streaming {
+    border-color: var(--color-brand-primary);
+    background: var(--color-surface-subtle);
+    cursor: default;
+}
+
 .image-prompt-manager .prompt-textarea::placeholder {
     color: var(--color-text-muted);
 }

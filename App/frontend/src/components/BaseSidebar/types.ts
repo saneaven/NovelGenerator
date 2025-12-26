@@ -7,8 +7,8 @@ export interface BaseSidebarProps {
   /** Unique identifier for this sidebar */
   id: SidebarId;
 
-  /** Project ID for per-project state management */
-  projectId: string;
+  /** Project ID for per-project state management. Defaults to '__global__' for global contexts */
+  projectId?: string;
 
   /** Slide direction - determines which side the sidebar appears from */
   position: SidebarPosition;

@@ -156,6 +156,7 @@ export interface UpdateObjectRequest<TData = Record<string, any>> {
   language: string;
   user_request?: string;
   create_new_version?: boolean;  // Default: true
+  metadata?: Record<string, any>;  // For structural updates like order
 }
 
 export interface AddTranslationRequest<TData = Record<string, any>> {

@@ -74,10 +74,10 @@ const FUNCTION_META: Record<string, FunctionMeta> = {
     description: 'Replace story object fields',
     summary: (args) => `${args.type}: ${args.name || args.id}`,
   },
-  replace_chapter: {
+  replace_chapter_outline: {
     editType: 'edit',
-    title: 'Update Chapter',
-    description: 'Replace chapter fields',
+    title: 'Update Chapter Outline',
+    description: 'Replace chapter outline fields',
     summary: (args) => args.name as string || args.id as string,
   },
   replace_manuscript: {
@@ -111,10 +111,10 @@ const FUNCTION_META: Record<string, FunctionMeta> = {
       return `${type}: ${replacements?.length ?? 0} replacements`;
     },
   },
-  patch_chapter: {
+  patch_chapter_outline: {
     editType: 'edit',
-    title: 'Patch Chapter',
-    description: 'Search-replace in chapter',
+    title: 'Patch Chapter Outline',
+    description: 'Search-replace in chapter outline',
     summary: (args) => {
       const replacements = args.replacements as unknown[];
       return `${replacements?.length ?? 0} replacements`;

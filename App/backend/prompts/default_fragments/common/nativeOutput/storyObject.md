@@ -75,9 +75,9 @@ Output a JSON array containing all function calls. Each object in the array repr
 { "function": "replace_story_object", "id": "obj-123", "type": "character", "name": "New Name", "description": "New description" }
 ```
 
-**replace_chapter** (only include fields to change)
+**replace_chapter_outline** (only include fields to change)
 ```json
-{ "function": "replace_chapter", "id": "ch-123", "name": "New Name", "description": "New description", "actId": "act-456" }
+{ "function": "replace_chapter_outline", "id": "ch-123", "name": "New Name", "description": "New description", "actId": "act-456", "order": 2 }
 ```
 
 #### Patch Operations
@@ -92,9 +92,9 @@ Output a JSON array containing all function calls. Each object in the array repr
 { "function": "patch_story_object", "id": "obj-123", "type": "character", "replacements": [{ "field": "description", "old": "text to find", "new": "replacement" }] }
 ```
 
-**patch_chapter**
+**patch_chapter_outline**
 ```json
-{ "function": "patch_chapter", "id": "ch-123", "replacements": [{ "field": "description", "old": "text to find", "new": "replacement" }] }
+{ "function": "patch_chapter_outline", "id": "ch-123", "replacements": [{ "field": "description", "old": "text to find", "new": "replacement" }], "order": 3 } // order is 1 oriented
 ```
 
 **Important:**

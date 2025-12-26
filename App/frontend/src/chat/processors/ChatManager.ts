@@ -46,6 +46,7 @@ export interface ChatManagerCallbacks {
   onAddMessage: (projectId: string, chatId: string, message: ChatMessage, language: string) => Promise<string>;
   onGetChatHistory: (projectId: string, chatId: string, language: string) => ChatMessage[];
   onError: (error: Error) => void;
+  onErrorMessage?: (projectId: string, chatId: string, messageId: string, errorMessage: string, language: string) => void;
   onFunctionCallProgress?: (projectId: string, chatId: string, messageId: string, progress: FunctionCallProgress[]) => void;
 }
 
@@ -55,6 +56,7 @@ export class ChatManager {
   private task: LLMTask | null = null;
   private taskHandle: TaskHandle | null = null;
   private isAborted = false;
+  private currentMessageId: string | null = null;
 
   constructor(config: ChatManagerConfig, callbacks: ChatManagerCallbacks) {
     this.config = config;
@@ -85,6 +87,7 @@ export class ChatManager {
         this.createAssistantMessage(),
         language
       );
+      this.currentMessageId = assistantMessageId;
 
       await this.runLLMTask(chatId, assistantMessageId, language, this.getMessageText(userMessage));
 
@@ -119,6 +122,7 @@ export class ChatManager {
         this.createAssistantMessage(),
         language
       );
+      this.currentMessageId = assistantMessageId;
 
       await this.runLLMTask(chatId, assistantMessageId, language, '');
 
@@ -280,7 +284,19 @@ export class ChatManager {
       this.taskHandle?.cancel();
     } else {
       const err = error instanceof Error ? error : new Error(String(error));
-      this.callbacks.onError(err);
+
+      // Show error inline in the chat message
+      const chatId = this.config.getActiveChatId();
+      if (chatId && this.currentMessageId) {
+        this.callbacks.onErrorMessage?.(
+          this.config.projectId,
+          chatId,
+          this.currentMessageId,
+          err.message,
+          this.config.getConversationLanguage()
+        );
+      }
+
       this.taskHandle?.error(err.message);
     }
   }
@@ -290,6 +306,7 @@ export class ChatManager {
     this.task = null;
     this.taskHandle = null;
     this.isAborted = false;
+    this.currentMessageId = null;
     this.config.abortControllerRef.current = null;
   }
 
