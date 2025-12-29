@@ -27,12 +27,11 @@
     grid-template-columns: 1fr;
 }
 
-/* Close button - positioning only (styling from IconButton) */
+/* Close button - inline with tabs */
 .expanded-close-btn.icon-button {
-    position: absolute;
-    top: var(--spacing-md);
-    right: var(--spacing-md);
-    z-index: var(--z-button);
+    margin-left: auto;
+    margin-right: var(--spacing-sm);
+    align-self: center;
 }
 
 /* Image section - DOM order last, but visually first via order */
@@ -231,11 +230,6 @@
 
     .expanded-image-section {
         min-height: 150px;
-    }
-
-    .expanded-close-btn.icon-button {
-        top: var(--spacing-sm);
-        right: var(--spacing-sm);
     }
 
     .expanded-edit-content {

@@ -155,7 +155,8 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
             onClick={handleClose}
             title="Close sidebar"
             size="sm"
-            className="close-sidebar-btn" 
+            variant="ghost"
+            className="close-sidebar-btn"
         />
       </div>
     </div>
@@ -243,6 +244,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
                       title="Delete chat"
                       disabled={chats.length <= 1}
                       size="xs"
+                      variant="danger"
                     />
                   </div>
                 )}

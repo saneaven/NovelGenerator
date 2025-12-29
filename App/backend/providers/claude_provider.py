@@ -79,20 +79,48 @@ class ClaudeProvider(BaseProvider):
     # Message preparation
     # ------------------------------------------------------------------ #
     def _convert_messages(self, messages: List[Dict]) -> Tuple[Optional[str], List[Dict]]:
-        """Map OpenAI-style messages to Anthropic messages + system prompt."""
+        """Map OpenAI-style messages to Anthropic messages + system prompt.
+
+        Handles tool_calls in assistant messages by converting to Claude's
+        tool_use content block format.
+        """
         system_parts: List[str] = []
         anthropic_messages: List[Dict] = []
 
         for msg in messages:
             role = msg.get("role")
             content = msg.get("content") or ""
+            tool_calls = msg.get("tool_calls")
 
             if role == "system":
                 system_parts.append(content)
                 continue
 
             mapped_role = "user" if role == "user" else "assistant"
-            anthropic_messages.append({"role": mapped_role, "content": content})
+
+            # Handle assistant messages with tool_calls
+            if role == "assistant" and tool_calls:
+                content_blocks = []
+                # Add text content if present
+                if content:
+                    content_blocks.append({"type": "text", "text": content})
+                # Convert tool_calls to Claude tool_use blocks
+                for tc in tool_calls:
+                    tc_function = tc.get("function", {})
+                    args_str = tc_function.get("arguments", "{}")
+                    try:
+                        args = json.loads(args_str) if isinstance(args_str, str) else args_str
+                    except json.JSONDecodeError:
+                        args = {}
+                    content_blocks.append({
+                        "type": "tool_use",
+                        "id": tc.get("id", ""),
+                        "name": tc_function.get("name", ""),
+                        "input": args
+                    })
+                anthropic_messages.append({"role": mapped_role, "content": content_blocks})
+            else:
+                anthropic_messages.append({"role": mapped_role, "content": content})
 
         system_prompt = "\n\n".join(system_parts) if system_parts else None
         return system_prompt, anthropic_messages

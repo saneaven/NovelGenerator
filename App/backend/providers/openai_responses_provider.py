@@ -82,16 +82,38 @@ class OpenAIResponsesProvider(BaseProvider):
 
         Responses API format:
             {"role": "user", "content": [{"type": "input_text", "text": "Hello"}]}
+
+        Also handles tool_calls in assistant messages by converting to
+        Responses API function_call format.
         """
         result = []
         for msg in messages:
             role = msg.get("role", "user")
             content = msg.get("content", "")
+            tool_calls = msg.get("tool_calls")
 
             # Map roles (Chat Completions -> Responses)
             # system -> developer in Responses API
             if role == "system":
                 role = "developer"
+
+            # Handle assistant messages with tool_calls
+            if role == "assistant" and tool_calls:
+                content_items = []
+                # Add text content if present (use output_text for assistant)
+                if content:
+                    content_items.append({"type": "output_text", "text": content})
+                # Convert tool_calls to Responses API function_call format
+                for tc in tool_calls:
+                    tc_function = tc.get("function", {})
+                    content_items.append({
+                        "type": "function_call",
+                        "call_id": tc.get("id", ""),
+                        "name": tc_function.get("name", ""),
+                        "arguments": tc_function.get("arguments", "{}")  # Already JSON string
+                    })
+                result.append({"role": role, "content": content_items})
+                continue
 
             # Convert content to array format
             if isinstance(content, str):

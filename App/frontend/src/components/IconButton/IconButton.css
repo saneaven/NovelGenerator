@@ -4,12 +4,8 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  background: var(--color-surface-base);
-  color: var(--color-text-tertiary);
-  border: 1px solid var(--color-border-default);
   cursor: pointer;
   transition: all var(--transition-base);
-  box-shadow: var(--shadow-xs);
   flex-shrink: 0;
   position: relative;
 }
@@ -34,19 +30,39 @@
   height: 1.75rem;
   border-radius: var(--border-radius-sm);
   font-size: var(--font-size-sm);
-  box-shadow: none;
-  border: none;
-  background: transparent;
 }
 
-.icon-button--xs:hover {
-  background: var(--color-surface-hover);
-  box-shadow: none;
-  transform: none;
+/* ===== Primary Variant ===== */
+.icon-button--primary {
+  background: var(--color-brand-primary);
+  color: var(--color-text-inverse);
+  border: 1px solid var(--color-brand-primary);
+  box-shadow: var(--shadow-xs);
 }
 
-/* ===== Hover State ===== */
-.icon-button:hover {
+.icon-button--primary:hover:not(:disabled) {
+  background: var(--color-brand-primary-hover);
+  border-color: var(--color-brand-primary-hover);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.icon-button--primary:active:not(:disabled) {
+  background: var(--color-brand-primary-active);
+  border-color: var(--color-brand-primary-active);
+  transform: translateY(0);
+  box-shadow: var(--shadow-xs);
+}
+
+/* ===== Secondary Variant (default) ===== */
+.icon-button--secondary {
+  background: var(--color-surface-base);
+  color: var(--color-text-tertiary);
+  border: 1px solid var(--color-border-default);
+  box-shadow: var(--shadow-xs);
+}
+
+.icon-button--secondary:hover:not(:disabled) {
   background: var(--color-surface-hover);
   border-color: var(--color-border-medium);
   color: var(--color-text-secondary);
@@ -54,10 +70,50 @@
   box-shadow: var(--shadow-md);
 }
 
-/* ===== Active (Pressed) State ===== */
-.icon-button:active {
+.icon-button--secondary:active:not(:disabled) {
   transform: translateY(0);
   box-shadow: var(--shadow-xs);
+}
+
+/* ===== Ghost Variant ===== */
+.icon-button--ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: none;
+  box-shadow: none;
+}
+
+.icon-button--ghost:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+  transform: none;
+  box-shadow: none;
+}
+
+.icon-button--ghost:active:not(:disabled) {
+  background: var(--color-surface-active);
+}
+
+/* ===== Danger Variant ===== */
+.icon-button--danger {
+  background: var(--color-surface-base);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-default);
+  box-shadow: var(--shadow-xs);
+}
+
+.icon-button--danger:hover:not(:disabled) {
+  background: var(--color-error);
+  color: var(--color-text-inverse);
+  border-color: var(--color-error);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.icon-button--danger:active:not(:disabled) {
+  background: var(--color-error-dark);
+  border-color: var(--color-error-dark);
+  transform: translateY(0);
 }
 
 /* ===== Toggle Active State (e.g., panel open) ===== */

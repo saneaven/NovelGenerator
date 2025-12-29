@@ -691,6 +691,30 @@ export class PromptManager {
             imagePromptNegative: entry.metadata?.image_prompt_negative || undefined,
           };
         }),
+        ...acts
+          .slice()
+          .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0))
+          .map(act => {
+            const data = act.data[lang] || {};
+            return {
+              type: 'act',
+              id: act.id,
+              name: data.name || '',
+              description: data.description || '',
+            };
+          }),
+        ...chapters
+          .slice()
+          .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0))
+          .map(chapter => {
+            const data = chapter.data[lang] || {};
+            return {
+              type: 'chapter',
+              id: chapter.id,
+              name: data.name || '',
+              description: data.description || '',
+            };
+          }),
       ];
 
       // Build outline for this language

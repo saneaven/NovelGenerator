@@ -117,11 +117,20 @@ function buildGroups(
           .filter(ch => ch.metadata?.act_id === act.id)
           .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0));
 
+        // Create act item (for translation filtering - uses actual act ID)
+        const actItem: ObjectPickerItem = {
+          id: act.id,
+          name: (actData.name as string) || 'Unnamed Act',
+          description: (actData.description as string) || undefined,
+          type: 'act',
+          order: act.metadata?.order as number | undefined,
+        };
+
         return {
           id: `outline-act-${act.id}`,
           label: (actData.name as string) || 'Unnamed Act',
           type: 'act' as const,
-          items: actChapters.map(ch => objectToItem(ch, language)),
+          items: [actItem, ...actChapters.map(ch => objectToItem(ch, language))],
         };
       });
 

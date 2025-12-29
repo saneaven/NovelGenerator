@@ -199,6 +199,7 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
                         onClick={handleDelete}
                         title="Remove image"
                         size="sm"
+                        variant="danger"
                         className="delete-btn"
                     />
                 </div>

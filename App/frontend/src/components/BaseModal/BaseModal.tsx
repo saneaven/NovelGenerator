@@ -21,6 +21,7 @@ const BaseModal: React.FC<BaseModalProps> = ({
 }) => {
   useModalHistory(isOpen, onClose);
   const modalRef = useRef<HTMLDivElement>(null);
+  const mouseDownTargetRef = useRef<EventTarget | null>(null);
 
   // Escape key handler
   useEffect(() => {
@@ -43,11 +44,21 @@ const BaseModal: React.FC<BaseModalProps> = ({
     }
   }, [isOpen]);
 
+  const handleOverlayMouseDown = useCallback((e: React.MouseEvent) => {
+    mouseDownTargetRef.current = e.target;
+  }, []);
+
   const handleOverlayClick = useCallback(
     (e: React.MouseEvent) => {
-      if (closeOnOverlayClick && e.target === e.currentTarget) {
+      // Only close if both mousedown and mouseup occurred on the overlay
+      if (
+        closeOnOverlayClick &&
+        e.target === e.currentTarget &&
+        mouseDownTargetRef.current === e.currentTarget
+      ) {
         onClose();
       }
+      mouseDownTargetRef.current = null;
     },
     [closeOnOverlayClick, onClose]
   );
@@ -57,6 +68,7 @@ const BaseModal: React.FC<BaseModalProps> = ({
   const modalContent = (
     <div
       className={`base-modal-overlay base-modal-overlay--layer-${zIndexLayer}`}
+      onMouseDown={handleOverlayMouseDown}
       onClick={handleOverlayClick}
       role="dialog"
       aria-modal="true"

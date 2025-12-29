@@ -13,6 +13,7 @@ export interface IconButtonProps {
   showSpinner?: boolean;
   className?: string;
   size?: 'xs' | 'sm' | 'md';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
 }
 
 const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
@@ -29,12 +30,14 @@ const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
       showSpinner = false,
       className = '',
       size = 'md',
+      variant = 'secondary',
     },
     ref
   ) => {
     const buttonClasses = [
       'icon-button',
       `icon-button--${size}`,
+      `icon-button--${variant}`,
       isActive && 'icon-button--active',
       disabled && 'icon-button--disabled',
       className,

@@ -9,6 +9,8 @@ import { UnifiedApplicator, type StoreActions, type ApplicationResult } from '..
 import { parseJsonOutput, extractRawContent } from '../utils/nativeOutputParser';
 import { LLMTask, LLMTaskMode, LLMTaskManager, type EditAssistantStoryObjectPromptContext, type TaskHandle } from '../llm';
 import { shouldRetry, buildRetryPrompt, summarizePatchFailures } from '../llm/patchRetryHandler';
+import { useLLMTaskStore } from '../store/llmTaskStore';
+import { convertApplicationResults, type ExtendedApplicationResult } from '../llm/retry';
 import { Expand, Collapse } from './icons';
 import { ObjectPicker } from './ObjectPicker';
 import { TextButton } from './TextButton';
@@ -150,6 +152,14 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
         const mainLanguage = useSettingsStore.getState().settings.mainLanguage;
         const results = await applyEditFunctionCalls(projectId, functionCalls, mainLanguage);
 
+        // Convert and store function call results for retry system
+        const aggregatedResults = convertApplicationResults(
+          task.sessionId,
+          functionCalls,
+          results as ExtendedApplicationResult[]
+        );
+        useLLMTaskStore.getState().setFunctionCallResults(task.sessionId, aggregatedResults);
+
         // Collect all retry contexts from results
         const allRetryContexts: PatchRetryContext[] = [];
         for (const result of results) {
@@ -210,6 +220,15 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
 
         const mainLanguage = useSettingsStore.getState().settings.mainLanguage;
         const results = await applyEditFunctionCalls(projectId, functionCalls, mainLanguage);
+
+        // Convert and store function call results for retry system
+        const aggregatedResults = convertApplicationResults(
+          task.sessionId,
+          functionCalls,
+          results as ExtendedApplicationResult[]
+        );
+        useLLMTaskStore.getState().setFunctionCallResults(task.sessionId, aggregatedResults);
+
         const failedResults = results.filter(r => !r.success);
 
         if (failedResults.length > 0) {

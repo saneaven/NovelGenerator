@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { ContentPart, FunctionCallProgress, TokenUsage } from '../llm/requestTypes';
+import type { AggregatedFunctionCallResults, ConversationSnapshot } from '../llm/retry/types';
 
 export type TaskSessionStatus = 'idle' | 'running' | 'success' | 'error' | 'cancelled';
 
@@ -50,6 +51,9 @@ export interface LLMTaskSessionState {
   provider?: string;
   model?: string;
   usage?: TokenUsage;
+  // Retry support
+  functionCallResults?: AggregatedFunctionCallResults;
+  conversationSnapshot?: ConversationSnapshot;
 }
 
 const createDefaultSession = (id: string): LLMTaskSessionState => ({
@@ -96,6 +100,10 @@ interface LLMTaskStore {
   registerAbortController: (id: string, controller: AbortController) => void;
   unregisterAbortController: (id: string) => void;
   cancelTask: (id: string) => void;
+
+  // Retry support
+  setFunctionCallResults: (id: string, results: AggregatedFunctionCallResults) => void;
+  setConversationSnapshot: (id: string, snapshot: ConversationSnapshot) => void;
 }
 
 export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
@@ -368,6 +376,41 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
           [id]: {
             ...existing,
             status: 'cancelled',
+            updatedAt: Date.now(),
+          },
+        },
+      };
+    });
+  },
+
+  // Retry support
+  setFunctionCallResults: (id, results) => {
+    set((state) => {
+      const existing = state.sessions[id];
+      if (!existing) return state;
+      return {
+        sessions: {
+          ...state.sessions,
+          [id]: {
+            ...existing,
+            functionCallResults: results,
+            updatedAt: Date.now(),
+          },
+        },
+      };
+    });
+  },
+
+  setConversationSnapshot: (id, snapshot) => {
+    set((state) => {
+      const existing = state.sessions[id];
+      if (!existing) return state;
+      return {
+        sessions: {
+          ...state.sessions,
+          [id]: {
+            ...existing,
+            conversationSnapshot: snapshot,
             updatedAt: Date.now(),
           },
         },

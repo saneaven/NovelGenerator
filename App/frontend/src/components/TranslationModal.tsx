@@ -204,20 +204,29 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       const sourceData = obj.data[sourceLanguage] || obj.data[Object.keys(obj.data)[0]] || {};
       let label = sourceData.name || sourceData.title || obj.id;
 
-      // For manuscripts, show chapter name instead of manuscript ID and derive order from chapter/act
-      let order = obj.metadata.order;
-      if (objType === 'manuscript' && obj.metadata?.chapter_id) {
+      // Calculate hierarchical order for proper sorting
+      let order = obj.metadata.order ?? 0;
+
+      if (objType === 'act') {
+        // Acts: actOrder * 10000 (so they come before their chapters)
+        order = order * 10000;
+      } else if (objType === 'chapter') {
+        // Chapters: actOrder * 10000 + chapterOrder * 10 + 1 (after their parent act)
+        const act = obj.metadata?.act_id ? objects[obj.metadata.act_id as string] : null;
+        const actOrder = act?.metadata?.order ?? 0;
+        order = actOrder * 10000 + order * 10 + 1;
+      } else if (objType === 'manuscript' && obj.metadata?.chapter_id) {
+        // Manuscripts: actOrder * 10000 + chapterOrder * 10 + 2 (after their parent chapter)
         const chapter = objects[obj.metadata.chapter_id as string];
         if (chapter) {
           const chapterData = chapter.data[sourceLanguage] || chapter.data[Object.keys(chapter.data)[0]];
           if (chapterData?.name) {
             label = chapterData.name;
           }
-          // Derive order from parent chapter and act for proper hierarchical sorting
           const chapterOrder = chapter.metadata?.order ?? 0;
           const act = chapter.metadata?.act_id ? objects[chapter.metadata.act_id as string] : null;
           const actOrder = act?.metadata?.order ?? 0;
-          order = actOrder * 1000 + chapterOrder;
+          order = actOrder * 10000 + chapterOrder * 10 + 2;
         }
       }
 

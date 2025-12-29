@@ -9,8 +9,6 @@
  * - Replacement arrays: { replacements: [{old, new}] } (for search-replace patches)
  */
 
-import { Allow, parse } from 'partial-json';
-
 /**
  * Replacement operation for patch-style edits
  */
@@ -69,30 +67,6 @@ export function isReplacementOperation(
     'replacements' in value &&
     Array.isArray((value as any).replacements)
   );
-}
-
-/**
- * Parse potentially incomplete JSON during streaming.
- * Uses partial-json library to handle incomplete JSON gracefully.
- */
-export function parsePartialJson<T>(content: string): T | null {
-  try {
-    const cleaned = extractRawContent(content);
-    if (!cleaned.trim()) return null;
-    return parse(cleaned, Allow.ALL) as T;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Parse streaming JSON array output, returning parsed items so far.
- * Always returns an array - handles both array and single object inputs.
- */
-export function parseStreamingItems(content: string): ParsedItem[] {
-  const parsed = parsePartialJson<ParsedItem[] | ParsedItem>(content);
-  if (!parsed) return [];
-  return Array.isArray(parsed) ? parsed : [parsed];
 }
 
 /**

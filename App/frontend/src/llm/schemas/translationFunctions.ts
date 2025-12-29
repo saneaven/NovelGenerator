@@ -46,8 +46,8 @@ export const SET_OBJECT_TRANSLATION: FunctionCallSchema = {
   },
 };
 
-export const SET_CHAPTER_TRANSLATION: FunctionCallSchema = {
-  name: 'set_chapter_translation',
+export const SET_CHAPTER_OUTLINE_TRANSLATION: FunctionCallSchema = {
+  name: 'set_chapter_outline_translation',
   description: 'Set translation for acts or chapters.',
   parameters: {
     type: 'object',
@@ -145,8 +145,8 @@ export const PATCH_OBJECT_TRANSLATION: FunctionCallSchema = {
   },
 };
 
-export const PATCH_CHAPTER_TRANSLATION: FunctionCallSchema = {
-  name: 'patch_chapter_translation',
+export const PATCH_CHAPTER_OUTLINE_TRANSLATION: FunctionCallSchema = {
+  name: 'patch_chapter_outline_translation',
   description: 'Patch act/chapter translation with search-replace.',
   parameters: {
     type: 'object',
@@ -229,14 +229,14 @@ export const SET_CHAT_MESSAGE_TRANSLATION: FunctionCallSchema = {
 export const SET_TRANSLATION_FUNCTIONS: FunctionCallSchema[] = [
   SET_BASIC_INFO_TRANSLATION,
   SET_OBJECT_TRANSLATION,
-  SET_CHAPTER_TRANSLATION,
+  SET_CHAPTER_OUTLINE_TRANSLATION,
   SET_MANUSCRIPT_TRANSLATION,
 ];
 
 export const PATCH_TRANSLATION_FUNCTIONS: FunctionCallSchema[] = [
   PATCH_BASIC_INFO_TRANSLATION,
   PATCH_OBJECT_TRANSLATION,
-  PATCH_CHAPTER_TRANSLATION,
+  PATCH_CHAPTER_OUTLINE_TRANSLATION,
   PATCH_MANUSCRIPT_TRANSLATION,
 ];
 
@@ -256,14 +256,14 @@ export const CHAT_TRANSLATION_FUNCTIONS: FunctionCallSchema[] = [
 export const SET_FUNCTION_NAMES = new Set([
   'set_basic_info_translation',
   'set_object_translation',
-  'set_chapter_translation',
+  'set_chapter_outline_translation',
   'set_manuscript_translation',
 ]);
 
 export const PATCH_FUNCTION_NAMES = new Set([
   'patch_basic_info_translation',
   'patch_object_translation',
-  'patch_chapter_translation',
+  'patch_chapter_outline_translation',
   'patch_manuscript_translation',
 ]);
 
@@ -279,10 +279,10 @@ export const ALL_TRANSLATION_FUNCTION_NAMES = new Set([
 export const FUNCTION_TO_OBJECT_TYPE: Record<string, string> = {
   set_basic_info_translation: 'basic_info',
   set_object_translation: 'object',
-  set_chapter_translation: 'chapter',
+  set_chapter_outline_translation: 'chapter',
   set_manuscript_translation: 'manuscript',
   patch_basic_info_translation: 'basic_info',
   patch_object_translation: 'object',
-  patch_chapter_translation: 'chapter',
+  patch_chapter_outline_translation: 'chapter',
   patch_manuscript_translation: 'manuscript',
 };

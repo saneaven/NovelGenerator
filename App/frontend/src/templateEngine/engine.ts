@@ -38,21 +38,25 @@ handlebars.registerHelper('getManuscript', (manuscripts: any[] | undefined, chap
 });
 
 // getObjectsOfLanguage(project, language, ids?) - Get objects for any language
+// When ids is provided, returns objects in the same order as ids array
 handlebars.registerHelper('getObjectsOfLanguage', (project: any, language: string | undefined, ids?: string | string[]) => {
   if (!project || !language) return [];
   const langObjects = project?.languages?.[language]?.objects || [];
   if (!ids) return langObjects;
-  const idSet = new Set(Array.isArray(ids) ? ids : [ids]);
-  return langObjects.filter((obj: any) => idSet.has(obj?.id));
+  const idArray = Array.isArray(ids) ? ids : [ids];
+  const objectMap = new Map(langObjects.map((obj: any) => [obj?.id, obj]));
+  return idArray.map(id => objectMap.get(id)).filter(Boolean);
 });
 
 // getManuscriptsOfLanguage(project, language, ids?) - Get manuscripts for any language
+// When ids is provided, returns manuscripts in the same order as ids array
 handlebars.registerHelper('getManuscriptsOfLanguage', (project: any, language: string | undefined, ids?: string | string[]) => {
   if (!project || !language) return [];
   const langManuscripts = project?.languages?.[language]?.manuscripts || [];
   if (!ids) return langManuscripts;
-  const idSet = new Set(Array.isArray(ids) ? ids : [ids]);
-  return langManuscripts.filter((ms: any) => idSet.has(ms?.id));
+  const idArray = Array.isArray(ids) ? ids : [ids];
+  const manuscriptMap = new Map(langManuscripts.map((ms: any) => [ms?.id, ms]));
+  return idArray.map(id => manuscriptMap.get(id)).filter(Boolean);
 });
 
 // count(array) - Count array items
@@ -159,7 +163,7 @@ handlebars.registerHelper('prompt', function (this: any, ...args: any[]) {
 
   const fragmentContent = fragmentRegistry.get(path);
   if (!fragmentContent) {
-    console.log('[Template Debug] Fragment not found! Available fragments:', [...fragmentRegistry.keys()]);
+    console.log(`[Template Debug] Fragment ${path} not found! Available fragments:`, [...fragmentRegistry.keys()]);
     return new Handlebars.SafeString(`[Fragment Error: Not found - ${path}]`);
   }
 

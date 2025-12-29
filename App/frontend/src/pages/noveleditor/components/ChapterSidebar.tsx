@@ -99,6 +99,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
         title="Close sidebar"
         className="close-button"
         size="sm"
+        variant="ghost"
       />
     </div>
   );

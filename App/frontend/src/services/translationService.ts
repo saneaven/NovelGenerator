@@ -20,9 +20,11 @@ import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import type { ObjectType, UnifiedObject } from '../types/unifiedObject';
 import type { FunctionCallMetadata, FunctionCallProgress, ContentPart } from '../llm/requestTypes';
 import { translationService as translationAPI } from '../api/unifiedObjectService';
-import { parseJsonOutput, parseStreamingItems, extractRawContent, type ParsedItem } from '../utils/nativeOutputParser';
+import { parseJsonOutput, extractRawContent } from '../utils/nativeOutputParser';
 import { LLMTask, LLMTaskMode, type StoryTranslationPromptContext, type ChatTranslationPromptContext } from '../llm';
 import { UnifiedApplicator, type StoreActions, type TranslationActions, type ApplicationResult } from '../functionCall';
+import { useLLMTaskStore } from '../store/llmTaskStore';
+import { convertApplicationResults, type ExtendedApplicationResult } from '../llm/retry';
 
 /**
  * Helper to apply translation function calls using UnifiedApplicator
@@ -98,7 +100,6 @@ export interface TranslationOptions {
   onPartialSuccess?: (translations: TranslationResult[], error: Error) => void;
   abortControllerRef?: MutableRefObject<AbortController | null>;
   onStreamContent?: (content: string) => void;
-  onStreamParsed?: (items: ParsedItem[]) => void;
   onStreamUpdate?: (contentParts: ContentPart[]) => void;
   onFunctionCallProgress?: (progressList: FunctionCallProgress[]) => void;
   sessionId?: string;
@@ -236,7 +237,6 @@ export class TranslationService {
       onPartialSuccess,
       abortControllerRef: providedAbortRef,
       onStreamContent,
-      onStreamParsed,
       onStreamUpdate,
       onFunctionCallProgress: onFunctionCallProgressCallback,
       sessionId,
@@ -380,6 +380,16 @@ export class TranslationService {
       // Use the applicator for all function calls
       const results = await applyTranslationFunctionCalls(translationCalls, targetLanguage);
 
+      // Convert and store function call results for retry system
+      if (sessionId) {
+        const aggregatedResults = convertApplicationResults(
+          sessionId,
+          translationCalls,
+          results as ExtendedApplicationResult[]
+        );
+        useLLMTaskStore.getState().setFunctionCallResults(sessionId, aggregatedResults);
+      }
+
       const successfulIds = results
         .filter(r => r.success && r.objectId)
         .map(r => r.objectId as string);
@@ -431,10 +441,6 @@ export class TranslationService {
             const text = contentParts.filter(part => part.type === 'content').map(part => part.text).join('');
             if (text) {
               onStreamContent?.(text);
-              if (onStreamParsed) {
-                const items = parseStreamingItems(text);
-                if (items.length > 0) onStreamParsed(items);
-              }
             }
           }
         },

@@ -143,7 +143,7 @@ const FUNCTION_META: Record<string, FunctionMeta> = {
     description: 'Set object translation',
     summary: (args) => `${args.type}: ${args.name || args.id}`,
   },
-  set_chapter_translation: {
+  set_chapter_outline_translation: {
     editType: 'translate',
     title: 'Translate Chapter',
     description: 'Set chapter translation',
@@ -180,7 +180,7 @@ const FUNCTION_META: Record<string, FunctionMeta> = {
       return `${type}: ${replacements?.length ?? 0} replacements`;
     },
   },
-  patch_chapter_translation: {
+  patch_chapter_outline_translation: {
     editType: 'translate',
     title: 'Patch Chapter Translation',
     description: 'Patch chapter translation',

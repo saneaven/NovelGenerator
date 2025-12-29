@@ -202,14 +202,10 @@ const Workspace: React.FC = () =>
         prevObjectIdsRef.current = currentIds;
     }, [unifiedStore.objects, projectId]);
 
-    // Total count of selectable project objects for display
-    // Note: 'act' type is excluded because acts are group headers in ObjectPicker, not selectable items
+    // Total count of all project objects for display
     const totalObjectCount = useMemo(() => {
         return Object.keys(unifiedStore.objects)
-            .filter(id => {
-                const obj = unifiedStore.objects[id];
-                return obj.metadata?.project_id === projectId && obj.type !== 'act';
-            })
+            .filter(id => unifiedStore.objects[id].metadata?.project_id === projectId)
             .length;
     }, [unifiedStore.objects, projectId]);
 

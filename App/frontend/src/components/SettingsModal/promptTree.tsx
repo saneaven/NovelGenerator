@@ -5,7 +5,7 @@
 
 import React from 'react';
 import type { FunctionType, PromptCategory } from '../../types/prompts';
-import { Chat, Globe, Edit, Palette } from '../icons';
+import { Chat, Globe, Edit, Palette, Settings } from '../icons';
 
 export interface PromptNode {
   id: string;
@@ -386,6 +386,23 @@ export const PROMPT_TREE: PromptNode[] = [
             description: 'Template for cover image prompt responses'
           }
         ]
+      }
+    ]
+  },
+  {
+    id: 'common',
+    label: 'Common',
+    icon: <Settings size="sm" />,
+    type: 'category',
+    children: [
+      {
+        id: 'common-retry',
+        label: 'Function Call Retry',
+        type: 'prompt',
+        functionType: 'common',
+        category: 'userPrompt',
+        name: 'functionCallRetry',
+        description: 'Template for retry message when function calls fail. Appended to user input on retry.'
       }
     ]
   },

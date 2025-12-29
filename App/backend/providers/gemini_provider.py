@@ -131,12 +131,18 @@ class GeminiProvider(BaseProvider):
     # Message conversion
     # ------------------------------------------------------------------ #
     def _convert_messages(self, messages: List[Dict]) -> Dict[str, object]:
+        """Convert messages to Gemini format.
+
+        Handles tool_calls in assistant messages by converting to Gemini's
+        FunctionCall parts.
+        """
         contents: List[types.Content] = []
         system_instruction: Optional[types.Content] = None
 
         for msg in messages:
             role = msg.get("role")
             text = msg.get("content") or ""
+            tool_calls = msg.get("tool_calls")
 
             if role == "system":
                 # First system message becomes systemInstruction; additional ones are appended as user content
@@ -145,7 +151,29 @@ class GeminiProvider(BaseProvider):
                     continue
 
             mapped_role = "user" if role == "user" else "model"
-            contents.append(types.Content(role=mapped_role, parts=[types.Part.from_text(text=text)]))
+
+            # Handle assistant messages with tool_calls
+            if role == "assistant" and tool_calls:
+                parts = []
+                # Add text content if present
+                if text:
+                    parts.append(types.Part.from_text(text=text))
+                # Convert tool_calls to Gemini FunctionCall parts
+                for tc in tool_calls:
+                    tc_function = tc.get("function", {})
+                    args_str = tc_function.get("arguments", "{}")
+                    try:
+                        args = json.loads(args_str) if isinstance(args_str, str) else args_str
+                    except json.JSONDecodeError:
+                        args = {}
+                    # Create FunctionCall part using the SDK's method
+                    parts.append(types.Part.from_function_call(
+                        name=tc_function.get("name", ""),
+                        args=args
+                    ))
+                contents.append(types.Content(role=mapped_role, parts=parts))
+            else:
+                contents.append(types.Content(role=mapped_role, parts=[types.Part.from_text(text=text)]))
 
         return {"contents": contents, "system_instruction": system_instruction}
 

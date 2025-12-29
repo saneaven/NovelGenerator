@@ -9,7 +9,7 @@ Use these when there is no existing translation OR when the existing translation
 |----------|----------|-----------------|
 | `set_basic_info_translation` | Basic info (title, logline, genre) | id, title, logline, genre |
 | `set_object_translation` | Story objects | id, type, name, description |
-| `set_chapter_translation` | Acts and chapters | id, type, name, description |
+| `set_chapter_outline_translation` | Acts and chapters | id, type, name, description |
 | `set_manuscript_translation` | Manuscript content | id, content |
 
 ### Patch Functions (Search-Replace Edits)
@@ -19,7 +19,7 @@ Use these when the existing translation only needs minor corrections or refineme
 |----------|----------|-----------------|
 | `patch_basic_info_translation` | Fix basic info | id, replacements[] |
 | `patch_object_translation` | Fix story objects | id, type, replacements[] |
-| `patch_chapter_translation` | Fix acts/chapters | id, type, replacements[] |
+| `patch_chapter_outline_translation` | Fix acts/chapters | id, type, replacements[] |
 | `patch_manuscript_translation` | Fix manuscript | id, replacements[] |
 
 ### Patch Replacement Format

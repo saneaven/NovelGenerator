@@ -3,10 +3,11 @@ import { BaseModal } from '../BaseModal';
 import { useLLMTaskStore, type LLMTaskSessionState } from '../../store/llmTaskStore';
 import ThinkingDisplay from '../ThinkingDisplay';
 import NotificationProgressBar from './NotificationProgressBar';
-import { parsePartialJson } from '../../utils/nativeOutputParser';
-import { Close, ChevronDown, ChevronUp } from '../icons';
+import { parse, Allow } from 'partial-json';
+import { Close, ChevronDown, ChevronUp, Check, Warning } from '../icons';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
+import type { CategorizedFunctionCallResult } from '../../llm/retry/types';
 import './NotificationDetailModal.css';
 
 // Content segment types for mixed text/JSON content
@@ -36,7 +37,12 @@ const parseContentSegments = (content: string): ContentSegment[] => {
     // JSON code block
     const jsonContent = match[1].trim();
     if (jsonContent) {
-      const parsed = parsePartialJson(jsonContent);
+      let parsed = null;
+      try {
+        parsed = parse(jsonContent, Allow.ALL);
+      } catch {
+        // Ignore parse errors during streaming
+      }
       segments.push({
         type: 'json',
         content: jsonContent,
@@ -164,6 +170,105 @@ const JsonObjectViewer: React.FC<JsonObjectViewerProps> = ({ data, isStreaming }
   );
 };
 
+// Function Call Result Item Component
+interface FunctionCallResultItemProps {
+  result: CategorizedFunctionCallResult;
+  defaultExpanded?: boolean;
+}
+
+const FunctionCallResultItem: React.FC<FunctionCallResultItemProps> = ({
+  result,
+  defaultExpanded = false
+}) => {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+
+  const getStatusIcon = () => {
+    if (result.success) {
+      return <Check size="xs" className="function-result-icon function-result-icon--success" />;
+    }
+    if (result.isRejected) {
+      return <Close size="xs" className="function-result-icon function-result-icon--rejected" />;
+    }
+    return <Warning size="xs" className="function-result-icon function-result-icon--error" />;
+  };
+
+  const getFailureTypeLabel = () => {
+    switch (result.failureType) {
+      case 'parsing_failed':
+        return 'Parse Error';
+      case 'validation_failed':
+        return 'Validation Error';
+      case 'application_failed':
+        return 'Application Error';
+      case 'user_rejected':
+        return 'Rejected';
+      default:
+        return null;
+    }
+  };
+
+  const failureLabel = getFailureTypeLabel();
+
+  return (
+    <div className={`function-result-item ${result.success ? 'function-result-item--success' : 'function-result-item--failed'}`}>
+      <button
+        className="function-result-item-header"
+        onClick={() => setExpanded(!expanded)}
+        type="button"
+      >
+        <span className="function-result-status-icon">{getStatusIcon()}</span>
+        <span className="function-result-name">{result.functionName}</span>
+        {failureLabel && (
+          <span className="function-result-failure-badge">{failureLabel}</span>
+        )}
+        <span className="function-result-expand-icon">
+          {expanded ? <ChevronUp size="xs" /> : <ChevronDown size="xs" />}
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="function-result-item-content">
+          {/* Error message */}
+          {result.error && (
+            <div className="function-result-error-message">
+              {result.error}
+            </div>
+          )}
+
+          {/* Full arguments display */}
+          {result.arguments && Object.keys(result.arguments).length > 0 && (
+            <div className="function-result-arguments">
+              <div className="function-result-arguments-label">Arguments</div>
+              <JsonObjectViewer
+                data={result.arguments}
+                isStreaming={false}
+              />
+            </div>
+          )}
+
+          {/* Patch failures */}
+          {result.patchFailures && result.patchFailures.length > 0 && (
+            <div className="function-result-patch-failures">
+              <div className="function-result-patch-failures-label">Patch Failures</div>
+              <div className="function-result-patch-failures-list">
+                {result.patchFailures.map((pf, i) => (
+                  <div key={i} className="function-result-patch-failure-item">
+                    <span className="patch-failure-field">{pf.fieldName}</span>
+                    <span className="patch-failure-target">
+                      ({pf.objectType}:{pf.objectId})
+                    </span>
+                    <span className="patch-failure-error">{pf.error}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface NotificationDetailModalProps {
   session: LLMTaskSessionState;
   onClose: () => void;
@@ -239,6 +344,9 @@ const NotificationDetailModal: React.FC<NotificationDetailModalProps> = ({
   };
 
   const renderFooter = () => {
+    const failureCount = session.functionCallResults?.failureCount ?? 0;
+    const hasRetryableFailures = failureCount > 0 && session.retryContext;
+
     if (session.status === 'running') {
       return (
         <div className="notification-detail-footer-actions">
@@ -260,9 +368,23 @@ const NotificationDetailModal: React.FC<NotificationDetailModalProps> = ({
           </TextButton>
           {session.retryContext && (
             <TextButton variant="primary" onClick={handleRetry}>
-              Retry
+              {hasRetryableFailures ? `Retry Failed (${failureCount})` : 'Retry'}
             </TextButton>
           )}
+        </div>
+      );
+    }
+
+    // Success state - still show retry if there are failures
+    if (session.status === 'success' && hasRetryableFailures) {
+      return (
+        <div className="notification-detail-footer-actions">
+          <TextButton variant="secondary" onClick={onClose}>
+            Close
+          </TextButton>
+          <TextButton variant="primary" onClick={handleRetry}>
+            Retry Failed ({failureCount})
+          </TextButton>
         </div>
       );
     }
@@ -319,6 +441,7 @@ const NotificationDetailModal: React.FC<NotificationDetailModalProps> = ({
           onClick={onClose}
           title="Close"
           size="sm"
+          variant="ghost"
         />
       </div>
 
@@ -330,6 +453,43 @@ const NotificationDetailModal: React.FC<NotificationDetailModalProps> = ({
             {(session.retryContext.formState as Record<string, any>).userRequest ||
              (session.retryContext.formState as Record<string, any>).userInput ||
              '(No input)'}
+          </div>
+        </div>
+      )}
+
+      {/* Function Call Results Section */}
+      {session.functionCallResults && session.functionCallResults.results.length > 0 && (
+        <div className="notification-detail-function-results">
+          <div className="notification-detail-function-results-header">
+            <span className="notification-detail-function-results-title">
+              Function Calls ({session.functionCallResults.total})
+            </span>
+            <div className="notification-detail-function-results-summary">
+              {session.functionCallResults.successCount > 0 && (
+                <span className="function-results-count function-results-count--success">
+                  {session.functionCallResults.successCount} succeeded
+                </span>
+              )}
+              {session.functionCallResults.failureCount > 0 && (
+                <span className="function-results-count function-results-count--failed">
+                  {session.functionCallResults.failureCount} failed
+                </span>
+              )}
+              {session.functionCallResults.rejectedCount > 0 && (
+                <span className="function-results-count function-results-count--rejected">
+                  {session.functionCallResults.rejectedCount} rejected
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="notification-detail-function-results-list">
+            {session.functionCallResults.results.map((result) => (
+              <FunctionCallResultItem
+                key={result.functionCallId}
+                result={result}
+                defaultExpanded={!result.success}
+              />
+            ))}
           </div>
         </div>
       )}

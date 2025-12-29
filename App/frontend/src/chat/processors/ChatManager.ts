@@ -193,8 +193,9 @@ export class ChatManager {
         onComplete: (r) => {
           result = r;
         },
-        onError: (error) => {
-          throw error;
+        onError: (_error) => {
+          // Don't rethrow - error propagates via LLMTask.run() throw
+          // The catch block in processUserMessage/processEmptyRequest will call handleError()
         },
         onFunctionProgress: (progress) => {
           this.callbacks.onFunctionCallProgress?.(this.config.projectId, chatId, assistantMessageId, progress);

@@ -241,14 +241,25 @@ const NovelEditor: React.FC = () =>
         onGetChatHistory: (projId, chatId, language) => getMessages(projId, chatId, language),
         onError: (error) =>
         {
+            // Legacy callback - errors are now shown inline via onErrorMessage
             console.error('Runtime processing error:', error);
-            showError('Chat Error', error.message || 'An error occurred during processing. Please try again.');
+        },
+        onErrorMessage: (projId, chatId, messageId, errorMessage, language) =>
+        {
+            // Append error content part to the message for inline display
+            const messages = getMessages(projId, chatId, language);
+            const message = messages.find(m => m.id === messageId);
+            if (message) {
+                const errorPart = { type: 'error' as const, text: errorMessage };
+                const newParts = [...message.contentParts, errorPart];
+                updateMessageContentLocal(projId, chatId, messageId, newParts, language);
+            }
         },
         onFunctionCallProgress: (_projId, _chatId, messageId, progressEvents) =>
         {
             handleFunctionCallProgress(messageId, progressEvents);
         },
-    }), [updateMessageContentLocal, updateMessage, handleFunctionCalls, addMessage, getMessages, showError, handleFunctionCallProgress]);
+    }), [updateMessageContentLocal, updateMessage, handleFunctionCalls, addMessage, getMessages, handleFunctionCallProgress]);
 
     const chatManager = useMemo(() =>
     {

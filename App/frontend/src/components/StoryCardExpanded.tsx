@@ -106,16 +106,6 @@ const StoryCardExpanded: React.FC<StoryCardExpandedProps> = ({
                 opacity: { duration: 0.2 },
             }}
         >
-            {/* Close button */}
-            <IconButton
-                icon={<Collapse size="md" />}
-                onClick={handleCancel}
-                ariaLabel="Close"
-                title="Close"
-                size="sm"
-                className="expanded-close-btn"
-            />
-
             {/* Content section */}
             <div className="expanded-content-section">
                 {/* Tab navigation */}
@@ -132,6 +122,15 @@ const StoryCardExpanded: React.FC<StoryCardExpandedProps> = ({
                     >
                         Image
                     </button>
+                    <IconButton
+                        icon={<Collapse size="md" />}
+                        onClick={handleCancel}
+                        ariaLabel="Close"
+                        title="Close"
+                        size="sm"
+                        variant="ghost"
+                        className="expanded-close-btn"
+                    />
                 </div>
 
                 {/* Tab content */}

@@ -238,6 +238,7 @@ const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode })
                             onClick={() => setIsOpen(false)}
                             title="Close syntax panel"
                             size="xs"
+                            variant="ghost"
                         />
                     </header>
                     <div className="syntax-tabs">

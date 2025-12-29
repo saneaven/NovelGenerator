@@ -4,11 +4,11 @@
  * Handlers for translation operations:
  * - set_basic_info_translation
  * - set_object_translation
- * - set_chapter_translation
+ * - set_chapter_outline_translation
  * - set_manuscript_translation
  * - patch_basic_info_translation
  * - patch_object_translation
- * - patch_chapter_translation
+ * - patch_chapter_outline_translation
  * - patch_manuscript_translation
  */
 
@@ -131,7 +131,7 @@ export async function setObjectTranslation(
 /**
  * Set translation for acts/chapters
  */
-export async function setChapterTranslation(
+export async function setChapterOutlineTranslation(
   args: Record<string, unknown>,
   context: HandlerContext
 ): Promise<ApplicationResult> {
@@ -143,7 +143,7 @@ export async function setChapterTranslation(
   };
 
   if (!id || !type) {
-    return error('Missing id or type for set_chapter_translation');
+    return error('Missing id or type for set_chapter_outline_translation');
   }
 
   const objectType = type === 'act' ? 'act' : 'chapter';
@@ -332,7 +332,7 @@ export async function patchObjectTranslation(
 /**
  * Patch chapter/act translation with search-replace
  */
-export async function patchChapterTranslation(
+export async function patchChapterOutlineTranslation(
   args: Record<string, unknown>,
   context: HandlerContext
 ): Promise<ApplicationResult> {
@@ -343,7 +343,7 @@ export async function patchChapterTranslation(
   };
 
   if (!id || !type || !replacements) {
-    return error('Missing required fields for patch_chapter_translation');
+    return error('Missing required fields for patch_chapter_outline_translation');
   }
 
   const objectType = type === 'act' ? 'act' : 'chapter';
@@ -462,10 +462,10 @@ export async function patchManuscriptTranslation(
 export const TRANSLATION_HANDLERS = {
   set_basic_info_translation: setBasicInfoTranslation,
   set_object_translation: setObjectTranslation,
-  set_chapter_translation: setChapterTranslation,
+  set_chapter_outline_translation: setChapterOutlineTranslation,
   set_manuscript_translation: setManuscriptTranslation,
   patch_basic_info_translation: patchBasicInfoTranslation,
   patch_object_translation: patchObjectTranslation,
-  patch_chapter_translation: patchChapterTranslation,
+  patch_chapter_outline_translation: patchChapterOutlineTranslation,
   patch_manuscript_translation: patchManuscriptTranslation,
 };

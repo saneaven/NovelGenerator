@@ -681,6 +681,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                                     disabled={isTranslating}
                                                     title="Delete"
                                                     size="sm"
+                                                    variant="danger"
                                                 />
                                             </div>
                                         </div>
@@ -694,8 +695,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 <div ref={messagesEndRef} />
 
                 {showScrollButton && (
-                    <button
+                    <IconButton
                         className="scroll-to-bottom-button"
+                        icon={<ChevronDown size="sm" />}
                         onClick={() => {
                             if (scrollContainerRef.current) {
                                 isUserNearBottomRef.current = true;
@@ -704,9 +706,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                             }
                         }}
                         title="Scroll to bottom"
-                    >
-                        <ChevronDown size="sm" />
-                    </button>
+                        variant="primary"
+                    />
                 )}
             </div>
 

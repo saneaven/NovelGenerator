@@ -283,8 +283,8 @@ const SET_OBJECT_TRANSLATION: FunctionSchema = {
   },
 };
 
-const SET_CHAPTER_TRANSLATION: FunctionSchema = {
-  name: 'set_chapter_translation',
+const SET_CHAPTER_OUTLINE_TRANSLATION: FunctionSchema = {
+  name: 'set_chapter_outline_translation',
   description: 'Set translation for acts or chapters.',
   category: 'translation',
   target: 'chapter',
@@ -362,8 +362,8 @@ const PATCH_OBJECT_TRANSLATION: FunctionSchema = {
   },
 };
 
-const PATCH_CHAPTER_TRANSLATION: FunctionSchema = {
-  name: 'patch_chapter_translation',
+const PATCH_CHAPTER_OUTLINE_TRANSLATION: FunctionSchema = {
+  name: 'patch_chapter_outline_translation',
   description: 'Patch act/chapter translation with search-replace.',
   category: 'translation',
   target: 'chapter',
@@ -457,13 +457,13 @@ class SchemaRegistryClass {
     // Translation Set
     this.register(SET_BASIC_INFO_TRANSLATION);
     this.register(SET_OBJECT_TRANSLATION);
-    this.register(SET_CHAPTER_TRANSLATION);
+    this.register(SET_CHAPTER_OUTLINE_TRANSLATION);
     this.register(SET_MANUSCRIPT_TRANSLATION);
 
     // Translation Patch
     this.register(PATCH_BASIC_INFO_TRANSLATION);
     this.register(PATCH_OBJECT_TRANSLATION);
-    this.register(PATCH_CHAPTER_TRANSLATION);
+    this.register(PATCH_CHAPTER_OUTLINE_TRANSLATION);
     this.register(PATCH_MANUSCRIPT_TRANSLATION);
 
     // Chat message translation
@@ -569,11 +569,11 @@ export const PATCH_FUNCTION_NAMES = new Set([
 export const TRANSLATION_FUNCTION_NAMES = new Set([
   'set_basic_info_translation',
   'set_object_translation',
-  'set_chapter_translation',
+  'set_chapter_outline_translation',
   'set_manuscript_translation',
   'patch_basic_info_translation',
   'patch_object_translation',
-  'patch_chapter_translation',
+  'patch_chapter_outline_translation',
   'patch_manuscript_translation',
   'set_chat_message_translation',
 ]);

@@ -53,6 +53,7 @@ const WorkspaceTabsSidebar: React.FC<WorkspaceTabsSidebarProps> = ({
             onClick={handleClose}
             title="Close"
             size="sm"
+            variant="ghost"
           />
         </div>
       }

@@ -798,7 +798,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                     <div className="success-modal" onClick={(e) => e.stopPropagation()}>
                         <div className="success-modal-header">
                             <h3>Image Created</h3>
-                            <IconButton size="xs" icon={<Close size="sm" />} onClick={() => setSuccessModalAsset(null)} />
+                            <IconButton size="xs" icon={<Close size="sm" />} onClick={() => setSuccessModalAsset(null)} variant="ghost" />
                         </div>
                         <div className="success-modal-body">
                             <div className="success-image-preview">
@@ -835,7 +835,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                     <div className="asset-detail-modal" onClick={(e) => e.stopPropagation()}>
                         <div className="asset-detail-header">
                             <h3>Image Details</h3>
-                            <IconButton size="xs" icon={<Close size="sm" />} onClick={() => setDetailAsset(null)} />
+                            <IconButton size="xs" icon={<Close size="sm" />} onClick={() => setDetailAsset(null)} variant="ghost" />
                         </div>
                         <div className="asset-detail-body">
                             <div className="asset-detail-image">
@@ -949,6 +949,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                             className="generate-panel-close"
                             size="xs"
                             icon={<Close size="sm" />}
+                            variant="ghost"
                             onClick={() => {
                                 setShowGeneratePanel(false);
                                 setRegenerateSettings(null);

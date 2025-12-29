@@ -199,6 +199,7 @@ const Home: React.FC = () => {
                     onClick={() => handleDeleteProject(project.id)}
                     title="Delete project"
                     size="sm"
+                    variant="danger"
                     className="project-delete-button"
                   />
                 </div>
