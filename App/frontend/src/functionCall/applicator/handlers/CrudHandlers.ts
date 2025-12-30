@@ -2,10 +2,11 @@
  * CRUD Handlers
  *
  * Handlers for create and delete operations:
- * - create_story_object
- * - delete_story_object
- * - create_chapter
- * - delete_chapter
+ * - create_story_object / delete_story_object
+ * - create_chapter / delete_chapter (legacy)
+ * - create_outline / delete_outline
+ * - create_outline_act / delete_outline_act
+ * - create_outline_chapter / delete_outline_chapter
  */
 
 import type { ApplicationResult, StoryObjectSubtype } from '../../types';
@@ -18,7 +19,6 @@ const STORY_OBJECT_TYPE_MAP: Record<StoryObjectSubtype, ObjectType> = {
   location: 'location',
   organization: 'organization',
   lorebook: 'lorebook',
-  act: 'act',
 };
 
 // ============================================================================
@@ -38,7 +38,7 @@ function error(message: string): ApplicationResult {
 // ============================================================================
 
 /**
- * Create a story object (character, location, organization, lorebook, or act)
+ * Create a story object (character, location, organization, or lorebook)
  */
 export async function createStoryObject(
   args: Record<string, unknown>,
@@ -60,14 +60,6 @@ export async function createStoryObject(
   }
 
   const { store, projectId, language } = context;
-
-  // Special handling for acts - need to set order
-  if (type === 'act') {
-    const acts = await store.listObjects('act', projectId);
-    const order = acts.length;
-    await store.createObject('act', projectId, { name, description }, language, { order }, 'AI Edit');
-    return ok(`Created act: ${name}`);
-  }
 
   await store.createObject(objectType, projectId, { name, description }, language, undefined, 'AI Edit');
   return ok(`Created ${type}: ${name}`);
@@ -149,12 +141,174 @@ export async function deleteChapter(
 }
 
 // ============================================================================
+// OUTLINE CRUD HANDLERS
+// ============================================================================
+
+/**
+ * Create a new outline for the project
+ */
+export async function createOutline(
+  args: Record<string, unknown>,
+  context: HandlerContext
+): Promise<ApplicationResult> {
+  const { name, description } = args as {
+    name?: string;
+    description?: string;
+  };
+
+  if (!name || !description) {
+    return error('Missing required fields for create_outline');
+  }
+
+  const { store, projectId, language } = context;
+
+  // Calculate order for new outline
+  const outlines = await store.listObjects('outline', projectId);
+  const order = outlines.length;
+
+  await store.createObject('outline', projectId, { name, description }, language, { order }, 'AI Edit');
+  return ok(`Created outline: ${name}`);
+}
+
+/**
+ * Delete an outline by ID (and all its acts/chapters)
+ */
+export async function deleteOutline(
+  args: Record<string, unknown>,
+  context: HandlerContext
+): Promise<ApplicationResult> {
+  const { id } = args as { id?: string };
+
+  if (!id) {
+    return error('Missing id for delete_outline');
+  }
+
+  await context.store.deleteObject('outline', id);
+  return ok('Deleted outline', { id });
+}
+
+/**
+ * Create an act within an outline
+ */
+export async function createOutlineAct(
+  args: Record<string, unknown>,
+  context: HandlerContext
+): Promise<ApplicationResult> {
+  const { outlineId, name, description } = args as {
+    outlineId?: string;
+    name?: string;
+    description?: string;
+  };
+
+  if (!outlineId || !name || !description) {
+    return error('Missing required fields for create_outline_act');
+  }
+
+  const { store, projectId, language } = context;
+
+  // Calculate order within the outline
+  const acts = await store.listObjects('act', projectId);
+  const existingInOutline = acts.filter((act: UnifiedObject) => act.metadata?.outline_id === outlineId);
+  const order = existingInOutline.length;
+
+  await store.createObject(
+    'act',
+    projectId,
+    { name, description },
+    language,
+    { outline_id: outlineId, order },
+    'AI Edit'
+  );
+
+  return ok(`Created act: ${name}`);
+}
+
+/**
+ * Delete an act by ID (and all its chapters)
+ */
+export async function deleteOutlineAct(
+  args: Record<string, unknown>,
+  context: HandlerContext
+): Promise<ApplicationResult> {
+  const { id } = args as { id?: string };
+
+  if (!id) {
+    return error('Missing id for delete_outline_act');
+  }
+
+  await context.store.deleteObject('act', id);
+  return ok('Deleted act', { id });
+}
+
+/**
+ * Create a chapter within an act (outline-prefixed version)
+ */
+export async function createOutlineChapter(
+  args: Record<string, unknown>,
+  context: HandlerContext
+): Promise<ApplicationResult> {
+  const { actId, name, description } = args as {
+    actId?: string;
+    name?: string;
+    description?: string;
+  };
+
+  if (!actId || !name || !description) {
+    return error('Missing required fields for create_outline_chapter');
+  }
+
+  const { store, projectId, language } = context;
+
+  // Calculate order within the act
+  const chapters = await store.listObjects('chapter', projectId);
+  const existingInAct = chapters.filter((ch: UnifiedObject) => ch.metadata?.act_id === actId);
+  const order = existingInAct.length;
+
+  await store.createObject(
+    'chapter',
+    projectId,
+    { name, description },
+    language,
+    { act_id: actId, order },
+    'AI Edit'
+  );
+
+  return ok(`Created chapter: ${name}`);
+}
+
+/**
+ * Delete a chapter by ID (outline-prefixed version)
+ */
+export async function deleteOutlineChapter(
+  args: Record<string, unknown>,
+  context: HandlerContext
+): Promise<ApplicationResult> {
+  const { id } = args as { id?: string };
+
+  if (!id) {
+    return error('Missing id for delete_outline_chapter');
+  }
+
+  await context.store.deleteObject('chapter', id);
+  return ok('Deleted chapter', { id });
+}
+
+// ============================================================================
 // HANDLER REGISTRY
 // ============================================================================
 
 export const CRUD_HANDLERS = {
+  // Story objects
   create_story_object: createStoryObject,
   delete_story_object: deleteStoryObject,
+  // Legacy chapter (for backward compatibility)
   create_chapter: createChapter,
   delete_chapter: deleteChapter,
+  // Outline system
+  create_outline: createOutline,
+  delete_outline: deleteOutline,
+  create_outline_act: createOutlineAct,
+  delete_outline_act: deleteOutlineAct,
+  create_outline_chapter: createOutlineChapter,
+  delete_outline_chapter: deleteOutlineChapter,
 };

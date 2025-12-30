@@ -9,6 +9,7 @@ import type { FunctionCallSchema } from './schemas/chatFunctions';
 export const LLMTaskMode = {
   CHAT_WORKSPACE: 'chat_workspace',
   CHAT_NOVEL_EDITOR: 'chat_novel_editor',
+  CHAT_OUTLINE_MANAGER: 'chat_outline_manager',
   EDIT_ASSISTANT_MANUSCRIPT: 'edit_assistant_manuscript',
   EDIT_ASSISTANT_STORY_OBJECT: 'edit_assistant_story_object',
   TRANSLATION: 'translation',
@@ -37,7 +38,28 @@ export interface TemplateData {
   project: {
     basicInfo: { id: string; title: string; logline: string; genre: string } | null;
     objects: Array<{ type: string; id: string; name: string; description: string; imagePrompt?: string; imagePromptPositive?: string; imagePromptNegative?: string }>;
-    outline: { acts: Array<{ id: string; name: string; description: string; chapters: Array<{ id: string; name: string; description: string }> }> } | null;
+    outline: {
+      outlines: Array<{
+        id: string;
+        name: string;
+        description: string;
+        order: number;
+        acts: Array<{
+          id: string;
+          name: string;
+          description: string;
+          order: number;
+          outlineId: string;
+          chapters: Array<{
+            id: string;
+            name: string;
+            description: string;
+            order: number;
+            actId: string;
+          }>;
+        }>;
+      }>;
+    } | null;
     manuscripts: Array<{ id: string; chapterId: string; chapterName: string; content: string; wordCount: number }>;
     languages: Record<string, any>;
   };
@@ -47,8 +69,10 @@ export interface TemplateData {
   };
   // Mode-specific groups (only one should be set)
   chat?: {
-    mode: 'workspace' | 'novelEditor';
+    mode: 'workspace' | 'novelEditor' | 'outlineManager';
     contextObjectIds?: string[];
+    selectedOutlineId?: string;
+    selectedActId?: string;
   };
   editAssistant?: {
     mode: 'manuscript' | 'storyObject';
@@ -124,6 +148,18 @@ export interface ChatNovelEditorPromptContext extends BasePromptContext {
   functions?: FunctionCallSchema[];
   functionResults?: FunctionCallResultSummary[];
   contextObjectIds?: string[];
+}
+
+/**
+ * Context for outline manager chat
+ * Used for AI-assisted story structure planning and organization.
+ */
+export interface ChatOutlineManagerPromptContext extends BasePromptContext {
+  functions?: FunctionCallSchema[];
+  functionResults?: FunctionCallResultSummary[];
+  contextObjectIds?: string[];
+  selectedOutlineId?: string;
+  selectedActId?: string;
 }
 
 /**

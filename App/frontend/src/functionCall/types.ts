@@ -15,15 +15,14 @@ import type { ObjectType, UnifiedObject } from '../types/unifiedObject';
 export type FunctionCategory = 'crud' | 'replace' | 'patch' | 'translation';
 
 /** Target types for function operations */
-export type TargetType = 'basic_info' | 'story_object' | 'chapter' | 'manuscript';
+export type TargetType = 'basic_info' | 'story_object' | 'outline' | 'chapter' | 'manuscript';
 
 /** Story object subtypes (used in function arguments) */
 export type StoryObjectSubtype =
   | 'character'
   | 'location'
   | 'organization'
-  | 'lorebook'
-  | 'act';
+  | 'lorebook';
 
 /** Execution modes for the applicator */
 export type ExecutionMode = 'workspace' | 'novelEditor' | 'translation' | 'editAssistant';
@@ -205,7 +204,6 @@ export const STORY_OBJECT_TYPE_MAP: Record<StoryObjectSubtype, ObjectType> = {
   location: 'location',
   organization: 'organization',
   lorebook: 'lorebook',
-  act: 'act',
 };
 
 /** Helper to get object data for a language with fallback */

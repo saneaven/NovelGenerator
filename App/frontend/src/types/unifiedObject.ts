@@ -17,6 +17,7 @@ export type ObjectType =
   | 'organization'
   | 'location'
   | 'lorebook'
+  | 'outline'
   | 'act'
   | 'chapter'
   | 'manuscript';
@@ -119,6 +120,11 @@ export interface LorebookEntryData {
   description: string;
 }
 
+export interface OutlineData {
+  name: string;
+  description: string;
+}
+
 export interface ActData {
   name: string;
   description: string;
@@ -143,6 +149,7 @@ export type CharacterObject = UnifiedObject<CharacterData>;
 export type OrganizationObject = UnifiedObject<OrganizationData>;
 export type LocationObject = UnifiedObject<LocationData>;
 export type LorebookEntryObject = UnifiedObject<LorebookEntryData>;
+export type OutlineObject = UnifiedObject<OutlineData>;
 export type ActObject = UnifiedObject<ActData>;
 export type ChapterObject = UnifiedObject<ChapterData>;
 export type ManuscriptObject = UnifiedObject<ManuscriptData>;

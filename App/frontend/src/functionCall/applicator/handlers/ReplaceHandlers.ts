@@ -4,8 +4,9 @@
  * Handlers for full replacement operations:
  * - replace_basic_info
  * - replace_story_object
- * - replace_chapter_outline
+ * - replace_chapter_outline (legacy)
  * - replace_manuscript
+ * - replace_outline / replace_outline_act / replace_outline_chapter
  */
 
 import type { ApplicationResult, StoryObjectSubtype } from '../../types';
@@ -19,7 +20,6 @@ const STORY_OBJECT_TYPE_MAP: Record<StoryObjectSubtype, ObjectType> = {
   location: 'location',
   organization: 'organization',
   lorebook: 'lorebook',
-  act: 'act',
 };
 
 // ============================================================================
@@ -241,12 +241,150 @@ export async function replaceManuscript(
 }
 
 // ============================================================================
+// OUTLINE REPLACE HANDLERS
+// ============================================================================
+
+/**
+ * Replace outline fields
+ */
+export async function replaceOutline(
+  args: Record<string, unknown>,
+  context: HandlerContext
+): Promise<ApplicationResult> {
+  const { id, name, description } = args as {
+    id?: string;
+    name?: string;
+    description?: string;
+  };
+
+  if (!id) {
+    return error('Missing id for replace_outline');
+  }
+
+  const { store, language } = context;
+
+  const object = await ensureObject(store, 'outline', id);
+  const currentData = getObjectData(object, language);
+
+  await store.updateObject('outline', id, {
+    data: {
+      name: name ?? currentData.name ?? '',
+      description: description ?? currentData.description ?? '',
+    },
+    language,
+    create_new_version: true,
+    user_request: 'AI Edit',
+  });
+
+  return ok('Updated outline', { id });
+}
+
+/**
+ * Replace act fields
+ */
+export async function replaceOutlineAct(
+  args: Record<string, unknown>,
+  context: HandlerContext
+): Promise<ApplicationResult> {
+  const { id, name, description, order } = args as {
+    id?: string;
+    name?: string;
+    description?: string;
+    order?: number;
+  };
+
+  if (!id) {
+    return error('Missing id for replace_outline_act');
+  }
+
+  const { store, language } = context;
+
+  const object = await ensureObject(store, 'act', id);
+  const currentData = getObjectData(object, language);
+
+  const updateData: Record<string, unknown> = {
+    name: name ?? currentData.name ?? '',
+    description: description ?? currentData.description ?? '',
+  };
+
+  // Build metadata for structural changes (order)
+  const metadata: Record<string, unknown> = {};
+  if (order !== undefined && typeof order === 'number') {
+    metadata.order = order;
+  }
+
+  await store.updateObject('act', id, {
+    data: updateData,
+    language,
+    create_new_version: true,
+    user_request: 'AI Edit',
+    ...(Object.keys(metadata).length > 0 && { metadata }),
+  });
+
+  return ok('Updated act', { id });
+}
+
+/**
+ * Replace chapter fields (outline-prefixed version)
+ */
+export async function replaceOutlineChapter(
+  args: Record<string, unknown>,
+  context: HandlerContext
+): Promise<ApplicationResult> {
+  const { id, actId, name, description, order } = args as {
+    id?: string;
+    actId?: string;
+    name?: string;
+    description?: string;
+    order?: number;
+  };
+
+  if (!id) {
+    return error('Missing id for replace_outline_chapter');
+  }
+
+  const { store, language } = context;
+
+  const object = await ensureObject(store, 'chapter', id);
+  const currentData = getObjectData(object, language);
+
+  const updateData: Record<string, unknown> = {
+    name: name ?? currentData.name ?? '',
+    description: description ?? currentData.description ?? '',
+  };
+
+  // Build metadata for structural changes (actId, order)
+  const metadata: Record<string, unknown> = {};
+  if (actId) {
+    metadata.act_id = actId;
+  }
+  if (order !== undefined && typeof order === 'number') {
+    metadata.order = order;
+  }
+
+  await store.updateObject('chapter', id, {
+    data: updateData,
+    language,
+    create_new_version: true,
+    user_request: 'AI Edit',
+    ...(Object.keys(metadata).length > 0 && { metadata }),
+  });
+
+  return ok('Updated chapter', { id });
+}
+
+// ============================================================================
 // HANDLER REGISTRY
 // ============================================================================
 
 export const REPLACE_HANDLERS = {
+  // Basic handlers
   replace_basic_info: replaceBasicInfo,
   replace_story_object: replaceStoryObject,
   replace_chapter_outline: replaceChapterOutline,
   replace_manuscript: replaceManuscript,
+  // Outline handlers
+  replace_outline: replaceOutline,
+  replace_outline_act: replaceOutlineAct,
+  replace_outline_chapter: replaceOutlineChapter,
 };

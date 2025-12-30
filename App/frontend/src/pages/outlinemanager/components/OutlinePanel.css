@@ -1,0 +1,941 @@
+/* OutlinePanel.css - Timeline Design */
+/* Adapted for Outline > Act > Chapter hierarchy */
+
+/* ============================================================================
+   PANEL CONTAINER
+   ============================================================================ */
+
+.outline-panel {
+  flex: 1 1 auto;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-surface-base);
+  overflow: hidden;
+}
+
+.outline-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--color-border-default);
+  flex-shrink: 0;
+}
+
+.outline-panel-header h2 {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+
+.outline-panel-header .header-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
+/* Desktop Only */
+@media (max-width: 768px) {
+  .outline-panel-header .desktop-only {
+    display: none;
+  }
+}
+
+.outline-panel-content {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ============================================================================
+   OUTLINE MANAGER CONTAINER
+   ============================================================================ */
+
+.outline-manager {
+  height: 100%;
+}
+
+.outline-manager .timeline-container {
+  padding: var(--spacing-md) var(--spacing-lg) var(--spacing-xl);
+  color: var(--color-text-primary);
+}
+
+.outline-manager .timeline-creation-panel {
+  margin-bottom: var(--spacing-2xl);
+  animation: slideDown var(--transition-base);
+}
+
+/* ============================================================================
+   TIMELINE TRACK
+   ============================================================================ */
+
+.outline-manager .timeline-track {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xl);
+  max-width: var(--container-lg);
+  margin: 0 auto;
+}
+
+/* Vertical Line for the entire track */
+.outline-manager .timeline-track::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: var(--spacing-2xl);
+  left: var(--spacing-xl);
+  width: 2px;
+  background-color: var(--color-border-default);
+  z-index: var(--z-base);
+}
+
+/* ============================================================================
+   EMPTY STATE
+   ============================================================================ */
+
+.outline-manager .empty-timeline-state {
+  text-align: center;
+  padding: var(--spacing-3xl);
+  background: var(--color-surface-subtle);
+  border-radius: var(--border-radius-xl);
+  border: 1px dashed var(--color-border-default);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-md);
+  z-index: var(--z-content);
+  position: relative;
+}
+
+.outline-manager .empty-icon {
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.outline-manager .empty-timeline-state h3 {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  margin: 0;
+}
+
+.outline-manager .empty-timeline-state p {
+  color: var(--color-text-secondary);
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+/* ============================================================================
+   OUTLINE GROUP (Top Level)
+   ============================================================================ */
+
+.outline-manager .timeline-outline-group {
+  position: relative;
+  z-index: var(--z-content);
+  overflow: visible;
+}
+
+/* Remove margin from last group */
+.outline-manager .timeline-outline-group:last-child {
+  margin-bottom: 0;
+}
+
+/* ============================================================================
+   OUTLINE NODE
+   ============================================================================ */
+
+.outline-manager .timeline-outline-node {
+  display: flex;
+  gap: var(--spacing-lg);
+  align-items: flex-start;
+}
+
+.outline-manager .outline-marker {
+  flex-shrink: 0;
+  width: var(--size-14, 56px);
+  height: var(--size-14, 56px);
+  background-color: var(--color-surface-base);
+  border: 3px solid var(--color-border-default);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-content);
+  box-shadow: 0 0 0 var(--spacing-xs) var(--color-surface-base);
+  transition: all var(--transition-base);
+  color: var(--color-text-tertiary);
+}
+
+.outline-manager .timeline-outline-group.is-expanded .outline-marker {
+  border-color: var(--color-brand-primary-border, var(--color-border-medium));
+  color: var(--color-text-primary);
+}
+
+.outline-manager .outline-index {
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-xl);
+  color: var(--color-text-tertiary);
+}
+
+.outline-manager .timeline-outline-group.is-expanded .outline-index {
+  color: var(--color-text-primary);
+}
+
+.outline-manager .outline-content-wrapper {
+  flex: 1;
+  padding-top: var(--spacing-xs);
+}
+
+/* Outline Card */
+.outline-manager .outline-card {
+  border-width: 2px;
+}
+
+/* ============================================================================
+   ACT STREAM WRAPPER (Height Animation)
+   ============================================================================ */
+
+.outline-manager .act-stream-wrapper {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--transition-slow);
+  overflow: visible;
+}
+
+.outline-manager .timeline-outline-group.is-collapsed .act-stream-wrapper {
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--transition-base);
+}
+
+.outline-manager .timeline-act-stream {
+  min-height: 0;
+  margin-top: var(--spacing-lg);
+  margin-left: var(--spacing-xl);
+  padding-left: calc(var(--size-14, 56px) / 2);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+  overflow: hidden;
+}
+
+.outline-manager .timeline-outline-group.is-expanded .timeline-act-stream {
+  overflow: visible;
+}
+
+/* Stream line for acts */
+.outline-manager .timeline-act-stream > .stream-line {
+  position: absolute;
+  top: calc(-1 * var(--spacing-xl));
+  bottom: var(--spacing-xl);
+  left: 0;
+  width: 2px;
+  background-color: var(--color-border-default);
+  z-index: var(--z-base);
+}
+
+/* ============================================================================
+   ACT GROUP
+   ============================================================================ */
+
+.outline-manager .timeline-act-group {
+  position: relative;
+  z-index: var(--z-content);
+  overflow: visible;
+}
+
+.outline-manager .timeline-act-group:last-child {
+  margin-bottom: 0;
+}
+
+/* Closing state - fade out acts */
+.outline-manager .timeline-outline-group.is-collapsed .timeline-act-group {
+  opacity: 0;
+  transform: translateY(calc(-1 * var(--spacing-sm)));
+  animation: none;
+}
+
+/* ============================================================================
+   ACT NODE
+   ============================================================================ */
+
+.outline-manager .timeline-act-node {
+  display: flex;
+  gap: var(--spacing-lg);
+  align-items: flex-start;
+  opacity: 0;
+  transform: translateY(calc(-1 * var(--spacing-md)));
+  animation: actSlideIn 0.35s ease forwards;
+  animation-delay: calc(var(--act-index, 0) * 80ms);
+}
+
+@keyframes actSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-1 * var(--spacing-md)));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.outline-manager .node-marker {
+  flex-shrink: 0;
+  width: var(--size-12);
+  height: var(--size-12);
+  background-color: var(--color-surface-base);
+  border: 2px solid var(--color-border-default);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-content);
+  box-shadow: 0 0 0 var(--spacing-xs) var(--color-surface-base);
+  transition: all var(--transition-base);
+  color: var(--color-text-tertiary);
+}
+
+.outline-manager .timeline-act-group.is-expanded .node-marker {
+  border-color: var(--color-border-medium);
+  color: var(--color-text-primary);
+}
+
+.outline-manager .act-index {
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-lg);
+  color: var(--color-text-tertiary);
+}
+
+.outline-manager .timeline-act-group.is-expanded .act-index {
+  color: var(--color-text-primary);
+}
+
+.outline-manager .act-content-wrapper {
+  flex: 1;
+  padding-top: var(--spacing-xs);
+}
+
+/* ============================================================================
+   CONTENT CARDS (Shared Styles)
+   ============================================================================ */
+
+.outline-manager .content-card {
+  background-color: var(--color-surface-base);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-lg);
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Edit Mode Styling */
+.outline-manager .content-card.is-editing {
+  border-color: var(--color-brand-primary-border);
+  box-shadow: 0 0 0 1px var(--color-brand-primary-soft), var(--shadow-lg);
+}
+
+/* Card Header */
+.outline-manager .card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+}
+
+.outline-manager .card-title-section {
+  cursor: pointer;
+  flex: 1;
+}
+
+.outline-manager .title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.outline-manager .card-title-section h3 {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  line-height: 1.2;
+}
+
+.outline-manager .card-title-section h4 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  line-height: 1.2;
+}
+
+.outline-manager .card-meta {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  margin-top: var(--spacing-xs);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.outline-manager .card-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+/* Card Body Expand Animation */
+.outline-manager .card-body-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--transition-slow);
+  overflow: hidden;
+  margin-top: var(--spacing-md);
+}
+
+.outline-manager .card-body-wrapper.is-expanded {
+  grid-template-rows: 1fr;
+}
+
+.outline-manager .card-body-content {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.outline-manager .card-body-wrapper.is-expanded .card-body-content {
+  overflow: visible;
+}
+
+.outline-manager .card-body-content p {
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-relaxed);
+  margin: 0 0 var(--spacing-lg) 0;
+  white-space: pre-wrap;
+}
+
+.outline-manager .placeholder-text {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.outline-manager .card-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+/* ============================================================================
+   INLINE EDIT INPUTS
+   ============================================================================ */
+
+.outline-manager .inline-title-input {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  width: 100%;
+  border: none;
+  border-bottom: 2px solid var(--color-border-default);
+  background: transparent;
+  padding: var(--spacing-xs) 0;
+  color: var(--color-text-primary);
+  transition: border-color var(--transition-base);
+  line-height: 1.2;
+}
+
+.outline-manager .inline-title-input:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+}
+
+.outline-manager .inline-description-input {
+  width: 100%;
+  background-color: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-md);
+  font-family: inherit;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text-primary);
+  resize: vertical;
+  min-height: 100px;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.outline-manager .inline-description-input:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 2px var(--color-brand-primary-soft);
+  background-color: var(--color-surface-base);
+}
+
+/* Edit Actions */
+.outline-manager .edit-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  justify-content: flex-end;
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: var(--spacing-md);
+}
+
+.outline-manager .edit-actions-split {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: var(--spacing-md);
+}
+
+.outline-manager .edit-actions-right {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+/* ============================================================================
+   CHAPTER STREAM WRAPPER (Height Animation)
+   ============================================================================ */
+
+.outline-manager .chapter-stream-wrapper {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--transition-slow);
+  overflow: visible;
+}
+
+.outline-manager .timeline-act-group.is-collapsed .chapter-stream-wrapper {
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--transition-base);
+}
+
+.outline-manager .timeline-chapter-stream {
+  min-height: 0;
+  margin-top: var(--spacing-lg);
+  margin-left: var(--spacing-xl);
+  padding-left: var(--size-12);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  overflow: hidden;
+}
+
+.outline-manager .timeline-act-group.is-expanded .timeline-chapter-stream {
+  overflow: visible;
+}
+
+/* Connector Line for chapters */
+.outline-manager .timeline-chapter-stream > .stream-line {
+  position: absolute;
+  top: calc(-1 * var(--spacing-xl));
+  bottom: var(--spacing-xl);
+  left: 0;
+  width: 2px;
+  background-color: var(--color-border-default);
+  z-index: var(--z-base);
+}
+
+/* Closing state - all fade out together */
+.outline-manager .timeline-act-group.is-collapsed .timeline-chapter-node {
+  opacity: 0;
+  transform: translateY(calc(-1 * var(--spacing-sm)));
+  animation: none;
+}
+
+/* ============================================================================
+   CHAPTER NODE
+   ============================================================================ */
+
+.outline-manager .timeline-chapter-node {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-lg);
+  opacity: 0;
+  transform: translateY(calc(-1 * var(--spacing-md)));
+  animation: chapterSlideIn 0.35s ease forwards;
+  animation-delay: calc(var(--chapter-index, 0) * 60ms);
+}
+
+@keyframes chapterSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-1 * var(--spacing-md)));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.outline-manager .chapter-marker {
+  position: absolute;
+  left: calc(-1 * var(--size-12) - 7px);
+  top: var(--spacing-xl);
+  width: 14px;
+  height: 14px;
+  background-color: var(--color-surface-base);
+  border: 2px solid var(--color-border-default);
+  border-radius: 50%;
+  z-index: var(--z-content);
+  box-shadow: 0 0 0 var(--spacing-xs) var(--color-surface-base);
+  transition: all var(--transition-base);
+}
+
+.outline-manager .chapter-content-wrapper {
+  flex: 1;
+  width: 100%;
+}
+
+/* Chapter Card */
+.outline-manager .chapter-card {
+  padding: var(--spacing-md) var(--spacing-lg);
+}
+
+.outline-manager .chapter-card .inline-title-input {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.outline-manager .chapter-card .inline-description-input {
+  min-height: 80px;
+}
+
+.outline-manager .chapter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--spacing-xs);
+}
+
+.outline-manager .chapter-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  cursor: pointer;
+  flex: 1;
+}
+
+.outline-manager .chapter-index {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-secondary-main);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.outline-manager .chapter-info h4 {
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.outline-manager .chapter-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+/* Chapter Expand Animation Wrapper */
+.outline-manager .chapter-expand-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--transition-slow);
+  overflow: hidden;
+}
+
+.outline-manager .chapter-expand-wrapper.is-expanded {
+  grid-template-rows: 1fr;
+}
+
+.outline-manager .chapter-expand-content {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.outline-manager .chapter-expand-wrapper.is-expanded .chapter-expand-content {
+  overflow: visible;
+}
+
+.outline-manager .chapter-description {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
+  margin: var(--spacing-sm) 0 0 0;
+  white-space: pre-wrap;
+  max-height: 12.5rem;
+  overflow-y: auto;
+}
+
+.outline-manager .chapter-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: var(--spacing-sm);
+}
+
+/* ============================================================================
+   ADD NODES (Creation)
+   ============================================================================ */
+
+/* Creation Node (Add Act/Chapter Inline) */
+.outline-manager .creation-node .node-marker,
+.outline-manager .creation-node .chapter-marker {
+  border-color: var(--color-border-default);
+  color: var(--color-text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-surface-base);
+}
+
+/* Add Act Node */
+.outline-manager .add-act-node {
+  cursor: pointer;
+}
+
+.outline-manager .add-act-node .node-marker {
+  border-color: var(--color-border-default);
+  border-style: dashed;
+  color: var(--color-text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-surface-base);
+}
+
+.outline-manager .add-act-card {
+  border: 1px dashed var(--color-border-default);
+  background: var(--color-surface-base);
+  padding: var(--spacing-md) var(--spacing-lg);
+  transition: all var(--transition-base);
+}
+
+.outline-manager .add-act-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.outline-manager .add-act-node:hover .node-marker {
+  border-color: var(--color-border-medium);
+  border-style: solid;
+  color: var(--color-text-secondary);
+}
+
+.outline-manager .add-act-node:hover .add-act-card {
+  border-color: var(--color-border-medium);
+  border-style: solid;
+  background: var(--color-surface-hover);
+}
+
+.outline-manager .add-act-node:hover .add-act-content {
+  color: var(--color-text-secondary);
+}
+
+/* Add Chapter Node */
+.outline-manager .add-chapter-node {
+  cursor: pointer;
+}
+
+.outline-manager .add-chapter-node .chapter-marker {
+  border-color: var(--color-border-default);
+  border-style: dashed;
+  color: var(--color-text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-surface-base);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.outline-manager .add-chapter-card {
+  border: 1px dashed var(--color-border-default);
+  background: var(--color-surface-base);
+  padding: var(--spacing-md) var(--spacing-lg);
+  transition: all var(--transition-base);
+}
+
+.outline-manager .add-chapter-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.outline-manager .add-chapter-node:hover .chapter-marker {
+  border-color: var(--color-border-medium);
+  border-style: solid;
+  color: var(--color-text-secondary);
+}
+
+.outline-manager .add-chapter-node:hover .add-chapter-card {
+  border-color: var(--color-border-medium);
+  border-style: solid;
+  background: var(--color-surface-hover);
+}
+
+.outline-manager .add-chapter-node:hover .add-chapter-content {
+  color: var(--color-text-secondary);
+}
+
+/* ============================================================================
+   EDIT FORMS
+   ============================================================================ */
+
+.outline-manager .item-form {
+  background: var(--color-surface-subtle);
+  padding: var(--spacing-lg);
+  border-radius: var(--border-radius-lg);
+  border: 1px solid var(--color-border-subtle);
+}
+
+.outline-manager .item-form h3,
+.outline-manager .item-form h4 {
+  margin-top: 0;
+  margin-bottom: var(--spacing-md);
+}
+
+.outline-manager .form-group {
+  margin-bottom: var(--spacing-md);
+}
+
+.outline-manager .form-group label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  margin-bottom: var(--spacing-xs);
+  color: var(--color-text-secondary);
+}
+
+.outline-manager .form-group input,
+.outline-manager .form-group textarea {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface-base);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  transition: border-color var(--transition-fast);
+}
+
+.outline-manager .form-group input:focus,
+.outline-manager .form-group textarea:focus {
+  outline: none;
+  border-color: var(--color-primary-main);
+  box-shadow: 0 0 0 2px var(--color-primary-100);
+}
+
+.outline-manager .form-actions,
+.outline-manager .form-actions-split {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+}
+
+.outline-manager .form-actions-split {
+  justify-content: space-between;
+}
+
+.outline-manager .form-actions-right {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.outline-manager .chapter-add-form {
+  padding: var(--spacing-md);
+}
+
+/* ============================================================================
+   FALLBACK BADGE
+   ============================================================================ */
+
+.outline-manager .fallback-badge {
+  color: var(--color-warning-main);
+}
+
+.outline-manager .warning-icon {
+  color: var(--color-warning-main);
+  margin-left: var(--spacing-xs);
+}
+
+/* ============================================================================
+   ANIMATIONS
+   ============================================================================ */
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(calc(-1 * var(--spacing-sm) - 2px)); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes expandStream {
+  from { opacity: 0; transform: translateY(calc(-1 * var(--spacing-xs) - 1px)); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================================
+   RESPONSIVE
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .outline-manager .timeline-container {
+    padding: var(--spacing-md);
+  }
+
+  .outline-manager .timeline-track::before {
+    left: var(--spacing-lg);
+  }
+
+  .outline-manager .outline-marker {
+    width: var(--size-12);
+    height: var(--size-12);
+    font-size: var(--font-size-base);
+  }
+
+  .outline-manager .node-marker {
+    width: var(--spacing-2xl);
+    height: var(--spacing-2xl);
+    font-size: var(--font-size-sm);
+  }
+
+  .outline-manager .timeline-act-stream {
+    margin-left: var(--spacing-lg);
+    padding-left: var(--spacing-xl);
+  }
+
+  .outline-manager .timeline-chapter-stream {
+    margin-left: var(--spacing-lg);
+    padding-left: var(--spacing-xl);
+  }
+
+  .outline-manager .chapter-marker {
+    left: calc(-1 * var(--spacing-xl) - 7px);
+  }
+
+  /* Prevent last content from being hidden behind fixed MobileFooter */
+  .outline-panel-content::after {
+    content: '';
+    display: block;
+    height: var(--size-mobile-footer-height);
+  }
+}

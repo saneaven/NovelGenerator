@@ -202,7 +202,7 @@ class Project(Base):
     organizations = relationship("Organization", back_populates="project", cascade="all, delete-orphan")
     locations = relationship("Location", back_populates="project", cascade="all, delete-orphan")
     lorebook_entries = relationship("LorebookEntry", back_populates="project", cascade="all, delete-orphan")
-    outline = relationship("Outline", back_populates="project", uselist=False, cascade="all, delete-orphan")
+    outlines = relationship("Outline", back_populates="project", cascade="all, delete-orphan", order_by="Outline.order")
     chats = relationship("Chat", back_populates="project", cascade="all, delete-orphan")
     assets = relationship("Asset", back_populates="project", cascade="all, delete-orphan")
 
@@ -327,17 +327,19 @@ class LorebookEntry(Base):
 # ============================================================================
 
 class Outline(Base):
-    """Story outline - structure only"""
+    """Story outline - structure only (content in object_translations)"""
     __tablename__ = 'outlines'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, unique=True)
+    project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    order = Column(Integer, nullable=False, default=0)  # Display order within project
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
-    project = relationship("Project", back_populates="outline")
+    project = relationship("Project", back_populates="outlines")
     acts = relationship("Act", back_populates="outline", cascade="all, delete-orphan", order_by="Act.order")
 
 

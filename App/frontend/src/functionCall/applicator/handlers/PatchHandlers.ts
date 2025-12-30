@@ -4,8 +4,9 @@
  * Handlers for search-replace patch operations:
  * - patch_basic_info
  * - patch_story_object
- * - patch_chapter_outline
+ * - patch_chapter_outline (legacy)
  * - patch_manuscript
+ * - patch_outline / patch_outline_act / patch_outline_chapter
  */
 
 import type { ApplicationResult, PatchRetryContext, StoryObjectSubtype } from '../../types';
@@ -21,7 +22,6 @@ const STORY_OBJECT_TYPE_MAP: Record<StoryObjectSubtype, ObjectType> = {
   location: 'location',
   organization: 'organization',
   lorebook: 'lorebook',
-  act: 'act',
 };
 
 // ============================================================================
@@ -330,12 +330,199 @@ export async function patchManuscript(
 }
 
 // ============================================================================
+// OUTLINE PATCH HANDLERS
+// ============================================================================
+
+/**
+ * Patch outline fields using search and replace
+ */
+export async function patchOutline(
+  args: Record<string, unknown>,
+  context: HandlerContext
+): Promise<ApplicationResult> {
+  const { id, replacements } = args as {
+    id?: string;
+    replacements?: Replacement[];
+  };
+
+  if (!id || !replacements) {
+    return error('Missing required fields for patch_outline');
+  }
+
+  const { store, language } = context;
+
+  const object = await ensureObject(store, 'outline', id);
+  const currentData = getObjectData(object, language);
+  const retryContexts: PatchRetryContext[] = [];
+
+  const newData: Record<string, string> = {
+    name: (currentData.name as string) ?? '',
+    description: (currentData.description as string) ?? '',
+  };
+
+  for (const r of replacements) {
+    if (!r.field || !Object.prototype.hasOwnProperty.call(newData, r.field)) continue;
+
+    const result = applyPatch(newData[r.field], [{ old: r.old, new: r.new }]);
+    if (result.success) {
+      newData[r.field] = result.value;
+    } else {
+      retryContexts.push({
+        objectId: id,
+        objectType: 'outline',
+        fieldName: r.field,
+        currentValue: newData[r.field],
+        error: result.error || 'Patch failed',
+      });
+    }
+  }
+
+  await store.updateObject('outline', id, {
+    data: newData,
+    language,
+    create_new_version: true,
+    user_request: 'AI Edit',
+  });
+
+  return buildPatchResult(id, 'outline', retryContexts, replacements.length, 'Updated outline');
+}
+
+/**
+ * Patch act fields using search and replace
+ */
+export async function patchOutlineAct(
+  args: Record<string, unknown>,
+  context: HandlerContext
+): Promise<ApplicationResult> {
+  const { id, replacements, order } = args as {
+    id?: string;
+    replacements?: Replacement[];
+    order?: number;
+  };
+
+  if (!id || !replacements) {
+    return error('Missing required fields for patch_outline_act');
+  }
+
+  const { store, language } = context;
+
+  const object = await ensureObject(store, 'act', id);
+  const currentData = getObjectData(object, language);
+  const retryContexts: PatchRetryContext[] = [];
+
+  const newData: Record<string, string> = {
+    name: (currentData.name as string) ?? '',
+    description: (currentData.description as string) ?? '',
+  };
+
+  for (const r of replacements) {
+    if (!r.field || !Object.prototype.hasOwnProperty.call(newData, r.field)) continue;
+
+    const result = applyPatch(newData[r.field], [{ old: r.old, new: r.new }]);
+    if (result.success) {
+      newData[r.field] = result.value;
+    } else {
+      retryContexts.push({
+        objectId: id,
+        objectType: 'act',
+        fieldName: r.field,
+        currentValue: newData[r.field],
+        error: result.error || 'Patch failed',
+      });
+    }
+  }
+
+  // Build metadata for order change
+  const metadata: Record<string, unknown> = {};
+  if (order !== undefined && typeof order === 'number') {
+    metadata.order = order;
+  }
+
+  await store.updateObject('act', id, {
+    data: newData,
+    language,
+    create_new_version: true,
+    user_request: 'AI Edit',
+    ...(Object.keys(metadata).length > 0 && { metadata }),
+  });
+
+  return buildPatchResult(id, 'act', retryContexts, replacements.length, 'Updated act');
+}
+
+/**
+ * Patch chapter fields using search and replace (outline-prefixed version)
+ */
+export async function patchOutlineChapter(
+  args: Record<string, unknown>,
+  context: HandlerContext
+): Promise<ApplicationResult> {
+  const { id, replacements, order } = args as {
+    id?: string;
+    replacements?: Replacement[];
+    order?: number;
+  };
+
+  if (!id || !replacements) {
+    return error('Missing required fields for patch_outline_chapter');
+  }
+
+  const { store, language } = context;
+
+  const object = await ensureObject(store, 'chapter', id);
+  const currentData = getObjectData(object, language);
+  const retryContexts: PatchRetryContext[] = [];
+
+  const newData: Record<string, string> = {
+    name: (currentData.name as string) ?? '',
+    description: (currentData.description as string) ?? '',
+  };
+
+  for (const r of replacements) {
+    if (!r.field || !Object.prototype.hasOwnProperty.call(newData, r.field)) continue;
+
+    const result = applyPatch(newData[r.field], [{ old: r.old, new: r.new }]);
+    if (result.success) {
+      newData[r.field] = result.value;
+    } else {
+      retryContexts.push({
+        objectId: id,
+        objectType: 'chapter',
+        fieldName: r.field,
+        currentValue: newData[r.field],
+        error: result.error || 'Patch failed',
+      });
+    }
+  }
+
+  // Build metadata for order change
+  const metadata: Record<string, unknown> = {};
+  if (order !== undefined && typeof order === 'number') {
+    metadata.order = order;
+  }
+
+  await store.updateObject('chapter', id, {
+    data: newData,
+    language,
+    create_new_version: true,
+    user_request: 'AI Edit',
+    ...(Object.keys(metadata).length > 0 && { metadata }),
+  });
+
+  return buildPatchResult(id, 'chapter', retryContexts, replacements.length, 'Updated chapter');
+}
+
+// ============================================================================
 // HANDLER REGISTRY
 // ============================================================================
 
 export const PATCH_HANDLERS = {
+  // Basic handlers
   patch_basic_info: patchBasicInfo,
   patch_story_object: patchStoryObject,
   patch_chapter_outline: patchChapterOutline,
   patch_manuscript: patchManuscript,
+  // Outline handlers
+  patch_outline: patchOutline,
+  patch_outline_act: patchOutlineAct,
+  patch_outline_chapter: patchOutlineChapter,
 };

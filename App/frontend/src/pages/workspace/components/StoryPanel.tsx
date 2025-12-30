@@ -3,10 +3,9 @@ import './StoryPanel.css';
 import '../../../components/ManagerCommon.css';
 import BasicInfoManager from '../../../components/BasicInfoManager';
 import NameDescriptionManager from '../../../components/NameDescriptionManager';
-import OutlineManager from '../../../components/OutlineManager';
-import { Clipboard, People, Organization, Map, Books, Document, ChevronLeft, ChevronRight } from '../../../components/icons';
+import { Clipboard, People, Organization, Map, Books, ChevronLeft, ChevronRight } from '../../../components/icons';
 
-type TabType = 'basicInfo' | 'characters' | 'organizations' | 'locations' | 'lorebook' | 'outline';
+type TabType = 'basicInfo' | 'characters' | 'organizations' | 'locations' | 'lorebook';
 
 interface StoryPanelProps {
   activeStoryTab: TabType;
@@ -29,7 +28,6 @@ const StoryPanel: React.FC<StoryPanelProps> = ({
     { id: 'organizations', label: 'Organizations', icon: <Organization size="sm" /> },
     { id: 'locations', label: 'Locations', icon: <Map size="sm" /> },
     { id: 'lorebook', label: 'Lorebook', icon: <Books size="sm" /> },
-    { id: 'outline', label: 'Outline', icon: <Document size="sm" /> },
   ];
 
   // Check scroll position to show/hide navigation buttons
@@ -139,8 +137,6 @@ const StoryPanel: React.FC<StoryPanelProps> = ({
             globalDisplayLanguage={globalDisplayLanguage}
           />
         );
-      case 'outline':
-        return <OutlineManager globalDisplayLanguage={globalDisplayLanguage} />;
       default:
         return <BasicInfoManager globalDisplayLanguage={globalDisplayLanguage} />;
     }

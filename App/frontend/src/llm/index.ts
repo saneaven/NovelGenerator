@@ -14,6 +14,7 @@ export {
   type BasePromptContext,
   type ChatWorkspacePromptContext,
   type ChatNovelEditorPromptContext,
+  type ChatOutlineManagerPromptContext,
   type EditAssistantStoryObjectPromptContext,
   type EditAssistantManuscriptPromptContext,
   type StoryTranslationPromptContext,

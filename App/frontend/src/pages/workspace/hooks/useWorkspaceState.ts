@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useChatStore } from '../../../store/chatStore';
 
-type TabType = 'basicInfo' | 'characters' | 'organizations' | 'locations' | 'lorebook' | 'outline';
+type TabType = 'basicInfo' | 'characters' | 'organizations' | 'locations' | 'lorebook';
 
 export interface WorkspaceUIState {
   isChatVisible: boolean;

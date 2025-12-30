@@ -6,6 +6,7 @@ import Register from './pages/Register';
 import Home from './pages/Home';
 import ProjectMenu from './pages/ProjectMenu';
 import Workspace from './pages/Workspace';
+import OutlineManager from './pages/OutlineManager';
 import NovelEditor from './pages/NovelEditor';
 import { useEffect, useState } from 'react';
 
@@ -107,6 +108,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <Workspace />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'project/:projectId/outline',
+        element: (
+          <ProtectedRoute>
+            <OutlineManager />
           </ProtectedRoute>
         ),
       },

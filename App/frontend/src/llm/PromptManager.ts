@@ -15,6 +15,7 @@ import {
   type TemplateData,
   type ChatWorkspacePromptContext,
   type ChatNovelEditorPromptContext,
+  type ChatOutlineManagerPromptContext,
   type EditAssistantStoryObjectPromptContext,
   type EditAssistantManuscriptPromptContext,
   type StoryTranslationPromptContext,
@@ -104,6 +105,8 @@ export class PromptManager {
         return this.generateChatBundle(context as ChatWorkspacePromptContext, 'workspace');
       case LLMTaskMode.CHAT_NOVEL_EDITOR:
         return this.generateChatBundle(context as ChatNovelEditorPromptContext, 'novelEditor');
+      case LLMTaskMode.CHAT_OUTLINE_MANAGER:
+        return this.generateChatBundle(context as ChatOutlineManagerPromptContext, 'outlineManager');
       case LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT:
         return this.generateEditAssistantBundle(context as EditAssistantStoryObjectPromptContext, 'storyObject');
       case LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT:
@@ -134,6 +137,7 @@ export class PromptManager {
     switch (mode) {
       case LLMTaskMode.CHAT_WORKSPACE:
       case LLMTaskMode.CHAT_NOVEL_EDITOR:
+      case LLMTaskMode.CHAT_OUTLINE_MANAGER:
         return (context as ChatWorkspacePromptContext).functions;
       case LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT:
         return this.getEditAssistantFunctions(context as EditAssistantStoryObjectPromptContext, 'storyObject');
@@ -157,8 +161,8 @@ export class PromptManager {
   // ==================== Chat (Workspace & NovelEditor) ====================
 
   private static async generateChatBundle(
-    context: ChatWorkspacePromptContext | ChatNovelEditorPromptContext,
-    mode: 'workspace' | 'novelEditor'
+    context: ChatWorkspacePromptContext | ChatNovelEditorPromptContext | ChatOutlineManagerPromptContext,
+    mode: 'workspace' | 'novelEditor' | 'outlineManager'
   ): Promise<PromptBundle> {
     const [systemTemplate, userTemplate, nonLastTemplate, prefillTemplate] = await Promise.all([
       this.getTemplate('chat', 'systemPrompt', mode),
@@ -581,27 +585,44 @@ export class PromptManager {
       }),
     ];
 
-    // Build outline with acts and chapters
-    const outline: TemplateData['project']['outline'] = acts.length > 0 ? {
-      acts: acts
+    // Build outline with multiple outlines, acts and chapters
+    const outlines = projectObjects.filter(obj => obj.type === 'outline');
+    const outline: TemplateData['project']['outline'] = outlines.length > 0 ? {
+      outlines: outlines
         .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0))
-        .map(act => {
-          const actData = this.getObjectDataForLanguage(act, language);
+        .map(outlineObj => {
+          const outlineData = this.getObjectDataForLanguage(outlineObj, language);
+          const outlineActs = acts
+            .filter(act => act.metadata?.outline_id === outlineObj.id)
+            .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0));
           return {
-            id: act.id,
-            name: actData.name || '',
-            description: actData.description || '',
-            chapters: chapters
-              .filter(ch => ch.metadata?.act_id === act.id)
-              .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0))
-              .map(chapter => {
-                const chapterData = this.getObjectDataForLanguage(chapter, language);
-                return {
-                  id: chapter.id,
-                  name: chapterData.name || '',
-                  description: chapterData.description || '',
-                };
-              }),
+            id: outlineObj.id,
+            name: outlineData.name || '',
+            description: outlineData.description || '',
+            order: (outlineObj.metadata?.order as number) || 0,
+            acts: outlineActs.map(act => {
+              const actData = this.getObjectDataForLanguage(act, language);
+              return {
+                id: act.id,
+                name: actData.name || '',
+                description: actData.description || '',
+                order: (act.metadata?.order as number) || 0,
+                outlineId: outlineObj.id,
+                chapters: chapters
+                  .filter(ch => ch.metadata?.act_id === act.id)
+                  .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0))
+                  .map(chapter => {
+                    const chapterData = this.getObjectDataForLanguage(chapter, language);
+                    return {
+                      id: chapter.id,
+                      name: chapterData.name || '',
+                      description: chapterData.description || '',
+                      order: (chapter.metadata?.order as number) || 0,
+                      actId: act.id,
+                    };
+                  }),
+              };
+            }),
           };
         }),
     } : null;
@@ -725,27 +746,43 @@ export class PromptManager {
           }),
       ];
 
-      // Build outline for this language
-      const langOutline = acts.length > 0 ? {
-        acts: acts
+      // Build outline for this language (multiple outlines)
+      const langOutline = outlines.length > 0 ? {
+        outlines: outlines
           .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0))
-          .map(act => {
-            const actData = act.data[lang] || {};
+          .map(outlineObj => {
+            const outlineData = outlineObj.data[lang] || {};
+            const outlineActs = acts
+              .filter(act => act.metadata?.outline_id === outlineObj.id)
+              .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0));
             return {
-              id: act.id,
-              name: actData.name || '',
-              description: actData.description || '',
-              chapters: chapters
-                .filter(ch => ch.metadata?.act_id === act.id)
-                .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0))
-                .map(chapter => {
-                  const chapterData = chapter.data[lang] || {};
-                  return {
-                    id: chapter.id,
-                    name: chapterData.name || '',
-                    description: chapterData.description || '',
-                  };
-                }),
+              id: outlineObj.id,
+              name: outlineData.name || '',
+              description: outlineData.description || '',
+              order: (outlineObj.metadata?.order as number) || 0,
+              acts: outlineActs.map(act => {
+                const actData = act.data[lang] || {};
+                return {
+                  id: act.id,
+                  name: actData.name || '',
+                  description: actData.description || '',
+                  order: (act.metadata?.order as number) || 0,
+                  outlineId: outlineObj.id,
+                  chapters: chapters
+                    .filter(ch => ch.metadata?.act_id === act.id)
+                    .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0))
+                    .map(chapter => {
+                      const chapterData = chapter.data[lang] || {};
+                      return {
+                        id: chapter.id,
+                        name: chapterData.name || '',
+                        description: chapterData.description || '',
+                        order: (chapter.metadata?.order as number) || 0,
+                        actId: act.id,
+                      };
+                    }),
+                };
+              }),
             };
           }),
       } : null;

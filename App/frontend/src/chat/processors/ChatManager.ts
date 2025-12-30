@@ -2,7 +2,7 @@ import type { MutableRefObject } from 'react';
 import type { ChatMessage, FunctionCallMetadata, ContentPart, FunctionCallProgress, FunctionCallResultSummary } from '../../llm/requestTypes';
 import type { ProviderType, ProviderConfig, ThinkingConfig, RetryConfig } from '../../store/settingsStore';
 import { generateTempId } from '../../utils/tempId';
-import { LLMTask, LLMTaskMode, LLMTaskManager, type TaskHandle, type ChatWorkspacePromptContext, type ChatNovelEditorPromptContext } from '../../llm';
+import { LLMTask, LLMTaskMode, LLMTaskManager, type TaskHandle, type ChatWorkspacePromptContext, type ChatNovelEditorPromptContext, type ChatOutlineManagerPromptContext } from '../../llm';
 
 /**
  * Find the index of the last user message in an array of chat messages
@@ -30,7 +30,7 @@ export interface ChatManagerConfig {
   provider: ProviderType;
   providerConfig: ProviderConfig;
   functions?: any[];
-  mode: 'novelEditor' | 'workspace';
+  mode: 'novelEditor' | 'workspace' | 'outlineManager';
   enablePrefill?: boolean;
   thinkingMode?: 'off' | 'model' | 'custom';
   thinkingConfig?: ThinkingConfig;
@@ -163,6 +163,8 @@ export class ChatManager {
 
     const mode = this.config.mode === 'workspace'
       ? LLMTaskMode.CHAT_WORKSPACE
+      : this.config.mode === 'outlineManager'
+      ? LLMTaskMode.CHAT_OUTLINE_MANAGER
       : LLMTaskMode.CHAT_NOVEL_EDITOR;
 
     const promptContext = this.buildPromptContext(combinedUserInput, language);
@@ -211,7 +213,7 @@ export class ChatManager {
   private buildPromptContext(
     userInput: string,
     language: string
-  ): ChatWorkspacePromptContext | ChatNovelEditorPromptContext {
+  ): ChatWorkspacePromptContext | ChatNovelEditorPromptContext | ChatOutlineManagerPromptContext {
     const functionResults = this.config.getPendingFunctionCallResults?.() ?? [];
     const contextObjectIds = this.config.getSelectedContextIds?.();
 

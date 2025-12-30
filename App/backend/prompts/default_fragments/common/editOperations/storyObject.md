@@ -54,27 +54,16 @@ To change "fights alone" to "leads a small band":
 ## Available Functions
 
 ### CRUD Operations
-- `create_story_object` - Create a new story object (character, location, item, event, act, other)
+- `create_story_object` - Create a new story object (character, location, organization, lorebook)
 - `delete_story_object` - Delete a story object
-- `create_chapter` - Create a new chapter
-- `delete_chapter` - Delete a chapter
 
 ### Replace Operations
 - `replace_basic_info` - Replace basic info fields (title, logline, genre)
-- `replace_story_object` - Replace story object fields
-- `replace_chapter_outline` - Replace chapter outline fields (name, description, actId, order)
+- `replace_story_object` - Replace story object fields (name, description)
 
 ### Patch Operations
 - `patch_basic_info` - Patch basic info using search-replace
 - `patch_story_object` - Patch story object using search-replace
-- `patch_chapter_outline` - Patch chapter outline using search-replace (can also change order)
-
-## Chapter Ordering
-
-Both `replace_chapter_outline` and `patch_chapter_outline` support an `order` field:
-- Use 1-based positioning (order: 1 = first chapter, order: 2 = second, etc.)
-- When you change a chapter's order, sibling chapters are automatically reordered
-- Example: `{ "function": "replace_chapter_outline", "id": "ch-123", "order": 2 }`
 
 ## Guidelines
 
@@ -82,4 +71,3 @@ Both `replace_chapter_outline` and `patch_chapter_outline` support an `order` fi
 - Use `patch_*` for targeted changes in long descriptions
 - For patch operations, ensure the `old` string is unique in the field
 - Omit fields you don't need to change
-- Use `order` to reposition chapters within their act

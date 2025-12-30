@@ -568,17 +568,24 @@ export interface SimplifiedStoryObjects {
   locations: Array<{ id: string; name: string; description: string }>;
   lorebook: Array<{ id: string; name: string; description: string }>;
   outline: {
-    acts: Array<{
+    outlines: Array<{
       id: string;
       name: string;
       description: string;
       order: number;
-      chapters: Array<{
+      acts: Array<{
         id: string;
         name: string;
         description: string;
         order: number;
-        actId: string;
+        outlineId: string;
+        chapters: Array<{
+          id: string;
+          name: string;
+          description: string;
+          order: number;
+          actId: string;
+        }>;
       }>;
     }>;
   };
@@ -619,7 +626,7 @@ export function useStoryObjects(projectId: string | undefined, language: string)
         organizations: [],
         locations: [],
         lorebook: [],
-        outline: { acts: [] },
+        outline: { outlines: [] },
       };
     }
 
@@ -635,6 +642,7 @@ export function useStoryObjects(projectId: string | undefined, language: string)
     const organizations = projectObjects.filter(obj => obj.type === 'organization');
     const locations = projectObjects.filter(obj => obj.type === 'location');
     const lorebook = projectObjects.filter(obj => obj.type === 'lorebook');
+    const outlines = projectObjects.filter(obj => obj.type === 'outline');
     const acts = projectObjects.filter(obj => obj.type === 'act');
     const chapters = projectObjects.filter(obj => obj.type === 'chapter');
 
@@ -649,28 +657,41 @@ export function useStoryObjects(projectId: string | undefined, language: string)
       };
     })() : null;
 
-    // Build outline with acts and chapters
+    // Build outline hierarchy: Outline > Acts > Chapters
     const outline = {
-      acts: acts
+      outlines: outlines
         .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-        .map(act => {
-          const actData = getObjectDataForLanguage(act, language);
+        .map(outlineObj => {
+          const outlineData = getObjectDataForLanguage(outlineObj, language);
           return {
-            id: act.id,
-            name: actData.name || '',
-            description: actData.description || '',
-            order: act.metadata.order || 0,
-            chapters: chapters
-              .filter(ch => ch.metadata.act_id === act.id)
+            id: outlineObj.id,
+            name: outlineData.name || '',
+            description: outlineData.description || '',
+            order: outlineObj.metadata.order || 0,
+            acts: acts
+              .filter(act => act.metadata.outline_id === outlineObj.id)
               .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-              .map(chapter => {
-                const chapterData = getObjectDataForLanguage(chapter, language);
+              .map(act => {
+                const actData = getObjectDataForLanguage(act, language);
                 return {
-                  id: chapter.id,
-                  name: chapterData.name || '',
-                  description: chapterData.description || '',
-                  order: chapter.metadata.order || 0,
-                  actId: chapter.metadata.act_id || '',
+                  id: act.id,
+                  name: actData.name || '',
+                  description: actData.description || '',
+                  order: act.metadata.order || 0,
+                  outlineId: act.metadata.outline_id || '',
+                  chapters: chapters
+                    .filter(ch => ch.metadata.act_id === act.id)
+                    .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+                    .map(chapter => {
+                      const chapterData = getObjectDataForLanguage(chapter, language);
+                      return {
+                        id: chapter.id,
+                        name: chapterData.name || '',
+                        description: chapterData.description || '',
+                        order: chapter.metadata.order || 0,
+                        actId: chapter.metadata.act_id || '',
+                      };
+                    }),
                 };
               }),
           };

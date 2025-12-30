@@ -25,7 +25,7 @@ import {
 
 const CREATE_STORY_OBJECT: FunctionSchema = {
   name: 'create_story_object',
-  description: 'Create a story object (character, location, organization, lorebook, or act).',
+  description: 'Create a story object (character, location, organization, or lorebook).',
   category: 'crud',
   target: 'story_object',
   parameters: {
@@ -87,6 +87,102 @@ const DELETE_CHAPTER: FunctionSchema = {
 };
 
 // ============================================================================
+// OUTLINE CRUD FUNCTIONS
+// ============================================================================
+
+const CREATE_OUTLINE: FunctionSchema = {
+  name: 'create_outline',
+  description: 'Create a new outline for the project.',
+  category: 'crud',
+  target: 'outline',
+  parameters: {
+    type: 'object',
+    properties: {
+      name: nameProperty,
+      description: descriptionProperty,
+    },
+    required: ['name', 'description'],
+  },
+};
+
+const DELETE_OUTLINE: FunctionSchema = {
+  name: 'delete_outline',
+  description: 'Delete an outline by ID. This will also delete all acts and chapters within.',
+  category: 'crud',
+  target: 'outline',
+  idParam: 'id',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: idProperty,
+    },
+    required: ['id'],
+  },
+};
+
+const CREATE_OUTLINE_ACT: FunctionSchema = {
+  name: 'create_outline_act',
+  description: 'Create an act within an outline.',
+  category: 'crud',
+  target: 'outline',
+  parameters: {
+    type: 'object',
+    properties: {
+      outlineId: { type: 'string', description: 'ID of the parent outline' },
+      name: nameProperty,
+      description: descriptionProperty,
+    },
+    required: ['outlineId', 'name', 'description'],
+  },
+};
+
+const DELETE_OUTLINE_ACT: FunctionSchema = {
+  name: 'delete_outline_act',
+  description: 'Delete an act by ID. This will also delete all chapters within.',
+  category: 'crud',
+  target: 'outline',
+  idParam: 'id',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: idProperty,
+    },
+    required: ['id'],
+  },
+};
+
+const CREATE_OUTLINE_CHAPTER: FunctionSchema = {
+  name: 'create_outline_chapter',
+  description: 'Create a chapter within an act.',
+  category: 'crud',
+  target: 'outline',
+  parameters: {
+    type: 'object',
+    properties: {
+      actId: { type: 'string', description: 'ID of the parent act' },
+      name: nameProperty,
+      description: descriptionProperty,
+    },
+    required: ['actId', 'name', 'description'],
+  },
+};
+
+const DELETE_OUTLINE_CHAPTER: FunctionSchema = {
+  name: 'delete_outline_chapter',
+  description: 'Delete a chapter by ID.',
+  category: 'crud',
+  target: 'outline',
+  idParam: 'id',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: idProperty,
+    },
+    required: ['id'],
+  },
+};
+
+// ============================================================================
 // REPLACE FUNCTIONS
 // ============================================================================
 
@@ -129,6 +225,64 @@ const REPLACE_CHAPTER_OUTLINE: FunctionSchema = {
   description: 'Replace chapter outline fields. Only include fields you want to change.',
   category: 'replace',
   target: 'chapter',
+  idParam: 'id',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: idProperty,
+      actId: { type: 'string', description: 'New parent act ID' },
+      name: { type: 'string', description: 'New chapter name' },
+      description: { type: 'string', description: 'New chapter description' },
+      order: { type: 'integer', description: 'New position (1-based). Chapters will be reordered automatically.' },
+    },
+    required: ['id'],
+  },
+};
+
+// ============================================================================
+// OUTLINE REPLACE FUNCTIONS
+// ============================================================================
+
+const REPLACE_OUTLINE: FunctionSchema = {
+  name: 'replace_outline',
+  description: 'Replace outline fields. Only include fields you want to change.',
+  category: 'replace',
+  target: 'outline',
+  idParam: 'id',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: idProperty,
+      name: { type: 'string', description: 'New outline name' },
+      description: { type: 'string', description: 'New outline description' },
+    },
+    required: ['id'],
+  },
+};
+
+const REPLACE_OUTLINE_ACT: FunctionSchema = {
+  name: 'replace_outline_act',
+  description: 'Replace act fields. Only include fields you want to change.',
+  category: 'replace',
+  target: 'outline',
+  idParam: 'id',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: idProperty,
+      name: { type: 'string', description: 'New act name' },
+      description: { type: 'string', description: 'New act description' },
+      order: { type: 'integer', description: 'New position (1-based). Acts will be reordered automatically.' },
+    },
+    required: ['id'],
+  },
+};
+
+const REPLACE_OUTLINE_CHAPTER: FunctionSchema = {
+  name: 'replace_outline_chapter',
+  description: 'Replace chapter fields. Only include fields you want to change.',
+  category: 'replace',
+  target: 'outline',
   idParam: 'id',
   parameters: {
     type: 'object',
@@ -207,6 +361,72 @@ const PATCH_CHAPTER_OUTLINE: FunctionSchema = {
   description: 'Patch chapter outline fields using search and replace. Can also change order.',
   category: 'patch',
   target: 'chapter',
+  idParam: 'id',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: idProperty,
+      replacements: {
+        type: 'array',
+        items: nameDescReplacementSchema,
+        description: 'List of replacements to apply',
+      },
+      order: { type: 'integer', description: 'New position (1-based). Chapters will be reordered automatically.' },
+    },
+    required: ['id', 'replacements'],
+  },
+};
+
+// ============================================================================
+// OUTLINE PATCH FUNCTIONS
+// ============================================================================
+
+const PATCH_OUTLINE: FunctionSchema = {
+  name: 'patch_outline',
+  description: 'Patch outline fields using search and replace.',
+  category: 'patch',
+  target: 'outline',
+  idParam: 'id',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: idProperty,
+      replacements: {
+        type: 'array',
+        items: nameDescReplacementSchema,
+        description: 'List of replacements to apply',
+      },
+    },
+    required: ['id', 'replacements'],
+  },
+};
+
+const PATCH_OUTLINE_ACT: FunctionSchema = {
+  name: 'patch_outline_act',
+  description: 'Patch act fields using search and replace. Can also change order.',
+  category: 'patch',
+  target: 'outline',
+  idParam: 'id',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: idProperty,
+      replacements: {
+        type: 'array',
+        items: nameDescReplacementSchema,
+        description: 'List of replacements to apply',
+      },
+      order: { type: 'integer', description: 'New position (1-based). Acts will be reordered automatically.' },
+    },
+    required: ['id', 'replacements'],
+  },
+};
+
+const PATCH_OUTLINE_CHAPTER: FunctionSchema = {
+  name: 'patch_outline_chapter',
+  description: 'Patch chapter fields using search and replace. Can also change order.',
+  category: 'patch',
+  target: 'outline',
   idParam: 'id',
   parameters: {
     type: 'object',
@@ -436,23 +656,41 @@ class SchemaRegistryClass {
   }
 
   private registerAll(): void {
-    // CRUD
+    // CRUD - Story Objects
     this.register(CREATE_STORY_OBJECT);
     this.register(DELETE_STORY_OBJECT);
     this.register(CREATE_CHAPTER);
     this.register(DELETE_CHAPTER);
 
-    // Replace
+    // CRUD - Outline
+    this.register(CREATE_OUTLINE);
+    this.register(DELETE_OUTLINE);
+    this.register(CREATE_OUTLINE_ACT);
+    this.register(DELETE_OUTLINE_ACT);
+    this.register(CREATE_OUTLINE_CHAPTER);
+    this.register(DELETE_OUTLINE_CHAPTER);
+
+    // Replace - Basic
     this.register(REPLACE_BASIC_INFO);
     this.register(REPLACE_STORY_OBJECT);
     this.register(REPLACE_CHAPTER_OUTLINE);
     this.register(REPLACE_MANUSCRIPT);
 
-    // Patch
+    // Replace - Outline
+    this.register(REPLACE_OUTLINE);
+    this.register(REPLACE_OUTLINE_ACT);
+    this.register(REPLACE_OUTLINE_CHAPTER);
+
+    // Patch - Basic
     this.register(PATCH_BASIC_INFO);
     this.register(PATCH_STORY_OBJECT);
     this.register(PATCH_CHAPTER_OUTLINE);
     this.register(PATCH_MANUSCRIPT);
+
+    // Patch - Outline
+    this.register(PATCH_OUTLINE);
+    this.register(PATCH_OUTLINE_ACT);
+    this.register(PATCH_OUTLINE_CHAPTER);
 
     // Translation Set
     this.register(SET_BASIC_INFO_TRANSLATION);
@@ -547,6 +785,12 @@ export const CRUD_FUNCTION_NAMES = new Set([
   'delete_story_object',
   'create_chapter',
   'delete_chapter',
+  'create_outline',
+  'delete_outline',
+  'create_outline_act',
+  'delete_outline_act',
+  'create_outline_chapter',
+  'delete_outline_chapter',
 ]);
 
 /** All function names that perform replace operations */
@@ -555,6 +799,9 @@ export const REPLACE_FUNCTION_NAMES = new Set([
   'replace_story_object',
   'replace_chapter_outline',
   'replace_manuscript',
+  'replace_outline',
+  'replace_outline_act',
+  'replace_outline_chapter',
 ]);
 
 /** All function names that perform patch operations */
@@ -563,6 +810,9 @@ export const PATCH_FUNCTION_NAMES = new Set([
   'patch_story_object',
   'patch_chapter_outline',
   'patch_manuscript',
+  'patch_outline',
+  'patch_outline_act',
+  'patch_outline_chapter',
 ]);
 
 /** All translation function names */
@@ -620,4 +870,20 @@ export const STORY_OBJECT_EDIT_FUNCTIONS = [
 export const MANUSCRIPT_EDIT_FUNCTIONS = [
   REPLACE_MANUSCRIPT,
   PATCH_MANUSCRIPT,
+].map(s => ({ name: s.name, description: s.description, parameters: s.parameters }));
+
+/** Outline edit functions (for outline manager) */
+export const OUTLINE_EDIT_FUNCTIONS = [
+  CREATE_OUTLINE,
+  DELETE_OUTLINE,
+  CREATE_OUTLINE_ACT,
+  DELETE_OUTLINE_ACT,
+  CREATE_OUTLINE_CHAPTER,
+  DELETE_OUTLINE_CHAPTER,
+  REPLACE_OUTLINE,
+  REPLACE_OUTLINE_ACT,
+  REPLACE_OUTLINE_CHAPTER,
+  PATCH_OUTLINE,
+  PATCH_OUTLINE_ACT,
+  PATCH_OUTLINE_CHAPTER,
 ].map(s => ({ name: s.name, description: s.description, parameters: s.parameters }));

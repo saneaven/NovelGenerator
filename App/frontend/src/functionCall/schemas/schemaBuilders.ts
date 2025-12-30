@@ -15,10 +15,9 @@ export const STORY_OBJECT_TYPES = [
   'location',
   'organization',
   'lorebook',
-  'act',
 ] as const;
 
-/** Object types for translation (excludes act) */
+/** Object types for translation (excludes outline structure) */
 export const TRANSLATION_OBJECT_TYPES = [
   'character',
   'organization',
@@ -26,7 +25,10 @@ export const TRANSLATION_OBJECT_TYPES = [
   'lorebook',
 ] as const;
 
-/** Chapter types (act or chapter) */
+/** Outline structure types (outline, act, chapter) */
+export const OUTLINE_TYPES = ['outline', 'act', 'chapter'] as const;
+
+/** Chapter types (act or chapter) - legacy, use OUTLINE_TYPES for new code */
 export const CHAPTER_TYPES = ['act', 'chapter'] as const;
 
 // ============================================================================

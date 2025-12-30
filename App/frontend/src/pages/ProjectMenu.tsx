@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useProjectStore } from '../store/projectStore';
-import { Workspace, Document, ArrowRight, ArrowLeft } from '../components/icons';
+import { Workspace, Clipboard, Document, ArrowRight, ArrowLeft } from '../components/icons';
 
 const ProjectMenu: React.FC = () => {
   const navigate = useNavigate();
@@ -43,6 +43,10 @@ const ProjectMenu: React.FC = () => {
     navigate(`/project/${projectId}/workspace`);
   };
 
+  const handleOutlineClick = () => {
+    navigate(`/project/${projectId}/outline`);
+  };
+
   const handleNovelEditorClick = () => {
     navigate(`/project/${projectId}/novel-editor`);
   };
@@ -70,6 +74,13 @@ const ProjectMenu: React.FC = () => {
           <div className="menu-icon"><Workspace size="3xl" /></div>
           <h3>Workspace</h3>
           <p>Unified workspace with AI chat and story editing</p>
+          <div className="menu-arrow"><ArrowRight size="md" /></div>
+        </div>
+
+        <div className="menu-card" onClick={handleOutlineClick}>
+          <div className="menu-icon"><Clipboard size="3xl" /></div>
+          <h3>Outline Manager</h3>
+          <p>Plan and organize your story structure</p>
           <div className="menu-arrow"><ArrowRight size="md" /></div>
         </div>
 

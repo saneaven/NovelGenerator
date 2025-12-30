@@ -118,6 +118,7 @@ def get_object_model_class(object_type: str):
         'organization': Organization,
         'location': Location,
         LOREBOOK_TYPE: LorebookEntry,
+        'outline': Outline,
         'act': Act,
         'chapter': Chapter,
         'manuscript': Manuscript,
@@ -179,6 +180,9 @@ def get_object_metadata(obj: Any, object_type: str, db: Optional[Session] = None
         metadata['image_prompt'] = getattr(obj, 'image_prompt', None)
         metadata['image_prompt_positive'] = getattr(obj, 'image_prompt_positive', None)
         metadata['image_prompt_negative'] = getattr(obj, 'image_prompt_negative', None)
+    elif object_type == 'outline':
+        metadata['project_id'] = str(obj.project_id)
+        metadata['order'] = getattr(obj, 'order', 0) or 0
     elif object_type == 'act':
         outline = getattr(obj, 'outline', None)
         if not outline:
@@ -848,40 +852,43 @@ async def list_objects(
     # Filter by project_id or parent relationship
     if object_type in ['basic_info', 'character', 'organization', 'location', LOREBOOK_TYPE]:
         query = query.filter(model_class.project_id == project_id)
+    elif object_type == 'outline':
+        query = query.filter(model_class.project_id == project_id)
     elif object_type == 'act':
-        # Need to join through outline
-        outline = db.query(Outline).filter(Outline.project_id == project_id).first()
-        if outline:
-            query = query.filter(model_class.outline_id == outline.id)
+        # Get all outlines for the project
+        outline_ids = [o.id for o in db.query(Outline).filter(Outline.project_id == project_id).all()]
+        if outline_ids:
+            query = query.filter(model_class.outline_id.in_(outline_ids))
         else:
-            # No outline, return empty result set
+            # No outlines, return empty result set
             query = query.filter(model_class.id == None)
     elif object_type == 'chapter':
-        # Need to get acts first, then chapters
-        outline = db.query(Outline).filter(Outline.project_id == project_id).first()
-        if outline:
-            act_ids = [act.id for act in db.query(Act).filter(Act.outline_id == outline.id).all()]
+        # Get all acts from all outlines in the project
+        outline_ids = [o.id for o in db.query(Outline).filter(Outline.project_id == project_id).all()]
+        if outline_ids:
+            act_ids = [act.id for act in db.query(Act).filter(Act.outline_id.in_(outline_ids)).all()]
             if act_ids:
                 query = query.filter(model_class.act_id.in_(act_ids))
             else:
                 query = query.filter(model_class.id == None)
         else:
-            # No outline, return empty result set
+            # No outlines, return empty result set
             query = query.filter(model_class.id == None)
     elif object_type == 'manuscript':
-        # Need to get chapters first
-        outline = db.query(Outline).filter(Outline.project_id == project_id).first()
-        if outline:
-            acts = db.query(Act).filter(Act.outline_id == outline.id).all()
-            act_ids = [act.id for act in acts]
-            chapters = db.query(Chapter).filter(Chapter.act_id.in_(act_ids)).all()
-            chapter_ids = [ch.id for ch in chapters]
-            if chapter_ids:
-                query = query.filter(model_class.chapter_id.in_(chapter_ids))
+        # Get all chapters from all acts from all outlines in the project
+        outline_ids = [o.id for o in db.query(Outline).filter(Outline.project_id == project_id).all()]
+        if outline_ids:
+            act_ids = [act.id for act in db.query(Act).filter(Act.outline_id.in_(outline_ids)).all()]
+            if act_ids:
+                chapter_ids = [ch.id for ch in db.query(Chapter).filter(Chapter.act_id.in_(act_ids)).all()]
+                if chapter_ids:
+                    query = query.filter(model_class.chapter_id.in_(chapter_ids))
+                else:
+                    query = query.filter(model_class.id == None)
             else:
                 query = query.filter(model_class.id == None)
         else:
-            # No outline, return empty result set
+            # No outlines, return empty result set
             query = query.filter(model_class.id == None)
 
     # Get all core objects
@@ -995,30 +1002,85 @@ async def create_object(
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
+    elif object_type == 'outline':
+        # Calculate next order value for outlines
+        max_order = db.query(func.max(model_class.order)).filter(
+            model_class.project_id == project_id
+        ).scalar()
+        if max_order is None:
+            max_order = -1  # So first outline gets order 0
+
+        core_obj = model_class(
+            id=object_id,
+            project_id=project_id,
+            order=max_order + 1,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
     elif object_type == 'act':
-        # Need outline_id and order
-        outline = db.query(Outline).filter(Outline.project_id == project_id).first()
-        if not outline:
-            # Create outline on demand so first act creation succeeds
-            outline = Outline(
-                id=uuid4(),
-                project_id=project_id,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
-            )
-            db.add(outline)
-            db.flush()
+        # Need outline_id from metadata
+        outline_id_value = metadata.get('outline_id')
+        if not outline_id_value:
+            # Fallback: use first outline if exists (backward compatibility)
+            outline = db.query(Outline).filter(Outline.project_id == project_id).first()
+            if not outline:
+                # Auto-create outline on demand for backward compatibility
+                outline = Outline(
+                    id=uuid4(),
+                    project_id=project_id,
+                    order=0,
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                db.add(outline)
+                db.flush()
+                # Create translation for auto-created outline
+                outline_translation = ObjectTranslation(
+                    id=uuid4(),
+                    object_type='outline',
+                    object_id=outline.id,
+                    language=request.language,
+                    data={'name': 'Main Outline', 'description': ''},
+                    is_active=True,
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                db.add(outline_translation)
+                outline_version = ObjectVersion(
+                    id=uuid4(),
+                    object_type='outline',
+                    object_id=outline.id,
+                    version_number=1,
+                    data={request.language: {'name': 'Main Outline', 'description': ''}},
+                    user_request='Auto-created',
+                    created_at=datetime.utcnow()
+                )
+                db.add(outline_version)
+            outline_uuid = outline.id
+        else:
+            try:
+                outline_uuid = UUID(str(outline_id_value))
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=400, detail="Invalid outline_id format")
+
+            # Verify outline belongs to project
+            outline = db.query(Outline).filter(
+                Outline.id == outline_uuid,
+                Outline.project_id == project_id
+            ).first()
+            if not outline:
+                raise HTTPException(status_code=404, detail="Outline not found for project")
 
         requested_order = metadata.get('order')
         if isinstance(requested_order, int):
             order_value = requested_order
         else:
-            max_order = db.query(Act).filter(Act.outline_id == outline.id).count()
-            order_value = max_order + 1
+            max_order = db.query(Act).filter(Act.outline_id == outline_uuid).count()
+            order_value = max_order
 
         core_obj = model_class(
             id=object_id,
-            outline_id=outline.id,
+            outline_id=outline_uuid,
             order=order_value,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
@@ -1280,8 +1342,8 @@ async def reorder_objects(
     """
     object_type = normalize_object_type(object_type)
 
-    # Only allow reordering for story object types
-    allowed_types = ['character', 'organization', 'location', LOREBOOK_TYPE]
+    # Only allow reordering for story object types and outlines
+    allowed_types = ['character', 'organization', 'location', LOREBOOK_TYPE, 'outline']
     if object_type not in allowed_types:
         raise HTTPException(
             status_code=400,
