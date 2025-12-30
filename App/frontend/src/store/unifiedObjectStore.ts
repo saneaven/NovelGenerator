@@ -85,6 +85,13 @@ interface UnifiedObjectStore {
       image_prompt_negative?: string;
     }
   ) => Promise<void>;
+
+  // Reordering
+  reorderObjects: (
+    type: ObjectType,
+    projectId: string,
+    objectIds: string[]
+  ) => Promise<void>;
 }
 
 // ============================================================================
@@ -452,6 +459,42 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => ({
         errors: { ...state.errors, [id]: error.message || 'Failed to update image prompt' },
         loading: { ...state.loading, [id]: false },
       }));
+      throw error;
+    }
+  },
+
+  // ========================================================================
+  // REORDERING
+  // ========================================================================
+
+  reorderObjects: async (type: ObjectType, projectId: string, objectIds: string[]) => {
+    // Save old state for rollback
+    const oldObjects = { ...get().objects };
+
+    // Optimistic update - update local state IMMEDIATELY
+    set((state) => {
+      const newObjects = { ...state.objects };
+      objectIds.forEach((id, index) => {
+        if (newObjects[id]) {
+          newObjects[id] = {
+            ...newObjects[id],
+            metadata: {
+              ...newObjects[id].metadata,
+              order: index + 1,
+            },
+          };
+        }
+      });
+      return { objects: newObjects };
+    });
+
+    // Then call API (if fails, rollback)
+    try {
+      await unifiedObjectService.reorderObjects(type, projectId, objectIds);
+    } catch (error: any) {
+      // Rollback on error
+      set({ objects: oldObjects });
+      console.error('Failed to reorder objects:', error);
       throw error;
     }
   },

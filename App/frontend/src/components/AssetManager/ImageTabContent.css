@@ -23,6 +23,25 @@
     position: relative;
 }
 
+/* Scene filter toggle (Current Chapter / All Chapters) */
+.scene-filter-toggle {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+    margin-right: var(--spacing-sm);
+}
+
+.scene-filter-toggle .toggle-switch {
+    background: var(--color-surface-subtle);
+    border-radius: var(--border-radius-md);
+    padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+.scene-filter-toggle .toggle-switch-text {
+    font-size: var(--font-size-xs);
+    white-space: nowrap;
+}
+
 /* Sub-tabs navigation */
 .image-tab-subtabs {
     display: flex;
@@ -58,8 +77,10 @@
 /* Sub-tab content area */
 .image-tab-body {
     flex: 1;
-    overflow-y: auto;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 /* Library sub-tab */
@@ -67,6 +88,8 @@
     display: flex;
     flex-direction: column;
     gap: var(--spacing-md);
+    flex: 1;
+    min-height: 0;
 }
 
 .library-subtab .search-bar {
@@ -95,13 +118,21 @@
     color: var(--color-text-muted);
 }
 
-/* Asset grid - fine-grained masonry */
+/* Asset grid - fine-grained masonry (legacy, kept for reference) */
 .image-tab-content .asset-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     grid-auto-rows: 10px;
     grid-auto-flow: dense;
     gap: var(--spacing-sm);
+}
+
+/* Virtualized grid container */
+.image-tab-content .virtualized-grid-container {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    overflow-y: auto;
 }
 
 /* Base asset item */
@@ -193,7 +224,7 @@
 .image-tab-content .asset-thumbnail img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
 }
 
 /* Info overlay - hidden by default, show on hover */
@@ -361,6 +392,9 @@
 /* Prompt sub-tab */
 .prompt-subtab {
     padding: var(--spacing-sm) 0;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
 }
 
 /* States */

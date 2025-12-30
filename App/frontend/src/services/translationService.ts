@@ -22,7 +22,7 @@ import type { FunctionCallMetadata, FunctionCallProgress, ContentPart } from '..
 import { translationService as translationAPI } from '../api/unifiedObjectService';
 import { parseJsonOutput, extractRawContent } from '../utils/nativeOutputParser';
 import { LLMTask, LLMTaskMode, type StoryTranslationPromptContext, type ChatTranslationPromptContext } from '../llm';
-import { UnifiedApplicator, type StoreActions, type TranslationActions, type ApplicationResult } from '../functionCall';
+import { UnifiedApplicator, createStoreActions, type TranslationActions, type ApplicationResult } from '../functionCall';
 import { useLLMTaskStore } from '../store/llmTaskStore';
 import { convertApplicationResults, type ExtendedApplicationResult } from '../llm/retry';
 
@@ -34,16 +34,7 @@ async function applyTranslationFunctionCalls(
   targetLanguage: string
 ): Promise<Array<ApplicationResult & { objectId?: string }>> {
   const store = useUnifiedObjectStore.getState();
-
-  const storeActions: StoreActions = {
-    getObject: (id) => store.getObject(id),
-    fetchObject: (type, id) => store.fetchObject(type, id),
-    listObjects: (type, projectId) => store.listObjects(type, projectId),
-    createObject: (type, projectId, data, language, metadata, userRequest) =>
-      store.createObject(type, projectId, data, language, metadata, userRequest),
-    updateObject: (type, id, request) => store.updateObject(type, id, request),
-    deleteObject: (type, id) => store.deleteObject(type, id),
-  };
+  const storeActions = createStoreActions(store);
 
   const translationActions: TranslationActions = {
     addTranslations: async (translations) => {
@@ -70,7 +61,7 @@ async function applyTranslationFunctionCalls(
     const args = typeof fc.arguments === 'string' ? JSON.parse(fc.arguments) : fc.arguments;
     const result = await applicator.apply(
       { id: fc.id, function_name: fc.function_name, arguments: args },
-      { projectId: '', language: targetLanguage, mode: 'translation', targetLanguage }
+      { projectId: '', language: targetLanguage, targetLanguage }
     );
     results.push({ ...result, objectId: args?.id });
   }

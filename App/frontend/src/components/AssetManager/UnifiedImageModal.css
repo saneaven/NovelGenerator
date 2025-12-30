@@ -2,10 +2,23 @@
    UNIFIED IMAGE MODAL
    ======================================== */
 
+/* Force modal to maintain maximum height regardless of content */
+.unified-image-modal.base-modal--large {
+    height: 90dvh;
+}
+
 .unified-image-modal .modal-content {
     min-height: 400px;
     display: flex;
     flex-direction: column;
+}
+
+/* Disable base modal scrolling; content manages its own scroll */
+.unified-image-modal .base-modal-body {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
 }
 
 .unified-image-modal-content {

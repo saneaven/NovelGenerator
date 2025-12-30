@@ -7,6 +7,8 @@ import { FunctionCallCardHeader } from './FunctionCallCardHeader';
 import { FunctionCallCardList } from './FunctionCallCardList';
 import { CardFooter } from './CardFooter';
 import { ConfirmedFooter } from './ConfirmedFooter';
+import { useStoryObjects } from '../../store/unifiedObjectStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import type { FunctionCallCardContainerProps, CardWithPreview, StreamingPreview } from './types';
 import './FunctionCallCard.css';
 
@@ -15,10 +17,12 @@ export const FunctionCallCardContainer: React.FC<FunctionCallCardContainerProps>
   cards = [],
   streamingProgress = [],
   onConfirm,
-  storyObjects,
+  projectId,
   isApplyDisabled = false,
   applyDisabledReason,
 }) => {
+  const mainLanguage = useSettingsStore(state => state.settings.mainLanguage);
+  const storyObjects = useStoryObjects(projectId, mainLanguage);
   const isStreaming = mode === 'streaming';
   const isConfirmed = mode === 'confirmed';
   const isPending = mode === 'pending';

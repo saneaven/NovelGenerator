@@ -510,6 +510,14 @@ export class PromptManager {
     const chapters = projectObjects.filter(obj => obj.type === 'chapter');
     const manuscripts = projectObjects.filter(obj => obj.type === 'manuscript');
 
+    // Sort story objects by order within each type
+    const sortByOrder = (a: UnifiedObject, b: UnifiedObject) =>
+      (a.metadata?.order ?? Number.MAX_SAFE_INTEGER) - (b.metadata?.order ?? Number.MAX_SAFE_INTEGER);
+    characters.sort(sortByOrder);
+    organizations.sort(sortByOrder);
+    locations.sort(sortByOrder);
+    lorebook.sort(sortByOrder);
+
     // Build basic info
     const basicInfo = basicInfoList.length > 0 ? (() => {
       const data = this.getObjectDataForLanguage(basicInfoList[0], language);

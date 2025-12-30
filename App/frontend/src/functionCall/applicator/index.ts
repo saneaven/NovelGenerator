@@ -13,3 +13,17 @@ export type {
   HandlerEntry,
 } from './types';
 export { ALL_HANDLERS } from './handlers';
+
+// Shared utilities
+export { createStoreActions, createApplicatorWithStore, useApplicator } from './utils';
+
+// Retry utilities
+export {
+  getPatchRetryConfig,
+  buildRetryPrompt,
+  buildForceReplaceSystemPrompt,
+  shouldRetry,
+  summarizePatchFailures,
+  type PatchRetryConfig,
+  type PatchRetryResult,
+} from './retryUtils';

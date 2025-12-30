@@ -189,6 +189,15 @@
   overflow-y: auto;
 }
 
+/* Pending Confirmation Section */
+.notification-detail-pending-confirmation {
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--color-border-default);
+  flex-shrink: 0;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
 /* Scrollable Body Container */
 .notification-detail-body {
   flex: 1;

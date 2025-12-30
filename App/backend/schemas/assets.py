@@ -120,6 +120,7 @@ class AssetResponse(BaseModel):
     thumbnail_path: Optional[str] = None
     mime_type: str
     asset_type: Optional[str] = None  # 'scene', 'object', or null
+    manuscript_id: Optional[str] = None  # Ownership for scene assets
     # Structured prompts (StyledPrompt with prefix/content/postfix)
     generation_prompt: Optional[StyledPrompt] = None  # Natural language prompt (OpenAI, Gemini, xAI)
     generation_positive_prompt: Optional[StyledPrompt] = None  # Positive prompt for tag-based (NovelAI)
@@ -238,25 +239,25 @@ class ManuscriptImageUpdateRequest(BaseModel):
 
 
 # ============================================================================
-# CHAPTER ASSETS (Scene Asset Usage Tracking)
+# MANUSCRIPT ASSET USAGE (Scene Asset Usage Tracking)
 # ============================================================================
 
-class ChapterInfo(BaseModel):
-    """Minimal chapter info for usage display"""
+class ManuscriptInfo(BaseModel):
+    """Minimal manuscript info for usage display"""
     id: str
-    name: str
+    name: str  # Chapter name
     act_name: Optional[str] = None
 
 
-class ChapterAssetCreate(BaseModel):
-    """Request to link a scene asset to a chapter"""
+class ManuscriptAssetUsageCreate(BaseModel):
+    """Request to link a scene asset to a manuscript"""
     asset_id: str
 
 
-class ChapterAssetResponse(BaseModel):
-    """Response for chapter asset link"""
+class ManuscriptAssetUsageResponse(BaseModel):
+    """Response for manuscript asset usage link"""
     id: str
-    chapter_id: str
+    manuscript_id: str
     asset_id: str
     created_at: datetime
     asset: AssetResponse
@@ -265,13 +266,13 @@ class ChapterAssetResponse(BaseModel):
         from_attributes = True
 
 
-class ChapterAssetsResponse(BaseModel):
-    """Response for listing chapter assets"""
-    assets: List[ChapterAssetResponse]
+class ManuscriptAssetUsagesResponse(BaseModel):
+    """Response for listing manuscript asset usages"""
+    assets: List[ManuscriptAssetUsageResponse]
 
 
 class SceneAssetResponse(BaseModel):
-    """Scene asset with chapter usage information"""
+    """Scene asset with manuscript usage information"""
     id: str
     project_id: str
     name: str
@@ -279,6 +280,7 @@ class SceneAssetResponse(BaseModel):
     thumbnail_path: Optional[str] = None
     mime_type: str
     asset_type: Optional[str] = None
+    manuscript_id: Optional[str] = None  # Ownership - which manuscript this belongs to
     # Structured prompts (StyledPrompt with prefix/content/postfix)
     generation_prompt: Optional[StyledPrompt] = None
     generation_positive_prompt: Optional[StyledPrompt] = None
@@ -292,8 +294,8 @@ class SceneAssetResponse(BaseModel):
     updated_at: datetime
     file_url: str
     thumbnail_url: Optional[str] = None
-    # Chapter usage info
-    used_in_chapters: List[ChapterInfo] = []
+    # Manuscript usage info
+    used_in_manuscripts: List[ManuscriptInfo] = []
     usage_count: int = 0
 
     class Config:

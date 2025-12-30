@@ -102,6 +102,9 @@ export interface ImageGenerationRequest {
 
     // Asset type for categorization ('scene' for novel editor scenes, 'object' from AssetManager, 'cover' for project cover)
     assetType?: 'scene' | 'object' | 'cover';
+
+    // Manuscript ownership for scene assets
+    manuscriptId?: string;
 }
 
 // Processed request (after PreProcessor)
@@ -120,6 +123,7 @@ export interface ProcessedImageRequest {
     reference_images?: Array<{ asset_id: string; strength: number }>;
     reference_objects?: Array<{ id: string; type: string; name: string }>;
     asset_type?: 'scene' | 'object' | 'cover';
+    manuscript_id?: string;  // Manuscript ownership for scene assets
 }
 
 // Progress tracking

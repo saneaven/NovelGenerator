@@ -52,7 +52,8 @@ export class ImageRequestManager {
                 this.config.projectId,
                 processedRequest,
                 this.config.apiKey,
-                { signal: this.config.abortControllerRef.current.signal }
+                { signal: this.config.abortControllerRef.current.signal },
+                processedRequest.manuscript_id
             );
 
             // Manual iteration to properly capture the generator's return value

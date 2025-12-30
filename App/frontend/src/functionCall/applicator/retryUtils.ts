@@ -1,13 +1,15 @@
 /**
- * Patch Retry Handler
+ * Retry Utilities
  *
  * Handles retry logic when patch_* function calls fail.
  * When a search-replace patch cannot be applied (text not found or ambiguous),
- * this handler can retry the LLM request forcing it to use replace_* functions instead.
+ * these utilities help retry the LLM request forcing it to use replace_* functions instead.
+ *
+ * Moved from llm/patchRetryHandler.ts for better organization.
  */
 
-import type { PatchRetryContext } from '../types/patchTypes';
-import { useSettingsStore } from '../store/settingsStore';
+import type { PatchRetryContext } from '../types';
+import { useSettingsStore } from '../../store/settingsStore';
 
 /**
  * Configuration for patch retry
@@ -41,6 +43,10 @@ export function getPatchRetryConfig(): PatchRetryConfig {
 
 /**
  * Build a retry prompt that instructs AI to use replace_* functions instead of patch_*
+ *
+ * @param originalPrompt - The original user prompt
+ * @param retryContexts - Contexts from failed patch operations
+ * @returns Modified prompt with retry instructions
  */
 export function buildRetryPrompt(
   originalPrompt: string,
@@ -102,6 +108,10 @@ This ensures reliable updates without search-replace issues.
 
 /**
  * Check if retry should be attempted based on retry contexts
+ *
+ * @param retryContexts - Contexts from failed patch operations
+ * @param attemptCount - Current number of retry attempts
+ * @returns Whether retry should be attempted
  */
 export function shouldRetry(
   retryContexts: PatchRetryContext[],
@@ -123,6 +133,9 @@ export function shouldRetry(
 
 /**
  * Create a summary of patch failures for logging/display
+ *
+ * @param retryContexts - Contexts from failed patch operations
+ * @returns Human-readable summary string
  */
 export function summarizePatchFailures(
   retryContexts: PatchRetryContext[]

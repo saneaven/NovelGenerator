@@ -1,19 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { EditCard } from '../chat/types';
-import { ChatManager, type ChatManagerCallbacks } from '../chat/processors/ChatManager';
-import { DefaultDisplayProcessor } from '../chat/processors/DisplayProcessor';
-import { areEditCardMapsEqual } from '../chat/utils/editCardUtils';
-import { CHAT_FUNCTIONS } from '../llm/schemas/chatFunctions';
 import { useChatStore } from '../store/chatStore';
 import { useChatUIStore } from '../store/chatUIStore';
 import { useSidebarStore } from '../store/sidebarStore';
 import { useProjectStore } from '../store/projectStore';
-import { useUnifiedObjectStore, useStoryObjects } from '../store/unifiedObjectStore';
+import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
 
-import ChatSidebar from '../components/ChatSidebar';
 import ErrorModal from '../components/ErrorModal';
 import SettingsModal from '../components/SettingsModal/SettingsModal';
 import TranslationModal from '../components/TranslationModal';
@@ -23,8 +17,6 @@ import WorkspaceTabsSidebar from './workspace/components/WorkspaceTabsSidebar';
 import { PageHeader, MobileFooter } from '../components/layout';
 
 import { useWorkspaceState } from './workspace/hooks/useWorkspaceState';
-import { useChatHandlers } from './workspace/hooks/useChatHandlers';
-import { useFunctionCallHandlers } from './workspace/hooks/useFunctionCallHandlers';
 
 import './Workspace.css';
 import './workspace/styles/ChatPanel.css';
@@ -45,26 +37,17 @@ const tabLabels: Record<string, string> = {
     outline: 'Outline',
 };
 
-const Workspace: React.FC = () =>
-{
+const Workspace: React.FC = () => {
     const { projectId } = useParams<{ projectId: string }>();
 
     const { getCurrentProject, fetchProjects, projects, isLoading: projectsLoading } = useProjectStore();
-    const {
-        addMessage,
-        updateMessage,
-        updateMessageContentLocal,
-        getMessages,
-        getSelectedChatId,
-        fetchChats,
-    } = useChatStore();
+    const { fetchChats } = useChatStore();
     const listObjects = useUnifiedObjectStore(state => state.listObjects);
     const mainLanguage = useSettingsStore(state => state.settings.mainLanguage);
     const displayLanguage = useSettingsStore(state => state.settings.displayLanguage);
     const setDisplayLanguage = useSettingsStore(state => state.setDisplayLanguage);
-    const chatFunctionConfig = useSettingsStore(state => state.settings.functionConfigs.chat);
-    const providerCredentials = useSettingsStore(state => state.settings.providerCredentials);
     const { currentError, showError, hideError } = useErrorStore();
+
     // Use selectors to avoid re-rendering on input changes
     const isChatVisibleState = useChatUIStore((state) => state.chatVisibleByProject[projectId ?? ''] ?? false);
     const setChatVisible = useChatUIStore((state) => state.setChatVisible);
@@ -72,6 +55,7 @@ const Workspace: React.FC = () =>
     const isDesktopView = typeof window !== 'undefined' && window.innerWidth > 768;
     const isChatVisible = isDesktopView ? true : isChatVisibleState;
     const sidebarStore = useSidebarStore();
+    const unifiedStore = useUnifiedObjectStore();
 
     // Force re-render when crossing desktop/mobile breakpoint
     const [_isDesktop, setIsDesktop] = useState(() => window.innerWidth > 768);
@@ -92,22 +76,6 @@ const Workspace: React.FC = () =>
 
     // Translation modal state
     const [showTranslateModal, setShowTranslateModal] = useState(false);
-
-    // Mobile chat overlay closing animation state
-    const [isOverlayClosing, setIsOverlayClosing] = useState(false);
-
-    const handleCloseChat = useCallback(() => {
-        setIsOverlayClosing(true);
-        setChatVisible(projectId ?? '', false);
-    }, [projectId, setChatVisible]);
-
-    const handleOverlayAnimationEnd = useCallback((e: React.AnimationEvent) => {
-        if (e.animationName === 'overlayFadeOut') {
-            setChatVisible(projectId ?? '', false);
-            setIsOverlayClosing(false);
-        }
-    }, [projectId, setChatVisible]);
-    const unifiedStore = useUnifiedObjectStore();
 
     // Build available languages list (main + all sub languages)
     const availableLanguages = useMemo(() => {
@@ -130,11 +98,8 @@ const Workspace: React.FC = () =>
 
         allObjects.forEach((obj: any) => {
             if (obj.metadata?.project_id !== projectId) return;
-
-            // Filter by allowed types (same as TranslationModal)
             if (!WORKSPACE_TRANSLATION_TYPES.includes(obj.type)) return;
 
-            // Check if object is missing any sub language translation
             const availableLangs = Object.keys(obj.data || {});
             const needsAnyTranslation = settings.subLanguages.some(
                 (subLang: string) => !availableLangs.includes(subLang)
@@ -150,7 +115,6 @@ const Workspace: React.FC = () =>
 
     // Handler for translation complete
     const handleTranslateComplete = () => {
-        // Refresh objects after translation
         if (projectId) {
             listObjects('basic_info', projectId);
             listObjects('character', projectId);
@@ -163,8 +127,6 @@ const Workspace: React.FC = () =>
         setShowTranslateModal(false);
     };
 
-    // Derive story objects reactively from unified store (always uses main language for chat context)
-    const storyObjects = useStoryObjects(projectId, mainLanguage);
 
     // Fetch projects if not loaded
     useEffect(() => {
@@ -173,168 +135,12 @@ const Workspace: React.FC = () =>
         }
     }, [projectId, projects.length, fetchProjects]);
 
-    // Selected context IDs for chat - initialized with all project objects
-    const [selectedContextIds, setSelectedContextIds] = useState<string[]>(() => {
-        return Object.keys(unifiedStore.objects)
-            .filter(id => unifiedStore.objects[id].metadata?.project_id === projectId);
-    });
-
-    // Track previous object IDs to auto-select newly created objects
-    const prevObjectIdsRef = useRef<Set<string>>(new Set(selectedContextIds));
-    // Ref to always get current selectedContextIds (avoid stale closure in ChatManager)
-    const selectedContextIdsRef = useRef(selectedContextIds);
-    selectedContextIdsRef.current = selectedContextIds;
-
-    // Auto-select new objects when they're created during the session
-    useEffect(() => {
-        const currentIds = new Set(
-            Object.keys(unifiedStore.objects)
-                .filter(id => unifiedStore.objects[id].metadata?.project_id === projectId)
-        );
-
-        // Find new IDs that weren't in the previous set
-        const newIds = [...currentIds].filter(id => !prevObjectIdsRef.current.has(id));
-
-        if (newIds.length > 0) {
-            setSelectedContextIds(prev => [...new Set([...prev, ...newIds])]);
-        }
-
-        prevObjectIdsRef.current = currentIds;
-    }, [unifiedStore.objects, projectId]);
-
-    // Total count of all project objects for display
-    const totalObjectCount = useMemo(() => {
-        return Object.keys(unifiedStore.objects)
-            .filter(id => unifiedStore.objects[id].metadata?.project_id === projectId)
-            .length;
-    }, [unifiedStore.objects, projectId]);
-
-    const displayProcessor = useMemo(() => new DefaultDisplayProcessor(), []);
-    const abortControllerRef = useRef<AbortController | null>(null);
-
-    const {
-        messageEditCards,
-        activeFunctionCalls,
-        pendingFunctionCallResults,
-        setPendingFunctionCallResults,
-        setMessageEditCards,
-        handleFunctionCalls,
-        handleFunctionCallProgress,
-        handleBatchConfirm,
-        isMessageConfirmed,
-        setConfirmedMessages,
-        createFunctionCallApplyHandler,
-        createFunctionCallRejectHandler,
-        registerSessionForMessage,
-    } = useFunctionCallHandlers(projectId);
-
-    const chatManagerCallbacks = useMemo<ChatManagerCallbacks>(() => ({
-        onUpdateMessage: (projId, chatId, messageId, contentParts, language, thinking_details) =>
-        {
-            updateMessageContentLocal(projId, chatId, messageId, contentParts, language, thinking_details);
-        },
-        onSyncMessageToBackend: async (projId, chatId, messageId, contentParts, language, thinking_details) =>
-        {
-            await updateMessage(projId, chatId, messageId, contentParts, language, thinking_details);
-        },
-        onFunctionCalls: (_projId, _chatId, messageId, functionCalls, sessionId) =>
-        {
-            // Register sessionId for this message so function call errors can update the toast
-            if (sessionId) {
-                registerSessionForMessage(messageId, sessionId);
-            }
-            handleFunctionCalls(messageId, functionCalls);
-        },
-        onAddMessage: async (projId, chatId, message, language) =>
-        {
-            return await addMessage(projId, chatId, message, language);
-        },
-        onGetChatHistory: (projId, chatId, language) => getMessages(projId, chatId, language),
-        onError: (error) =>
-        {
-            // Legacy callback - errors are now shown inline via onErrorMessage
-            console.error('Runtime processing error:', error);
-        },
-        onErrorMessage: (projId, chatId, messageId, errorMessage, language) =>
-        {
-            // Append error content part to the message for inline display
-            const messages = getMessages(projId, chatId, language);
-            const message = messages.find(m => m.id === messageId);
-            if (message) {
-                const errorPart = { type: 'error' as const, text: errorMessage };
-                const newParts = [...message.contentParts, errorPart];
-                updateMessageContentLocal(projId, chatId, messageId, newParts, language);
-            }
-        },
-        onFunctionCallProgress: (_projId, _chatId, messageId, progressEvents) =>
-        {
-            handleFunctionCallProgress(messageId, progressEvents);
-        },
-    }), [updateMessageContentLocal, updateMessage, handleFunctionCalls, addMessage, getMessages, handleFunctionCallProgress, registerSessionForMessage]);
-
-    const chatManager = useMemo(() =>
-    {
-        const activeProjectId = projectId ?? '';
-        return new ChatManager(
-            {
-                projectId: activeProjectId,
-                getStoryObjects: () => storyObjects,
-                getIsLoading: () => useChatUIStore.getState().isLoading(activeProjectId),
-                setIsLoading: (loading: boolean) => useChatUIStore.getState().setLoading(activeProjectId, loading),
-                abortControllerRef,
-                getActiveChatId: () =>
-                {
-                    if (!activeProjectId) return undefined;
-                    return getSelectedChatId(activeProjectId);
-                },
-                getConversationLanguage: () => mainLanguage,
-                aiModel: chatFunctionConfig.model,
-                temperature: chatFunctionConfig.temperature,
-                provider: chatFunctionConfig.provider,
-                providerConfig: providerCredentials[chatFunctionConfig.provider],
-                functions: CHAT_FUNCTIONS,
-                mode: 'workspace',
-                enablePrefill: chatFunctionConfig.advanced.enablePrefill,
-                thinkingMode: chatFunctionConfig.advanced.thinkingMode,
-                thinkingConfig: chatFunctionConfig.advanced.thinkingConfig,
-                retryConfig: settings.retryConfig,
-                getPendingFunctionCallResults: () => pendingFunctionCallResults,
-                getSelectedContextIds: () => selectedContextIdsRef.current,
-            },
-            chatManagerCallbacks
-        );
-    }, [
-        projectId,
-        storyObjects,
-        // Note: chatUI is intentionally excluded - it's accessed via closures and
-        // including it causes ChatManager recreation during streaming state changes
-        // pendingFunctionCallResults is also excluded - accessed via getter function
-        mainLanguage,
-        chatFunctionConfig,
-        providerCredentials,
-        getSelectedChatId,
-        chatManagerCallbacks,
-        settings.retryConfig,
-    ]);
-
-    const chatHandlers = useChatHandlers(
-        projectId,
-        chatManager,
-        pendingFunctionCallResults,
-        () => setPendingFunctionCallResults([])
-    );
-
-    const currentProject = getCurrentProject();
-
     // Populate unified store cache when projectId changes
-    // Fetches all objects with all languages
-    useEffect(() =>
-    {
+    useEffect(() => {
         if (!projectId) return;
 
         const populateStoreCache = async () => {
             try {
-                // Fetch all objects (returns all languages per object)
                 await Promise.all([
                     listObjects('basic_info', projectId),
                     listObjects('character', projectId),
@@ -345,7 +151,6 @@ const Workspace: React.FC = () =>
                     listObjects('chapter', projectId),
                 ]);
             } catch (error) {
-                // Don't show error for expected 404s (outline/basicInfo not created yet)
                 console.error('Failed to load story objects:', error);
                 const errorStatus = (error as any)?.status || (error as any)?.response?.status;
                 if (errorStatus !== 404) {
@@ -358,92 +163,19 @@ const Workspace: React.FC = () =>
     }, [projectId, listObjects, showError]);
 
     // Fetch chats when projectId changes
-    useEffect(() =>
-    {
+    useEffect(() => {
         if (!projectId) return;
 
-        fetchChats(projectId).catch(error =>
-        {
+        fetchChats(projectId).catch(error => {
             console.error('Failed to fetch chats:', error);
             showError('Data Error', 'Failed to load chats. Please try again.');
         });
     }, [projectId, fetchChats, showError]);
 
-    useEffect(() =>
-    {
-        if (!projectId) return;
-
-        const chatId = getSelectedChatId(projectId);
-        if (!chatId) return;
-
-        const messages = getMessages(projectId, chatId, mainLanguage);
-        const restored: Record<string, EditCard[]> = {};
-        const restoredConfirmed: Record<string, boolean> = {};
-
-        messages.forEach(message =>
-        {
-            const processed = displayProcessor.process(message as any, {
-                projectId,
-                mode: 'workspace',
-            } as any);
-
-            if (processed.editCards.length > 0)
-            {
-                const cards = processed.editCards.map(card =>
-                {
-                    if (message.role === 'assistant' && message.functionCalls)
-                    {
-                        const funcCall = message.functionCalls.find(fc => fc.id === card.id);
-                        if (funcCall)
-                        {
-                            return {
-                                ...card,
-                                appliedAt: funcCall.appliedAt,
-                                onApply: createFunctionCallApplyHandler(message.id, funcCall),
-                                onReject: createFunctionCallRejectHandler(message.id, funcCall),
-                            };
-                        }
-                    }
-                    return card;
-                });
-                restored[message.id] = cards;
-
-                // Check if all function calls in this message have been applied/rejected
-                const allProcessed = cards.every(card => card.isApplied || card.isRejected);
-                if (allProcessed && cards.length > 0)
-                {
-                    restoredConfirmed[message.id] = true;
-                }
-            }
-        });
-
-        if (!areEditCardMapsEqual(messageEditCards, restored))
-        {
-            setMessageEditCards(restored);
-        }
-
-        // Restore confirmed state for messages that were already processed
-        if (Object.keys(restoredConfirmed).length > 0)
-        {
-            setConfirmedMessages(prev => ({ ...prev, ...restoredConfirmed }));
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [
-        projectId,
-        getSelectedChatId,
-        getMessages,
-        mainLanguage,
-        displayProcessor,
-        storyObjects,
-        createFunctionCallApplyHandler,
-        createFunctionCallRejectHandler,
-        // Note: messageEditCards, setMessageEditCards, setConfirmedMessages intentionally omitted to prevent render loops
-        // messageEditCards is only used for comparison, not as a trigger
-    ]);
+    const currentProject = getCurrentProject();
 
     // Show loading state
-    if (projectsLoading && !currentProject)
-    {
+    if (projectsLoading && !currentProject) {
         return (
             <div className="error-container">
                 <p>Loading project...</p>
@@ -451,8 +183,7 @@ const Workspace: React.FC = () =>
         );
     }
 
-    if (!currentProject)
-    {
+    if (!currentProject) {
         return (
             <div className="error-container">
                 <h2>Project Not Found</h2>
@@ -482,24 +213,7 @@ const Workspace: React.FC = () =>
             <div className={`workspace-content ${isChatVisible ? 'chat-visible' : ''}`}>
                 <ChatPanel
                     projectId={projectId ?? ''}
-                    selectedContextIds={selectedContextIds}
-                    onContextIdsChange={setSelectedContextIds}
-                    totalObjectCount={totalObjectCount}
-                    storyObjects={storyObjects as unknown as import('../types/storyObject').StoryObjects}
-                    messageEditCards={messageEditCards}
-                    activeFunctionCalls={activeFunctionCalls}
-                    onBatchConfirm={handleBatchConfirm}
-                    isMessageConfirmed={isMessageConfirmed}
-                    onSubmit={chatHandlers.handleSubmit}
-                    onStop={chatHandlers.handleStop}
-                    onEditMessage={chatHandlers.handleEditMessage}
-                    onEditContentChange={chatHandlers.handleEditContentChange}
-                    onSaveEdit={chatHandlers.handleSaveEdit}
-                    onCancelEdit={chatHandlers.handleCancelEdit}
-                    onDeleteMessage={chatHandlers.handleDeleteMessage}
-                    editTextareaRef={chatHandlers.editTextareaRef as React.RefObject<HTMLTextAreaElement>}
                     mode="workspace"
-                    onClose={handleCloseChat}
                 />
 
                 <StoryPanel
@@ -509,30 +223,17 @@ const Workspace: React.FC = () =>
                 />
             </div>
 
-            <ChatSidebar
-                projectId={projectId ?? ''}
-                onSelectChat={chatHandlers.handleSelectChat}
-            />
-
             <WorkspaceTabsSidebar
                 projectId={projectId ?? ''}
                 activeTab={uiState.activeStoryTab}
                 onTabChange={uiActions.setActiveStoryTab}
             />
 
-            {(isChatVisible || isOverlayClosing) && (
-                <div
-                    className={`chat-overlay mobile-only ${isOverlayClosing ? 'closing' : ''}`}
-                    onClick={handleCloseChat}
-                    onAnimationEnd={handleOverlayAnimationEnd}
-                />
-            )}
-
             <MobileFooter
                 isChatVisible={isChatVisible}
                 onChatToggle={() => {
                     if (isChatVisible) {
-                        handleCloseChat();
+                        setChatVisible(projectId ?? '', false);
                     } else {
                         toggleChatVisible(projectId ?? '');
                     }
@@ -567,6 +268,3 @@ const Workspace: React.FC = () =>
 };
 
 export default Workspace;
-
-
-

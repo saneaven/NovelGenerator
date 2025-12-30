@@ -9,7 +9,6 @@ import { useScroll } from 'motion/react';
 
 // Import modal types for retry functionality
 import AIEditModal from '../AIEditModal';
-import ManuscriptAIEditModal from '../ManuscriptAIEditModal';
 import TranslationModal from '../TranslationModal';
 import UnifiedImagePromptModal from '../ImageGeneration/UnifiedImagePromptModal';
 import { UnifiedImageModal } from '../AssetManager';
@@ -143,20 +142,6 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
             category={modalProps.category}
             projectId={modalProps.projectId}
             targetId={modalProps.targetId}
-            onResult={modalProps.onResult}
-            defaultUserRequest={formState?.userRequest}
-            defaultSelectedContextIds={formState?.selectedContextIds}
-          />
-        );
-
-      case 'chapter-edit':
-        return (
-          <ManuscriptAIEditModal
-            isOpen={true}
-            onClose={handleLLMRetryModalClose}
-            projectId={modalProps.projectId}
-            chapterId={modalProps.chapterId}
-            chapterName={modalProps.chapterName}
             onResult={modalProps.onResult}
             defaultUserRequest={formState?.userRequest}
             defaultSelectedContextIds={formState?.selectedContextIds}

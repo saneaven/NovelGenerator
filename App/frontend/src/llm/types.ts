@@ -110,18 +110,18 @@ export interface BasePromptContext {
  */
 export interface ChatWorkspacePromptContext extends BasePromptContext {
   functions?: FunctionCallSchema[];
-  storyObjects?: Record<string, any>;
   functionResults?: FunctionCallResultSummary[];
   contextObjectIds?: string[];
 }
 
 /**
  * Context for novel editor chat
+ * Note: This is now identical to ChatWorkspacePromptContext.
+ * The only difference between workspace and novelEditor modes is the systemPrompt template.
+ * Manuscripts are included via contextObjectIds, not a separate novelData field.
  */
 export interface ChatNovelEditorPromptContext extends BasePromptContext {
   functions?: FunctionCallSchema[];
-  storyObjects?: Record<string, any>;
-  novelData?: Record<string, any>;
   functionResults?: FunctionCallResultSummary[];
   contextObjectIds?: string[];
 }

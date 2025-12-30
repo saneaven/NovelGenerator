@@ -52,6 +52,7 @@ interface ImageGenerationModalProps {
     onClose?: () => void;
     objectType?: string;
     objectId?: string;
+    manuscriptId?: string;  // For scene mode: ownership
     initialSettings?: RegenerateSettings | null;
     // Scene context for scene mode AI assist
     sceneContext?: { preContext: string; postContext: string };
@@ -64,6 +65,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     onClose,
     objectType,
     objectId,
+    manuscriptId,
     initialSettings,
     sceneContext,
     assetType = 'object',
@@ -81,6 +83,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 const asset: Asset = {
                     id: result.asset.id,
                     project_id: result.asset.projectId,
+                    manuscript_id: null,  // Set by backend based on request
                     name: result.asset.name,
                     file_path: result.asset.filePath,
                     thumbnail_path: result.asset.thumbnailPath,
@@ -400,6 +403,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 vibeStrength: provider === 'novelai' ? novelaiVibeStrength : undefined,
                 vibeInfoExtracted: provider === 'novelai' ? novelaiVibeInfoExtracted : undefined,
                 assetType,
+                manuscriptId,
             };
 
             onClose?.();
@@ -423,6 +427,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 // Reference images
                 referenceImages: referenceImagesData.length > 0 ? referenceImagesData : undefined,
                 assetType,
+                manuscriptId,
             };
 
             onClose?.();

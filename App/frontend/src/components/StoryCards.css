@@ -14,12 +14,17 @@
     position: relative;
 }
 
-/* Span types for dynamic grid sizing */
-.story-card[data-span="horizontal"] {
+/* Sortable wrapper - fills grid cell */
+.story-cards-grid > [data-span] {
+    height: 100%;
+}
+
+/* Span types for dynamic grid sizing - applies to sortable wrapper or card directly */
+.story-cards-grid > [data-span="horizontal"] {
     grid-column: span 2;
 }
 
-.story-card[data-span="vertical"] {
+.story-cards-grid > [data-span="vertical"] {
     grid-row: span 2;
 }
 
@@ -29,7 +34,7 @@
         grid-template-columns: 1fr;
     }
 
-    .story-card[data-span="horizontal"] {
+    .story-cards-grid > [data-span="horizontal"] {
         grid-column: span 1;
     }
 }

@@ -12,6 +12,7 @@ All story objects use the same pattern:
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
 from uuid import UUID, uuid4
@@ -85,6 +86,11 @@ class ListObjectsResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class ReorderObjectsRequest(BaseModel):
+    """Request to reorder objects of a specific type"""
+    object_ids: List[str]  # IDs in desired order
 
 
 class VersionResponse(BaseModel):
@@ -167,6 +173,8 @@ def get_object_metadata(obj: Any, object_type: str, db: Optional[Session] = None
         metadata['image_prompt_negative'] = getattr(obj, 'image_prompt_negative', None)
     elif object_type in ['character', 'organization', 'location', LOREBOOK_TYPE]:
         metadata['project_id'] = str(obj.project_id)
+        # Include order field for story objects
+        metadata['order'] = getattr(obj, 'order', 0) or 0
         # Include image prompt fields for story objects that support them
         metadata['image_prompt'] = getattr(obj, 'image_prompt', None)
         metadata['image_prompt_positive'] = getattr(obj, 'image_prompt_positive', None)
@@ -967,10 +975,23 @@ async def create_object(
     # Different object types have different required fields
     metadata = request.metadata or {}
 
-    if object_type in ['basic_info', 'character', 'organization', 'location', LOREBOOK_TYPE]:
+    if object_type == 'basic_info':
         core_obj = model_class(
             id=object_id,
             project_id=project_id,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+    elif object_type in ['character', 'organization', 'location', LOREBOOK_TYPE]:
+        # Calculate next order value for story objects
+        max_order = db.query(func.max(model_class.order)).filter(
+            model_class.project_id == project_id
+        ).scalar() or 0
+
+        core_obj = model_class(
+            id=object_id,
+            project_id=project_id,
+            order=max_order + 1,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
@@ -1237,6 +1258,74 @@ async def update_image_prompt(
         "image_prompt": obj.image_prompt,
         "image_prompt_positive": obj.image_prompt_positive,
         "image_prompt_negative": obj.image_prompt_negative
+    }
+
+
+# ============================================================================
+# STORY OBJECT REORDERING
+# ============================================================================
+
+@router.patch("/projects/{project_id}/objects/{object_type}/reorder")
+async def reorder_objects(
+    project_id: UUID,
+    object_type: str,
+    request: ReorderObjectsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Reorder objects of a specific type within a project.
+    Takes an array of object IDs in the desired order.
+    Updates the order field for each object (1-indexed).
+    """
+    object_type = normalize_object_type(object_type)
+
+    # Only allow reordering for story object types
+    allowed_types = ['character', 'organization', 'location', LOREBOOK_TYPE]
+    if object_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Reordering not supported for {object_type}"
+        )
+
+    model_class = get_object_model_class(object_type)
+
+    # Verify project access
+    from ..models.db_models import Project
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Validate and update each object's order
+    for i, obj_id_str in enumerate(request.object_ids):
+        try:
+            obj_uuid = UUID(obj_id_str)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid UUID: {obj_id_str}")
+
+        obj = db.query(model_class).filter(
+            model_class.id == obj_uuid,
+            model_class.project_id == project_id
+        ).first()
+
+        if not obj:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Object {obj_id_str} not found in project"
+            )
+
+        # Update order (1-indexed)
+        obj.order = i + 1
+        obj.updated_at = datetime.utcnow()
+
+    db.commit()
+
+    return {
+        "success": True,
+        "message": f"Reordered {len(request.object_ids)} {object_type}(s)"
     }
 
 

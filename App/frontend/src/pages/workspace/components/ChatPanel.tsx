@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useChatStore, type StoredChatMessage } from '../../../store/chatStore';
 import { useChatUIStore } from '../../../store/chatUIStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
@@ -7,40 +8,23 @@ import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useLLMTaskStore } from '../../../store/llmTaskStore';
-import type { EditCard } from '../../../chat/types';
 import ObjectPicker from '../../../components/ObjectPicker/ObjectPicker';
+import ChatSidebar from '../../../components/ChatSidebar';
 import { TranslationService } from '../../../services/translationService';
 import { DefaultDisplayProcessor } from '../../../chat/processors/DisplayProcessor';
-import type { StoryObjects } from '../../../types/storyObject';
-import type { ChatMessage, FunctionCallProgress } from '../../../llm/requestTypes';
+import type { ChatMessage } from '../../../llm/requestTypes';
 import ThinkingDisplay from '../../../components/ThinkingDisplay';
 import { FunctionCallCard } from '../../../components/functionCall';
 import { TextButton } from '../../../components/TextButton';
 import { IconButton } from '../../../components/IconButton';
 import { collapseContentParts } from '../../../chat/utils/contentParts';
 import { Settings, Edit, Trash, Globe, CircularArrow, ChevronUp, ChevronDown } from '../../../components/icons';
+import { useChatOrchestration } from '../../../chat/hooks';
 
 interface ChatPanelProps
 {
     projectId: string;
-    selectedContextIds: string[];
-    onContextIdsChange: (ids: string[]) => void;
-    totalObjectCount: number;
-    storyObjects: StoryObjects;
-    messageEditCards: Record<string, EditCard[]>;
-    activeFunctionCalls: Record<string, FunctionCallProgress[]>;
-    onBatchConfirm: (messageId: string, selections: Record<string, boolean>) => Promise<void>;
-    isMessageConfirmed: (messageId: string) => boolean;
-    onSubmit: (e: React.FormEvent, input: string, isLoading: boolean) => Promise<void>;
-    onStop: () => void;
-    onEditMessage: (messageId: string, content: string, language: string) => void;
-    onEditContentChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-    onSaveEdit: (editingMessageId: string | null, editContent: string, language: string) => void;
-    onCancelEdit: () => void;
-    onDeleteMessage: (messageId: string) => void;
-    editTextareaRef: React.RefObject<HTMLTextAreaElement>;
     mode: 'novelEditor' | 'workspace';
-    onClose?: () => void;
 }
 
 // Context picker component for selecting which objects to include in chat context
@@ -200,26 +184,32 @@ interface DisplayMessageInfo
 
 const ChatPanel: React.FC<ChatPanelProps> = ({
     projectId,
-    selectedContextIds,
-    onContextIdsChange,
-    totalObjectCount,
-    storyObjects,
-    messageEditCards,
-    activeFunctionCalls,
-    onBatchConfirm,
-    isMessageConfirmed,
-    onSubmit,
-    onStop,
-    onEditMessage,
-    onEditContentChange,
-    onSaveEdit,
-    onCancelEdit,
-    onDeleteMessage,
-    editTextareaRef,
     mode,
-    onClose,
 }) =>
 {
+    // Chat orchestration - all chat logic is handled internally
+    const {
+        chatHandlers,
+        functionCallState,
+        functionCallHandlers,
+        contextIds,
+    } = useChatOrchestration({ projectId, mode });
+
+    // Destructure for easier access
+    const { selectedContextIds, setSelectedContextIds: onContextIdsChange, totalObjectCount } = contextIds;
+    const { messageEditCards, activeFunctionCalls } = functionCallState;
+    const { handleBatchConfirm: onBatchConfirm, isMessageConfirmed } = functionCallHandlers;
+    const {
+        handleSubmit: onSubmit,
+        handleStop: onStop,
+        handleEditMessage: onEditMessage,
+        handleEditContentChange: onEditContentChange,
+        handleSaveEdit: onSaveEdit,
+        handleCancelEdit: onCancelEdit,
+        handleDeleteMessage: onDeleteMessage,
+        handleSelectChat: onSelectChat,
+        editTextareaRef,
+    } = chatHandlers;
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const isUserNearBottomRef = useRef(true);
@@ -265,6 +255,20 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     const [translationErrors, setTranslationErrors] = useState<Record<string, string | null>>({});
     // Per-message language view: tracks which messages are showing translation
     const [messageLanguageView, setMessageLanguageView] = useState<Record<string, 'primary' | 'secondary'>>({});
+    // Mobile chat overlay closing animation state
+    const [isOverlayClosing, setIsOverlayClosing] = useState(false);
+
+    const handleCloseChat = useCallback(() => {
+        setIsOverlayClosing(true);
+        setChatVisible(projectId, false);
+    }, [projectId, setChatVisible]);
+
+    const handleOverlayAnimationEnd = useCallback((e: React.AnimationEvent) => {
+        if (e.animationName === 'overlayFadeOut') {
+            setChatVisible(projectId, false);
+            setIsOverlayClosing(false);
+        }
+    }, [projectId, setChatVisible]);
 
     const currentProject = getCurrentProject();
 
@@ -537,7 +541,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                     variant="secondary"
                     size="sm"
                     className="mobile-only"
-                    onClick={() => onClose ? onClose() : setChatVisible(projectId, false)}
+                    onClick={() => setChatVisible(projectId, false)}
                 >
                     Close
                 </TextButton>
@@ -610,7 +614,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                                 <FunctionCallCard
                                                     mode="streaming"
                                                     streamingProgress={activeFunctionCalls[message.chatMessage.id]}
-                                                    storyObjects={storyObjects}
+                                                    projectId={projectId}
                                                 />
                                             </div>
                                         )}
@@ -621,7 +625,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                                                     mode={isMessageConfirmed(message.chatMessage.id) ? 'confirmed' : 'pending'}
                                                     cards={messageEditCards[message.chatMessage.id]}
                                                     onConfirm={(selections: Record<string, boolean>) => onBatchConfirm(message.chatMessage.id, selections)}
-                                                    storyObjects={storyObjects}
+                                                    projectId={projectId}
                                                     isApplyDisabled={hasUnsavedChanges}
                                                     applyDisabledReason={hasUnsavedChanges ? "Save your changes first - unsaved work will be overwritten" : undefined}
                                                 />
@@ -726,6 +730,20 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                     onStop={onStop}
                 />
             </div>
+
+            <ChatSidebar
+                projectId={projectId}
+                onSelectChat={onSelectChat}
+            />
+
+            {(isChatVisible || isOverlayClosing) && createPortal(
+                <div
+                    className={`chat-overlay mobile-only ${isOverlayClosing ? 'closing' : ''}`}
+                    onClick={handleCloseChat}
+                    onAnimationEnd={handleOverlayAnimationEnd}
+                />,
+                document.getElementById('root') || document.body
+            )}
         </div>
     );
 };

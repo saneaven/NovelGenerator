@@ -24,6 +24,7 @@ export type AssetType = 'scene' | 'object' | 'cover' | null;
 export interface Asset {
     id: string;
     project_id: string;
+    manuscript_id: string | null;  // Ownership for scene assets
     name: string;
     file_path: string;
     thumbnail_path: string | null;
@@ -67,27 +68,28 @@ export interface StoryObjectAssetsResponse {
     main_asset: StoryObjectAsset | null;
 }
 
-// Chapter Asset types (for scene asset tracking)
-export interface ChapterInfo {
+// Manuscript Asset Usage types (for scene asset tracking)
+export interface ManuscriptInfo {
     id: string;
-    name: string;
+    name: string;  // Chapter name
     act_name: string | null;
 }
 
-export interface ChapterAsset {
+export interface ManuscriptAssetUsage {
     id: string;
-    chapter_id: string;
+    manuscript_id: string;
     asset_id: string;
     created_at: string;
     asset: Asset;
 }
 
-export interface ChapterAssetsResponse {
-    assets: ChapterAsset[];
+export interface ManuscriptAssetUsagesResponse {
+    assets: ManuscriptAssetUsage[];
 }
 
 export interface SceneAsset extends Omit<Asset, 'generation_settings' | 'generation_reference_objects'> {
-    used_in_chapters: ChapterInfo[];
+    manuscript_id: string | null;  // Ownership
+    used_in_manuscripts: ManuscriptInfo[];
     usage_count: number;
 }
 
@@ -186,11 +188,15 @@ export const assetService = {
     async generateImage(
         projectId: string,
         request: ImageGenerationRequest,
-        apiKey: string
+        apiKey: string,
+        manuscriptId?: string
     ): Promise<ImageGenerationResponse> {
         // Send api_key in request body (consistent with LLM endpoints)
+        const url = manuscriptId
+            ? `/api/v1/assets/${projectId}/generate?manuscript_id=${manuscriptId}`
+            : `/api/v1/assets/${projectId}/generate`;
         const response = await apiClient.post<ImageGenerationResponse>(
-            `/api/v1/assets/${projectId}/generate`,
+            url,
             { ...request, api_key: apiKey }
         );
         return response;
@@ -330,47 +336,50 @@ export const assetService = {
     // Scene Assets
 
     /**
-     * List all scene assets with chapter usage information
+     * List all scene assets with manuscript usage information
      */
-    async listSceneAssets(projectId: string): Promise<SceneAssetsResponse> {
-        return apiClient.get<SceneAssetsResponse>(`/api/v1/assets/${projectId}/scene`);
+    async listSceneAssets(projectId: string, manuscriptId?: string): Promise<SceneAssetsResponse> {
+        const url = manuscriptId
+            ? `/api/v1/assets/${projectId}/scene?manuscript_id=${manuscriptId}`
+            : `/api/v1/assets/${projectId}/scene`;
+        return apiClient.get<SceneAssetsResponse>(url);
     },
 
-    // Chapter Assets
+    // Manuscript Asset Usage
 
     /**
-     * Get all assets linked to a chapter
+     * Get all asset usages for a manuscript
      */
-    async getChapterAssets(projectId: string, chapterId: string): Promise<ChapterAssetsResponse> {
-        return apiClient.get<ChapterAssetsResponse>(
-            `/api/v1/assets/${projectId}/chapter/${chapterId}/assets`
+    async getManuscriptAssetUsages(projectId: string, manuscriptId: string): Promise<ManuscriptAssetUsagesResponse> {
+        return apiClient.get<ManuscriptAssetUsagesResponse>(
+            `/api/v1/assets/${projectId}/manuscript/${manuscriptId}/usage`
         );
     },
 
     /**
-     * Link an asset to a chapter
+     * Link an asset to a manuscript (usage tracking)
      */
-    async linkAssetToChapter(
+    async linkAssetToManuscript(
         projectId: string,
-        chapterId: string,
+        manuscriptId: string,
         assetId: string
-    ): Promise<ChapterAsset> {
-        return apiClient.post<ChapterAsset>(
-            `/api/v1/assets/${projectId}/chapter/${chapterId}`,
+    ): Promise<ManuscriptAssetUsage> {
+        return apiClient.post<ManuscriptAssetUsage>(
+            `/api/v1/assets/${projectId}/manuscript/${manuscriptId}/usage`,
             { asset_id: assetId }
         );
     },
 
     /**
-     * Unlink an asset from a chapter
+     * Unlink an asset from a manuscript
      */
-    async unlinkAssetFromChapter(
+    async unlinkAssetFromManuscript(
         projectId: string,
-        chapterId: string,
+        manuscriptId: string,
         assetId: string
     ): Promise<void> {
         await apiClient.delete<void>(
-            `/api/v1/assets/${projectId}/chapter/${chapterId}/${assetId}`
+            `/api/v1/assets/${projectId}/manuscript/${manuscriptId}/usage/${assetId}`
         );
     },
 };

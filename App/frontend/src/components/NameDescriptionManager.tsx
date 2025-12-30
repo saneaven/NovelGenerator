@@ -11,10 +11,27 @@
  * - Edit mode expands card to fill visible viewport
  */
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import './StoryCards.css';
 import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+} from '@dnd-kit/sortable';
+import { SortableStoryCard } from './SortableStoryCard';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
@@ -92,6 +109,24 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     getMainAsset,
     storyObjectAssets,
   } = useAssetStore();
+
+  // DnD sensors for drag-and-drop reordering
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Require 8px drag before activating
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 200, // 200ms delay before drag starts (to distinguish from scroll)
+        tolerance: 5, // 5px movement tolerance during delay
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // 3-state card system:
   // State 1 (collapsed): not in expandedItems
@@ -197,6 +232,32 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
         return orderA - orderB;
       });
   }, [objects, category, projectId, settings.mainLanguage]);
+
+  // Handle drag end for reordering
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id || !projectId) return;
+
+    const oldIndex = items.findIndex(item => item.id === active.id);
+    const newIndex = items.findIndex(item => item.id === over.id);
+
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    // Get new order of IDs
+    const newOrder = arrayMove(
+      items.map(item => item.id),
+      oldIndex,
+      newIndex
+    );
+
+    try {
+      await store.reorderObjects(category, projectId, newOrder);
+    } catch (error) {
+      console.error('Failed to reorder:', error);
+      showError('Reorder Error', 'Failed to reorder items. Please try again.');
+    }
+  }, [items, projectId, category, store, showError]);
 
   // Fetch story object assets when items change
   useEffect(() => {
@@ -479,39 +540,49 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
           <p>Try adding a new {singularName}!</p>
         </div>
       ) : (
-        <LayoutGroup id={category}>
-          <div
-            ref={gridRef}
-            className="story-cards-grid"
-            style={{ position: 'relative' }}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={items.map(item => item.id)}
+            strategy={rectSortingStrategy}
           >
-            {items.map((item) => {
-                const isFullExpanded = expandedCardId === item.id;
-                const { effectiveLanguage } = getEffectiveLanguage(item);
-                const itemData = getDataForLanguage(item, effectiveLanguage);
-                const mainAsset = getMainAsset(category, item.id);
-                const baseSpanType = getSpanType(mainAsset);
-                // When only 1 column fits, horizontal cards should not span 2
-                const spanType = (baseSpanType === 'horizontal' && columnCount < 2) ? 'normal' : baseSpanType;
-                const isExpanded = expandedItems.has(item.id);
+            <LayoutGroup id={category}>
+              <div
+                ref={gridRef}
+                className="story-cards-grid"
+                style={{ position: 'relative' }}
+              >
+                {items.map((item) => {
+                    const isFullExpanded = expandedCardId === item.id;
+                    const { effectiveLanguage } = getEffectiveLanguage(item);
+                    const itemData = getDataForLanguage(item, effectiveLanguage);
+                    const mainAsset = getMainAsset(category, item.id);
+                    const baseSpanType = getSpanType(mainAsset);
+                    // When only 1 column fits, horizontal cards should not span 2
+                    const spanType = (baseSpanType === 'horizontal' && columnCount < 2) ? 'normal' : baseSpanType;
+                    const isExpanded = expandedItems.has(item.id);
 
-                return (
-                  <ItemDisplay
-                    key={item.id}
-                    item={item}
-                    itemData={itemData}
-                    isExpanded={isExpanded}
-                    isFullExpanded={isFullExpanded}
-                    isAnimating={animatingCardId === item.id}
-                    mainAsset={mainAsset}
-                    spanType={spanType}
-                    onToggleExpand={() => toggleItemExpand(item.id)}
-                    onOpenFullExpand={() => openFullExpand(item.id)}
-                    onAnimationComplete={() => handleAnimationComplete(item.id)}
-                  />
-                );
-              })}
-          </div>
+                    return (
+                      <SortableStoryCard key={item.id} id={item.id} disabled={isFullExpanded} spanType={spanType}>
+                        <ItemDisplay
+                          item={item}
+                          itemData={itemData}
+                          isExpanded={isExpanded}
+                          isFullExpanded={isFullExpanded}
+                          isAnimating={animatingCardId === item.id}
+                          mainAsset={mainAsset}
+                          spanType={spanType}
+                          onToggleExpand={() => toggleItemExpand(item.id)}
+                          onOpenFullExpand={() => openFullExpand(item.id)}
+                          onAnimationComplete={() => handleAnimationComplete(item.id)}
+                        />
+                      </SortableStoryCard>
+                    );
+                  })}
+              </div>
 
           {/* State 3: Full expanded overlay - inside LayoutGroup for animation */}
           <AnimatePresence mode="sync">
@@ -567,8 +638,10 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
                 </motion.div>
               );
             })()}
-          </AnimatePresence>
-        </LayoutGroup>
+            </AnimatePresence>
+          </LayoutGroup>
+        </SortableContext>
+      </DndContext>
       )}
 
       <AIEditModal

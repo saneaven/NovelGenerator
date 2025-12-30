@@ -30,7 +30,7 @@ import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
-import ManuscriptAIEditModal from '../../../components/ManuscriptAIEditModal';
+import AIEditModal from '../../../components/AIEditModal';
 import TranslationModal from '../../../components/TranslationModal';
 import VersionHistoryModal from '../../../components/VersionHistoryModal';
 import { UnifiedImageModal, type InitialGenerationSettings } from '../../../components/AssetManager';
@@ -1012,12 +1012,12 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
       {/* AI Edit Modal */}
       {selectedChapter && (
-        <ManuscriptAIEditModal
+        <AIEditModal
           isOpen={isAIEditModalOpen}
           onClose={() => setIsAIEditModalOpen(false)}
+          category="manuscript"
           projectId={projectId}
-          chapterId={selectedChapter.id}
-          chapterName={selectedChapter.name}
+          targetId={selectedChapter.id}
           onResult={handleAIEditComplete}
         />
       )}
@@ -1068,6 +1068,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         }}
         onSelect={handleImageSelect}
         onImageGenerated={handleImageGenerated}
+        manuscriptId={manuscriptId ?? undefined}
         sceneContext={{
           preContext: cursorContext.before,
           postContext: cursorContext.after,

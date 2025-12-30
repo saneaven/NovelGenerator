@@ -33,7 +33,8 @@ export async function* generateImage(
     projectId: string,
     request: ProcessedImageRequest,
     apiKey: string,
-    options?: GenerateImageOptions
+    options?: GenerateImageOptions,
+    manuscriptId?: string
 ): AsyncGenerator<ImageGenerationProgress, ImageGenerationResult, undefined> {
     // Stage 1: Preparing
     yield {
@@ -74,8 +75,13 @@ export async function* generateImage(
         console.log('Full Payload:', { ...requestPayload, api_key: '[REDACTED]' });
         console.groupEnd();
 
+        // Build URL with optional manuscript_id query param
+        const url = manuscriptId
+            ? `/api/v1/assets/${projectId}/generate?manuscript_id=${manuscriptId}`
+            : `/api/v1/assets/${projectId}/generate`;
+
         const response = await apiClient.post<ApiGenerationResponse>(
-            `/api/v1/assets/${projectId}/generate`,
+            url,
             requestPayload
         );
 

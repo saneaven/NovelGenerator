@@ -5,9 +5,12 @@ import { ImageGenerationModal } from '../ImageGeneration';
 import ImagePromptManager from './ImagePromptManager';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
-import { formatStyledPrompt, type Asset, type SceneAsset } from '../../api/assetService';
+import { formatStyledPrompt, type Asset } from '../../api/assetService';
 import { API_BASE_URL } from '../../api/client';
-import { Star, Edit, Folder, AIAssistMini, Close, MoreHorizontal, Trash, Info } from '../icons';
+import { Folder, AIAssistMini, Close } from '../icons';
+import { VirtualizedImageGrid } from './VirtualizedImageGrid';
+import ToggleSwitch from '../ToggleSwitch';
+import type { DisplayAsset } from './ImageGridItem';
 import './ImageTabContent.css';
 
 // Basic asset info needed for display
@@ -27,26 +30,6 @@ type AssetLike = {
     generation_negative_prompt?: { prefix?: string; content?: string; postfix?: string } | null;
     generation_settings?: Record<string, unknown> | null;
 };
-
-// Calculate grid span based on image aspect ratio
-function calculateGridSpan(asset: AssetLike | null, baseRowHeight: number = 10): { rowSpan: number; colSpan: number } {
-    if (!asset?.width || !asset?.height) {
-        return { rowSpan: 15, colSpan: 1 }; // Default square-ish
-    }
-
-    const ratio = asset.width / asset.height;
-    const baseWidth = 150; // Approximate column width in pixels
-
-    // Landscape images span 2 columns
-    const colSpan = ratio > 1.5 ? 2 : 1;
-
-    // Calculate row span based on aspect ratio
-    const effectiveWidth = baseWidth * colSpan;
-    const calculatedHeight = effectiveWidth / ratio;
-    const rowSpan = Math.ceil(calculatedHeight / baseRowHeight);
-
-    return { rowSpan, colSpan };
-}
 
 type SubTabType = 'library' | 'prompt';
 
@@ -71,6 +54,9 @@ interface ImageTabContentProps {
     objectType?: string;
     objectId?: string;
     onAssetChange?: () => void;
+
+    // Scene mode props
+    manuscriptId?: string;  // For scene mode: ownership filtering
 
     // Picker mode props
     onSelect?: (asset: Asset) => void;
@@ -105,6 +91,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     objectType,
     objectId,
     onAssetChange,
+    manuscriptId,
     onSelect,
     excludeAssetIds = [],
     onSelectionChange,
@@ -139,6 +126,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
 
     const [activeSubTab, setActiveSubTab] = useState<SubTabType>('library');
     const [searchQuery, setSearchQuery] = useState('');
+    const [showAllChapters, setShowAllChapters] = useState(false);
     const [successModalAsset, setSuccessModalAsset] = useState<Asset | null>(null);
     const [assetName, setAssetName] = useState('');
     const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
@@ -163,12 +151,14 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         if (mode === 'object' && objectType && objectId) {
             fetchStoryObjectAssets(currentProjectId, objectType, objectId);
         } else if (mode === 'scene') {
-            fetchSceneAssets(currentProjectId);
+            // If showAllChapters is true, fetch all scene assets (no manuscriptId filter)
+            // Otherwise, fetch only assets owned by current manuscript
+            fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
         } else if (mode === 'picker') {
             // Picker mode: fetch all assets or scene assets
             fetchAssets(currentProjectId);
         }
-    }, [currentProjectId, mode, objectType, objectId, fetchStoryObjectAssets, fetchSceneAssets, fetchAssets]);
+    }, [currentProjectId, mode, objectType, objectId, manuscriptId, showAllChapters, fetchStoryObjectAssets, fetchSceneAssets, fetchAssets]);
 
     // Auto-open generate panel when regenerating (initialGenerationSettings provided)
     useEffect(() => {
@@ -182,17 +172,6 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         if (mode !== 'object' || !objectType || !objectId) return [];
         return getStoryObjectAssets(objectType, objectId);
     }, [mode, objectType, objectId, storyObjectAssets, getStoryObjectAssets]);
-
-    // Unified asset list type for rendering
-    type DisplayAsset = {
-        id: string;
-        asset: Asset | SceneAsset;
-        is_main?: boolean;
-        usage_count?: number;
-        used_in_chapters?: Array<{ id: string; name: string; act_name?: string | null }>;
-        // For object mode, keep reference to original link for unlink operation
-        linkId?: string;
-    };
 
     // Get display assets based on mode
     const displayAssets = useMemo((): DisplayAsset[] => {
@@ -208,7 +187,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                 id: asset.id,
                 asset: asset,
                 usage_count: asset.usage_count,
-                used_in_chapters: asset.used_in_chapters,
+                used_in_manuscripts: asset.used_in_manuscripts,
             }));
         } else {
             // Picker mode: show all assets
@@ -369,7 +348,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         // Check if it's a scene asset with usage info
         const sceneAsset = sceneAssets.find(sa => sa.id === asset.id);
         const usageWarning = sceneAsset && sceneAsset.usage_count > 0
-            ? `\n\nWarning: This image is used in ${sceneAsset.usage_count} chapter${sceneAsset.usage_count > 1 ? 's' : ''}:\n${sceneAsset.used_in_chapters.map(ch => `• ${ch.act_name ? ch.act_name + ' - ' : ''}${ch.name}`).join('\n')}`
+            ? `\n\nWarning: This image is used in ${sceneAsset.usage_count} manuscript${sceneAsset.usage_count > 1 ? 's' : ''}:\n${sceneAsset.used_in_manuscripts.map(m => `• ${m.act_name ? m.act_name + ' - ' : ''}${m.name}`).join('\n')}`
             : '';
 
         if (window.confirm(`Are you sure you want to delete "${asset.name}"?${usageWarning}`)) {
@@ -377,7 +356,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                 await deleteAsset(currentProjectId, asset.id);
                 // Refresh the appropriate list
                 if (mode === 'scene') {
-                    await fetchSceneAssets(currentProjectId);
+                    await fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
                 } else if (mode === 'object' && objectType && objectId) {
                     await fetchStoryObjectAssets(currentProjectId, objectType, objectId);
                 } else {
@@ -406,7 +385,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
             await updateAsset(currentProjectId, assetId, editingName.trim());
             // Refresh the appropriate list
             if (mode === 'scene') {
-                await fetchSceneAssets(currentProjectId);
+                await fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
             } else if (mode === 'object' && objectType && objectId) {
                 await fetchStoryObjectAssets(currentProjectId, objectType, objectId);
             } else {
@@ -427,7 +406,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
             await linkAssetToObject(currentProjectId, objectType, objectId, asset.id, isFirstImage);
             await fetchStoryObjectAssets(currentProjectId, objectType, objectId);
         } else if (mode === 'scene') {
-            await fetchSceneAssets(currentProjectId);
+            await fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
         } else {
             await fetchAssets(currentProjectId);
         }
@@ -559,6 +538,18 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                         </button>
                     )}
                 </div>
+
+                {/* Scene mode filter toggle - show only when manuscriptId is available */}
+                {mode === 'scene' && manuscriptId && (
+                    <div className="scene-filter-toggle">
+                        <ToggleSwitch
+                            checked={showAllChapters}
+                            onChange={setShowAllChapters}
+                            label={showAllChapters ? 'All Chapters' : 'Current Chapter'}
+                        />
+                    </div>
+                )}
+
                 {showImportButton && (
                     <div className="import-button-wrapper" ref={importButtonRef}>
                         <TextButton
@@ -637,148 +628,38 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                             </div>
                         )}
 
-                        <div className="asset-grid">
-                            {filteredAssets.map((item) => {
-                                const { rowSpan, colSpan } = calculateGridSpan(item.asset);
-                                const isSelected = selectedAssetId === item.id;
-                                const isExcluded = excludeAssetIds.includes(item.asset.id);
-                                const isActive = activeAssetId === item.id;
+                        <VirtualizedImageGrid
+                            items={filteredAssets}
+                            mode={mode}
+                            scrollResetKey={mode === 'scene' ? `${manuscriptId ?? 'all'}:${showAllChapters ? 'all' : 'current'}` : mode}
+                            activeAssetId={activeAssetId}
+                            selectedAssetId={selectedAssetId}
+                            excludeAssetIds={excludeAssetIds}
+                            editingAssetId={editingAssetId}
+                            editingName={editingName}
+                            moreDropdownAssetId={moreDropdownAssetId}
+                            moreDropdownRef={moreDropdownRef}
+                            onItemClick={handleAssetClick}
+                            onSetActiveAssetId={setActiveAssetId}
+                            onSetMain={handleSetMain}
+                            onStartRename={handleStartRename}
+                            onEditingNameChange={setEditingName}
+                            onSaveRename={handleSaveRename}
+                            onCancelRename={() => setEditingAssetId(null)}
+                            onOpenDetail={handleOpenDetail}
+                            onDeleteAsset={handleDeleteAsset}
+                            onToggleMoreDropdown={setMoreDropdownAssetId}
+                        />
 
-                                return (
-                                    <div
-                                        key={item.id}
-                                        className={`asset-item ${item.is_main ? 'main' : ''} ${isActive ? 'active' : ''} ${isSelected ? 'selected' : ''} ${isExcluded ? 'excluded' : ''}`}
-                                        style={{
-                                            gridRow: `span ${rowSpan}`,
-                                            gridColumn: `span ${colSpan}`,
-                                        }}
-                                        onClick={() => {
-                                            if (isExcluded) return;
-
-                                            if (mode === 'object') {
-                                                // Object mode: first tap shows actions
-                                                setActiveAssetId(item.id);
-                                            } else {
-                                                // Scene/Picker mode: tap to select + show actions
-                                                handleAssetClick(item);
-                                            }
-                                        }}
-                                    >
-                                        {/* Star button - only in object mode */}
-                                        {mode === 'object' && (
-                                            <div className={`star-button-wrapper ${item.is_main ? 'is-main' : ''}`} onClick={(e) => e.stopPropagation()}>
-                                                <IconButton
-                                                    size="xs"
-                                                    icon={<Star size="xs" />}
-                                                    onClick={() => !item.is_main && handleSetMain(item.asset.id)}
-                                                    title={item.is_main ? 'Main Image' : 'Set as Main'}
-                                                    isActive={item.is_main}
-                                                />
-                                            </div>
-                                        )}
-
-                                        {/* Usage badge - only in scene mode */}
-                                        {mode === 'scene' && item.usage_count && item.usage_count > 0 && (
-                                            <div
-                                                className="usage-badge"
-                                                title={`Used in: ${item.used_in_chapters?.map(ch => ch.name).join(', ')}`}
-                                            >
-                                                {item.usage_count}
-                                            </div>
-                                        )}
-
-                                        {/* Excluded overlay - only in picker mode */}
-                                        {isExcluded && (
-                                            <div className="excluded-overlay">
-                                                <span>Selected</span>
-                                            </div>
-                                        )}
-
-                                        <div className="asset-thumbnail">
-                                            <img
-                                                src={`${API_BASE_URL}${item.asset.thumbnail_url || item.asset.file_url}`}
-                                                alt={item.asset.name}
-                                                loading="lazy"
-                                            />
-                                        </div>
-
-                                        <div className="asset-info">
-                                            {editingAssetId === item.asset.id ? (
-                                                <input
-                                                    className="rename-input"
-                                                    value={editingName}
-                                                    onChange={(e) => setEditingName(e.target.value)}
-                                                    onBlur={() => handleSaveRename(item.asset.id)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') handleSaveRename(item.asset.id);
-                                                        if (e.key === 'Escape') setEditingAssetId(null);
-                                                    }}
-                                                    autoFocus
-                                                    onClick={(e) => e.stopPropagation()}
-                                                />
-                                            ) : (
-                                                <>
-                                                    <span className="asset-name" title={item.asset.name}>
-                                                        {item.asset.name}
-                                                    </span>
-                                                    <button
-                                                        className="rename-button"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleStartRename(item.asset);
-                                                        }}
-                                                        title="Rename"
-                                                    >
-                                                        <Edit size="xs" />
-                                                    </button>
-                                                </>
-                                            )}
-                                        </div>
-
-                                        {/* Action buttons */}
-                                        <div className="asset-actions" onClick={(e) => e.stopPropagation()}>
-                                            {/* More dropdown button */}
-                                            <div className="more-dropdown-wrapper" ref={moreDropdownAssetId === item.id ? moreDropdownRef : undefined}>
-                                                <IconButton
-                                                    size="xs"
-                                                    icon={<MoreHorizontal size="xs" />}
-                                                    onClick={() => setMoreDropdownAssetId(moreDropdownAssetId === item.id ? null : item.id)}
-                                                    title="More"
-                                                />
-                                                {moreDropdownAssetId === item.id && (
-                                                    <div className="more-dropdown">
-                                                        <button
-                                                            className="more-dropdown-item"
-                                                            onClick={() => handleOpenDetail(item.asset)}
-                                                        >
-                                                            <Info size="xs" />
-                                                            <span>Detail</span>
-                                                        </button>
-                                                        <button
-                                                            className="more-dropdown-item danger"
-                                                            onClick={() => handleDeleteAsset(item.asset)}
-                                                        >
-                                                            <Trash size="xs" />
-                                                            <span>Delete</span>
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-
-                            {filteredAssets.length === 0 && !isLoading && (
-                                <div className="empty-state">
-                                    {searchQuery
-                                        ? 'No images match your search'
-                                        : mode === 'scene'
-                                            ? 'No scene images yet. Generate or upload scene images from the chapter editor.'
-                                            : 'No images yet. Upload or generate one!'}
-                                </div>
-                            )}
-                        </div>
+                        {filteredAssets.length === 0 && !isLoading && (
+                            <div className="empty-state">
+                                {searchQuery
+                                    ? 'No images match your search'
+                                    : mode === 'scene'
+                                        ? 'No scene images yet. Generate or upload scene images from the chapter editor.'
+                                        : 'No images yet. Upload or generate one!'}
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -963,6 +844,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                             }}
                             objectType={objectType}
                             objectId={objectId}
+                            manuscriptId={manuscriptId}
                             initialSettings={regenerateSettings || (initialGenerationSettings && initialGenerationSettings.provider && initialGenerationSettings.model ? {
                                 provider: initialGenerationSettings.provider,
                                 model: initialGenerationSettings.model,

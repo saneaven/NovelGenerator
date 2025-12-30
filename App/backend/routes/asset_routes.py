@@ -7,15 +7,15 @@ from datetime import datetime
 
 from ..database import get_db
 from ..auth import get_current_user
-from ..models.db_models import User, Project, Asset, StoryObjectAsset, ManuscriptImage, Manuscript, ChapterAsset, Chapter, Act
+from ..models.db_models import User, Project, Asset, StoryObjectAsset, ManuscriptImage, Manuscript, ManuscriptAssetUsage, Chapter, Act
 from ..schemas.assets import (
     AssetResponse, AssetListResponse, AssetUpdateRequest,
     StoryObjectAssetCreate, StoryObjectAssetResponse, StoryObjectAssetsResponse, SetMainAssetRequest,
     ManuscriptImageCreate, ManuscriptImageResponse, ManuscriptImagesResponse, ManuscriptImageUpdateRequest,
     ImageGenerationRequest, ImageGenerationResponse,
     ImageProvidersResponse, ImageProviderInfo, ImageModelsResponse,
-    ChapterAssetCreate, ChapterAssetResponse, ChapterAssetsResponse,
-    SceneAssetResponse, SceneAssetsResponse, ChapterInfo,
+    ManuscriptAssetUsageCreate, ManuscriptAssetUsageResponse, ManuscriptAssetUsagesResponse,
+    SceneAssetResponse, SceneAssetsResponse, ManuscriptInfo,
     StyledPrompt
 )
 from ..services.storage_service import storage_service
@@ -67,8 +67,8 @@ def _asset_to_response(asset: Asset) -> AssetResponse:
     )
 
 
-def _asset_to_scene_response(asset: Asset, used_in_chapters: List[ChapterInfo]) -> SceneAssetResponse:
-    """Convert Asset model to SceneAssetResponse with chapter usage info"""
+def _asset_to_scene_response(asset: Asset, used_in_manuscripts: List[ManuscriptInfo]) -> SceneAssetResponse:
+    """Convert Asset model to SceneAssetResponse with manuscript usage info"""
     return SceneAssetResponse(
         id=str(asset.id),
         project_id=str(asset.project_id),
@@ -77,6 +77,7 @@ def _asset_to_scene_response(asset: Asset, used_in_chapters: List[ChapterInfo]) 
         thumbnail_path=cast(Optional[str], asset.thumbnail_path),
         mime_type=cast(str, asset.mime_type),
         asset_type=cast(Optional[str], asset.asset_type),
+        manuscript_id=str(asset.manuscript_id) if asset.manuscript_id is not None else None,
         generation_prompt=_jsonb_to_styled_prompt(cast(Optional[Dict[str, Any]], asset.generation_prompt)),
         generation_positive_prompt=_jsonb_to_styled_prompt(cast(Optional[Dict[str, Any]], asset.generation_positive_prompt)),
         generation_negative_prompt=_jsonb_to_styled_prompt(cast(Optional[Dict[str, Any]], asset.generation_negative_prompt)),
@@ -89,8 +90,8 @@ def _asset_to_scene_response(asset: Asset, used_in_chapters: List[ChapterInfo]) 
         updated_at=cast(datetime, asset.updated_at),
         file_url=f"/storage/assets/{cast(str, asset.file_path)}",
         thumbnail_url=f"/storage/assets/{cast(str, asset.thumbnail_path)}" if asset.thumbnail_path is not None else None,
-        used_in_chapters=used_in_chapters,
-        usage_count=len(used_in_chapters)
+        used_in_manuscripts=used_in_manuscripts,
+        usage_count=len(used_in_manuscripts)
     )
 
 
@@ -143,6 +144,7 @@ async def get_image_models(
 async def generate_image(
     project_id: UUID,
     request: ImageGenerationRequest,
+    manuscript_id: Optional[UUID] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -255,6 +257,7 @@ async def generate_image(
         asset = Asset(
             id=uuid4(),
             project_id=project_id,
+            manuscript_id=manuscript_id,  # Ownership for scene assets
             name=f"Generated Image {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
             file_path=file_path,
             thumbnail_path=thumb_path,
@@ -300,10 +303,11 @@ async def generate_image(
 @router.get("/{project_id}/scene", response_model=SceneAssetsResponse)
 async def list_scene_assets(
     project_id: UUID,
+    manuscript_id: Optional[UUID] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """List all scene assets with chapter usage information"""
+    """List scene assets with manuscript usage information. Optionally filter by manuscript ownership."""
     # Verify project ownership
     project = db.query(Project).filter(
         Project.id == project_id,
@@ -312,35 +316,38 @@ async def list_scene_assets(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Get all scene assets
-    assets = db.query(Asset).filter(
+    # Get scene assets (optionally filtered by manuscript ownership)
+    query = db.query(Asset).filter(
         Asset.project_id == project_id,
         Asset.asset_type == 'scene'
-    ).order_by(Asset.created_at.desc()).all()
+    )
+    if manuscript_id:
+        query = query.filter(Asset.manuscript_id == manuscript_id)
+    assets = query.order_by(Asset.created_at.desc()).all()
 
-    # Build response with chapter usage
+    # Build response with manuscript usage
     responses = []
     for asset in assets:
-        # Get chapters using this asset
-        chapter_links = db.query(ChapterAsset).filter(
-            ChapterAsset.asset_id == asset.id
+        # Get manuscripts using this asset
+        usage_links = db.query(ManuscriptAssetUsage).filter(
+            ManuscriptAssetUsage.asset_id == asset.id
         ).all()
 
-        used_in_chapters = []
-        for link in chapter_links:
-            chapter = db.query(Chapter).filter(Chapter.id == link.chapter_id).first()
-            if chapter:
-                # Get act info for chapter name context
-                act = db.query(Act).filter(Act.id == chapter.act_id).first()
-                # Get chapter name from object_translations if available
-                # For now, use a placeholder - in production, join with translations
-                used_in_chapters.append(ChapterInfo(
-                    id=str(chapter.id),
-                    name=f"Chapter {chapter.order + 1}",  # Fallback name
-                    act_name=f"Act {act.order + 1}" if act else None
-                ))
+        used_in_manuscripts = []
+        for link in usage_links:
+            manuscript = db.query(Manuscript).filter(Manuscript.id == link.manuscript_id).first()
+            if manuscript:
+                chapter = db.query(Chapter).filter(Chapter.id == manuscript.chapter_id).first()
+                if chapter:
+                    # Get act info for chapter name context
+                    act = db.query(Act).filter(Act.id == chapter.act_id).first()
+                    used_in_manuscripts.append(ManuscriptInfo(
+                        id=str(manuscript.id),
+                        name=f"Chapter {chapter.order + 1}",  # Fallback name
+                        act_name=f"Act {act.order + 1}" if act else None
+                    ))
 
-        responses.append(_asset_to_scene_response(asset, used_in_chapters))
+        responses.append(_asset_to_scene_response(asset, used_in_manuscripts))
 
     return SceneAssetsResponse(assets=responses, total=len(responses))
 
@@ -898,18 +905,18 @@ async def delete_manuscript_image(
 
 
 # ============================================================================
-# CHAPTER ASSETS
+# MANUSCRIPT ASSET USAGE
 # ============================================================================
 
-@router.post("/{project_id}/chapter/{chapter_id}", response_model=ChapterAssetResponse)
-async def link_asset_to_chapter(
+@router.post("/{project_id}/manuscript/{manuscript_id}/usage", response_model=ManuscriptAssetUsageResponse)
+async def link_asset_to_manuscript(
     project_id: UUID,
-    chapter_id: UUID,
-    request: ChapterAssetCreate,
+    manuscript_id: UUID,
+    request: ManuscriptAssetUsageCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Link a scene asset to a chapter"""
+    """Link a scene asset to a manuscript (usage tracking)"""
     # Verify project ownership
     project = db.query(Project).filter(
         Project.id == project_id,
@@ -927,48 +934,48 @@ async def link_asset_to_chapter(
         raise HTTPException(status_code=404, detail="Asset not found")
 
     # Check if link already exists
-    existing = db.query(ChapterAsset).filter(
-        ChapterAsset.chapter_id == chapter_id,
-        ChapterAsset.asset_id == UUID(request.asset_id)
+    existing = db.query(ManuscriptAssetUsage).filter(
+        ManuscriptAssetUsage.manuscript_id == manuscript_id,
+        ManuscriptAssetUsage.asset_id == UUID(request.asset_id)
     ).first()
     if existing:
         # Return existing link instead of error
-        return ChapterAssetResponse(
+        return ManuscriptAssetUsageResponse(
             id=str(existing.id),
-            chapter_id=str(existing.chapter_id),
+            manuscript_id=str(existing.manuscript_id),
             asset_id=str(existing.asset_id),
             created_at=cast(datetime, existing.created_at),
             asset=_asset_to_response(asset)
         )
 
     # Create link
-    link = ChapterAsset(
+    link = ManuscriptAssetUsage(
         id=uuid4(),
-        chapter_id=chapter_id,
+        manuscript_id=manuscript_id,
         asset_id=UUID(request.asset_id)
     )
     db.add(link)
     db.commit()
     db.refresh(link)
 
-    return ChapterAssetResponse(
+    return ManuscriptAssetUsageResponse(
         id=str(link.id),
-        chapter_id=str(link.chapter_id),
+        manuscript_id=str(link.manuscript_id),
         asset_id=str(link.asset_id),
         created_at=cast(datetime, link.created_at),
         asset=_asset_to_response(asset)
     )
 
 
-@router.delete("/{project_id}/chapter/{chapter_id}/{asset_id}")
-async def unlink_asset_from_chapter(
+@router.delete("/{project_id}/manuscript/{manuscript_id}/usage/{asset_id}")
+async def unlink_asset_from_manuscript(
     project_id: UUID,
-    chapter_id: UUID,
+    manuscript_id: UUID,
     asset_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Remove asset link from a chapter"""
+    """Remove asset usage link from a manuscript"""
     # Verify project ownership
     project = db.query(Project).filter(
         Project.id == project_id,
@@ -977,9 +984,9 @@ async def unlink_asset_from_chapter(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    link = db.query(ChapterAsset).filter(
-        ChapterAsset.chapter_id == chapter_id,
-        ChapterAsset.asset_id == asset_id
+    link = db.query(ManuscriptAssetUsage).filter(
+        ManuscriptAssetUsage.manuscript_id == manuscript_id,
+        ManuscriptAssetUsage.asset_id == asset_id
     ).first()
     if not link:
         raise HTTPException(status_code=404, detail="Link not found")
@@ -990,14 +997,14 @@ async def unlink_asset_from_chapter(
     return {"success": True}
 
 
-@router.get("/{project_id}/chapter/{chapter_id}/assets", response_model=ChapterAssetsResponse)
-async def get_chapter_assets(
+@router.get("/{project_id}/manuscript/{manuscript_id}/usage", response_model=ManuscriptAssetUsagesResponse)
+async def get_manuscript_asset_usages(
     project_id: UUID,
-    chapter_id: UUID,
+    manuscript_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get all assets linked to a chapter"""
+    """Get all asset usages for a manuscript"""
     # Verify project ownership
     project = db.query(Project).filter(
         Project.id == project_id,
@@ -1007,20 +1014,20 @@ async def get_chapter_assets(
         raise HTTPException(status_code=404, detail="Project not found")
 
     # Get all linked assets
-    links = db.query(ChapterAsset).filter(
-        ChapterAsset.chapter_id == chapter_id
-    ).order_by(ChapterAsset.created_at).all()
+    links = db.query(ManuscriptAssetUsage).filter(
+        ManuscriptAssetUsage.manuscript_id == manuscript_id
+    ).order_by(ManuscriptAssetUsage.created_at).all()
 
     responses = []
     for link in links:
         asset = db.query(Asset).filter(Asset.id == link.asset_id).first()
         if asset:
-            responses.append(ChapterAssetResponse(
+            responses.append(ManuscriptAssetUsageResponse(
                 id=str(link.id),
-                chapter_id=str(link.chapter_id),
+                manuscript_id=str(link.manuscript_id),
                 asset_id=str(link.asset_id),
                 created_at=cast(datetime, link.created_at),
                 asset=_asset_to_response(asset)
             ))
 
-    return ChapterAssetsResponse(assets=responses)
+    return ManuscriptAssetUsagesResponse(assets=responses)

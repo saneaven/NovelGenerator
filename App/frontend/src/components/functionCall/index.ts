@@ -25,6 +25,7 @@ export type {
   CardWithPreview,
   StreamingPreview,
   SelectionState,
+  StoryObjectsLike,
 } from './types';
 
 // Constants

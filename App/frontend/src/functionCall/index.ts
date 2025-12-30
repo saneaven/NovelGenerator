@@ -57,6 +57,9 @@ export {
   getIdFromArgs,
 } from './normalizer';
 
+// Native Output Converter
+export { convertNativeOutputToFunctionCalls } from './nativeOutputConverter';
+
 // Applicator
 export { UnifiedApplicator, createApplicator } from './applicator';
 export type {
@@ -67,6 +70,19 @@ export type {
   HandlerContext,
   Handler,
 } from './applicator';
+
+// Applicator utilities
+export { createStoreActions, createApplicatorWithStore, useApplicator } from './applicator';
+
+// Retry utilities
+export {
+  getPatchRetryConfig,
+  buildRetryPrompt,
+  buildForceReplaceSystemPrompt,
+  shouldRetry,
+  summarizePatchFailures,
+} from './applicator';
+export type { PatchRetryConfig, PatchRetryResult } from './applicator';
 
 // EditCards
 export {

@@ -18,8 +18,6 @@ export function findLastUserMessageIdx(messages: ChatMessage[]): number {
 
 export interface ChatManagerConfig {
   projectId: string;
-  getStoryObjects: () => any;
-  getNovelData?: () => any;
   getPendingFunctionCallResults?: () => FunctionCallResultSummary[];
   getSelectedContextIds?: () => string[];
   getIsLoading: () => boolean;
@@ -214,12 +212,11 @@ export class ChatManager {
     userInput: string,
     language: string
   ): ChatWorkspacePromptContext | ChatNovelEditorPromptContext {
-    const storyObjects = this.config.getStoryObjects();
-    const novelData = this.config.getNovelData?.();
     const functionResults = this.config.getPendingFunctionCallResults?.() ?? [];
     const contextObjectIds = this.config.getSelectedContextIds?.();
 
-    const base = {
+    // Both modes use the same base context - mode only affects systemPrompt template selection
+    return {
       userInput,
       projectId: this.config.projectId,
       outputLanguage: language,
@@ -227,19 +224,9 @@ export class ChatManager {
       enableThinking: this.config.thinkingMode === 'model',
       enableCustomThinking: this.config.thinkingMode === 'custom',
       functions: this.config.functions,
-      storyObjects,
       functionResults,
       contextObjectIds,
     };
-
-    if (this.config.mode === 'novelEditor') {
-      return {
-        ...base,
-        novelData,
-      } as ChatNovelEditorPromptContext;
-    }
-
-    return base as ChatWorkspacePromptContext;
   }
 
   private async finishProcessing(

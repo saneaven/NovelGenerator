@@ -108,6 +108,11 @@ function processNaturalRequest(
         processed.asset_type = request.assetType;
     }
 
+    // Add manuscript_id for scene asset ownership
+    if (request.manuscriptId) {
+        processed.manuscript_id = request.manuscriptId;
+    }
+
     return processed;
 }
 
@@ -192,6 +197,11 @@ function processTagBasedRequest(
     // Add asset type if provided
     if (request.assetType) {
         processed.asset_type = request.assetType;
+    }
+
+    // Add manuscript_id for scene asset ownership
+    if (request.manuscriptId) {
+        processed.manuscript_id = request.manuscriptId;
     }
 
     return processed;

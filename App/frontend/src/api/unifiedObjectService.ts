@@ -267,6 +267,23 @@ export const unifiedObjectService = {
     }>(`/api/v1/objects/${type}/${id}/image-prompt`, prompts);
   },
 
+  /**
+   * Reorder objects of a specific type within a project
+   * @param type Object type (character, organization, location, lorebook)
+   * @param projectId Project ID
+   * @param objectIds Array of object IDs in desired order
+   */
+  async reorderObjects(
+    type: ObjectType,
+    projectId: string,
+    objectIds: string[]
+  ): Promise<{ success: boolean; message: string }> {
+    return apiClient.patch<{ success: boolean; message: string }>(
+      `/api/v1/projects/${projectId}/objects/${type}/reorder`,
+      { object_ids: objectIds }
+    );
+  },
+
 };
 
 // ============================================================================

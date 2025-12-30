@@ -1,16 +1,15 @@
 import { create } from 'zustand';
-import type { ContentPart, FunctionCallProgress, TokenUsage } from '../llm/requestTypes';
+import type { ContentPart, FunctionCallProgress, TokenUsage, FunctionCallMetadata } from '../llm/requestTypes';
 import type { AggregatedFunctionCallResults, ConversationSnapshot } from '../llm/retry/types';
 
-export type TaskSessionStatus = 'idle' | 'running' | 'success' | 'error' | 'cancelled';
+export type TaskSessionStatus = 'idle' | 'running' | 'pending_confirmation' | 'success' | 'error' | 'cancelled';
 
 // AbortController registry (outside Zustand store to avoid serialization issues)
 const abortControllers = new Map<string, AbortController>();
 
 // Task types for different LLM operations
 export type LLMTaskType =
-  | 'ai-edit'           // AIEditModal
-  | 'chapter-edit'      // ManuscriptAIEditModal
+  | 'ai-edit'           // AIEditModal (story objects and manuscript)
   | 'translation'       // TranslationModal (story objects)
   | 'chat-translation'  // ChatPanel inline (single message)
   | 'image-prompt'      // UnifiedImagePromptModal
@@ -54,6 +53,8 @@ export interface LLMTaskSessionState {
   // Retry support
   functionCallResults?: AggregatedFunctionCallResults;
   conversationSnapshot?: ConversationSnapshot;
+  // Pending confirmation (function calls awaiting user approval)
+  pendingFunctionCalls?: FunctionCallMetadata[];
 }
 
 const createDefaultSession = (id: string): LLMTaskSessionState => ({
@@ -104,6 +105,9 @@ interface LLMTaskStore {
   // Retry support
   setFunctionCallResults: (id: string, results: AggregatedFunctionCallResults) => void;
   setConversationSnapshot: (id: string, snapshot: ConversationSnapshot) => void;
+
+  // Pending confirmation support
+  setPendingConfirmation: (id: string, functionCalls: FunctionCallMetadata[]) => void;
 }
 
 export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
@@ -411,6 +415,24 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
           [id]: {
             ...existing,
             conversationSnapshot: snapshot,
+            updatedAt: Date.now(),
+          },
+        },
+      };
+    });
+  },
+
+  setPendingConfirmation: (id, functionCalls) => {
+    set((state) => {
+      const existing = state.sessions[id];
+      if (!existing) return state;
+      return {
+        sessions: {
+          ...state.sessions,
+          [id]: {
+            ...existing,
+            status: 'pending_confirmation',
+            pendingFunctionCalls: functionCalls,
             updatedAt: Date.now(),
           },
         },

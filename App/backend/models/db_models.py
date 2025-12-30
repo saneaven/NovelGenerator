@@ -241,6 +241,9 @@ class Character(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
 
+    # Display order within project (per-type ordering)
+    order = Column(Integer, nullable=True, default=0)
+
     # Image prompt fields (stored on base object, not versioned)
     image_prompt = Column(Text, nullable=True)  # Natural language prompt
     image_prompt_positive = Column(Text, nullable=True)  # NovelAI positive tags
@@ -259,6 +262,9 @@ class Organization(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    # Display order within project (per-type ordering)
+    order = Column(Integer, nullable=True, default=0)
 
     # Image prompt fields (stored on base object, not versioned)
     image_prompt = Column(Text, nullable=True)  # Natural language prompt
@@ -279,6 +285,9 @@ class Location(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
 
+    # Display order within project (per-type ordering)
+    order = Column(Integer, nullable=True, default=0)
+
     # Image prompt fields (stored on base object, not versioned)
     image_prompt = Column(Text, nullable=True)  # Natural language prompt
     image_prompt_positive = Column(Text, nullable=True)  # NovelAI positive tags
@@ -297,6 +306,9 @@ class LorebookEntry(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    # Display order within project (per-type ordering)
+    order = Column(Integer, nullable=True, default=0)
 
     # Image prompt fields (stored on base object, not versioned)
     image_prompt = Column(Text, nullable=True)  # Natural language prompt
@@ -380,6 +392,8 @@ class Manuscript(Base):
     # Relationships
     chapter = relationship("Chapter", back_populates="manuscript")
     versions = relationship("ManuscriptVersion", back_populates="manuscript", cascade="all, delete-orphan")
+    owned_assets = relationship("Asset", back_populates="manuscript", foreign_keys="Asset.manuscript_id")
+    asset_usages = relationship("ManuscriptAssetUsage", back_populates="manuscript", cascade="all, delete-orphan")
 
 
 class ManuscriptVersion(Base):
@@ -467,6 +481,9 @@ class Asset(Base):
     # null: Uncategorized
     asset_type = Column(String(20), nullable=True, index=True)
 
+    # Manuscript ownership for scene assets (which manuscript this image belongs to)
+    manuscript_id = Column(UUID(as_uuid=True), ForeignKey('manuscripts.id', ondelete='SET NULL'), nullable=True, index=True)
+
     # Generation metadata - prompts stored as StyledPrompt JSON structure
     # StyledPrompt: { "prefix": str, "content": str, "postfix": str }
     # Natural language providers (OpenAI, Gemini, xAI): use generation_prompt only
@@ -491,7 +508,8 @@ class Asset(Base):
     project = relationship("Project", back_populates="assets")
     story_object_assets = relationship("StoryObjectAsset", back_populates="asset", cascade="all, delete-orphan")
     manuscript_images = relationship("ManuscriptImage", back_populates="asset", cascade="all, delete-orphan")
-    chapter_assets = relationship("ChapterAsset", back_populates="asset", cascade="all, delete-orphan")
+    manuscript = relationship("Manuscript", back_populates="owned_assets", foreign_keys=[manuscript_id])
+    manuscript_asset_usages = relationship("ManuscriptAssetUsage", back_populates="asset", cascade="all, delete-orphan")
 
 
 class StoryObjectAsset(Base):
@@ -519,22 +537,22 @@ class StoryObjectAsset(Base):
     )
 
 
-class ChapterAsset(Base):
-    """Links scene assets to chapters (many-to-many) for tracking usage"""
-    __tablename__ = 'chapter_assets'
+class ManuscriptAssetUsage(Base):
+    """Tracks which manuscripts use which scene assets"""
+    __tablename__ = 'manuscript_asset_usages'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    chapter_id = Column(UUID(as_uuid=True), ForeignKey('chapters.id', ondelete='CASCADE'), nullable=False, index=True)
+    manuscript_id = Column(UUID(as_uuid=True), ForeignKey('manuscripts.id', ondelete='CASCADE'), nullable=False, index=True)
     asset_id = Column(UUID(as_uuid=True), ForeignKey('assets.id', ondelete='CASCADE'), nullable=False, index=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships
-    asset = relationship("Asset", back_populates="chapter_assets")
-    chapter = relationship("Chapter")
+    asset = relationship("Asset", back_populates="manuscript_asset_usages")
+    manuscript = relationship("Manuscript", back_populates="asset_usages")
 
     __table_args__ = (
-        Index('idx_chapter_asset', 'chapter_id', 'asset_id', unique=True),
+        Index('idx_manuscript_asset_usage', 'manuscript_id', 'asset_id', unique=True),
     )
 
 

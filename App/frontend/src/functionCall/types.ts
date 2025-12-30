@@ -100,12 +100,15 @@ export interface ApplicationResult {
 
 /**
  * Context for function call execution
+ *
+ * Note: mode is NOT included here because handlers route by function name,
+ * not by mode. Mode only affects which function schemas are sent to the LLM
+ * (see schemaRegistry.getForMode).
  */
 export interface ExecutionContext {
   projectId: string;
   language: string;
-  mode: ExecutionMode;
-  /** Target language for translation mode */
+  /** Target language for translation operations */
   targetLanguage?: string;
 }
 

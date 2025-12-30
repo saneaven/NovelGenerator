@@ -43,6 +43,9 @@ interface UnifiedImageModalProps {
     objectId?: string;
     onAssetChange?: () => void;
 
+    // Scene mode props
+    manuscriptId?: string;  // For scene mode: ownership filtering
+
     // Picker props
     onSelect?: (asset: Asset) => void;
     excludeAssetIds?: string[];
@@ -94,6 +97,7 @@ const UnifiedImageModal: React.FC<UnifiedImageModalProps> = ({
     objectType,
     objectId,
     onAssetChange,
+    manuscriptId,
     onSelect,
     excludeAssetIds,
     sceneContext,
@@ -153,6 +157,7 @@ const UnifiedImageModal: React.FC<UnifiedImageModalProps> = ({
                     objectType={objectType}
                     objectId={objectId}
                     onAssetChange={onAssetChange}
+                    manuscriptId={manuscriptId}
                     onSelectionChange={onSelect ? handleSelectionChange : undefined}
                     excludeAssetIds={excludeAssetIds}
                     showImportButton={mode !== 'picker'}
