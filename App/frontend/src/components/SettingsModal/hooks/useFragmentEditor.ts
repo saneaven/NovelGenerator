@@ -20,7 +20,7 @@ interface UseFragmentEditorResult {
     hasChanges: boolean;
     isSystemDefault: boolean;
     fullPath: string;
-    onSave: (note?: string) => Promise<void>;
+    onSave: () => Promise<void>;
     onDelete: () => Promise<void>;
     reload: () => Promise<void>;
     versionHistoryProps: {
@@ -135,7 +135,7 @@ export function useFragmentEditor(
         }
     };
 
-    const handleSave = async (note?: string) => {
+    const handleSave = async () => {
         if (!validation?.valid) {
             throw new Error('Cannot save: template contains syntax errors');
         }
@@ -147,7 +147,7 @@ export function useFragmentEditor(
                 fragmentName,
                 content,
                 description || undefined,
-                note
+                undefined
             );
             setOriginalContent(content);
             setOriginalDescription(description);

@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import PromptTreeNav from './PromptTreeNav';
 import FragmentTreeNav from './FragmentTreeNav';
 import TemplateEditor from './TemplateEditor';
+import VersionHistoryModal from '../VersionHistoryModal';
 import { usePromptEditor } from './hooks/usePromptEditor';
 import { useFragmentEditor } from './hooks/useFragmentEditor';
 import { fragmentService } from '../../api/fragmentService';
@@ -9,7 +10,7 @@ import { PromptManager } from '../../llm/PromptManager';
 import { PROMPT_TREE, getFirstPromptNode, type PromptNode } from './promptTree';
 import { IconButton } from '../IconButton';
 import { TextButton } from '../TextButton';
-import { ChevronLeft, ChevronRight, Document, Copy } from '../icons';
+import { ChevronLeft, ChevronRight, Document, Copy, Clock, Trash, Edit } from '../icons';
 import './PromptsTemplatesPanel.css';
 import TemplateSyntaxHint from './TemplateSyntaxHint';
 
@@ -18,6 +19,22 @@ type SubTab = 'prompts' | 'fragments';
 interface SelectedFragment {
     folderPath: string | null;
     fragmentName: string;
+}
+
+interface EditorState {
+    content: string;
+    hasChanges: boolean;
+    isSaving: boolean;
+    isDeleting?: boolean;
+    description?: string;
+    setDescription?: (desc: string) => void;
+    versionHistoryProps?: {
+        title: string;
+        loadVersions: () => Promise<any[]>;
+        restoreVersion: (versionNumber: number) => Promise<void>;
+    };
+    reload?: () => void;
+    onDelete?: () => void;
 }
 
 interface CreateFragmentModalProps {
@@ -153,60 +170,84 @@ const CreateFragmentModal: React.FC<CreateFragmentModalProps> = ({
     );
 };
 
-// Prompt Editor Wrapper using hook
+// Prompt Editor Wrapper - exposes state for header
 const PromptEditorWrapper: React.FC<{
     node: PromptNode;
-}> = ({ node }) => {
+    onStateChange: (state: EditorState) => void;
+}> = ({ node, onStateChange }) => {
     const editor = usePromptEditor(
         node.functionType!,
         node.category!,
         node.name
     );
 
+    // Notify parent of state changes
+    useEffect(() => {
+        onStateChange({
+            content: editor.content,
+            hasChanges: editor.hasChanges,
+            isSaving: editor.isSaving,
+            versionHistoryProps: editor.versionHistoryProps,
+            reload: editor.reload,
+        });
+    }, [editor.content, editor.hasChanges, editor.isSaving, editor.versionHistoryProps, editor.reload, onStateChange]);
+
     return (
         <TemplateEditor
-            mode="prompt"
             content={editor.content}
             onContentChange={editor.setContent}
             validation={editor.validation}
             isLoading={editor.isLoading}
             isSaving={editor.isSaving}
             hasChanges={editor.hasChanges}
-            onSave={editor.onSave}
-            versionHistoryProps={editor.versionHistoryProps}
-            onRestoreVersion={editor.reload}
+            onSave={async () => { await editor.onSave(); }}
+            placeholder="Enter prompt template..."
         />
     );
 };
 
-// Fragment Editor Wrapper using hook
+// Fragment Editor Wrapper - exposes state for header
 const FragmentEditorWrapper: React.FC<{
     folderPath: string | null;
     fragmentName: string;
     onDelete: () => void;
     onSave: () => void;
-}> = ({ folderPath, fragmentName, onDelete, onSave }) => {
+    onStateChange: (state: EditorState) => void;
+}> = ({ folderPath, fragmentName, onDelete, onSave, onStateChange }) => {
     const editor = useFragmentEditor(folderPath, fragmentName, {
         onDeleted: onDelete,
         onSaved: onSave,
     });
 
+    // Notify parent of state changes
+    useEffect(() => {
+        onStateChange({
+            content: editor.content,
+            hasChanges: editor.hasChanges,
+            isSaving: editor.isSaving,
+            isDeleting: editor.isDeleting,
+            description: editor.description,
+            setDescription: editor.setDescription,
+            versionHistoryProps: editor.versionHistoryProps,
+            reload: editor.reload,
+            onDelete: editor.onDelete,
+        });
+    }, [
+        editor.content, editor.hasChanges, editor.isSaving, editor.isDeleting,
+        editor.description, editor.setDescription, editor.versionHistoryProps,
+        editor.reload, editor.onDelete, onStateChange
+    ]);
+
     return (
         <TemplateEditor
-            mode="fragment"
             content={editor.content}
             onContentChange={editor.setContent}
             validation={editor.validation}
             isLoading={editor.isLoading}
             isSaving={editor.isSaving}
             hasChanges={editor.hasChanges}
-            onSave={editor.onSave}
-            versionHistoryProps={editor.versionHistoryProps}
-            onRestoreVersion={editor.reload}
-            fragmentDescription={editor.description}
-            onDescriptionChange={editor.setDescription}
-            onDelete={editor.onDelete}
-            isDeleting={editor.isDeleting}
+            onSave={async () => { await editor.onSave(); }}
+            placeholder="Enter fragment template..."
         />
     );
 };
@@ -220,6 +261,21 @@ const PromptsTemplatesPanel: React.FC = () => {
     const [createFolderPath, setCreateFolderPath] = useState<string | null>(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
+    // Editor state from wrappers
+    const [editorState, setEditorState] = useState<EditorState | null>(null);
+
+    // Version history modal
+    const [showVersionHistory, setShowVersionHistory] = useState(false);
+
+    // Inline description editing
+    const [isEditingDescription, setIsEditingDescription] = useState(false);
+    const [editedDescription, setEditedDescription] = useState('');
+
+    // Memoize state change handler to prevent infinite loops
+    const handleEditorStateChange = useCallback((state: EditorState) => {
+        setEditorState(state);
+    }, []);
+
     // Initialize with first prompt on mount
     useEffect(() => {
         const firstPrompt = getFirstPromptNode();
@@ -228,10 +284,15 @@ const PromptsTemplatesPanel: React.FC = () => {
         }
     }, []);
 
+    // Reset editor state when selection changes
+    useEffect(() => {
+        setEditorState(null);
+        setIsEditingDescription(false);
+    }, [selectedPrompt, selectedFragment]);
+
     const handlePromptSelect = (node: PromptNode) => {
         if (node.type === 'prompt') {
             setSelectedPrompt(node);
-            // On mobile, collapse sidebar after selection
             if (window.innerWidth <= 768) {
                 setIsSidebarCollapsed(true);
             }
@@ -240,7 +301,6 @@ const PromptsTemplatesPanel: React.FC = () => {
 
     const handleFragmentSelect = (folderPath: string | null, fragmentName: string) => {
         setSelectedFragment({ folderPath, fragmentName });
-        // On mobile, collapse sidebar after selection
         if (window.innerWidth <= 768) {
             setIsSidebarCollapsed(true);
         }
@@ -273,12 +333,30 @@ const PromptsTemplatesPanel: React.FC = () => {
 
     const handleSubTabChange = (newTab: SubTab) => {
         setSubTab(newTab);
-        // Clear selection when switching tabs
         if (newTab === 'prompts') {
             setSelectedFragment(null);
         } else {
             setSelectedPrompt(null);
         }
+    };
+
+    const handleRestoreComplete = () => {
+        editorState?.reload?.();
+        setShowVersionHistory(false);
+    };
+
+    const handleStartEditDescription = () => {
+        setEditedDescription(editorState?.description || '');
+        setIsEditingDescription(true);
+    };
+
+    const handleSaveDescription = () => {
+        editorState?.setDescription?.(editedDescription);
+        setIsEditingDescription(false);
+    };
+
+    const handleCancelEditDescription = () => {
+        setIsEditingDescription(false);
     };
 
     const selectedPath = selectedFragment
@@ -307,14 +385,6 @@ const PromptsTemplatesPanel: React.FC = () => {
     const getEditorDescription = () => {
         if (subTab === 'prompts' && selectedPrompt?.description) {
             return selectedPrompt.description;
-        }
-        if (subTab === 'fragments' && selectedFragment) {
-            return (
-                <>
-                    Reusable template snippet that can be included in prompts using{' '}
-                    <code>{`{{prompt "${selectedPath}"}}`}</code>
-                </>
-            );
         }
         return null;
     };
@@ -350,14 +420,84 @@ const PromptsTemplatesPanel: React.FC = () => {
                                                 />
                                             )}
                                         </div>
-                                        {getEditorDescription() && (
-                                            <p className="editor-wrapper__description">
-                                                {getEditorDescription()}
-                                            </p>
+
+                                        {/* Description - inline editable for fragments */}
+                                        {subTab === 'fragments' && editorState ? (
+                                            <div className="editor-wrapper__description editor-wrapper__description--editable">
+                                                {isEditingDescription ? (
+                                                    <input
+                                                        type="text"
+                                                        value={editedDescription}
+                                                        onChange={(e) => setEditedDescription(e.target.value)}
+                                                        onBlur={handleSaveDescription}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') handleSaveDescription();
+                                                            if (e.key === 'Escape') handleCancelEditDescription();
+                                                        }}
+                                                        placeholder="Add description..."
+                                                        className="editor-wrapper__description-input"
+                                                        autoFocus
+                                                    />
+                                                ) : (
+                                                    <>
+                                                        <span className="editor-wrapper__description-text">
+                                                            {editorState.description || 'No description'}
+                                                        </span>
+                                                        <button
+                                                            className="editor-wrapper__description-edit"
+                                                            onClick={handleStartEditDescription}
+                                                            title="Edit description"
+                                                        >
+                                                            <Edit size="xs" />
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            getEditorDescription() && (
+                                                <p className="editor-wrapper__description">
+                                                    {getEditorDescription()}
+                                                </p>
+                                            )
+                                        )}
+
+                                        {/* Meta info */}
+                                        {editorState && (
+                                            <div className="editor-wrapper__meta">
+                                                <span>{editorState.content.length} chars</span>
+                                                {editorState.hasChanges && (
+                                                    <span className="editor-wrapper__unsaved"> • Unsaved changes</span>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
+
                                     <div className="editor-wrapper__actions">
                                         <TemplateSyntaxHint selectedNode={subTab === 'prompts' ? selectedPrompt : null} />
+
+                                        {/* History button */}
+                                        {editorState?.versionHistoryProps && (
+                                            <IconButton
+                                                icon={<Clock size="sm" />}
+                                                onClick={() => setShowVersionHistory(true)}
+                                                title="Version history"
+                                                size="sm"
+                                                disabled={editorState.isSaving || editorState.isDeleting}
+                                            />
+                                        )}
+
+                                        {/* Delete button (fragments only) */}
+                                        {subTab === 'fragments' && editorState?.onDelete && (
+                                            <IconButton
+                                                icon={<Trash size="sm" />}
+                                                onClick={editorState.onDelete}
+                                                title="Delete fragment"
+                                                size="sm"
+                                                disabled={editorState.isDeleting || editorState.isSaving}
+                                                className="editor-wrapper__delete-btn"
+                                            />
+                                        )}
+
                                         <IconButton
                                             icon={isSidebarCollapsed ? <ChevronLeft size="sm" /> : <ChevronRight size="sm" />}
                                             onClick={toggleSidebar}
@@ -373,6 +513,7 @@ const PromptsTemplatesPanel: React.FC = () => {
                                         <PromptEditorWrapper
                                             key={`${selectedPrompt.functionType}-${selectedPrompt.category}-${selectedPrompt.name || ''}`}
                                             node={selectedPrompt}
+                                            onStateChange={handleEditorStateChange}
                                         />
                                     )}
                                     {subTab === 'fragments' && selectedFragment && (
@@ -382,6 +523,7 @@ const PromptsTemplatesPanel: React.FC = () => {
                                             fragmentName={selectedFragment.fragmentName}
                                             onDelete={handleFragmentDeleted}
                                             onSave={handleFragmentSaved}
+                                            onStateChange={handleEditorStateChange}
                                         />
                                     )}
                                 </div>
@@ -455,6 +597,16 @@ const PromptsTemplatesPanel: React.FC = () => {
                     folderPath={createFolderPath}
                     onClose={() => setShowCreateModal(false)}
                     onCreate={handleFragmentCreated}
+                />
+            )}
+
+            {/* Version history modal */}
+            {showVersionHistory && editorState?.versionHistoryProps && (
+                <VersionHistoryModal
+                    isOpen={showVersionHistory}
+                    onClose={() => setShowVersionHistory(false)}
+                    onRestoreVersion={handleRestoreComplete}
+                    textVersionProps={editorState.versionHistoryProps}
                 />
             )}
         </div>

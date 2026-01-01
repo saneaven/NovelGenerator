@@ -1,134 +1,166 @@
-/* ========================================
-   SETTINGS MODAL - BASE STYLES
-   Modal container, header, body, footer
-   ======================================== */
+/* Settings Modal Layout */
 
-/* Modal Base */
 .settings-modal {
-    width: 90%;
-    max-width: 900px;
-    height: 85dvh;
     display: flex;
     flex-direction: column;
-    background: var(--color-surface-base);
-    border-radius: var(--border-radius-xl);
-    box-shadow: var(--shadow-2xl);
-    overflow: hidden;
+    height: 100%;
+    max-height: 85vh;
+    background-color: var(--color-surface-base);
 }
 
-/* Header */
+/* BaseModal body needs to be flex container for settings content */
+.settings-modal .base-modal-body {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    min-height: 0;
+}
+
 .settings-modal-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: var(--spacing-md);
     padding: var(--spacing-lg) var(--spacing-xl);
-    background: var(--gradient-surface);
     border-bottom: 1px solid var(--color-border-default);
+    background-color: var(--color-surface-base);
     flex-shrink: 0;
 }
 
 .settings-modal-header h2 {
-    margin: 0;
-    font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
+    flex: 1;
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
-}
-
-.settings-modal .close-button {
-    background: none;
-    border: none;
-    font-size: var(--font-size-2xl);
-    color: var(--color-text-tertiary);
-    cursor: pointer;
-    width: var(--spacing-2xl);
-    height: var(--spacing-2xl);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--border-radius-md);
-    transition: all var(--transition-base);
-}
-
-.settings-modal .close-button:hover {
-    background: var(--color-surface-hover);
+    margin: 0;
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
     color: var(--color-text-primary);
 }
 
-/* Modal Body */
+.settings-hamburger-btn {
+    display: none;
+    padding: var(--spacing-sm);
+    border: none;
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    border-radius: var(--border-radius-sm);
+    transition: background-color var(--transition-fast);
+}
+
+.settings-hamburger-btn:hover {
+    background-color: var(--color-surface-subtle);
+}
+
+.close-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xl);
+    cursor: pointer;
+    border-radius: var(--border-radius-sm);
+    transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.close-button:hover {
+    background-color: var(--color-surface-subtle);
+    color: var(--color-text-primary);
+}
+
 .settings-panel-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     flex: 1;
     min-height: 0;
     overflow-y: auto;
     padding: var(--spacing-xl);
-    background: var(--color-surface-base);
+    background-color: var(--color-surface-base);
 }
 
-/* Override BaseModal body padding for custom layout */
-.settings-modal .base-modal-body {
+/* When containing prompts layout, don't add extra scroll - let content manage it */
+.settings-panel-content:has(.prompts-layout) {
+    align-items: stretch;
+    overflow: hidden;
     padding: 0;
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
 }
 
-/* Panel Description */
-.panel-description {
-    margin-bottom: var(--spacing-lg);
-    padding: var(--spacing-md) var(--spacing-lg);
-    background: var(--color-brand-primary-soft);
-    border-left: var(--spacing-xs) solid var(--color-primary-main);
-    border-radius: var(--border-radius-md);
+/* Mobile Sidebar */
+.settings-mobile-sidebar {
+    background-color: var(--color-surface-base);
 }
 
-.panel-description p {
+.settings-mobile-sidebar-title {
     margin: 0;
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-sm);
-    line-height: var(--line-height-normal);
+    padding: var(--spacing-lg);
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    border-bottom: 1px solid var(--color-border-subtle);
 }
 
-/* ========================================
-   MODAL FOOTER
-   ======================================== */
+.settings-mobile-sidebar-list {
+    list-style: none;
+    margin: 0;
+    padding: var(--spacing-sm);
+}
 
-.settings-modal .base-modal-footer {
+.settings-mobile-sidebar-item {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
     gap: var(--spacing-md);
-    padding: var(--spacing-lg) var(--spacing-xl);
-    background: var(--color-surface-subtle);
-    border-top: 1px solid var(--color-border-default);
-    flex-shrink: 0;
+    width: 100%;
+    padding: var(--spacing-md) var(--spacing-lg);
+    border: none;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-base);
+    text-align: left;
+    cursor: pointer;
+    border-radius: var(--border-radius-md);
+    transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
-/* Note: btn-primary and btn-secondary have been migrated to TextButton component.
-   Generic button styles are available in utilities.css if needed. */
+.settings-mobile-sidebar-item:hover {
+    background-color: var(--color-surface-subtle);
+    color: var(--color-text-primary);
+}
 
-/* ========================================
-   MOBILE RESPONSIVE
-   ======================================== */
+.settings-mobile-sidebar-item.active {
+    background-color: var(--color-brand-primary-soft);
+    color: var(--color-brand-primary);
+}
 
+/* Responsive */
 @media (max-width: 768px) {
-    /* Remove overlay padding for full screen */
+    /* Make settings modal truly fullscreen on mobile */
     .base-modal-overlay:has(.settings-modal) {
         padding: 0;
     }
 
-    .settings-modal {
+    .base-modal.settings-modal {
         width: 100%;
-        max-width: 100%;
         height: 100dvh;
         max-height: 100dvh;
         border-radius: 0;
     }
 
+    .settings-modal {
+        max-height: 100vh;
+    }
+
     .settings-modal-header {
         padding: var(--spacing-md) var(--spacing-lg);
+    }
+
+    .settings-hamburger-btn {
+        display: flex;
     }
 
     .settings-panel-content {

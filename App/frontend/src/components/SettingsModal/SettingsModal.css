@@ -1,38 +1,8 @@
-/* ========================================
-   SETTINGS MODAL - MAIN ENTRY POINT
-   ======================================== */
+/* Settings Modal */
 
-/* Import component styles */
+/* Import core styles */
 @import './styles/settings-modal-layout.css';
 @import './styles/tabs.css';
 @import './styles/forms.css';
-@import './styles/model-browser.css';
 
-/* ========================================
-   RESPONSIVE DESIGN
-   (Modal base styles are in modal-base.css)
-   (Tab styles are in tabs.css)
-   ======================================== */
-
-@media (max-width: 768px) {
-    .function-tab {
-        flex-direction: column;
-        padding: var(--spacing-sm);
-        text-align: center;
-    }
-
-    .function-tab .tab-icon {
-        font-size: var(--font-size-lg);
-    }
-
-    .function-tab .tab-label {
-        font-size: var(--font-size-xs);
-    }
-}
-
-/* Medium screens - 3 columns */
-@media (max-width: 900px) and (min-width: 769px) {
-    .function-selector {
-        grid-template-columns: repeat(3, 1fr);
-    }
-}
+/* Modal-specific overrides if needed */

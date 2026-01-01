@@ -10,7 +10,7 @@
  * - Patch: patch_basic_info, patch_story_object, patch_chapter_outline, patch_manuscript
  */
 
-import type { StoryObjectType } from '../../types/patchTypes';
+import { storyObjectTypeSchema } from '../../functionCall/schemas/schemaBuilders';
 
 // ============================================
 // TYPES
@@ -57,22 +57,6 @@ export interface FunctionResultMessage {
 // ============================================
 // SCHEMA BUILDING BLOCKS
 // ============================================
-
-/** Story object type enum for schemas */
-const STORY_OBJECT_TYPE_ENUM: StoryObjectType[] = [
-  'character',
-  'location',
-  'organization',
-  'lorebook',
-  'act',
-];
-
-/** Schema for story object type field */
-const storyObjectTypeSchema = {
-  type: 'string',
-  enum: STORY_OBJECT_TYPE_ENUM,
-  description: 'Type of story object',
-};
 
 /** Schema for a single replacement in patch operations */
 const replacementWithFieldSchema = {
@@ -142,7 +126,7 @@ const manuscriptReplacementSchema = {
 export const CREATE_STORY_OBJECT_FUNCTION: FunctionCallSchema = {
   name: 'create_story_object',
   description:
-    'Create a story object (character, location, organization, lorebook, or act).',
+    'Create a story object (character, location, organization, or lorebook).',
   parameters: {
     type: 'object',
     properties: {

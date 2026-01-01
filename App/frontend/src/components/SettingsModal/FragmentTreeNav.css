@@ -1,232 +1,161 @@
-.tree-nav {
+/* Fragment Tree Nav */
+
+.fragment-tree-nav {
     display: flex;
     flex-direction: column;
     height: 100%;
     overflow: hidden;
-    background-color: var(--color-surface-elevated);
 }
 
-.tree-nav--loading {
-    align-items: center;
-    justify-content: center;
-    color: var(--color-text-muted);
-}
-
-.tree-nav__header {
+.fragment-tree-nav__header {
     display: flex;
-    align-items: center;
     justify-content: space-between;
-    padding: var(--spacing-sm) var(--spacing-md);
-    border-bottom: 1px solid var(--color-border-subtle);
-    flex-shrink: 0;
-    min-height: 48px;
-}
-
-.tree-nav__header-left {
-    display: flex;
     align-items: center;
     gap: var(--spacing-sm);
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-bottom: 1px solid var(--color-border-subtle);
 }
 
-.tree-nav__title {
+.fragment-tree-nav__title {
     margin: 0;
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-semibold);
-    color: var(--color-text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    color: var(--color-text-primary);
 }
 
-.tree-nav__action-btn {
+.fragment-tree-nav__actions {
+    display: flex;
+    gap: var(--spacing-xs);
+}
+
+.fragment-tree-nav__close-btn {
+    display: none;
+    padding: var(--spacing-xs);
+    border: none;
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    border-radius: var(--border-radius-sm);
+    transition: background-color var(--transition-fast);
+}
+
+.fragment-tree-nav__close-btn:hover {
+    background-color: var(--color-surface-subtle);
+}
+
+.fragment-tree-nav__content {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--spacing-sm) 0;
+}
+
+/* Fragment Tree Node */
+.fragment-node {
+    /* Container for node and its children */
+}
+
+.fragment-node__content {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+}
+
+.fragment-node__content:hover {
+    background-color: var(--color-surface-subtle);
+}
+
+.fragment-node__content--selected {
+    background-color: var(--color-brand-primary-soft);
+    color: var(--color-brand-primary);
+}
+
+.fragment-node__content--folder {
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-primary);
+}
+
+.fragment-node__content--fragment {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+}
+
+.fragment-node__content--fragment.fragment-node__content--selected {
+    color: var(--color-brand-primary);
+}
+
+.fragment-node__expand-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--color-text-secondary);
-    border-radius: var(--border-radius-sm);
-    cursor: pointer;
-    transition: all var(--transition-fast);
+    width: 12px;
+    color: var(--color-text-tertiary);
 }
 
-.tree-nav__action-btn:hover {
-    background-color: var(--color-surface-hover);
-    color: var(--color-primary-main);
+.fragment-node__icon {
+    display: flex;
+    align-items: center;
+    color: inherit;
 }
 
-.tree-nav__content {
+.fragment-node__label {
     flex: 1;
-    overflow-y: auto;
-    padding: var(--spacing-xs) 0;
+    font-size: var(--font-size-sm);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.tree-nav__empty {
+.fragment-node__add-btn {
+    display: flex;
+    padding: var(--spacing-xs);
+    border: none;
+    background: transparent;
+    color: var(--color-text-tertiary);
+    cursor: pointer;
+    border-radius: var(--border-radius-sm);
+    opacity: 0;
+    transition: opacity var(--transition-fast), color var(--transition-fast);
+}
+
+.fragment-node__content:hover .fragment-node__add-btn {
+    opacity: 1;
+}
+
+.fragment-node__add-btn:hover {
+    color: var(--color-brand-primary);
+}
+
+.fragment-node__children {
+    /* Nested children container */
+}
+
+/* Empty State */
+.fragment-tree-nav__empty {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     padding: var(--spacing-xl);
     text-align: center;
+}
+
+.fragment-tree-nav__empty-icon {
+    margin-bottom: var(--spacing-md);
     color: var(--color-text-muted);
+}
+
+.fragment-tree-nav__empty-text {
+    margin: 0 0 var(--spacing-md) 0;
     font-size: var(--font-size-sm);
-    gap: var(--spacing-md);
+    color: var(--color-text-tertiary);
 }
 
-/* Close button for mobile */
-.tree-nav__close-btn {
-    display: none;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border: none;
-    background: transparent;
-    color: var(--color-text-muted);
-    border-radius: var(--border-radius-sm);
-    cursor: pointer;
-}
-
-/* Tree Node */
-.tree-node {
-    display: flex;
-    flex-direction: column;
-    font-size: var(--font-size-sm);
-}
-
-.tree-node__content {
-    display: flex;
-    align-items: center;
-    padding: var(--spacing-xs) var(--spacing-md);
-    cursor: pointer;
-    color: var(--color-text-secondary);
-    margin: 0;
-    transition: background-color var(--transition-fast), color var(--transition-fast);
-    position: relative;
-    height: 32px;
-}
-
-.tree-node__content:hover {
-    background-color: var(--color-surface-hover);
-    color: var(--color-text-primary);
-}
-
-/* Folder specific hover for adding button visibility if we had one on hover */
-.tree-node__content:hover .tree-node__action-btn {
-    opacity: 1;
-}
-
-.tree-node__content--selected {
-    background-color: var(--color-primary-soft);
-    color: var(--color-primary-main);
-    font-weight: var(--font-weight-medium);
-}
-
-.tree-node__content--selected::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 3px;
-    background-color: var(--color-primary-main);
-}
-
-/* Icons */
-.tree-node__expand-icon,
-.tree-node__icon,
-.tree-node__bullet {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-    color: currentColor;
-    opacity: 0.8;
-}
-
-.tree-node__expand-icon {
-    margin-right: var(--spacing-xs);
-    cursor: pointer;
-}
-
-.tree-node__icon {
-    margin-right: var(--spacing-sm);
-}
-
-.tree-node__bullet {
-    margin-right: var(--spacing-sm);
-    transform: scale(0.8);
-}
-
-.tree-node__label {
-    flex: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    line-height: 1.5;
-}
-
-/* Badge */
-.tree-node__badge {
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: var(--border-radius-full);
-    background-color: var(--color-secondary-soft);
-    color: var(--color-secondary-main);
-    font-weight: var(--font-weight-bold);
-    text-transform: uppercase;
-    margin-left: var(--spacing-sm);
-    flex-shrink: 0;
-}
-
-/* Action Button inside Node */
-.tree-node__content .tree-node__action-btn {
-    width: 20px;
-    height: 20px;
-    margin-left: var(--spacing-xs);
-    opacity: 0; /* Hidden by default */
-}
-
-.tree-node__content:hover .tree-node__action-btn {
-    opacity: 1;
-}
-
-.tree-node__children {
-    display: flex;
-    flex-direction: column;
-}
-
-/* ========================================
-   MOBILE STYLES
-   ======================================== */
+/* Responsive */
 @media (max-width: 768px) {
-    .tree-nav__close-btn {
+    .fragment-tree-nav__close-btn {
         display: flex;
-    }
-
-    .tree-node__content {
-        height: 48px; /* Larger tap target */
-        padding-top: var(--spacing-sm);
-        padding-bottom: var(--spacing-sm);
-    }
-    
-    .tree-node__expand-icon,
-    .tree-node__icon,
-    .tree-node__bullet {
-        width: 20px;
-        height: 20px;
-    }
-
-    /* Always show action buttons on mobile since there is no hover */
-    .tree-node__content .tree-node__action-btn {
-        opacity: 1;
-        width: 32px;
-        height: 32px;
-        background-color: var(--color-surface-subtle);
     }
 }

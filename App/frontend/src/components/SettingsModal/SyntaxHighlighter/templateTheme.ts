@@ -12,6 +12,7 @@ import { tags } from '@lezer/highlight';
  * Base editor theme - styling for the editor container and gutters
  */
 export const templateEditorTheme = EditorView.theme({
+  // Container must be position:relative with explicit height for absolute scroller
   '&': {
     fontSize: 'var(--font-size-sm)',
     fontFamily: 'var(--font-family-mono)',
@@ -20,9 +21,8 @@ export const templateEditorTheme = EditorView.theme({
     border: '1px solid var(--color-border-default)',
     borderRadius: 'var(--border-radius-md)',
     position: 'relative',
-    flex: '1',
     width: '100%',
-    minHeight: '200px',
+    height: '100%',
   },
 
   '&.cm-focused': {
@@ -31,9 +31,10 @@ export const templateEditorTheme = EditorView.theme({
     boxShadow: 'var(--shadow-focus)',
   },
 
+  // Absolute positioning is required to constrain height in flex containers
   '.cm-scroller': {
     backgroundColor: 'var(--color-surface-base)',
-    position: 'absolute',
+    position: 'absolute !important',
     top: '0',
     right: '0',
     bottom: '0',

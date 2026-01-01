@@ -102,4 +102,4 @@ Output a JSON array containing all function calls. Each object in the array repr
 - Include the correct `id` for items you are editing
 - Omit fields that should not change in replace operations
 - Use `patch_*` for targeted edits, `replace_*` for full replacements
-- Valid story object types: `character`, `location`, `organization`, `lorebook`, `act`
+- Valid story object types: `character`, `location`, `organization`, `lorebook`

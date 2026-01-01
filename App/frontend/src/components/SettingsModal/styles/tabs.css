@@ -1,16 +1,19 @@
-/* ========================================
-   SETTINGS MODAL - TABS
-   Main tabs and function selector
-   ======================================== */
+/* Tab Navigation Styles */
 
-/* Main Category Tabs */
 .main-tabs {
     display: flex;
-    gap: 0;
-    background: var(--color-surface-subtle);
-    border-bottom: 1px solid var(--color-border-default);
+    gap: var(--spacing-xs);
     padding: 0 var(--spacing-xl);
+    border-bottom: 1px solid var(--color-border-default);
+    background-color: var(--color-surface-base);
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
     flex-shrink: 0;
+}
+
+.main-tabs::-webkit-scrollbar {
+    display: none;
 }
 
 .main-tab {
@@ -18,235 +21,81 @@
     align-items: center;
     gap: var(--spacing-sm);
     padding: var(--spacing-md) var(--spacing-lg);
-    background: none;
     border: none;
-    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--color-text-secondary);
     font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-tertiary);
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
     cursor: pointer;
-    transition: all var(--transition-base);
-    position: relative;
+    border-bottom: 2px solid transparent;
     margin-bottom: -1px;
+    transition: color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .main-tab:hover {
-    color: var(--color-text-secondary);
-    background: var(--color-surface-hover);
+    color: var(--color-text-primary);
 }
 
 .main-tab.active {
-    color: var(--color-primary-main);
-    border-bottom-color: var(--color-primary-main);
-    background: var(--color-surface-base);
+    color: var(--color-brand-primary);
+    border-bottom-color: var(--color-brand-primary);
 }
 
-.main-tab .tab-icon {
-    font-size: var(--font-size-lg);
-}
-
-.main-tab .tab-label {
-    font-size: var(--font-size-sm);
-}
-
-/* ========================================
-   FUNCTION SELECTOR (GeneralPanel)
-   ======================================== */
-
-.configurations-panel {
+.tab-icon {
     display: flex;
-    flex-direction: column;
-    gap: var(--spacing-lg);
+    align-items: center;
+    justify-content: center;
 }
 
-/* Function Selector Tabs */
+.tab-label {
+    display: inline;
+}
+
+/* Function Tabs (sub-navigation within panels) */
 .function-selector {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    display: flex;
     gap: var(--spacing-sm);
-    padding: var(--spacing-lg);
-    background: var(--color-surface-subtle);
-    border-radius: var(--border-radius-lg);
+    margin-bottom: var(--spacing-xl);
+    padding-bottom: var(--spacing-md);
+    border-bottom: 1px solid var(--color-border-subtle);
+    overflow-x: auto;
 }
 
 .function-tab {
     display: flex;
-    flex-direction: row;
     align-items: center;
-    justify-content: center;
-    gap: var(--spacing-xs);
+    gap: var(--spacing-sm);
     padding: var(--spacing-sm) var(--spacing-md);
-    background: var(--color-surface-base);
     border: 1px solid var(--color-border-default);
-    border-radius: var(--border-radius-md);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
     cursor: pointer;
-    transition: all var(--transition-base);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-tertiary);
+    border-radius: var(--border-radius-md);
+    transition: all var(--transition-fast);
 }
 
 .function-tab:hover {
-    border-color: var(--color-primary-main);
-    background: var(--color-brand-primary-soft);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
+    background-color: var(--color-surface-subtle);
+    color: var(--color-text-primary);
 }
 
 .function-tab.active {
-    background: var(--gradient-accent);
-    border-color: var(--color-primary-main);
-    color: var(--color-text-inverse);
-    box-shadow: var(--shadow-lg);
+    background-color: var(--color-brand-primary-soft);
+    border-color: var(--color-brand-primary);
+    color: var(--color-brand-primary);
 }
 
-.function-tab .tab-icon {
-    font-size: var(--font-size-xl);
-}
-
-.function-tab .tab-label {
-    font-size: var(--font-size-xs);
-}
-
-/* Function Description */
-.function-description {
-    padding: var(--spacing-lg);
-    background: var(--color-brand-primary-soft);
-    border-radius: var(--border-radius-lg);
-    border-left: var(--spacing-xs) solid var(--color-primary-main);
-}
-
-.description-header {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
-    margin-bottom: var(--spacing-sm);
-}
-
-.description-icon {
-    font-size: var(--font-size-xl);
-}
-
-.function-description h3 {
-    margin: 0;
-    font-size: var(--font-size-base);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
-}
-
-.function-description p {
-    margin: 0;
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-sm);
-    line-height: var(--line-height-normal);
-}
-
-/* ========================================
-   MOBILE SIDEBAR NAVIGATION
-   (Uses BaseSidebar component)
-   ======================================== */
-
-/* Hamburger button - only visible on mobile */
-.settings-hamburger-btn {
-    display: none;
-    background: none;
-    border: none;
-    color: var(--color-text-secondary);
-    cursor: pointer;
-    padding: var(--spacing-sm);
-    border-radius: var(--border-radius-md);
-    transition: all var(--transition-base);
-}
-
-.settings-hamburger-btn:hover {
-    background: var(--color-surface-hover);
-    color: var(--color-text-primary);
-}
-
-/* Settings Sidebar Header */
-.settings-mobile-sidebar .base-sidebar-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--spacing-md);
-    padding: var(--spacing-lg);
-    background: var(--color-surface-subtle);
-    border-bottom: 1px solid var(--color-border-default);
-}
-
-.settings-mobile-sidebar-title {
-    margin: 0;
-    font-size: var(--font-size-lg);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
-}
-
-/* Sidebar List */
-.settings-mobile-sidebar-list {
-    list-style: none;
-    margin: 0;
-    padding: var(--spacing-md) 0;
-    overflow-y: auto;
-    flex: 1;
-}
-
-/* Sidebar Item */
-.settings-mobile-sidebar-item {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
-    width: 100%;
-    padding: var(--spacing-md) var(--spacing-lg);
-    background: none;
-    border: none;
-    text-align: left;
-    font-size: var(--font-size-base);
-    font-weight: var(--font-weight-medium);
-    color: var(--color-text-secondary);
-    cursor: pointer;
-    transition: all var(--transition-base);
-    position: relative;
-}
-
-.settings-mobile-sidebar-item:hover {
-    background-color: var(--color-surface-hover);
-    color: var(--color-text-primary);
-}
-
-.settings-mobile-sidebar-item.active {
-    background-color: var(--color-primary-soft);
-    color: var(--color-primary-main);
-    font-weight: var(--font-weight-semibold);
-}
-
-.settings-mobile-sidebar-item.active::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 3px;
-    background-color: var(--color-primary-main);
-}
-
-/* ========================================
-   MOBILE RESPONSIVE - SHOW HAMBURGER
-   ======================================== */
-
+/* Responsive */
 @media (max-width: 768px) {
-    /* Show hamburger button */
-    .settings-hamburger-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    /* Hide horizontal tabs */
     .main-tabs {
         display: none;
     }
 
-    /* Function selector adjustments */
     .function-selector {
-        grid-template-columns: repeat(2, 1fr);
+        flex-wrap: wrap;
     }
 }

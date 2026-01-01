@@ -12,7 +12,7 @@ interface UsePromptEditorResult {
     isLoading: boolean;
     isSaving: boolean;
     hasChanges: boolean;
-    onSave: (note?: string) => Promise<void>;
+    onSave: () => Promise<void>;
     reload: () => Promise<void>;
     versionHistoryProps: {
         title: string;
@@ -92,7 +92,7 @@ export function usePromptEditor(
         }
     };
 
-    const handleSave = async (note?: string) => {
+    const handleSave = async () => {
         if (!validation?.valid) {
             throw new Error('Cannot save: template contains syntax errors');
         }
@@ -103,7 +103,7 @@ export function usePromptEditor(
                 functionType,
                 category,
                 content,
-                note,
+                undefined,
                 name
             );
             invalidatePromptCache(functionType, category, name);

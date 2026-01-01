@@ -6,6 +6,14 @@
  * - patch_* functions: Search and replace within fields
  */
 
+import {
+  STORY_OBJECT_TYPES,
+  type StoryObjectType,
+} from '../functionCall/schemas/schemaBuilders';
+
+// Re-export for backward compatibility
+export { STORY_OBJECT_TYPES, type StoryObjectType };
+
 // ============================================
 // REPLACEMENT TYPES
 // ============================================
@@ -62,21 +70,3 @@ export interface PatchRetryContext {
   error: string;
 }
 
-// ============================================
-// STORY OBJECT TYPES (for type enum)
-// ============================================
-
-export type StoryObjectType =
-  | 'character'
-  | 'location'
-  | 'organization'
-  | 'lorebook'
-  | 'act';
-
-export const STORY_OBJECT_TYPES: StoryObjectType[] = [
-  'character',
-  'location',
-  'organization',
-  'lorebook',
-  'act',
-];

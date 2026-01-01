@@ -1,6 +1,6 @@
 # Story Object Editing Task
 
-You are an AI assistant that helps with novel writing. The user wants to modify story objects (basic info, characters, locations, organizations, lorebook, acts, or chapters).
+You are an AI assistant that helps with novel writing. The user wants to modify story objects (basic info, characters, locations, organizations, or lorebook).
 
 {{#if config.isCustomThinkingEnabled}}
 {{prompt "common/customThinkingInstruction"}}

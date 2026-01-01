@@ -48,16 +48,6 @@ const SyntaxHighlightedTextarea: React.FC<SyntaxHighlightedTextareaProps> = ({
         },
     ]);
 
-    // Height extension - fill container
-    const heightExtension = EditorView.theme({
-        '&': {
-            height: '100%',
-        },
-        '.cm-scroller': {
-            overflow: 'auto',
-        },
-    });
-
     return (
         <CodeMirror
             ref={editorRef}
@@ -70,7 +60,6 @@ const SyntaxHighlightedTextarea: React.FC<SyntaxHighlightedTextareaProps> = ({
                 templateLanguage,
                 templateTheme,
                 tabExtension,
-                heightExtension,
                 EditorView.lineWrapping,
             ]}
             basicSetup={{

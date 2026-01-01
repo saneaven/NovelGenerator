@@ -1,61 +1,40 @@
-/* General Panel - uses theme.css variables for automatic dark mode support */
+/* General Panel */
 
 .general-panel {
-  padding: var(--spacing-xl);
-  max-width: 800px;
-  margin: 0 auto;
+    width: 100%;
+    max-width: 700px;
 }
 
 /* Function Description */
 .function-description {
-  background: var(--color-brand-primary-soft);
-  padding: var(--spacing-lg) var(--spacing-xl);
-  border-radius: var(--border-radius-lg);
-  margin-bottom: var(--spacing-xl);
-  border-left: 4px solid var(--color-primary-main);
+    margin-bottom: var(--spacing-xl);
+    padding: var(--spacing-lg);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--border-radius-md);
+    background-color: var(--color-surface-subtle);
 }
 
 .description-header {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  margin-bottom: var(--spacing-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
 }
 
 .description-icon {
-  font-size: var(--font-size-2xl);
-  color: var(--color-primary-main);
+    display: flex;
+    color: var(--color-brand-primary);
 }
 
 .description-header h3 {
-  margin: 0;
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
+    margin: 0;
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-primary);
 }
 
 .function-description p {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  line-height: var(--line-height-relaxed);
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .general-panel {
-    padding: var(--spacing-lg);
-  }
-
-  .function-description {
-    padding: var(--spacing-md) var(--spacing-lg);
-  }
-
-  .description-header h3 {
-    font-size: var(--font-size-base);
-  }
-
-  .function-description p {
-    font-size: var(--font-size-xs);
-  }
+    margin: 0;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
 }

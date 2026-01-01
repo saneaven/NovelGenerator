@@ -17,6 +17,9 @@ export const STORY_OBJECT_TYPES = [
   'lorebook',
 ] as const;
 
+/** TypeScript type derived from STORY_OBJECT_TYPES */
+export type StoryObjectType = (typeof STORY_OBJECT_TYPES)[number];
+
 /** Object types for translation (excludes outline structure) */
 export const TRANSLATION_OBJECT_TYPES = [
   'character',
