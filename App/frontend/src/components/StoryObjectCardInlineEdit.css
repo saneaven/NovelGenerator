@@ -3,7 +3,7 @@
    Modern, clean design for inline card editing
    ======================================== */
 
-.story-card-inline-edit {
+.story-object-card-inline-edit {
     display: flex;
     flex-direction: column;
     background: var(--color-surface-elevated);
@@ -241,7 +241,7 @@
 
 /* Responsive */
 @media (max-width: 480px) {
-    .story-card-inline-edit {
+    .story-object-card-inline-edit {
         max-height: 400px;
     }
 

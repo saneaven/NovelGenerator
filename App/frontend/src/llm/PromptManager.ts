@@ -101,8 +101,8 @@ export class PromptManager {
     await this.ensureFragmentsLoaded();
 
     switch (mode) {
-      case LLMTaskMode.CHAT_WORKSPACE:
-        return this.generateChatBundle(context as ChatWorkspacePromptContext, 'workspace');
+      case LLMTaskMode.CHAT_STORYOBJECT:
+        return this.generateChatBundle(context as ChatWorkspacePromptContext, 'storyObject');
       case LLMTaskMode.CHAT_NOVEL_EDITOR:
         return this.generateChatBundle(context as ChatNovelEditorPromptContext, 'novelEditor');
       case LLMTaskMode.CHAT_OUTLINE_MANAGER:
@@ -135,7 +135,7 @@ export class PromptManager {
     context: PromptContext
   ): FunctionCallSchema[] | undefined {
     switch (mode) {
-      case LLMTaskMode.CHAT_WORKSPACE:
+      case LLMTaskMode.CHAT_STORYOBJECT:
       case LLMTaskMode.CHAT_NOVEL_EDITOR:
       case LLMTaskMode.CHAT_OUTLINE_MANAGER:
         return (context as ChatWorkspacePromptContext).functions;
@@ -162,7 +162,7 @@ export class PromptManager {
 
   private static async generateChatBundle(
     context: ChatWorkspacePromptContext | ChatNovelEditorPromptContext | ChatOutlineManagerPromptContext,
-    mode: 'workspace' | 'novelEditor' | 'outlineManager'
+    mode: 'storyObject' | 'novelEditor' | 'outlineManager'
   ): Promise<PromptBundle> {
     const [systemTemplate, userTemplate, nonLastTemplate, prefillTemplate] = await Promise.all([
       this.getTemplate('chat', 'systemPrompt', mode),

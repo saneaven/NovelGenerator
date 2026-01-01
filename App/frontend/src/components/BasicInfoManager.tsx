@@ -1,7 +1,7 @@
 /**
  * BasicInfoManager - Modern Image Card Design
  *
- * Uses global display language from parent (StoryPanel) instead of per-object switching.
+ * Uses global display language from parent (StoryObjectPanel) instead of per-object switching.
  * Shows warning icon when displaying in fallback language.
  */
 

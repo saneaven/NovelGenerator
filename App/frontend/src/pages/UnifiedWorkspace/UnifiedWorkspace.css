@@ -1,0 +1,116 @@
+/* ========================================
+   UNIFIED WORKSPACE STYLES
+   Combined layout for all sub-pages
+   ======================================== */
+
+/* ===== Main Container ===== */
+.unified-workspace-container {
+  height: 100dvh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface-base);
+  overflow: hidden;
+}
+
+/* ===== Content Area ===== */
+.unified-workspace-content {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ===== Error Container ===== */
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100dvh;
+  padding: var(--spacing-2xl);
+  text-align: center;
+  background: var(--color-surface-base);
+}
+
+.error-container h2 {
+  color: var(--color-error);
+  font-size: var(--font-size-3xl);
+  margin-bottom: var(--spacing-lg);
+}
+
+.error-container a {
+  color: var(--color-text-link);
+  text-decoration: none;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-lg);
+  padding: var(--spacing-md) var(--spacing-xl);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-lg);
+  transition: all var(--transition-base);
+  display: inline-block;
+  margin-top: var(--spacing-lg);
+}
+
+.error-container a:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-medium);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+/* ===== Overlays ===== */
+.sidebar-overlay,
+.desktop-chat-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--overlay-dark-heavy);
+  backdrop-filter: blur(4px);
+  animation: fadeIn var(--transition-base);
+}
+
+.sidebar-overlay {
+  z-index: calc(var(--z-modal) + 1);
+}
+
+.desktop-chat-overlay {
+  z-index: calc(var(--z-sticky) - 1);
+  background: var(--overlay-dark-light);
+}
+
+/* ===== Responsive Design ===== */
+@media (min-width: 769px) {
+  .mobile-only {
+    display: none;
+  }
+
+  .desktop-only {
+    display: block;
+  }
+}
+
+/* ===== Animations ===== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

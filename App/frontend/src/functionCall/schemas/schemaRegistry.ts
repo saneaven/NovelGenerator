@@ -737,7 +737,7 @@ class SchemaRegistryClass {
    */
   getForMode(mode: ExecutionMode): FunctionSchema[] {
     switch (mode) {
-      case 'workspace':
+      case 'storyObject':
         // All CRUD, replace, patch (no translation)
         return this.getAll().filter(s => s.category !== 'translation');
 

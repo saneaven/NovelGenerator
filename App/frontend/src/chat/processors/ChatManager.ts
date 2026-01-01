@@ -30,7 +30,7 @@ export interface ChatManagerConfig {
   provider: ProviderType;
   providerConfig: ProviderConfig;
   functions?: any[];
-  mode: 'novelEditor' | 'workspace' | 'outlineManager';
+  mode: 'novelEditor' | 'storyObject' | 'outlineManager';
   enablePrefill?: boolean;
   thinkingMode?: 'off' | 'model' | 'custom';
   thinkingConfig?: ThinkingConfig;
@@ -161,8 +161,8 @@ export class ChatManager {
     // Combine trailing user messages with current userInput
     const combinedUserInput = [...trailingUserTexts, userInput].filter(Boolean).join('\n\n');
 
-    const mode = this.config.mode === 'workspace'
-      ? LLMTaskMode.CHAT_WORKSPACE
+    const mode = this.config.mode === 'storyObject'
+      ? LLMTaskMode.CHAT_STORYOBJECT
       : this.config.mode === 'outlineManager'
       ? LLMTaskMode.CHAT_OUTLINE_MANAGER
       : LLMTaskMode.CHAT_NOVEL_EDITOR;

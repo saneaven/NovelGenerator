@@ -7,7 +7,7 @@ import type { FunctionCallSchema } from './schemas/chatFunctions';
  * LLM Task Mode - determines which prompts and functions to use
  */
 export const LLMTaskMode = {
-  CHAT_WORKSPACE: 'chat_workspace',
+  CHAT_STORYOBJECT: 'chat_storyObject',
   CHAT_NOVEL_EDITOR: 'chat_novel_editor',
   CHAT_OUTLINE_MANAGER: 'chat_outline_manager',
   EDIT_ASSISTANT_MANUSCRIPT: 'edit_assistant_manuscript',
@@ -69,7 +69,7 @@ export interface TemplateData {
   };
   // Mode-specific groups (only one should be set)
   chat?: {
-    mode: 'workspace' | 'novelEditor' | 'outlineManager';
+    mode: 'storyObject' | 'novelEditor' | 'outlineManager';
     contextObjectIds?: string[];
     selectedOutlineId?: string;
     selectedActId?: string;

@@ -46,6 +46,7 @@ import ChapterSidebar from './ChapterSidebar';
 import { Save, Check, Bullet, Warning, HamburgerMenu, AIAssist, Refresh, Globe, Lightbulb, MoreHorizontal, Clock } from '../../../components/icons';
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
+import './NovelEditorPanel.css';
 
 interface NovelEditorPanelProps {
   projectId: string;
@@ -814,13 +815,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
             <div className="editor-header">
               <div className="editor-info">
                 <div className="editor-title-row">
-                  {/* Mobile-only: Save status icon */}
-                  <div className="mobile-save-status">
-                    {isSaving && <span className="saving-indicator" title="Saving..."><Save size="sm" /></span>}
-                    {!isSaving && hasUnsavedChanges && <span className="unsaved-indicator" title="Unsaved"><Bullet size="sm" /></span>}
-                    {!isSaving && !hasUnsavedChanges && <span className="saved-indicator" title="Saved"><Check size="sm" /></span>}
-                  </div>
-
                   <h2
                     className={`editor-chapter-title ${selectedChapter.description ? 'has-description' : ''}`}
                     onClick={selectedChapter.description ? () => setIsDescriptionExpanded(!isDescriptionExpanded) : undefined}

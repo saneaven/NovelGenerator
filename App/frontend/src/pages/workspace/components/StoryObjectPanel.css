@@ -1,10 +1,10 @@
 /* ========================================
-   STORY PANEL STYLES
+   STORY OBJECT PANEL STYLES
    Panel header, tabs, and content container
    ======================================== */
 
-/* ===== Story Panel ===== */
-.story-panel {
+/* ===== Story Object Panel ===== */
+.story-object-panel {
     flex: 1 1 auto;
     background: var(--color-surface-base);
     display: flex;
@@ -13,7 +13,7 @@
     overflow: hidden;
 }
 
-.story-header {
+.story-object-header {
     padding: var(--spacing-xl);
     border-bottom: 1px solid var(--color-border-default);
     background: var(--color-surface-elevated);
@@ -25,7 +25,7 @@
     flex-wrap: wrap;
 }
 
-.story-header h2 {
+.story-object-header h2 {
     margin: 0;
     font-size: var(--font-size-xl);
     font-weight: var(--font-weight-bold);
@@ -36,15 +36,15 @@
     gap: var(--spacing-sm);
 }
 
-/* ===== Story Tabs ===== */
-.story-tabs-container {
+/* ===== Story Object Tabs ===== */
+.story-object-tabs-container {
     padding-top: var(--spacing-sm);
     position: relative;
     background: var(--color-surface-subtle);
     flex-shrink: 0;
 }
 
-.story-tabs {
+.story-object-tabs {
     display: flex;
     padding: 0 var(--spacing-lg);
     gap: var(--spacing-xs);
@@ -54,12 +54,12 @@
     scroll-behavior: smooth;
 }
 
-.story-tabs::-webkit-scrollbar {
+.story-object-tabs::-webkit-scrollbar {
     display: none;
 }
 
 /* Navigation Buttons */
-.tab-nav-button {
+.story-object-tab-nav-button {
     position: absolute;
     top: 50%;
     transform: translateY(-50%);
@@ -81,12 +81,12 @@
     visibility: hidden;
 }
 
-.tab-nav-button.visible {
+.story-object-tab-nav-button.visible {
     opacity: 1;
     visibility: visible;
 }
 
-.tab-nav-button:hover {
+.story-object-tab-nav-button:hover {
     background: var(--color-surface-hover);
     border-color: var(--color-border-medium);
     color: var(--color-text-primary);
@@ -94,19 +94,19 @@
     transform: translateY(-50%) scale(1.05);
 }
 
-.tab-nav-button:active {
+.story-object-tab-nav-button:active {
     transform: translateY(-50%) scale(0.95);
 }
 
-.tab-nav-button.left {
+.story-object-tab-nav-button.left {
     left: var(--spacing-xs);
 }
 
-.tab-nav-button.right {
+.story-object-tab-nav-button.right {
     right: var(--spacing-xs);
 }
 
-.tab-button {
+.story-object-tab-button {
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
@@ -124,29 +124,29 @@
     box-shadow: var(--shadow-sm);
 }
 
-.tab-button:hover {
+.story-object-tab-button:hover {
     color: var(--color-text-secondary);
     background: var(--color-surface-hover);
     border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
 }
 
-.tab-button.active {
+.story-object-tab-button.active {
     color: var(--color-brand-accent);
     border-bottom-color: var(--color-brand-accent);
     background: var(--color-surface-base);
     font-weight: var(--font-weight-semibold);
 }
 
-.tab-icon {
+.story-object-tab-icon {
     font-size: var(--font-size-lg);
     line-height: 1;
 }
 
-.tab-label {
+.story-object-tab-label {
     line-height: 1;
 }
 
-.story-content {
+.story-object-content {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
@@ -155,8 +155,8 @@
     position: relative;
 }
 
-/* Story Card Expanded Overlay - State 3 full edit mode */
-.story-card-expanded-container {
+/* Story Object Card Expanded Overlay - State 3 full edit mode */
+.story-object-card-expanded-container {
     position: fixed;
     inset: 0;
     z-index: var(--z-modal);
@@ -168,7 +168,7 @@
     padding: var(--spacing-xl);
 }
 
-.story-card-expanded-container > * {
+.story-object-card-expanded-container > * {
     width: 100%;
     max-width: 1200px;
     max-height: 90dvh;
@@ -178,33 +178,33 @@
 /* ===== Responsive Design ===== */
 @media (max-width: 768px) {
     /* Hide tabs container on mobile - use sidebar instead */
-    .story-tabs-container {
+    .story-object-tabs-container {
         display: none;
     }
 
-    .story-header {
+    .story-object-header {
         display: none;
     }
 
-    .story-tabs {
+    .story-object-tabs {
         padding: 0 var(--spacing-sm);
     }
 
-    .tab-button {
+    .story-object-tab-button {
         padding: var(--spacing-sm) var(--spacing-md);
         font-size: var(--font-size-xs);
     }
 
-    .tab-icon {
+    .story-object-tab-icon {
         font-size: var(--font-size-base);
     }
 
-    .story-content {
+    .story-object-content {
         padding: var(--spacing-lg);
     }
 
     /* Prevent last content line/card from being hidden behind fixed MobileFooter */
-    .story-content::after {
+    .story-object-content::after {
         content: '';
         display: block;
         height: var(--size-mobile-footer-height);
@@ -213,7 +213,7 @@
 }
 
 @media (min-width: 769px) and (max-width: 1024px) {
-    .story-content {
+    .story-object-content {
         padding: var(--spacing-xl);
     }
 }

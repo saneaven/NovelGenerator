@@ -36,46 +36,46 @@ export const PROMPT_TREE: PromptNode[] = [
     defaultExpanded: true,
     children: [
       {
-        id: 'chat-workspace',
-        label: 'Workspace Mode',
+        id: 'chat-storyobject',
+        label: 'Story Object Mode',
         type: 'category',
         defaultExpanded: true,
         children: [
           {
-            id: 'chat-workspace-system',
+            id: 'chat-storyobject-system',
             label: 'System Prompt',
             type: 'prompt',
             functionType: 'chat',
             category: 'systemPrompt',
-            name: 'workspace',
-            description: 'Main AI behavior for Workspace conversations'
+            name: 'storyObject',
+            description: 'Main AI behavior for Story Object conversations'
           },
           {
-            id: 'chat-workspace-user',
+            id: 'chat-storyobject-user',
             label: 'User Prompt',
             type: 'prompt',
             functionType: 'chat',
             category: 'userPrompt',
-            name: 'workspace',
+            name: 'storyObject',
             description: 'Template for the last user message in chat'
           },
           {
-            id: 'chat-workspace-nonlast',
+            id: 'chat-storyobject-nonlast',
             label: 'Non-Last User Prompt',
             type: 'prompt',
             functionType: 'chat',
             category: 'nonLastUserPrompt',
-            name: 'workspace',
+            name: 'storyObject',
             description: 'Template for previous user messages in chat history'
           },
           {
-            id: 'chat-workspace-prefill',
+            id: 'chat-storyobject-prefill',
             label: 'Prefill Template',
             type: 'prompt',
             functionType: 'chat',
             category: 'prefill',
-            name: 'workspace',
-            description: 'AI response starter for Workspace mode'
+            name: 'storyObject',
+            description: 'AI response starter for Story Object mode'
           }
         ]
       },

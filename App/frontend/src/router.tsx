@@ -4,10 +4,7 @@ import App from './App';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Home from './pages/Home';
-import ProjectMenu from './pages/ProjectMenu';
-import Workspace from './pages/Workspace';
-import OutlineManager from './pages/OutlineManager';
-import NovelEditor from './pages/NovelEditor';
+import { UnifiedWorkspace } from './pages/UnifiedWorkspace';
 import { useEffect, useState } from 'react';
 
 // Protected Route Component
@@ -96,34 +93,10 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: 'project/:projectId',
+        path: 'project/:projectId/:subPage?',
         element: (
           <ProtectedRoute>
-            <ProjectMenu />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: 'project/:projectId/workspace',
-        element: (
-          <ProtectedRoute>
-            <Workspace />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: 'project/:projectId/outline',
-        element: (
-          <ProtectedRoute>
-            <OutlineManager />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: 'project/:projectId/novel-editor',
-        element: (
-          <ProtectedRoute>
-            <NovelEditor />
+            <UnifiedWorkspace />
           </ProtectedRoute>
         ),
       },

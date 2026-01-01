@@ -2,7 +2,7 @@
  * NameDescriptionManager - Using Global Language Toggle
  *
  * Manages collections of name/description objects (Character, Organization, Location, Lorebook)
- * Uses global display language from parent (StoryPanel) instead of per-object switching.
+ * Uses global display language from parent (StoryObjectPanel) instead of per-object switching.
  *
  * Features:
  * - Motion-powered animations with dynamic grid sizing
@@ -13,7 +13,7 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import './StoryCards.css';
+import './StoryObjectCards.css';
 import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
 import {
   DndContext,
@@ -31,7 +31,7 @@ import {
   sortableKeyboardCoordinates,
   rectSortingStrategy,
 } from '@dnd-kit/sortable';
-import { SortableStoryCard } from './SortableStoryCard';
+import { SortableStoryObjectCard } from './SortableStoryObjectCard';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
@@ -40,7 +40,7 @@ import AIEditModal from './AIEditModal';
 import VersionHistoryModal from './VersionHistoryModal';
 import TranslationModal from './TranslationModal';
 import { UnifiedImageModal } from './AssetManager';
-import StoryCardExpanded from './StoryCardExpanded';
+import StoryObjectCardExpanded from './StoryObjectCardExpanded';
 import { DropdownMenu, DropdownItem, DropdownDivider } from './ui/DropdownMenu';
 import { IconButton } from './IconButton';
 import { TextButton } from './TextButton';
@@ -552,7 +552,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
             <LayoutGroup id={category}>
               <div
                 ref={gridRef}
-                className="story-cards-grid"
+                className="story-object-cards-grid"
                 style={{ position: 'relative' }}
               >
                 {items.map((item) => {
@@ -566,7 +566,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
                     const isExpanded = expandedItems.has(item.id);
 
                     return (
-                      <SortableStoryCard key={item.id} id={item.id} disabled={isFullExpanded} spanType={spanType}>
+                      <SortableStoryObjectCard key={item.id} id={item.id} disabled={isFullExpanded} spanType={spanType}>
                         <ItemDisplay
                           item={item}
                           itemData={itemData}
@@ -579,7 +579,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
                           onOpenFullExpand={() => openFullExpand(item.id)}
                           onAnimationComplete={() => handleAnimationComplete(item.id)}
                         />
-                      </SortableStoryCard>
+                      </SortableStoryObjectCard>
                     );
                   })}
               </div>
@@ -599,13 +599,13 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
               return (
                 <motion.div
                   key="expanded-overlay"
-                  className="story-card-expanded-container"
+                  className="story-object-card-expanded-container"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0, transition: { duration: 0.4, delay: 0.15 } }}
                   transition={{ duration: 0.2 }}
                 >
-                  <StoryCardExpanded
+                  <StoryObjectCardExpanded
                     itemId={item.id}
                     itemData={itemData}
                     effectiveLanguage={effectiveLanguage}
@@ -807,7 +807,7 @@ const ItemDisplay = React.memo<ItemDisplayProps>(({
   return (
     <motion.article
       layoutId={`card-${item.id}`}
-      className={`story-card ${isAnimating ? 'story-card--animating' : ''}`}
+      className={`story-object-card ${isAnimating ? 'story-object-card--animating' : ''}`}
       data-expanded={isExpanded}
       data-has-image={Boolean(mainAsset)}
       data-span={spanType}
@@ -824,21 +824,21 @@ const ItemDisplay = React.memo<ItemDisplayProps>(({
         ariaLabel="Open edit panel"
         title="Edit"
         size="sm"
-        className="story-card__full-expand-btn"
+        className="story-object-card__full-expand-btn"
       />
 
       {/* Content */}
-      <div className="story-card__content">
+      <div className="story-object-card__content">
         {/* Header - always visible */}
-        <header className="story-card__header">
+        <header className="story-object-card__header">
           {isTextOnly ? (
             <div
               ref={containerRef}
-              className="story-card__title-container"
+              className="story-object-card__title-container"
             >
               <h4
                 ref={textRef as React.RefObject<HTMLHeadingElement>}
-                className="story-card__title story-card__title--no-toggle story-card__title--fit"
+                className="story-object-card__title story-object-card__title--no-toggle story-object-card__title--fit"
                 style={{
                   fontSize: isReady ? `${fontSize}px` : undefined,
                   opacity: isReady ? 1 : 0,
@@ -849,7 +849,7 @@ const ItemDisplay = React.memo<ItemDisplayProps>(({
             </div>
           ) : (
             <h4
-              className="story-card__title"
+              className="story-object-card__title"
               onClick={onToggleExpand}
               role="button"
               tabIndex={0}
@@ -861,8 +861,8 @@ const ItemDisplay = React.memo<ItemDisplayProps>(({
         </header>
 
         {/* Description - always in DOM, CSS controls visibility via max-height */}
-        <div className="story-card__description-wrapper">
-          <div className="story-card__description">
+        <div className="story-object-card__description-wrapper">
+          <div className="story-object-card__description">
             <p>{itemData.description || 'No description.'}</p>
           </div>
         </div>
@@ -870,11 +870,11 @@ const ItemDisplay = React.memo<ItemDisplayProps>(({
 
       {/* Image - plain div (no layoutId to avoid Framer Motion interference) */}
       {mainAsset && (
-        <div className="story-card__image-container">
+        <div className="story-object-card__image-container">
           <img
             src={`${API_BASE_URL}${mainAsset.file_url}`}
             alt={itemData.name}
-            className="story-card__image"
+            className="story-object-card__image"
             loading="lazy"
           />
         </div>

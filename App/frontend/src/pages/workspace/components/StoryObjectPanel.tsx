@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import './StoryPanel.css';
+import './StoryObjectPanel.css';
 import '../../../components/ManagerCommon.css';
 import BasicInfoManager from '../../../components/BasicInfoManager';
 import NameDescriptionManager from '../../../components/NameDescriptionManager';
@@ -7,13 +7,13 @@ import { Clipboard, People, Organization, Map, Books, ChevronLeft, ChevronRight 
 
 type TabType = 'basicInfo' | 'characters' | 'organizations' | 'locations' | 'lorebook';
 
-interface StoryPanelProps {
+interface StoryObjectPanelProps {
   activeStoryTab: TabType;
   onTabChange: (tab: TabType) => void;
   globalDisplayLanguage: string; // Actual language name (e.g., 'English', 'Korean')
 }
 
-const StoryPanel: React.FC<StoryPanelProps> = ({
+const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
   activeStoryTab,
   onTabChange,
   globalDisplayLanguage,
@@ -143,14 +143,14 @@ const StoryPanel: React.FC<StoryPanelProps> = ({
   };
 
   return (
-    <div className="story-panel">
-      <div className="story-header">
+    <div className="story-object-panel">
+      <div className="story-object-header">
         <h2><Clipboard size="2xl" /> Story Objects</h2>
       </div>
 
-      <div className="story-tabs-container">
+      <div className="story-object-tabs-container">
         <button
-          className={`tab-nav-button left ${showLeftButton ? 'visible' : ''}`}
+          className={`story-object-tab-nav-button left ${showLeftButton ? 'visible' : ''}`}
           onClick={() => scroll('left')}
           aria-label="Scroll tabs left"
         >
@@ -158,24 +158,24 @@ const StoryPanel: React.FC<StoryPanelProps> = ({
         </button>
 
         <div
-          className="story-tabs"
+          className="story-object-tabs"
           ref={tabsRef}
           onScroll={checkScroll}
         >
           {storyTabs.map((tab) => (
             <button
               key={tab.id}
-              className={`tab-button ${activeStoryTab === tab.id ? 'active' : ''}`}
+              className={`story-object-tab-button ${activeStoryTab === tab.id ? 'active' : ''}`}
               onClick={() => onTabChange(tab.id)}
             >
-              <span className="tab-icon">{tab.icon}</span>
-              <span className="tab-label">{tab.label}</span>
+              <span className="story-object-tab-icon">{tab.icon}</span>
+              <span className="story-object-tab-label">{tab.label}</span>
             </button>
           ))}
         </div>
 
         <button
-          className={`tab-nav-button right ${showRightButton ? 'visible' : ''}`}
+          className={`story-object-tab-nav-button right ${showRightButton ? 'visible' : ''}`}
           onClick={() => scroll('right')}
           aria-label="Scroll tabs right"
         >
@@ -183,11 +183,11 @@ const StoryPanel: React.FC<StoryPanelProps> = ({
         </button>
       </div>
 
-      <div className="story-content">
+      <div className="story-object-content">
           {renderStoryContent()}
       </div>
     </div>
   );
 };
 
-export default StoryPanel;
+export default StoryObjectPanel;

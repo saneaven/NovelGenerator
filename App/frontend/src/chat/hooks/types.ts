@@ -13,7 +13,7 @@ import type { FunctionCallMetadata, FunctionCallProgress, FunctionCallResultSumm
 /**
  * Chat mode - only affects systemPrompt template selection
  */
-export type ChatMode = 'workspace' | 'novelEditor' | 'outlineManager';
+export type ChatMode = 'storyObject' | 'novelEditor' | 'outlineManager';
 
 /**
  * Configuration for the chat orchestration hook

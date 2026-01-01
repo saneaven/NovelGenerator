@@ -91,26 +91,6 @@
     min-width: 0;
 }
 
-/* Save status icon */
-.mobile-save-status {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.mobile-save-status .saving-indicator {
-    color: var(--color-warning-main);
-}
-
-.mobile-save-status .unsaved-indicator {
-    color: var(--color-warning-main);
-}
-
-.mobile-save-status .saved-indicator {
-    color: var(--color-success-main);
-}
-
 /* Status Info - word count only on desktop */
 .editor-status-info {
     display: flex;
@@ -444,13 +424,6 @@
     font-style: italic;
 }
 
-.editor-main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-}
-
 /* Mobile Styles */
 @media (max-width: 768px) {
     /* Hide editor header on mobile - moved to PageHeader */
@@ -468,7 +441,7 @@
         position: relative;
     }
 
-    /* Mobile: Compact header layout - [Save icon] [Title] [Sidebar button] */
+    /* Mobile: Compact header layout */
     .editor-title-row {
         gap: var(--spacing-sm);
     }

@@ -60,11 +60,46 @@
   letter-spacing: -0.025em;
 }
 
+/* ===== Unified Workspace Header ===== */
+.page-header-unified {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.page-header-unified-left {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--spacing-sm);
+}
+
+.page-header-unified-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page-header-project-link {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  text-decoration: none;
+  transition: color var(--transition-base);
+  letter-spacing: -0.02em;
+}
+
+.page-header-project-link:hover {
+  color: var(--color-text-link-hover);
+}
+
 /* Controls */
 .page-header-controls {
   display: flex;
   gap: var(--spacing-sm);
   align-items: center;
+  justify-content: flex-end;
 }
 
 /* ===== Mobile Header ===== */
@@ -123,7 +158,11 @@
   justify-content: center;
   gap: var(--spacing-2xs);
   max-width: 50%;
-  pointer-events: none;
+}
+
+/* Allow pointer events for dropdown in mobile center */
+.page-header-mobile-center .workspace-page-selector {
+  pointer-events: auto;
 }
 
 /* Mobile Subtitle */

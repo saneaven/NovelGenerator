@@ -1,0 +1,535 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { useChatStore } from '../../store/chatStore';
+import { useChatUIStore } from '../../store/chatUIStore';
+import { useSidebarStore } from '../../store/sidebarStore';
+import { useProjectStore } from '../../store/projectStore';
+import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { useNovelEditorStore } from '../../store/novelEditorStore';
+import { useSettingsStore } from '../../store/settingsStore';
+import { useErrorStore } from '../../store/errorStore';
+import type { StoryObjects } from '../../types/storyObject';
+
+import ErrorModal from '../../components/ErrorModal';
+import SettingsModal from '../../components/SettingsModal/SettingsModal';
+import TranslationModal from '../../components/TranslationModal';
+import ChatPanel from '../workspace/components/ChatPanel';
+import StoryObjectPanel from '../workspace/components/StoryObjectPanel';
+import OutlinePanel from '../outlinemanager/components/OutlinePanel';
+import NovelEditorPanel from '../noveleditor/components/NovelEditorPanel';
+import WorkspaceTabsSidebar from '../workspace/components/WorkspaceTabsSidebar';
+import { PageHeader, MobileFooter } from '../../components/layout';
+
+import { useWorkspaceSubPage, type SubPageType } from './hooks/useWorkspaceSubPage';
+import { WorkspaceHeaderDropdown } from './components/WorkspaceHeaderDropdown';
+import { useWorkspaceState } from '../workspace/hooks/useWorkspaceState';
+import { useNovelEditorState } from '../noveleditor/hooks/useNovelEditorState';
+
+import './UnifiedWorkspace.css';
+import '../workspace/styles/ChatPanel.css';
+import '../workspace/styles/ChatHeader.css';
+import '../workspace/styles/ChatMessages.css';
+import '../workspace/styles/MessageEdit.css';
+import '../workspace/styles/ChatInput.css';
+import '../workspace/styles/MessageEditCards.css';
+import '../../components/MobileChat.css';
+
+// Tab labels for mobile subtitle (story-object mode)
+const tabLabels: Record<string, string> = {
+  basicInfo: 'Basic Info',
+  characters: 'Characters',
+  organizations: 'Organizations',
+  locations: 'Locations',
+  lorebook: 'Lorebook',
+  outline: 'Outline',
+};
+
+// Translation types per sub-page
+const TRANSLATION_TYPES: Record<SubPageType, string[]> = {
+  'story-object': ['basic_info', 'character', 'organization', 'location', 'lorebook', 'act', 'chapter'],
+  'outline-manager': ['outline', 'act', 'chapter'],
+  'novel-editor': ['manuscript'],
+};
+
+// Get chat mode from sub-page
+function getChatMode(subPage: SubPageType): 'storyObject' | 'outlineManager' | 'novelEditor' {
+  switch (subPage) {
+    case 'story-object':
+      return 'storyObject';
+    case 'outline-manager':
+      return 'outlineManager';
+    case 'novel-editor':
+      return 'novelEditor';
+  }
+}
+
+// Get sidebar type from sub-page
+function getSidebarType(subPage: SubPageType): string {
+  switch (subPage) {
+    case 'story-object':
+      return 'workspace-tabs';
+    case 'outline-manager':
+      return 'outline';
+    case 'novel-editor':
+      return 'chapter';
+  }
+}
+
+const UnifiedWorkspace: React.FC = () => {
+  const { projectId, subPage: urlSubPage } = useParams<{ projectId: string; subPage?: string }>();
+  const { currentSubPage, navigateToSubPage } = useWorkspaceSubPage(projectId, urlSubPage);
+
+  const { getCurrentProject, fetchProjects, projects, isLoading: projectsLoading, setCurrentProject } = useProjectStore();
+  const { fetchChats } = useChatStore();
+  const unifiedObjects = useUnifiedObjectStore(state => state.objects);
+  const listObjects = useUnifiedObjectStore(state => state.listObjects);
+  const unifiedStore = useUnifiedObjectStore();
+
+  // NovelEditor specific stores
+  const selectedChapterByProject = useNovelEditorStore(state => state.selectedChapterByProject);
+  const isSavingByProject = useNovelEditorStore(state => state.isSavingByProject);
+  const hasUnsavedChangesByProject = useNovelEditorStore(state => state.hasUnsavedChangesByProject);
+  const getSelectedChapterId = useNovelEditorStore(state => state.getSelectedChapterId);
+  const selectChapter = useNovelEditorStore(state => state.selectChapter);
+
+  // Settings
+  const settings = useSettingsStore(state => state.settings);
+  const mainLanguage = settings.mainLanguage;
+  const displayLanguage = settings.displayLanguage;
+  const setDisplayLanguage = useSettingsStore(state => state.setDisplayLanguage);
+  const subLanguages = settings.subLanguages;
+
+  // Error handling
+  const { currentError, showError, hideError } = useErrorStore();
+
+  // UI stores
+  const chatUI = useChatUIStore();
+  const isChatVisibleState = chatUI.chatVisibleByProject[projectId ?? ''] ?? false;
+  const sidebarStore = useSidebarStore();
+
+  // Desktop/mobile detection
+  const isDesktopView = typeof window !== 'undefined' && window.innerWidth > 768;
+  const isChatVisible = isDesktopView ? true : isChatVisibleState;
+
+  // Force re-render when crossing desktop/mobile breakpoint
+  const [_isDesktop, setIsDesktop] = useState(() => window.innerWidth > 768);
+  useEffect(() => {
+    const handleResize = () => {
+      const desktop = window.innerWidth > 768;
+      setIsDesktop(prev => {
+        if (prev !== desktop) return desktop;
+        return prev;
+      });
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Workspace-specific state
+  const { state: workspaceState, actions: workspaceActions } = useWorkspaceState(projectId);
+
+  // NovelEditor-specific state
+  const { state: novelEditorState, actions: novelEditorActions } = useNovelEditorState(projectId);
+
+  // Combined settings modal state (use whichever is relevant to current sub-page)
+  const isSettingsOpen = currentSubPage === 'novel-editor' ? novelEditorState.isSettingsOpen : workspaceState.isSettingsOpen;
+  const setIsSettingsOpen = currentSubPage === 'novel-editor'
+    ? novelEditorActions.setIsSettingsOpen
+    : workspaceActions.setIsSettingsOpen;
+
+  // Translation modal state
+  const [showTranslateModal, setShowTranslateModal] = useState(false);
+
+  // NovelEditor story objects state
+  const [storyObjects, setStoryObjects] = useState<StoryObjects>({
+    basicInfo: null,
+    characters: [],
+    organizations: [],
+    locations: [],
+    lorebook: [],
+    outline: null,
+  });
+  const [isOutlineInitialized, setIsOutlineInitialized] = useState(false);
+
+  // Build available languages list
+  const availableLanguages = useMemo(() => {
+    const languages = [mainLanguage];
+    if (subLanguages && subLanguages.length > 0) {
+      languages.push(...subLanguages);
+    }
+    return [...new Set(languages)].filter(Boolean);
+  }, [mainLanguage, subLanguages]);
+
+  const currentDisplayLanguage = displayLanguage || mainLanguage;
+
+  // Get translation types for current sub-page
+  const translationTypes = TRANSLATION_TYPES[currentSubPage];
+
+  // Calculate count of objects needing translation
+  const objectsNeedingTranslation = useMemo(() => {
+    if (!subLanguages || subLanguages.length === 0 || !projectId) return 0;
+
+    const allObjects = Object.values(unifiedStore.objects);
+    let count = 0;
+
+    allObjects.forEach((obj: any) => {
+      if (obj.metadata?.project_id !== projectId) return;
+      if (!translationTypes.includes(obj.type)) return;
+
+      const availableLangs = Object.keys(obj.data || {});
+      const needsAnyTranslation = subLanguages.some(
+        (subLang: string) => !availableLangs.includes(subLang)
+      );
+
+      if (needsAnyTranslation) {
+        count++;
+      }
+    });
+
+    return count;
+  }, [unifiedStore.objects, projectId, subLanguages, translationTypes]);
+
+  // Handler for translation complete
+  const handleTranslateComplete = () => {
+    if (projectId) {
+      translationTypes.forEach(type => {
+        listObjects(type as any, projectId);
+      });
+    }
+    setShowTranslateModal(false);
+  };
+
+  // Selected chapter for novel-editor
+  const selectedChapterId = selectedChapterByProject[projectId ?? '']
+    ?? localStorage.getItem(`selectedChapter_${projectId ?? ''}`)
+    ?? undefined;
+
+  const selectedChapter = useMemo(() => {
+    if (!selectedChapterId) return null;
+    const chapter = unifiedObjects[selectedChapterId];
+    if (!chapter || chapter.type !== 'chapter') return null;
+
+    const langData = chapter.data[currentDisplayLanguage] || chapter.data[mainLanguage] || chapter.data[Object.keys(chapter.data)[0]] || {};
+
+    return {
+      id: chapter.id,
+      name: langData.name || '',
+      description: langData.description || '',
+      order: chapter.metadata.order || 0,
+      actId: chapter.metadata.act_id || '',
+    };
+  }, [selectedChapterId, unifiedObjects, currentDisplayLanguage, mainLanguage]);
+
+  const hasChapters = storyObjects.outline?.acts.some(act => act.chapters.length > 0) ?? false;
+
+  // Helper to get data for a specific language
+  const getDataForLanguage = (obj: any, language: string): Record<string, any> => {
+    if (obj.data[language]) return obj.data[language];
+    const available = Object.keys(obj.data);
+    if (available.length > 0) return obj.data[available[0]];
+    return {};
+  };
+
+  // Set current project when projectId changes
+  useEffect(() => {
+    if (projectId) {
+      setCurrentProject(projectId);
+    }
+  }, [projectId, setCurrentProject]);
+
+  // Fetch projects if not loaded
+  useEffect(() => {
+    if (projectId && projects.length === 0) {
+      fetchProjects();
+    }
+  }, [projectId, projects.length, fetchProjects]);
+
+  // Populate unified store cache when projectId changes
+  useEffect(() => {
+    if (!projectId) return;
+
+    const populateStoreCache = async () => {
+      try {
+        await Promise.all([
+          listObjects('basic_info', projectId),
+          listObjects('character', projectId),
+          listObjects('organization', projectId),
+          listObjects('location', projectId),
+          listObjects('lorebook', projectId),
+          listObjects('outline', projectId),
+          listObjects('act', projectId),
+          listObjects('chapter', projectId),
+        ]);
+      } catch (error) {
+        console.error('Failed to load story objects:', error);
+        const errorStatus = (error as any)?.status || (error as any)?.response?.status;
+        if (errorStatus !== 404) {
+          showError('Data Error', 'Failed to load story objects. Please try again.');
+        }
+      }
+    };
+
+    populateStoreCache();
+  }, [projectId, listObjects, showError]);
+
+  // Build story objects for NovelEditor (when in novel-editor mode)
+  useEffect(() => {
+    if (!projectId || currentSubPage !== 'novel-editor') return;
+
+    setIsOutlineInitialized(false);
+    const activeProjectId = projectId;
+    let isActive = true;
+
+    const buildStoryObjects = async () => {
+      try {
+        const [basicInfoList, characters, organizations, locations, lorebook, acts, chapters] = await Promise.all([
+          listObjects('basic_info', projectId),
+          listObjects('character', projectId),
+          listObjects('organization', projectId),
+          listObjects('location', projectId),
+          listObjects('lorebook', projectId),
+          listObjects('act', projectId),
+          listObjects('chapter', projectId),
+        ]);
+
+        const basicInfo = basicInfoList.length > 0 ? (() => {
+          const data = getDataForLanguage(basicInfoList[0], mainLanguage);
+          return {
+            id: basicInfoList[0].id,
+            title: data.title || '',
+            logline: data.logline || '',
+            genre: data.genre || '',
+          };
+        })() : null;
+
+        const outline = {
+          acts: acts
+            .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+            .map(act => {
+              const actData = getDataForLanguage(act, mainLanguage);
+              return {
+                id: act.id,
+                name: actData.name || '',
+                description: actData.description || '',
+                order: act.metadata.order || 0,
+                chapters: chapters
+                  .filter(ch => ch.metadata.act_id === act.id)
+                  .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+                  .map(chapter => {
+                    const chapterData = getDataForLanguage(chapter, mainLanguage);
+                    return {
+                      id: chapter.id,
+                      name: chapterData.name || '',
+                      description: chapterData.description || '',
+                      order: chapter.metadata.order || 0,
+                      actId: chapter.metadata.act_id || '',
+                    };
+                  }),
+              };
+            }),
+        };
+
+        if (isActive) {
+          setStoryObjects({
+            basicInfo,
+            characters: characters.map(ch => {
+              const data = getDataForLanguage(ch, mainLanguage);
+              return { id: ch.id, name: data.name || '', description: data.description || '' };
+            }),
+            organizations: organizations.map(org => {
+              const data = getDataForLanguage(org, mainLanguage);
+              return { id: org.id, name: data.name || '', description: data.description || '' };
+            }),
+            locations: locations.map(loc => {
+              const data = getDataForLanguage(loc, mainLanguage);
+              return { id: loc.id, name: data.name || '', description: data.description || '' };
+            }),
+            lorebook: lorebook.map(entry => {
+              const data = getDataForLanguage(entry, mainLanguage);
+              return { id: entry.id, name: data.name || '', description: data.description || '' };
+            }),
+            outline,
+          } as unknown as StoryObjects);
+
+          if (activeProjectId) {
+            const firstActWithChapters = outline.acts.find(act => act.chapters.length > 0);
+            const firstChapter = firstActWithChapters?.chapters[0];
+            if (firstChapter) {
+              const existingSelection = getSelectedChapterId(activeProjectId);
+              const selectionStillExists = existingSelection
+                ? outline.acts.some(act => act.chapters.some(ch => ch.id === existingSelection))
+                : false;
+
+              if (!selectionStillExists) {
+                selectChapter(activeProjectId, firstChapter.id);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load story objects:', error);
+      } finally {
+        if (isActive) {
+          setIsOutlineInitialized(true);
+        }
+      }
+    };
+
+    buildStoryObjects();
+    return () => {
+      isActive = false;
+    };
+  }, [projectId, currentSubPage, listObjects, mainLanguage, getSelectedChapterId, selectChapter]);
+
+  // Fetch chats when projectId changes
+  useEffect(() => {
+    if (!projectId) return;
+
+    fetchChats(projectId).catch(error => {
+      console.error('Failed to fetch chats:', error);
+      showError('Data Error', 'Failed to load chats. Please try again.');
+    });
+  }, [projectId, fetchChats, showError]);
+
+  const currentProject = getCurrentProject();
+
+  // Show loading state
+  if (projectsLoading && !currentProject) {
+    return (
+      <div className="error-container">
+        <p>Loading project...</p>
+      </div>
+    );
+  }
+
+  if (!currentProject) {
+    return (
+      <div className="error-container">
+        <h2>Project Not Found</h2>
+        <Link to="/">Go back to Home</Link>
+      </div>
+    );
+  }
+
+  // Get mobile subtitle based on current sub-page
+  const getMobileSubtitle = () => {
+    switch (currentSubPage) {
+      case 'story-object':
+        return tabLabels[workspaceState.activeStoryTab];
+      case 'outline-manager':
+        return 'Outlines';
+      case 'novel-editor':
+        return selectedChapter?.name || 'No chapter selected';
+    }
+  };
+
+  return (
+    <div className="unified-workspace-container">
+      <PageHeader
+        projectId={projectId ?? ''}
+        projectName={currentProject.name}
+        pageTitle=""
+        currentSubPage={currentSubPage}
+        onSubPageChange={navigateToSubPage}
+        availableLanguages={availableLanguages}
+        currentLanguage={currentDisplayLanguage}
+        onLanguageChange={setDisplayLanguage}
+        showTranslateAll={subLanguages && subLanguages.length > 0 && objectsNeedingTranslation > 0}
+        translateCount={objectsNeedingTranslation}
+        onTranslateAllClick={() => setShowTranslateModal(true)}
+        onSettingsClick={() => setIsSettingsOpen(true)}
+        mobileSubtitle={getMobileSubtitle()}
+        showHamburger={true}
+        onHamburgerClick={() => sidebarStore.toggleSidebar(projectId ?? '', getSidebarType(currentSubPage))}
+        showSaveIndicator={currentSubPage === 'novel-editor'}
+        saveStatus={
+          currentSubPage === 'novel-editor'
+            ? isSavingByProject[projectId ?? '']
+              ? 'saving'
+              : hasUnsavedChangesByProject[projectId ?? '']
+                ? 'unsaved'
+                : 'saved'
+            : undefined
+        }
+      />
+
+      <div className={`unified-workspace-content ${isChatVisible ? 'chat-visible' : ''}`}>
+        <ChatPanel
+          projectId={projectId ?? ''}
+          mode={getChatMode(currentSubPage)}
+        />
+
+        {currentSubPage === 'story-object' && (
+          <StoryObjectPanel
+            activeStoryTab={workspaceState.activeStoryTab}
+            onTabChange={workspaceActions.setActiveStoryTab}
+            globalDisplayLanguage={currentDisplayLanguage}
+          />
+        )}
+
+        {currentSubPage === 'outline-manager' && (
+          <OutlinePanel
+            globalDisplayLanguage={currentDisplayLanguage}
+          />
+        )}
+
+        {currentSubPage === 'novel-editor' && (
+          <NovelEditorPanel
+            projectId={projectId ?? ''}
+            selectedChapter={selectedChapter}
+            selectedChapterId={selectedChapterId || null}
+            hasChapters={hasChapters}
+            chaptersInitialized={isOutlineInitialized}
+            onSelectChapter={(chapterId) => selectChapter(projectId ?? '', chapterId)}
+          />
+        )}
+      </div>
+
+      {/* Sidebar for story-object mode */}
+      {currentSubPage === 'story-object' && (
+        <WorkspaceTabsSidebar
+          projectId={projectId ?? ''}
+          activeTab={workspaceState.activeStoryTab}
+          onTabChange={workspaceActions.setActiveStoryTab}
+        />
+      )}
+
+      <MobileFooter
+        isChatVisible={isChatVisible}
+        onChatToggle={() => {
+          if (isChatVisible) {
+            chatUI.setChatVisible(projectId ?? '', false);
+          } else {
+            chatUI.toggleChatVisible(projectId ?? '');
+          }
+          sidebarStore.closeSidebar(projectId ?? '');
+        }}
+        onSettingsClick={() => setIsSettingsOpen(true)}
+      />
+
+      <TranslationModal
+        isOpen={showTranslateModal}
+        onClose={() => setShowTranslateModal(false)}
+        projectId={projectId || ''}
+        onComplete={handleTranslateComplete}
+        allowedObjectTypes={translationTypes}
+      />
+
+      <ErrorModal
+        isOpen={!!currentError}
+        type={currentError?.type}
+        title={currentError?.title || ''}
+        message={currentError?.message || ''}
+        detail={currentError?.detail}
+        onClose={hideError}
+      />
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
+    </div>
+  );
+};
+
+export default UnifiedWorkspace;

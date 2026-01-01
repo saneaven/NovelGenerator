@@ -8,11 +8,11 @@ import { TextButton } from './TextButton';
 import ImageTabContent from './AssetManager/ImageTabContent';
 import type { Asset } from '../api/assetService';
 import { API_BASE_URL } from '../api/client';
-import './StoryCardExpanded.css';
+import './StoryObjectCardExpanded.css';
 
 type TabType = 'edit' | 'image';
 
-interface StoryCardExpandedProps {
+interface StoryObjectCardExpandedProps {
     itemId: string;
     itemData: { name: string; description: string };
     effectiveLanguage: string;
@@ -30,7 +30,7 @@ interface StoryCardExpandedProps {
     onAssetChange?: () => void;
 }
 
-const StoryCardExpanded: React.FC<StoryCardExpandedProps> = ({
+const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
     itemId,
     itemData,
     effectiveLanguage,
@@ -96,7 +96,7 @@ const StoryCardExpanded: React.FC<StoryCardExpandedProps> = ({
     return (
         <motion.article
             layoutId={`card-${itemId}`}
-            className={`story-card-expanded ${hasImage ? 'has-image' : 'no-image'}`}
+            className={`story-object-card-expanded ${hasImage ? 'has-image' : 'no-image'}`}
             onKeyDown={handleKeyDown}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -257,4 +257,4 @@ const StoryCardExpanded: React.FC<StoryCardExpandedProps> = ({
     );
 };
 
-export default StoryCardExpanded;
+export default StoryObjectCardExpanded;

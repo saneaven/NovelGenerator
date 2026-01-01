@@ -36,11 +36,11 @@ def _load_prompt_file(relative_path: str) -> str:
 
 
 # Load all prompts from files
-# Chat - Workspace
-_WORKSPACE_SYSTEM_PROMPT = _load_prompt_file('chat/workspace/systemPrompt.md')
-_WORKSPACE_USER_PROMPT = _load_prompt_file('chat/workspace/userPrompt.md')
-_WORKSPACE_NON_LAST_USER_PROMPT = _load_prompt_file('chat/workspace/nonLastUserPrompt.md')
-_WORKSPACE_PREFILL = _load_prompt_file('chat/workspace/prefill.md')
+# Chat - Story Object
+_STORYOBJECT_SYSTEM_PROMPT = _load_prompt_file('chat/storyObject/systemPrompt.md')
+_STORYOBJECT_USER_PROMPT = _load_prompt_file('chat/storyObject/userPrompt.md')
+_STORYOBJECT_NON_LAST_USER_PROMPT = _load_prompt_file('chat/storyObject/nonLastUserPrompt.md')
+_STORYOBJECT_PREFILL = _load_prompt_file('chat/storyObject/prefill.md')
 # Chat - Novel Editor
 _NOVEL_EDITOR_SYSTEM_PROMPT = _load_prompt_file('chat/novelEditor/systemPrompt.md')
 _NOVEL_EDITOR_USER_PROMPT = _load_prompt_file('chat/novelEditor/userPrompt.md')
@@ -76,19 +76,19 @@ _SCENE_IMAGE_PROMPT_PREFILL = _load_prompt_file('imagePrompt/scene/prefill.md')
 DEFAULT_PROMPTS = {
     'chat': {
         'systemPrompt': {
-            'workspace': _WORKSPACE_SYSTEM_PROMPT,
+            'storyObject': _STORYOBJECT_SYSTEM_PROMPT,
             'novelEditor': _NOVEL_EDITOR_SYSTEM_PROMPT,
         },
         'userPrompt': {
-            'workspace': _WORKSPACE_USER_PROMPT,
+            'storyObject': _STORYOBJECT_USER_PROMPT,
             'novelEditor': _NOVEL_EDITOR_USER_PROMPT,
         },
         'nonLastUserPrompt': {
-            'workspace': _WORKSPACE_NON_LAST_USER_PROMPT,
+            'storyObject': _STORYOBJECT_NON_LAST_USER_PROMPT,
             'novelEditor': _NOVEL_EDITOR_NON_LAST_USER_PROMPT,
         },
         'prefill': {
-            'workspace': _WORKSPACE_PREFILL,
+            'storyObject': _STORYOBJECT_PREFILL,
             'novelEditor': _NOVEL_EDITOR_PREFILL,
         },
     },

@@ -5,11 +5,11 @@ import { TextButton } from './TextButton';
 import ImageTabContent from './AssetManager/ImageTabContent';
 import type { Asset } from '../api/assetService';
 import { Scroll, Refresh, Trash, AIAssistMini } from './icons';
-import './StoryCardInlineEdit.css';
+import './StoryObjectCardInlineEdit.css';
 
 type TabType = 'edit' | 'image';
 
-interface StoryCardInlineEditProps {
+interface StoryObjectCardInlineEditProps {
     itemId: string;
     itemData: { name: string; description: string };
     effectiveLanguage: string;
@@ -27,7 +27,7 @@ interface StoryCardInlineEditProps {
     onAssetChange?: () => void;
 }
 
-const StoryCardInlineEdit: React.FC<StoryCardInlineEditProps> = ({
+const StoryObjectCardInlineEdit: React.FC<StoryObjectCardInlineEditProps> = ({
     itemId,
     itemData,
     effectiveLanguage,
@@ -91,7 +91,7 @@ const StoryCardInlineEdit: React.FC<StoryCardInlineEditProps> = ({
     };
 
     return (
-        <div className="story-card-inline-edit" onKeyDown={handleKeyDown}>
+        <div className="story-object-card-inline-edit" onKeyDown={handleKeyDown}>
             {/* Tab navigation */}
             <div className="inline-edit-tabs">
                 <button
@@ -228,4 +228,4 @@ const StoryCardInlineEdit: React.FC<StoryCardInlineEditProps> = ({
     );
 };
 
-export default StoryCardInlineEdit;
+export default StoryObjectCardInlineEdit;

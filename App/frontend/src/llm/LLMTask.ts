@@ -25,8 +25,9 @@ import { LLMTaskMode } from './types';
  * Map LLMTaskMode to AIFunctionType for settings lookup
  */
 const MODE_TO_FUNCTION_TYPE: Record<LLMTaskModeType, AIFunctionType> = {
-  [LLMTaskMode.CHAT_WORKSPACE]: 'chat',
+  [LLMTaskMode.CHAT_STORYOBJECT]: 'chat',
   [LLMTaskMode.CHAT_NOVEL_EDITOR]: 'chat',
+  [LLMTaskMode.CHAT_OUTLINE_MANAGER]: 'chat',
   [LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT]: 'editAssistant',
   [LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT]: 'editAssistant',
   [LLMTaskMode.TRANSLATION]: 'translation',

@@ -24,7 +24,7 @@ export interface DisplayProcessingResult {
  */
 export interface LLMRequestPipelineContext {
   projectId: string;
-  mode: 'novelEditor' | 'workspace';
+  mode: 'novelEditor' | 'storyObject';
 }
 
 /**

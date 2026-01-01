@@ -116,7 +116,7 @@ export const UNIFIED_SCHEMA = {
   },
 
   chat: {
-    mode: { desc: "Chat mode", example: "workspace" as "workspace" | "novelEditor" },
+    mode: { desc: "Chat mode", example: "storyObject" as "storyObject" | "novelEditor" },
     contextObjectIds: { desc: "IDs of objects to include in context", example: ["char-1", "loc-1"] as string[] },
   },
 

@@ -24,7 +24,7 @@ import { useChatOrchestration } from '../../../chat/hooks';
 interface ChatPanelProps
 {
     projectId: string;
-    mode: 'novelEditor' | 'workspace' | 'outlineManager';
+    mode: 'novelEditor' | 'storyObject' | 'outlineManager';
 }
 
 // Context picker component for selecting which objects to include in chat context
