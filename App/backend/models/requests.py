@@ -18,8 +18,8 @@ class ThinkingConfig(BaseModel):
 
     Fields are optional; providers pick what they understand.
     """
-    # Common - effort now includes 'none' for GPT-5
-    effort: Optional[Literal["none", "low", "medium", "high"]] = "medium"
+    # Common - effort now includes 'none', 'minimal', 'xhigh' for GPT-5.2+
+    effort: Optional[Literal["none", "minimal", "low", "medium", "high", "xhigh"]] = "medium"
     max_tokens: Optional[int] = Field(default=None, alias="maxTokens")
 
     # GPT-5 specific - output verbosity
@@ -28,9 +28,12 @@ class ThinkingConfig(BaseModel):
     # Claude (Anthropic)
     claude_budget_tokens: Optional[int] = Field(default=None, alias="claudeBudgetTokens")
 
-    # Gemini
-    gemini_thinking_level: Optional[Literal["low", "high"]] = Field(default=None, alias="geminiThinkingLevel")
+    # Gemini - now supports 'minimal' and 'medium' for Gemini 3 Flash
+    gemini_thinking_level: Optional[Literal["minimal", "low", "medium", "high"]] = Field(default=None, alias="geminiThinkingLevel")
     gemini_budget_tokens: Optional[int] = Field(default=None, alias="geminiBudgetTokens")
+
+    # Custom endpoint thinking format
+    custom_thinking_format: Optional[Literal["openai", "claude", "gemini", "openrouter"]] = Field(default=None, alias="customThinkingFormat")
 
 
 class RetryConfig(BaseModel):
@@ -45,9 +48,21 @@ class ContentPart(BaseModel):
     type: Literal["content", "thinking"]
     text: str
 
+class ToolCallFunction(BaseModel):
+    """Function details in a tool call"""
+    name: str
+    arguments: str
+
+class ToolCall(BaseModel):
+    """A tool call from an assistant message"""
+    id: str
+    type: Literal["function"] = "function"
+    function: ToolCallFunction
+
 class Message(BaseModel):
     role: Literal["system", "user", "assistant"]
     contentParts: List[ContentPart]
+    tool_calls: Optional[List[ToolCall]] = None
 
     def get_content_text(self) -> str:
         """Extract text content from contentParts for LLM providers"""

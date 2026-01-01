@@ -2,10 +2,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import { useSettingsStore } from '../../../store/settingsStore';
-import type { ActObject, ChapterObject, ManuscriptObject } from '../../../types/unifiedObject';
+import { useNovelEditorStore } from '../../../store/novelEditorStore';
+import type { ActObject, ChapterObject, ManuscriptObject, OutlineObject } from '../../../types/unifiedObject';
 import { BaseSidebar } from '../../../components/BaseSidebar';
 import { IconButton } from '../../../components/IconButton';
-import { Close } from '../../../components/icons';
+import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
+import { Close, ChevronDown } from '../../../components/icons';
 import './ChapterSidebar.css';
 
 interface ChapterSidebarProps {
@@ -24,7 +26,8 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
   const store = useUnifiedObjectStore();
   const closeSidebar = useSidebarStore((state) => state.closeSidebar);
   const mainLanguage = useSettingsStore((state) => state.settings.mainLanguage);
-  
+  const { selectOutline, getSelectedOutlineId } = useNovelEditorStore();
+
   const handleClose = () => {
     closeSidebar(projectId);
   };
@@ -37,10 +40,14 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
     return available.length > 0 ? obj.data[available[0]] : fallback;
   };
 
+  const [outlineIds, setOutlineIds] = useState<string[]>([]);
   const [actIds, setActIds] = useState<string[]>([]);
   const [chapterIds, setChapterIds] = useState<string[]>([]);
   const [collapsedActs, setCollapsedActs] = useState<Set<string>>(new Set());
   const [expandCount, setExpandCount] = useState<Record<string, number>>({});
+
+  // Get selected outline from store
+  const selectedOutlineId = getSelectedOutlineId(projectId);
 
   const toggleAct = (actId: string) => {
     const newCollapsed = new Set(collapsedActs);
@@ -59,24 +66,51 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
     const loadOutlineData = async () => {
       if (!projectId) return;
       try {
+        // Load outlines first
+        const outlines = await store.listObjects('outline', projectId);
+        const sortedOutlines = outlines.sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0));
+        setOutlineIds(sortedOutlines.map(o => o.id));
+
+        // Auto-select first outline if none selected
+        if (sortedOutlines.length > 0 && !getSelectedOutlineId(projectId)) {
+          selectOutline(projectId, sortedOutlines[0].id);
+        }
+
         const acts = await store.listObjects('act', projectId);
         setActIds(acts.sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0)).map(a => a.id));
-        
+
         const chapters = await store.listObjects('chapter', projectId);
         setChapterIds(chapters.sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0)).map(c => c.id));
-        
+
         await store.listObjects('manuscript', projectId);
       } catch (error) {
         console.error('Failed to load outline data:', error);
       }
     };
     loadOutlineData();
-  }, [projectId, store]);
+  }, [projectId, store, selectOutline, getSelectedOutlineId]);
+
+  // Get outlines for dropdown
+  const outlines = useMemo(() => {
+    return outlineIds
+      .map(id => store.objects[id] as OutlineObject)
+      .filter(Boolean);
+  }, [outlineIds, store.objects]);
+
+  // Get selected outline
+  const selectedOutline = useMemo(() => {
+    if (!selectedOutlineId) return outlines[0] || null;
+    return outlines.find(o => o.id === selectedOutlineId) || outlines[0] || null;
+  }, [outlines, selectedOutlineId]);
 
   const { acts, chaptersByAct } = useMemo(() => {
-    const loadedActs = actIds.map(id => store.objects[id] as ActObject).filter(Boolean);
+    const loadedActs = actIds
+      .map(id => store.objects[id] as ActObject)
+      .filter(Boolean)
+      // Filter acts by selected outline
+      .filter(act => !selectedOutlineId || act.metadata.outline_id === selectedOutlineId);
     const loadedChapters = chapterIds.map(id => store.objects[id] as ChapterObject).filter(Boolean);
-    
+
     const grouped = loadedActs.reduce((acc, act) => {
       acc[act.id] = loadedChapters
         .filter(c => c.metadata.act_id === act.id)
@@ -85,14 +119,47 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
     }, {} as Record<string, ChapterObject[]>);
 
     return { acts: loadedActs, chaptersByAct: grouped };
-  }, [actIds, chapterIds, store.objects]);
+  }, [actIds, chapterIds, store.objects, selectedOutlineId]);
+
+  // Get selected outline name
+  const selectedOutlineName = selectedOutline
+    ? getLocalizedData(selectedOutline, { name: 'Untitled Outline' }).name || 'Untitled Outline'
+    : 'Timeline';
 
   const headerContent = (
     <div className="chapter-sidebar-header">
-      <div className="header-title-group">
-        <h3 className="header-title">Timeline</h3>
-        <span className="header-subtitle">Story Outline</span>
-      </div>
+      {outlines.length > 1 ? (
+        <DropdownMenu
+          trigger={
+            <div className="header-title-group clickable">
+              <h3 className="header-title">{selectedOutlineName}</h3>
+              <span className="header-subtitle">
+                Story Outline
+                <ChevronDown size="xs" className="header-chevron" />
+              </span>
+            </div>
+          }
+          align="left"
+        >
+          {outlines.map((outline) => {
+            const outlineData = getLocalizedData(outline, { name: 'Untitled Outline' });
+            const isSelected = outline.id === selectedOutlineId;
+            return (
+              <DropdownItem
+                key={outline.id}
+                label={outlineData.name || 'Untitled Outline'}
+                onClick={() => selectOutline(projectId, outline.id)}
+                className={isSelected ? 'is-selected' : ''}
+              />
+            );
+          })}
+        </DropdownMenu>
+      ) : (
+        <div className="header-title-group">
+          <h3 className="header-title">{selectedOutlineName}</h3>
+          <span className="header-subtitle">Story Outline</span>
+        </div>
+      )}
       <IconButton
         icon={<Close size="sm" />}
         onClick={handleClose}

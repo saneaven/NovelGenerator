@@ -149,13 +149,16 @@ async def stream_chat(provider: str, request: ChatCompletionRequest, req: Reques
             )
 
         # Convert messages to dict format with content field for LLM providers
-        messages = [
-            {
+        messages = []
+        for msg in request.messages:
+            message_dict: dict = {
                 "role": msg.role,
                 "content": msg.get_content_text()
             }
-            for msg in request.messages
-        ]
+            # Include tool_calls for assistant messages if present
+            if msg.tool_calls:
+                message_dict["tool_calls"] = [tc.model_dump() for tc in msg.tool_calls]
+            messages.append(message_dict)
 
         async def event_gen():
             # Prepare provider preference for OpenRouter

@@ -133,10 +133,11 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   const z = useTransform(depth, (value) => -value * maxDepthZ);
   const y = useTransform(depth, (value) => (isMobile ? value * stackLift : -value * stackLift));
   const blur = useTransform(depth, (value) => value * maxBlur);
+  const surfaceFillOpacity = useTransform(depth, (value) => Math.max(0.15, 1 - value * 0.85));
   const pointerEvents = useTransform(depth, (value) => (value > 0.92 ? 'none' : 'auto'));
   const zIndex = isMobile ? (index + 1) : (totalCount - index);
   const transform = useMotionTemplate`translateY(${y}px) translateZ(${z}px)`;
-  const filter = useMotionTemplate`blur(${blur}px)`;
+  const bodyFilter = useMotionTemplate`blur(${blur}px)`;
 
   const handleClick = useCallback(() => {
     // All states except idle open the detail modal
@@ -217,7 +218,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
     <motion.div
       ref={itemRef}
       className={`notification-item notification-item--${normalizedStatus} notification-item--${task.kind} ${isClickable ? 'notification-item--clickable' : ''} ${!isRead ? 'notification-item--unread' : ''}`}
-      style={{ opacity, transform, filter, pointerEvents, zIndex }}
+      style={{ opacity, transform, pointerEvents, zIndex }}
       onClick={isClickable ? handleClick : undefined}
       role={isClickable ? 'button' : undefined}
       tabIndex={isClickable ? 0 : undefined}
@@ -236,33 +237,42 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
         className="notification-item-surface"
         style={surfaceStyle}
       >
-        <div className="notification-item-content">
-          <div className="notification-item-icon">{getStatusIcon()}</div>
-          <div className="notification-item-text">
-            <div className="notification-item-label">{label || 'Task'}</div>
-            <div className="notification-item-message">{getStatusMessage()}</div>
-            <div className="notification-item-time">{formatRelativeTime(updatedAt)}</div>
-          </div>
-
-          {/* Thumbnail preview for completed image tasks */}
-          {thumbnailUrl && (
-            <div className="notification-item-thumbnail">
-              <img src={`${API_BASE_URL}${thumbnailUrl}`} alt="Generated" />
+        <motion.div
+          className="notification-item-backdrop"
+          style={{ '--notification-surface-fill-opacity': surfaceFillOpacity } as React.CSSProperties}
+        />
+        <motion.div
+          className="notification-item-body"
+          style={{ filter: bodyFilter }}
+        >
+          <div className="notification-item-content">
+            <div className="notification-item-icon">{getStatusIcon()}</div>
+            <div className="notification-item-text">
+              <div className="notification-item-label">{label || 'Task'}</div>
+              <div className="notification-item-message">{getStatusMessage()}</div>
+              <div className="notification-item-time">{formatRelativeTime(updatedAt)}</div>
             </div>
-          )}
 
-          <button
-            className="notification-item-close"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDismiss(task);
-            }}
-            title="Dismiss"
-            aria-label="Dismiss notification"
-          >
-            <Close size="xs" />
-          </button>
-        </div>
+            {/* Thumbnail preview for completed image tasks */}
+            {thumbnailUrl && (
+              <div className="notification-item-thumbnail">
+                <img src={`${API_BASE_URL}${thumbnailUrl}`} alt="Generated" />
+              </div>
+            )}
+
+            <button
+              className="notification-item-close"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDismiss(task);
+              }}
+              title="Dismiss"
+              aria-label="Dismiss notification"
+            >
+              <Close size="xs" />
+            </button>
+          </div>
+        </motion.div>
       </div>
     </motion.div>
   );

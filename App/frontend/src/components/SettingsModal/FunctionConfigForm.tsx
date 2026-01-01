@@ -5,6 +5,7 @@ import type {
   AIFunctionType,
   ProviderCredentials,
   ThinkingConfig,
+  CustomThinkingFormat,
 } from '../../store/settingsStore';
 import ModelBrowser from './ModelBrowser';
 import { TextButton } from '../TextButton';
@@ -280,8 +281,8 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
               <div className="thinking-config">
                 <h5 className="subsection-title"><Settings size="sm" />Thinking Configuration</h5>
 
-                {/* Generic settings for OpenRouter/Custom/OpenAI */}
-                {config.provider !== 'claude' && config.provider !== 'gemini' && (
+                {/* Generic settings for OpenRouter/OpenAI (not custom) */}
+                {(config.provider === 'openrouter' || config.provider === 'openai' || config.provider === 'xai') && (
                   <>
                     <div className="form-field">
                       <label>{isGpt5 ? 'Reasoning Effort (GPT-5)' : 'Effort Level'}</label>
@@ -345,6 +346,140 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                           Directly specify thinking token budget. Leave empty to use effort-based allocation.
                         </p>
                       </div>
+                    )}
+                  </>
+                )}
+
+                {/* Custom endpoint - format selector and format-specific options */}
+                {config.provider === 'custom' && (
+                  <>
+                    <div className="form-field">
+                      <label>Thinking Format</label>
+                      <CustomSelect
+                        value={config.advanced.thinkingConfig?.customThinkingFormat || ''}
+                        onChange={(value) => handleThinkingConfigChange('customThinkingFormat', value as CustomThinkingFormat || undefined)}
+                        options={[
+                          { value: '', label: 'Select format...' },
+                          { value: 'openai', label: 'OpenAI (reasoning_effort)' },
+                          { value: 'claude', label: 'Claude (budget_tokens)' },
+                          { value: 'gemini', label: 'Gemini (thinkingLevel)' },
+                          { value: 'openrouter', label: 'OpenRouter (effort + max_tokens)' },
+                        ]}
+                      />
+                      <p className="field-hint">
+                        Select the thinking format your endpoint supports
+                      </p>
+                    </div>
+
+                    {/* OpenAI format options */}
+                    {config.advanced.thinkingConfig?.customThinkingFormat === 'openai' && (
+                      <>
+                        <div className="form-field">
+                          <label>Reasoning Effort</label>
+                          <CustomSelect
+                            value={config.advanced.thinkingConfig?.effort || 'medium'}
+                            onChange={(value) => handleThinkingConfigChange('effort', value)}
+                            options={[
+                              { value: 'none', label: 'None - No reasoning (fastest)' },
+                              { value: 'minimal', label: 'Minimal - Very light reasoning' },
+                              { value: 'low', label: 'Low - Quick reasoning' },
+                              { value: 'medium', label: 'Medium - Balanced' },
+                              { value: 'high', label: 'High - Deep reasoning' },
+                              { value: 'xhigh', label: 'Extra High - Maximum reasoning' },
+                            ]}
+                          />
+                          <p className="field-hint">Controls reasoning depth (summary is auto-enabled)</p>
+                        </div>
+                        <div className="form-field">
+                          <label>Output Verbosity</label>
+                          <CustomSelect
+                            value={config.advanced.thinkingConfig?.verbosity || 'medium'}
+                            onChange={(value) => handleThinkingConfigChange('verbosity', value)}
+                            options={[
+                              { value: 'low', label: 'Low - Concise output' },
+                              { value: 'medium', label: 'Medium - Standard' },
+                              { value: 'high', label: 'High - Detailed output' },
+                            ]}
+                          />
+                          <p className="field-hint">Controls the length and detail of the output</p>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Claude format options */}
+                    {config.advanced.thinkingConfig?.customThinkingFormat === 'claude' && (
+                      <div className="form-field">
+                        <label>Thinking Budget (tokens)</label>
+                        <input
+                          type="number"
+                          min="1024"
+                          value={config.advanced.thinkingConfig?.claudeBudgetTokens || ''}
+                          onChange={(e) =>
+                            handleThinkingConfigChange(
+                              'claudeBudgetTokens',
+                              e.target.value ? parseInt(e.target.value) : undefined
+                            )
+                          }
+                          placeholder="e.g., 10000"
+                          className="config-input"
+                        />
+                        <p className="field-hint">Minimum 1024 tokens. Leave blank for model default.</p>
+                      </div>
+                    )}
+
+                    {/* Gemini format options */}
+                    {config.advanced.thinkingConfig?.customThinkingFormat === 'gemini' && (
+                      <div className="form-field">
+                        <label>Thinking Level</label>
+                        <CustomSelect
+                          value={config.advanced.thinkingConfig?.geminiThinkingLevel || 'high'}
+                          onChange={(value) => handleThinkingConfigChange('geminiThinkingLevel', value)}
+                          options={[
+                            { value: 'minimal', label: 'Minimal - Lowest latency' },
+                            { value: 'low', label: 'Low - Quick thinking' },
+                            { value: 'medium', label: 'Medium - Balanced' },
+                            { value: 'high', label: 'High - Deep thinking' },
+                          ]}
+                        />
+                        <p className="field-hint">Controls thinking depth for Gemini-compatible endpoints</p>
+                      </div>
+                    )}
+
+                    {/* OpenRouter format options */}
+                    {config.advanced.thinkingConfig?.customThinkingFormat === 'openrouter' && (
+                      <>
+                        <div className="form-field">
+                          <label>Effort Level</label>
+                          <CustomSelect
+                            value={config.advanced.thinkingConfig?.effort || 'medium'}
+                            onChange={(value) => handleThinkingConfigChange('effort', value)}
+                            options={[
+                              { value: 'low', label: 'Low (~20% of max tokens)' },
+                              { value: 'medium', label: 'Medium (~50% of max tokens)' },
+                              { value: 'high', label: 'High (~80% of max tokens)' },
+                            ]}
+                          />
+                          <p className="field-hint">Controls how much thinking the model performs</p>
+                        </div>
+                        <div className="form-field">
+                          <label>Max Thinking Tokens (optional)</label>
+                          <input
+                            type="number"
+                            min="1024"
+                            max="32000"
+                            value={config.advanced.thinkingConfig?.maxTokens || ''}
+                            onChange={(e) =>
+                              handleThinkingConfigChange(
+                                'maxTokens',
+                                e.target.value ? parseInt(e.target.value) : undefined
+                              )
+                            }
+                            placeholder="Auto (based on effort)"
+                            className="config-input"
+                          />
+                          <p className="field-hint">Directly specify thinking token budget</p>
+                        </div>
+                      </>
                     )}
                   </>
                 )}

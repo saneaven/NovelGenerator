@@ -8,15 +8,20 @@ import { ChevronRight } from '../icons';
 import ObjectPickerItem from './ObjectPickerItem';
 import type { ObjectPickerGroupProps, SelectionState, ObjectPickerItem as PickerItem } from './types';
 
+interface GroupLike {
+  items: PickerItem[];
+  childGroups?: GroupLike[];
+}
+
 /**
- * Get all item IDs from a group (including nested groups)
+ * Get all item IDs from a group (recursively including all nested levels)
  */
-function getAllItemIds(group: { items: PickerItem[]; childGroups?: { items: PickerItem[] }[] }): string[] {
+function getAllItemIds(group: GroupLike): string[] {
   const ids: string[] = group.items.map(item => item.id);
 
   if (group.childGroups) {
     group.childGroups.forEach(childGroup => {
-      ids.push(...childGroup.items.map(item => item.id));
+      ids.push(...getAllItemIds(childGroup));
     });
   }
 

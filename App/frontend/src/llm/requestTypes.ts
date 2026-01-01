@@ -13,11 +13,21 @@ export interface FunctionCall {
   arguments: string;
 }
 
+export interface ToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
 export interface ConversationBlock {
   role: Role;
   contentParts: ContentPart[];
   function_call?: FunctionCall;
   name?: string; // for function role messages
+  tool_calls?: ToolCall[]; // for assistant messages with function calls
 }
 
 // Thinking detail from OpenRouter (model-native thinking)

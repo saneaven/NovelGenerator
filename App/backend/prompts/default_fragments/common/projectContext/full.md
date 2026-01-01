@@ -53,9 +53,10 @@
 {{/if}}
 
 {{#if project.outline}}
-### Story Outline
+{{#each project.outline.outlines}}
+### Story Outline - {{ this.name }}
 
-{{#each project.outline.acts}}
+{{#each this.acts}}
 #### Act: {{ this.name }} (id: {{ this.id }})
 
 {{ this.description }}
@@ -65,5 +66,6 @@
 - **{{ this.name }}** (id: {{ this.id }}): {{ this.description }}
 {{/each}}
 
+{{/each}}
 {{/each}}
 {{/if}}

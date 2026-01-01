@@ -143,6 +143,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     const dropdownRef = useRef<HTMLDivElement>(null);
     const importButtonRef = useRef<HTMLDivElement>(null);
     const moreDropdownRef = useRef<HTMLDivElement>(null);
+    const gridScrollContainerRef = useRef<HTMLDivElement>(null);
 
     // Fetch data based on mode
     useEffect(() => {
@@ -295,8 +296,9 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     // Clear active asset when clicking outside the grid (for mobile)
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
-            const target = e.target as HTMLElement;
-            if (!target.closest('.asset-grid')) {
+            const targetNode = e.target as Node | null;
+            const gridEl = gridScrollContainerRef.current;
+            if (!gridEl || !targetNode || !gridEl.contains(targetNode)) {
                 setActiveAssetId(null);
                 setSelectedAssetId(null);
             }
@@ -639,6 +641,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                             editingName={editingName}
                             moreDropdownAssetId={moreDropdownAssetId}
                             moreDropdownRef={moreDropdownRef}
+                            scrollContainerRef={gridScrollContainerRef}
                             onItemClick={handleAssetClick}
                             onSetActiveAssetId={setActiveAssetId}
                             onSetMain={handleSetMain}

@@ -15,6 +15,9 @@ import { create } from 'zustand';
 export type StoryTabType = 'basicInfo' | 'characters' | 'organizations' | 'locations' | 'lorebook' | 'outline';
 
 interface NovelEditorUIState {
+  // Outline selection per project
+  selectedOutlineByProject: Record<string, string | undefined>;
+
   // Chapter selection per project
   selectedChapterByProject: Record<string, string | undefined>;
 
@@ -36,6 +39,11 @@ interface NovelEditorUIState {
 }
 
 interface NovelEditorActions {
+  // Outline selection
+  selectOutline: (projectId: string, outlineId: string) => void;
+  getSelectedOutlineId: (projectId: string) => string | undefined;
+  clearSelectedOutline: (projectId: string) => void;
+
   // Chapter selection
   selectChapter: (projectId: string, chapterId: string) => void;
   getSelectedChapterId: (projectId: string) => string | undefined;
@@ -69,6 +77,7 @@ interface NovelEditorActions {
 type NovelEditorStore = NovelEditorUIState & NovelEditorActions;
 
 const initialState: NovelEditorUIState = {
+  selectedOutlineByProject: {},
   selectedChapterByProject: {},
   chatVisibleByProject: {},
   isAIEditModalOpen: false,
@@ -82,6 +91,45 @@ const initialState: NovelEditorUIState = {
 
 export const useNovelEditorStore = create<NovelEditorStore>()((set, get) => ({
   ...initialState,
+
+  // Outline selection
+  selectOutline: (projectId: string, outlineId: string) => {
+    set((state) => ({
+      selectedOutlineByProject: {
+        ...state.selectedOutlineByProject,
+        [projectId]: outlineId,
+      },
+    }));
+    localStorage.setItem(`selectedOutline_${projectId}`, outlineId);
+  },
+
+  getSelectedOutlineId: (projectId: string) => {
+    const stateOutlineId = get().selectedOutlineByProject[projectId];
+    if (stateOutlineId) return stateOutlineId;
+
+    const storedOutlineId = localStorage.getItem(`selectedOutline_${projectId}`);
+    if (storedOutlineId) {
+      set((state) => ({
+        selectedOutlineByProject: {
+          ...state.selectedOutlineByProject,
+          [projectId]: storedOutlineId,
+        },
+      }));
+      return storedOutlineId;
+    }
+
+    return undefined;
+  },
+
+  clearSelectedOutline: (projectId: string) => {
+    set((state) => ({
+      selectedOutlineByProject: {
+        ...state.selectedOutlineByProject,
+        [projectId]: undefined,
+      },
+    }));
+    localStorage.removeItem(`selectedOutline_${projectId}`);
+  },
 
   // Chapter selection
   selectChapter: (projectId: string, chapterId: string) => {
@@ -210,6 +258,7 @@ export const useNovelEditorStore = create<NovelEditorStore>()((set, get) => ({
   resetProjectState: (projectId: string) => {
     set((state) => {
       const newState = { ...state };
+      delete newState.selectedOutlineByProject[projectId];
       delete newState.selectedChapterByProject[projectId];
       delete newState.chatVisibleByProject[projectId];
       delete newState.editorContentByProject[projectId];
@@ -218,6 +267,7 @@ export const useNovelEditorStore = create<NovelEditorStore>()((set, get) => ({
       delete newState.activeStoryTabByProject[projectId];
       return newState;
     });
+    localStorage.removeItem(`selectedOutline_${projectId}`);
     localStorage.removeItem(`selectedChapter_${projectId}`);
   },
 }));

@@ -82,6 +82,17 @@
   background: var(--color-surface-hover);
 }
 
+/* Selected state */
+.dropdown-item.is-selected {
+  background: var(--color-primary-subtle);
+  color: var(--color-primary-main);
+  font-weight: 500;
+}
+
+.dropdown-item.is-selected:hover:not(.disabled) {
+  background: var(--color-primary-subtle);
+}
+
 /* Danger variant */
 .dropdown-item.danger {
   color: var(--color-error);

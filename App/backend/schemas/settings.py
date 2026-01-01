@@ -32,9 +32,11 @@ class ThinkingConfig(BaseModel):
     """Thinking configuration for model-native thinking"""
     effort: Optional[str] = "medium"  # legacy OpenRouter-style effort
     maxTokens: Optional[int] = None
+    verbosity: Optional[str] = None  # GPT-5 output verbosity: 'low' | 'medium' | 'high'
     claudeBudgetTokens: Optional[int] = None
-    geminiThinkingLevel: Optional[str] = None  # 'low' | 'high'
+    geminiThinkingLevel: Optional[str] = None  # 'minimal' | 'low' | 'medium' | 'high'
     geminiBudgetTokens: Optional[int] = None
+    customThinkingFormat: Optional[str] = None  # 'openai' | 'claude' | 'gemini' | 'openrouter'
 
 
 class AdvancedFunctionSettings(BaseModel):
@@ -184,6 +186,8 @@ class UserSettingsResponse(BaseModel):
     nativeOutputMode: bool = False
     patchAutoRetry: bool = True
     llmLoggingEnabled: bool = False
+    functionCallHistoryLimit: int = 5
+    displayLanguage: str = "English"
 
     class Config:
         from_attributes = True
@@ -202,3 +206,5 @@ class UserSettingsUpdate(BaseModel):
     nativeOutputMode: Optional[bool] = None
     patchAutoRetry: Optional[bool] = None
     llmLoggingEnabled: Optional[bool] = None
+    functionCallHistoryLimit: Optional[int] = None
+    displayLanguage: Optional[str] = None

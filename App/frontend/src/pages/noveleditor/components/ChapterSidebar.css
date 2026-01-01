@@ -41,6 +41,31 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+/* Clickable header for outline selection */
+.chapter-sidebar .header-title-group.clickable {
+    cursor: pointer;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    margin: calc(-1 * var(--spacing-xs)) calc(-1 * var(--spacing-sm));
+    border-radius: var(--border-radius-md);
+    transition: background-color var(--transition-fast);
+}
+
+.chapter-sidebar .header-title-group.clickable:hover {
+    background-color: var(--color-surface-elevated);
+}
+
+.chapter-sidebar .header-chevron {
+    color: var(--color-text-tertiary);
+    transition: transform var(--transition-fast);
+}
+
+.chapter-sidebar .header-title-group.clickable:hover .header-chevron {
+    color: var(--color-text-secondary);
 }
 
 /* Timeline Container */

@@ -19,6 +19,7 @@ import './ObjectPicker.css';
 
 /**
  * Filter groups to only include items with IDs in the filterIds set
+ * Recursively handles all levels of nested childGroups
  */
 function filterGroupsByIds(groups: Group[], filterIds: Set<string>): Group[] {
   return groups
@@ -26,53 +27,54 @@ function filterGroupsByIds(groups: Group[], filterIds: Set<string>): Group[] {
       // Filter items by ID
       const filteredItems = group.items.filter(item => filterIds.has(item.id));
 
-      // Filter child groups
-      const filteredChildGroups = group.childGroups?.map(childGroup => {
-        const childFilteredItems = childGroup.items.filter(item => filterIds.has(item.id));
-        if (childFilteredItems.length === 0) return null;
-        return { ...childGroup, items: childFilteredItems };
-      }).filter(Boolean) as Group[] | undefined;
+      // Recursively filter child groups
+      const filteredChildGroups = group.childGroups
+        ? filterGroupsByIds(group.childGroups, filterIds)
+        : undefined;
 
-      // Include group if it has matching items or child groups
-      if (filteredItems.length === 0 && (!filteredChildGroups || filteredChildGroups.length === 0)) {
+      // Include group if it has matching items or filtered child groups with content
+      const hasItems = filteredItems.length > 0;
+      const hasChildGroups = filteredChildGroups && filteredChildGroups.length > 0;
+
+      if (!hasItems && !hasChildGroups) {
         return null;
       }
 
       return {
         ...group,
         items: filteredItems,
-        childGroups: filteredChildGroups,
+        childGroups: hasChildGroups ? filteredChildGroups : undefined,
       };
     })
     .filter(Boolean) as Group[];
 }
 
 /**
- * Get all item IDs from groups (including nested child groups)
+ * Get all item IDs from groups (including deeply nested child groups)
  */
 function getAllItemIds(groups: Group[]): string[] {
   const ids: string[] = [];
-  groups.forEach(group => {
+
+  function collectIds(group: Group) {
     ids.push(...group.items.map(item => item.id));
     if (group.childGroups) {
-      group.childGroups.forEach(childGroup => {
-        ids.push(...childGroup.items.map(item => item.id));
-      });
+      group.childGroups.forEach(childGroup => collectIds(childGroup));
     }
-  });
+  }
+
+  groups.forEach(group => collectIds(group));
   return ids;
 }
 
 /**
- * Find a group by ID (including nested groups)
+ * Find a group by ID (recursively searching all nested levels)
  */
 function findGroup(groups: Group[], groupId: string): Group | null {
   for (const group of groups) {
     if (group.id === groupId) return group;
     if (group.childGroups) {
-      for (const childGroup of group.childGroups) {
-        if (childGroup.id === groupId) return childGroup;
-      }
+      const found = findGroup(group.childGroups, groupId);
+      if (found) return found;
     }
   }
   return null;
@@ -255,14 +257,18 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
     const group = findGroup(filteredGroups, groupId);
     if (!group) return;
 
-    // Get all item IDs from this group (including nested)
-    const groupItemIds: string[] = [...group.items.map(item => item.id)];
-    if (group.childGroups) {
-      group.childGroups.forEach(childGroup => {
-        groupItemIds.push(...childGroup.items.map(item => item.id));
-      });
+    // Recursively collect all item IDs from this group and nested child groups
+    function collectGroupItemIds(g: Group): string[] {
+      const ids = g.items.map(item => item.id);
+      if (g.childGroups) {
+        g.childGroups.forEach(cg => {
+          ids.push(...collectGroupItemIds(cg));
+        });
+      }
+      return ids;
     }
 
+    const groupItemIds = collectGroupItemIds(group);
     const newSelection = new Set(selectedIdSet);
 
     groupItemIds.forEach(id => {

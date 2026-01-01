@@ -64,10 +64,11 @@
 {{/with}}
 
 {{#if project.outline}}
-{{#each project.outline.acts}}
+{{#each project.outline.outlines}}
+{{#each this.acts}}
 {{#with (filterByIds this.chapters @root.params.[0]) as |selectedChapters|}}
 {{#if (hasItems selectedChapters)}}
-### Story Outline
+### Story Outline - {{ ../../name }}
 
 #### Act: {{ ../name }} (id: {{ ../id }})
 
@@ -80,6 +81,7 @@
 
 {{/if}}
 {{/with}}
+{{/each}}
 {{/each}}
 {{/if}}
 

@@ -128,7 +128,9 @@ async def get_user_settings(
         imageGenConfig=image_gen_config_dict,  # type: ignore
         nativeOutputMode=settings.native_output_mode,
         patchAutoRetry=getattr(settings, 'patch_auto_retry', True),
-        llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False)
+        llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
+        functionCallHistoryLimit=getattr(settings, 'function_call_history_limit', 5),
+        displayLanguage=getattr(settings, 'display_language', 'English')
     )
 
 
@@ -196,6 +198,12 @@ async def update_user_settings(
     if update_data.llmLoggingEnabled is not None:
         settings.llm_logging_enabled = update_data.llmLoggingEnabled  # type: ignore
 
+    if update_data.functionCallHistoryLimit is not None:
+        settings.function_call_history_limit = update_data.functionCallHistoryLimit  # type: ignore
+
+    if update_data.displayLanguage is not None:
+        settings.display_language = update_data.displayLanguage  # type: ignore
+
     db.commit()
     db.refresh(settings)
 
@@ -232,7 +240,9 @@ async def update_user_settings(
         imageGenConfig=image_gen_config_dict,  # type: ignore
         nativeOutputMode=settings.native_output_mode,
         patchAutoRetry=getattr(settings, 'patch_auto_retry', True),
-        llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False)
+        llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
+        functionCallHistoryLimit=getattr(settings, 'function_call_history_limit', 5),
+        displayLanguage=getattr(settings, 'display_language', 'English')
     )
 
 
@@ -296,7 +306,9 @@ async def update_function_config(
         imageGenConfig=image_gen_config_dict,  # type: ignore
         nativeOutputMode=settings.native_output_mode,
         patchAutoRetry=getattr(settings, 'patch_auto_retry', True),
-        llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False)
+        llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
+        functionCallHistoryLimit=getattr(settings, 'function_call_history_limit', 5),
+        displayLanguage=getattr(settings, 'display_language', 'English')
     )
 
 
@@ -352,7 +364,9 @@ async def sync_settings_from_client(
             image_gen_config=client_settings.get('imageGenConfig', default_image_gen_config),
             native_output_mode=client_settings.get('nativeOutputMode', False),
             patch_auto_retry=client_settings.get('patchAutoRetry', True),
-            llm_logging_enabled=client_settings.get('llmLoggingEnabled', False)
+            llm_logging_enabled=client_settings.get('llmLoggingEnabled', False),
+            function_call_history_limit=client_settings.get('functionCallHistoryLimit', 5),
+            display_language=client_settings.get('displayLanguage', 'English')
         )
         db.add(settings)
     else:
@@ -369,6 +383,8 @@ async def sync_settings_from_client(
         settings.native_output_mode = client_settings.get('nativeOutputMode', settings.native_output_mode)  # type: ignore
         settings.patch_auto_retry = client_settings.get('patchAutoRetry', getattr(settings, 'patch_auto_retry', True))  # type: ignore
         settings.llm_logging_enabled = client_settings.get('llmLoggingEnabled', getattr(settings, 'llm_logging_enabled', False))  # type: ignore
+        settings.function_call_history_limit = client_settings.get('functionCallHistoryLimit', getattr(settings, 'function_call_history_limit', 5))  # type: ignore
+        settings.display_language = client_settings.get('displayLanguage', getattr(settings, 'display_language', 'English'))  # type: ignore
 
     db.commit()
     db.refresh(settings)

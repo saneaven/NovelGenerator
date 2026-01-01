@@ -121,6 +121,49 @@ export const PROMPT_TREE: PromptNode[] = [
             description: 'AI response starter for Novel Editor mode'
           }
         ]
+      },
+      {
+        id: 'chat-outlinemanager',
+        label: 'Outline Manager Mode',
+        type: 'category',
+        children: [
+          {
+            id: 'chat-outlinemanager-system',
+            label: 'System Prompt',
+            type: 'prompt',
+            functionType: 'chat',
+            category: 'systemPrompt',
+            name: 'outlineManager',
+            description: 'Main AI behavior for Outline Manager conversations'
+          },
+          {
+            id: 'chat-outlinemanager-user',
+            label: 'User Prompt',
+            type: 'prompt',
+            functionType: 'chat',
+            category: 'userPrompt',
+            name: 'outlineManager',
+            description: 'Template for the last user message in outline manager chat'
+          },
+          {
+            id: 'chat-outlinemanager-nonlast',
+            label: 'Non-Last User Prompt',
+            type: 'prompt',
+            functionType: 'chat',
+            category: 'nonLastUserPrompt',
+            name: 'outlineManager',
+            description: 'Template for previous user messages in outline manager chat history'
+          },
+          {
+            id: 'chat-outlinemanager-prefill',
+            label: 'Prefill Template',
+            type: 'prompt',
+            functionType: 'chat',
+            category: 'prefill',
+            name: 'outlineManager',
+            description: 'AI response starter for Outline Manager mode'
+          }
+        ]
       }
     ]
   },

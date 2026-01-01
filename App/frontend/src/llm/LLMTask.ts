@@ -432,6 +432,8 @@ export class LLMTask {
     promptBundle: PromptBundle
   ): Promise<ConversationBlock[]> {
     const messages: ConversationBlock[] = [];
+    const { settings } = useSettingsStore.getState();
+    const fcLimit = settings.functionCallHistoryLimit;
 
     // 1. System prompt
     messages.push({
@@ -439,7 +441,18 @@ export class LLMTask {
       contentParts: [{ type: 'content', text: promptBundle.systemPrompt }],
     });
 
-    // 2. Process history (all previous messages - ChatManager passes history without current user message)
+    // 2. Count assistant messages to determine which ones should include function calls
+    // (we include function calls from the last N assistant messages)
+    const assistantIndices: number[] = [];
+    for (let i = 0; i < history.length; i++) {
+      if (history[i].role === 'assistant') {
+        assistantIndices.push(i);
+      }
+    }
+    const totalAssistants = assistantIndices.length;
+
+    // 3. Process history (all previous messages - ChatManager passes history without current user message)
+    let assistantCount = 0;
     for (let i = 0; i < history.length; i++) {
       const msg = history[i];
 
@@ -456,8 +469,39 @@ export class LLMTask {
           role: 'user',
           contentParts: [{ type: 'content', text: rendered }],
         });
+      } else if (msg.role === 'assistant') {
+        // For assistant messages, potentially include tool_calls
+        assistantCount++;
+
+        // Determine if we should include function calls for this message
+        // fcLimit: 0 = none, -1 = all, N = last N assistant messages
+        const shouldIncludeFC = fcLimit === -1 ||
+          (fcLimit > 0 && assistantCount > totalAssistants - fcLimit);
+
+        const block: ConversationBlock = {
+          role: msg.role,
+          contentParts: msg.contentParts.length > 0
+            ? msg.contentParts
+            : [{ type: 'content', text: '' }],
+        };
+
+        // Add tool_calls if applicable
+        if (shouldIncludeFC && msg.functionCalls && msg.functionCalls.length > 0) {
+          block.tool_calls = msg.functionCalls.map(fc => ({
+            id: fc.id,
+            type: 'function' as const,
+            function: {
+              name: fc.function_name,
+              arguments: typeof fc.arguments === 'string'
+                ? fc.arguments
+                : JSON.stringify(fc.arguments),
+            },
+          }));
+        }
+
+        messages.push(block);
       } else {
-        // Use raw message content
+        // Use raw message content for other roles
         messages.push({
           role: msg.role,
           contentParts: msg.contentParts.length > 0
@@ -467,13 +511,13 @@ export class LLMTask {
       }
     }
 
-    // 3. Last user message (rendered from userPrompt template with userRequest)
+    // 4. Last user message (rendered from userPrompt template with userRequest)
     messages.push({
       role: 'user',
       contentParts: [{ type: 'content', text: promptBundle.userPrompt }],
     });
 
-    // 4. Prefill (if configured)
+    // 5. Prefill (if configured)
     if (promptBundle.prefill) {
       messages.push({
         role: 'assistant',

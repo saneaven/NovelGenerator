@@ -303,6 +303,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             onPatchAutoRetryChange={(enabled) =>
               setLocalSettings(prev => ({ ...prev, patchAutoRetry: enabled }))
             }
+            functionCallHistoryLimit={localSettings.functionCallHistoryLimit}
+            onFunctionCallHistoryLimitChange={(limit) =>
+              setLocalSettings(prev => ({ ...prev, functionCallHistoryLimit: limit }))
+            }
           />
         )}
       </div>

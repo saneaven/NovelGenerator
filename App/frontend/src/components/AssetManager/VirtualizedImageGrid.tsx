@@ -1,17 +1,11 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useMasonry, usePositioner, useResizeObserver, type RenderComponentProps } from 'masonic';
 import { ImageGridItem, calculateItemHeight } from './ImageGridItem';
 import type { DisplayAsset, ImageContentMode } from './ImageGridItem';
 import type { Asset, SceneAsset } from '../../api/assetService';
 
-interface VirtualizedImageGridProps {
-    items: DisplayAsset[];
+type VirtualizedImageGridContextValue = {
     mode: ImageContentMode;
-    /**
-     * When this key changes, the grid will reset its scroll position (and internal scrollTop state).
-     * Useful when switching between different datasets (e.g., Current Chapter vs All Chapters).
-     */
-    scrollResetKey?: string | number;
     activeAssetId: string | null;
     selectedAssetId: string | null;
     excludeAssetIds: string[];
@@ -29,6 +23,98 @@ interface VirtualizedImageGridProps {
     onOpenDetail: (asset: Asset | SceneAsset) => void;
     onDeleteAsset: (asset: Asset | SceneAsset) => void;
     onToggleMoreDropdown: (assetId: string | null) => void;
+};
+
+const VirtualizedImageGridContext = createContext<VirtualizedImageGridContextValue | null>(null);
+
+function useVirtualizedImageGridContext() {
+    const ctx = useContext(VirtualizedImageGridContext);
+    if (!ctx) {
+        throw new Error('VirtualizedImageGridContext is missing. Did you forget to wrap the grid with its provider?');
+    }
+    return ctx;
+}
+
+const MasonryCard: React.FC<RenderComponentProps<DisplayAsset>> = ({ data, width }: RenderComponentProps<DisplayAsset>) => {
+    const ctx = useVirtualizedImageGridContext();
+    const isActive = ctx.activeAssetId === data.id;
+    const isSelected = ctx.selectedAssetId === data.id;
+    const isExcluded = ctx.excludeAssetIds.includes(data.asset.id);
+    const itemHeight = calculateItemHeight(data.asset, width);
+
+    const handleItemClick = () => {
+        if (isExcluded) return;
+        if (ctx.mode === 'object') {
+            ctx.onSetActiveAssetId(data.id);
+        } else {
+            ctx.onItemClick(data);
+        }
+    };
+
+    return (
+        <ImageGridItem
+            item={data}
+            mode={ctx.mode}
+            isActive={isActive}
+            isSelected={isSelected}
+            isExcluded={isExcluded}
+            editingAssetId={ctx.editingAssetId}
+            editingName={ctx.editingName}
+            moreDropdownAssetId={ctx.moreDropdownAssetId}
+            moreDropdownRef={ctx.moreDropdownRef}
+            onItemClick={handleItemClick}
+            onSetMain={ctx.onSetMain}
+            onStartRename={ctx.onStartRename}
+            onEditingNameChange={ctx.onEditingNameChange}
+            onSaveRename={ctx.onSaveRename}
+            onCancelRename={ctx.onCancelRename}
+            onOpenDetail={ctx.onOpenDetail}
+            onDeleteAsset={ctx.onDeleteAsset}
+            onToggleMoreDropdown={ctx.onToggleMoreDropdown}
+            height={itemHeight}
+        />
+    );
+};
+
+interface VirtualizedImageGridProps {
+    items: DisplayAsset[];
+    mode: ImageContentMode;
+    /**
+     * When this key changes, the grid will reset its scroll position (and internal scrollTop state).
+     * Useful when switching between different datasets (e.g., Current Chapter vs All Chapters).
+     */
+    scrollResetKey?: string | number;
+    activeAssetId: string | null;
+    selectedAssetId: string | null;
+    excludeAssetIds: string[];
+    editingAssetId: string | null;
+    editingName: string;
+    moreDropdownAssetId: string | null;
+    moreDropdownRef: RefObject<HTMLDivElement | null>;
+    /**
+     * Ref to the scroll container element. Useful for robust "click outside grid" detection
+     * without relying on class selectors.
+     */
+    scrollContainerRef?: React.Ref<HTMLDivElement>;
+    onItemClick: (item: DisplayAsset) => void;
+    onSetActiveAssetId: (id: string | null) => void;
+    onSetMain: (assetId: string) => void;
+    onStartRename: (asset: Asset | SceneAsset) => void;
+    onEditingNameChange: (name: string) => void;
+    onSaveRename: (assetId: string) => void;
+    onCancelRename: () => void;
+    onOpenDetail: (asset: Asset | SceneAsset) => void;
+    onDeleteAsset: (asset: Asset | SceneAsset) => void;
+    onToggleMoreDropdown: (assetId: string | null) => void;
+}
+
+function setRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
+    if (!ref) return;
+    if (typeof ref === 'function') {
+        ref(value);
+        return;
+    }
+    (ref as React.MutableRefObject<T | null>).current = value;
 }
 
 function useElementSize<T extends HTMLElement>(element: T | null) {
@@ -113,6 +199,7 @@ export const VirtualizedImageGrid: React.FC<VirtualizedImageGridProps> = ({
     editingName,
     moreDropdownAssetId,
     moreDropdownRef,
+    scrollContainerRef,
     onItemClick,
     onSetActiveAssetId,
     onSetMain,
@@ -126,6 +213,10 @@ export const VirtualizedImageGrid: React.FC<VirtualizedImageGridProps> = ({
 }) => {
     const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
+    const setScrollElementRef = useCallback((el: HTMLDivElement | null) => {
+        setScrollElement(el);
+        setRef(scrollContainerRef, el);
+    }, [scrollContainerRef]);
 
     const { width, height } = useElementSize(scrollElement);
     const { scrollTop, isScrolling, syncScrollTop, scrollToTop } = useElementScroller(scrollElement, 12);
@@ -146,45 +237,26 @@ export const VirtualizedImageGrid: React.FC<VirtualizedImageGridProps> = ({
     );
     const resizeObserver = useResizeObserver(positioner);
 
-    const MasonryCard = useCallback(({ data, width }: RenderComponentProps<DisplayAsset>) => {
-        const isActive = activeAssetId === data.id;
-        const isSelected = selectedAssetId === data.id;
-        const isExcluded = excludeAssetIds.includes(data.asset.id);
-        const itemHeight = calculateItemHeight(data.asset, width);
-
-        const handleItemClick = () => {
-            if (isExcluded) return;
-            if (mode === 'object') {
-                onSetActiveAssetId(data.id);
-            } else {
-                onItemClick(data);
-            }
-        };
-
-        return (
-            <ImageGridItem
-                item={data}
-                mode={mode}
-                isActive={isActive}
-                isSelected={isSelected}
-                isExcluded={isExcluded}
-                editingAssetId={editingAssetId}
-                editingName={editingName}
-                moreDropdownAssetId={moreDropdownAssetId}
-                moreDropdownRef={moreDropdownRef}
-                onItemClick={handleItemClick}
-                onSetMain={onSetMain}
-                onStartRename={onStartRename}
-                onEditingNameChange={onEditingNameChange}
-                onSaveRename={onSaveRename}
-                onCancelRename={onCancelRename}
-                onOpenDetail={onOpenDetail}
-                onDeleteAsset={onDeleteAsset}
-                onToggleMoreDropdown={onToggleMoreDropdown}
-                height={itemHeight}
-            />
-        );
-    }, [
+    const contextValue = useMemo<VirtualizedImageGridContextValue>(() => ({
+        mode,
+        activeAssetId,
+        selectedAssetId,
+        excludeAssetIds,
+        editingAssetId,
+        editingName,
+        moreDropdownAssetId,
+        moreDropdownRef,
+        onItemClick,
+        onSetActiveAssetId,
+        onSetMain,
+        onStartRename,
+        onEditingNameChange,
+        onSaveRename,
+        onCancelRename,
+        onOpenDetail,
+        onDeleteAsset,
+        onToggleMoreDropdown,
+    }), [
         mode,
         activeAssetId,
         selectedAssetId,
@@ -223,8 +295,10 @@ export const VirtualizedImageGrid: React.FC<VirtualizedImageGridProps> = ({
     }
 
     return (
-        <div ref={setScrollElement} className="virtualized-grid-container">
-            {masonry}
-        </div>
+        <VirtualizedImageGridContext.Provider value={contextValue}>
+            <div ref={setScrollElementRef} className="virtualized-grid-container">
+                {masonry}
+            </div>
+        </VirtualizedImageGridContext.Provider>
     );
 };

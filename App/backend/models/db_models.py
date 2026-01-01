@@ -106,6 +106,12 @@ class UserSettings(Base):
     # LLM logging enabled - enable LLM request logging for debugging
     llm_logging_enabled = Column(Boolean, default=False, nullable=False)
 
+    # Function call history limit - number of recent assistant messages to include function calls for
+    function_call_history_limit = Column(Integer, default=5, nullable=False)
+
+    # Display language for UI
+    display_language = Column(String(50), default='English', nullable=False)
+
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

@@ -13,6 +13,8 @@ interface AdvancedPanelProps {
     onNativeOutputModeChange: (enabled: boolean) => void;
     patchAutoRetry: boolean;
     onPatchAutoRetryChange: (enabled: boolean) => void;
+    functionCallHistoryLimit: number;
+    onFunctionCallHistoryLimitChange: (limit: number) => void;
 }
 
 const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
@@ -22,6 +24,8 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
     onNativeOutputModeChange,
     patchAutoRetry,
     onPatchAutoRetryChange,
+    functionCallHistoryLimit,
+    onFunctionCallHistoryLimitChange,
 }) => {
     const [newErrorCode, setNewErrorCode] = useState('');
 
@@ -217,6 +221,38 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                     <p className="field-hint">
                         When enabled, if a unified diff patch fails to apply during AI editing, the system will
                         automatically retry the request forcing the AI to use full replacement mode instead.
+                    </p>
+                </div>
+            </div>
+
+            {/* Function Call History */}
+            <div className="advanced-settings-card">
+                <h3>Function Call History</h3>
+                <div className="form-field">
+                    <label>Include function calls in chat history</label>
+                    <div className="slider-container">
+                        <input
+                            type="range"
+                            min="0"
+                            max="11"
+                            value={functionCallHistoryLimit === -1 ? 11 : functionCallHistoryLimit}
+                            onChange={(e) => {
+                                const val = parseInt(e.target.value, 10);
+                                onFunctionCallHistoryLimitChange(val === 11 ? -1 : val);
+                            }}
+                            className="slider"
+                        />
+                        <span className="slider-value">
+                            {functionCallHistoryLimit === -1 ? 'All' : functionCallHistoryLimit}
+                        </span>
+                    </div>
+                    <div className="slider-labels">
+                        <span>0</span>
+                        <span>All</span>
+                    </div>
+                    <p className="field-hint">
+                        Number of recent assistant messages whose function calls will be included
+                        in the conversation history sent to the AI. Set to 0 to disable.
                     </p>
                 </div>
             </div>

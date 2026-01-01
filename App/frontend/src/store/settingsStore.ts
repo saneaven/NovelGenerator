@@ -51,14 +51,18 @@ export interface ProviderPreference {
     ignore?: string[];
 }
 
+// Custom thinking format for custom endpoints
+export type CustomThinkingFormat = 'openai' | 'claude' | 'gemini' | 'openrouter';
+
 // Thinking configuration for model-native thinking
 export interface ThinkingConfig {
     effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';  // GPT-5.2+ supports minimal/xhigh
     maxTokens?: number;
     verbosity?: 'low' | 'medium' | 'high';  // GPT-5 output verbosity
     claudeBudgetTokens?: number;
-    geminiThinkingLevel?: 'low' | 'high';  // Gemini only supports low/high
+    geminiThinkingLevel?: 'minimal' | 'low' | 'medium' | 'high';  // Gemini 3 Flash supports all, Pro only low/high
     geminiBudgetTokens?: number;
+    customThinkingFormat?: CustomThinkingFormat;  // For custom endpoint thinking format
 }
 
 // Retry configuration for error handling
@@ -181,6 +185,10 @@ export interface Settings {
 
     // LLM request logging - enable logging of LLM requests for debugging
     llmLoggingEnabled: boolean;
+
+    // Function call history limit - how many recent assistant messages to include function calls for
+    // 0 = none, 1-10 = last N messages, -1 = all
+    functionCallHistoryLimit: number;
 }
 
 // Default settings
@@ -321,6 +329,9 @@ const defaultSettings: Settings = {
 
     // LLM logging disabled by default
     llmLoggingEnabled: false,
+
+    // Function call history limit - include function calls from last 5 assistant messages by default
+    functionCallHistoryLimit: 5,
 };
 
 // Store interface
@@ -471,6 +482,7 @@ const mergeWithDefaults = (stored: any): Settings => {
         nativeOutputMode: stored.nativeOutputMode ?? defaultSettings.nativeOutputMode,
         patchAutoRetry: stored.patchAutoRetry ?? defaultSettings.patchAutoRetry,
         llmLoggingEnabled: stored.llmLoggingEnabled ?? defaultSettings.llmLoggingEnabled,
+        functionCallHistoryLimit: stored.functionCallHistoryLimit ?? defaultSettings.functionCallHistoryLimit,
     };
 };
 
