@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import type { FunctionCallOperationPreview } from '../../llm/requestTypes';
-import { buildOperationPreviewsFromArgs } from '../../chat/utils/functionCallPreview';
-import { resolveStoryObjectName, parseFunctionName } from '../../chat/utils/objectNameResolver';
+import { buildOperationPreviewsFromArgs } from '../../agent/utils/functionCallPreview';
+import { resolveStoryObjectName, parseFunctionName } from '../../agent/utils/objectNameResolver';
 import { useCardSelection, useCardExpansion } from './hooks';
 import { FunctionCallCardHeader } from './FunctionCallCardHeader';
 import { FunctionCallCardList } from './FunctionCallCardList';

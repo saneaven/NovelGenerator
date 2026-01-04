@@ -19,6 +19,7 @@ class BaseProvider(ABC):
         provider_preference: Optional[Dict] = None,
         thinking_config: Optional[Dict] = None,
         thinking_mode: Optional[str] = None,
+        custom_api_format: Optional[str] = None,
         retry_config: Optional[Dict] = None
     ) -> AsyncGenerator[bytes, None]:
         """
@@ -34,6 +35,7 @@ class BaseProvider(ABC):
             provider_preference: Provider-specific preferences (e.g., OpenRouter only/ignore)
             thinking_config: Thinking configuration for model-native thinking (mapped to provider-native thinking field)
             thinking_mode: Thinking mode ('off', 'custom', 'model')
+            custom_api_format: API format for custom provider ('openai', 'claude', 'gemini', 'openrouter')
             retry_config: Retry configuration for error handling
 
         Yields:

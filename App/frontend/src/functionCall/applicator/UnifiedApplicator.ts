@@ -2,7 +2,10 @@
  * Unified Applicator
  *
  * Single class-based applicator for all function call operations.
- * Uses dependency injection for store and translation service access.
+ * Uses dependency injection for store access.
+ *
+ * Note: For translation operations, pass the target language as `language` in the context.
+ * Translation handlers use `create_new_version: false` while CRUD handlers use `true`.
  */
 
 import type {
@@ -11,8 +14,8 @@ import type {
   RawFunctionCall,
   NormalizedFunctionCall,
 } from '../types';
-import type { ApplicatorConfig, HandlerContext, Handler, StoreActions, TranslationActions } from './types';
-import { normalizeFunctionCall, validateFunctionCall, isKnownFunction } from '../normalizer';
+import type { ApplicatorConfig, HandlerContext, Handler, StoreActions } from './types';
+import { normalizeFunctionCall, isKnownFunction } from '../normalizer';
 import { ALL_HANDLERS } from './handlers';
 
 /**
@@ -20,15 +23,16 @@ import { ALL_HANDLERS } from './handlers';
  */
 export class UnifiedApplicator {
   private store: StoreActions;
-  private translationService?: TranslationActions;
 
   constructor(config: ApplicatorConfig) {
     this.store = config.store;
-    this.translationService = config.translationService;
   }
 
   /**
    * Apply a single function call
+   *
+   * Note: Validation is performed separately before calling apply().
+   * See functionCall/validation module for the two-phase validation system.
    *
    * @param functionCall - Raw or normalized function call
    * @param context - Execution context (projectId, language, mode)
@@ -39,16 +43,6 @@ export class UnifiedApplicator {
   ): Promise<ApplicationResult> {
     // Normalize the function call
     const normalized = this.normalize(functionCall);
-
-    // Validate the function call
-    const validation = validateFunctionCall(normalized.functionName, normalized.arguments);
-    if (!validation.valid) {
-      return {
-        success: false,
-        message: 'Validation failed',
-        error: validation.errors?.join(', ') ?? 'Unknown validation error',
-      };
-    }
 
     // Get the handler
     const handler = this.getHandler(normalized.functionName);
@@ -64,7 +58,6 @@ export class UnifiedApplicator {
     const handlerContext: HandlerContext = {
       ...context,
       store: this.store,
-      translationService: this.translationService,
     };
 
     // Execute the handler

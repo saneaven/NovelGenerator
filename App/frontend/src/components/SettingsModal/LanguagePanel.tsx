@@ -147,7 +147,7 @@ const LanguagePanel: React.FC<LanguagePanelProps> = ({
         <ul>
           <li>Main language affects AI model responses and system prompts</li>
           <li>Sub languages are used for translation features</li>
-          <li>The default sub language (marked with radio) is used for quick-translate in chat</li>
+          <li>The default sub language (marked with radio) is used for quick-translate in agent</li>
           <li>You can add multiple sub languages for multilingual projects</li>
         </ul>
       </div>

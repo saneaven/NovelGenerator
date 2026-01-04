@@ -12,17 +12,12 @@ import { create } from 'zustand';
  * All manuscript (content) data is managed by unifiedObjectStore.
  */
 
-export type StoryTabType = 'basicInfo' | 'characters' | 'organizations' | 'locations' | 'lorebook' | 'outline';
-
 interface NovelEditorUIState {
   // Outline selection per project
   selectedOutlineByProject: Record<string, string | undefined>;
 
   // Chapter selection per project
   selectedChapterByProject: Record<string, string | undefined>;
-
-  // UI visibility per project (sidebar visibility is now in sidebarStore)
-  chatVisibleByProject: Record<string, boolean>;
 
   // Modal states (global - one at a time)
   isAIEditModalOpen: boolean;
@@ -34,24 +29,20 @@ interface NovelEditorUIState {
   isSavingByProject: Record<string, boolean>;
   hasUnsavedChangesByProject: Record<string, boolean>;
 
-  // Display preferences per project (displayLanguage moved to settingsStore)
-  activeStoryTabByProject: Record<string, StoryTabType>;
 }
 
 interface NovelEditorActions {
   // Outline selection
   selectOutline: (projectId: string, outlineId: string) => void;
   getSelectedOutlineId: (projectId: string) => string | undefined;
+  syncOutlineFromStorage: (projectId: string) => void;
   clearSelectedOutline: (projectId: string) => void;
 
   // Chapter selection
   selectChapter: (projectId: string, chapterId: string) => void;
   getSelectedChapterId: (projectId: string) => string | undefined;
+  syncChapterFromStorage: (projectId: string) => void;
   clearSelectedChapter: (projectId: string) => void;
-
-  // UI visibility (sidebar visibility is now in sidebarStore)
-  setChatVisible: (projectId: string, visible: boolean) => void;
-  isChatVisible: (projectId: string) => boolean;
 
   // Modal states
   setAIEditModalOpen: (open: boolean) => void;
@@ -66,10 +57,6 @@ interface NovelEditorActions {
   setHasUnsavedChanges: (projectId: string, hasChanges: boolean) => void;
   getHasUnsavedChanges: (projectId: string) => boolean;
 
-  // Display preferences (displayLanguage moved to settingsStore)
-  setActiveStoryTab: (projectId: string, tab: StoryTabType) => void;
-  getActiveStoryTab: (projectId: string) => StoryTabType;
-
   // Reset project state
   resetProjectState: (projectId: string) => void;
 }
@@ -79,14 +66,12 @@ type NovelEditorStore = NovelEditorUIState & NovelEditorActions;
 const initialState: NovelEditorUIState = {
   selectedOutlineByProject: {},
   selectedChapterByProject: {},
-  chatVisibleByProject: {},
   isAIEditModalOpen: false,
   isVersionModalOpen: false,
   isSettingsOpen: false,
   editorContentByProject: {},
   isSavingByProject: {},
   hasUnsavedChangesByProject: {},
-  activeStoryTabByProject: {},
 };
 
 export const useNovelEditorStore = create<NovelEditorStore>()((set, get) => ({
@@ -104,8 +89,19 @@ export const useNovelEditorStore = create<NovelEditorStore>()((set, get) => ({
   },
 
   getSelectedOutlineId: (projectId: string) => {
+    // First check state
     const stateOutlineId = get().selectedOutlineByProject[projectId];
     if (stateOutlineId) return stateOutlineId;
+
+    // Fall back to localStorage (read-only, no state update during render)
+    const storedOutlineId = localStorage.getItem(`selectedOutline_${projectId}`);
+    return storedOutlineId || undefined;
+  },
+
+  // Sync localStorage value to state (call this in useEffect, not during render)
+  syncOutlineFromStorage: (projectId: string) => {
+    const stateOutlineId = get().selectedOutlineByProject[projectId];
+    if (stateOutlineId) return; // Already in state
 
     const storedOutlineId = localStorage.getItem(`selectedOutline_${projectId}`);
     if (storedOutlineId) {
@@ -115,10 +111,7 @@ export const useNovelEditorStore = create<NovelEditorStore>()((set, get) => ({
           [projectId]: storedOutlineId,
         },
       }));
-      return storedOutlineId;
     }
-
-    return undefined;
   },
 
   clearSelectedOutline: (projectId: string) => {
@@ -143,8 +136,19 @@ export const useNovelEditorStore = create<NovelEditorStore>()((set, get) => ({
   },
 
   getSelectedChapterId: (projectId: string) => {
+    // First check state
     const stateChapterId = get().selectedChapterByProject[projectId];
     if (stateChapterId) return stateChapterId;
+
+    // Fall back to localStorage (read-only, no state update during render)
+    const storedChapterId = localStorage.getItem(`selectedChapter_${projectId}`);
+    return storedChapterId || undefined;
+  },
+
+  // Sync localStorage value to state (call this in useEffect, not during render)
+  syncChapterFromStorage: (projectId: string) => {
+    const stateChapterId = get().selectedChapterByProject[projectId];
+    if (stateChapterId) return; // Already in state
 
     const storedChapterId = localStorage.getItem(`selectedChapter_${projectId}`);
     if (storedChapterId) {
@@ -154,10 +158,7 @@ export const useNovelEditorStore = create<NovelEditorStore>()((set, get) => ({
           [projectId]: storedChapterId,
         },
       }));
-      return storedChapterId;
     }
-
-    return undefined;
   },
 
   clearSelectedChapter: (projectId: string) => {
@@ -168,23 +169,6 @@ export const useNovelEditorStore = create<NovelEditorStore>()((set, get) => ({
       },
     }));
     localStorage.removeItem(`selectedChapter_${projectId}`);
-  },
-
-  // UI visibility (sidebar visibility is now in sidebarStore)
-  setChatVisible: (projectId: string, visible: boolean) => {
-    set((state) => ({
-      chatVisibleByProject: {
-        ...state.chatVisibleByProject,
-        [projectId]: visible,
-      },
-    }));
-  },
-
-  isChatVisible: (projectId: string) => {
-    const isDesktop = typeof window !== 'undefined' && window.innerWidth > 768;
-    if (isDesktop) return true; // Always show chat on desktop
-    const stored = get().chatVisibleByProject[projectId];
-    return stored ?? false; // Use stored state on mobile, default to hidden
   },
 
   // Modal states
@@ -240,31 +224,15 @@ export const useNovelEditorStore = create<NovelEditorStore>()((set, get) => ({
     return get().hasUnsavedChangesByProject[projectId] ?? false;
   },
 
-  // Display preferences (displayLanguage moved to settingsStore)
-  setActiveStoryTab: (projectId: string, tab: StoryTabType) => {
-    set((state) => ({
-      activeStoryTabByProject: {
-        ...state.activeStoryTabByProject,
-        [projectId]: tab,
-      },
-    }));
-  },
-
-  getActiveStoryTab: (projectId: string) => {
-    return get().activeStoryTabByProject[projectId] ?? 'basicInfo';
-  },
-
   // Reset project state
   resetProjectState: (projectId: string) => {
     set((state) => {
       const newState = { ...state };
       delete newState.selectedOutlineByProject[projectId];
       delete newState.selectedChapterByProject[projectId];
-      delete newState.chatVisibleByProject[projectId];
       delete newState.editorContentByProject[projectId];
       delete newState.isSavingByProject[projectId];
       delete newState.hasUnsavedChangesByProject[projectId];
-      delete newState.activeStoryTabByProject[projectId];
       return newState;
     });
     localStorage.removeItem(`selectedOutline_${projectId}`);

@@ -15,8 +15,16 @@ class ClaudeProvider(BaseProvider):
     def __init__(self, config: Dict):
         super().__init__(config)
         self._client: Optional[AsyncAnthropic] = None
+        self._base_url = (config.get("base_url") or "").strip() or None
         if self.validate_config():
-            self._client = AsyncAnthropic(api_key=self.api_key)
+            self._client = self._build_client()
+
+    def _build_client(self) -> AsyncAnthropic:
+        """Build Anthropic client with optional custom base_url."""
+        kwargs = {"api_key": self.api_key}
+        if self._base_url:
+            kwargs["base_url"] = self._base_url
+        return AsyncAnthropic(**kwargs)
 
     # ------------------------------------------------------------------ #
     # Properties
@@ -38,7 +46,7 @@ class ClaudeProvider(BaseProvider):
 
     def _ensure_client(self) -> AsyncAnthropic:
         if self._client is None:
-            self._client = AsyncAnthropic(api_key=self.api_key)
+            self._client = self._build_client()
         return self._client
 
     # ------------------------------------------------------------------ #
@@ -97,6 +105,21 @@ class ClaudeProvider(BaseProvider):
                 continue
 
             mapped_role = "user" if role == "user" else "assistant"
+
+            # Handle tool_results messages (from frontend after function call application)
+            if role == "tool_results":
+                tool_results = msg.get("tool_results", [])
+                if tool_results:
+                    content_blocks = []
+                    for tr in tool_results:
+                        content_blocks.append({
+                            "type": "tool_result",
+                            "tool_use_id": tr.get("tool_call_id", ""),
+                            "content": tr.get("content", "")
+                        })
+                    # Claude requires tool_result in a user message
+                    anthropic_messages.append({"role": "user", "content": content_blocks})
+                continue
 
             # Handle assistant messages with tool_calls
             if role == "assistant" and tool_calls:
@@ -164,6 +187,7 @@ class ClaudeProvider(BaseProvider):
         provider_preference: Optional[Dict] = None,
         thinking_config: Optional[Dict] = None,
         thinking_mode: Optional[str] = None,
+        custom_api_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
     ) -> AsyncGenerator[bytes, None]:
         if not self.validate_config():

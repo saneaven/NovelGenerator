@@ -4,25 +4,23 @@
  * Handlers for search-replace patch operations:
  * - patch_basic_info
  * - patch_story_object
- * - patch_chapter_outline (legacy)
  * - patch_manuscript
  * - patch_outline / patch_outline_act / patch_outline_chapter
  */
 
-import type { ApplicationResult, PatchRetryContext, StoryObjectSubtype } from '../../types';
-import { getObjectData } from '../../types';
-import type { HandlerContext } from '../types';
+import type { ApplicationResult } from '../../types';
+import { getObjectData, ALL_OBJECT_TYPE_MAP } from '../../types';
+import type { HandlerContext, HandlerOptions } from '../types';
+import { CRUD_OPTIONS } from '../types';
 import type { ObjectType, UnifiedObject } from '../../../types/unifiedObject';
 import type { Replacement } from '../../../types/patchTypes';
 import { applyPatch } from '../../../utils/patchUtils';
 
-/** Maps story object subtype to unified object type */
-const STORY_OBJECT_TYPE_MAP: Record<StoryObjectSubtype, ObjectType> = {
-  character: 'character',
-  location: 'location',
-  organization: 'organization',
-  lorebook: 'lorebook',
-};
+/** Internal structure for tracking patch failures (for error messages only) */
+interface PatchFailure {
+  fieldName: string;
+  error: string;
+}
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -55,17 +53,17 @@ async function ensureObject(
 function buildPatchResult(
   objectId: string,
   objectType: string | undefined,
-  retryContexts: PatchRetryContext[],
+  failures: PatchFailure[],
   totalReplacements: number,
   successMessage: string
 ): ApplicationResult {
-  if (retryContexts.length > 0) {
-    const failureCount = retryContexts.length;
+  if (failures.length > 0) {
+    const failureCount = failures.length;
     const successCount = totalReplacements - failureCount;
     const statusMsg = successCount > 0
       ? `${objectType ?? 'Object'} patch: ${successCount} succeeded, ${failureCount} failed`
       : `${objectType ?? 'Object'} patch: ${failureCount} failed`;
-    const errorDetails = retryContexts.map(ctx => `[${ctx.fieldName}] ${ctx.error}`).join('\n');
+    const errorDetails = failures.map(f => `[${f.fieldName}] ${f.error}`).join('\n');
 
     return {
       success: false,
@@ -73,7 +71,6 @@ function buildPatchResult(
       error: errorDetails,
       objectId,
       objectType,
-      retryContexts,
     };
   }
 
@@ -89,7 +86,8 @@ function buildPatchResult(
  */
 export async function patchBasicInfo(
   args: Record<string, unknown>,
-  context: HandlerContext
+  context: HandlerContext,
+  options: HandlerOptions = CRUD_OPTIONS
 ): Promise<ApplicationResult> {
   const { replacements } = args as { replacements?: Replacement[] };
 
@@ -98,6 +96,7 @@ export async function patchBasicInfo(
   }
 
   const { store, projectId, language } = context;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
 
   const existing = await store.listObjects('basic_info', projectId);
   if (existing.length === 0) {
@@ -106,7 +105,7 @@ export async function patchBasicInfo(
 
   const basic = existing[0];
   const currentData = getObjectData(basic, language);
-  const retryContexts: PatchRetryContext[] = [];
+  const failures: PatchFailure[] = [];
 
   // Apply patches to each field
   const newData: Record<string, string> = {
@@ -122,10 +121,8 @@ export async function patchBasicInfo(
     if (result.success) {
       newData[r.field] = result.value;
     } else {
-      retryContexts.push({
-        objectId: basic.id,
+      failures.push({
         fieldName: r.field,
-        currentValue: newData[r.field],
         error: result.error || 'Patch failed',
       });
     }
@@ -134,40 +131,39 @@ export async function patchBasicInfo(
   await store.updateObject('basic_info', basic.id, {
     data: newData,
     language,
-    create_new_version: true,
-    user_request: 'AI Edit',
+    create_new_version: createNewVersion,
+    user_request: userRequest,
   });
 
-  return buildPatchResult(basic.id, 'basic_info', retryContexts, replacements.length, 'Updated basic info');
+  return buildPatchResult(basic.id, 'basic_info', failures, replacements.length, 'Updated basic info');
 }
 
 /**
- * Patch story object fields using search and replace
+ * Patch story object fields using search and replace.
+ * Also used for translation via patch_object_translation (with ALL_OBJECT_TYPE_MAP).
+ * Note: Validation (id, type, replacements, object existence) is done before this handler runs.
  */
 export async function patchStoryObject(
   args: Record<string, unknown>,
-  context: HandlerContext
+  context: HandlerContext,
+  options: HandlerOptions = CRUD_OPTIONS
 ): Promise<ApplicationResult> {
+  // Args are pre-validated
   const { id, type, replacements } = args as {
-    id?: string;
-    type?: string;
-    replacements?: Replacement[];
+    id: string;
+    type: string;
+    replacements: Replacement[];
   };
 
-  if (!id || !type || !replacements) {
-    return error('Missing required fields for patch_story_object');
-  }
-
-  const objectType = STORY_OBJECT_TYPE_MAP[type as StoryObjectSubtype];
-  if (!objectType) {
-    return error(`Unknown story object type: ${type}`);
-  }
-
+  // Use ALL_OBJECT_TYPE_MAP to support both story objects and outline types (for translation)
+  const objectType = ALL_OBJECT_TYPE_MAP[type];
   const { store, language } = context;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
 
+  // Object should be in cache from validation, but fetch if needed for safety
   const object = await ensureObject(store, objectType, id);
   const currentData = getObjectData(object, language);
-  const retryContexts: PatchRetryContext[] = [];
+  const failures: PatchFailure[] = [];
 
   const newData: Record<string, string> = {
     name: (currentData.name as string) ?? '',
@@ -181,11 +177,8 @@ export async function patchStoryObject(
     if (result.success) {
       newData[r.field] = result.value;
     } else {
-      retryContexts.push({
-        objectId: id,
-        objectType: type,
+      failures.push({
         fieldName: r.field,
-        currentValue: newData[r.field],
         error: result.error || 'Patch failed',
       });
     }
@@ -194,73 +187,11 @@ export async function patchStoryObject(
   await store.updateObject(objectType, id, {
     data: newData,
     language,
-    create_new_version: true,
-    user_request: 'AI Edit',
+    create_new_version: createNewVersion,
+    user_request: userRequest,
   });
 
-  return buildPatchResult(id, type, retryContexts, replacements.length, `Updated ${type}`);
-}
-
-/**
- * Patch chapter outline fields using search and replace
- */
-export async function patchChapterOutline(
-  args: Record<string, unknown>,
-  context: HandlerContext
-): Promise<ApplicationResult> {
-  const { id, replacements, order } = args as {
-    id?: string;
-    replacements?: Replacement[];
-    order?: number;
-  };
-
-  if (!id || !replacements) {
-    return error('Missing required fields for patch_chapter_outline');
-  }
-
-  const { store, language } = context;
-
-  const object = await ensureObject(store, 'chapter', id);
-  const currentData = getObjectData(object, language);
-  const retryContexts: PatchRetryContext[] = [];
-
-  const newData: Record<string, string> = {
-    name: (currentData.name as string) ?? '',
-    description: (currentData.description as string) ?? '',
-  };
-
-  for (const r of replacements) {
-    if (!r.field || !Object.prototype.hasOwnProperty.call(newData, r.field)) continue;
-
-    const result = applyPatch(newData[r.field], [{ old: r.old, new: r.new }]);
-    if (result.success) {
-      newData[r.field] = result.value;
-    } else {
-      retryContexts.push({
-        objectId: id,
-        objectType: 'chapter',
-        fieldName: r.field,
-        currentValue: newData[r.field],
-        error: result.error || 'Patch failed',
-      });
-    }
-  }
-
-  // Build metadata for order change
-  const metadata: Record<string, unknown> = {};
-  if (order !== undefined && typeof order === 'number') {
-    metadata.order = order;
-  }
-
-  await store.updateObject('chapter', id, {
-    data: newData,
-    language,
-    create_new_version: true,
-    user_request: 'AI Edit',
-    ...(Object.keys(metadata).length > 0 && { metadata }),
-  });
-
-  return buildPatchResult(id, 'chapter', retryContexts, replacements.length, 'Updated chapter');
+  return buildPatchResult(id, type, failures, replacements.length, `Updated ${type}`);
 }
 
 /**
@@ -268,7 +199,8 @@ export async function patchChapterOutline(
  */
 export async function patchManuscript(
   args: Record<string, unknown>,
-  context: HandlerContext
+  context: HandlerContext,
+  options: HandlerOptions = CRUD_OPTIONS
 ): Promise<ApplicationResult> {
   const { id, replacements } = args as {
     id?: string;
@@ -280,22 +212,21 @@ export async function patchManuscript(
   }
 
   const { store, language } = context;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
 
   // Ensure manuscript is in cache (fetch from API if needed)
   const manuscript = await ensureObject(store, 'manuscript', id);
 
   const currentData = getObjectData(manuscript, language);
   const currentContent = (currentData.content as string) ?? '';
-  const retryContexts: PatchRetryContext[] = [];
+  const failures: PatchFailure[] = [];
 
   // Apply all replacements to content
   const result = applyPatch(currentContent, replacements);
 
   if (!result.success) {
-    retryContexts.push({
-      objectId: manuscript.id,
+    failures.push({
       fieldName: 'content',
-      currentValue: currentContent,
       error: result.error || 'Patch failed',
     });
   }
@@ -305,11 +236,11 @@ export async function patchManuscript(
   await store.updateObject('manuscript', manuscript.id, {
     data: { content: result.value, wordCount },
     language,
-    create_new_version: true,
-    user_request: 'AI Edit',
+    create_new_version: createNewVersion,
+    user_request: userRequest,
   });
 
-  if (retryContexts.length > 0) {
+  if (failures.length > 0) {
     const successCount = result.successCount ?? 0;
     const failureCount = result.failureCount ?? 0;
     const statusMsg = successCount > 0
@@ -322,7 +253,6 @@ export async function patchManuscript(
       error: result.error,
       objectId: manuscript.id,
       objectType: 'manuscript',
-      retryContexts,
     };
   }
 
@@ -338,7 +268,8 @@ export async function patchManuscript(
  */
 export async function patchOutline(
   args: Record<string, unknown>,
-  context: HandlerContext
+  context: HandlerContext,
+  options: HandlerOptions = CRUD_OPTIONS
 ): Promise<ApplicationResult> {
   const { id, replacements } = args as {
     id?: string;
@@ -350,10 +281,11 @@ export async function patchOutline(
   }
 
   const { store, language } = context;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
 
   const object = await ensureObject(store, 'outline', id);
   const currentData = getObjectData(object, language);
-  const retryContexts: PatchRetryContext[] = [];
+  const failures: PatchFailure[] = [];
 
   const newData: Record<string, string> = {
     name: (currentData.name as string) ?? '',
@@ -367,11 +299,8 @@ export async function patchOutline(
     if (result.success) {
       newData[r.field] = result.value;
     } else {
-      retryContexts.push({
-        objectId: id,
-        objectType: 'outline',
+      failures.push({
         fieldName: r.field,
-        currentValue: newData[r.field],
         error: result.error || 'Patch failed',
       });
     }
@@ -380,11 +309,11 @@ export async function patchOutline(
   await store.updateObject('outline', id, {
     data: newData,
     language,
-    create_new_version: true,
-    user_request: 'AI Edit',
+    create_new_version: createNewVersion,
+    user_request: userRequest,
   });
 
-  return buildPatchResult(id, 'outline', retryContexts, replacements.length, 'Updated outline');
+  return buildPatchResult(id, 'outline', failures, replacements.length, 'Updated outline');
 }
 
 /**
@@ -392,7 +321,8 @@ export async function patchOutline(
  */
 export async function patchOutlineAct(
   args: Record<string, unknown>,
-  context: HandlerContext
+  context: HandlerContext,
+  options: HandlerOptions = CRUD_OPTIONS
 ): Promise<ApplicationResult> {
   const { id, replacements, order } = args as {
     id?: string;
@@ -405,10 +335,11 @@ export async function patchOutlineAct(
   }
 
   const { store, language } = context;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
 
   const object = await ensureObject(store, 'act', id);
   const currentData = getObjectData(object, language);
-  const retryContexts: PatchRetryContext[] = [];
+  const failures: PatchFailure[] = [];
 
   const newData: Record<string, string> = {
     name: (currentData.name as string) ?? '',
@@ -422,11 +353,8 @@ export async function patchOutlineAct(
     if (result.success) {
       newData[r.field] = result.value;
     } else {
-      retryContexts.push({
-        objectId: id,
-        objectType: 'act',
+      failures.push({
         fieldName: r.field,
-        currentValue: newData[r.field],
         error: result.error || 'Patch failed',
       });
     }
@@ -441,12 +369,12 @@ export async function patchOutlineAct(
   await store.updateObject('act', id, {
     data: newData,
     language,
-    create_new_version: true,
-    user_request: 'AI Edit',
+    create_new_version: createNewVersion,
+    user_request: userRequest,
     ...(Object.keys(metadata).length > 0 && { metadata }),
   });
 
-  return buildPatchResult(id, 'act', retryContexts, replacements.length, 'Updated act');
+  return buildPatchResult(id, 'act', failures, replacements.length, 'Updated act');
 }
 
 /**
@@ -454,7 +382,8 @@ export async function patchOutlineAct(
  */
 export async function patchOutlineChapter(
   args: Record<string, unknown>,
-  context: HandlerContext
+  context: HandlerContext,
+  options: HandlerOptions = CRUD_OPTIONS
 ): Promise<ApplicationResult> {
   const { id, replacements, order } = args as {
     id?: string;
@@ -467,10 +396,11 @@ export async function patchOutlineChapter(
   }
 
   const { store, language } = context;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
 
   const object = await ensureObject(store, 'chapter', id);
   const currentData = getObjectData(object, language);
-  const retryContexts: PatchRetryContext[] = [];
+  const failures: PatchFailure[] = [];
 
   const newData: Record<string, string> = {
     name: (currentData.name as string) ?? '',
@@ -484,11 +414,8 @@ export async function patchOutlineChapter(
     if (result.success) {
       newData[r.field] = result.value;
     } else {
-      retryContexts.push({
-        objectId: id,
-        objectType: 'chapter',
+      failures.push({
         fieldName: r.field,
-        currentValue: newData[r.field],
         error: result.error || 'Patch failed',
       });
     }
@@ -503,12 +430,12 @@ export async function patchOutlineChapter(
   await store.updateObject('chapter', id, {
     data: newData,
     language,
-    create_new_version: true,
-    user_request: 'AI Edit',
+    create_new_version: createNewVersion,
+    user_request: userRequest,
     ...(Object.keys(metadata).length > 0 && { metadata }),
   });
 
-  return buildPatchResult(id, 'chapter', retryContexts, replacements.length, 'Updated chapter');
+  return buildPatchResult(id, 'chapter', failures, replacements.length, 'Updated chapter');
 }
 
 // ============================================================================
@@ -519,7 +446,6 @@ export const PATCH_HANDLERS = {
   // Basic handlers
   patch_basic_info: patchBasicInfo,
   patch_story_object: patchStoryObject,
-  patch_chapter_outline: patchChapterOutline,
   patch_manuscript: patchManuscript,
   // Outline handlers
   patch_outline: patchOutline,

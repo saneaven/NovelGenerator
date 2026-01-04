@@ -409,7 +409,7 @@
     align-items: center;
     padding: var(--spacing-md) var(--spacing-lg);
     border-top: 1px solid var(--color-border-default);
-    background: var(--color-surface-subtle);
+    background: var(--color-surface-elevated);
     font-size: var(--font-size-sm);
     color: var(--color-text-tertiary);
 }
@@ -421,6 +421,8 @@
 }
 
 .editor-footer-notice {
+    display:flex;
+    gap: var(--spacing-sm);
     font-style: italic;
 }
 
@@ -456,7 +458,7 @@
         display: none;
     }
 
-    /* Chat panel, overlay, and mobile-only styles are in MobileChat.css */
+    /* Agent panel, overlay, and mobile-only styles are in MobileAgent.css */
 
     .chapter-sidebar {
         width: var(--size-sidebar-width-mobile);
@@ -491,9 +493,9 @@
         position: relative;
     }
 
-    .chat-panel {
+    .agent-panel {
         position: static;
-        width: var(--size-chat-panel);
+        width: var(--size-agent-panel);
         height: auto;
         z-index: auto;
         transform: none;
@@ -503,7 +505,7 @@
         flex-direction: column;
     }
 
-    .chat-panel.hidden {
+    .agent-panel.hidden {
         width: 0;
         overflow: hidden;
     }

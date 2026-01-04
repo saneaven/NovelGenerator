@@ -7,7 +7,6 @@
     flex-direction: column;
     height: 100%;
     width: 100%;
-    background: var(--color-surface-base);
     border: none;
     border-radius: 0;
     overflow: hidden;
@@ -286,7 +285,7 @@
 .editor-content-wrapper {
     flex: 1;
     overflow-y: auto;
-    padding: var(--spacing-lg);
+    padding: var(--spacing-lg) var(--spacing-6xl);
 }
 
 .tiptap-editor-content {
@@ -296,6 +295,7 @@
     font-size: var(--font-size-lg);
     line-height: 1.8;
     color: var(--color-text-primary);
+    background: var(--color-surface-base);
 }
 
 .tiptap-editor-content p {
@@ -461,7 +461,7 @@
     }
 
     .editor-content-wrapper {
-        padding: var(--spacing-md);
+        padding: var(--spacing-lg);
     }
     
     .editor-content-wrapper::after {

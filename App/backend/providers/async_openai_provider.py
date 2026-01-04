@@ -65,6 +65,7 @@ class AsyncOpenAIProvider(BaseProvider):
         max_tokens: Optional[int],
         provider_preference: Optional[Dict],
         thinking_config: Optional[Dict],
+        custom_api_format: Optional[str] = None,
     ) -> Dict[str, object]:
         is_gpt5 = self._is_gpt5_model(model)
 
@@ -114,6 +115,29 @@ class AsyncOpenAIProvider(BaseProvider):
 
     def _additional_request_kwargs(self) -> Dict[str, object]:
         return {}
+
+    def _convert_messages(self, messages: List[Dict]) -> List[Dict]:
+        """Convert messages to OpenAI Chat Completions format.
+
+        Handles tool_results messages by converting to role: "tool" messages.
+        """
+        converted: List[Dict] = []
+        for msg in messages:
+            role = msg.get("role")
+
+            if role == "tool_results":
+                # OpenAI: separate message per tool result with role "tool"
+                tool_results = msg.get("tool_results", [])
+                for tr in tool_results:
+                    converted.append({
+                        "role": "tool",
+                        "tool_call_id": tr.get("tool_call_id", ""),
+                        "content": tr.get("content", "")
+                    })
+            else:
+                converted.append(msg)
+
+        return converted
 
     # ----- Streaming hooks ------------------------------------------------------------
     def _mutate_chunk(
@@ -212,6 +236,7 @@ class AsyncOpenAIProvider(BaseProvider):
         provider_preference: Optional[Dict] = None,
         thinking_config: Optional[Dict] = None,
         thinking_mode: Optional[str] = None,
+        custom_api_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
     ) -> AsyncGenerator[bytes, None]:
         if not self.validate_config():
@@ -219,8 +244,12 @@ class AsyncOpenAIProvider(BaseProvider):
             return
 
         client = self._ensure_client()
+
+        # Convert messages (handles tool_results -> role: "tool" conversion)
+        converted_messages = self._convert_messages(messages)
+
         request_kwargs = self._prepare_request_kwargs(
-            messages,
+            converted_messages,
             model,
             temperature,
             functions,
@@ -228,6 +257,7 @@ class AsyncOpenAIProvider(BaseProvider):
             max_tokens,
             provider_preference,
             thinking_config,
+            custom_api_format,
         )
 
         # Check if prefill has unclosed <thinking> tag - parser should start inside thinking block

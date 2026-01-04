@@ -5,8 +5,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import type { ObjectType, ManuscriptObject, ChapterObject } from '../types/unifiedObject';
 import type { FunctionCallMetadata } from '../llm/requestTypes';
 import { LLMTask, LLMTaskMode, LLMTaskManager, type LLMTaskModeType, type EditAssistantStoryObjectPromptContext, type EditAssistantManuscriptPromptContext } from '../llm';
-import { useLLMTaskStore } from '../store/llmTaskStore';
-import { convertNativeOutputToFunctionCalls } from '../functionCall';
+import { convertNativeOutputToFunctionCalls, processFunctionCallsForSession } from '../functionCall';
 import { Expand, Collapse } from './icons';
 import { ObjectPicker } from './ObjectPicker';
 import { TextButton } from './TextButton';
@@ -261,8 +260,12 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
               return;
             }
 
-            // Store function calls for confirmation in notification modal
-            useLLMTaskStore.getState().setPendingConfirmation(task.sessionId, functionCalls);
+            // Process function calls and store in EditCardStore for confirmation
+            await processFunctionCallsForSession(functionCalls, {
+              projectId,
+              language: mainLanguage,
+              sessionId: task.sessionId,
+            });
           } catch (err) {
             task.error(err instanceof Error ? err.message : 'An unknown error occurred.');
           }
@@ -374,7 +377,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       size="large"
       title={getTitle()}
       className="ai-edit-modal"
-      footer={<div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)' }}>{renderFooter()}</div>}
+      footer={renderFooter()}
     >
       {renderContent()}
     </BaseModal>

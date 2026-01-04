@@ -1,0 +1,347 @@
+/* ========================================
+   AGENT INPUT STYLES
+   Modern, Clean Input Design
+   ======================================== */
+
+/* ===== Input Container ===== */
+.agent-input-container {
+  border-top: 1px solid var(--color-border-default);
+  padding: var(--spacing-md) var(--spacing-xl) var(--spacing-xl) var(--spacing-xl);
+  background: var(--color-surface-elevated);
+  flex-shrink: 0;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
+  position: relative;
+  z-index: 2;
+}
+
+/* ===== Agent Controls ===== */
+.agent-controls {
+  margin-bottom: var(--spacing-md);
+  padding: 0;
+  background: var(--color-surface-subtle);
+  border-radius: var(--border-radius-lg);
+  border: 1px solid var(--color-border-default);
+  display: flex;
+  flex-direction: column;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+  overflow: hidden;
+}
+
+.agent-controls:hover {
+  border-color: var(--color-border-medium);
+  box-shadow: var(--shadow-xs);
+}
+
+/* Agent Controls Header */
+.agent-controls-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) var(--spacing-lg);
+  cursor: pointer;
+  background: var(--color-surface-subtle);
+  transition: background var(--transition-base);
+  user-select: none;
+}
+
+.agent-controls-header:hover {
+  background: var(--color-surface-base);
+}
+
+.agent-controls-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.agent-controls-toggle {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  padding: var(--spacing-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-base);
+  pointer-events: none;
+}
+
+.agent-controls-toggle:hover {
+  color: var(--color-brand-accent);
+  transform: scale(1.1);
+}
+
+/* Agent Controls Content */
+.agent-controls-content {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.3s ease-out;
+}
+
+.agent-controls.collapsed .agent-controls-content {
+  grid-template-rows: 0fr;
+}
+
+.agent-controls-content-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.agent-controls-content-body {
+  padding: 0 var(--spacing-lg) var(--spacing-lg) var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+/* Collapsed State */
+.agent-controls.collapsed {
+  background: var(--color-surface-base);
+  margin-bottom: var(--spacing-sm);
+  border: 1px solid transparent;
+}
+
+.agent-controls.collapsed:hover {
+  border-color: var(--color-border-default);
+}
+
+.agent-controls.collapsed .agent-controls-header {
+  padding: var(--spacing-xs) var(--spacing-md);
+}
+
+.agent-controls.collapsed .agent-controls-title {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  opacity: 0.8;
+}
+
+.agent-controls.collapsed .agent-controls-toggle {
+  font-size: var(--font-size-xs);
+  opacity: 0.6;
+}
+
+
+/* ===== Agent Form ===== */
+.agent-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.input-group {
+  display: flex;
+  gap: var(--spacing-md);
+  align-items: flex-end;
+}
+
+.agent-input {
+  flex: 1;
+  border: 2px solid var(--color-border-default);
+  border-radius: var(--border-radius-xl);
+  padding: var(--spacing-lg) var(--spacing-xl);
+  font-size: var(--font-size-base);
+  font-family: inherit;
+  line-height: var(--line-height-normal);
+  resize: none;
+  min-height: 3rem;
+  max-height: 10rem;
+  background: var(--color-surface-base);
+  color: var(--color-text-primary);
+  transition: all var(--transition-base);
+  outline: none;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.agent-input:focus {
+  border-color: var(--color-brand-accent);
+  background: var(--color-surface-base);
+  box-shadow: var(--shadow-focus);
+}
+
+.agent-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.agent-input:disabled {
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+  border-color: var(--color-border-default);
+  opacity: var(--opacity-disabled);
+}
+
+
+/* ===== Agent Submit Button (Send/Stop) ===== */
+.agent-submit-btn {
+  min-width: 3.5rem;
+  height: 3.5rem;
+  border-radius: var(--border-radius-lg);
+  font-size: var(--font-size-sm);
+  box-shadow: var(--shadow-md);
+  flex-shrink: 0;
+}
+
+.agent-submit-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.agent-submit-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--shadow-md);
+}
+
+/* ===== Mobile Responsive ===== */
+@media (max-width: 768px) {
+  .agent-input-container {
+    padding: var(--spacing-sm) var(--spacing-lg) var(--spacing-lg) var(--spacing-lg);
+  }
+
+  .agent-controls {
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .agent-controls-header {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  .agent-controls-title {
+    font-size: var(--font-size-xs);
+  }
+
+  .agent-controls-content {
+    padding: 0 var(--spacing-md) var(--spacing-md) var(--spacing-md);
+    gap: var(--spacing-sm);
+  }
+
+  .agent-controls.collapsed {
+    margin-bottom: var(--spacing-xs);
+  }
+
+  .agent-controls.collapsed .agent-controls-header {
+    padding: 6px var(--spacing-sm);
+  }
+
+  .agent-controls.collapsed .agent-controls-title {
+    font-size: 10px;
+  }
+
+  .agent-controls.collapsed .agent-controls-toggle {
+    font-size: 10px;
+  }
+
+  .input-group {
+    gap: var(--spacing-sm);
+  }
+
+  .agent-input {
+    padding: var(--spacing-md) var(--spacing-lg);
+    font-size: var(--font-size-sm);
+    min-height: 2.5rem;
+    max-height: 8rem;
+    border-radius: var(--border-radius-lg);
+  }
+
+  .agent-submit-btn {
+    min-width: 2.75rem;
+    height: 2.75rem;
+    font-size: var(--font-size-xs);
+    border-radius: var(--border-radius-md);
+  }
+}
+
+/* ===== Tablet Styles ===== */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .agent-input-container {
+    padding: var(--spacing-md) var(--spacing-lg) var(--spacing-lg) var(--spacing-lg);
+  }
+
+  .agent-input {
+    padding: var(--spacing-md) var(--spacing-lg);
+    font-size: var(--font-size-sm);
+  }
+
+  .agent-submit-btn {
+    min-width: 3rem;
+    height: 3rem;
+  }
+}
+
+/* ===== Large Desktop ===== */
+/* @media (min-width: 1440px) {
+  .agent-input-container {
+    padding: var(--spacing-lg) var(--spacing-2xl) var(--spacing-2xl) var(--spacing-2xl);
+  }
+
+  .agent-controls {
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .agent-controls-header {
+    padding: var(--spacing-lg) var(--spacing-xl);
+  }
+
+  .agent-controls-content {
+    padding: 0 var(--spacing-xl) var(--spacing-xl) var(--spacing-xl);
+    gap: var(--spacing-lg);
+  }
+
+  .agent-controls.collapsed {
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .agent-controls.collapsed .agent-controls-header {
+    padding: var(--spacing-xs) var(--spacing-lg);
+  }
+
+  .agent-controls.collapsed .agent-controls-title {
+    font-size: var(--font-size-xs);
+  }
+
+  .agent-controls.collapsed .agent-controls-toggle {
+    font-size: var(--font-size-xs);
+  }
+
+  .input-group {
+    gap: var(--spacing-lg);
+  }
+
+  .agent-input {
+    padding: var(--spacing-lg) var(--spacing-xl);
+    font-size: var(--font-size-lg);
+    min-height: 3.5rem;
+    max-height: 12rem;
+  }
+
+  .send-button,
+  .stop-button {
+    min-width: 4rem;
+    height: 4rem;
+    font-size: var(--font-size-base);
+  }
+} */
+
+/* ===== Focus State Animation ===== */
+@keyframes focusPulse {
+  0% {
+    box-shadow: var(--shadow-focus);
+  }
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.agent-input:focus {
+  animation: focusPulse 1.5s ease-out;
+}

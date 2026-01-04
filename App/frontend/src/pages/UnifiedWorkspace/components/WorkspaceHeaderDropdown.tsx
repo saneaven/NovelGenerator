@@ -11,9 +11,9 @@ interface SubPageConfig {
 }
 
 const SUB_PAGES: SubPageConfig[] = [
-  { id: 'story-object', label: 'Story Objects', icon: <Workspace size="sm" /> },
-  { id: 'outline-manager', label: 'Outline Manager', icon: <Clipboard size="sm" /> },
-  { id: 'novel-editor', label: 'Novel Editor', icon: <Document size="sm" /> },
+  { id: 'story-object', label: 'Story Objects', icon: <Workspace size="md" /> },
+  { id: 'outline-manager', label: 'Outline Manager', icon: <Clipboard size="md" /> },
+  { id: 'novel-editor', label: 'Novel Editor', icon: <Document size="md" /> },
 ];
 
 interface WorkspaceHeaderDropdownProps {

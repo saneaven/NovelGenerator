@@ -97,6 +97,17 @@ class OpenAIResponsesProvider(BaseProvider):
             if role == "system":
                 role = "developer"
 
+            # Handle tool_results messages
+            if role == "tool_results":
+                tool_results = msg.get("tool_results", [])
+                for tr in tool_results:
+                    result.append({
+                        "type": "function_call_output",
+                        "call_id": tr.get("tool_call_id", ""),
+                        "output": tr.get("content", "")
+                    })
+                continue
+
             # Handle assistant messages with tool_calls
             if role == "assistant" and tool_calls:
                 content_items = []
@@ -168,6 +179,7 @@ class OpenAIResponsesProvider(BaseProvider):
         provider_preference: Optional[Dict] = None,
         thinking_config: Optional[Dict] = None,
         thinking_mode: Optional[str] = None,
+        custom_api_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
     ) -> AsyncGenerator[bytes, None]:
         """

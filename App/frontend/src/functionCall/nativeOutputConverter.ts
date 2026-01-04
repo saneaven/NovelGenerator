@@ -39,7 +39,7 @@ export function convertNativeOutputToFunctionCalls(
       function_name: item.function,
       arguments: JSON.stringify(item),
       id: `native-${index}`,
-      isApplied: false,
+      status: 'pending',
     };
   });
 }

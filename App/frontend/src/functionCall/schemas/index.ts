@@ -14,6 +14,17 @@ export {
   isPatchFunction,
   STORY_OBJECT_EDIT_FUNCTIONS,
   MANUSCRIPT_EDIT_FUNCTIONS,
+  OUTLINE_EDIT_FUNCTIONS,
+  // Agent functions
+  AGENT_FUNCTIONS,
+  AGENT_FUNCTION_NAMES,
+  getFunctionsForSet,
+  type FunctionSetName,
+  // Legacy types
+  type FunctionCallSchema,
+  type FunctionCallResult,
+  type FunctionCallMessage,
+  type FunctionResultMessage,
 } from './schemaRegistry';
 
 export {

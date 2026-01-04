@@ -5,14 +5,14 @@ import { IconButton } from '../IconButton';
 import './MobileFooter.css';
 
 export interface MobileFooterProps {
-  isChatVisible: boolean;
-  onChatToggle: () => void;
+  isAgentVisible: boolean;
+  onAgentToggle: () => void;
   onSettingsClick: () => void;
 }
 
 const MobileFooter: React.FC<MobileFooterProps> = ({
-  isChatVisible,
-  onChatToggle,
+  isAgentVisible,
+  onAgentToggle,
   onSettingsClick,
 }) => {
   return (
@@ -25,10 +25,10 @@ const MobileFooter: React.FC<MobileFooterProps> = ({
       />
 
       <button
-        className={`footer-chat-toggle-btn ${isChatVisible ? 'active' : ''}`}
-        onClick={onChatToggle}
+        className={`footer-agent-toggle-btn ${isAgentVisible ? 'active' : ''}`}
+        onClick={onAgentToggle}
       >
-        Chat
+        Agent
       </button>
 
       <NotificationButton position="mobile" className="footer-notification-btn" />

@@ -3,23 +3,15 @@
  *
  * Handlers for create and delete operations:
  * - create_story_object / delete_story_object
- * - create_chapter / delete_chapter (legacy)
  * - create_outline / delete_outline
  * - create_outline_act / delete_outline_act
  * - create_outline_chapter / delete_outline_chapter
  */
 
 import type { ApplicationResult, StoryObjectSubtype } from '../../types';
+import { STORY_OBJECT_TYPE_MAP } from '../../types';
 import type { HandlerContext } from '../types';
-import type { ObjectType, UnifiedObject } from '../../../types/unifiedObject';
-
-/** Maps story object subtype to unified object type */
-const STORY_OBJECT_TYPE_MAP: Record<StoryObjectSubtype, ObjectType> = {
-  character: 'character',
-  location: 'location',
-  organization: 'organization',
-  lorebook: 'lorebook',
-};
+import type { UnifiedObject } from '../../../types/unifiedObject';
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -85,59 +77,6 @@ export async function deleteStoryObject(
 
   await context.store.deleteObject(objectType, id);
   return ok(`Deleted ${type}`, { id, type });
-}
-
-/**
- * Create a chapter within an act
- */
-export async function createChapter(
-  args: Record<string, unknown>,
-  context: HandlerContext
-): Promise<ApplicationResult> {
-  const { actId, name, description } = args as {
-    actId?: string;
-    name?: string;
-    description?: string;
-  };
-
-  if (!actId || !name || !description) {
-    return error('Missing required fields for create_chapter');
-  }
-
-  const { store, projectId, language } = context;
-
-  // Calculate order within the act
-  const chapters = await store.listObjects('chapter', projectId);
-  const existingInAct = chapters.filter((ch: UnifiedObject) => ch.metadata?.act_id === actId);
-  const order = existingInAct.length;
-
-  await store.createObject(
-    'chapter',
-    projectId,
-    { name, description },
-    language,
-    { act_id: actId, order },
-    'AI Edit'
-  );
-
-  return ok(`Created chapter: ${name}`);
-}
-
-/**
- * Delete a chapter by ID
- */
-export async function deleteChapter(
-  args: Record<string, unknown>,
-  context: HandlerContext
-): Promise<ApplicationResult> {
-  const { id } = args as { id?: string };
-
-  if (!id) {
-    return error('Missing id for delete_chapter');
-  }
-
-  await context.store.deleteObject('chapter', id);
-  return ok('Deleted chapter', { id });
 }
 
 // ============================================================================
@@ -301,9 +240,6 @@ export const CRUD_HANDLERS = {
   // Story objects
   create_story_object: createStoryObject,
   delete_story_object: deleteStoryObject,
-  // Legacy chapter (for backward compatibility)
-  create_chapter: createChapter,
-  delete_chapter: deleteChapter,
   // Outline system
   create_outline: createOutline,
   delete_outline: deleteOutline,

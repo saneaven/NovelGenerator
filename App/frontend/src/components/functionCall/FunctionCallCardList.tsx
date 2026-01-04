@@ -40,12 +40,12 @@ export const FunctionCallCardList: React.FC<FunctionCallCardListProps> = ({
 
       {!isStreaming &&
         cardsWithPreviews.map(({ card, previews }) => {
-          const hasValidationError = !!card.validationError;
-          const hasApplyError = !!card.applyError;
-          const hasError = hasValidationError || hasApplyError;
+          const fcStatus = card.functionCall?.status ?? 'pending';
+          const hasError = fcStatus === 'failed';
+          const errorMessage = card.functionCall?.reason;
 
           if (isConfirmed) {
-            const status = card.isRejected ? 'rejected' : card.applyError ? 'failed' : 'applied';
+            const status = fcStatus === 'rejected' ? 'rejected' : fcStatus === 'failed' ? 'failed' : 'applied';
 
             return (
               <ConfirmedOperationItem
@@ -53,12 +53,12 @@ export const FunctionCallCardList: React.FC<FunctionCallCardListProps> = ({
                 title={card.title}
                 previews={previews}
                 status={status}
-                errorMessage={card.applyError}
+                errorMessage={errorMessage}
               />
             );
           }
 
-          const isSelected = hasValidationError
+          const isSelected = fcStatus === 'failed' && card.functionCall?.failureType === 'validation'
             ? false
             : selections[card.id] ?? true;
 
@@ -71,7 +71,7 @@ export const FunctionCallCardList: React.FC<FunctionCallCardListProps> = ({
               isSelected={isSelected}
               onToggle={() => onToggle(card.id)}
               hasError={hasError}
-              errorMessage={card.validationError || card.applyError}
+              errorMessage={errorMessage}
               isDisabled={isConfirming}
             />
           );

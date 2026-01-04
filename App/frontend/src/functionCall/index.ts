@@ -16,10 +16,11 @@ export type {
   TargetType,
   StoryObjectSubtype,
   ExecutionMode,
+  FunctionCallStatus,
+  FunctionCallFailureType,
   RawFunctionCall,
   NormalizedFunctionCall,
   FunctionCallWithStatus,
-  PatchRetryContext,
   ApplicationResult,
   ExecutionContext,
   FunctionHandler,
@@ -45,6 +46,17 @@ export {
   isPatchFunction,
   STORY_OBJECT_EDIT_FUNCTIONS,
   MANUSCRIPT_EDIT_FUNCTIONS,
+  OUTLINE_EDIT_FUNCTIONS,
+  // Agent functions
+  AGENT_FUNCTIONS,
+  AGENT_FUNCTION_NAMES,
+  getFunctionsForSet,
+  type FunctionSetName,
+  // Legacy types for LLM module compatibility
+  type FunctionCallSchema,
+  type FunctionCallResult,
+  type FunctionCallMessage,
+  type FunctionResultMessage,
 } from './schemas';
 
 // Normalizer
@@ -64,8 +76,6 @@ export { convertNativeOutputToFunctionCalls } from './nativeOutputConverter';
 export { UnifiedApplicator, createApplicator } from './applicator';
 export type {
   StoreActions,
-  TranslationActions,
-  TranslationInput,
   ApplicatorConfig,
   HandlerContext,
   Handler,
@@ -74,21 +84,13 @@ export type {
 // Applicator utilities
 export { createStoreActions, createApplicatorWithStore, useApplicator } from './applicator';
 
-// Retry utilities
-export {
-  getPatchRetryConfig,
-  buildRetryPrompt,
-  buildForceReplaceSystemPrompt,
-  shouldRetry,
-  summarizePatchFailures,
-} from './applicator';
-export type { PatchRetryConfig, PatchRetryResult } from './applicator';
-
 // EditCards
 export {
   useEditCardStore,
   useCardsForMessage,
   useIsMessageConfirmed,
+  useCardsForSession,
+  useIsSessionConfirmed,
   getEditType,
   getFunctionTitle,
   getFunctionDescription,
@@ -96,4 +98,23 @@ export {
   generateFunctionSummary,
   buildEditCard,
   buildEditCards,
+  applyValidationResults,
 } from './editCards';
+
+// Hooks
+export {
+  useFunctionCallHandlers,
+  processFunctionCallsForSession,
+  batchConfirmSession,
+  type ProcessFunctionCallsConfig,
+} from './hooks';
+export type {
+  UseFunctionCallHandlersConfig,
+  UseFunctionCallHandlersReturn,
+  FunctionCallHandlersState,
+  FunctionCallHandlersActions,
+} from './hooks';
+
+// Validation
+export { validate, validateOne } from './validation';
+export type { ValidationResult as AsyncValidationResult, Validator } from './validation';

@@ -25,7 +25,6 @@ export const CardFooter: React.FC<CardFooterProps> = ({
   onConfirm,
 }) => {
   const allSelected = selectedCount === totalCount;
-  const noneSelected = selectedCount === 0;
 
   return (
     <div className="fc-footer">
@@ -61,7 +60,7 @@ export const CardFooter: React.FC<CardFooterProps> = ({
             type="button"
             className="fc-btn fc-btn--ghost"
             onClick={onDeselectAll}
-            disabled={noneSelected || isConfirming || isApplyDisabled}
+            disabled={isConfirming || isApplyDisabled}
           >
             Deselect All
           </button>
@@ -70,7 +69,7 @@ export const CardFooter: React.FC<CardFooterProps> = ({
           type="button"
           className="fc-btn fc-btn--primary"
           onClick={onConfirm}
-          disabled={isConfirming || isApplyDisabled || noneSelected}
+          disabled={isConfirming || isApplyDisabled}
         >
           {isConfirming ? 'Applying...' : 'Confirm'}
         </button>

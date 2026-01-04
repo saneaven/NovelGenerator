@@ -34,7 +34,7 @@ function getObjectDataForLanguage(obj: UnifiedObject, language: string): Record<
  */
 function getTypesForMode(mode: ObjectPickerMode, excludeTypes: ObjectType[]): ObjectType[] {
   // Story objects includes outline hierarchy (outline > act > chapter)
-  const storyTypes: ObjectType[] = ['basic_info', 'character', 'organization', 'location', 'lorebook', 'outline', 'act', 'chapter'];
+  const storyObjectTypes: ObjectType[] = ['basic_info', 'character', 'organization', 'location', 'lorebook', 'outline', 'act', 'chapter'];
 
   // Chapter hierarchy types for manuscript mode display
   const chapterHierarchyTypes: ObjectType[] = ['outline', 'act', 'chapter', 'manuscript'];
@@ -42,14 +42,14 @@ function getTypesForMode(mode: ObjectPickerMode, excludeTypes: ObjectType[]): Ob
   let types: ObjectType[];
   switch (mode) {
     case 'story-objects':
-      types = storyTypes;
+      types = storyObjectTypes;
       break;
     case 'manuscript':
       types = chapterHierarchyTypes;
       break;
     case 'all':
-      // All unique types (storyTypes already has outline/act/chapter, just add manuscript)
-      types = [...storyTypes, 'manuscript'];
+      // All unique types (storyObjectTypes already has outline/act/chapter, just add manuscript)
+      types = [...storyObjectTypes, 'manuscript'];
       break;
   }
 

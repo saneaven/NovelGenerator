@@ -624,12 +624,12 @@ const PATCH_MANUSCRIPT_TRANSLATION: FunctionSchema = {
 };
 
 // ============================================================================
-// CHAT MESSAGE TRANSLATION
+// AGENT MESSAGE TRANSLATION
 // ============================================================================
 
-const SET_CHAT_MESSAGE_TRANSLATION: FunctionSchema = {
-  name: 'set_chat_message_translation',
-  description: 'Translate a chat message from one language to another.',
+const SET_AGENT_MESSAGE_TRANSLATION: FunctionSchema = {
+  name: 'set_agent_message_translation',
+  description: 'Translate an agent message from one language to another.',
   category: 'translation',
   target: 'basic_info', // Special case - not really a target but needed for typing
   parameters: {
@@ -704,8 +704,8 @@ class SchemaRegistryClass {
     this.register(PATCH_CHAPTER_OUTLINE_TRANSLATION);
     this.register(PATCH_MANUSCRIPT_TRANSLATION);
 
-    // Chat message translation
-    this.register(SET_CHAT_MESSAGE_TRANSLATION);
+    // Agent message translation
+    this.register(SET_AGENT_MESSAGE_TRANSLATION);
   }
 
   register(schema: FunctionSchema): void {
@@ -825,7 +825,7 @@ export const TRANSLATION_FUNCTION_NAMES = new Set([
   'patch_object_translation',
   'patch_chapter_outline_translation',
   'patch_manuscript_translation',
-  'set_chat_message_translation',
+  'set_agent_message_translation',
 ]);
 
 /** Check if a function name is a translation function */
@@ -887,3 +887,129 @@ export const OUTLINE_EDIT_FUNCTIONS = [
   PATCH_OUTLINE_ACT,
   PATCH_OUTLINE_CHAPTER,
 ].map(s => ({ name: s.name, description: s.description, parameters: s.parameters }));
+
+// ============================================================================
+// AGENT FUNCTIONS - Full set for Agent mode
+// ============================================================================
+
+/** All functions available to Agent mode (CRUD + Replace + Patch, no Translation) */
+export const AGENT_FUNCTIONS = [
+  // CRUD - Story Objects
+  CREATE_STORY_OBJECT,
+  DELETE_STORY_OBJECT,
+  CREATE_CHAPTER,
+  DELETE_CHAPTER,
+  // CRUD - Outline
+  CREATE_OUTLINE,
+  DELETE_OUTLINE,
+  CREATE_OUTLINE_ACT,
+  DELETE_OUTLINE_ACT,
+  CREATE_OUTLINE_CHAPTER,
+  DELETE_OUTLINE_CHAPTER,
+  // Replace
+  REPLACE_BASIC_INFO,
+  REPLACE_STORY_OBJECT,
+  REPLACE_CHAPTER_OUTLINE,
+  REPLACE_MANUSCRIPT,
+  REPLACE_OUTLINE,
+  REPLACE_OUTLINE_ACT,
+  REPLACE_OUTLINE_CHAPTER,
+  // Patch
+  PATCH_BASIC_INFO,
+  PATCH_STORY_OBJECT,
+  PATCH_CHAPTER_OUTLINE,
+  PATCH_MANUSCRIPT,
+  PATCH_OUTLINE,
+  PATCH_OUTLINE_ACT,
+  PATCH_OUTLINE_CHAPTER,
+].map(s => ({ name: s.name, description: s.description, parameters: s.parameters }));
+
+/** All agent function names for validation */
+export const AGENT_FUNCTION_NAMES = AGENT_FUNCTIONS.map(f => f.name);
+
+// ============================================================================
+// FUNCTION SETS - Dynamic retrieval by set name
+// ============================================================================
+
+/** Available function set names */
+export type FunctionSetName = 'agent' | 'manuscript' | 'storyObject' | 'outline';
+
+/** Function set definitions */
+const FUNCTION_SET_SCHEMAS: Record<FunctionSetName, FunctionSchema[]> = {
+  agent: [
+    CREATE_STORY_OBJECT, DELETE_STORY_OBJECT, CREATE_CHAPTER, DELETE_CHAPTER,
+    CREATE_OUTLINE, DELETE_OUTLINE, CREATE_OUTLINE_ACT, DELETE_OUTLINE_ACT,
+    CREATE_OUTLINE_CHAPTER, DELETE_OUTLINE_CHAPTER,
+    REPLACE_BASIC_INFO, REPLACE_STORY_OBJECT, REPLACE_CHAPTER_OUTLINE, REPLACE_MANUSCRIPT,
+    REPLACE_OUTLINE, REPLACE_OUTLINE_ACT, REPLACE_OUTLINE_CHAPTER,
+    PATCH_BASIC_INFO, PATCH_STORY_OBJECT, PATCH_CHAPTER_OUTLINE, PATCH_MANUSCRIPT,
+    PATCH_OUTLINE, PATCH_OUTLINE_ACT, PATCH_OUTLINE_CHAPTER,
+  ],
+  manuscript: [REPLACE_MANUSCRIPT, PATCH_MANUSCRIPT],
+  storyObject: [
+    CREATE_STORY_OBJECT, DELETE_STORY_OBJECT, CREATE_CHAPTER, DELETE_CHAPTER,
+    REPLACE_BASIC_INFO, REPLACE_STORY_OBJECT, REPLACE_CHAPTER_OUTLINE,
+    PATCH_BASIC_INFO, PATCH_STORY_OBJECT, PATCH_CHAPTER_OUTLINE,
+  ],
+  outline: [
+    CREATE_OUTLINE, DELETE_OUTLINE, CREATE_OUTLINE_ACT, DELETE_OUTLINE_ACT,
+    CREATE_OUTLINE_CHAPTER, DELETE_OUTLINE_CHAPTER,
+    REPLACE_OUTLINE, REPLACE_OUTLINE_ACT, REPLACE_OUTLINE_CHAPTER,
+    PATCH_OUTLINE, PATCH_OUTLINE_ACT, PATCH_OUTLINE_CHAPTER,
+  ],
+};
+
+/**
+ * Get LLM-compatible function schemas for a specific set
+ */
+export function getFunctionsForSet(setName: FunctionSetName): Array<{ name: string; description: string; parameters: unknown }> {
+  const schemas = FUNCTION_SET_SCHEMAS[setName];
+  return schemas.map(s => ({ name: s.name, description: s.description, parameters: s.parameters }));
+}
+
+// ============================================================================
+// LEGACY TYPES (for backward compatibility with llm module)
+// ============================================================================
+
+/** LLM-compatible function call schema (simplified, no metadata) */
+export interface FunctionCallSchema {
+  name: string;
+  description: string;
+  parameters: {
+    type: 'object';
+    properties: Record<string, unknown>;
+    required: string[];
+  };
+}
+
+/** Function call from LLM response */
+export interface FunctionCall {
+  name: string;
+  arguments: string; // JSON string
+}
+
+/** Result of executing a function call */
+export interface FunctionCallResult {
+  success: boolean;
+  message: string;
+  error?: string;
+  data?: unknown;
+}
+
+/** Message containing a function call (assistant role) */
+export interface FunctionCallMessage {
+  id: string;
+  role: 'assistant';
+  content: string | null;
+  function_call?: FunctionCall;
+  timestamp: Date;
+}
+
+/** Message containing function result */
+export interface FunctionResultMessage {
+  id: string;
+  role: 'function';
+  name: string;
+  content: string;
+  timestamp: Date;
+}

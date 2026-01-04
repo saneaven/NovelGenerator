@@ -1,0 +1,94 @@
+/* ========================================
+   MOBILE AGENT - Shared Mobile Agent Styles
+   Consistent behavior across all pages
+   ======================================== */
+
+@media (max-width: 768px) {
+    /* ===== Agent Panel Mobile (Bottom Sheet) ===== */
+    .agent-panel {
+        position: fixed;
+        top: auto;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 98dvh;
+        z-index: var(--z-mobile-agent);
+        transform: translateY(100%);
+        transition: transform var(--transition-get-in);
+        border-radius: 16px 16px 0 0;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+        overflow: hidden; /* Clip content to rounded corners */
+    }
+
+    .agent-panel.visible {
+        transition: transform var(--transition-get-in);
+        transform: translateY(0);
+    }
+
+    .agent-panel.hidden {
+        transition: transform var(--transition-get-out);
+        transform: translateY(100%);
+        display: flex; /* Override utilities.css .hidden { display: none } */
+    }
+
+    /* ===== Agent Overlay ===== */
+    .agent-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: calc(var(--z-mobile-agent) - 1);
+        opacity: 0;
+        animation: overlayFadeIn 400ms ease-out forwards;
+    }
+
+    .agent-overlay.closing {
+        animation: overlayFadeOut 200ms ease-out forwards;
+    }
+
+    /* ===== Sidebar Overlay ===== */
+    .sidebar-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: calc(var(--z-modal) + 1);
+        animation: fadeIn var(--duration-normal, 0.2s) ease-out;
+    }
+
+    /* ===== Mobile-only visibility ===== */
+    .mobile-only {
+        display: block;
+    }
+}
+
+/* ===== Desktop: Hide mobile-only elements ===== */
+@media (min-width: 769px) {
+    .mobile-only {
+        display: none;
+    }
+}
+
+/* ===== Fade In Animation ===== */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes overlayFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes overlayFadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}

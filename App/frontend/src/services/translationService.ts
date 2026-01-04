@@ -3,7 +3,7 @@
  *
  * Handles all translation operations using LLMTask.
  * - Story objects: set_* and patch_* translation functions
- * - Chat messages: dedicated chat translation flow via set_chat_message_translation
+ * - Agent messages: dedicated agent message translation flow via set_agent_message_translation
  */
 
 import type { MutableRefObject } from 'react';
@@ -12,7 +12,7 @@ import {
   SET_FUNCTION_NAMES,
   PATCH_FUNCTION_NAMES,
   ALL_TRANSLATION_FUNCTION_NAMES,
-  SET_CHAT_MESSAGE_TRANSLATION,
+  SET_AGENT_MESSAGE_TRANSLATION,
   FUNCTION_TO_OBJECT_TYPE,
 } from '../llm/schemas/translationFunctions';
 import { useSettingsStore } from '../store/settingsStore';
@@ -22,12 +22,15 @@ import type { FunctionCallMetadata, FunctionCallProgress, ContentPart } from '..
 import { translationService as translationAPI } from '../api/unifiedObjectService';
 import { parseJsonOutput, extractRawContent } from '../utils/nativeOutputParser';
 import { LLMTask, LLMTaskMode, type StoryTranslationPromptContext, type ChatTranslationPromptContext } from '../llm';
-import { UnifiedApplicator, createStoreActions, type TranslationActions, type ApplicationResult } from '../functionCall';
+import { UnifiedApplicator, createStoreActions, type ApplicationResult } from '../functionCall';
 import { useLLMTaskStore } from '../store/llmTaskStore';
 import { convertApplicationResults, type ExtendedApplicationResult } from '../llm/retry';
 
 /**
  * Helper to apply translation function calls using UnifiedApplicator
+ *
+ * Note: Translation handlers use `context.language` as the target language
+ * and `create_new_version: false` to update without creating new versions.
  */
 async function applyTranslationFunctionCalls(
   functionCalls: FunctionCallMetadata[],
@@ -36,23 +39,8 @@ async function applyTranslationFunctionCalls(
   const store = useUnifiedObjectStore.getState();
   const storeActions = createStoreActions(store);
 
-  const translationActions: TranslationActions = {
-    addTranslations: async (translations) => {
-      const result = await translationAPI.addTranslations(translations);
-      // Update store with returned objects
-      if (result.objects?.length) {
-        result.objects.forEach((obj: UnifiedObject) => {
-          store.objects[obj.id] = obj;
-        });
-        useUnifiedObjectStore.setState({ objects: { ...store.objects } });
-      }
-      return result;
-    },
-  };
-
   const applicator = new UnifiedApplicator({
     store: storeActions,
-    translationService: translationActions,
   });
 
   const results: Array<ApplicationResult & { objectId?: string }> = [];
@@ -61,7 +49,7 @@ async function applyTranslationFunctionCalls(
     const args = typeof fc.arguments === 'string' ? JSON.parse(fc.arguments) : fc.arguments;
     const result = await applicator.apply(
       { id: fc.id, function_name: fc.function_name, arguments: args },
-      { projectId: '', language: targetLanguage, targetLanguage }
+      { projectId: '', language: targetLanguage }
     );
     results.push({ ...result, objectId: args?.id });
   }
@@ -316,7 +304,7 @@ export class TranslationService {
             id: crypto.randomUUID(),
             function_name: functionName,
             arguments: item,
-            isApplied: false,
+            status: 'pending',
           };
           const results = await applyTranslationFunctionCalls([mockFunctionCall], targetLanguage);
           if (results[0]?.success && results[0]?.data) {
@@ -605,9 +593,9 @@ export class TranslationService {
                 reject(new Error('AI did not generate any translation'));
               }
             } else {
-              const translationCall = result.functionCalls.find(fc => fc.function_name === SET_CHAT_MESSAGE_TRANSLATION.name);
+              const translationCall = result.functionCalls.find(fc => fc.function_name === SET_AGENT_MESSAGE_TRANSLATION.name);
               if (!translationCall) {
-                reject(new Error('AI did not call set_chat_message_translation function'));
+                reject(new Error('AI did not call set_agent_message_translation function'));
                 return;
               }
 

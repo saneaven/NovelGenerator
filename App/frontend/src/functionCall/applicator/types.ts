@@ -40,27 +40,6 @@ export interface StoreActions {
 }
 
 // ============================================================================
-// TRANSLATION SERVICE INTERFACE
-// ============================================================================
-
-/**
- * Translation input for batch translation operations
- */
-export interface TranslationInput {
-  objectType: ObjectType;
-  objectId: string;
-  language: string;
-  data: Record<string, unknown>;
-}
-
-/**
- * Translation service interface for dependency injection
- */
-export interface TranslationActions {
-  addTranslations: (translations: TranslationInput[]) => Promise<{ objects: UnifiedObject[] }>;
-}
-
-// ============================================================================
 // APPLICATOR CONFIGURATION
 // ============================================================================
 
@@ -70,8 +49,6 @@ export interface TranslationActions {
 export interface ApplicatorConfig {
   /** Store actions for object operations */
   store: StoreActions;
-  /** Optional translation service for translation mode */
-  translationService?: TranslationActions;
 }
 
 // ============================================================================
@@ -81,11 +58,36 @@ export interface ApplicatorConfig {
 /**
  * Context passed to each handler
  * Combines execution context with dependencies
+ *
+ * Note: For translation handlers, pass the target language as `language`.
+ * Translation uses `create_new_version: false` while CRUD uses `true`.
  */
 export interface HandlerContext extends ExecutionContext {
   store: StoreActions;
-  translationService?: TranslationActions;
 }
+
+/**
+ * Options for handler functions to control versioning and request type.
+ * Used to share logic between CRUD and Translation handlers.
+ */
+export interface HandlerOptions {
+  /** Whether to create a new version (CRUD: true, Translation: false) */
+  createNewVersion?: boolean;
+  /** User request label for the operation */
+  userRequest?: string;
+}
+
+/** Default options for CRUD operations */
+export const CRUD_OPTIONS: HandlerOptions = {
+  createNewVersion: true,
+  userRequest: 'AI Edit',
+};
+
+/** Default options for Translation operations */
+export const TRANSLATION_OPTIONS: HandlerOptions = {
+  createNewVersion: false,
+  userRequest: 'AI Translation',
+};
 
 /**
  * Handler function signature with context

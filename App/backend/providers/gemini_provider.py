@@ -150,6 +150,20 @@ class GeminiProvider(BaseProvider):
                     system_instruction = types.Content(role="user", parts=[types.Part.from_text(text=text)])
                     continue
 
+            # Handle tool_results messages
+            if role == "tool_results":
+                tool_results = msg.get("tool_results", [])
+                if tool_results:
+                    parts = []
+                    for tr in tool_results:
+                        # Gemini uses from_function_response with name and response dict
+                        parts.append(types.Part.from_function_response(
+                            name=tr.get("function_name", ""),
+                            response={"result": tr.get("content", "")}
+                        ))
+                    contents.append(types.Content(role="tool", parts=parts))
+                continue
+
             mapped_role = "user" if role == "user" else "model"
 
             # Handle assistant messages with tool_calls
@@ -198,6 +212,7 @@ class GeminiProvider(BaseProvider):
         provider_preference: Optional[Dict] = None,
         thinking_config: Optional[Dict] = None,
         thinking_mode: Optional[str] = None,
+        custom_api_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
     ) -> AsyncGenerator[bytes, None]:
         if not self.validate_config():

@@ -48,25 +48,11 @@ export interface PatchResult {
   success: boolean;
   value: string;
   error?: string;
-  /** True if patch failed and retry with replace function should be attempted */
-  needsRetry?: boolean;
   /** Individual results for each replacement */
   replacementResults?: ReplacementResult[];
   /** Count of successful replacements */
   successCount?: number;
   /** Count of failed replacements */
   failureCount?: number;
-}
-
-/**
- * Context for retry attempts when patch fails.
- * Used to prompt AI to use replace_* function instead.
- */
-export interface PatchRetryContext {
-  objectId: string;
-  objectType?: string;
-  fieldName: string;
-  currentValue: string;
-  error: string;
 }
 

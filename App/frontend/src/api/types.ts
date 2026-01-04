@@ -218,21 +218,21 @@ export interface VersionListResponse {
 }
 
 // ============================================================================
-// CHATS
+// AGENTS
 // ============================================================================
 
-export interface ChatCreate {
+export interface AgentCreate {
   name: string;
 }
 
-export interface ChatUpdate {
+export interface AgentUpdate {
   name?: string;
 }
 
-export interface ChatResponse extends BaseMetadata {
+export interface AgentResponse extends BaseMetadata {
   project_id: string;
   name: string;
-  messages: ChatMessageResponse[];
+  messages: AgentMessageResponse[];
 }
 
 export interface ContentPart {
@@ -240,7 +240,7 @@ export interface ContentPart {
   text: string;
 }
 
-export interface ChatMessageCreate {
+export interface AgentMessageCreate {
   role: string;
   content_parts?: ContentPart[];
   language?: string;
@@ -248,16 +248,16 @@ export interface ChatMessageCreate {
   thinking_details?: any[];
 }
 
-export interface ChatMessageUpdate {
+export interface AgentMessageUpdate {
   content_parts?: ContentPart[];
   language?: string;
   function_calls?: any;
   thinking_details?: any[];
 }
 
-export interface ChatMessageResponse {
+export interface AgentMessageResponse {
   id: string;
-  chat_id: string;
+  agent_id: string;
   role: string;
   data: LanguageData<{
     contentParts: ContentPart[];

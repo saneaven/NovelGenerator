@@ -11,8 +11,6 @@ interface AdvancedPanelProps {
     onRetryConfigChange: (config: RetryConfig) => void;
     nativeOutputMode: boolean;
     onNativeOutputModeChange: (enabled: boolean) => void;
-    patchAutoRetry: boolean;
-    onPatchAutoRetryChange: (enabled: boolean) => void;
     functionCallHistoryLimit: number;
     onFunctionCallHistoryLimitChange: (limit: number) => void;
 }
@@ -22,8 +20,6 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
     onRetryConfigChange,
     nativeOutputMode,
     onNativeOutputModeChange,
-    patchAutoRetry,
-    onPatchAutoRetryChange,
     functionCallHistoryLimit,
     onFunctionCallHistoryLimitChange,
 }) => {
@@ -202,25 +198,8 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                         icon={<Document size="sm" />}
                     />
                     <p className="field-hint">
-                        When enabled, AI features (except chat) will output raw text instead of using function calls.
+                        When enabled, AI features (except agent) will output raw text instead of using function calls.
                         This can improve compatibility with some models but may reduce structured output reliability.
-                    </p>
-                </div>
-            </div>
-
-            {/* Patch Auto-Retry */}
-            <div className="advanced-settings-card">
-                <h3>Patch Auto-Retry</h3>
-                <div className="form-field">
-                    <ToggleSwitch
-                        checked={patchAutoRetry}
-                        onChange={onPatchAutoRetryChange}
-                        label="Auto-retry with replace mode on patch failure"
-                        icon={<Refresh size="sm" />}
-                    />
-                    <p className="field-hint">
-                        When enabled, if a unified diff patch fails to apply during AI editing, the system will
-                        automatically retry the request forcing the AI to use full replacement mode instead.
                     </p>
                 </div>
             </div>
@@ -229,7 +208,7 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
             <div className="advanced-settings-card">
                 <h3>Function Call History</h3>
                 <div className="form-field">
-                    <label>Include function calls in chat history</label>
+                    <label>Include function calls in agent history</label>
                     <div className="slider-container">
                         <input
                             type="range"

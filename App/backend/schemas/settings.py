@@ -16,7 +16,7 @@ class ProviderType(str, Enum):
 
 class AIFunctionType(str, Enum):
     """AI function types"""
-    CHAT = "chat"
+    AGENT = "agent"
     TRANSLATION = "translation"
     EDIT_ASSISTANT = "editAssistant"
     IMAGE_PROMPT = "imagePrompt"
@@ -36,7 +36,6 @@ class ThinkingConfig(BaseModel):
     claudeBudgetTokens: Optional[int] = None
     geminiThinkingLevel: Optional[str] = None  # 'minimal' | 'low' | 'medium' | 'high'
     geminiBudgetTokens: Optional[int] = None
-    customThinkingFormat: Optional[str] = None  # 'openai' | 'claude' | 'gemini' | 'openrouter'
 
 
 class AdvancedFunctionSettings(BaseModel):
@@ -44,6 +43,7 @@ class AdvancedFunctionSettings(BaseModel):
     enablePrefill: bool = False
     thinkingMode: str = "off"  # 'off' | 'model' | 'custom'
     thinkingConfig: Optional[ThinkingConfig] = Field(default_factory=lambda: ThinkingConfig())
+    customApiFormat: str = "openai"  # 'openai' | 'claude' | 'gemini' | 'openrouter' - for custom provider
 
 
 class FunctionAIConfig(BaseModel):

@@ -50,7 +50,7 @@ class UserSettings(Base):
 
     # Function-based configuration (provider, model, temperature, advanced settings per function)
     function_configs = Column(JSONB, nullable=False, server_default="""{
-        "chat": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
+        "agent": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
         "translation": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.2, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
         "editAssistant": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "advanced": {"enablePrefill": true, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
         "imagePrompt": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}}
@@ -131,7 +131,7 @@ class PromptVersion(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
 
     # Prompt identification
-    function_type = Column(String(50), nullable=False)  # 'chat', 'translation', 'editAssistant', 'imagePrompt'
+    function_type = Column(String(50), nullable=False)  # 'agent', 'translation', 'editAssistant', 'imagePrompt'
     prompt_category = Column(String(50), nullable=False)  # 'systemPrompt', 'prefill', 'userMessageTag'
     prompt_name = Column(String(50), nullable=True)  # 'workspace', 'novelEditor', etc (nullable for single prompts)
 
@@ -209,7 +209,7 @@ class Project(Base):
     locations = relationship("Location", back_populates="project", cascade="all, delete-orphan")
     lorebook_entries = relationship("LorebookEntry", back_populates="project", cascade="all, delete-orphan")
     outlines = relationship("Outline", back_populates="project", cascade="all, delete-orphan", order_by="Outline.order")
-    chats = relationship("Chat", back_populates="project", cascade="all, delete-orphan")
+    agents = relationship("Agent", back_populates="project", cascade="all, delete-orphan")
     assets = relationship("Asset", back_populates="project", cascade="all, delete-orphan")
 
 
@@ -425,12 +425,12 @@ class ManuscriptVersion(Base):
 
 
 # ============================================================================
-# CHAT SYSTEM
+# AGENT SYSTEM
 # ============================================================================
 
-class Chat(Base):
-    """Chat conversations per project"""
-    __tablename__ = 'chats'
+class Agent(Base):
+    """Agent conversations per project"""
+    __tablename__ = 'agents'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
@@ -441,16 +441,16 @@ class Chat(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
-    project = relationship("Project", back_populates="chats")
-    messages = relationship("ChatMessage", back_populates="chat", cascade="all, delete-orphan", order_by="ChatMessage.created_at")
+    project = relationship("Project", back_populates="agents")
+    messages = relationship("AgentMessage", back_populates="agent", cascade="all, delete-orphan", order_by="AgentMessage.created_at")
 
 
-class ChatMessage(Base):
-    """Chat messages with multilingual support and function calls"""
-    __tablename__ = 'chat_messages'
+class AgentMessage(Base):
+    """Agent messages with multilingual support and function calls"""
+    __tablename__ = 'agent_messages'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    chat_id = Column(UUID(as_uuid=True), ForeignKey('chats.id', ondelete='CASCADE'), nullable=False, index=True)
+    agent_id = Column(UUID(as_uuid=True), ForeignKey('agents.id', ondelete='CASCADE'), nullable=False, index=True)
 
     role = Column(String(50), nullable=False)
 
@@ -464,7 +464,7 @@ class ChatMessage(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships
-    chat = relationship("Chat", back_populates="messages")
+    agent = relationship("Agent", back_populates="messages")
 
 
 # ============================================================================

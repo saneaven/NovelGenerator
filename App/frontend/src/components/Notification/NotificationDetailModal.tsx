@@ -1,7 +1,6 @@
 import React, { useMemo, useCallback, useState } from 'react';
 import { BaseModal } from '../BaseModal';
 import { useLLMTaskStore, type LLMTaskSessionState } from '../../store/llmTaskStore';
-import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import ThinkingDisplay from '../ThinkingDisplay';
 import NotificationProgressBar from './NotificationProgressBar';
@@ -11,10 +10,9 @@ import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
 import { FunctionCallCard } from '../functionCall';
 import {
-  buildEditCards,
-  type EditCard,
-  UnifiedApplicator,
-  createStoreActions,
+  useCardsForSession,
+  useEditCardStore,
+  batchConfirmSession,
 } from '../../functionCall';
 import { convertApplicationResults, type ExtendedApplicationResult } from '../../llm/retry';
 import type { CategorizedFunctionCallResult } from '../../llm/retry/types';
@@ -296,7 +294,6 @@ const NotificationDetailModal: React.FC<NotificationDetailModalProps> = ({
   const setSuccess = useLLMTaskStore((state) => state.setSuccess);
   const setCancelled = useLLMTaskStore((state) => state.setCancelled);
   const setFunctionCallResults = useLLMTaskStore((state) => state.setFunctionCallResults);
-  const updateSession = useLLMTaskStore((state) => state.updateSession);
 
   const mainLanguage = useSettingsStore((state) => state.settings.mainLanguage);
   const projectId = session.retryContext?.modalProps?.projectId;
@@ -304,85 +301,85 @@ const NotificationDetailModal: React.FC<NotificationDetailModalProps> = ({
   const [errorExpanded, setErrorExpanded] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
 
-  // Build EditCards from pendingFunctionCalls for pending_confirmation state
-  const pendingEditCards: EditCard[] = useMemo(() => {
-    if (session.status !== 'pending_confirmation' || !session.pendingFunctionCalls) {
-      return [];
-    }
-    return buildEditCards(session.pendingFunctionCalls);
-  }, [session.status, session.pendingFunctionCalls]);
+  // Get EditCards from EditCardStore for pending_confirmation state
+  const pendingEditCards = useCardsForSession(session.id);
 
   // Handle confirmation of function calls
   const handleConfirmFunctionCalls = useCallback(async (selections: Record<string, boolean>) => {
-    if (!session.pendingFunctionCalls || !projectId) return;
+    if (!projectId || pendingEditCards.length === 0) return;
 
     setIsApplying(true);
     try {
-      // Create applicator
-      const store = useUnifiedObjectStore.getState();
-      const storeActions = createStoreActions(store);
-      const applicator = new UnifiedApplicator({ store: storeActions });
+      // Use batchConfirmSession to apply all selected cards
+      await batchConfirmSession(session.id, selections, {
+        projectId,
+        language: mainLanguage,
+      });
 
-      // Apply selected function calls
-      const selectedCalls = session.pendingFunctionCalls.filter(
-        (fc) => selections[fc.id] !== false
-      );
-      const rejectedCalls = session.pendingFunctionCalls.filter(
-        (fc) => selections[fc.id] === false
-      );
+      // Get the updated cards to build aggregated results for retry support
+      const updatedCards = useEditCardStore.getState().getCardsForSession(session.id);
 
-      const results: ExtendedApplicationResult[] = [];
+      // Build aggregated results from cards
+      const results: ExtendedApplicationResult[] = updatedCards.map(card => {
+        if (card.functionCall?.status === 'accepted') {
+          return {
+            success: true,
+            message: card.description || 'Applied successfully',
+          } as ExtendedApplicationResult;
+        } else if (card.functionCall?.status === 'rejected') {
+          return {
+            success: false,
+            message: 'User rejected',
+            error: 'User rejected this function call',
+          } as ExtendedApplicationResult;
+        } else {
+          return {
+            success: false,
+            message: card.description || 'Failed',
+            error: card.functionCall?.reason || 'Unknown error',
+          } as ExtendedApplicationResult;
+        }
+      });
 
-      // Apply selected calls
-      for (const fc of selectedCalls) {
-        const result = await applicator.apply(
-          { function_name: fc.function_name, arguments: fc.arguments, id: fc.id },
-          { projectId, language: mainLanguage }
-        );
-        results.push(result as ExtendedApplicationResult);
-      }
+      // Convert to function call format for aggregation
+      const functionCalls = updatedCards.map(card => ({
+        id: card.id,
+        function_name: card.functionCall?.functionName || '',
+        arguments: card.functionCall?.arguments || {},
+        status: card.functionCall?.status || 'pending' as const,
+      }));
 
-      // Add rejected calls as user_rejected results
-      for (const fc of rejectedCalls) {
-        results.push({
-          success: false,
-          message: 'User rejected',
-          error: 'User rejected this function call',
-        } as ExtendedApplicationResult);
-      }
-
-      // Convert results to aggregated format (all function calls with all results)
-      const allCalls = [...selectedCalls, ...rejectedCalls];
+      // Convert results to aggregated format
       const aggregated = convertApplicationResults(
         session.id,
-        allCalls,
+        functionCalls,
         results
       );
 
       // Update session with results
       setFunctionCallResults(session.id, aggregated);
-      updateSession(session.id, { pendingFunctionCalls: undefined });
 
       // Set status based on results
-      if (aggregated.failureCount > 0) {
-        // Keep as success but with failures (retry button will show)
-        setSuccess(session.id);
-      } else {
-        setSuccess(session.id);
-      }
+      setSuccess(session.id);
     } catch (error) {
       console.error('Failed to apply function calls:', error);
       // Keep pending_confirmation state on error
     } finally {
       setIsApplying(false);
     }
-  }, [session.pendingFunctionCalls, session.id, projectId, mainLanguage, setFunctionCallResults, updateSession, setSuccess]);
+  }, [pendingEditCards, session.id, projectId, mainLanguage, setFunctionCallResults, setSuccess]);
 
   // Handle reject all
   const handleRejectAll = useCallback(() => {
+    // Reject all cards in the session
+    const store = useEditCardStore.getState();
+    const cards = store.getCardsForSession(session.id);
+    cards.forEach(card => {
+      store.rejectSessionCard(session.id, card.id, 'User rejected all');
+    });
+    store.confirmSession(session.id);
     setCancelled(session.id);
-    updateSession(session.id, { pendingFunctionCalls: undefined });
-  }, [session.id, setCancelled, updateSession]);
+  }, [session.id, setCancelled]);
 
   const handleCancel = useCallback(() => {
     cancelTask(session.id);

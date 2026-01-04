@@ -6,6 +6,8 @@ export {
   useEditCardStore,
   useCardsForMessage,
   useIsMessageConfirmed,
+  useCardsForSession,
+  useIsSessionConfirmed,
 } from './EditCardStore';
 
 export {
@@ -16,4 +18,7 @@ export {
   generateFunctionSummary,
   buildEditCard,
   buildEditCards,
+  applyValidationResults,
 } from './EditCardBuilder';
+
+export type { BuildEditCardOptions, BuildEditCardsOptions } from './EditCardBuilder';

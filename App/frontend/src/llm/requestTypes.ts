@@ -1,5 +1,6 @@
+import type { FunctionCallStatus, FunctionCallFailureType, ApplicationResult } from '../functionCall/types';
 
-export type Role = "system" | "user" | "assistant" | "function";
+export type Role = "system" | "user" | "assistant" | "function" | "tool_results";
 
 export type ContentPartType = "content" | "thinking" | "error";
 
@@ -22,12 +23,23 @@ export interface ToolCall {
   };
 }
 
+/**
+ * Tool result block for sending function call results back to the LLM.
+ * Used in multi-turn conversations where the assistant made tool_calls.
+ */
+export interface ToolResultBlock {
+  tool_call_id: string;
+  function_name: string;  // Required for Gemini provider
+  content: string;
+}
+
 export interface ConversationBlock {
   role: Role;
   contentParts: ContentPart[];
   function_call?: FunctionCall;
   name?: string; // for function role messages
   tool_calls?: ToolCall[]; // for assistant messages with function calls
+  tool_results?: ToolResultBlock[]; // for tool_results role messages
 }
 
 // Thinking detail from OpenRouter (model-native thinking)
@@ -49,12 +61,16 @@ export interface FunctionCallMetadata {
   id: string;
   function_name: string;
   arguments: any;
-  result?: any;
-  isApplied: boolean;
-  isRejected?: boolean; // True if user explicitly rejected this function call
-  appliedAt?: Date;
-  error?: string;
-  resultMessage?: string; // Human-readable result message
+  /** Current status of the function call */
+  status: FunctionCallStatus;
+  /** Error message (when failed) or user-provided reason (when rejected) */
+  reason?: string;
+  /** Type of failure when status is 'failed' */
+  failureType?: FunctionCallFailureType;
+  /** Result from applying the function call (when accepted) */
+  result?: ApplicationResult;
+  /** Timestamp when the function call was accepted */
+  acceptedAt?: Date;
 }
 
 export type FunctionCallProgressStatus = 'collecting' | 'validating' | 'ready' | 'error';
@@ -113,16 +129,6 @@ export interface FunctionCallProgress {
   operationPreviews?: FunctionCallOperationPreview[];
   error?: string;
   updatedAt: number;
-}
-
-// Helper interface for tracking function call results systematically
-export interface FunctionCallResultSummary {
-  functionCallId: string;
-  functionName: string;
-  success: boolean;
-  isRejected?: boolean; // True if user explicitly rejected this function call
-  resultMessage: string;
-  appliedAt: Date;
 }
 
 export interface ChatMessage extends ConversationBlock {

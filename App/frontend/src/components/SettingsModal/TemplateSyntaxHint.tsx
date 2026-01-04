@@ -15,7 +15,7 @@ const GROUP_LABELS: Record<string, string> = {
     config: 'Config (Settings)',
     project: 'Project Data',
     input: 'Input',
-    chat: 'Chat Mode',
+    agent: 'Agent Mode',
     editAssistant: 'Edit Assistant',
     translation: 'Translation',
     imagePrompt: 'Image Prompt',
@@ -60,7 +60,7 @@ function buildTooltip(desc: string, example: any): string {
 
 function getSchemaKey(functionType: string, name?: string): PromptType | null {
     switch (functionType) {
-        case 'chat': return 'chat';
+        case 'agent': return 'agent';
         case 'translation': return 'translation';
         case 'editAssistant': return 'editAssistant';
         case 'imagePrompt':

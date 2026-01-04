@@ -1,0 +1,133 @@
+/**
+ * Validator Registry
+ *
+ * Maps function names to their validators.
+ * Validators are run in order - first failure stops validation.
+ */
+
+import type { Validator } from './types';
+import {
+  validateTypeMapping,
+  validateRequiredId,
+  validatePatchRequiredFields,
+  validateObjectExists,
+  validatePatchApplicable,
+} from './validators';
+
+// ============================================================================
+// FUNCTION TO VALIDATORS MAPPING
+// ============================================================================
+
+/**
+ * Registry mapping function names to their validators.
+ * Validators are executed in array order; first failure stops the chain.
+ */
+export const FUNCTION_VALIDATORS: Record<string, Validator[]> = {
+  // -------------------------------------------------------------------------
+  // CRUD Operations
+  // -------------------------------------------------------------------------
+  create_story_object: [validateTypeMapping],
+  delete_story_object: [validateTypeMapping, validateRequiredId, validateObjectExists],
+  create_chapter: [],
+  delete_chapter: [validateRequiredId, validateObjectExists],
+  create_outline: [],
+  delete_outline: [validateRequiredId, validateObjectExists],
+  create_outline_act: [],
+  delete_outline_act: [validateRequiredId, validateObjectExists],
+  create_outline_chapter: [],
+  delete_outline_chapter: [validateRequiredId, validateObjectExists],
+
+  // -------------------------------------------------------------------------
+  // Replace Operations
+  // -------------------------------------------------------------------------
+  replace_basic_info: [validateRequiredId, validateObjectExists],
+  replace_story_object: [validateTypeMapping, validateRequiredId, validateObjectExists],
+  replace_chapter_outline: [validateRequiredId, validateObjectExists],
+  replace_manuscript: [validateRequiredId, validateObjectExists],
+  replace_outline: [validateRequiredId, validateObjectExists],
+  replace_outline_act: [validateRequiredId, validateObjectExists],
+  replace_outline_chapter: [validateRequiredId, validateObjectExists],
+
+  // -------------------------------------------------------------------------
+  // Patch Operations
+  // -------------------------------------------------------------------------
+  patch_basic_info: [validatePatchRequiredFields, validateObjectExists, validatePatchApplicable],
+  patch_story_object: [
+    validateTypeMapping,
+    validateRequiredId,
+    validatePatchRequiredFields,
+    validateObjectExists,
+    validatePatchApplicable,
+  ],
+  patch_chapter_outline: [
+    validateRequiredId,
+    validatePatchRequiredFields,
+    validateObjectExists,
+    validatePatchApplicable,
+  ],
+  patch_manuscript: [
+    validateRequiredId,
+    validatePatchRequiredFields,
+    validateObjectExists,
+    validatePatchApplicable,
+  ],
+  patch_outline: [validateRequiredId, validatePatchRequiredFields, validateObjectExists, validatePatchApplicable],
+  patch_outline_act: [
+    validateRequiredId,
+    validatePatchRequiredFields,
+    validateObjectExists,
+    validatePatchApplicable,
+  ],
+  patch_outline_chapter: [
+    validateRequiredId,
+    validatePatchRequiredFields,
+    validateObjectExists,
+    validatePatchApplicable,
+  ],
+
+  // -------------------------------------------------------------------------
+  // Translation Set Operations
+  // -------------------------------------------------------------------------
+  set_basic_info_translation: [validateRequiredId, validateObjectExists],
+  set_object_translation: [validateTypeMapping, validateRequiredId, validateObjectExists],
+  set_chapter_outline_translation: [validateTypeMapping, validateRequiredId, validateObjectExists],
+  set_manuscript_translation: [validateRequiredId, validateObjectExists],
+
+  // -------------------------------------------------------------------------
+  // Translation Patch Operations
+  // -------------------------------------------------------------------------
+  patch_basic_info_translation: [
+    validateRequiredId,
+    validatePatchRequiredFields,
+    validateObjectExists,
+    validatePatchApplicable,
+  ],
+  patch_object_translation: [
+    validateTypeMapping,
+    validateRequiredId,
+    validatePatchRequiredFields,
+    validateObjectExists,
+    validatePatchApplicable,
+  ],
+  patch_chapter_outline_translation: [
+    validateTypeMapping,
+    validateRequiredId,
+    validatePatchRequiredFields,
+    validateObjectExists,
+    validatePatchApplicable,
+  ],
+  patch_manuscript_translation: [
+    validateRequiredId,
+    validatePatchRequiredFields,
+    validateObjectExists,
+    validatePatchApplicable,
+  ],
+};
+
+/**
+ * Get validators for a function name.
+ * Returns empty array if no validators registered.
+ */
+export function getValidators(functionName: string): Validator[] {
+  return FUNCTION_VALIDATORS[functionName] ?? [];
+}

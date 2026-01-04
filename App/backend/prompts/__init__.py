@@ -4,7 +4,7 @@ Default prompt content for the Novel Generator application.
 This module contains all default prompts that are initialized for new users.
 The structure mirrors the frontend prompts structure defined in:
 - App/frontend/src/prompts/defaults.ts
-- App/frontend/src/chat/managers/prompts/
+- App/frontend/src/agent/
 
 Format: {function_type: {category: {name?: content}}}
 """
@@ -36,24 +36,24 @@ def _load_prompt_file(relative_path: str) -> str:
 
 
 # Load all prompts from files
-# Chat - Story Object
-_STORYOBJECT_SYSTEM_PROMPT = _load_prompt_file('chat/storyObject/systemPrompt.md')
-_STORYOBJECT_USER_PROMPT = _load_prompt_file('chat/storyObject/userPrompt.md')
-_STORYOBJECT_NON_LAST_USER_PROMPT = _load_prompt_file('chat/storyObject/nonLastUserPrompt.md')
-_STORYOBJECT_PREFILL = _load_prompt_file('chat/storyObject/prefill.md')
-# Chat - Novel Editor
-_NOVEL_EDITOR_SYSTEM_PROMPT = _load_prompt_file('chat/novelEditor/systemPrompt.md')
-_NOVEL_EDITOR_USER_PROMPT = _load_prompt_file('chat/novelEditor/userPrompt.md')
-_NOVEL_EDITOR_NON_LAST_USER_PROMPT = _load_prompt_file('chat/novelEditor/nonLastUserPrompt.md')
-_NOVEL_EDITOR_PREFILL = _load_prompt_file('chat/novelEditor/prefill.md')
+# Agent - Story Object
+_STORYOBJECT_SYSTEM_PROMPT = _load_prompt_file('agent/storyObject/systemPrompt.md')
+_STORYOBJECT_USER_PROMPT = _load_prompt_file('agent/storyObject/userPrompt.md')
+_STORYOBJECT_NON_LAST_USER_PROMPT = _load_prompt_file('agent/storyObject/nonLastUserPrompt.md')
+_STORYOBJECT_PREFILL = _load_prompt_file('agent/storyObject/prefill.md')
+# Agent - Novel Editor
+_NOVEL_EDITOR_SYSTEM_PROMPT = _load_prompt_file('agent/novelEditor/systemPrompt.md')
+_NOVEL_EDITOR_USER_PROMPT = _load_prompt_file('agent/novelEditor/userPrompt.md')
+_NOVEL_EDITOR_NON_LAST_USER_PROMPT = _load_prompt_file('agent/novelEditor/nonLastUserPrompt.md')
+_NOVEL_EDITOR_PREFILL = _load_prompt_file('agent/novelEditor/prefill.md')
 # Translation - Object
 _TRANSLATION_SYSTEM_PROMPT_OBJECT = _load_prompt_file('translation/object/systemPrompt.md')
 _TRANSLATION_USER_PROMPT_OBJECT = _load_prompt_file('translation/object/userPrompt.md')
 _TRANSLATION_PREFILL_OBJECT = _load_prompt_file('translation/object/prefill.md')
-# Translation - Chat
-_TRANSLATION_SYSTEM_PROMPT_CHAT = _load_prompt_file('translation/chat/systemPrompt.md')
-_TRANSLATION_USER_PROMPT_CHAT = _load_prompt_file('translation/chat/userPrompt.md')
-_TRANSLATION_PREFILL_CHAT = _load_prompt_file('translation/chat/prefill.md')
+# Translation - Agent
+_TRANSLATION_SYSTEM_PROMPT_AGENT = _load_prompt_file('translation/agent/systemPrompt.md')
+_TRANSLATION_USER_PROMPT_AGENT = _load_prompt_file('translation/agent/userPrompt.md')
+_TRANSLATION_PREFILL_AGENT = _load_prompt_file('translation/agent/prefill.md')
 # Edit Assistant - Manuscript
 _EDIT_ASSISTANT_MANUSCRIPT_SYSTEM_PROMPT = _load_prompt_file('editAssistant/manuscript/systemPrompt.md')
 _EDIT_ASSISTANT_MANUSCRIPT_USER_PROMPT = _load_prompt_file('editAssistant/manuscript/userPrompt.md')
@@ -74,7 +74,7 @@ _SCENE_IMAGE_PROMPT_PREFILL = _load_prompt_file('imagePrompt/scene/prefill.md')
 # Default prompts structure
 # Format matches the frontend structure: {function_type: {category: {name?: content}}}
 DEFAULT_PROMPTS = {
-    'chat': {
+    'agent': {
         'systemPrompt': {
             'storyObject': _STORYOBJECT_SYSTEM_PROMPT,
             'novelEditor': _NOVEL_EDITOR_SYSTEM_PROMPT,
@@ -95,15 +95,15 @@ DEFAULT_PROMPTS = {
     'translation': {
         'systemPrompt': {
             'object': _TRANSLATION_SYSTEM_PROMPT_OBJECT,
-            'chat': _TRANSLATION_SYSTEM_PROMPT_CHAT,
+            'agent': _TRANSLATION_SYSTEM_PROMPT_AGENT,
         },
         'userPrompt': {
             'object': _TRANSLATION_USER_PROMPT_OBJECT,
-            'chat': _TRANSLATION_USER_PROMPT_CHAT,
+            'agent': _TRANSLATION_USER_PROMPT_AGENT,
         },
         'prefill': {
             'object': _TRANSLATION_PREFILL_OBJECT,
-            'chat': _TRANSLATION_PREFILL_CHAT,
+            'agent': _TRANSLATION_PREFILL_AGENT,
         },
     },
     'editAssistant': {

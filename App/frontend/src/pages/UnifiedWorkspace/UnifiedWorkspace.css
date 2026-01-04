@@ -63,7 +63,7 @@
 
 /* ===== Overlays ===== */
 .sidebar-overlay,
-.desktop-chat-overlay {
+.desktop-agent-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -78,7 +78,7 @@
   z-index: calc(var(--z-modal) + 1);
 }
 
-.desktop-chat-overlay {
+.desktop-agent-overlay {
   z-index: calc(var(--z-sticky) - 1);
   background: var(--overlay-dark-light);
 }

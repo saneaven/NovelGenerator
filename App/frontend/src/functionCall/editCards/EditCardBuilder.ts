@@ -4,8 +4,15 @@
  * Builds EditCard objects from function calls for UI display.
  */
 
-import type { EditCard, FunctionCallWithStatus, RawFunctionCall, NormalizedFunctionCall } from '../types';
+import type {
+  EditCard,
+  FunctionCallWithStatus,
+  RawFunctionCall,
+  NormalizedFunctionCall,
+  FunctionCallStatus,
+} from '../types';
 import { normalizeFunctionCall, validateFunctionCall } from '../normalizer';
+import type { ValidationResult } from '../validation';
 
 // ============================================================================
 // EDIT TYPES
@@ -130,6 +137,93 @@ const FUNCTION_META: Record<string, FunctionMeta> = {
     },
   },
 
+  // Outline CRUD
+  create_outline: {
+    editType: 'add',
+    title: 'Create Outline',
+    description: 'Create an outline',
+    summary: (args) => args.name as string,
+  },
+  delete_outline: {
+    editType: 'remove',
+    title: 'Delete Outline',
+    description: 'Delete an outline',
+    summary: (args) => args.id as string,
+  },
+  create_outline_act: {
+    editType: 'add',
+    title: 'Create Act',
+    description: 'Create an act',
+    summary: (args) => args.name as string,
+  },
+  delete_outline_act: {
+    editType: 'remove',
+    title: 'Delete Act',
+    description: 'Delete an act',
+    summary: (args) => args.id as string,
+  },
+  create_outline_chapter: {
+    editType: 'add',
+    title: 'Create Chapter',
+    description: 'Create a chapter in outline',
+    summary: (args) => args.name as string,
+  },
+  delete_outline_chapter: {
+    editType: 'remove',
+    title: 'Delete Chapter',
+    description: 'Delete a chapter from outline',
+    summary: (args) => args.id as string,
+  },
+
+  // Outline Replace
+  replace_outline: {
+    editType: 'edit',
+    title: 'Update Outline',
+    description: 'Replace outline fields',
+    summary: (args) => args.name as string || args.id as string,
+  },
+  replace_outline_act: {
+    editType: 'edit',
+    title: 'Update Act',
+    description: 'Replace act fields',
+    summary: (args) => args.name as string || args.id as string,
+  },
+  replace_outline_chapter: {
+    editType: 'edit',
+    title: 'Update Chapter',
+    description: 'Replace chapter fields',
+    summary: (args) => args.name as string || args.id as string,
+  },
+
+  // Outline Patch
+  patch_outline: {
+    editType: 'edit',
+    title: 'Patch Outline',
+    description: 'Search-replace in outline',
+    summary: (args) => {
+      const replacements = args.replacements as unknown[];
+      return `${replacements?.length ?? 0} replacements`;
+    },
+  },
+  patch_outline_act: {
+    editType: 'edit',
+    title: 'Patch Act',
+    description: 'Search-replace in act',
+    summary: (args) => {
+      const replacements = args.replacements as unknown[];
+      return `${replacements?.length ?? 0} replacements`;
+    },
+  },
+  patch_outline_chapter: {
+    editType: 'edit',
+    title: 'Patch Chapter',
+    description: 'Search-replace in chapter',
+    summary: (args) => {
+      const replacements = args.replacements as unknown[];
+      return `${replacements?.length ?? 0} replacements`;
+    },
+  },
+
   // Translation Set
   set_basic_info_translation: {
     editType: 'translate',
@@ -200,11 +294,11 @@ const FUNCTION_META: Record<string, FunctionMeta> = {
     },
   },
 
-  // Chat message translation
-  set_chat_message_translation: {
+  // Agent message translation
+  set_agent_message_translation: {
     editType: 'translate',
     title: 'Translate Message',
-    description: 'Translate chat message',
+    description: 'Translate agent message',
     summary: () => 'message content',
   },
 };
@@ -256,30 +350,58 @@ export function generateFunctionSummary(
 }
 
 /**
+ * Options for building an EditCard
+ */
+export interface BuildEditCardOptions {
+  /** Handler called when user clicks Apply */
+  onApply?: () => void;
+  /** Handler called when user clicks Reject */
+  onReject?: (reason?: string) => void;
+  /** Initial status (defaults to running schema validation) */
+  initialStatus?: FunctionCallStatus;
+  /** Validation result (overrides schema validation) */
+  validationResult?: ValidationResult;
+}
+
+/**
  * Build an EditCard from a function call
  */
 export function buildEditCard(
   functionCall: RawFunctionCall | NormalizedFunctionCall,
-  options?: {
-    onApply?: () => void;
-    onReject?: () => void;
-  }
+  options?: BuildEditCardOptions
 ): EditCard {
   // Normalize if needed
   const normalized = 'functionName' in functionCall
     ? functionCall as NormalizedFunctionCall
     : normalizeFunctionCall(functionCall as RawFunctionCall);
 
-  // Validate
-  const validation = validateFunctionCall(normalized.functionName, normalized.arguments);
+  // Determine status
+  let status: FunctionCallStatus;
+  let reason: string | undefined;
+
+  if (options?.initialStatus) {
+    // Use provided initial status (e.g., 'validating')
+    status = options.initialStatus;
+    reason = undefined;
+  } else if (options?.validationResult) {
+    // Use provided validation result
+    status = options.validationResult.valid ? 'pending' : 'failed';
+    reason = options.validationResult.error;
+  } else {
+    // Fall back to schema validation
+    const validation = validateFunctionCall(normalized.functionName, normalized.arguments);
+    status = validation.valid ? 'pending' : 'failed';
+    reason = validation.valid ? undefined : validation.errors?.join(', ');
+  }
 
   // Build function call with status
   const functionCallWithStatus: FunctionCallWithStatus = {
     id: normalized.id,
     functionName: normalized.functionName,
     arguments: normalized.arguments,
-    isApplied: false,
-    isRejected: false,
+    status,
+    reason,
+    failureType: status === 'failed' ? 'validation' : undefined,
   };
 
   return {
@@ -287,14 +409,25 @@ export function buildEditCard(
     type: getEditType(normalized.functionName),
     title: getFunctionTitle(normalized.functionName),
     description: generateFunctionSummary(normalized.functionName, normalized.arguments),
-    isApplied: false,
-    isRejected: false,
     data: normalized.arguments,
     functionCall: functionCallWithStatus,
     onApply: options?.onApply,
     onReject: options?.onReject,
-    validationError: validation.valid ? undefined : validation.errors?.join(', '),
   };
+}
+
+/**
+ * Options for building multiple EditCards
+ */
+export interface BuildEditCardsOptions {
+  /** Factory for Apply handlers */
+  createApplyHandler?: (functionCall: NormalizedFunctionCall) => () => void;
+  /** Factory for Reject handlers */
+  createRejectHandler?: (functionCall: NormalizedFunctionCall) => () => void;
+  /** Initial status for all cards (e.g., 'validating') */
+  initialStatus?: FunctionCallStatus;
+  /** Validation results map (keyed by function call ID) */
+  validationResults?: Map<string, ValidationResult>;
 }
 
 /**
@@ -302,10 +435,7 @@ export function buildEditCard(
  */
 export function buildEditCards(
   functionCalls: Array<RawFunctionCall | NormalizedFunctionCall>,
-  options?: {
-    createApplyHandler?: (functionCall: NormalizedFunctionCall) => () => void;
-    createRejectHandler?: (functionCall: NormalizedFunctionCall) => () => void;
-  }
+  options?: BuildEditCardsOptions
 ): EditCard[] {
   return functionCalls.map(fc => {
     const normalized = 'functionName' in fc
@@ -315,6 +445,35 @@ export function buildEditCards(
     return buildEditCard(fc, {
       onApply: options?.createApplyHandler?.(normalized),
       onReject: options?.createRejectHandler?.(normalized),
+      initialStatus: options?.initialStatus,
+      validationResult: options?.validationResults?.get(normalized.id),
     });
+  });
+}
+
+/**
+ * Update EditCards with validation results.
+ * Returns new cards with updated status based on validation.
+ */
+export function applyValidationResults(
+  cards: EditCard[],
+  validationResults: Map<string, ValidationResult>
+): EditCard[] {
+  return cards.map(card => {
+    const result = validationResults.get(card.id);
+    if (!result) return card;
+
+    const newStatus: FunctionCallStatus = result.valid ? 'pending' : 'failed';
+    const newReason = result.valid ? undefined : result.error;
+
+    return {
+      ...card,
+      functionCall: {
+        ...card.functionCall,
+        status: newStatus,
+        reason: newReason,
+        failureType: newStatus === 'failed' ? 'validation' : undefined,
+      },
+    };
   });
 }

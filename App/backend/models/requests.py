@@ -32,9 +32,6 @@ class ThinkingConfig(BaseModel):
     gemini_thinking_level: Optional[Literal["minimal", "low", "medium", "high"]] = Field(default=None, alias="geminiThinkingLevel")
     gemini_budget_tokens: Optional[int] = Field(default=None, alias="geminiBudgetTokens")
 
-    # Custom endpoint thinking format
-    custom_thinking_format: Optional[Literal["openai", "claude", "gemini", "openrouter"]] = Field(default=None, alias="customThinkingFormat")
-
 
 class RetryConfig(BaseModel):
     """Retry configuration for error handling"""
@@ -59,10 +56,17 @@ class ToolCall(BaseModel):
     type: Literal["function"] = "function"
     function: ToolCallFunction
 
+class ToolResult(BaseModel):
+    """Result of a tool/function call execution"""
+    tool_call_id: str
+    function_name: str  # Required for Gemini provider
+    content: str
+
 class Message(BaseModel):
-    role: Literal["system", "user", "assistant"]
-    contentParts: List[ContentPart]
+    role: Literal["system", "user", "assistant", "tool_results"]
+    contentParts: List[ContentPart] = []
     tool_calls: Optional[List[ToolCall]] = None
+    tool_results: Optional[List[ToolResult]] = None
 
     def get_content_text(self) -> str:
         """Extract text content from contentParts for LLM providers"""
@@ -70,7 +74,7 @@ class Message(BaseModel):
 
 class ChatCompletionRequest(BaseModel):
     messages: List[Message]
-    model: str = "gpt-4"
+    model: str
     temperature: float = Field(default=0.7, ge=0, le=2)
     functions: Optional[List[Dict]] = None
     tool_choice: Optional[Literal["auto", "required", "none"]] = None
@@ -79,4 +83,5 @@ class ChatCompletionRequest(BaseModel):
     provider_preference: Optional[ProviderPreference] = None
     thinking_mode: Optional[Literal["off", "custom", "model"]] = "off"
     thinking_config: Optional[ThinkingConfig] = None
+    custom_api_format: Optional[Literal["openai", "claude", "gemini", "openrouter"]] = None  # For custom provider
     retry_config: Optional[RetryConfig] = None

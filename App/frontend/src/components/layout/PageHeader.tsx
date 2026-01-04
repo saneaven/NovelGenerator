@@ -9,13 +9,11 @@ import type { SubPageType } from '../../pages/UnifiedWorkspace';
 import './PageHeader.css';
 
 export interface PageHeaderProps {
-  projectId: string;
   projectName: string;
-  pageTitle?: string;           // "Workspace" or "Novel Editor" (optional when using dropdown)
 
-  // Sub-page navigation (unified workspace mode)
-  currentSubPage?: SubPageType;
-  onSubPageChange?: (subPage: SubPageType) => void;
+  // Sub-page navigation
+  currentSubPage: SubPageType;
+  onSubPageChange: (subPage: SubPageType) => void;
 
   // Language
   availableLanguages: string[];
@@ -39,9 +37,7 @@ export interface PageHeaderProps {
 }
 
 const PageHeader: React.FC<PageHeaderProps> = ({
-  projectId,
   projectName,
-  pageTitle,
   currentSubPage,
   onSubPageChange,
   availableLanguages,
@@ -59,84 +55,45 @@ const PageHeader: React.FC<PageHeaderProps> = ({
 }) => {
   const navigate = useNavigate();
 
-  // Unified workspace mode uses dropdown navigation
-  const isUnifiedWorkspace = currentSubPage !== undefined && onSubPageChange !== undefined;
-
   return (
     <div className="page-header">
       {/* Desktop Header */}
       <div className="page-header-desktop">
-        {isUnifiedWorkspace ? (
-          // Unified workspace: Dropdown left, Project name center, Controls right
-          <div className="page-header-unified">
-            <div className="page-header-unified-left">
-              <IconButton
-                icon={<ArrowLeft size="lg" />}
-                onClick={() => navigate('/')}
-                title="Back to home"
-              />
-              <WorkspaceHeaderDropdown
-                currentSubPage={currentSubPage}
-                onSubPageChange={onSubPageChange}
-              />
-            </div>
-            <div className="page-header-unified-center">
-              <Link to="/" className="page-header-project-link">{projectName}</Link>
-            </div>
-            <div className="page-header-controls">
-              {availableLanguages.length > 1 && (
-                <LanguageDropdown
-                  languages={availableLanguages}
-                  value={currentLanguage}
-                  onChange={onLanguageChange}
-                  title="Select display language"
-                  showTranslateAll={showTranslateAll}
-                  translateCount={translateCount}
-                  onTranslateAllClick={onTranslateAllClick}
-                />
-              )}
-              <NotificationButton position="desktop" />
-              <IconButton
-                icon={<Settings size="xl" />}
-                onClick={onSettingsClick}
-                title="Settings"
-              />
-            </div>
+        <div className="page-header-unified">
+          <div className="page-header-unified-left">
+            <IconButton
+              icon={<ArrowLeft size="lg" />}
+              onClick={() => navigate('/')}
+              title="Back to home"
+            />
+            <WorkspaceHeaderDropdown
+              currentSubPage={currentSubPage}
+              onSubPageChange={onSubPageChange}
+            />
           </div>
-        ) : (
-          // Legacy mode: Breadcrumb navigation
-          <>
-            <div className="breadcrumb">
-              <Link to="/" className="breadcrumb-link">Home</Link>
-              <span className="breadcrumb-separator"> / </span>
-              <Link to={`/project/${projectId}`} className="breadcrumb-link">{projectName}</Link>
-              <span className="breadcrumb-separator"> / </span>
-              <span className="breadcrumb-current">{pageTitle}</span>
-            </div>
-            <div className="page-header-title-row">
-              <h1 className="page-header-title">{pageTitle}</h1>
-              <div className="page-header-controls">
-                {availableLanguages.length > 1 && (
-                  <LanguageDropdown
-                    languages={availableLanguages}
-                    value={currentLanguage}
-                    onChange={onLanguageChange}
-                    title="Select display language"
-                    showTranslateAll={showTranslateAll}
-                    translateCount={translateCount}
-                    onTranslateAllClick={onTranslateAllClick}
-                  />
-                )}
-                <NotificationButton position="desktop" />
-                <IconButton
-                  icon={<Settings size="xl" />}
-                  onClick={onSettingsClick}
-                  title="Settings"
-                />
-              </div>
-            </div>
-          </>
-        )}
+          <div className="page-header-unified-center">
+            <Link to="/" className="page-header-project-link">{projectName}</Link>
+          </div>
+          <div className="page-header-controls">
+            {availableLanguages.length > 1 && (
+              <LanguageDropdown
+                languages={availableLanguages}
+                value={currentLanguage}
+                onChange={onLanguageChange}
+                title="Select display language"
+                showTranslateAll={showTranslateAll}
+                translateCount={translateCount}
+                onTranslateAllClick={onTranslateAllClick}
+              />
+            )}
+            <NotificationButton position="desktop" />
+            <IconButton
+              icon={<Settings size="xl" />}
+              onClick={onSettingsClick}
+              title="Settings"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Mobile Header */}
@@ -161,18 +118,12 @@ const PageHeader: React.FC<PageHeaderProps> = ({
 
         {/* Center - absolutely positioned */}
         <div className="page-header-mobile-center">
-          {isUnifiedWorkspace ? (
-            <WorkspaceHeaderDropdown
-              currentSubPage={currentSubPage}
-              onSubPageChange={onSubPageChange}
-            />
-          ) : (
-            <>
-              <h1 className="page-header-mobile-title">{pageTitle}</h1>
-              {mobileSubtitle && (
-                <span className="page-header-mobile-subtitle">{mobileSubtitle}</span>
-              )}
-            </>
+          <WorkspaceHeaderDropdown
+            currentSubPage={currentSubPage}
+            onSubPageChange={onSubPageChange}
+          />
+          {mobileSubtitle && (
+            <span className="page-header-mobile-subtitle">{mobileSubtitle}</span>
           )}
         </div>
 

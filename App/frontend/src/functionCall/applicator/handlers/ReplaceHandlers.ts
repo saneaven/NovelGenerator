@@ -4,23 +4,15 @@
  * Handlers for full replacement operations:
  * - replace_basic_info
  * - replace_story_object
- * - replace_chapter_outline (legacy)
  * - replace_manuscript
  * - replace_outline / replace_outline_act / replace_outline_chapter
  */
 
-import type { ApplicationResult, StoryObjectSubtype } from '../../types';
-import { getObjectData } from '../../types';
-import type { HandlerContext } from '../types';
+import type { ApplicationResult } from '../../types';
+import { getObjectData, ALL_OBJECT_TYPE_MAP } from '../../types';
+import type { HandlerContext, HandlerOptions } from '../types';
+import { CRUD_OPTIONS } from '../types';
 import type { ObjectType, UnifiedObject } from '../../../types/unifiedObject';
-
-/** Maps story object subtype to unified object type */
-const STORY_OBJECT_TYPE_MAP: Record<StoryObjectSubtype, ObjectType> = {
-  character: 'character',
-  location: 'location',
-  organization: 'organization',
-  lorebook: 'lorebook',
-};
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -59,7 +51,8 @@ async function ensureObject(
  */
 export async function replaceBasicInfo(
   args: Record<string, unknown>,
-  context: HandlerContext
+  context: HandlerContext,
+  options: HandlerOptions = CRUD_OPTIONS
 ): Promise<ApplicationResult> {
   const { title, logline, genre } = args as {
     title?: string;
@@ -68,6 +61,7 @@ export async function replaceBasicInfo(
   };
 
   const { store, projectId, language } = context;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
 
   const existing = await store.listObjects('basic_info', projectId);
   if (existing.length > 0) {
@@ -81,8 +75,8 @@ export async function replaceBasicInfo(
         genre: genre ?? currentData.genre ?? '',
       },
       language,
-      create_new_version: true,
-      user_request: 'AI Edit',
+      create_new_version: createNewVersion,
+      user_request: userRequest,
     });
     return ok('Updated basic info', { id: basic.id });
   }
@@ -94,17 +88,19 @@ export async function replaceBasicInfo(
     { title: title ?? '', logline: logline ?? '', genre: genre ?? '' },
     language,
     undefined,
-    'AI Edit'
+    userRequest
   );
   return ok('Created basic info', { id: created.id });
 }
 
 /**
- * Replace story object fields
+ * Replace story object fields.
+ * Also used for translation via set_object_translation (with ALL_OBJECT_TYPE_MAP).
  */
 export async function replaceStoryObject(
   args: Record<string, unknown>,
-  context: HandlerContext
+  context: HandlerContext,
+  options: HandlerOptions = CRUD_OPTIONS
 ): Promise<ApplicationResult> {
   const { id, type, name, description } = args as {
     id?: string;
@@ -117,12 +113,14 @@ export async function replaceStoryObject(
     return error('Missing id or type for replace_story_object');
   }
 
-  const objectType = STORY_OBJECT_TYPE_MAP[type as StoryObjectSubtype];
+  // Use ALL_OBJECT_TYPE_MAP to support both story objects and outline types (for translation)
+  const objectType = ALL_OBJECT_TYPE_MAP[type];
   if (!objectType) {
-    return error(`Unknown story object type: ${type}`);
+    return error(`Unknown object type: ${type}`);
   }
 
   const { store, language } = context;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
 
   const object = await ensureObject(store, objectType, id);
   const currentData = getObjectData(object, language);
@@ -133,60 +131,11 @@ export async function replaceStoryObject(
       description: description ?? currentData.description ?? '',
     },
     language,
-    create_new_version: true,
-    user_request: 'AI Edit',
+    create_new_version: createNewVersion,
+    user_request: userRequest,
   });
 
   return ok(`Updated ${type}`, { id, type });
-}
-
-/**
- * Replace chapter outline fields
- */
-export async function replaceChapterOutline(
-  args: Record<string, unknown>,
-  context: HandlerContext
-): Promise<ApplicationResult> {
-  const { id, actId, name, description, order } = args as {
-    id?: string;
-    actId?: string;
-    name?: string;
-    description?: string;
-    order?: number;
-  };
-
-  if (!id) {
-    return error('Missing id for replace_chapter_outline');
-  }
-
-  const { store, language } = context;
-
-  const object = await ensureObject(store, 'chapter', id);
-  const currentData = getObjectData(object, language);
-
-  const updateData: Record<string, unknown> = {
-    name: name ?? currentData.name ?? '',
-    description: description ?? currentData.description ?? '',
-  };
-
-  // Build metadata for structural changes (actId, order)
-  const metadata: Record<string, unknown> = {};
-  if (actId) {
-    metadata.act_id = actId;
-  }
-  if (order !== undefined && typeof order === 'number') {
-    metadata.order = order;
-  }
-
-  await store.updateObject('chapter', id, {
-    data: updateData,
-    language,
-    create_new_version: true,
-    user_request: 'AI Edit',
-    ...(Object.keys(metadata).length > 0 && { metadata }),
-  });
-
-  return ok('Updated chapter', { id });
 }
 
 /**
@@ -194,7 +143,8 @@ export async function replaceChapterOutline(
  */
 export async function replaceManuscript(
   args: Record<string, unknown>,
-  context: HandlerContext
+  context: HandlerContext,
+  options: HandlerOptions = CRUD_OPTIONS
 ): Promise<ApplicationResult> {
   const { id, content } = args as {
     id?: string;
@@ -206,6 +156,7 @@ export async function replaceManuscript(
   }
 
   const { store, projectId, language } = context;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
 
   // Get manuscript by ID or find by chapter reference
   let manuscript = store.getObject(id) ?? null;
@@ -224,7 +175,7 @@ export async function replaceManuscript(
       { content: '', wordCount: 0 },
       language,
       { chapter_id: id },
-      'AI Edit'
+      userRequest
     );
   }
 
@@ -233,8 +184,8 @@ export async function replaceManuscript(
   await store.updateObject('manuscript', manuscript.id, {
     data: { content, wordCount },
     language,
-    create_new_version: true,
-    user_request: 'AI Edit',
+    create_new_version: createNewVersion,
+    user_request: userRequest,
   });
 
   return ok('Updated manuscript', { id: manuscript.id });
@@ -249,7 +200,8 @@ export async function replaceManuscript(
  */
 export async function replaceOutline(
   args: Record<string, unknown>,
-  context: HandlerContext
+  context: HandlerContext,
+  options: HandlerOptions = CRUD_OPTIONS
 ): Promise<ApplicationResult> {
   const { id, name, description } = args as {
     id?: string;
@@ -262,6 +214,7 @@ export async function replaceOutline(
   }
 
   const { store, language } = context;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
 
   const object = await ensureObject(store, 'outline', id);
   const currentData = getObjectData(object, language);
@@ -272,8 +225,8 @@ export async function replaceOutline(
       description: description ?? currentData.description ?? '',
     },
     language,
-    create_new_version: true,
-    user_request: 'AI Edit',
+    create_new_version: createNewVersion,
+    user_request: userRequest,
   });
 
   return ok('Updated outline', { id });
@@ -284,7 +237,8 @@ export async function replaceOutline(
  */
 export async function replaceOutlineAct(
   args: Record<string, unknown>,
-  context: HandlerContext
+  context: HandlerContext,
+  options: HandlerOptions = CRUD_OPTIONS
 ): Promise<ApplicationResult> {
   const { id, name, description, order } = args as {
     id?: string;
@@ -298,6 +252,7 @@ export async function replaceOutlineAct(
   }
 
   const { store, language } = context;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
 
   const object = await ensureObject(store, 'act', id);
   const currentData = getObjectData(object, language);
@@ -316,8 +271,8 @@ export async function replaceOutlineAct(
   await store.updateObject('act', id, {
     data: updateData,
     language,
-    create_new_version: true,
-    user_request: 'AI Edit',
+    create_new_version: createNewVersion,
+    user_request: userRequest,
     ...(Object.keys(metadata).length > 0 && { metadata }),
   });
 
@@ -329,7 +284,8 @@ export async function replaceOutlineAct(
  */
 export async function replaceOutlineChapter(
   args: Record<string, unknown>,
-  context: HandlerContext
+  context: HandlerContext,
+  options: HandlerOptions = CRUD_OPTIONS
 ): Promise<ApplicationResult> {
   const { id, actId, name, description, order } = args as {
     id?: string;
@@ -344,6 +300,7 @@ export async function replaceOutlineChapter(
   }
 
   const { store, language } = context;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
 
   const object = await ensureObject(store, 'chapter', id);
   const currentData = getObjectData(object, language);
@@ -365,8 +322,8 @@ export async function replaceOutlineChapter(
   await store.updateObject('chapter', id, {
     data: updateData,
     language,
-    create_new_version: true,
-    user_request: 'AI Edit',
+    create_new_version: createNewVersion,
+    user_request: userRequest,
     ...(Object.keys(metadata).length > 0 && { metadata }),
   });
 
@@ -381,7 +338,6 @@ export const REPLACE_HANDLERS = {
   // Basic handlers
   replace_basic_info: replaceBasicInfo,
   replace_story_object: replaceStoryObject,
-  replace_chapter_outline: replaceChapterOutline,
   replace_manuscript: replaceManuscript,
   // Outline handlers
   replace_outline: replaceOutline,

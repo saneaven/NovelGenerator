@@ -53,7 +53,6 @@ export function applySingleReplacement(
       success: false,
       value: text,
       error: `Text not found: "${old.slice(0, 50)}${old.length > 50 ? '...' : ''}"`,
-      needsRetry: true,
     };
   }
 
@@ -64,7 +63,6 @@ export function applySingleReplacement(
       success: false,
       value: text,
       error: `Text appears multiple times: "${old.slice(0, 50)}${old.length > 50 ? '...' : ''}" - include more surrounding context in 'old' to make it unique`,
-      needsRetry: true,
     };
   }
 
@@ -136,7 +134,6 @@ export function applyPatch(
       success: false,
       value: current,  // Return text with successful patches applied
       error: `${failureCount}/${replacements.length} replacements failed:\n${failedItems}`,
-      needsRetry: true,
       replacementResults,
       successCount,
       failureCount,

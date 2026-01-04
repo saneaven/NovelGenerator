@@ -1,6 +1,6 @@
-import type { FunctionCallSchema } from './schemas/chatFunctions';
+import type { FunctionCallSchema } from '../functionCall';
 import { STORY_OBJECT_EDIT_FUNCTIONS, MANUSCRIPT_EDIT_FUNCTIONS } from '../functionCall';
-import { TRANSLATION_FUNCTIONS, CHAT_TRANSLATION_FUNCTIONS } from './schemas/translationFunctions';
+import { TRANSLATION_FUNCTIONS, AGENT_TRANSLATION_FUNCTIONS } from './schemas/translationFunctions';
 import { OBJECT_IMAGE_PROMPT_FUNCTIONS } from './schemas/imagePromptFunctions';
 import { renderTemplate, registerFragments, type PromptFragment } from '../templateEngine/engine';
 import { useSettingsStore } from '../store/settingsStore';
@@ -13,13 +13,13 @@ import {
   type PromptBundle,
   type PromptContext,
   type TemplateData,
-  type ChatWorkspacePromptContext,
-  type ChatNovelEditorPromptContext,
-  type ChatOutlineManagerPromptContext,
+  type AgentWorkspacePromptContext,
+  type AgentNovelEditorPromptContext,
+  type AgentOutlineManagerPromptContext,
   type EditAssistantStoryObjectPromptContext,
   type EditAssistantManuscriptPromptContext,
   type StoryTranslationPromptContext,
-  type ChatTranslationPromptContext,
+  type AgentTranslationPromptContext,
   type ObjectImagePromptContext,
   type SceneImagePromptContext,
   type CoverImagePromptContext,
@@ -68,7 +68,7 @@ export class PromptManager {
    * Load a prompt template from store or fallback to bundled default
    */
   private static async getTemplate(
-    functionType: 'chat' | 'translation' | 'editAssistant' | 'imagePrompt',
+    functionType: 'agent' | 'translation' | 'editAssistant' | 'imagePrompt',
     category: 'systemPrompt' | 'prefill' | 'userPrompt' | 'nonLastUserPrompt',
     name?: string
   ): Promise<string | null> {
@@ -101,20 +101,20 @@ export class PromptManager {
     await this.ensureFragmentsLoaded();
 
     switch (mode) {
-      case LLMTaskMode.CHAT_STORYOBJECT:
-        return this.generateChatBundle(context as ChatWorkspacePromptContext, 'storyObject');
-      case LLMTaskMode.CHAT_NOVEL_EDITOR:
-        return this.generateChatBundle(context as ChatNovelEditorPromptContext, 'novelEditor');
-      case LLMTaskMode.CHAT_OUTLINE_MANAGER:
-        return this.generateChatBundle(context as ChatOutlineManagerPromptContext, 'outlineManager');
+      case LLMTaskMode.AGENT_STORYOBJECT:
+        return this.generateAgentBundle(context as AgentWorkspacePromptContext, 'storyObject');
+      case LLMTaskMode.AGENT_NOVEL_EDITOR:
+        return this.generateAgentBundle(context as AgentNovelEditorPromptContext, 'novelEditor');
+      case LLMTaskMode.AGENT_OUTLINE_MANAGER:
+        return this.generateAgentBundle(context as AgentOutlineManagerPromptContext, 'outlineManager');
       case LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT:
         return this.generateEditAssistantBundle(context as EditAssistantStoryObjectPromptContext, 'storyObject');
       case LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT:
         return this.generateEditAssistantBundle(context as EditAssistantManuscriptPromptContext, 'manuscript');
       case LLMTaskMode.TRANSLATION:
         return this.generateTranslationBundle(context as StoryTranslationPromptContext);
-      case LLMTaskMode.CHAT_TRANSLATION:
-        return this.generateChatTranslationBundle(context as ChatTranslationPromptContext);
+      case LLMTaskMode.AGENT_TRANSLATION:
+        return this.generateAgentTranslationBundle(context as AgentTranslationPromptContext);
       case LLMTaskMode.OBJECT_IMAGE_PROMPT:
         return this.generateObjectImagePromptBundle(context as ObjectImagePromptContext);
       case LLMTaskMode.SCENE_IMAGE_PROMPT:
@@ -135,18 +135,18 @@ export class PromptManager {
     context: PromptContext
   ): FunctionCallSchema[] | undefined {
     switch (mode) {
-      case LLMTaskMode.CHAT_STORYOBJECT:
-      case LLMTaskMode.CHAT_NOVEL_EDITOR:
-      case LLMTaskMode.CHAT_OUTLINE_MANAGER:
-        return (context as ChatWorkspacePromptContext).functions;
+      case LLMTaskMode.AGENT_STORYOBJECT:
+      case LLMTaskMode.AGENT_NOVEL_EDITOR:
+      case LLMTaskMode.AGENT_OUTLINE_MANAGER:
+        return (context as AgentWorkspacePromptContext).functions;
       case LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT:
         return this.getEditAssistantFunctions(context as EditAssistantStoryObjectPromptContext, 'storyObject');
       case LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT:
         return this.getEditAssistantFunctions(context as EditAssistantManuscriptPromptContext, 'manuscript');
       case LLMTaskMode.TRANSLATION:
         return this.getTranslationFunctions(context as StoryTranslationPromptContext);
-      case LLMTaskMode.CHAT_TRANSLATION:
-        return this.getChatTranslationFunctions(context as ChatTranslationPromptContext);
+      case LLMTaskMode.AGENT_TRANSLATION:
+        return this.getAgentTranslationFunctions(context as AgentTranslationPromptContext);
       case LLMTaskMode.OBJECT_IMAGE_PROMPT:
         return this.getObjectImagePromptFunctions(context as ObjectImagePromptContext);
       case LLMTaskMode.SCENE_IMAGE_PROMPT:
@@ -158,17 +158,17 @@ export class PromptManager {
     }
   }
 
-  // ==================== Chat (Workspace & NovelEditor) ====================
+  // ==================== Agent (Workspace & NovelEditor) ====================
 
-  private static async generateChatBundle(
-    context: ChatWorkspacePromptContext | ChatNovelEditorPromptContext | ChatOutlineManagerPromptContext,
+  private static async generateAgentBundle(
+    context: AgentWorkspacePromptContext | AgentNovelEditorPromptContext | AgentOutlineManagerPromptContext,
     mode: 'storyObject' | 'novelEditor' | 'outlineManager'
   ): Promise<PromptBundle> {
     const [systemTemplate, userTemplate, nonLastTemplate, prefillTemplate] = await Promise.all([
-      this.getTemplate('chat', 'systemPrompt', mode),
-      this.getTemplate('chat', 'userPrompt', mode),
-      this.getTemplate('chat', 'nonLastUserPrompt', mode),
-      this.getTemplate('chat', 'prefill', mode),
+      this.getTemplate('agent', 'systemPrompt', mode),
+      this.getTemplate('agent', 'userPrompt', mode),
+      this.getTemplate('agent', 'nonLastUserPrompt', mode),
+      this.getTemplate('agent', 'prefill', mode),
     ]);
 
     const settings = useSettingsStore.getState().settings;
@@ -177,16 +177,8 @@ export class PromptManager {
       project: this.buildProjectData(context.projectId, settings.mainLanguage),
       input: {
         userMessage: context.userInput,
-        functionResults: context.functionResults?.map(r => ({
-          functionCallId: r.functionCallId,
-          functionName: r.functionName,
-          success: r.success,
-          isRejected: r.isRejected ?? false,
-          resultMessage: r.resultMessage,
-          appliedAt: r.appliedAt ? (typeof r.appliedAt === 'string' ? r.appliedAt : r.appliedAt.toISOString()) : undefined,
-        })),
       },
-      chat: { mode, contextObjectIds: context.contextObjectIds },
+      agent: { mode, contextObjectIds: context.contextObjectIds },
     };
 
     return {
@@ -308,15 +300,15 @@ export class PromptManager {
     };
   }
 
-  // ==================== Chat Translation ====================
+  // ==================== Agent Translation ====================
 
-  private static async generateChatTranslationBundle(
-    context: ChatTranslationPromptContext
+  private static async generateAgentTranslationBundle(
+    context: AgentTranslationPromptContext
   ): Promise<PromptBundle> {
     const [systemTemplate, userTemplate, prefillTemplate] = await Promise.all([
-      this.getTemplate('translation', 'systemPrompt', 'chat'),
-      this.getTemplate('translation', 'userPrompt', 'chat'),
-      this.getTemplate('translation', 'prefill', 'chat'),
+      this.getTemplate('translation', 'systemPrompt', 'agent'),
+      this.getTemplate('translation', 'userPrompt', 'agent'),
+      this.getTemplate('translation', 'prefill', 'agent'),
     ]);
 
     const settings = useSettingsStore.getState().settings;
@@ -327,7 +319,7 @@ export class PromptManager {
       translation: {
         sourceLanguage: context.sourceLanguage,
         targetLanguage: context.targetLanguage,
-        chatMessages: [{ id: 'source', content: context.sourceContent }],
+        agentMessages: [{ id: 'source', content: context.sourceContent }],
       },
     };
 
@@ -836,11 +828,11 @@ export class PromptManager {
     return TRANSLATION_FUNCTIONS;
   }
 
-  private static getChatTranslationFunctions(
-    context: ChatTranslationPromptContext
+  private static getAgentTranslationFunctions(
+    context: AgentTranslationPromptContext
   ): FunctionCallSchema[] | undefined {
     if (context.isNativeOutput) return undefined;
-    return CHAT_TRANSLATION_FUNCTIONS;
+    return AGENT_TRANSLATION_FUNCTIONS;
   }
 
   private static getObjectImagePromptFunctions(

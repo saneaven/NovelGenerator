@@ -1,0 +1,59 @@
+/* ========================================
+   AGENT PANEL CONTAINER
+   Modern, Responsive Design
+   ======================================== */
+
+.agent-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 30%;
+  min-width: 350px;
+  max-width: 600px;
+  background: var(--color-surface-base);
+  border-right: 1px solid var(--color-border-default);
+  transition: flex var(--transition-base), transform var(--transition-base);
+  height: 100%;
+  position: relative;
+  box-shadow: var(--shadow-sm);
+  z-index: 1;
+}
+
+/* Mobile styles are defined in MobileAgent.css */
+
+/* ===== Tablet Styles ===== */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .agent-panel {
+    flex: 0 0 30%;
+    min-width: 300px;
+    max-width: 500px;
+  }
+
+}
+
+/* ===== Desktop Styles ===== */
+@media (min-width: 769px) {
+  .agent-panel {
+    position: static;
+    height: auto;
+    z-index: auto;
+    transform: none;
+  }
+
+  .agent-panel.visible {
+    transform: none;
+  }
+}
+
+/* ===== Large Desktop ===== */
+/* @media (min-width: 1440px) {
+  .agent-panel {
+    flex: 0 0 30%;
+    min-width: 400px;
+    max-width: 700px;
+  }
+
+  .agent-panel.hidden {
+    flex: 0 0 0;
+    min-width: 0;
+  }
+} */

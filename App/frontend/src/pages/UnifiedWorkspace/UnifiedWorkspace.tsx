@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useChatStore } from '../../store/chatStore';
-import { useChatUIStore } from '../../store/chatUIStore';
+import { useAgentStore } from '../../store/agentStore';
+import { useAgentUIStore } from '../../store/agentUIStore';
 import { useSidebarStore } from '../../store/sidebarStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
@@ -13,7 +13,7 @@ import type { StoryObjects } from '../../types/storyObject';
 import ErrorModal from '../../components/ErrorModal';
 import SettingsModal from '../../components/SettingsModal/SettingsModal';
 import TranslationModal from '../../components/TranslationModal';
-import ChatPanel from '../workspace/components/ChatPanel';
+import AgentPanel from '../workspace/components/AgentPanel';
 import StoryObjectPanel from '../workspace/components/StoryObjectPanel';
 import OutlinePanel from '../outlinemanager/components/OutlinePanel';
 import NovelEditorPanel from '../noveleditor/components/NovelEditorPanel';
@@ -22,17 +22,16 @@ import { PageHeader, MobileFooter } from '../../components/layout';
 
 import { useWorkspaceSubPage, type SubPageType } from './hooks/useWorkspaceSubPage';
 import { WorkspaceHeaderDropdown } from './components/WorkspaceHeaderDropdown';
-import { useWorkspaceState } from '../workspace/hooks/useWorkspaceState';
-import { useNovelEditorState } from '../noveleditor/hooks/useNovelEditorState';
+import { useStoryObjectTab } from '../workspace/hooks/useStoryObjectTab';
 
 import './UnifiedWorkspace.css';
-import '../workspace/styles/ChatPanel.css';
-import '../workspace/styles/ChatHeader.css';
-import '../workspace/styles/ChatMessages.css';
+import '../workspace/styles/AgentPanel.css';
+import '../workspace/styles/AgentHeader.css';
+import '../workspace/styles/AgentMessages.css';
 import '../workspace/styles/MessageEdit.css';
-import '../workspace/styles/ChatInput.css';
+import '../workspace/styles/AgentInput.css';
 import '../workspace/styles/MessageEditCards.css';
-import '../../components/MobileChat.css';
+import '../../components/MobileAgent.css';
 
 // Tab labels for mobile subtitle (story-object mode)
 const tabLabels: Record<string, string> = {
@@ -51,8 +50,8 @@ const TRANSLATION_TYPES: Record<SubPageType, string[]> = {
   'novel-editor': ['manuscript'],
 };
 
-// Get chat mode from sub-page
-function getChatMode(subPage: SubPageType): 'storyObject' | 'outlineManager' | 'novelEditor' {
+// Get agent mode from sub-page
+function getAgentMode(subPage: SubPageType): 'storyObject' | 'outlineManager' | 'novelEditor' {
   switch (subPage) {
     case 'story-object':
       return 'storyObject';
@@ -80,7 +79,7 @@ const UnifiedWorkspace: React.FC = () => {
   const { currentSubPage, navigateToSubPage } = useWorkspaceSubPage(projectId, urlSubPage);
 
   const { getCurrentProject, fetchProjects, projects, isLoading: projectsLoading, setCurrentProject } = useProjectStore();
-  const { fetchChats } = useChatStore();
+  const { fetchAgents } = useAgentStore();
   const unifiedObjects = useUnifiedObjectStore(state => state.objects);
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
   const unifiedStore = useUnifiedObjectStore();
@@ -103,13 +102,13 @@ const UnifiedWorkspace: React.FC = () => {
   const { currentError, showError, hideError } = useErrorStore();
 
   // UI stores
-  const chatUI = useChatUIStore();
-  const isChatVisibleState = chatUI.chatVisibleByProject[projectId ?? ''] ?? false;
+  const agentUI = useAgentUIStore();
+  const isAgentVisibleState = agentUI.agentVisibleByProject[projectId ?? ''] ?? false;
   const sidebarStore = useSidebarStore();
 
   // Desktop/mobile detection
   const isDesktopView = typeof window !== 'undefined' && window.innerWidth > 768;
-  const isChatVisible = isDesktopView ? true : isChatVisibleState;
+  const isAgentVisible = isDesktopView ? true : isAgentVisibleState;
 
   // Force re-render when crossing desktop/mobile breakpoint
   const [_isDesktop, setIsDesktop] = useState(() => window.innerWidth > 768);
@@ -125,17 +124,11 @@ const UnifiedWorkspace: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Workspace-specific state
-  const { state: workspaceState, actions: workspaceActions } = useWorkspaceState(projectId);
+  // Settings modal state
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // NovelEditor-specific state
-  const { state: novelEditorState, actions: novelEditorActions } = useNovelEditorState(projectId);
-
-  // Combined settings modal state (use whichever is relevant to current sub-page)
-  const isSettingsOpen = currentSubPage === 'novel-editor' ? novelEditorState.isSettingsOpen : workspaceState.isSettingsOpen;
-  const setIsSettingsOpen = currentSubPage === 'novel-editor'
-    ? novelEditorActions.setIsSettingsOpen
-    : workspaceActions.setIsSettingsOpen;
+  // Story object tab state (for mobile subtitle)
+  const { activeTab: activeStoryObjectTab } = useStoryObjectTab();
 
   // Translation modal state
   const [showTranslateModal, setShowTranslateModal] = useState(false);
@@ -381,15 +374,15 @@ const UnifiedWorkspace: React.FC = () => {
     };
   }, [projectId, currentSubPage, listObjects, mainLanguage, getSelectedChapterId, selectChapter]);
 
-  // Fetch chats when projectId changes
+  // Fetch agents when projectId changes
   useEffect(() => {
     if (!projectId) return;
 
-    fetchChats(projectId).catch(error => {
-      console.error('Failed to fetch chats:', error);
-      showError('Data Error', 'Failed to load chats. Please try again.');
+    fetchAgents(projectId).catch(error => {
+      console.error('Failed to fetch agents:', error);
+      showError('Data Error', 'Failed to load agents. Please try again.');
     });
-  }, [projectId, fetchChats, showError]);
+  }, [projectId, fetchAgents, showError]);
 
   const currentProject = getCurrentProject();
 
@@ -415,7 +408,7 @@ const UnifiedWorkspace: React.FC = () => {
   const getMobileSubtitle = () => {
     switch (currentSubPage) {
       case 'story-object':
-        return tabLabels[workspaceState.activeStoryTab];
+        return tabLabels[activeStoryObjectTab];
       case 'outline-manager':
         return 'Outlines';
       case 'novel-editor':
@@ -426,9 +419,7 @@ const UnifiedWorkspace: React.FC = () => {
   return (
     <div className="unified-workspace-container">
       <PageHeader
-        projectId={projectId ?? ''}
         projectName={currentProject.name}
-        pageTitle=""
         currentSubPage={currentSubPage}
         onSubPageChange={navigateToSubPage}
         availableLanguages={availableLanguages}
@@ -453,16 +444,14 @@ const UnifiedWorkspace: React.FC = () => {
         }
       />
 
-      <div className={`unified-workspace-content ${isChatVisible ? 'chat-visible' : ''}`}>
-        <ChatPanel
+      <div className={`unified-workspace-content ${isAgentVisible ? 'agent-visible' : ''}`}>
+        <AgentPanel
           projectId={projectId ?? ''}
-          mode={getChatMode(currentSubPage)}
+          mode={getAgentMode(currentSubPage)}
         />
 
         {currentSubPage === 'story-object' && (
           <StoryObjectPanel
-            activeStoryTab={workspaceState.activeStoryTab}
-            onTabChange={workspaceActions.setActiveStoryTab}
             globalDisplayLanguage={currentDisplayLanguage}
           />
         )}
@@ -489,18 +478,16 @@ const UnifiedWorkspace: React.FC = () => {
       {currentSubPage === 'story-object' && (
         <WorkspaceTabsSidebar
           projectId={projectId ?? ''}
-          activeTab={workspaceState.activeStoryTab}
-          onTabChange={workspaceActions.setActiveStoryTab}
         />
       )}
 
       <MobileFooter
-        isChatVisible={isChatVisible}
-        onChatToggle={() => {
-          if (isChatVisible) {
-            chatUI.setChatVisible(projectId ?? '', false);
+        isAgentVisible={isAgentVisible}
+        onAgentToggle={() => {
+          if (isAgentVisible) {
+            agentUI.setAgentVisible(projectId ?? '', false);
           } else {
-            chatUI.toggleChatVisible(projectId ?? '');
+            agentUI.toggleAgentVisible(projectId ?? '');
           }
           sidebarStore.closeSidebar(projectId ?? '');
         }}

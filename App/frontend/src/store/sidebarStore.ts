@@ -9,10 +9,10 @@ import { create } from 'zustand';
  *
  * Usage:
  *   const { isOpen, toggleSidebar } = useSidebarStore();
- *   toggleSidebar(projectId, 'chat');  // Opens chat, closes any other sidebar
+ *   toggleSidebar(projectId, 'agent');  // Opens agent, closes any other sidebar
  */
 
-export type SidebarId = 'chat' | 'chapter' | string;
+export type SidebarId = 'agent' | 'chapter' | string;
 
 interface SidebarState {
   // Per-project open sidebar tracking (only one at a time per project)

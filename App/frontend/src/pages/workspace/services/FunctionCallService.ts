@@ -1,5 +1,5 @@
 import type { SimplifiedStoryObjects } from '../../../store/unifiedObjectStore';
-import { parseFunctionName, resolveStoryObjectName } from '../../../chat/utils/objectNameResolver';
+import { parseFunctionName, resolveStoryObjectName } from '../../../agent/utils/objectNameResolver';
 
 type EditType = "add" | "edit" | "remove" | "init";
 

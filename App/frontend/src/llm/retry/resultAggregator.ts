@@ -40,19 +40,20 @@ export function categorizeFunctionCall(
   let error: string | undefined;
   let patchFailures: PatchFailureDetail[] | undefined;
 
-  if (fc.isRejected) {
+  if (fc.status === 'rejected') {
     failureType = 'user_rejected';
-    error = 'User rejected this function call';
-  } else if (fc.error) {
+    error = fc.reason || 'User rejected this function call';
+  } else if (fc.status === 'failed' && fc.reason) {
     // Check error message patterns to determine type
-    if (fc.error.includes('JSON') || fc.error.includes('parse') || fc.error.includes('syntax')) {
+    const errorMsg = fc.reason;
+    if (errorMsg.includes('JSON') || errorMsg.includes('parse') || errorMsg.includes('syntax')) {
       failureType = 'parsing_failed';
-    } else if (fc.error.includes('validation') || fc.error.includes('schema') || fc.error.includes('required')) {
+    } else if (fc.failureType === 'validation' || errorMsg.includes('validation') || errorMsg.includes('schema') || errorMsg.includes('required')) {
       failureType = 'validation_failed';
     } else {
       failureType = 'application_failed';
     }
-    error = fc.error;
+    error = fc.reason;
   } else if (applicationResult && !applicationResult.success) {
     // Use application result to determine failure type
     if (applicationResult.isParsingError) {
@@ -74,8 +75,8 @@ export function categorizeFunctionCall(
     arguments: fc.arguments || {},
     failureType,
     success,
-    isRejected: fc.isRejected || false,
-    resultMessage: fc.resultMessage || applicationResult?.message || (success ? 'Applied successfully' : 'Failed'),
+    isRejected: fc.status === 'rejected',
+    resultMessage: fc.result?.message || applicationResult?.message || (success ? 'Applied successfully' : 'Failed'),
     error,
     patchFailures,
   };
@@ -224,9 +225,9 @@ export function convertApplicationResults(
     let error: string | undefined;
     let patchFailures: PatchFailureDetail[] | undefined;
 
-    if (fc.isRejected) {
+    if (fc.status === 'rejected') {
       failureType = 'user_rejected';
-      error = 'User rejected this function call';
+      error = fc.reason || 'User rejected this function call';
     } else if (appResult && !appResult.success) {
       // Check for retryContexts from patch handlers
       if (appResult.retryContexts && appResult.retryContexts.length > 0) {
@@ -248,16 +249,17 @@ export function convertApplicationResults(
         failureType = 'application_failed';
         error = appResult.error || appResult.message;
       }
-    } else if (fc.error) {
+    } else if (fc.status === 'failed' && fc.reason) {
       // Fallback to function call error
-      if (fc.error.includes('JSON') || fc.error.includes('parse')) {
+      const errorMsg = fc.reason;
+      if (errorMsg.includes('JSON') || errorMsg.includes('parse')) {
         failureType = 'parsing_failed';
-      } else if (fc.error.includes('validation') || fc.error.includes('schema')) {
+      } else if (fc.failureType === 'validation' || errorMsg.includes('validation') || errorMsg.includes('schema')) {
         failureType = 'validation_failed';
       } else {
         failureType = 'application_failed';
       }
-      error = fc.error;
+      error = fc.reason;
     }
 
     const success = failureType === 'success';
@@ -269,7 +271,7 @@ export function convertApplicationResults(
       arguments: typeof fc.arguments === 'string' ? JSON.parse(fc.arguments) : (fc.arguments || {}),
       failureType,
       success,
-      isRejected: fc.isRejected || false,
+      isRejected: fc.status === 'rejected',
       resultMessage,
       error,
       patchFailures,

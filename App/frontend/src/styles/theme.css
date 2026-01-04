@@ -232,6 +232,8 @@
     /* 64px */
     --spacing-5xl: 6rem;
     /* 96px */
+    --spacing-6xl: 8rem;
+    /* 128px */
 
     /* ===== Size Variables ===== */
     --size-6: 1.5rem;
@@ -242,8 +244,8 @@
     /* 240px - dropdown menus */
     --size-content-sm: 24rem;
     /* 384px - content containers */
-    --size-chat-panel: 400px;
-    /* chat panel width */
+    --size-agent-panel: 400px;
+    /* agent panel width */
     --size-mobile-footer-height: 72px;
     /* mobile footer height */
 
@@ -289,7 +291,10 @@
     /* 36px */
     --font-size-5xl: 3rem;
     /* 48px */
+    --font-size-6xl: 4rem;
+    /* 64px */
 
+    --font-weight-slim: 300;
     --font-weight-normal: 400;
     --font-weight-medium: 500;
     --font-weight-semibold: 600;
@@ -343,7 +348,7 @@
     --z-sticky: 1010;
     --z-fixed: 1020;
     --z-overlay: 1030;
-    --z-mobile-chat: 1032;
+    --z-mobile-agent: 1032;
     --z-sidebar-backdrop: 1035;
     --z-sidebar: 1036;
     --z-modal: 1040;

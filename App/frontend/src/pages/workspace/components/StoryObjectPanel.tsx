@@ -4,25 +4,22 @@ import '../../../components/ManagerCommon.css';
 import BasicInfoManager from '../../../components/BasicInfoManager';
 import NameDescriptionManager from '../../../components/NameDescriptionManager';
 import { Clipboard, People, Organization, Map, Books, ChevronLeft, ChevronRight } from '../../../components/icons';
-
-type TabType = 'basicInfo' | 'characters' | 'organizations' | 'locations' | 'lorebook';
+import type { StoryObjectTabType } from '../../../types/storyObject';
+import { useStoryObjectTab } from '../hooks/useStoryObjectTab';
 
 interface StoryObjectPanelProps {
-  activeStoryTab: TabType;
-  onTabChange: (tab: TabType) => void;
   globalDisplayLanguage: string; // Actual language name (e.g., 'English', 'Korean')
 }
 
 const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
-  activeStoryTab,
-  onTabChange,
   globalDisplayLanguage,
 }) => {
+  const { activeTab: activeStoryObjectTab, setActiveTab: setActiveStoryObjectTab } = useStoryObjectTab();
   const tabsRef = useRef<HTMLDivElement>(null);
   const [showLeftButton, setShowLeftButton] = useState(false);
   const [showRightButton, setShowRightButton] = useState(false);
 
-  const storyTabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
+  const storyObjectTabs: { id: StoryObjectTabType; label: string; icon: React.ReactNode }[] = [
     { id: 'basicInfo', label: 'Basic Info', icon: <Clipboard size="sm" /> },
     { id: 'characters', label: 'Characters', icon: <People size="sm" /> },
     { id: 'organizations', label: 'Organizations', icon: <Organization size="sm" /> },
@@ -75,10 +72,10 @@ const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
   // Check scroll when active tab changes
   useEffect(() => {
     checkScroll();
-  }, [activeStoryTab]);
+  }, [activeStoryObjectTab]);
 
   const renderStoryContent = () => {
-    switch (activeStoryTab) {
+    switch (activeStoryObjectTab) {
       case 'basicInfo':
         return <BasicInfoManager globalDisplayLanguage={globalDisplayLanguage} />;
       case 'characters':
@@ -162,11 +159,11 @@ const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
           ref={tabsRef}
           onScroll={checkScroll}
         >
-          {storyTabs.map((tab) => (
+          {storyObjectTabs.map((tab) => (
             <button
               key={tab.id}
-              className={`story-object-tab-button ${activeStoryTab === tab.id ? 'active' : ''}`}
-              onClick={() => onTabChange(tab.id)}
+              className={`story-object-tab-button ${activeStoryObjectTab === tab.id ? 'active' : ''}`}
+              onClick={() => setActiveStoryObjectTab(tab.id)}
             >
               <span className="story-object-tab-icon">{tab.icon}</span>
               <span className="story-object-tab-label">{tab.label}</span>

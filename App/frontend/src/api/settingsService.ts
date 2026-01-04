@@ -32,8 +32,8 @@ export const settingsService = {
      * Update a specific function's configuration
      */
     async updateFunctionConfig(
-        functionType: 'chat' | 'translation' | 'editAssistant' | 'imagePrompt',
-        config: Settings['functionConfigs']['chat']
+        functionType: 'agent' | 'translation' | 'editAssistant' | 'imagePrompt',
+        config: Settings['functionConfigs']['agent']
     ): Promise<SettingsSyncResponse> {
         return await apiClient.patch<SettingsSyncResponse>(
             `/api/v1/settings/function/${functionType}`,

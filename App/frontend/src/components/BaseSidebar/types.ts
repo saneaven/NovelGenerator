@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 export type SidebarPosition = 'left' | 'right';
-export type SidebarId = 'chat' | 'chapter' | string;
+export type SidebarId = 'agent' | 'chapter' | string;
 
 export interface BaseSidebarProps {
   /** Unique identifier for this sidebar */

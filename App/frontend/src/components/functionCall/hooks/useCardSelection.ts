@@ -9,8 +9,9 @@ export function useCardSelection(
   const [selections, setSelections] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     cards.forEach((card) => {
-      // Cards with validation errors default to unselected
-      initial[card.id] = !card.validationError;
+      // Cards with validation failures default to unselected
+      const hasValidationFailure = card.functionCall?.status === 'failed' && card.functionCall?.failureType === 'validation';
+      initial[card.id] = !hasValidationFailure;
     });
     return initial;
   });
@@ -28,7 +29,8 @@ export function useCardSelection(
       // Add new cards
       cards.forEach((card) => {
         if (!(card.id in updated)) {
-          updated[card.id] = !card.validationError;
+          const hasValidationFailure = card.functionCall?.status === 'failed' && card.functionCall?.failureType === 'validation';
+          updated[card.id] = !hasValidationFailure;
           hasChanges = true;
         }
       });
@@ -49,7 +51,8 @@ export function useCardSelection(
     (cardId: string) => {
       if (isDisabled) return;
       const card = cards.find((c) => c.id === cardId);
-      if (card?.validationError) return;
+      const hasValidationFailure = card?.functionCall?.status === 'failed' && card?.functionCall?.failureType === 'validation';
+      if (hasValidationFailure) return;
       setSelections((prev) => ({
         ...prev,
         [cardId]: !prev[cardId],
@@ -62,7 +65,8 @@ export function useCardSelection(
     if (isDisabled) return;
     const newSelections: Record<string, boolean> = {};
     cards.forEach((card) => {
-      newSelections[card.id] = !card.validationError;
+      const hasValidationFailure = card.functionCall?.status === 'failed' && card.functionCall?.failureType === 'validation';
+      newSelections[card.id] = !hasValidationFailure;
     });
     setSelections(newSelections);
   }, [cards, isDisabled]);

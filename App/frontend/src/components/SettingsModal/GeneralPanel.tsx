@@ -1,12 +1,12 @@
 import React from 'react';
 import type { AIFunctionType, FunctionAIConfig, ProviderCredentials } from '../../store/settingsStore';
 import FunctionConfigForm from './FunctionConfigForm';
-import { Chat, Globe, Edit, Palette } from '../icons';
+import { SpeechBubble, Globe, Edit, Palette } from '../icons';
 import './GeneralPanel.css';
 
 interface GeneralPanelProps {
   functionConfigs: {
-    chat: FunctionAIConfig;
+    agent: FunctionAIConfig;
     translation: FunctionAIConfig;
     editAssistant: FunctionAIConfig;
     imagePrompt: FunctionAIConfig;
@@ -18,14 +18,14 @@ interface GeneralPanelProps {
 }
 
 const FUNCTION_LABELS: Record<AIFunctionType, { icon: React.ReactNode; label: string }> = {
-  chat: { icon: <Chat size="sm" />, label: 'Chat' },
+  agent: { icon: <SpeechBubble size="sm" />, label: 'Agent' },
   translation: { icon: <Globe size="sm" />, label: 'Translation' },
   editAssistant: { icon: <Edit size="sm" />, label: 'Edit Assistant' },
   imagePrompt: { icon: <Palette size="sm" />, label: 'Image Prompt' },
 };
 
 const FUNCTION_DESCRIPTIONS: Record<AIFunctionType, string> = {
-  chat: 'General conversation and assistance for story planning and brainstorming',
+  agent: 'General conversation and assistance for story planning and brainstorming',
   translation: 'Accurate language translation with context preservation',
   editAssistant: 'Editing and refinement of story objects and manuscript content',
   imagePrompt: 'AI-assisted generation of detailed image prompts from story context',

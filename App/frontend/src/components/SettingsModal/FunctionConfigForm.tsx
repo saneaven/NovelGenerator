@@ -5,7 +5,7 @@ import type {
   AIFunctionType,
   ProviderCredentials,
   ThinkingConfig,
-  CustomThinkingFormat,
+  CustomApiFormat,
 } from '../../store/settingsStore';
 import ModelBrowser from './ModelBrowser';
 import { TextButton } from '../TextButton';
@@ -99,6 +99,16 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
     });
   };
 
+  const handleCustomApiFormatChange = (format: CustomApiFormat | undefined) => {
+    onChange({
+      ...config,
+      advanced: {
+        ...config.advanced,
+        customApiFormat: format,
+      },
+    });
+  };
+
   return (
     <div className="function-config-form">
       {/* Basic Settings */}
@@ -128,6 +138,26 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
             {config.provider === 'custom' && 'Use your own OpenAI-compatible endpoint'}
           </p>
         </div>
+
+        {/* Custom endpoint - API format selector (always visible for custom provider) */}
+        {config.provider === 'custom' && (
+          <div className="form-field">
+            <label>API Format</label>
+            <CustomSelect
+              value={config.advanced.customApiFormat || 'openai'}
+              onChange={(value) => handleCustomApiFormatChange(value as CustomApiFormat)}
+              options={[
+                { value: 'openai', label: 'OpenAI' },
+                { value: 'claude', label: 'Claude' },
+                { value: 'gemini', label: 'Gemini' },
+                { value: 'openrouter', label: 'OpenRouter' },
+              ]}
+            />
+            <p className="field-hint">
+              Select the API format - uses native SDK for each provider
+            </p>
+          </div>
+        )}
 
         <div className="form-field">
           <label>AI Model</label>
@@ -350,29 +380,11 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                   </>
                 )}
 
-                {/* Custom endpoint - format selector and format-specific options */}
+                {/* Custom endpoint - format-specific thinking options */}
                 {config.provider === 'custom' && (
                   <>
-                    <div className="form-field">
-                      <label>Thinking Format</label>
-                      <CustomSelect
-                        value={config.advanced.thinkingConfig?.customThinkingFormat || ''}
-                        onChange={(value) => handleThinkingConfigChange('customThinkingFormat', value as CustomThinkingFormat || undefined)}
-                        options={[
-                          { value: '', label: 'Select format...' },
-                          { value: 'openai', label: 'OpenAI (reasoning_effort)' },
-                          { value: 'claude', label: 'Claude (budget_tokens)' },
-                          { value: 'gemini', label: 'Gemini (thinkingLevel)' },
-                          { value: 'openrouter', label: 'OpenRouter (effort + max_tokens)' },
-                        ]}
-                      />
-                      <p className="field-hint">
-                        Select the thinking format your endpoint supports
-                      </p>
-                    </div>
-
                     {/* OpenAI format options */}
-                    {config.advanced.thinkingConfig?.customThinkingFormat === 'openai' && (
+                    {config.advanced.customApiFormat === 'openai' && (
                       <>
                         <div className="form-field">
                           <label>Reasoning Effort</label>
@@ -407,7 +419,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                     )}
 
                     {/* Claude format options */}
-                    {config.advanced.thinkingConfig?.customThinkingFormat === 'claude' && (
+                    {config.advanced.customApiFormat === 'claude' && (
                       <div className="form-field">
                         <label>Thinking Budget (tokens)</label>
                         <input
@@ -428,7 +440,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                     )}
 
                     {/* Gemini format options */}
-                    {config.advanced.thinkingConfig?.customThinkingFormat === 'gemini' && (
+                    {config.advanced.customApiFormat === 'gemini' && (
                       <div className="form-field">
                         <label>Thinking Level</label>
                         <CustomSelect
@@ -446,7 +458,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                     )}
 
                     {/* OpenRouter format options */}
-                    {config.advanced.thinkingConfig?.customThinkingFormat === 'openrouter' && (
+                    {config.advanced.customApiFormat === 'openrouter' && (
                       <>
                         <div className="form-field">
                           <label>Effort Level</label>

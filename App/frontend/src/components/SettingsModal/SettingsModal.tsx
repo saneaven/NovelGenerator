@@ -28,7 +28,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [localSettings, setLocalSettings] = useState<Settings>(settingsStore.settings);
   const [isSaving, setIsSaving] = useState(false);
   const [mainTab, setMainTab] = useState<MainTab>('general');
-  const [activeFunction, setActiveFunction] = useState<AIFunctionType>('chat');
+  const [activeFunction, setActiveFunction] = useState<AIFunctionType>('agent');
 
   // Mobile sidebar state from store
   const openSidebar = useSidebarStore((state) => state.openSidebar);
@@ -298,10 +298,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             nativeOutputMode={localSettings.nativeOutputMode}
             onNativeOutputModeChange={(enabled) =>
               setLocalSettings(prev => ({ ...prev, nativeOutputMode: enabled }))
-            }
-            patchAutoRetry={localSettings.patchAutoRetry}
-            onPatchAutoRetryChange={(enabled) =>
-              setLocalSettings(prev => ({ ...prev, patchAutoRetry: enabled }))
             }
             functionCallHistoryLimit={localSettings.functionCallHistoryLimit}
             onFunctionCallHistoryLimitChange={(limit) =>

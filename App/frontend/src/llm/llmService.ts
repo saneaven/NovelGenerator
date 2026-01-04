@@ -1,5 +1,5 @@
 import { type ConversationBlock, type ThinkingDetail, type TokenUsage } from "./requestTypes";
-import { type ProviderType, type ProviderConfig, type ProviderPreference, type ThinkingConfig, type RetryConfig } from "../store/settingsStore";
+import { type ProviderType, type ProviderConfig, type ProviderPreference, type ThinkingConfig, type RetryConfig, type CustomApiFormat } from "../store/settingsStore";
 
 const API_BASE = `http://${window.location.hostname}:8000/api/v1`;
 
@@ -41,6 +41,7 @@ export async function* streamLLM(
         providerPreference?: ProviderPreference;
         thinkingConfig?: ThinkingConfig;
         thinkingMode?: 'off' | 'custom' | 'model';
+        customApiFormat?: CustomApiFormat;
         retryConfig?: RetryConfig;
     }
 ): AsyncGenerator<string | { content: string | null; tool_calls?: any[]; thinking?: string; thinking_details?: ThinkingDetail[]; thinking_text?: string; thinking_signature?: string; usage?: TokenUsage }>
@@ -84,6 +85,11 @@ export async function* streamLLM(
     if (opts?.thinkingMode)
     {
         requestBody.thinking_mode = opts.thinkingMode;
+    }
+
+    if (opts?.customApiFormat)
+    {
+        requestBody.custom_api_format = opts.customApiFormat;
     }
 
     // Retry configuration

@@ -31,7 +31,8 @@
 }
 
 .workspace-page-selector-label {
-  white-space: nowrap;
+    font-size: var(--font-size-lg);
+    white-space: nowrap;
 }
 
 .workspace-page-selector-chevron {

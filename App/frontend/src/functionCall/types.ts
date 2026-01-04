@@ -28,6 +28,23 @@ export type StoryObjectSubtype =
 export type ExecutionMode = 'storyObject' | 'novelEditor' | 'translation' | 'editAssistant';
 
 // ============================================================================
+// FUNCTION CALL STATUS
+// ============================================================================
+
+/**
+ * Status of a function call
+ * - validating: Async validation in progress (post-streaming)
+ * - pending: Validation passed, awaiting Apply
+ * - failed: Validation or execution failed
+ * - accepted: Apply completed successfully
+ * - rejected: User rejected the function call
+ */
+export type FunctionCallStatus = 'validating' | 'pending' | 'failed' | 'accepted' | 'rejected';
+
+/** Type of failure when status is 'failed' */
+export type FunctionCallFailureType = 'validation' | 'execution' | 'partial';
+
+// ============================================================================
 // FUNCTION CALL TYPES
 // ============================================================================
 
@@ -54,27 +71,21 @@ export interface NormalizedFunctionCall {
  * Function call with application status (for UI tracking)
  */
 export interface FunctionCallWithStatus extends NormalizedFunctionCall {
-  isApplied: boolean;
-  isRejected?: boolean;
-  appliedAt?: Date;
-  error?: string;
-  resultMessage?: string;
+  /** Current status of the function call */
+  status: FunctionCallStatus;
+  /** Error message (when failed) or user-provided reason (when rejected) */
+  reason?: string;
+  /** Type of failure when status is 'failed' */
+  failureType?: FunctionCallFailureType;
+  /** Result from applying the function call (when accepted) */
+  result?: ApplicationResult;
+  /** Timestamp when the function call was accepted */
+  acceptedAt?: Date;
 }
 
 // ============================================================================
 // APPLICATION RESULT
 // ============================================================================
-
-/**
- * Retry context when patch operations fail
- */
-export interface PatchRetryContext {
-  objectId: string;
-  objectType?: string;
-  fieldName: string;
-  currentValue: string;
-  error: string;
-}
 
 /**
  * Result of applying a function call
@@ -89,8 +100,6 @@ export interface ApplicationResult {
   objectType?: string;
   /** Data that was applied */
   data?: Record<string, unknown>;
-  /** Contexts for fields that need retry (patch failed) */
-  retryContexts?: PatchRetryContext[];
 }
 
 // ============================================================================
@@ -103,12 +112,14 @@ export interface ApplicationResult {
  * Note: mode is NOT included here because handlers route by function name,
  * not by mode. Mode only affects which function schemas are sent to the LLM
  * (see schemaRegistry.getForMode).
+ *
+ * For translation operations, pass the target language as `language`.
+ * Translation handlers use `create_new_version: false` while CRUD handlers use `true`.
  */
 export interface ExecutionContext {
   projectId: string;
+  /** Language for the operation (main language for CRUD, target language for translation) */
   language: string;
-  /** Target language for translation operations */
-  targetLanguage?: string;
 }
 
 // ============================================================================
@@ -181,21 +192,14 @@ export interface EditCard {
   type: string;
   title: string;
   description: string;
-  isApplied: boolean;
-  isRejected?: boolean;
-  appliedAt?: Date;
   data: Record<string, unknown>;
   functionCall: FunctionCallWithStatus;
   onApply?: () => void;
-  onReject?: () => void;
-  /** Validation error (card cannot be applied) */
-  validationError?: string;
-  /** Apply error (card stays pending after failed apply) */
-  applyError?: string;
+  onReject?: (reason?: string) => void;
 }
 
 // ============================================================================
-// UTILITY TYPES
+// TYPE MAPPING CONSTANTS
 // ============================================================================
 
 /** Maps story object subtype to unified object type */
@@ -204,6 +208,16 @@ export const STORY_OBJECT_TYPE_MAP: Record<StoryObjectSubtype, ObjectType> = {
   location: 'location',
   organization: 'organization',
   lorebook: 'lorebook',
+};
+
+/** All object types including outline structure (for translation and validation) */
+export const ALL_OBJECT_TYPE_MAP: Record<string, ObjectType> = {
+  character: 'character',
+  location: 'location',
+  organization: 'organization',
+  lorebook: 'lorebook',
+  act: 'act',
+  chapter: 'chapter',
 };
 
 /** Helper to get object data for a language with fallback */

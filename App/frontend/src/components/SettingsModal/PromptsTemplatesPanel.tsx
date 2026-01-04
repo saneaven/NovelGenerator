@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import PromptTreeNav from './PromptTreeNav';
 import FragmentTreeNav from './FragmentTreeNav';
 import TemplateEditor from './TemplateEditor';
@@ -181,15 +181,28 @@ const PromptEditorWrapper: React.FC<{
         node.name
     );
 
-    // Notify parent of state changes
+    // Track previous primitive values to avoid infinite loops
+    const prevStateRef = useRef({ content: '', hasChanges: false, isSaving: false });
+
+    // Notify parent of state changes - only when primitive values change
     useEffect(() => {
-        onStateChange({
-            content: editor.content,
-            hasChanges: editor.hasChanges,
-            isSaving: editor.isSaving,
-            versionHistoryProps: editor.versionHistoryProps,
-            reload: editor.reload,
-        });
+        const prev = prevStateRef.current;
+        if (prev.content !== editor.content ||
+            prev.hasChanges !== editor.hasChanges ||
+            prev.isSaving !== editor.isSaving) {
+            prevStateRef.current = {
+                content: editor.content,
+                hasChanges: editor.hasChanges,
+                isSaving: editor.isSaving
+            };
+            onStateChange({
+                content: editor.content,
+                hasChanges: editor.hasChanges,
+                isSaving: editor.isSaving,
+                versionHistoryProps: editor.versionHistoryProps,
+                reload: editor.reload,
+            });
+        }
     }, [editor.content, editor.hasChanges, editor.isSaving, editor.versionHistoryProps, editor.reload, onStateChange]);
 
     return (
@@ -219,19 +232,42 @@ const FragmentEditorWrapper: React.FC<{
         onSaved: onSave,
     });
 
-    // Notify parent of state changes
+    // Track previous primitive values to avoid infinite loops
+    const prevStateRef = useRef({
+        content: '',
+        hasChanges: false,
+        isSaving: false,
+        isDeleting: false,
+        description: ''
+    });
+
+    // Notify parent of state changes - only when primitive values change
     useEffect(() => {
-        onStateChange({
-            content: editor.content,
-            hasChanges: editor.hasChanges,
-            isSaving: editor.isSaving,
-            isDeleting: editor.isDeleting,
-            description: editor.description,
-            setDescription: editor.setDescription,
-            versionHistoryProps: editor.versionHistoryProps,
-            reload: editor.reload,
-            onDelete: editor.onDelete,
-        });
+        const prev = prevStateRef.current;
+        if (prev.content !== editor.content ||
+            prev.hasChanges !== editor.hasChanges ||
+            prev.isSaving !== editor.isSaving ||
+            prev.isDeleting !== editor.isDeleting ||
+            prev.description !== editor.description) {
+            prevStateRef.current = {
+                content: editor.content,
+                hasChanges: editor.hasChanges,
+                isSaving: editor.isSaving,
+                isDeleting: editor.isDeleting,
+                description: editor.description
+            };
+            onStateChange({
+                content: editor.content,
+                hasChanges: editor.hasChanges,
+                isSaving: editor.isSaving,
+                isDeleting: editor.isDeleting,
+                description: editor.description,
+                setDescription: editor.setDescription,
+                versionHistoryProps: editor.versionHistoryProps,
+                reload: editor.reload,
+                onDelete: editor.onDelete,
+            });
+        }
     }, [
         editor.content, editor.hasChanges, editor.isSaving, editor.isDeleting,
         editor.description, editor.setDescription, editor.versionHistoryProps,

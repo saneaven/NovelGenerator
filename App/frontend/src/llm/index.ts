@@ -12,13 +12,13 @@ export {
   type PromptBundle,
   type PromptContext,
   type BasePromptContext,
-  type ChatWorkspacePromptContext,
-  type ChatNovelEditorPromptContext,
-  type ChatOutlineManagerPromptContext,
+  type AgentWorkspacePromptContext,
+  type AgentNovelEditorPromptContext,
+  type AgentOutlineManagerPromptContext,
   type EditAssistantStoryObjectPromptContext,
   type EditAssistantManuscriptPromptContext,
   type StoryTranslationPromptContext,
-  type ChatTranslationPromptContext,
+  type AgentTranslationPromptContext,
   type ObjectImagePromptContext,
   type SceneImagePromptContext,
   type CoverImagePromptContext,
@@ -40,32 +40,31 @@ export {
   type FunctionCallOperationChapterPreview,
   type FunctionCallOperationPreview,
   type FunctionCallProgress,
-  type FunctionCallResultSummary,
   type ChatMessage,
 } from './requestTypes';
 
 // Re-export LLM service functions (moved from llm_request/)
 export { streamLLM, BackendError, fetchModels, fetchProviders, fetchModelEndpoints } from './llmService';
 
-// Re-export function schemas (moved from chat/types/)
+// Function schemas - all from unified functionCall module
 export {
   type FunctionCallSchema,
   type FunctionCallResult,
   type FunctionCallMessage,
   type FunctionResultMessage,
-  CHAT_FUNCTIONS,
-} from './schemas/chatFunctions';
-
-// Edit functions are now exported from functionCall module
-export {
+  AGENT_FUNCTIONS,
+  AGENT_FUNCTION_NAMES,
   STORY_OBJECT_EDIT_FUNCTIONS,
   MANUSCRIPT_EDIT_FUNCTIONS,
+  OUTLINE_EDIT_FUNCTIONS,
+  getFunctionsForSet,
+  type FunctionSetName,
 } from '../functionCall';
 
 export {
   TRANSLATION_FUNCTIONS,
-  SET_CHAT_MESSAGE_TRANSLATION,
-  CHAT_TRANSLATION_FUNCTIONS,
+  SET_AGENT_MESSAGE_TRANSLATION,
+  AGENT_TRANSLATION_FUNCTIONS,
   SET_FUNCTION_NAMES,
   PATCH_FUNCTION_NAMES,
   ALL_TRANSLATION_FUNCTION_NAMES,

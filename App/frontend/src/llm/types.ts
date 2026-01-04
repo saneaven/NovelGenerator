@@ -1,19 +1,19 @@
 import type { MutableRefObject } from 'react';
-import type { ContentPart, FunctionCallMetadata, FunctionCallProgress, FunctionCallResultSummary } from './requestTypes';
-import type { ProviderConfig, ProviderType, ThinkingConfig, RetryConfig } from '../store/settingsStore';
-import type { FunctionCallSchema } from './schemas/chatFunctions';
+import type { ContentPart, FunctionCallMetadata, FunctionCallProgress } from './requestTypes';
+import type { ProviderConfig, ProviderType, ThinkingConfig, RetryConfig, CustomApiFormat } from '../store/settingsStore';
+import type { FunctionCallSchema } from '../functionCall';
 
 /**
  * LLM Task Mode - determines which prompts and functions to use
  */
 export const LLMTaskMode = {
-  CHAT_STORYOBJECT: 'chat_storyObject',
-  CHAT_NOVEL_EDITOR: 'chat_novel_editor',
-  CHAT_OUTLINE_MANAGER: 'chat_outline_manager',
+  AGENT_STORYOBJECT: 'agent_storyObject',
+  AGENT_NOVEL_EDITOR: 'agent_novel_editor',
+  AGENT_OUTLINE_MANAGER: 'agent_outline_manager',
   EDIT_ASSISTANT_MANUSCRIPT: 'edit_assistant_manuscript',
   EDIT_ASSISTANT_STORY_OBJECT: 'edit_assistant_story_object',
   TRANSLATION: 'translation',
-  CHAT_TRANSLATION: 'chat_translation',
+  AGENT_TRANSLATION: 'agent_translation',
   OBJECT_IMAGE_PROMPT: 'object_image_prompt',
   SCENE_IMAGE_PROMPT: 'scene_image_prompt',
   COVER_IMAGE_PROMPT: 'cover_image_prompt',
@@ -65,10 +65,9 @@ export interface TemplateData {
   };
   input: {
     userMessage: string;
-    functionResults?: Array<{ functionCallId: string; functionName: string; success: boolean; isRejected: boolean; resultMessage: string; appliedAt?: string }>;
   };
   // Mode-specific groups (only one should be set)
-  chat?: {
+  agent?: {
     mode: 'storyObject' | 'novelEditor' | 'outlineManager';
     contextObjectIds?: string[];
     selectedOutlineId?: string;
@@ -96,7 +95,7 @@ export interface TemplateData {
     objectIds?: string[];
     contextObjectIds?: string[];
     currentTranslatedContents?: Array<{ id: string; type: string; name: string; translatedContent: string }>;
-    chatMessages?: Array<{ id: string; content: string }>;
+    agentMessages?: Array<{ id: string; content: string }>;
   };
   imagePrompt?: {
     objectType?: string;
@@ -130,33 +129,30 @@ export interface BasePromptContext {
 }
 
 /**
- * Context for workspace chat
+ * Context for workspace agent
  */
-export interface ChatWorkspacePromptContext extends BasePromptContext {
+export interface AgentWorkspacePromptContext extends BasePromptContext {
   functions?: FunctionCallSchema[];
-  functionResults?: FunctionCallResultSummary[];
   contextObjectIds?: string[];
 }
 
 /**
- * Context for novel editor chat
- * Note: This is now identical to ChatWorkspacePromptContext.
+ * Context for novel editor agent
+ * Note: This is now identical to AgentWorkspacePromptContext.
  * The only difference between workspace and novelEditor modes is the systemPrompt template.
  * Manuscripts are included via contextObjectIds, not a separate novelData field.
  */
-export interface ChatNovelEditorPromptContext extends BasePromptContext {
+export interface AgentNovelEditorPromptContext extends BasePromptContext {
   functions?: FunctionCallSchema[];
-  functionResults?: FunctionCallResultSummary[];
   contextObjectIds?: string[];
 }
 
 /**
- * Context for outline manager chat
+ * Context for outline manager agent
  * Used for AI-assisted story structure planning and organization.
  */
-export interface ChatOutlineManagerPromptContext extends BasePromptContext {
+export interface AgentOutlineManagerPromptContext extends BasePromptContext {
   functions?: FunctionCallSchema[];
-  functionResults?: FunctionCallResultSummary[];
   contextObjectIds?: string[];
   selectedOutlineId?: string;
   selectedActId?: string;
@@ -211,9 +207,9 @@ export interface StoryTranslationPromptContext extends BasePromptContext {
 }
 
 /**
- * Context for chat message translation
+ * Context for agent message translation
  */
-export interface ChatTranslationPromptContext extends BasePromptContext {
+export interface AgentTranslationPromptContext extends BasePromptContext {
   sourceLanguage: string;
   targetLanguage: string;
   sourceContent: string;
@@ -276,12 +272,12 @@ export interface CoverImagePromptContext extends BasePromptContext {
  * Union type of all prompt contexts
  */
 export type PromptContext =
-  | ChatWorkspacePromptContext
-  | ChatNovelEditorPromptContext
+  | AgentWorkspacePromptContext
+  | AgentNovelEditorPromptContext
   | EditAssistantStoryObjectPromptContext
   | EditAssistantManuscriptPromptContext
   | StoryTranslationPromptContext
-  | ChatTranslationPromptContext
+  | AgentTranslationPromptContext
   | ObjectImagePromptContext
   | SceneImagePromptContext
   | CoverImagePromptContext;
@@ -303,6 +299,7 @@ export interface LLMTaskConfig {
   temperature?: number;
   thinkingMode?: 'off' | 'model' | 'custom';
   thinkingConfig?: ThinkingConfig;
+  customApiFormat?: CustomApiFormat;  // For custom provider API format
   retryConfig?: RetryConfig;
 }
 

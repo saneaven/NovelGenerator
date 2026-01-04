@@ -5,7 +5,7 @@
 
 import React from 'react';
 import type { FunctionType, PromptCategory } from '../../types/prompts';
-import { Chat, Globe, Edit, Palette, Settings } from '../icons';
+import { SpeechBubble, Globe, Edit, Palette, Settings } from '../icons';
 
 export interface PromptNode {
   id: string;
@@ -29,50 +29,50 @@ export interface PromptNode {
  */
 export const PROMPT_TREE: PromptNode[] = [
   {
-    id: 'chat',
-    label: 'Chat',
-    icon: <Chat size="sm" />,
+    id: 'agent',
+    label: 'Agent',
+    icon: <SpeechBubble size="sm" />,
     type: 'category',
     defaultExpanded: true,
     children: [
       {
-        id: 'chat-storyobject',
+        id: 'agent-storyobject',
         label: 'Story Object Mode',
         type: 'category',
         defaultExpanded: true,
         children: [
           {
-            id: 'chat-storyobject-system',
+            id: 'agent-storyobject-system',
             label: 'System Prompt',
             type: 'prompt',
-            functionType: 'chat',
+            functionType: 'agent',
             category: 'systemPrompt',
             name: 'storyObject',
             description: 'Main AI behavior for Story Object conversations'
           },
           {
-            id: 'chat-storyobject-user',
+            id: 'agent-storyobject-user',
             label: 'User Prompt',
             type: 'prompt',
-            functionType: 'chat',
+            functionType: 'agent',
             category: 'userPrompt',
             name: 'storyObject',
-            description: 'Template for the last user message in chat'
+            description: 'Template for the last user message in agent'
           },
           {
-            id: 'chat-storyobject-nonlast',
+            id: 'agent-storyobject-nonlast',
             label: 'Non-Last User Prompt',
             type: 'prompt',
-            functionType: 'chat',
+            functionType: 'agent',
             category: 'nonLastUserPrompt',
             name: 'storyObject',
-            description: 'Template for previous user messages in chat history'
+            description: 'Template for previous user messages in agent history'
           },
           {
-            id: 'chat-storyobject-prefill',
+            id: 'agent-storyobject-prefill',
             label: 'Prefill Template',
             type: 'prompt',
-            functionType: 'chat',
+            functionType: 'agent',
             category: 'prefill',
             name: 'storyObject',
             description: 'AI response starter for Story Object mode'
@@ -80,42 +80,42 @@ export const PROMPT_TREE: PromptNode[] = [
         ]
       },
       {
-        id: 'chat-noveleditor',
+        id: 'agent-noveleditor',
         label: 'Novel Editor Mode',
         type: 'category',
         children: [
           {
-            id: 'chat-noveleditor-system',
+            id: 'agent-noveleditor-system',
             label: 'System Prompt',
             type: 'prompt',
-            functionType: 'chat',
+            functionType: 'agent',
             category: 'systemPrompt',
             name: 'novelEditor',
             description: 'Main AI behavior for Novel Editor conversations'
           },
           {
-            id: 'chat-noveleditor-user',
+            id: 'agent-noveleditor-user',
             label: 'User Prompt',
             type: 'prompt',
-            functionType: 'chat',
+            functionType: 'agent',
             category: 'userPrompt',
             name: 'novelEditor',
-            description: 'Template for the last user message in novel editor chat'
+            description: 'Template for the last user message in novel editor agent'
           },
           {
-            id: 'chat-noveleditor-nonlast',
+            id: 'agent-noveleditor-nonlast',
             label: 'Non-Last User Prompt',
             type: 'prompt',
-            functionType: 'chat',
+            functionType: 'agent',
             category: 'nonLastUserPrompt',
             name: 'novelEditor',
-            description: 'Template for previous user messages in novel editor chat history'
+            description: 'Template for previous user messages in novel editor agent history'
           },
           {
-            id: 'chat-noveleditor-prefill',
+            id: 'agent-noveleditor-prefill',
             label: 'Prefill Template',
             type: 'prompt',
-            functionType: 'chat',
+            functionType: 'agent',
             category: 'prefill',
             name: 'novelEditor',
             description: 'AI response starter for Novel Editor mode'
@@ -123,42 +123,42 @@ export const PROMPT_TREE: PromptNode[] = [
         ]
       },
       {
-        id: 'chat-outlinemanager',
+        id: 'agent-outlinemanager',
         label: 'Outline Manager Mode',
         type: 'category',
         children: [
           {
-            id: 'chat-outlinemanager-system',
+            id: 'agent-outlinemanager-system',
             label: 'System Prompt',
             type: 'prompt',
-            functionType: 'chat',
+            functionType: 'agent',
             category: 'systemPrompt',
             name: 'outlineManager',
             description: 'Main AI behavior for Outline Manager conversations'
           },
           {
-            id: 'chat-outlinemanager-user',
+            id: 'agent-outlinemanager-user',
             label: 'User Prompt',
             type: 'prompt',
-            functionType: 'chat',
+            functionType: 'agent',
             category: 'userPrompt',
             name: 'outlineManager',
-            description: 'Template for the last user message in outline manager chat'
+            description: 'Template for the last user message in outline manager agent'
           },
           {
-            id: 'chat-outlinemanager-nonlast',
+            id: 'agent-outlinemanager-nonlast',
             label: 'Non-Last User Prompt',
             type: 'prompt',
-            functionType: 'chat',
+            functionType: 'agent',
             category: 'nonLastUserPrompt',
             name: 'outlineManager',
-            description: 'Template for previous user messages in outline manager chat history'
+            description: 'Template for previous user messages in outline manager agent history'
           },
           {
-            id: 'chat-outlinemanager-prefill',
+            id: 'agent-outlinemanager-prefill',
             label: 'Prefill Template',
             type: 'prompt',
-            functionType: 'chat',
+            functionType: 'agent',
             category: 'prefill',
             name: 'outlineManager',
             description: 'AI response starter for Outline Manager mode'
@@ -209,36 +209,36 @@ export const PROMPT_TREE: PromptNode[] = [
         ]
       },
       {
-        id: 'translation-chat',
-        label: 'Chat Messages',
+        id: 'translation-agentMessages',
+        label: 'Agent Messages',
         type: 'category',
         children: [
           {
-            id: 'translation-chat-system',
+            id: 'translation-agentMessages-system',
             label: 'System Prompt',
             type: 'prompt',
             functionType: 'translation',
             category: 'systemPrompt',
-            name: 'chat',
-            description: 'Instructions for translating chat messages'
+            name: 'agentMessages',
+            description: 'Instructions for translating agent messages'
           },
           {
-            id: 'translation-chat-user',
+            id: 'translation-agentMessages-user',
             label: 'User Prompt',
             type: 'prompt',
             functionType: 'translation',
             category: 'userPrompt',
-            name: 'chat',
-            description: 'Auto-generated user message with chat payload'
+            name: 'agentMessages',
+            description: 'Auto-generated user message with agent message payload'
           },
           {
-            id: 'translation-chat-prefill',
+            id: 'translation-agentMessages-prefill',
             label: 'Prefill Template',
             type: 'prompt',
             functionType: 'translation',
             category: 'prefill',
-            name: 'chat',
-            description: 'Template for chat translation responses'
+            name: 'agentMessages',
+            description: 'Template for agent message translation responses'
           }
         ]
       }

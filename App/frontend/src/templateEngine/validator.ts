@@ -22,8 +22,8 @@ export function mapFunctionTypeToSchemaType(
   name?: string
 ): PromptType | null {
   switch (functionType) {
-    case 'chat':
-      return 'chat';
+    case 'agent':
+      return 'agent';
     case 'translation':
       return 'translation';
     case 'editAssistant':
@@ -38,7 +38,7 @@ export function mapFunctionTypeToSchemaType(
 }
 
 // All valid schema groups
-const SCHEMA_GROUPS = ['config', 'project', 'input', 'chat', 'editAssistant', 'translation', 'imagePrompt'] as const;
+const SCHEMA_GROUPS = ['config', 'project', 'input', 'agent', 'editAssistant', 'translation', 'imagePrompt'] as const;
 type SchemaGroup = typeof SCHEMA_GROUPS[number];
 
 /**

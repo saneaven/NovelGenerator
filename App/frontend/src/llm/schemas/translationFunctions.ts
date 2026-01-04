@@ -6,7 +6,7 @@
  * - Patch functions: Search-replace edits for minor corrections
  */
 
-import type { FunctionCallSchema } from './chatFunctions';
+import type { FunctionCallSchema } from '../../functionCall';
 
 // ============================================================================
 // SET FUNCTIONS - Full translation (new or replace existing)
@@ -204,12 +204,12 @@ export const PATCH_MANUSCRIPT_TRANSLATION: FunctionCallSchema = {
 };
 
 // ============================================================================
-// CHAT MESSAGE TRANSLATION
+// AGENT MESSAGE TRANSLATION
 // ============================================================================
 
-export const SET_CHAT_MESSAGE_TRANSLATION: FunctionCallSchema = {
-  name: 'set_chat_message_translation',
-  description: 'Translate a chat message from one language to another.',
+export const SET_AGENT_MESSAGE_TRANSLATION: FunctionCallSchema = {
+  name: 'set_agent_message_translation',
+  description: 'Translate an agent message from one language to another.',
   parameters: {
     type: 'object',
     properties: {
@@ -245,8 +245,8 @@ export const TRANSLATION_FUNCTIONS: FunctionCallSchema[] = [
   ...PATCH_TRANSLATION_FUNCTIONS,
 ];
 
-export const CHAT_TRANSLATION_FUNCTIONS: FunctionCallSchema[] = [
-  SET_CHAT_MESSAGE_TRANSLATION,
+export const AGENT_TRANSLATION_FUNCTIONS: FunctionCallSchema[] = [
+  SET_AGENT_MESSAGE_TRANSLATION,
 ];
 
 // ============================================================================

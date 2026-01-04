@@ -57,7 +57,7 @@ export interface Outline extends BaseMetadata {
 }
 
 // Story Object Categories
-export type StoryObjectCategory = 
+export type StoryObjectCategory =
   | 'basicInfo'
   | 'character'
   | 'organization'
@@ -66,6 +66,9 @@ export type StoryObjectCategory =
   | 'outline'
   | 'act'
   | 'chapter';
+
+// UI Tab types for story object panels
+export type StoryObjectTabType = 'basicInfo' | 'characters' | 'organizations' | 'locations' | 'lorebook' | 'outline';
 
 // Combined Story Objects type
 export interface StoryObjects {

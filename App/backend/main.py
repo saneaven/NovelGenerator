@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from .models.requests import ChatCompletionRequest, ProviderConfig
 from .providers.registry import ProviderRegistry
 from .providers.openrouter import OpenRouterProvider
-from .providers.custom import CustomOpenAIProvider
+from .providers.custom import CustomProvider
 from .providers.claude_provider import ClaudeProvider
 from .providers.gemini_provider import GeminiProvider
 from .providers.openai_responses_provider import OpenAIResponsesProvider
@@ -17,7 +17,7 @@ from .providers.xai_provider import XAIProvider
 # Import database API routes
 from .routes.auth_routes import router as auth_router
 from .routes.project_routes import router as project_router
-from .routes.chat_routes import router as chat_router
+from .routes.agent_routes import router as agent_router
 from .routes.settings_routes import router as settings_router
 from .routes.prompt_routes import router as prompt_router
 
@@ -42,7 +42,7 @@ app = FastAPI(
 # Include all database API routers
 app.include_router(auth_router)
 app.include_router(project_router)
-app.include_router(chat_router)
+app.include_router(agent_router)
 app.include_router(settings_router)
 app.include_router(prompt_router)
 
@@ -158,6 +158,9 @@ async def stream_chat(provider: str, request: ChatCompletionRequest, req: Reques
             # Include tool_calls for assistant messages if present
             if msg.tool_calls:
                 message_dict["tool_calls"] = [tc.model_dump() for tc in msg.tool_calls]
+            # Include tool_results for tool_results role messages
+            if msg.tool_results:
+                message_dict["tool_results"] = [tr.model_dump() for tr in msg.tool_results]
             messages.append(message_dict)
 
         async def event_gen():
@@ -180,6 +183,7 @@ async def stream_chat(provider: str, request: ChatCompletionRequest, req: Reques
                 provider_preference=provider_pref,
                 thinking_config=thinking_cfg,
                 thinking_mode=request.thinking_mode,
+                custom_api_format=request.custom_api_format,
                 retry_config=retry_cfg
             )
 

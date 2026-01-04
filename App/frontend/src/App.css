@@ -335,30 +335,6 @@
     box-shadow: var(--shadow-md);
 }
 
-.breadcrumb {
-    color: var(--color-text-secondary);
-    margin-bottom: var(--spacing-sm);
-}
-
-.breadcrumb-link {
-    color: var(--color-brand-primary);
-    text-decoration: none;
-    transition: color var(--transition-fast);
-}
-
-.breadcrumb-link:hover {
-    text-decoration: underline;
-    color: var(--color-primary-main);
-}
-
-.breadcrumb-separator {
-    margin: 0 var(--spacing-sm);
-}
-
-.breadcrumb-current {
-    font-weight: var(--font-weight-bold);
-}
-
 .project-header h1 {
     color: var(--color-text-primary);
     margin-bottom: var(--spacing-md);

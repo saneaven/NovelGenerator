@@ -36,9 +36,9 @@ async def get_user_settings(
         settings = UserSettings(
             user_id=current_user.id,
             function_configs={
-                'chat': {
+                'agent': {
                     'provider': 'openrouter',
-                    'model': 'gpt-4o-mini',
+                    'model': 'gpt-5-mini',
                     'temperature': 0.7,
                     'advanced': {
                         'enablePrefill': False,
@@ -48,7 +48,7 @@ async def get_user_settings(
                 },
                 'translation': {
                     'provider': 'openrouter',
-                    'model': 'gpt-4o',
+                    'model': 'gpt-5',
                     'temperature': 0.2,
                     'advanced': {
                         'enablePrefill': False,
@@ -58,7 +58,7 @@ async def get_user_settings(
                 },
                 'editAssistant': {
                     'provider': 'openrouter',
-                    'model': 'gpt-4o',
+                    'model': 'gpt-5',
                     'temperature': 0.7,
                     'advanced': {
                         'enablePrefill': True,
@@ -68,7 +68,7 @@ async def get_user_settings(
                 },
                 'imagePrompt': {
                     'provider': 'openrouter',
-                    'model': 'gpt-4o',
+                    'model': 'gpt-5',
                     'temperature': 0.7,
                     'advanced': {
                         'enablePrefill': False,

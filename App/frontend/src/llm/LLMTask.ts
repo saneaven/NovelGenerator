@@ -9,7 +9,7 @@ import { streamLLM } from './llmService';
 import { useSettingsStore, type AIFunctionType } from '../store/settingsStore';
 import { useLLMTaskStore } from '../store/llmTaskStore';
 import { useLLMLogStore } from '../store/llmLogStore';
-import { FunctionCallStreamTracker } from '../chat/streaming/FunctionCallStreamTracker';
+import { FunctionCallStreamTracker } from '../agent/streaming/FunctionCallStreamTracker';
 import { PromptManager } from './PromptManager';
 import { LLMTaskManager } from './LLMTaskManager';
 import type {
@@ -25,13 +25,13 @@ import { LLMTaskMode } from './types';
  * Map LLMTaskMode to AIFunctionType for settings lookup
  */
 const MODE_TO_FUNCTION_TYPE: Record<LLMTaskModeType, AIFunctionType> = {
-  [LLMTaskMode.CHAT_STORYOBJECT]: 'chat',
-  [LLMTaskMode.CHAT_NOVEL_EDITOR]: 'chat',
-  [LLMTaskMode.CHAT_OUTLINE_MANAGER]: 'chat',
+  [LLMTaskMode.AGENT_STORYOBJECT]: 'agent',
+  [LLMTaskMode.AGENT_NOVEL_EDITOR]: 'agent',
+  [LLMTaskMode.AGENT_OUTLINE_MANAGER]: 'agent',
   [LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT]: 'editAssistant',
   [LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT]: 'editAssistant',
   [LLMTaskMode.TRANSLATION]: 'translation',
-  [LLMTaskMode.CHAT_TRANSLATION]: 'translation',
+  [LLMTaskMode.AGENT_TRANSLATION]: 'translation',
   [LLMTaskMode.OBJECT_IMAGE_PROMPT]: 'imagePrompt',
   [LLMTaskMode.SCENE_IMAGE_PROMPT]: 'imagePrompt',
   [LLMTaskMode.COVER_IMAGE_PROMPT]: 'imagePrompt',
@@ -62,8 +62,8 @@ export class LLMTask {
   }
 
   /**
-   * Run the LLM task with the given chat history
-   * @param history - Optional chat history (ChatManager passes this, modals don't)
+   * Run the LLM task with the given message history
+   * @param history - Optional message history (AgentManager passes this, modals don't)
    */
   async run(history: ChatMessage[] = []): Promise<void> {
     if (this.isRunning) {
@@ -95,6 +95,7 @@ export class LLMTask {
       const temperature = this.config.temperature ?? functionConfig.temperature;
       const thinkingMode = this.config.thinkingMode ?? functionConfig.advanced.thinkingMode;
       const thinkingConfig = this.config.thinkingConfig ?? functionConfig.advanced.thinkingConfig;
+      const customApiFormat = this.config.customApiFormat ?? functionConfig.advanced.customApiFormat;
       const retryConfig = this.config.retryConfig ?? settings.retryConfig;
 
       // 2. Generate prompt bundle
@@ -183,6 +184,7 @@ export class LLMTask {
           temperature,
           thinkingConfig: thinkingMode === 'model' ? thinkingConfig : undefined,
           thinkingMode,
+          customApiFormat,
           retryConfig,
         }
       )) {
@@ -341,8 +343,7 @@ export class LLMTask {
         id: fc.id,
         function_name: fc.function?.name ?? '',
         arguments: this.parseArguments(fc.function?.arguments),
-        isApplied: false,
-        isRejected: false,
+        status: 'pending',
       }));
       const result: LLMTaskResult = {
         contentParts: [...this.pendingParts],
@@ -452,7 +453,7 @@ export class LLMTask {
     }
     const totalAssistants = assistantIndices.length;
 
-    // 3. Process history (all previous messages - ChatManager passes history without current user message)
+    // 3. Process history (all previous messages - AgentManager passes history without current user message)
     let assistantCount = 0;
     for (let i = 0; i < history.length; i++) {
       const msg = history[i];
@@ -501,6 +502,41 @@ export class LLMTask {
         }
 
         messages.push(block);
+
+        // Add tool_results message if this assistant message had tool_calls with results
+        if (block.tool_calls && block.tool_calls.length > 0 && msg.functionCalls) {
+          const toolResults = msg.functionCalls
+            .filter(fc => fc.status !== 'pending')
+            .map(fc => {
+              let content: string;
+              switch (fc.status) {
+                case 'accepted':
+                  content = fc.result?.message || 'Applied successfully';
+                  break;
+                case 'rejected':
+                  content = fc.reason ? `User rejected: ${fc.reason}` : 'User rejected this action';
+                  break;
+                case 'failed':
+                  content = `Failed: ${fc.reason || 'Unknown error'}`;
+                  break;
+                default:
+                  content = 'Pending user confirmation';
+              }
+              return {
+                tool_call_id: fc.id,
+                function_name: fc.function_name,
+                content,
+              };
+            });
+
+          if (toolResults.length > 0) {
+            messages.push({
+              role: 'tool_results' as const,
+              contentParts: [],  // Required by ConversationBlock but not used for tool_results
+              tool_results: toolResults,
+            });
+          }
+        }
       } else {
         // Use raw message content for other roles
         messages.push({

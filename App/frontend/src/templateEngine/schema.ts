@@ -6,7 +6,7 @@
  * - config.* - Settings data (auto-loaded, available to ALL prompts)
  * - project.* - All project data (auto-loaded, available to ALL prompts)
  * - input.* - User input (available to ALL prompts)
- * - Mode-specific: chat.*, editAssistant.*, translation.*, imagePrompt.*
+ * - Mode-specific: agent.*, editAssistant.*, translation.*, imagePrompt.*
  */
 
 // Helper type for variable metadata
@@ -108,15 +108,15 @@ export const UNIFIED_SCHEMA = {
         functionCallId: "fc-1",
         functionName: "update_manuscript",
         success: true,
-        isRejected: false,
+        status: "accepted",
         resultMessage: "Applied successfully",
-        appliedAt: "2025-01-02T00:00:00Z"
-      }] as Array<{ functionCallId: string; functionName: string; success: boolean; isRejected: boolean; resultMessage: string; appliedAt?: string }>
+        acceptedAt: "2025-01-02T00:00:00Z"
+      }] as Array<{ functionCallId: string; functionName: string; success: boolean; status: string; resultMessage: string; acceptedAt?: string }>
     },
   },
 
-  chat: {
-    mode: { desc: "Chat mode", example: "storyObject" as "storyObject" | "novelEditor" },
+  agent: {
+    mode: { desc: "Agent mode", example: "storyObject" as "storyObject" | "novelEditor" },
     contextObjectIds: { desc: "IDs of objects to include in context", example: ["char-1", "loc-1"] as string[] },
   },
 
@@ -157,8 +157,8 @@ export const UNIFIED_SCHEMA = {
         translatedContent: "Name: 캐릭터\nDescription: 설명..."
       }] as Array<{ id: string; type: string; name: string; translatedContent: string }>
     },
-    chatMessages: {
-      desc: "Chat messages to translate (only for chat translation)",
+    agentMessages: {
+      desc: "Agent messages to translate (only for agent message translation)",
       example: [{ id: "msg-1", content: "Hello there" }] as Array<{ id: string; content: string }>
     },
   },
@@ -187,13 +187,13 @@ export const UNIFIED_SCHEMA = {
 /**
  * Prompt types
  */
-export type PromptType = 'chat' | 'editAssistant' | 'translation' | 'objectImagePrompt' | 'sceneImagePrompt' | 'coverImagePrompt';
+export type PromptType = 'agent' | 'editAssistant' | 'translation' | 'objectImagePrompt' | 'sceneImagePrompt' | 'coverImagePrompt';
 
 /**
  * Maps which variable groups are available for each prompt type.
  */
 export const PROMPT_TYPE_VARIABLES: Record<PromptType, string[]> = {
-  chat: ['config', 'project', 'input', 'chat'],
+  agent: ['config', 'project', 'input', 'agent'],
   editAssistant: ['config', 'project', 'input', 'editAssistant'],
   translation: ['config', 'project', 'input', 'translation'],
   objectImagePrompt: ['config', 'project', 'input', 'imagePrompt'],
@@ -212,7 +212,7 @@ type ExtractProps<T> = {
 export type ConfigData = ExtractProps<typeof UNIFIED_SCHEMA['config']>;
 export type ProjectData = ExtractProps<typeof UNIFIED_SCHEMA['project']>;
 export type InputData = ExtractProps<typeof UNIFIED_SCHEMA['input']>;
-export type ChatModeData = ExtractProps<typeof UNIFIED_SCHEMA['chat']>;
+export type AgentModeData = ExtractProps<typeof UNIFIED_SCHEMA['agent']>;
 export type EditAssistantModeData = ExtractProps<typeof UNIFIED_SCHEMA['editAssistant']>;
 export type TranslationModeData = ExtractProps<typeof UNIFIED_SCHEMA['translation']>;
 export type ImagePromptModeData = ExtractProps<typeof UNIFIED_SCHEMA['imagePrompt']>;
@@ -222,7 +222,7 @@ export interface PromptData {
   config: ConfigData;
   project: ProjectData;
   input: InputData;
-  chat?: ChatModeData;
+  agent?: AgentModeData;
   editAssistant?: EditAssistantModeData;
   translation?: TranslationModeData;
   imagePrompt?: ImagePromptModeData;

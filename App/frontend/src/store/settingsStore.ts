@@ -7,7 +7,7 @@ import { getPromptKey } from '../types/prompts';
 
 // Types
 export type ProviderType = 'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom' | 'xai';
-export type AIFunctionType = 'chat' | 'translation' | 'editAssistant' | 'imagePrompt';
+export type AIFunctionType = 'agent' | 'translation' | 'editAssistant' | 'imagePrompt';
 export type ImageProviderType = 'openai' | 'gemini' | 'xai' | 'novelai';
 export type PromptType = 'natural' | 'tag_based';
 export type ThemeMode = 'light' | 'dark' | 'system';
@@ -51,8 +51,8 @@ export interface ProviderPreference {
     ignore?: string[];
 }
 
-// Custom thinking format for custom endpoints
-export type CustomThinkingFormat = 'openai' | 'claude' | 'gemini' | 'openrouter';
+// Custom API format for custom endpoints (controls both thinking and function calling)
+export type CustomApiFormat = 'openai' | 'claude' | 'gemini' | 'openrouter';
 
 // Thinking configuration for model-native thinking
 export interface ThinkingConfig {
@@ -62,7 +62,6 @@ export interface ThinkingConfig {
     claudeBudgetTokens?: number;
     geminiThinkingLevel?: 'minimal' | 'low' | 'medium' | 'high';  // Gemini 3 Flash supports all, Pro only low/high
     geminiBudgetTokens?: number;
-    customThinkingFormat?: CustomThinkingFormat;  // For custom endpoint thinking format
 }
 
 // Retry configuration for error handling
@@ -78,6 +77,7 @@ export interface AdvancedFunctionSettings {
     enablePrefill: boolean;
     thinkingMode: 'off' | 'model' | 'custom';
     thinkingConfig?: ThinkingConfig;
+    customApiFormat?: CustomApiFormat;  // For custom endpoint API format (affects thinking + function calling)
 }
 
 // Complete configuration for a single AI function
@@ -180,9 +180,6 @@ export interface Settings {
     // Native output mode - skip function calling and output raw text/XML
     nativeOutputMode: boolean;
 
-    // Patch auto-retry - automatically retry with replace mode if patch fails
-    patchAutoRetry: boolean;
-
     // LLM request logging - enable logging of LLM requests for debugging
     llmLoggingEnabled: boolean;
 
@@ -219,8 +216,8 @@ const defaultSettings: Settings = {
     },
 
     functionConfigs: {
-        // Chat: Fast and cheap for conversation
-        chat: {
+        // Agent: Fast and cheap for conversation
+        agent: {
             provider: 'openrouter',
             model: 'gpt-4o-mini',
             temperature: 0.7,
@@ -324,9 +321,6 @@ const defaultSettings: Settings = {
     // Native output mode disabled by default
     nativeOutputMode: false,
 
-    // Patch auto-retry enabled by default
-    patchAutoRetry: true,
-
     // LLM logging disabled by default
     llmLoggingEnabled: false,
 
@@ -379,9 +373,6 @@ interface SettingsStore {
     // Native output mode setter
     setNativeOutputMode: (enabled: boolean) => void;
 
-    // Patch auto-retry setter
-    setPatchAutoRetry: (enabled: boolean) => void;
-
     // LLM logging setter
     setLLMLoggingEnabled: (enabled: boolean) => void;
 
@@ -400,6 +391,7 @@ const migrateAdvancedSettings = (advanced: any): AdvancedFunctionSettings => ({
     enablePrefill: advanced.enablePrefill ?? false,
     thinkingMode: advanced.thinkingMode ?? 'off',
     thinkingConfig: advanced.thinkingConfig ?? { effort: 'medium' },
+    customApiFormat: advanced.customApiFormat ?? 'openai',
 });
 
 // Helper to merge stored settings with defaults
@@ -480,7 +472,6 @@ const mergeWithDefaults = (stored: any): Settings => {
             ...stored.retryConfig,
         },
         nativeOutputMode: stored.nativeOutputMode ?? defaultSettings.nativeOutputMode,
-        patchAutoRetry: stored.patchAutoRetry ?? defaultSettings.patchAutoRetry,
         llmLoggingEnabled: stored.llmLoggingEnabled ?? defaultSettings.llmLoggingEnabled,
         functionCallHistoryLimit: stored.functionCallHistoryLimit ?? defaultSettings.functionCallHistoryLimit,
     };
@@ -731,13 +722,6 @@ export const useSettingsStore = create<SettingsStore>()(
             setNativeOutputMode: (enabled) => {
                 set((state) => ({
                     settings: { ...state.settings, nativeOutputMode: enabled },
-                }));
-            },
-
-            // Patch auto-retry setter
-            setPatchAutoRetry: (enabled) => {
-                set((state) => ({
-                    settings: { ...state.settings, patchAutoRetry: enabled },
                 }));
             },
 

@@ -3,17 +3,15 @@ import { useSidebarStore } from '../../../store/sidebarStore';
 import { BaseSidebar } from '../../../components/BaseSidebar';
 import { Close, Clipboard, People, Organization, Map, Books, Document } from '../../../components/icons';
 import { IconButton } from '../../../components/IconButton';
+import type { StoryObjectTabType } from '../../../types/storyObject';
+import { useStoryObjectTab } from '../hooks/useStoryObjectTab';
 import './WorkspaceTabsSidebar.css';
-
-type TabType = 'basicInfo' | 'characters' | 'organizations' | 'locations' | 'lorebook' | 'outline';
 
 interface WorkspaceTabsSidebarProps {
   projectId: string;
-  activeTab: TabType;
-  onTabChange: (tab: TabType) => void;
 }
 
-const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
+const storyObjectTabs: { id: StoryObjectTabType; label: string; icon: React.ReactNode }[] = [
   { id: 'basicInfo', label: 'Basic Info', icon: <Clipboard size="md" /> },
   { id: 'characters', label: 'Characters', icon: <People size="md" /> },
   { id: 'organizations', label: 'Organizations', icon: <Organization size="md" /> },
@@ -24,13 +22,12 @@ const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
 
 const WorkspaceTabsSidebar: React.FC<WorkspaceTabsSidebarProps> = ({
   projectId,
-  activeTab,
-  onTabChange,
 }) => {
+  const { activeTab, setActiveTab } = useStoryObjectTab();
   const closeSidebar = useSidebarStore((state) => state.closeSidebar);
 
-  const handleTabSelect = (tabId: TabType) => {
-    onTabChange(tabId);
+  const handleTabSelect = (tabId: StoryObjectTabType) => {
+    setActiveTab(tabId);
     closeSidebar(projectId);
   };
 
@@ -43,7 +40,6 @@ const WorkspaceTabsSidebar: React.FC<WorkspaceTabsSidebarProps> = ({
       id="workspace-tabs"
       projectId={projectId}
       position="right"
-      width="280px"
       className="workspace-tabs-sidebar"
       header={
         <div className="workspace-tabs-sidebar-header">
@@ -60,7 +56,7 @@ const WorkspaceTabsSidebar: React.FC<WorkspaceTabsSidebarProps> = ({
       onClose={handleClose}
     >
       <div className="workspace-tabs-sidebar-content">
-        {tabs.map((tab) => (
+        {storyObjectTabs.map((tab) => (
           <button
             key={tab.id}
             className={`workspace-tab-item ${activeTab === tab.id ? 'active' : ''}`}

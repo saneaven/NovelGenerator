@@ -1,0 +1,86 @@
+/* ========================================
+   AGENT HEADER STYLES
+   Clean, Modern Design
+   ======================================== */
+
+.agent-header {
+    padding: var(--spacing-lg) var(--spacing-xl);
+    border-bottom: 1px solid var(--color-border-default);
+    background: var(--color-surface-elevated);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    box-shadow: var(--shadow-xs);
+    position: relative;
+    z-index: 2;
+}
+
+.agent-header-left {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-lg);
+    flex: 1;
+    min-width: 0;
+}
+
+.agent-header h2 {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    margin: 0;
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    letter-spacing: -0.015em;
+    max-width: 50%;
+    text-align: center;
+}
+
+/* Note: .agent-list-btn and .agent-close-btn migrated to TextButton component */
+
+/* ===== Mobile Styles ===== */
+@media (max-width: 768px) {
+    .agent-header {
+        padding: var(--spacing-md) var(--spacing-lg);
+    }
+
+    .agent-header h2 {
+        font-size: var(--font-size-base);
+    }
+
+    .agent-header-left {
+        gap: var(--spacing-md);
+    }
+}
+
+/* ===== Tablet Styles ===== */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .agent-header {
+        padding: var(--spacing-md) var(--spacing-lg);
+    }
+
+    .agent-header h2 {
+        font-size: var(--font-size-base);
+    }
+}
+
+/* ===== Large Desktop ===== */
+/* @media (min-width: 1440px) {
+    .agent-header {
+        padding: var(--spacing-xl) var(--spacing-2xl);
+    }
+
+    .agent-header h2 {
+        font-size: var(--font-size-xl);
+    }
+
+    .agent-list-btn {
+        padding: var(--spacing-md) var(--spacing-xl);
+        font-size: var(--font-size-base);
+    }
+} */
