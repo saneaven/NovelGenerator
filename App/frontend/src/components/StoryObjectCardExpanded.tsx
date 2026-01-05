@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { useProjectStore } from '../store/projectStore';
 import { DropdownMenu, DropdownItem, DropdownSection } from './ui/DropdownMenu';
-import { AIAssistMini, Scroll, Refresh, Trash, Collapse, MoreHorizontal, Save } from './icons';
+import { AIAssistMini, Scroll, Refresh, Trash, Collapse, MoreHorizontal, Save, Plus } from './icons';
 import { IconButton } from './IconButton';
 import { TextButton } from './TextButton';
 import ImageTabContent from './AssetManager/ImageTabContent';
+import { RichTextEditor, type RichTextEditorRef } from './RichTextEditor';
 import type { Asset } from '../api/assetService';
 import { API_BASE_URL } from '../api/client';
 import './StoryObjectCardExpanded.css';
@@ -21,12 +22,13 @@ interface StoryObjectCardExpandedProps {
     mainAsset: Asset | null;
     loading?: boolean;
     showSecondaryLanguage?: boolean;
+    isNewItem?: boolean;
     onSave: (name: string, description: string) => void;
     onCancel: () => void;
-    onAIEdit: () => void;
-    onVersionHistory: () => void;
-    onRetranslate: () => void;
-    onDelete: () => void;
+    onAIEdit?: () => void;
+    onVersionHistory?: () => void;
+    onRetranslate?: () => void;
+    onDelete?: () => void;
     onAssetChange?: () => void;
 }
 
@@ -39,6 +41,7 @@ const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
     mainAsset,
     loading = false,
     showSecondaryLanguage = false,
+    isNewItem = false,
     onSave,
     onCancel,
     onAIEdit,
@@ -51,13 +54,16 @@ const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
     const [activeTab, setActiveTab] = useState<TabType>('edit');
     const [name, setName] = useState(itemData.name);
     const [description, setDescription] = useState(itemData.description);
+    const editorRef = useRef<RichTextEditorRef>(null);
+
     // Reset form when itemData changes
     useEffect(() => {
         setName(itemData.name);
         setDescription(itemData.description);
     }, [itemData.name, itemData.description]);
 
-    const hasUnsavedChanges = name !== itemData.name || description !== itemData.description;
+    // Use editorRef.hasChanges() for description comparison (handles TipTap normalization)
+    const hasUnsavedChanges = name !== itemData.name || (editorRef.current?.hasChanges() ?? false);
     const hasImage = Boolean(mainAsset);
 
     const handleTabSwitch = (tab: TabType) => {
@@ -150,72 +156,78 @@ const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
                                 />
                             </div>
 
-                            {/* Description field */}
+                            {/* Description field - Rich Text Editor */}
                             <div className="expanded-field expanded-field-grow">
-                                <label htmlFor={`expanded-desc-${itemId}`}>Description</label>
-                                <textarea
-                                    id={`expanded-desc-${itemId}`}
-                                    value={description}
-                                    onChange={(e) => setDescription(e.target.value)}
+                                <label>Description</label>
+                                <RichTextEditor
+                                    ref={editorRef}
+                                    key={itemId}
+                                    initialContent={itemData.description}
+                                    onChange={setDescription}
                                     placeholder="Enter description..."
-                                    className="expanded-textarea"
                                 />
                             </div>
 
                             {/* Actions row */}
                             <div className="expanded-actions-row">
-                                <DropdownMenu
-                                    trigger={
-                                        <IconButton
-                                            icon={<MoreHorizontal size="sm" />}
-                                            title="More actions"
-                                            size="sm"
-                                        />
-                                    }
-                                    align="right"
-                                >
-                                    <DropdownSection>
-                                        <DropdownItem
-                                            icon={<Scroll size="sm" />}
-                                            label="Version History"
-                                            onClick={onVersionHistory}
-                                        />
-                                        {showSecondaryLanguage && (
-                                            <DropdownItem
-                                                icon={<Refresh size="sm" />}
-                                                label="Retranslate"
-                                                onClick={onRetranslate}
+                                {!isNewItem && (
+                                    <DropdownMenu
+                                        trigger={
+                                            <IconButton
+                                                icon={<MoreHorizontal size="sm" />}
+                                                title="More actions"
+                                                size="sm"
                                             />
-                                        )}
-                                    </DropdownSection>
-                                    <DropdownSection>
-                                        <DropdownItem
-                                            icon={<Trash size="sm" />}
-                                            label="Delete"
-                                            onClick={onDelete}
-                                            variant="danger"
-                                        />
-                                    </DropdownSection>
-                                </DropdownMenu>
+                                        }
+                                        align="right"
+                                    >
+                                        <DropdownSection>
+                                            <DropdownItem
+                                                icon={<Scroll size="sm" />}
+                                                label="Version History"
+                                                onClick={onVersionHistory}
+                                            />
+                                            {showSecondaryLanguage && (
+                                                <DropdownItem
+                                                    icon={<Refresh size="sm" />}
+                                                    label="Retranslate"
+                                                    onClick={onRetranslate}
+                                                />
+                                            )}
+                                        </DropdownSection>
+                                        <DropdownSection>
+                                            <DropdownItem
+                                                icon={<Trash size="sm" />}
+                                                label="Delete"
+                                                onClick={onDelete}
+                                                variant="danger"
+                                            />
+                                        </DropdownSection>
+                                    </DropdownMenu>
+                                )}
 
-                                <TextButton
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={onAIEdit}
-                                    title="AI Edit"
-                                    iconLeft={<AIAssistMini size="sm" />}
-                                >
-                                    AI Edit
-                                </TextButton>
+                                {!isNewItem && onAIEdit && (
+                                    <TextButton
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={onAIEdit}
+                                        title="AI Edit"
+                                        iconLeft={<AIAssistMini size="sm" />}
+                                    >
+                                        AI Edit
+                                    </TextButton>
+                                )}
 
-                                <div className="expanded-metadata">
-                                    <span className="metadata-item">
-                                        Language: {effectiveLanguage}
-                                    </span>
-                                    <span className="metadata-item">
-                                        Version: {versionNumber}
-                                    </span>
-                                </div>
+                                {!isNewItem && (
+                                    <div className="expanded-metadata">
+                                        <span className="metadata-item">
+                                            Language: {effectiveLanguage}
+                                        </span>
+                                        <span className="metadata-item">
+                                            Version: {versionNumber}
+                                        </span>
+                                    </div>
+                                )}
 
                                 <TextButton
                                     variant="primary"
@@ -223,9 +235,9 @@ const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
                                     onClick={handleSave}
                                     disabled={loading || !name.trim()}
                                     loading={loading}
-                                    iconLeft={<Save size="sm" />}
+                                    iconLeft={isNewItem ? <Plus size="sm" /> : <Save size="sm" />}
                                 >
-                                    Save
+                                    {isNewItem ? 'Create' : 'Save'}
                                 </TextButton>
                             </div>
                         </div>

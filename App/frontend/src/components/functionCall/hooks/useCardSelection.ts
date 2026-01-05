@@ -45,7 +45,7 @@ export function useCardSelection(
 
       return hasChanges ? updated : prev;
     });
-  }, [cardIds, isDisabled, cards]);
+  }, [cardIds, isDisabled]);
 
   const toggleSelection = useCallback(
     (cardId: string) => {

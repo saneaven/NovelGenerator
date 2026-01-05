@@ -285,7 +285,8 @@
 .editor-content-wrapper {
     flex: 1;
     overflow-y: auto;
-    padding: var(--spacing-lg) var(--spacing-6xl);
+    background: var(--color-surface-base);
+    padding: var(--spacing-lg) var(--spacing-xl);
 }
 
 .tiptap-editor-content {

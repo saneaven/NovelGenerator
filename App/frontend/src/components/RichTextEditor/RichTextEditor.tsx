@@ -31,6 +31,8 @@ export interface RichTextEditorRef {
   updateImageSrc: (oldSrc: string, newSrc: string, newAlt?: string) => boolean;
   focus: () => void;
   getTextAroundCursor: () => { before: string; after: string };
+  hasChanges: () => boolean;
+  resetBaseline: () => void;
 }
 
 interface RichTextEditorProps {
@@ -69,6 +71,10 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  // Track normalized baseline content for hasChanges() comparison
+  // This is set after TipTap normalizes the initial content (in onCreate)
+  const baselineRef = useRef<string | null>(null);
 
   // Heading dropdown state
   const [headingDropdownOpen, setHeadingDropdownOpen] = useState(false);
@@ -183,6 +189,10 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
         editor.commands.setContent(initialContent, { contentType: 'markdown' });
       }
 
+      // Capture normalized baseline AFTER TipTap processes the content
+      // This ensures hasChanges() compares normalized vs normalized (not raw input)
+      baselineRef.current = editor.isEmpty ? '' : editor.getMarkdown();
+
       // Handle general content changes
       editor.on('update', ({ editor: updatedEditor }) => {
         // Use TipTap's built-in isEmpty check - more reliable than string matching
@@ -283,6 +293,16 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     updateImageSrc,
     focus: () => editor?.chain().focus().run(),
     getTextAroundCursor,
+    hasChanges: () => {
+      if (!editor || baselineRef.current === null) return false;
+      const currentContent = editor.isEmpty ? '' : editor.getMarkdown();
+      return currentContent !== baselineRef.current;
+    },
+    resetBaseline: () => {
+      if (editor) {
+        baselineRef.current = editor.isEmpty ? '' : editor.getMarkdown();
+      }
+    },
   }), [editor, insertImage, updateImageSrc, getTextAroundCursor]);
 
   if (!editor) {

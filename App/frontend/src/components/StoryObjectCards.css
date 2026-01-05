@@ -1,333 +1,331 @@
 /* ========================================
-   STORY CARDS - GRID LAYOUT
-   Dynamic grid-based card display
+   Story Object Cards - Modern Clean Design
    ======================================== */
 
 .story-object-cards-grid {
-    margin: var(--spacing-3xl);
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(25dvh, 1fr));
-    grid-auto-rows: 30dvh;
-    grid-auto-flow: dense;
-    gap: var(--spacing-2xl);
-    align-items: stretch;
-    position: relative;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(30dvh, 1fr));
+  grid-auto-rows: 33dvh;
+  gap: var(--spacing-lg);
+  grid-auto-flow: dense;
+  padding: var(--spacing-xs);
+  width: 100%;
 }
 
-/* Sortable wrapper - fills grid cell */
-.story-object-cards-grid > [data-span] {
-    height: 100%;
+/* ========================================
+   Grid Item Wrappers (SortableStoryObjectCard)
+   The direct children of the grid need to handle the sizing and spanning.
+   ======================================== */
+
+/* Span: Horizontal - only span 2 columns when there's room */
+.story-object-cards-grid > div[data-span="horizontal"] {
+  grid-column: span min(2, var(--grid-columns, 2));
 }
 
-/* Span types for dynamic grid sizing - applies to sortable wrapper or card directly */
-.story-object-cards-grid > [data-span="horizontal"] {
-    grid-column: span 2;
+/* Span: Vertical */
+.story-object-cards-grid > div[data-span="vertical"] {
+  grid-row: span 2;
 }
 
-.story-object-cards-grid > [data-span="vertical"] {
-    grid-row: span 2;
-}
+/* ========================================
+   Card Visual Component (.story-object-card)
+   This fills the wrapper and contains the actual UI.
+   ======================================== */
 
-/* Mobile: single column, vertical images span 2 rows */
-@media (max-width: 768px) {
-    .story-object-cards-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .story-object-cards-grid > [data-span="horizontal"] {
-        grid-column: span 1;
-    }
-}
-
-/* Story Card */
 .story-object-card {
-    position: relative;
-    height: 100%;
-    background: var(--color-surface-elevated);
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--border-radius-xl);
-    overflow: hidden;
-    box-shadow: var(--shadow-sm);
-    transition: box-shadow var(--transition-base), border-color var(--transition-base);
-    isolation: isolate;
-}
-
-/* Cards with image need clip to handle transformed content */
-.story-object-card[data-has-image="true"] {
-    overflow: clip;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background-color: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--border-radius-xl);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-base);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  isolation: isolate;
+  cursor: default;
 }
 
 .story-object-card:hover {
-    box-shadow: var(--shadow-md);
-    border-color: var(--color-border-medium);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--color-border-default);
+  z-index: 5;
 }
 
-/* Animating card - elevated z-index during layout animation */
-.story-object-card--animating {
-    z-index: var(--z-card-animating);
-}
+/* ========================================
+   Image Layer
+   ======================================== */
 
-/* Image Container - fills the card */
 .story-object-card__image-container {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
-    background: var(--color-surface-subtle);
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-color: var(--color-surface-muted);
+  overflow: hidden;
 }
 
-/* Image - fills container, crops to fit */
 .story-object-card__image {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--transition-slower);
+  display: block;
 }
 
-/* Content - Normal position */
+.story-object-card:hover .story-object-card__image {
+  transform: scale(1.05);
+}
+
+/* ========================================
+   Expand Button
+   ======================================== */
+
+.story-object-card__full-expand-btn {
+  position: absolute;
+  top: var(--spacing-sm);
+  right: var(--spacing-sm);
+  z-index: 10;
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+  
+  /* Ensure visibility over images */
+  background-color: var(--color-surface-base) !important; 
+  color: var(--color-text-primary) !important;
+  box-shadow: var(--shadow-md) !important;
+  border: 1px solid var(--color-border-subtle) !important;
+}
+
+/* Visible on hover or keyboard focus */
+.story-object-card:hover .story-object-card__full-expand-btn,
+.story-object-card:focus-within .story-object-card__full-expand-btn {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* ========================================
+   Content Container
+   ======================================== */
+
 .story-object-card__content {
-    padding: var(--spacing-md) var(--spacing-lg) var(--spacing-lg);
-    z-index: var(--z-content);
-    position: relative;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  transition: all var(--transition-base);
 }
 
-/* Cards WITH image: Content positioned at bottom */
+/* ----------------------------------------
+   Variant: Card WITH Image
+   ---------------------------------------- */
+
 .story-object-card[data-has-image="true"] .story-object-card__content {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: var(--color-surface-elevated);
-    border-radius: var(--border-radius-lg);
-    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15);
+  margin-top: auto; /* Push content to bottom */
+  background-color: var(--color-surface-base);
+  border-top: 1px solid var(--color-border-subtle);
+  padding: var(--spacing-md);
 }
 
-/* Header */
-.story-object-card__header {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
+/* Clickable title area interaction */
+.story-object-card[data-has-image="true"] .story-object-card__header {
+  cursor: pointer;
 }
 
-/* Title */
+.story-object-card[data-has-image="true"] .story-object-card__title {
+  color: var(--color-text-primary);
+  transition: color var(--transition-fast);
+}
+
+.story-object-card[data-has-image="true"] .story-object-card__header:hover .story-object-card__title {
+  color: var(--color-primary-main);
+}
+
+/* ----------------------------------------
+   Variant: Card WITHOUT Image (Text Only)
+   ---------------------------------------- */
+
+.story-object-card[data-has-image="false"] {
+  background-color: var(--color-surface-base);
+}
+
+.story-object-card[data-has-image="false"] .story-object-card__content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  padding: var(--spacing-lg) var(--spacing-xl);
+}
+
+.story-object-card[data-has-image="false"] .story-object-card__header {
+  flex: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+}
+
+.story-object-card[data-has-image="false"] .story-object-card__title-container {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.story-object-card[data-has-image="false"] .story-object-card__title {
+  color: var(--color-text-primary);
+}
+
+/* Always show description for text-only cards */
+.story-object-card[data-has-image="false"] .story-object-card__description-wrapper {
+  flex: 3;
+  max-height: none;
+  opacity: 1;
+  margin-top: var(--spacing-md);
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: var(--spacing-xs);
+}
+
+/* ========================================
+   Typography & Details
+   ======================================== */
+
 .story-object-card__title {
-    margin: 0;
-    font-size: var(--font-size-2xl);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-    cursor: pointer;
-    transition: color var(--transition-fast);
-    padding: var(--spacing-sm) 0;
-    flex: 1;
-    min-width: 0;
-    /* Collapsed: truncate */
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  margin: var(--spacing-sm);
+  font-family: var(--font-family-heading);
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-2xl);
+  line-height: var(--line-height-tight);
 }
 
-.story-object-card[data-expanded="true"] .story-object-card__title {
-    white-space: normal;
-    overflow: visible;
-}
-
-.story-object-card__title:hover {
-    color: var(--color-brand-primary);
-}
-
-/* Expand Toggle */
-.story-object-card__expand-toggle {
-    background: none;
-    border: none;
-    padding: var(--spacing-xs);
-    cursor: pointer;
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: var(--border-radius-sm);
-    transition: background-color var(--transition-fast), color var(--transition-fast);
-    flex-shrink: 0;
-}
-
-.story-object-card__expand-toggle:hover {
-    background-color: var(--color-surface-subtle);
-    color: var(--color-text-primary);
-}
-
-/* Full Expand Button - positioning only (styling from IconButton) */
-.story-object-card__full-expand-btn.icon-button {
-    position: absolute;
-    top: var(--spacing-sm);
-    right: var(--spacing-sm);
-    z-index: var(--z-button);
-}
-
-/* Description wrapper - collapsed by default for ALL cards */
 .story-object-card__description-wrapper {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 300ms ease-out;
+  overflow: hidden;
+  transition: max-height var(--transition-base), opacity var(--transition-base), margin-top var(--transition-base);
+  max-height: 0;
+  opacity: 0;
+  margin: 0 var(--spacing-sm) 0 var(--spacing-sm);
 }
 
-/* Expanded: show description (independent of data-has-image) */
-.story-object-card[data-expanded="true"] .story-object-card__description-wrapper {
-    max-height: 250px;
-}
-
-/* Description */
 .story-object-card__description {
-    margin-top: var(--spacing-md);
-    padding: var(--spacing-md);
-    background: var(--color-surface-base);
-    border-radius: var(--border-radius-lg);
-    max-height: 200px;
-    overflow-y: auto;
+  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-relaxed);
 }
 
+/* Markdown content styles */
 .story-object-card__description p {
-    margin: 0;
-    font-size: var(--font-size-base);
-    line-height: var(--line-height-relaxed);
-    color: var(--color-text-secondary);
-    white-space: pre-wrap;
-    word-wrap: break-word;
+  margin: 0 0 var(--spacing-sm) 0;
 }
 
-/* Metadata */
-.story-object-card__metadata {
-    display: flex;
-    gap: var(--spacing-md);
-    margin-top: var(--spacing-md);
-    padding-top: var(--spacing-sm);
-    border-top: 1px solid var(--color-border-subtle);
-    flex-wrap: wrap;
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
+.story-object-card__description p:last-child {
+  margin-bottom: 0;
 }
 
-.story-object-card__metadata span {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--spacing-xs);
+.story-object-card__description h1,
+.story-object-card__description h2,
+.story-object-card__description h3,
+.story-object-card__description h4,
+.story-object-card__description h5,
+.story-object-card__description h6 {
+  font-family: var(--font-family-heading);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin: var(--spacing-sm) 0 var(--spacing-xs) 0;
+  line-height: var(--line-height-tight);
 }
 
-.story-object-card__language {
-    font-weight: var(--font-weight-medium);
+.story-object-card__description h1:first-child,
+.story-object-card__description h2:first-child,
+.story-object-card__description h3:first-child,
+.story-object-card__description h4:first-child,
+.story-object-card__description h5:first-child,
+.story-object-card__description h6:first-child {
+  margin-top: 0;
 }
 
-.story-object-card__version {
-    padding: 2px 6px;
-    background: var(--color-surface-subtle);
-    border-radius: var(--border-radius-sm);
-    font-weight: var(--font-weight-medium);
+.story-object-card__description h1 { font-size: var(--font-size-xl); }
+.story-object-card__description h2 { font-size: var(--font-size-lg); }
+.story-object-card__description h3 { font-size: var(--font-size-md); }
+.story-object-card__description h4,
+.story-object-card__description h5,
+.story-object-card__description h6 { font-size: var(--font-size-sm); }
+
+.story-object-card__description ul,
+.story-object-card__description ol {
+  margin: 0 0 var(--spacing-sm) 0;
+  padding-left: var(--spacing-lg);
 }
 
-.story-object-card__fallback-warning {
-    color: var(--color-warning);
+.story-object-card__description li {
+  margin-bottom: var(--spacing-xs);
 }
 
-/* Actions */
-.story-object-card__actions {
-    flex-shrink: 0;
+.story-object-card__description code {
+  font-family: var(--font-family-mono);
+  font-size: 0.9em;
+  background-color: var(--color-surface-elevated);
+  padding: 0.1em 0.3em;
+  border-radius: var(--radius-sm);
 }
 
-/* Mobile Responsive */
-@media (max-width: 640px) {
-    .story-object-card__content {
-        padding: var(--spacing-sm) var(--spacing-md) var(--spacing-md);
-    }
-
-    .story-object-card__title {
-        font-size: var(--font-size-base);
-    }
-
-    .story-object-card__expand-toggle {
-        min-width: 44px;
-        min-height: 44px;
-    }
+.story-object-card__description pre {
+  margin: 0 0 var(--spacing-sm) 0;
+  padding: var(--spacing-sm);
+  background-color: var(--color-surface-elevated);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
 }
 
-/* ===== TEXT-ONLY CARDS (No Image) ===== */
-
-.story-object-card[data-span="text-only"] {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+.story-object-card__description pre code {
+  background: none;
+  padding: 0;
 }
 
-.story-object-card[data-span="text-only"] .story-object-card__content {
-    position: relative;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
+.story-object-card__description a {
+  color: var(--color-text-link);
+  text-decoration: underline;
 }
 
-.story-object-card[data-span="text-only"] .story-object-card__header {
-    flex-shrink: 0;
+.story-object-card__description a:hover {
+  color: var(--color-text-link-hover);
 }
 
-/* Text-only cards: fixed height title container for dynamic font scaling */
-.story-object-card[data-span="text-only"] .story-object-card__title-container {
-    height: 4.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    margin-bottom: var(--spacing-lg);
-    overflow: hidden;
+.story-object-card__description blockquote {
+  margin: 0 0 var(--spacing-sm) 0;
+  padding-left: var(--spacing-md);
+  border-left: 3px solid var(--color-border-default);
+  color: var(--color-text-muted);
+  font-style: italic;
 }
 
-/* Text-only cards: dynamically sized title */
-.story-object-card[data-span="text-only"] .story-object-card__title--fit {
-    font-size: var(--font-size-4xl);
-    white-space: normal;
-    word-break: break-word;
-    overflow: hidden;
-    margin-bottom: 0;
-    transition: opacity 0.15s ease-out;
+.story-object-card__description strong {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
 }
 
-/* Text-only cards: title is not clickable (no State 1) */
-.story-object-card__title--no-toggle {
-    cursor: default;
+.story-object-card__description em {
+  font-style: italic;
 }
 
-.story-object-card__title--no-toggle:hover {
-    color: var(--color-text-primary);
+/* Expanded State (State 2) - Description Visible */
+.story-object-card[data-expanded="true"] .story-object-card__description-wrapper {
+  max-height: 30dvh; /* Reasonable cap for description */
+  opacity: 1;
+  margin: var(--spacing-lg) var(--spacing-sm) var(--spacing-sm) var(--spacing-sm);
+  /* Scrollable description - No custom scrollbar */
+  overflow-y: auto;
 }
 
-.story-object-card[data-span="text-only"] .story-object-card__description-wrapper {
-    display: block;
-    visibility: visible;
-    opacity: 1;
-    flex: 1;
-    min-height: 0;
-    max-height: none;
-    overflow: hidden;
-}
+/* ========================================
+   Animation States
+   ======================================== */
 
-.story-object-card[data-span="text-only"] .story-object-card__description {
-    height: 100%;
-    max-height: none;
-    overflow-y: auto;
-    margin-top: 0;
-}
-
-.story-object-card[data-span="text-only"] .story-object-card__expand-toggle {
-    display: none;
-}
-
-/* Reduced motion */
-@media (prefers-reduced-motion: reduce) {
-    .story-object-card,
-    .story-object-card__description-wrapper,
-    .story-object-card__image,
-    .story-object-card__expand-toggle,
-    .story-object-card__full-expand-btn {
-        transition: none;
-        animation: none;
-    }
+.story-object-card--animating {
+  z-index: 50;
+  box-shadow: var(--shadow-xl);
 }

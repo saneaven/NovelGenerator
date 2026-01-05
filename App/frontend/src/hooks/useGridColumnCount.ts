@@ -23,8 +23,11 @@ export function useGridColumnCount(gridRef: RefObject<HTMLElement | null>): numb
       const minColWidth = DVH;
 
       // Calculate how many columns fit: (width + gap) / (colWidth + gap)
-      const columns = Math.floor((gridWidth + gap) / (minColWidth + gap));
-      setColumnCount(Math.max(1, columns));
+      const columns = Math.max(1, Math.floor((gridWidth + gap) / (minColWidth + gap)));
+      setColumnCount(columns);
+
+      // Set CSS variable for use in grid styles
+      grid.style.setProperty('--grid-columns', String(columns));
     };
 
     // Initial calculation

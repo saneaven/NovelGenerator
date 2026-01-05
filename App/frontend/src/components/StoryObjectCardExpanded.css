@@ -1,19 +1,20 @@
 /* ========================================
    STORY CARD EXPANDED
    Expanded card view for editing
+   Uses surface-base design pattern
    ======================================== */
 
 .story-object-card-expanded {
     position: relative;
     display: grid;
-    background: var(--color-surface-elevated);
+    background: var(--color-surface-base);
+    border: 1px solid var(--color-border-default);
     border-radius: var(--border-radius-xl);
-    box-shadow: var(--shadow-xl);
     overflow: hidden;
     width: 100%;
     height: 100%;
     max-height: 90dvh;
-    isolation: isolate; /* Create stacking context */
+    isolation: isolate;
 }
 
 /* WITH IMAGE: 2-column layout (9:16 ratio - image:content) */
@@ -36,7 +37,7 @@
 
 /* Image section - DOM order last, but visually first via order */
 .expanded-image-section {
-    order: 1; /* Visually first (left column) */
+    order: 1;
     position: relative;
     background: var(--color-surface-subtle);
     overflow: hidden;
@@ -54,7 +55,7 @@
 
 /* Content section - DOM order first, but visually second via order */
 .expanded-content-section {
-    order: 2; /* Visually second (right column) */
+    order: 2;
     position: relative;
     z-index: var(--z-content);
     display: flex;
@@ -63,7 +64,7 @@
     overflow: hidden;
 }
 
-/* Tabs */
+/* Tabs - subtle background on surface-base */
 .expanded-tabs {
     display: flex;
     background: var(--color-surface-subtle);
@@ -93,7 +94,7 @@
 .expanded-tab.active {
     color: var(--color-brand-primary);
     border-bottom-color: var(--color-brand-primary);
-    background: var(--color-surface-elevated);
+    background: var(--color-surface-base);
 }
 
 /* Tab content */
@@ -135,11 +136,12 @@
     letter-spacing: 0.5px;
 }
 
+/* Input fields - elevated from base */
 .expanded-input {
     padding: var(--spacing-sm) var(--spacing-md);
     border: 1px solid var(--color-border-default);
     border-radius: var(--border-radius-md);
-    background: var(--color-surface-base);
+    background: var(--color-surface-elevated);
     color: var(--color-text-primary);
     font-size: var(--font-size-sm);
     transition: border-color var(--transition-base), box-shadow var(--transition-base);
@@ -157,12 +159,34 @@
     box-shadow: var(--shadow-focus-primary);
 }
 
+/* Rich text editor container - elevated from base */
+.expanded-field-grow .rich-text-editor {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-md);
+    background: var(--color-surface-elevated);
+    overflow: hidden;
+}
+
+.expanded-field-grow .rich-text-editor .editor-format-toolbar {
+    background: var(--color-surface-subtle);
+    border-bottom: 1px solid var(--color-border-default);
+}
+
+.expanded-field-grow .rich-text-editor .editor-content-wrapper {
+    flex: 1;
+    overflow-y: auto;
+}
+
+/* Textarea fallback - elevated from base */
 .expanded-textarea {
     flex: 1;
     padding: var(--spacing-md);
     border: 1px solid var(--color-border-default);
     border-radius: var(--border-radius-md);
-    background: var(--color-surface-base);
+    background: var(--color-surface-elevated);
     color: var(--color-text-primary);
     font-size: var(--font-size-md);
     font-family: inherit;
@@ -184,15 +208,14 @@
     align-items: center;
     gap: var(--spacing-sm);
     margin-top: auto;
+    padding-top: var(--spacing-md);
+    border-top: 1px solid var(--color-border-subtle);
 }
 
 .expanded-actions-row .expanded-metadata {
     flex: 1;
     justify-content: center;
 }
-
-/* AI button styling now comes from TextButton component */
-
 
 /* Metadata */
 .expanded-metadata {

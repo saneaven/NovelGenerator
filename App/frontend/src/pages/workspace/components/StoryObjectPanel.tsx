@@ -85,10 +85,6 @@ const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
             title="Characters"
             singularName="Character"
             pluralName="Characters"
-            placeholder={{
-              name: 'Enter character name',
-              description: 'Describe the character\'s appearance, personality, background, etc.'
-            }}
             globalDisplayLanguage={globalDisplayLanguage}
           />
         );
@@ -99,10 +95,6 @@ const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
             title="Organizations"
             singularName="Organization"
             pluralName="Organizations"
-            placeholder={{
-              name: 'Enter organization name',
-              description: 'Describe the organization\'s purpose, structure, role, etc.'
-            }}
             globalDisplayLanguage={globalDisplayLanguage}
           />
         );
@@ -113,10 +105,6 @@ const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
             title="Locations"
             singularName="Location"
             pluralName="Locations"
-            placeholder={{
-              name: 'Enter location name',
-              description: 'Describe the location\'s features, atmosphere, importance, etc.'
-            }}
             globalDisplayLanguage={globalDisplayLanguage}
           />
         );
@@ -127,10 +115,6 @@ const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
             title="Lorebook"
             singularName="Entry"
             pluralName="Entries"
-            placeholder={{
-              name: 'Enter term or concept name',
-              description: 'Write a detailed description of this term or concept'
-            }}
             globalDisplayLanguage={globalDisplayLanguage}
           />
         );

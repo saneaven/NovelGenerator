@@ -51,6 +51,7 @@ import { useGridColumnCount } from '../hooks/useGridColumnCount';
 import type { UnifiedObject, ObjectType } from '../types/unifiedObject';
 import type { Asset } from '../api/assetService';
 import { API_BASE_URL } from '../api/client';
+import { renderMarkdown } from '../utils/markdown';
 
 interface NameDescriptionData {
   name: string;
@@ -64,10 +65,6 @@ interface NameDescriptionManagerProps {
   title: string;
   singularName: string;
   pluralName: string;
-  placeholder?: {
-    name: string;
-    description: string;
-  };
   globalDisplayLanguage: string;
 }
 
@@ -76,7 +73,6 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   title,
   singularName,
   pluralName,
-  placeholder = { name: 'Enter name', description: 'Enter description' },
   globalDisplayLanguage,
 }) => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -86,7 +82,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   const { showError } = useErrorStore();
 
   const objects = store.objects;
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
   const [aiEditTargetId, setAiEditTargetId] = useState<string | undefined>(undefined);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
@@ -284,7 +280,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
         { name: name.trim(), description: description.trim() },
         settings.mainLanguage
       );
-      setShowAddForm(false);
+      setIsCreatingNew(false);
     } catch (error) {
       console.error('Failed to add item:', error);
       showError('Create Error', 'Failed to add item. Please try again.');
@@ -477,7 +473,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
             variant="ghost"
             size="sm"
             onClick={() => handleAIEdit()}
-            disabled={showAddForm}
+            disabled={isCreatingNew}
             iconLeft={<AIAssist size="xs" />}
             className="desktop-only"
           >
@@ -486,8 +482,8 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
           <TextButton
             variant="secondary"
             size="sm"
-            onClick={() => setShowAddForm(true)}
-            disabled={showAddForm}
+            onClick={() => setIsCreatingNew(true)}
+            disabled={isCreatingNew}
             className="desktop-only"
           >
             Add {singularName}
@@ -512,29 +508,20 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
               icon={<AIAssist size="sm" />}
               label="AI Edit All"
               onClick={() => handleAIEdit()}
-              disabled={showAddForm}
+              disabled={isCreatingNew}
             />
             <DropdownItem
               icon={<Plus size="sm" />}
               label={`Add ${singularName}`}
-              onClick={() => setShowAddForm(true)}
-              disabled={showAddForm}
+              onClick={() => setIsCreatingNew(true)}
+              disabled={isCreatingNew}
             />
           </DropdownMenu>
         </div>
       </div>
       <div className="section-divider" />
 
-      {showAddForm && (
-        <AddItemForm
-          placeholder={placeholder}
-          onAdd={handleAdd}
-          onCancel={() => setShowAddForm(false)}
-          singularName={singularName}
-        />
-      )}
-
-      {items.length === 0 ? (
+      {items.length === 0 && !isCreatingNew ? (
         <div className="empty-state">
           <p>No {pluralName} found.</p>
           <p>Try adding a new {singularName}!</p>
@@ -586,6 +573,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 
           {/* State 3: Full expanded overlay - inside LayoutGroup for animation */}
           <AnimatePresence mode="sync">
+            {/* Edit existing item */}
             {expandedCardId && (() => {
               const item = items.find(i => i.id === expandedCardId);
               if (!item) return null;
@@ -638,6 +626,33 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
                 </motion.div>
               );
             })()}
+
+            {/* Create new item */}
+            {isCreatingNew && (
+              <motion.div
+                key="new-item-overlay"
+                className="story-object-card-expanded-container"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, transition: { duration: 0.4, delay: 0.15 } }}
+                transition={{ duration: 0.2 }}
+              >
+                <StoryObjectCardExpanded
+                  itemId="new"
+                  itemData={{ name: '', description: '' }}
+                  effectiveLanguage={settings.mainLanguage}
+                  versionNumber={0}
+                  objectType={category}
+                  mainAsset={null}
+                  loading={false}
+                  isNewItem={true}
+                  onSave={(name, description) => {
+                    handleAdd(name, description);
+                  }}
+                  onCancel={() => setIsCreatingNew(false)}
+                />
+              </motion.div>
+            )}
             </AnimatePresence>
           </LayoutGroup>
         </SortableContext>
@@ -705,68 +720,6 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 // ============================================================================
 // SUB-COMPONENTS
 // ============================================================================
-
-// Add Item Form Component
-interface AddItemFormProps {
-  placeholder: { name: string; description: string };
-  onAdd: (name: string, description: string) => void;
-  onCancel: () => void;
-  singularName: string;
-}
-
-const AddItemForm: React.FC<AddItemFormProps> = ({
-  placeholder,
-  onAdd,
-  onCancel,
-  singularName,
-}) => {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onAdd(name, description);
-    setName('');
-    setDescription('');
-  };
-
-  return (
-    <div className="item-form add-form">
-      <h3>Add New {singularName}</h3>
-      <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label htmlFor="add-name">Name</label>
-          <input
-            id="add-name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={placeholder.name}
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor="add-description">Description</label>
-          <textarea
-            id="add-description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder={placeholder.description}
-            rows={4}
-          />
-        </div>
-        <div className="form-actions">
-          <TextButton variant="secondary" type="button" onClick={onCancel}>
-            Cancel
-          </TextButton>
-          <TextButton variant="primary" type="submit">
-            Add
-          </TextButton>
-        </div>
-      </form>
-    </div>
-  );
-};
 
 // Item Display Component with Motion - 3-state card system
 // State 1 & 2 only - State 3 is rendered as overlay
@@ -862,9 +815,14 @@ const ItemDisplay = React.memo<ItemDisplayProps>(({
 
         {/* Description - always in DOM, CSS controls visibility via max-height */}
         <div className="story-object-card__description-wrapper">
-          <div className="story-object-card__description">
-            <p>{itemData.description || 'No description.'}</p>
-          </div>
+          <div
+            className="story-object-card__description markdown-content"
+            dangerouslySetInnerHTML={{
+              __html: itemData.description
+                ? renderMarkdown(itemData.description)
+                : '<p>No description.</p>'
+            }}
+          />
         </div>
       </div>
 

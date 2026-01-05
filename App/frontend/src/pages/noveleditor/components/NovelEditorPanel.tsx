@@ -127,7 +127,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   // Editor state
   const [content, setContent] = useState('');
-  const [lastSavedContent, setLastSavedContent] = useState('');
   const isSaving = useNovelEditorStore((state) => state.isSavingByProject[projectId] ?? false);
   const setIsSaving = (saving: boolean) => setIsSavingAction(projectId, saving);
   const [savingType, setSavingType] = useState<'auto' | 'manual' | null>(null);
@@ -136,9 +135,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const editorRef = useRef<RichTextEditorRef>(null);
-  // Track if baseline has been set for current editor instance
-  // This ensures we compare normalized content vs normalized content (not DB format)
-  const baselineSetRef = useRef(false);
 
   // Get manuscript from store
   const manuscript = manuscriptId
@@ -208,7 +204,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     return content.trim().split(/\s+/).filter(Boolean).length;
   }, [content]);
 
-  const hasUnsavedChanges = content !== lastSavedContent;
+  // Use editorRef.hasChanges() which handles TipTap normalization internally
+  const hasUnsavedChanges = editorRef.current?.hasChanges() ?? false;
 
   // Generate editor key - changes trigger editor remount for external content updates
   // This replaces the fragile isSettingContentRef approach with React's key mechanism
@@ -338,11 +335,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     };
   }, [manuscriptId]); // Only re-fetch when manuscriptId changes
 
-  // Reset baseline flag when editor remounts (editorKey changes)
-  // The actual content/lastSavedContent will be set by handleContentChange on first onChange
-  useEffect(() => {
-    baselineSetRef.current = false;
-  }, [editorKey]);
+  // Note: RichTextEditor now handles baseline tracking internally via hasChanges()
+  // No need to track baselineSetRef here anymore
 
   // Restore content from localStorage cache if available and newer than server data
   useEffect(() => {
@@ -359,8 +353,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         // Only restore if cache is newer than server data
         if (savedAt > serverUpdatedAt) {
           setContent(cachedContent);
-          // Don't set lastSavedContent - this keeps hasUnsavedChanges true
-          // so user knows there's unsaved work
+          // Note: Editor baseline is set from server content on mount,
+          // so hasChanges() will correctly return true for cached changes
         }
       } catch (err) {
         console.error('Failed to restore from cache:', err);
@@ -429,7 +423,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
           create_new_version: true, // CREATE VERSION SNAPSHOT
         });
 
-        setLastSavedContent(content);
+        // Reset editor baseline after save so hasChanges() returns false
+        editorRef.current?.resetBaseline();
 
         // Clear localStorage cache after successful save
         const cacheKey = getCacheKey(manuscriptId, effectiveLanguage);
@@ -451,17 +446,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   const handleContentChange = useCallback(
     (newContent: string) => {
-      // First onChange after editor mount: set baseline
-      // This ensures we compare normalized content vs normalized content
-      // (TipTap normalizes whitespace during markdown→HTML→markdown conversion)
-      if (!baselineSetRef.current) {
-        baselineSetRef.current = true;
-        setContent(newContent);
-        setLastSavedContent(newContent); // Both set to normalized format
-        return; // Don't trigger auto-save on baseline init
-      }
-
-      // Subsequent changes: normal behavior
+      // Update content state (RichTextEditor handles baseline tracking internally)
       setContent(newContent);
 
       // Clear existing auto-save timeout
@@ -469,10 +454,12 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         clearTimeout(autoSaveTimeoutRef.current);
       }
 
-      // Schedule new auto-save
-      autoSaveTimeoutRef.current = setTimeout(() => {
-        handleAutoSave();
-      }, AUTO_SAVE_DELAY);
+      // Schedule new auto-save (only if there are actual changes)
+      if (editorRef.current?.hasChanges()) {
+        autoSaveTimeoutRef.current = setTimeout(() => {
+          handleAutoSave();
+        }, AUTO_SAVE_DELAY);
+      }
     },
     [handleAutoSave]
   );

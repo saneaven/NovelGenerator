@@ -145,18 +145,33 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     []
   );
 
-  // Use the common function call handlers hook
-  const { state: fcState, actions: fcActions } = useFunctionCallHandlers({
-    projectId: projectId ?? '',
-    language: mainLanguage,
-    storageMode: 'message',
-    onUpdateStatus: (messageId, functionCallId, status, options) => {
+  // Memoize callbacks to prevent infinite loops in useFunctionCallHandlers
+  const handleUpdateStatus = useCallback(
+    (messageId: string, functionCallId: string, status: FunctionCallMetadata['status'], options?: {
+      result?: any;
+      reason?: string;
+      failureType?: 'validation' | 'execution';
+    }) => {
       if (!projectId) return;
       const agentId = getActiveAgentId();
       if (!agentId) return;
       updateFunctionCallStatus(projectId, agentId, messageId, functionCallId, status, options);
     },
-    getSessionId: (messageId) => messageSessionMap.current[messageId],
+    [projectId, getActiveAgentId, updateFunctionCallStatus]
+  );
+
+  const getSessionIdForMessage = useCallback(
+    (messageId: string) => messageSessionMap.current[messageId],
+    []
+  );
+
+  // Use the common function call handlers hook
+  const { state: fcState, actions: fcActions } = useFunctionCallHandlers({
+    projectId: projectId ?? '',
+    language: mainLanguage,
+    storageMode: 'message',
+    onUpdateStatus: handleUpdateStatus,
+    getSessionId: getSessionIdForMessage,
   });
 
   // Wrap handleFunctionCalls to also sync to backend

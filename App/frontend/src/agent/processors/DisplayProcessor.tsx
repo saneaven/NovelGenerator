@@ -1,6 +1,5 @@
 import React from 'react';
-import { marked } from 'marked';
-import DOMPurify from 'dompurify';
+import { renderMarkdown } from '../../utils/markdown';
 import type { FunctionCallMetadata } from '../../llm/requestTypes';
 import type {
   DisplayProcessor,
@@ -11,11 +10,6 @@ import type {
 } from '../types';
 import type { FunctionCallWithStatus } from '../../functionCall/types';
 import { FunctionCallService } from '../../pages/workspace/services/FunctionCallService';
-
-marked.setOptions({
-  gfm: true,
-  breaks: true,
-});
 
 export class DefaultDisplayProcessor implements DisplayProcessor {
   process(
@@ -52,7 +46,7 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
       content = this.removeSystemTags(content);
     }
 
-    content = this.processMarkdown(content);
+    content = renderMarkdown(content);
 
     return (
       <div
@@ -69,12 +63,6 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
     result = result.replace(systemTagRegex, '');
     result = result.replace(/\n\s*\n\s*\n/g, '\n\n');
     return result.trim();
-  }
-
-  private processMarkdown(content: string): string {
-    const parsed = marked.parse(content, { async: false });
-    const html = typeof parsed === 'string' ? parsed : '';
-    return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
   }
 
   generateEditCardsFromFunctionCalls(functionCalls: FunctionCallMetadata[]): EditCard[] {
