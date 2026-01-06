@@ -35,15 +35,15 @@ Please follow these instructions while maintaining all other translation require
 ## Critical Requirements
 
 {{#if config.isNativeOutputMode}}
-- **MUST include `function` field** to specify the operation type (set_* or patch_*)
-- **MUST use the exact object ID** in the `id` field
-- **MUST include `type` field** for object and chapter functions
+- **MUST include `function` field** to specify the operation type (`replace_*` or `patch_*`)
+- **MUST use the exact object ID** in the `id` field (required for most operations; `replace_basic_info` does not require `id`)
+- **MUST include `type` field** for story object operations (`replace_story_object` / `patch_story_object`)
 - **MUST output a JSON array** with one item per object
 - Keep terminology consistent across all translations
 {{else}}
 - **MUST call the appropriate function for EACH object** - Do not skip any objects
-- **MUST use set_* for new/full translations** and **patch_* for minor fixes**
-- **MUST use the exact objectId as the id parameter**
+- **MUST use `replace_*` for new/full translations** and **`patch_*` for minor fixes**
+- **MUST use the exact objectId as the `id` parameter** (when required)
 - **MUST include all required fields** for the chosen function
 - Keep terminology consistent across all translations
 {{/if}}

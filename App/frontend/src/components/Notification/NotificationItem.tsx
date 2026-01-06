@@ -1,19 +1,20 @@
 import React, { useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { motion, useMotionTemplate, useTransform, type MotionValue } from 'motion/react';
-import { useLLMTaskStore, type LLMTaskSessionState } from '../../store/llmTaskStore';
+import { useLLMTaskStore } from '../../store/llmTaskStore';
 import { useImageTaskStore } from '../../imageGeneration/store/imageTaskStore';
 import type { ImageTaskState } from '../../imageGeneration/types';
 import { Check, Close } from '../icons';
 import { API_BASE_URL } from '../../api/client';
+import type { TaskSessionState } from '../../llmTask';
 
 // Unified task type for notifications
 export type NotificationTask =
-  | (LLMTaskSessionState & { kind: 'llm' })
-  | (ImageTaskState & { kind: 'image' });
+  | (TaskSessionState & { source: 'llm' })
+  | (ImageTaskState & { source: 'image' });
 
 interface NotificationItemProps {
   taskId: string;
-  kind: 'llm' | 'image';
+  source: 'llm' | 'image';
   index: number;
   totalCount: number;
   scrollY: MotionValue<number>;
@@ -44,22 +45,22 @@ const formatRelativeTime = (timestamp: number): string => {
 };
 
 // Type guards
-const isImageTask = (task: NotificationTask): task is ImageTaskState & { kind: 'image' } =>
-  task.kind === 'image';
+const isImageTask = (task: NotificationTask): task is ImageTaskState & { source: 'image' } =>
+  task.source === 'image';
 
 // Normalize status for display (image tasks have more statuses)
-const normalizeStatus = (task: NotificationTask): 'running' | 'success' | 'error' | 'cancelled' | 'idle' => {
+const normalizeStatus = (task: NotificationTask): TaskSessionState['status'] => {
   if (isImageTask(task)) {
     if (task.status === 'preparing' || task.status === 'generating' || task.status === 'processing') {
       return 'running';
     }
   }
-  return task.status as 'running' | 'success' | 'error' | 'cancelled' | 'idle';
+  return task.status as TaskSessionState['status'];
 };
 
 const NotificationItem: React.FC<NotificationItemProps> = ({
   taskId,
-  kind,
+  source,
   index,
   totalCount,
   scrollY,
@@ -76,16 +77,16 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
 }) => {
   // Per-item subscription: each item subscribes to its own session/task
   const llmSession = useLLMTaskStore((state) =>
-    kind === 'llm' ? state.sessions[taskId] : undefined
+    source === 'llm' ? state.sessions[taskId] : undefined
   );
   const imageTaskData = useImageTaskStore((state) =>
-    kind === 'image' ? state.tasks[taskId] : undefined
+    source === 'image' ? state.tasks[taskId] : undefined
   );
 
   // Construct the full task with kind (memoized to prevent infinite loops)
   const task: NotificationTask | null = useMemo(() => {
-    if (llmSession) return { ...llmSession, kind: 'llm' as const };
-    if (imageTaskData) return { ...imageTaskData, kind: 'image' as const };
+    if (llmSession) return { ...llmSession, source: 'llm' as const };
+    if (imageTaskData) return { ...imageTaskData, source: 'image' as const };
     return null;
   }, [llmSession, imageTaskData]);
 
@@ -149,11 +150,14 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   const getStatusIcon = () => {
     switch (normalizedStatus) {
       case 'running':
+      case 'applying':
         return (
           <div className="notification-spinner">
             <div className="notification-spinner-ring" />
           </div>
         );
+      case 'pending_confirmation':
+        return <span className="notification-icon notification-icon--error">!</span>;
       case 'success':
         return <span className="notification-icon notification-icon--success"><Check size="sm" /></span>;
       case 'error':
@@ -189,10 +193,13 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
     // LLM task messages
     switch (task.status) {
       case 'running':
+      case 'applying':
         if (task.progress) {
           return task.progress.currentItemLabel || `${task.progress.current}/${task.progress.total}`;
         }
         return 'Processing...';
+      case 'pending_confirmation':
+        return 'Needs confirmation';
       case 'success':
         return 'Completed';
       case 'error':
@@ -217,7 +224,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   return (
     <motion.div
       ref={itemRef}
-      className={`notification-item notification-item--${normalizedStatus} notification-item--${task.kind} ${isClickable ? 'notification-item--clickable' : ''} ${!isRead ? 'notification-item--unread' : ''}`}
+      className={`notification-item notification-item--${normalizedStatus} notification-item--${task.source} ${isClickable ? 'notification-item--clickable' : ''} ${!isRead ? 'notification-item--unread' : ''}`}
       style={{ opacity, transform, pointerEvents, zIndex }}
       onClick={isClickable ? handleClick : undefined}
       role={isClickable ? 'button' : undefined}

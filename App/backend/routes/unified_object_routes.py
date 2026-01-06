@@ -465,39 +465,105 @@ def handle_metadata_update(
     Handle metadata updates for structural fields like order.
     Automatically reorders siblings when order changes.
     """
-    if object_type == 'chapter' and 'order' in metadata:
-        new_order = metadata['order']
-        if not isinstance(new_order, int) or new_order < 1:
+    if object_type == 'chapter' and ('order' in metadata or 'act_id' in metadata):
+        requested_order = metadata.get('order')
+        if requested_order is not None and (not isinstance(requested_order, int) or requested_order < 1):
             raise HTTPException(status_code=400, detail="Invalid order value: must be positive integer")
 
-        current_order = obj.order
-        act_id = obj.act_id
+        current_act_id = obj.act_id
+        target_act_id = current_act_id
 
-        if new_order != current_order:
-            # Get all sibling chapters in the same act (excluding current)
-            siblings = db.query(Chapter).filter(
-                Chapter.act_id == act_id,
+        # Validate and resolve target act (if provided)
+        if 'act_id' in metadata:
+            act_id_value = metadata.get('act_id')
+            if not act_id_value:
+                raise HTTPException(status_code=400, detail="Invalid act_id value")
+
+            try:
+                target_act_uuid = UUID(str(act_id_value))
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=400, detail="Invalid act_id format")
+
+            if target_act_uuid != current_act_id:
+                act = getattr(obj, 'act', None)
+                if not act:
+                    raise HTTPException(status_code=500, detail='Chapter is missing act relation')
+
+                outline = getattr(act, 'outline', None)
+                if not outline:
+                    raise HTTPException(status_code=500, detail='Chapter act is missing outline relation')
+
+                # Ensure the target act belongs to the same project as the chapter's current outline
+                target_act = db.query(Act).join(Outline).filter(
+                    Act.id == target_act_uuid,
+                    Outline.id == Act.outline_id,
+                    Outline.project_id == outline.project_id
+                ).first()
+
+                if not target_act:
+                    raise HTTPException(status_code=404, detail="Act not found for project")
+
+                target_act_id = target_act_uuid
+
+        # If only act_id was provided but it resolves to the same act, no structural change required
+        if requested_order is None and target_act_id == current_act_id:
+            return
+
+        if target_act_id != current_act_id:
+            # Move chapter to another act (optionally with new order)
+
+            # Reindex remaining chapters in the old act (exclude current) to close any gap
+            old_siblings = db.query(Chapter).filter(
+                Chapter.act_id == current_act_id,
                 Chapter.id != object_id
             ).order_by(Chapter.order).all()
+            for i, ch in enumerate(old_siblings, start=1):
+                ch.order = i
 
-            # Calculate max valid order (siblings + 1 for current chapter)
-            max_order = len(siblings) + 1
+            # Reindex chapters in the target act before insertion
+            target_siblings = db.query(Chapter).filter(
+                Chapter.act_id == target_act_id
+            ).order_by(Chapter.order).all()
+            for i, ch in enumerate(target_siblings, start=1):
+                ch.order = i
 
-            # Clamp new_order to valid range
+            max_order = len(target_siblings) + 1
+            new_order = requested_order if requested_order is not None else max_order
             new_order = min(new_order, max_order)
             new_order = max(new_order, 1)
 
-            # Shift siblings to make room
-            if new_order < current_order:
-                # Moving up: shift chapters in [new_order, current_order) down by 1
-                for ch in siblings:
-                    if new_order <= ch.order < current_order:
-                        ch.order += 1
-            else:
-                # Moving down: shift chapters in (current_order, new_order] up by 1
-                for ch in siblings:
-                    if current_order < ch.order <= new_order:
-                        ch.order -= 1
+            # Shift target siblings to make room for insertion
+            for ch in target_siblings:
+                if ch.order >= new_order:
+                    ch.order += 1
+
+            obj.act_id = target_act_id
+            obj.order = new_order
+            db.flush()
+
+        else:
+            # Reorder chapter within the same act
+            new_order = requested_order
+            if new_order is None:
+                return
+
+            siblings = db.query(Chapter).filter(
+                Chapter.act_id == current_act_id,
+                Chapter.id != object_id
+            ).order_by(Chapter.order).all()
+
+            # Normalize siblings to a contiguous 1-based order
+            for i, ch in enumerate(siblings, start=1):
+                ch.order = i
+
+            max_order = len(siblings) + 1
+            new_order = min(new_order, max_order)
+            new_order = max(new_order, 1)
+
+            # Shift siblings to make room for insertion
+            for ch in siblings:
+                if ch.order >= new_order:
+                    ch.order += 1
 
             obj.order = new_order
             db.flush()
@@ -971,6 +1037,13 @@ async def create_object(
     Creates core object, initial version, translation cache, and active version pointer.
     """
     object_type = normalize_object_type(object_type)
+
+    # Block basic_info creation - it's auto-created with the project
+    if object_type == 'basic_info':
+        raise HTTPException(
+            status_code=400,
+            detail="BasicInfo is automatically created when a project is created. Use update endpoint instead."
+        )
 
     # Get model class
     model_class = get_object_model_class(object_type)

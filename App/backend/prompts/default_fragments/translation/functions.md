@@ -2,29 +2,34 @@
 
 ## Available Functions
 
-### Set Functions (Full Translation - New or Replace)
-Use these when there is no existing translation OR when the existing translation needs a complete rewrite:
+### Replace Functions (Full Translation / Overwrite)
+Use these when there is no existing translation OR when the existing translation needs a complete rewrite.
+These overwrite the target-language fields for the object.
 
-| Function | Use Case | Required Fields |
-|----------|----------|-----------------|
-| `set_basic_info_translation` | Basic info (title, logline, genre) | id, title, logline, genre |
-| `set_object_translation` | Story objects | id, type, name, description |
-| `set_chapter_outline_translation` | Acts and chapters | id, type, name, description |
-| `set_manuscript_translation` | Manuscript content | id, content |
+| Function | Use Case | Notes |
+|----------|----------|-------|
+| `replace_basic_info` | Project basic info (title, logline, genre) | No `id` needed; updates/creates the project's basic info |
+| `replace_story_object` | Story objects (character/location/organization/lorebook) | Requires `id` and `type` |
+| `replace_outline` | Outline root | Requires `id` |
+| `replace_outline_act` | Outline act | Requires `id` |
+| `replace_outline_chapter` | Outline chapter | Requires `id` (optionally `actId` to move) |
+| `replace_manuscript` | Manuscript content | Requires `id` and `content` |
 
 ### Patch Functions (Search-Replace Edits)
-Use these when the existing translation only needs minor corrections or refinements:
+Use these when the existing translation only needs minor corrections/refinements.
 
-| Function | Use Case | Required Fields |
-|----------|----------|-----------------|
-| `patch_basic_info_translation` | Fix basic info | id, replacements[] |
-| `patch_object_translation` | Fix story objects | id, type, replacements[] |
-| `patch_chapter_outline_translation` | Fix acts/chapters | id, type, replacements[] |
-| `patch_manuscript_translation` | Fix manuscript | id, replacements[] |
+| Function | Use Case | Notes |
+|----------|----------|-------|
+| `patch_basic_info` | Fix basic info via replacements | `replacements[]` targets `title` / `logline` / `genre` |
+| `patch_story_object` | Fix story objects via replacements | Requires `id` and `type` |
+| `patch_outline` | Fix outline root via replacements | Requires `id` |
+| `patch_outline_act` | Fix act via replacements | Requires `id` |
+| `patch_outline_chapter` | Fix chapter via replacements | Requires `id` |
+| `patch_manuscript` | Fix manuscript via replacements | No `field` needed in replacements |
 
 ### Patch Replacement Format
 
-For patch functions, the `replacements` array contains search-replace operations:
+For object/basic/outline patches, the `replacements` array contains search-replace operations:
 
 ```json
 {
@@ -37,7 +42,8 @@ For patch functions, the `replacements` array contains search-replace operations
 }
 ```
 
-For manuscript patches (no field needed):
+For manuscript patches (no `field` needed):
+
 ```json
 {
   "id": "manuscript-id",
@@ -52,6 +58,7 @@ For manuscript patches (no field needed):
 
 For each object to translate:
 
-1. **No existing translation** → Use `set_*` function
-2. **Existing translation needs complete rewrite** → Use `set_*` function
-3. **Existing translation needs only minor fixes** → Use `patch_*` function
+1. **No existing translation** → Use `replace_*`
+2. **Existing translation needs a full rewrite** → Use `replace_*`
+3. **Existing translation needs only small fixes** → Use `patch_*`
+

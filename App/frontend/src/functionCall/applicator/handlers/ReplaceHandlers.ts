@@ -10,8 +10,7 @@
 
 import type { ApplicationResult } from '../../types';
 import { getObjectData, ALL_OBJECT_TYPE_MAP } from '../../types';
-import type { HandlerContext, HandlerOptions } from '../types';
-import { CRUD_OPTIONS } from '../types';
+import type { HandlerContext } from '../types';
 import type { ObjectType, UnifiedObject } from '../../../types/unifiedObject';
 
 // ============================================================================
@@ -51,8 +50,7 @@ async function ensureObject(
  */
 export async function replaceBasicInfo(
   args: Record<string, unknown>,
-  context: HandlerContext,
-  options: HandlerOptions = CRUD_OPTIONS
+  context: HandlerContext
 ): Promise<ApplicationResult> {
   const { title, logline, genre } = args as {
     title?: string;
@@ -61,36 +59,28 @@ export async function replaceBasicInfo(
   };
 
   const { store, projectId, language } = context;
-  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = context.options;
 
   const existing = await store.listObjects('basic_info', projectId);
-  if (existing.length > 0) {
-    const basic = existing[0];
-    const currentData = getObjectData(basic, language);
-
-    await store.updateObject('basic_info', basic.id, {
-      data: {
-        title: title ?? currentData.title ?? '',
-        logline: logline ?? currentData.logline ?? '',
-        genre: genre ?? currentData.genre ?? '',
-      },
-      language,
-      create_new_version: createNewVersion,
-      user_request: userRequest,
-    });
-    return ok('Updated basic info', { id: basic.id });
+  if (existing.length === 0) {
+    // BasicInfo should be auto-created with the project
+    return error('BasicInfo not found. This should not happen.');
   }
 
-  // Create new basic info if it doesn't exist
-  const created = await store.createObject(
-    'basic_info',
-    projectId,
-    { title: title ?? '', logline: logline ?? '', genre: genre ?? '' },
+  const basic = existing[0];
+  const currentData = getObjectData(basic, language);
+
+  await store.updateObject('basic_info', basic.id, {
+    data: {
+      title: title ?? currentData.title ?? '',
+      logline: logline ?? currentData.logline ?? '',
+      genre: genre ?? currentData.genre ?? '',
+    },
     language,
-    undefined,
-    userRequest
-  );
-  return ok('Created basic info', { id: created.id });
+    create_new_version: createNewVersion,
+    user_request: userRequest,
+  });
+  return ok('Updated basic info', { id: basic.id });
 }
 
 /**
@@ -99,8 +89,7 @@ export async function replaceBasicInfo(
  */
 export async function replaceStoryObject(
   args: Record<string, unknown>,
-  context: HandlerContext,
-  options: HandlerOptions = CRUD_OPTIONS
+  context: HandlerContext
 ): Promise<ApplicationResult> {
   const { id, type, name, description } = args as {
     id?: string;
@@ -120,7 +109,7 @@ export async function replaceStoryObject(
   }
 
   const { store, language } = context;
-  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = context.options;
 
   const object = await ensureObject(store, objectType, id);
   const currentData = getObjectData(object, language);
@@ -143,8 +132,7 @@ export async function replaceStoryObject(
  */
 export async function replaceManuscript(
   args: Record<string, unknown>,
-  context: HandlerContext,
-  options: HandlerOptions = CRUD_OPTIONS
+  context: HandlerContext
 ): Promise<ApplicationResult> {
   const { id, content } = args as {
     id?: string;
@@ -156,7 +144,7 @@ export async function replaceManuscript(
   }
 
   const { store, projectId, language } = context;
-  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = context.options;
 
   // Get manuscript by ID or find by chapter reference
   let manuscript = store.getObject(id) ?? null;
@@ -200,8 +188,7 @@ export async function replaceManuscript(
  */
 export async function replaceOutline(
   args: Record<string, unknown>,
-  context: HandlerContext,
-  options: HandlerOptions = CRUD_OPTIONS
+  context: HandlerContext
 ): Promise<ApplicationResult> {
   const { id, name, description } = args as {
     id?: string;
@@ -214,7 +201,7 @@ export async function replaceOutline(
   }
 
   const { store, language } = context;
-  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = context.options;
 
   const object = await ensureObject(store, 'outline', id);
   const currentData = getObjectData(object, language);
@@ -237,8 +224,7 @@ export async function replaceOutline(
  */
 export async function replaceOutlineAct(
   args: Record<string, unknown>,
-  context: HandlerContext,
-  options: HandlerOptions = CRUD_OPTIONS
+  context: HandlerContext
 ): Promise<ApplicationResult> {
   const { id, name, description, order } = args as {
     id?: string;
@@ -252,7 +238,7 @@ export async function replaceOutlineAct(
   }
 
   const { store, language } = context;
-  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = context.options;
 
   const object = await ensureObject(store, 'act', id);
   const currentData = getObjectData(object, language);
@@ -284,8 +270,7 @@ export async function replaceOutlineAct(
  */
 export async function replaceOutlineChapter(
   args: Record<string, unknown>,
-  context: HandlerContext,
-  options: HandlerOptions = CRUD_OPTIONS
+  context: HandlerContext
 ): Promise<ApplicationResult> {
   const { id, actId, name, description, order } = args as {
     id?: string;
@@ -300,7 +285,7 @@ export async function replaceOutlineChapter(
   }
 
   const { store, language } = context;
-  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = context.options;
 
   const object = await ensureObject(store, 'chapter', id);
   const currentData = getObjectData(object, language);

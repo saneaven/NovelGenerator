@@ -12,8 +12,6 @@ export type {
   AgentMode,
   AgentOrchestrationConfig,
   AgentOrchestrationReturn,
-  FunctionCallState,
-  FunctionCallHandlers,
   ContextIdState,
   AgentHandlersReturn,
 } from './types';

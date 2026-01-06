@@ -154,34 +154,29 @@ def get_default_prompts():
 FRAGMENTS_DIR = CURRENT_DIR / 'default_fragments'
 
 
-def _load_fragment_file(relative_path: str) -> str:
+def _load_all_fragments() -> dict[str, str]:
     """
-    Load a fragment file from the default_fragments directory.
+    Load all fragment files under default_fragments recursively.
 
-    Args:
-        relative_path: Path relative to the default_fragments directory
+    Keys are stored without the `.md` extension and always use POSIX separators.
 
-    Returns:
-        str: Content of the fragment file
+    Example:
+      default_fragments/translation/functions.md -> "translation/functions"
     """
-    file_path = FRAGMENTS_DIR / relative_path
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            return f.read()
-    except FileNotFoundError:
-        print(f"Warning: Fragment file not found: {file_path}")
-        return f"# Default fragment (file not found: {relative_path})"
+    fragments: dict[str, str] = {}
+
+    for file_path in FRAGMENTS_DIR.rglob('*.md'):
+        key = file_path.relative_to(FRAGMENTS_DIR).with_suffix('').as_posix()
+        try:
+            fragments[key] = file_path.read_text(encoding='utf-8')
+        except FileNotFoundError:
+            print(f"Warning: Fragment file not found: {file_path}")
+            fragments[key] = f"# Default fragment (file not found: {key})"
+
+    return fragments
 
 
-# Load all default fragments
-# Format: {'path/to/fragment': content}
-DEFAULT_FRAGMENTS = {
-    'common/customThinkingInstruction': _load_fragment_file('common/customThinkingInstruction.md'),
-    'common/projectContext/full': _load_fragment_file('common/projectContext/full.md'),
-    'common/projectContext/filtered': _load_fragment_file('common/projectContext/filtered.md'),
-    'common/editOperations/manuscript': _load_fragment_file('common/editOperations/manuscript.md'),
-    'common/editOperations/storyObject': _load_fragment_file('common/editOperations/storyObject.md'),
-}
+DEFAULT_FRAGMENTS = _load_all_fragments()
 
 
 def get_default_fragments():

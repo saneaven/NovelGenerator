@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useLLMLogStore, type LLMLogEntry, type LLMLogStatus } from '../../store/llmLogStore';
+import { useLLMLogStore, type LLMLogStatus } from '../../store/llmLogStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { TextButton } from '../TextButton';
 import { Check, Warning, Loading, Clock, Trash, Document } from '../icons';

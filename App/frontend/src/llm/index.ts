@@ -2,7 +2,6 @@
 
 export { LLMTask } from './LLMTask';
 export { PromptManager } from './PromptManager';
-export { LLMTaskManager, type TaskHandle, type StartTaskOptions } from './LLMTaskManager';
 export {
   LLMTaskMode,
   type LLMTaskModeType,

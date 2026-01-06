@@ -1,16 +1,11 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useLLMTaskStore, type LLMTaskSessionState } from '../../store/llmTaskStore';
+import { useLLMTaskStore } from '../../store/llmTaskStore';
 import { useImageTaskStore } from '../../imageGeneration/store/imageTaskStore';
 import type { ImageTaskState } from '../../imageGeneration/types';
 import NotificationItem, { type NotificationTask } from './NotificationItem';
 import NotificationDetailModal from './NotificationDetailModal';
 import ImagePreviewModal from './ImagePreviewModal';
 import { useScroll } from 'motion/react';
-
-// Import modal types for retry functionality
-import AIEditModal from '../AIEditModal';
-import TranslationModal from '../TranslationModal';
-import UnifiedImagePromptModal from '../ImageGeneration/UnifiedImagePromptModal';
 import { UnifiedImageModal } from '../AssetManager';
 
 interface NotificationPanelProps {
@@ -45,10 +40,10 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
   const allTaskRefs = useMemo(() => {
     const llmRefs = Object.entries(llmSessionsMap)
       .filter(([_, s]) => s && s.status !== 'idle')
-      .map(([id, s]) => ({ id, kind: 'llm' as const, createdAt: s!.createdAt }));
+      .map(([id, s]) => ({ id, source: 'llm' as const, createdAt: s!.createdAt }));
     const imageRefs = Object.entries(imageTasksMap)
       .filter(([_, t]) => t && t.status !== 'idle')
-      .map(([id, t]) => ({ id, kind: 'image' as const, createdAt: t!.createdAt }));
+      .map(([id, t]) => ({ id, source: 'image' as const, createdAt: t!.createdAt }));
     return [...llmRefs, ...imageRefs].sort((a, b) => b.createdAt - a.createdAt);
   }, [llmSessionsMap, imageTasksMap]);
 
@@ -58,13 +53,12 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
   }, [allTaskRefs, isMobile]);
 
   const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
-  const [llmRetrySession, setLLMRetrySession] = useState<LLMTaskSessionState | null>(null);
   const [imageRetryTask, setImageRetryTask] = useState<ImageTaskState | null>(null);
   const [previewAssetId, setPreviewAssetId] = useState<string | null>(null);
 
   const handleDismiss = useCallback(
     (task: NotificationTask) => {
-      if (task.kind === 'llm') {
+      if (task.source === 'llm') {
         // If LLM task is running, cancel it first
         if (task.status === 'running') {
           cancelLLMTask(task.id);
@@ -82,7 +76,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
   );
 
   const handleOpenDetail = useCallback((task: NotificationTask) => {
-    if (task.kind === 'llm') {
+    if (task.source === 'llm') {
       setDetailSessionId(task.id);
     } else {
       // For image tasks, if error with retry context, open retry modal
@@ -104,18 +98,6 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
     clearLLMNotification(id);
   }, [clearLLMNotification]);
 
-  const handleLLMRetry = useCallback((session: LLMTaskSessionState) => {
-    setLLMRetrySession(session);
-    setDetailSessionId(null);
-  }, []);
-
-  const handleLLMRetryModalClose = useCallback(() => {
-    if (llmRetrySession) {
-      clearLLMNotification(llmRetrySession.id);
-    }
-    setLLMRetrySession(null);
-  }, [llmRetrySession, clearLLMNotification]);
-
   const handleImageRetryModalClose = useCallback(() => {
     if (imageRetryTask) {
       clearImageTask(imageRetryTask.id);
@@ -127,65 +109,6 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
     clearAllLLMNotifications();
     clearAllImageTasks();
   }, [clearAllLLMNotifications, clearAllImageTasks]);
-
-  const renderLLMRetryModal = () => {
-    if (!llmRetrySession?.retryContext) return null;
-
-    const { taskType, modalProps, formState } = llmRetrySession.retryContext;
-
-    switch (taskType) {
-      case 'ai-edit':
-        return (
-          <AIEditModal
-            isOpen={true}
-            onClose={handleLLMRetryModalClose}
-            category={modalProps.category}
-            projectId={modalProps.projectId}
-            targetId={modalProps.targetId}
-            onResult={modalProps.onResult}
-            defaultUserRequest={formState?.userRequest}
-            defaultSelectedContextIds={formState?.selectedContextIds}
-          />
-        );
-
-      case 'translation':
-        return (
-          <TranslationModal
-            isOpen={true}
-            onClose={handleLLMRetryModalClose}
-            projectId={modalProps.projectId}
-            onComplete={modalProps.onComplete}
-            allowedObjectTypes={modalProps.allowedObjectTypes}
-            defaultSourceLanguage={formState?.sourceLanguage}
-            defaultTargetLanguage={formState?.targetLanguage}
-            defaultUserInput={formState?.userInput}
-            preSelectedObjectIds={formState?.selectedIds}
-            defaultSelectedContextIds={formState?.selectedContextIds}
-          />
-        );
-
-      case 'image-prompt':
-      case 'scene-image':
-        return (
-          <UnifiedImagePromptModal
-            isOpen={true}
-            onClose={handleLLMRetryModalClose}
-            contextType={modalProps.contextType || 'object'}
-            objectType={modalProps.objectType}
-            objectId={modalProps.objectId}
-            onPromptGenerated={modalProps.onPromptGenerated}
-            promptMode={modalProps.promptMode}
-            defaultUserRequest={formState?.userRequest}
-            defaultSelectedObjectIds={formState?.selectedObjectIds}
-            sceneContext={modalProps.sceneContext}
-          />
-        );
-
-      default:
-        console.warn(`Retry not implemented for task type: ${taskType}`);
-        return null;
-    }
-  };
 
   const renderImageRetryModal = () => {
     if (!imageRetryTask?.retryContext) return null;
@@ -231,17 +154,9 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
     const mediaQuery = window.matchMedia('(max-width: 480px)');
     const handleChange = () => setIsMobile(mediaQuery.matches);
     handleChange();
-    if (mediaQuery.addEventListener) {
-      mediaQuery.addEventListener('change', handleChange);
-    } else {
-      mediaQuery.addListener(handleChange);
-    }
+    mediaQuery.addEventListener('change', handleChange);
     return () => {
-      if (mediaQuery.addEventListener) {
-        mediaQuery.removeEventListener('change', handleChange);
-      } else {
-        mediaQuery.removeListener(handleChange);
-      }
+      mediaQuery.removeEventListener('change', handleChange);
     };
   }, []);
 
@@ -338,7 +253,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
               <NotificationItem
                 key={ref.id}
                 taskId={ref.id}
-                kind={ref.kind}
+                source={ref.source}
                 index={index}
                 totalCount={orderedTaskRefs.length}
                 scrollY={scrollY}
@@ -365,11 +280,9 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
           session={detailSession}
           onClose={handleCloseDetail}
           onDismissToast={() => handleDismissToast(detailSession.id)}
-          onRetry={handleLLMRetry}
         />
       )}
 
-      {renderLLMRetryModal()}
       {renderImageRetryModal()}
 
       {previewAssetId && (

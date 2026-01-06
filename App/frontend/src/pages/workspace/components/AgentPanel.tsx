@@ -10,7 +10,6 @@ import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useLLMTaskStore } from '../../../store/llmTaskStore';
 import ObjectPicker from '../../../components/ObjectPicker/ObjectPicker';
 import AgentSidebar from '../../../components/AgentSidebar';
-import { TranslationService } from '../../../services/translationService';
 import { DefaultDisplayProcessor } from '../../../agent/processors/DisplayProcessor';
 import type { ChatMessage } from '../../../llm/requestTypes';
 import ThinkingDisplay from '../../../components/ThinkingDisplay';
@@ -20,6 +19,11 @@ import { IconButton } from '../../../components/IconButton';
 import { collapseContentParts } from '../../../agent/utils/contentParts';
 import { Settings, Edit, Trash, Globe, CircularArrow, ChevronUp, ChevronDown } from '../../../components/icons';
 import { useAgentOrchestration } from '../../../agent/hooks';
+import { getBestLanguageData } from '../../../utils/languageData';
+import { TaskRuntime } from '../../../llmTask/TaskRuntime';
+import { applyFunctionCallsDirect, applySessionEdits } from '../../../llmTask/functionCalls/functionCallEngine';
+import { CRUD_OPTIONS } from '../../../functionCall/applicator/types';
+import { buildEditCardsFromFunctionCallMetadata } from '../../../functionCall';
 
 interface AgentPanelProps
 {
@@ -82,7 +86,7 @@ const AgentContextPicker: React.FC<AgentContextPickerProps> = React.memo(({
 interface AgentInputFormProps {
     projectId: string;
     mainLanguage: string;
-    onSubmit: (e: React.FormEvent, input: string, isLoading: boolean) => Promise<void>;
+    onSubmit: (e: React.FormEvent, input: string) => Promise<void>;
     onStop: () => void;
 }
 
@@ -92,13 +96,13 @@ const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({ projectId, m
     const setInput = useAgentUIStore((state) => state.setInput);
 
     const handleSubmit = useCallback((e: React.FormEvent) => {
-        onSubmit(e, input, isLoading);
+        onSubmit(e, input);
     }, [onSubmit, input, isLoading]);
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            onSubmit(e as any, input, isLoading);
+            onSubmit(e as any, input);
         }
     }, [onSubmit, input, isLoading]);
 
@@ -131,24 +135,20 @@ const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({ projectId, m
 // Separate component for message edit form to avoid re-rendering all messages on typing
 interface MessageEditFormProps {
     projectId: string;
-    displayLanguage: string;
-    editTextareaRef: React.RefObject<HTMLTextAreaElement>;
+    editTextareaRef: React.MutableRefObject<HTMLTextAreaElement | null>;
     onEditContentChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-    onSaveEdit: (messageId: string | null, content: string, language: string) => void;
+    onSaveEdit: () => void;
     onCancelEdit: () => void;
 }
 
 const MessageEditForm: React.FC<MessageEditFormProps> = React.memo(({
     projectId,
-    displayLanguage,
     editTextareaRef,
     onEditContentChange,
     onSaveEdit,
     onCancelEdit
 }) => {
-    const editingMessageId = useAgentUIStore((state) => state.editingByProject[projectId]?.messageId ?? null);
     const editingContent = useAgentUIStore((state) => state.editingByProject[projectId]?.content ?? '');
-    const editingLanguage = useAgentUIStore((state) => state.editingByProject[projectId]?.language ?? null);
 
     return (
         <div className="message-edit">
@@ -162,7 +162,7 @@ const MessageEditForm: React.FC<MessageEditFormProps> = React.memo(({
                 <TextButton
                     variant="primary"
                     size="sm"
-                    onClick={() => onSaveEdit(editingMessageId, editingContent, editingLanguage || displayLanguage)}
+                    onClick={onSaveEdit}
                 >
                     Save
                 </TextButton>
@@ -190,15 +190,11 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     // Agent orchestration - all agent logic is handled internally
     const {
         agentHandlers,
-        functionCallState,
-        functionCallHandlers,
         contextIds,
     } = useAgentOrchestration({ projectId, mode });
 
     // Destructure for easier access
     const { selectedContextIds, setSelectedContextIds: onContextIdsChange, totalObjectCount } = contextIds;
-    const { messageEditCards, activeFunctionCalls } = functionCallState;
-    const { handleBatchConfirm: onBatchConfirm, isMessageConfirmed } = functionCallHandlers;
     const {
         handleSubmit: onSubmit,
         handleStop: onStop,
@@ -215,7 +211,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     const isUserNearBottomRef = useRef(true);
     const [showScrollButton, setShowScrollButton] = useState(false);
     const displayProcessor = useMemo(() => new DefaultDisplayProcessor(), []);
-    const { convertToDisplayMessage, addTranslatedMessage } = useAgentStore();
+    const { convertToDisplayMessage } = useAgentStore();
 
     // Use selectors for agentUI to avoid re-rendering on input changes
     const isLoading = useAgentUIStore((state) => state.loadingByProject[projectId] ?? false);
@@ -231,7 +227,6 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     const { settings } = useSettingsStore();
     const { showError } = useErrorStore();
     const novelEditorStore = useNovelEditorStore();
-    const taskStore = useLLMTaskStore();
 
     // Check if editor has unsaved changes (only relevant in novelEditor mode)
     const hasUnsavedChanges = mode === 'novelEditor'
@@ -251,10 +246,31 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     });
     const storedMessages = useMemo(() => selectedAgent?.messages ?? [], [selectedAgent]);
 
+    const llmSessions = useLLMTaskStore((state) => state.sessions);
+    const agentSessionByMessageId = useMemo(() => {
+        const map: Record<string, any> = {};
+        for (const session of Object.values(llmSessions)) {
+            if (!session) continue;
+            if (session.kind !== 'agent') continue;
+            if ((session.input as any)?.projectId !== projectId) continue;
+
+            const assistantMessageId = (session.result as any)?.assistantMessageId as string | undefined;
+            if (!assistantMessageId) continue;
+
+            const existing = map[assistantMessageId];
+            if (!existing || (existing.createdAt ?? 0) < session.createdAt) {
+                map[assistantMessageId] = session;
+            }
+        }
+        return map;
+    }, [llmSessions, projectId]);
+
     const [translatingMessages, setTranslatingMessages] = useState<Record<string, boolean>>({});
     const [translationErrors, setTranslationErrors] = useState<Record<string, string | null>>({});
+    const [translationSessionByMessageId, setTranslationSessionByMessageId] = useState<Record<string, string>>({});
     // Per-message language view: tracks which messages are showing translation
     const [messageLanguageView, setMessageLanguageView] = useState<Record<string, 'primary' | 'secondary'>>({});
+    const [applyingMessageEdits, setApplyingMessageEdits] = useState<Record<string, boolean>>({});
     // Mobile agent overlay closing animation state
     const [isOverlayClosing, setIsOverlayClosing] = useState(false);
 
@@ -360,7 +376,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                 };
             }
 
-            const fallback = TranslationService.getBestLanguageData(
+            const fallback = getBestLanguageData(
                 message.data,
                 mainLanguage,
                 defaultSubLanguage ?? undefined
@@ -387,6 +403,61 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         [storedMessages, resolveDisplayInfo]
     );
 
+    useEffect(() => {
+        const entries = Object.entries(translationSessionByMessageId);
+        if (entries.length === 0) return;
+
+        const finished: Array<{ messageId: string; sessionId: string; status: string; error?: string }> = [];
+        for (const [messageId, sessionId] of entries) {
+            const session = llmSessions[sessionId];
+            if (!session) continue;
+            if (session.status === 'running' || session.status === 'applying') continue;
+            finished.push({ messageId, sessionId, status: session.status, error: session.error });
+        }
+
+        if (finished.length === 0) return;
+
+        setTranslationSessionByMessageId(prev => {
+            const next = { ...prev };
+            for (const item of finished) {
+                delete next[item.messageId];
+            }
+            return next;
+        });
+
+        setTranslatingMessages(prev => {
+            const next = { ...prev };
+            for (const item of finished) {
+                next[item.messageId] = false;
+            }
+            return next;
+        });
+
+        setTranslationErrors(prev => {
+            const next = { ...prev };
+            for (const item of finished) {
+                next[item.messageId] = item.status === 'error' ? (item.error ?? 'Unknown error occurred during translation.') : null;
+            }
+            return next;
+        });
+
+        setMessageLanguageView(prev => {
+            const next = { ...prev };
+            for (const item of finished) {
+                if (item.status === 'success') {
+                    next[item.messageId] = 'secondary';
+                }
+            }
+            return next;
+        });
+
+        for (const item of finished) {
+            if (item.status === 'error') {
+                showError('Translation Failed', item.error ?? 'Unknown error occurred during translation.');
+            }
+        }
+    }, [translationSessionByMessageId, llmSessions, showError]);
+
     const translateMessage = async (message: StoredAgentMessage) =>
     {
         if (!defaultSubLanguage)
@@ -400,19 +471,21 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
             return;
         }
 
-        const sourceLanguage = mainLanguage;
+        const preferredSourceLanguage = mainLanguage;
         const targetLanguage = defaultSubLanguage;
-        const sourceData = message.data[sourceLanguage] || TranslationService.getBestLanguageData(message.data, sourceLanguage)?.data;
-        if (!sourceData)
+        const sourceEntry = message.data[preferredSourceLanguage]
+            ? { language: preferredSourceLanguage, data: message.data[preferredSourceLanguage] }
+            : getBestLanguageData(message.data, preferredSourceLanguage);
+
+        if (!sourceEntry)
         {
-            showError('Translation Failed', `No ${sourceLanguage} content available to translate.`);
+            showError('Translation Failed', `No content available to translate.`);
             return;
         }
-        const contentParts = sourceData?.contentParts ?? [];
-        const {
-            content: sourceContent,
-            thinking
-        } = collapseContentParts(contentParts);
+
+        const sourceLanguage = sourceEntry.language;
+        const contentParts = (sourceEntry.data as any)?.contentParts ?? [];
+        const { content: sourceContent } = collapseContentParts(contentParts);
 
         if (!sourceContent.trim())
         {
@@ -420,68 +493,20 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
             return;
         }
 
-        // Generate toast session ID for this translation
-        const toastSessionId = `agent-translation-${message.id}`;
+        setTranslatingMessages(prev => ({ ...prev, [message.id]: true }));
+        setTranslationErrors(prev => ({ ...prev, [message.id]: null }));
 
-        try
-        {
-            setTranslatingMessages(prev => ({ ...prev, [message.id]: true }));
-            setTranslationErrors(prev => ({ ...prev, [message.id]: null }));
-            TranslationService.setTranslationStatus(message.id, { objectId: message.id, isTranslating: true });
+        const sessionId = TaskRuntime.start('agentTranslation', {
+            projectId,
+            agentId: selectedAgentId,
+            messageId: message.id,
+            sourceLanguage,
+            targetLanguage,
+            sourceContent,
+            originalContentParts: contentParts as any,
+        });
 
-            // Start toast notification
-            taskStore.setRunning(toastSessionId, 'Agent Translation', 'agent-translation');
-
-            const translationResult = await TranslationService.translateChatMessage(
-                {
-                    content: sourceContent
-                },
-                {
-                    projectId,
-                    sourceLanguage,
-                    targetLanguage
-                }
-            );
-            const translatedContent = translationResult.content || sourceContent;
-            const translatedThinking = thinking;
-
-            // Reconstruct contentParts with translated text
-            const translatedContentParts = contentParts.map((part: any) => {
-                if (part.type === 'content') {
-                    return { ...part, text: translatedContent };
-                } else if (part.type === 'thinking') {
-                    return { ...part, text: translatedThinking };
-                }
-                return part;
-            });
-
-            const translatedData: any = {
-                contentParts: translatedContentParts,
-                thinking_details: sourceData.thinking_details, // Keep original (not translated)
-            };
-
-            await addTranslatedMessage(projectId, selectedAgentId, message.id, translatedData, targetLanguage);
-
-            // Mark toast as success
-            taskStore.setSuccess(toastSessionId);
-
-            // Auto-switch to show translation after successful translate
-            setMessageLanguageView(prev => ({
-                ...prev,
-                [message.id]: 'secondary'
-            }));
-        } catch (error)
-        {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred during translation.';
-            setTranslationErrors(prev => ({ ...prev, [message.id]: errorMessage }));
-            showError('Translation Failed', errorMessage);
-            // Mark toast as error
-            taskStore.setTaskError(toastSessionId, errorMessage);
-        } finally
-        {
-            setTranslatingMessages(prev => ({ ...prev, [message.id]: false }));
-            TranslationService.clearTranslationStatus(message.id);
-        }
+        setTranslationSessionByMessageId(prev => ({ ...prev, [message.id]: sessionId }));
     };
 
     const renderMessageContent = (
@@ -575,6 +600,25 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                         ? `Refresh ${translationTargetLabel}`
                         : `Translate to ${translationTargetLabel}`;
                     const translateDisabled = !translationEnabled || isTranslating;
+                    const agentSession = agentSessionByMessageId[message.chatMessage.id];
+                    const hasStreamingCalls = Boolean(
+                        agentSession &&
+                        agentSession.status === 'running' &&
+                        agentSession.functionCallProgress?.length > 0
+                    );
+                    const sessionCards = agentSession?.editCards;
+                    const hasSessionCards = Boolean(sessionCards && sessionCards.length > 0);
+                    const storedFunctionCalls = message.storedMessage.functionCalls ?? [];
+                    const fallbackCards = !hasSessionCards && storedFunctionCalls.length > 0
+                        ? buildEditCardsFromFunctionCallMetadata(storedFunctionCalls)
+                        : [];
+                    const cardsToRender = (hasSessionCards ? sessionCards : fallbackCards) ?? [];
+                    const hasEditCards = cardsToRender.length > 0;
+                    const isApplying = agentSession?.status === 'applying' || applyingMessageEdits[message.chatMessage.id] === true;
+                    const hasPendingCards = cardsToRender.some((card: any) => card.functionCall.status === 'pending' || card.functionCall.status === 'validating');
+                    const cardMode = hasSessionCards
+                        ? (agentSession?.status === 'pending_confirmation' || isApplying ? 'pending' : 'confirmed')
+                        : (hasPendingCards || isApplying ? 'pending' : 'confirmed');
 
                     return (
                         <div
@@ -597,37 +641,84 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                     <span className="message-time">{formatTimestamp(message.chatMessage.timestamp)}</span>
                                 </div>
 
-                                {isEditing ? (
-                                    <MessageEditForm
-                                        projectId={projectId}
-                                        displayLanguage={message.displayLanguage}
-                                        editTextareaRef={editTextareaRef}
-                                        onEditContentChange={onEditContentChange}
-                                        onSaveEdit={onSaveEdit}
-                                        onCancelEdit={onCancelEdit}
-                                    />
-                                ) : (
-                                    <>
-                                        {renderMessageContent(message, processingResult)}
-                                        {activeFunctionCalls[message.chatMessage.id] && activeFunctionCalls[message.chatMessage.id].length > 0 && (
+                                        {isEditing ? (
+                                            <MessageEditForm
+                                                projectId={projectId}
+                                                editTextareaRef={editTextareaRef}
+                                                onEditContentChange={onEditContentChange}
+                                                onSaveEdit={onSaveEdit}
+                                                onCancelEdit={onCancelEdit}
+                                            />
+                                        ) : (
+                                            <>
+                                                {renderMessageContent(message, processingResult)}
+                                        {hasStreamingCalls && (
                                             <div className="message-edit-cards">
                                                 <FunctionCallCard
                                                     mode="streaming"
-                                                    streamingProgress={activeFunctionCalls[message.chatMessage.id]}
+                                                    streamingProgress={agentSession.functionCallProgress}
                                                     projectId={projectId}
                                                 />
                                             </div>
                                         )}
 
-                                        {messageEditCards[message.chatMessage.id] && messageEditCards[message.chatMessage.id].length > 0 && (
+                                        {hasEditCards && (
                                             <div className="message-edit-cards">
                                                 <FunctionCallCard
-                                                    mode={isMessageConfirmed(message.chatMessage.id) ? 'confirmed' : 'pending'}
-                                                    cards={messageEditCards[message.chatMessage.id]}
-                                                    onConfirm={(selections: Record<string, boolean>) => onBatchConfirm(message.chatMessage.id, selections)}
+                                                    mode={cardMode as any}
+                                                    cards={cardsToRender as any}
+                                                    onConfirm={
+                                                        cardMode === 'pending'
+                                                            ? async (selections: Record<string, boolean>) => {
+                                                                if (hasUnsavedChanges) {
+                                                                    showError('Cannot Apply', 'Save your changes first - unsaved work will be overwritten.');
+                                                                    return;
+                                                                }
+
+                                                                if (hasSessionCards && agentSession) {
+                                                                    await applySessionEdits({
+                                                                        sessionId: agentSession.id,
+                                                                        projectId,
+                                                                        language: mainLanguage,
+                                                                        selections,
+                                                                        options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
+                                                                    });
+                                                                    return;
+                                                                }
+
+                                                                if (!selectedAgentId || storedFunctionCalls.length === 0) return;
+
+                                                                setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: true }));
+                                                                try {
+                                                                    const nextFunctionCalls = await applyFunctionCallsDirect({
+                                                                        projectId,
+                                                                        language: mainLanguage,
+                                                                        functionCalls: storedFunctionCalls,
+                                                                        selections,
+                                                                        options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
+                                                                    });
+
+                                                                    await useAgentStore.getState().updateMessageFunctionCalls(
+                                                                        projectId,
+                                                                        selectedAgentId,
+                                                                        message.chatMessage.id,
+                                                                        nextFunctionCalls
+                                                                    );
+                                                                } finally {
+                                                                    setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: false }));
+                                                                }
+                                                            }
+                                                            : undefined
+                                                    }
                                                     projectId={projectId}
-                                                    isApplyDisabled={hasUnsavedChanges}
-                                                    applyDisabledReason={hasUnsavedChanges ? "Save your changes first - unsaved work will be overwritten" : undefined}
+                                                    isApplyDisabled={hasUnsavedChanges || isApplying}
+                                                    applyDisabledReason={
+                                                        hasUnsavedChanges
+                                                            ? 'Save your changes first - unsaved work will be overwritten'
+                                                            : isApplying
+                                                                ? 'Applying changes...'
+                                                                : undefined
+                                                    }
                                                 />
                                             </div>
                                         )}

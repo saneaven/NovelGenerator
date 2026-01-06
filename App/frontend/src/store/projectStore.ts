@@ -19,7 +19,7 @@ interface ProjectStore {
 
   // Actions
   fetchProjects: () => Promise<void>;
-  createProject: (name: string, description: string) => Promise<Project>;
+  createProject: (name: string, description: string, mainLanguage: string) => Promise<Project>;
   deleteProject: (id: string) => Promise<void>;
   updateProject: (id: string, updates: { name?: string; description?: string }) => Promise<void>;
   setCurrentProject: (id: string | null) => void;
@@ -47,10 +47,10 @@ export const useProjectStore = create<ProjectStore>()((set, get) => ({
     }
   },
 
-  createProject: async (name: string, description: string) => {
+  createProject: async (name: string, description: string, mainLanguage: string) => {
     set({ isLoading: true, error: null });
     try {
-      const newProject = await projectService.create({ name, description });
+      const newProject = await projectService.create({ name, description, main_language: mainLanguage });
       set((state) => ({
         projects: [...state.projects, newProject],
         isLoading: false,

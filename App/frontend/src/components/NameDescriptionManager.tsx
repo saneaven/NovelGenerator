@@ -99,12 +99,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   const columnCount = useGridColumnCount(gridRef);
 
   // Asset store for story object images
-  // Note: storyObjectAssets subscription triggers re-render when assets are loaded
-  const {
-    fetchStoryObjectAssets,
-    getMainAsset,
-    storyObjectAssets,
-  } = useAssetStore();
+  const { fetchStoryObjectAssets, getMainAsset } = useAssetStore();
 
   // DnD sensors for drag-and-drop reordering
   const sensors = useSensors(
@@ -356,61 +351,6 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   const handleAIEdit = (itemId?: string) => {
     setAiEditTargetId(itemId);
     setShowAIModal(true);
-  };
-
-  const handleAIResult = async (result: any) => {
-    if (!projectId) return;
-
-    if (aiEditTargetId) {
-      // Editing specific item
-      if (result && result.name !== undefined && result.description !== undefined) {
-        const item = store.objects[aiEditTargetId] as NameDescriptionObject;
-        if (!item) return;
-
-        try {
-          const { effectiveLanguage } = getEffectiveLanguage(item);
-          await store.updateObject(category, aiEditTargetId, {
-            data: {
-              name: result.name,
-              description: result.description,
-            },
-            language: effectiveLanguage,
-            user_request: 'AI Edit',
-            create_new_version: true,
-          });
-        } catch (error) {
-          console.error('Failed to apply AI edit:', error);
-          showError('AI Edit Error', 'Failed to apply AI edit. Please try again.');
-        }
-      }
-    } else {
-      // Batch editing - handle array of results
-      if (Array.isArray(result)) {
-        for (const itemResult of result) {
-          if (itemResult.name !== undefined && itemResult.description !== undefined) {
-            if (itemResult.id) {
-              // Update existing
-              const item = store.objects[itemResult.id] as NameDescriptionObject;
-              if (item) {
-                const { effectiveLanguage } = getEffectiveLanguage(item);
-                await store.updateObject(category, itemResult.id, {
-                  data: {
-                    name: itemResult.name,
-                    description: itemResult.description,
-                  },
-                  language: effectiveLanguage,
-                  user_request: 'AI Edit',
-                  create_new_version: true,
-                });
-              }
-            } else {
-              // Create new
-              await handleAdd(itemResult.name, itemResult.description);
-            }
-          }
-        }
-      }
-    }
   };
 
   const handleShowVersionHistory = (itemId: string) => {
@@ -668,7 +608,6 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
         category={category}
         projectId={projectId || ''}
         targetId={aiEditTargetId}
-        onResult={handleAIResult}
       />
 
       {versionHistoryTargetId && (
@@ -692,10 +631,6 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
             setRetranslateTargetId(undefined);
           }}
           projectId={projectId}
-          onComplete={() => {
-            setShowRetranslateModal(false);
-            setRetranslateTargetId(undefined);
-          }}
           allowedObjectTypes={[category]}
           preSelectedObjectIds={[retranslateTargetId]}
           defaultSourceLanguage={settings.mainLanguage}

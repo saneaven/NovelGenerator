@@ -52,8 +52,9 @@ export async function createStoryObject(
   }
 
   const { store, projectId, language } = context;
+  const userRequest = context.options.userRequest ?? 'AI Edit';
 
-  await store.createObject(objectType, projectId, { name, description }, language, undefined, 'AI Edit');
+  await store.createObject(objectType, projectId, { name, description }, language, undefined, userRequest);
   return ok(`Created ${type}: ${name}`);
 }
 
@@ -100,12 +101,13 @@ export async function createOutline(
   }
 
   const { store, projectId, language } = context;
+  const userRequest = context.options.userRequest ?? 'AI Edit';
 
   // Calculate order for new outline
   const outlines = await store.listObjects('outline', projectId);
   const order = outlines.length;
 
-  await store.createObject('outline', projectId, { name, description }, language, { order }, 'AI Edit');
+  await store.createObject('outline', projectId, { name, description }, language, { order }, userRequest);
   return ok(`Created outline: ${name}`);
 }
 
@@ -144,6 +146,7 @@ export async function createOutlineAct(
   }
 
   const { store, projectId, language } = context;
+  const userRequest = context.options.userRequest ?? 'AI Edit';
 
   // Calculate order within the outline
   const acts = await store.listObjects('act', projectId);
@@ -156,7 +159,7 @@ export async function createOutlineAct(
     { name, description },
     language,
     { outline_id: outlineId, order },
-    'AI Edit'
+    userRequest
   );
 
   return ok(`Created act: ${name}`);
@@ -197,6 +200,7 @@ export async function createOutlineChapter(
   }
 
   const { store, projectId, language } = context;
+  const userRequest = context.options.userRequest ?? 'AI Edit';
 
   // Calculate order within the act
   const chapters = await store.listObjects('chapter', projectId);
@@ -209,7 +213,7 @@ export async function createOutlineChapter(
     { name, description },
     language,
     { act_id: actId, order },
-    'AI Edit'
+    userRequest
   );
 
   return ok(`Created chapter: ${name}`);

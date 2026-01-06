@@ -250,6 +250,8 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
             if (s.noise_schedule) setNovelaiNoiseSchedule(s.noise_schedule);
             if (s.aspect_ratio) setGeminiAspectRatio(s.aspect_ratio);
             if (s.image_resolution) setGeminiResolution(s.image_resolution);
+            if (typeof s.natural_style_id === 'string') setSelectedNaturalStyleId(s.natural_style_id);
+            if (typeof s.tag_based_style_id === 'string') setSelectedTagBasedStyleId(s.tag_based_style_id);
         }
     }, [initialSettings]);
 
@@ -920,20 +922,34 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                         <span className="preview-label">Style Tags:</span>
                         <div className="tag-preview-rows">
                             <div className="tag-row">
-                                <span className="tag-indicator positive">+</span>
-                                <span className="tag-text">
-                                    {getCurrentTagBasedStyle()?.positiveTags || '(none)'}
-                                </span>
-                            </div>
-                            <div className="tag-row">
-                                <span className="tag-indicator negative">-</span>
-                                <span className="tag-text">
-                                    {getCurrentTagBasedStyle()?.negativeTags || '(none)'}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                )}
+	                                <span className="tag-indicator positive">+</span>
+	                                <span className="tag-text">
+	                                    {(() => {
+	                                        const style = getCurrentTagBasedStyle();
+	                                        const combined = [style?.positivePrefix, style?.positivePostfix]
+	                                            .filter(Boolean)
+	                                            .join(' ')
+	                                            .trim();
+	                                        return combined || '(none)';
+	                                    })()}
+	                                </span>
+	                            </div>
+	                            <div className="tag-row">
+	                                <span className="tag-indicator negative">-</span>
+	                                <span className="tag-text">
+	                                    {(() => {
+	                                        const style = getCurrentTagBasedStyle();
+	                                        const combined = [style?.negativePrefix, style?.negativePostfix]
+	                                            .filter(Boolean)
+	                                            .join(' ')
+	                                            .trim();
+	                                        return combined || '(none)';
+	                                    })()}
+	                                </span>
+	                            </div>
+	                        </div>
+	                    </div>
+	                )}
 
                 {/* Error Display */}
                 {error && <div className="error-message">{error}</div>}

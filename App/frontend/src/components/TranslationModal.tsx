@@ -4,10 +4,8 @@ import { BaseModal } from './BaseModal';
 import './TranslationModal.css';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { TranslationService } from '../services/translationService';
-import type { StoryObjectToTranslate } from '../services/translationService';
 import type { UnifiedObject, ObjectType } from '../types/unifiedObject';
-import { LLMTaskManager } from '../llm';
+import { TaskRuntime } from '../llmTask';
 import { Globe, Swap } from './icons';
 import { ObjectPicker, CATEGORY_CONFIG as PICKER_CATEGORY_CONFIG } from './ObjectPicker';
 import CollapsibleSection from './ui/CollapsibleSection';
@@ -18,7 +16,6 @@ interface TranslationModalProps {
   isOpen: boolean;
   onClose: () => void;
   projectId: string;
-  onComplete: () => void;
   allowedObjectTypes?: string[];  // If provided, only show these types and hide type selector
   defaultSourceLanguage?: string;
   defaultTargetLanguage?: string;
@@ -30,11 +27,17 @@ interface TranslationModalProps {
 // Category display names and order (use from ObjectPicker)
 const CATEGORY_CONFIG = PICKER_CATEGORY_CONFIG;
 
+interface StoryObjectToTranslate {
+  objectType: ObjectType;
+  objectId: string;
+  sourceData: Record<string, any>;
+  versionNumber?: number;
+}
+
 const TranslationModal: React.FC<TranslationModalProps> = ({
   isOpen,
   onClose,
   projectId,
-  onComplete,
   allowedObjectTypes,
   defaultSourceLanguage,
   defaultTargetLanguage,
@@ -56,7 +59,6 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   );
   const [isContextCollapsed, setIsContextCollapsed] = useState(true);
 
-  const abortControllerRef = useRef<AbortController | null>(null);
   const hasInitializedSelectionRef = useRef(false);
   // Use selector to only subscribe to objects, preventing re-renders from unrelated store changes
   const objects = useUnifiedObjectStore(useShallow(state => state.objects));
@@ -93,53 +95,6 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   }, [objects, projectId, targetLanguage]);
 
   const hasAnyContext = contextObjectIds.length > 0;
-
-  // Generate context data from selected context objects
-  const generateTargetLanguageContext = (): Record<string, any> => {
-    if (selectedContextIds.size === 0) return {};
-
-    const context: Record<string, any> = {};
-    const byType: Record<string, any[]> = {};
-
-    selectedContextIds.forEach(id => {
-      const obj = objects[id];
-      if (!obj || !obj.data[targetLanguage]) return;
-
-      const data = obj.data[targetLanguage];
-      const type = obj.type;
-
-      if (!byType[type]) {
-        byType[type] = [];
-      }
-
-      byType[type].push({
-        id: obj.id,
-        name: data.name || '',
-        description: data.description || '',
-      });
-    });
-
-    // Map to context structure expected by prompt template
-    if (byType.character) context.characters = byType.character;
-    if (byType.organization) context.organizations = byType.organization;
-    if (byType.location) context.locations = byType.location;
-    if (byType.lorebook) context.lorebook = byType.lorebook;
-    if (byType.act || byType.chapter) {
-      // Build outline structure
-      const acts = (byType.act || []).map((act: any) => ({
-        ...act,
-        chapters: (byType.chapter || []).filter((ch: any) => {
-          const chObj = objects[ch.id];
-          return chObj?.metadata?.act_id === act.id;
-        }),
-      }));
-      if (acts.length > 0) {
-        context.outline = { acts };
-      }
-    }
-
-    return context;
-  };
 
   // Initialize languages from settings - detect which direction has objects to translate
   useEffect(() => {
@@ -283,89 +238,34 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   }, [availableObjects, selectedIds]);
 
   // Reset state when modal closes
-  // Note: abort is handled by LLMTaskManager.cancelTask() via toast dismiss, not here
   useEffect(() => {
     if (!isOpen) {
       setUserInput(defaultUserInput || '');
       setSelectedIds(preSelectedObjectIds ? new Set(preSelectedObjectIds) : new Set());
       setSelectedContextIds(new Set(defaultSelectedContextIds));
       hasInitializedSelectionRef.current = false;
-      abortControllerRef.current = null;
       // Reset languages so they re-initialize from props on next open
       setSourceLanguage(defaultSourceLanguage || '');
       setTargetLanguage(defaultTargetLanguage || '');
     }
   }, [isOpen, defaultSourceLanguage, defaultTargetLanguage, defaultUserInput, preSelectedObjectIds, defaultSelectedContextIds]);
 
-  const handleStart = async () => {
+  const handleStart = () => {
     if (objectsToTranslate.length === 0) {
       return;
     }
 
-    // Generate context data from selected context objects
-    const contextData = selectedContextIds.size > 0 ? generateTargetLanguageContext() : undefined;
-
-    // Start task via LLMTaskManager - returns a handle with bound completion functions
-    const task = LLMTaskManager.startTask({
-      taskType: 'translation',
-      label: 'Translation',
-      retryContext: {
-        taskType: 'translation',
-        modalProps: {
-          projectId,
-          onComplete,
-          allowedObjectTypes,
-        },
-        formState: {
-          sourceLanguage,
-          targetLanguage,
-          userInput,
-          selectedIds: Array.from(selectedIds),
-          selectedContextIds: Array.from(selectedContextIds),
-        },
-      },
-    });
-
     // Auto-close modal - request continues in background, toast shows progress
     onClose();
 
-    let hasError = false;
-
-    try {
-      await TranslationService.translateBatch(objectsToTranslate, {
-        projectId,
-        sourceLanguage,
-        targetLanguage,
-        userInput: userInput.trim() || undefined,
-        contextData,
-        contextObjectIds: Array.from(selectedContextIds),
-        sessionId: task.sessionId,
-        onProgress: (completed) => {
-          task.updateProgress(completed.length, objectsToTranslate.length);
-        },
-        onError: (err) => {
-          hasError = true;
-          task.error(err.message);
-        },
-        onPartialSuccess: (translations, err) => {
-          // Partial success - apply what we got
-          hasError = true;
-          task.error(err.message);
-          TranslationService.applyPartialTranslations(translations, targetLanguage)
-            .then(() => onComplete())
-            .catch(console.error);
-        },
-        abortControllerRef,
-      });
-
-      // Only mark complete if no error occurred
-      if (!hasError) {
-        task.complete();
-        onComplete();
-      }
-    } catch {
-      // Error already handled by onError callback
-    }
+    TaskRuntime.start('translateObjects', {
+      projectId,
+      sourceLanguage,
+      targetLanguage,
+      userInput: userInput.trim() || undefined,
+      objectIds: objectsToTranslate.map(o => o.objectId),
+      contextObjectIds: Array.from(selectedContextIds),
+    });
   };
 
   const handleSwapLanguages = () => {

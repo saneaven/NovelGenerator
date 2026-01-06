@@ -18,9 +18,9 @@ interface UseFitTextOptions {
 
 interface UseFitTextResult {
   /** Ref to attach to the container element */
-  containerRef: React.RefObject<HTMLDivElement>;
+  containerRef: React.RefObject<HTMLDivElement | null>;
   /** Ref to attach to the text element */
-  textRef: React.RefObject<HTMLElement>;
+  textRef: React.RefObject<HTMLElement | null>;
   /** Calculated font size in pixels */
   fontSize: number;
   /** Whether the calculation is complete */

@@ -1,4 +1,4 @@
-import React, { memo, RefObject } from 'react';
+import { memo, type RefObject } from 'react';
 import { IconButton } from '../IconButton';
 import { Star, Edit, MoreHorizontal, Trash, Info } from '../icons';
 import { API_BASE_URL } from '../../api/client';

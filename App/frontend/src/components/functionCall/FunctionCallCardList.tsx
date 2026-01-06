@@ -65,7 +65,6 @@ export const FunctionCallCardList: React.FC<FunctionCallCardListProps> = ({
           return (
             <PendingOperationItem
               key={card.id}
-              id={card.id}
               title={card.title}
               previews={previews}
               isSelected={isSelected}

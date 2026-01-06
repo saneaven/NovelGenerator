@@ -7,7 +7,7 @@
 
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import type { ObjectType } from '../../types/unifiedObject';
-import type { ValidationResult, Validator } from './types';
+import type { Validator } from './types';
 import { validResult, invalidResult } from './types';
 import { STORY_OBJECT_TYPE_MAP, ALL_OBJECT_TYPE_MAP, type StoryObjectSubtype } from '../types';
 import { applyPatch } from '../../utils/patchUtils';
@@ -38,7 +38,7 @@ export function resolveObjectType(
   if (functionName.includes('outline_chapter')) {
     return 'chapter';
   }
-  if (functionName === 'patch_outline' || functionName === 'replace_outline') {
+  if (functionName === 'patch_outline' || functionName === 'replace_outline' || functionName === 'delete_outline') {
     return 'outline';
   }
 
@@ -67,7 +67,7 @@ export function resolveObjectType(
 /**
  * Validate that the type argument maps to a valid ObjectType
  */
-export const validateTypeMapping: Validator = (args, functionName) => {
+export const validateTypeMapping: Validator = (args, functionName, _context) => {
   const type = args.type as string | undefined;
 
   // Only validate if type argument is present
@@ -95,7 +95,7 @@ export const validateTypeMapping: Validator = (args, functionName) => {
 /**
  * Validate that required ID field is present
  */
-export const validateRequiredId: Validator = (args, functionName) => {
+export const validateRequiredId: Validator = (args, functionName, _context) => {
   const id = args.id as string | undefined;
 
   // Create operations don't require ID
@@ -114,7 +114,7 @@ export const validateRequiredId: Validator = (args, functionName) => {
 /**
  * Validate required fields for patch operations
  */
-export const validatePatchRequiredFields: Validator = (args, functionName) => {
+export const validatePatchRequiredFields: Validator = (args, functionName, _context) => {
   if (!functionName.startsWith('patch_')) {
     return validResult();
   }
@@ -122,6 +122,12 @@ export const validatePatchRequiredFields: Validator = (args, functionName) => {
   const replacements = args.replacements as unknown[] | undefined;
   if (!replacements || !Array.isArray(replacements)) {
     return invalidResult(`Missing replacements for ${functionName}`);
+  }
+
+  const hasStructuralChange = args.order !== undefined || args.actId !== undefined;
+
+  if (replacements.length === 0 && !hasStructuralChange) {
+    return invalidResult(`No replacements provided for ${functionName}`);
   }
 
   return validResult();
@@ -134,7 +140,7 @@ export const validatePatchRequiredFields: Validator = (args, functionName) => {
 /**
  * Validate that the object exists in the store (fetching if needed)
  */
-export const validateObjectExists: Validator = async (args, functionName) => {
+export const validateObjectExists: Validator = async (args, functionName, context) => {
   const id = args.id as string | undefined;
 
   // Create operations don't need existing object
@@ -166,6 +172,15 @@ export const validateObjectExists: Validator = async (args, functionName) => {
     return invalidResult(`Object with id ${id} not found`);
   }
 
+  const objectProjectId = object.metadata?.project_id;
+  if (!objectProjectId) {
+    return invalidResult(`Object ${id} is missing project_id metadata`);
+  }
+
+  if (objectProjectId !== context.projectId) {
+    return invalidResult(`Object ${id} belongs to a different project`);
+  }
+
   return validResult();
 };
 
@@ -173,7 +188,7 @@ export const validateObjectExists: Validator = async (args, functionName) => {
  * Validate that patch replacements can be applied to current content.
  * Note: applyPatch returns original text on failure, so running it is effectively a dry run.
  */
-export const validatePatchApplicable: Validator = async (args, functionName) => {
+export const validatePatchApplicable: Validator = async (args, functionName, _context) => {
   if (!functionName.startsWith('patch_')) {
     return validResult();
   }
@@ -200,30 +215,118 @@ export const validatePatchApplicable: Validator = async (args, functionName) => 
 
   const currentData = getObjectData(object, languages[0]);
   const failures: string[] = [];
+  let successCount = 0;
 
   // For manuscript patches (no field property), validate against content
   if (functionName.includes('manuscript')) {
     const content = (currentData.content as string) ?? '';
     const result = applyPatch(content, replacements);
-    if (!result.success && result.failureCount && result.failureCount > 0) {
+    successCount = result.successCount ?? 0;
+    if (successCount === 0) {
       failures.push(`content: ${result.error}`);
     }
   } else {
     // For other patches with field property
     for (const r of replacements) {
-      if (!r.field) continue;
+      if (!r.field) {
+        failures.push(`unknown: missing field for replacement`);
+        continue;
+      }
 
       const fieldValue = (currentData[r.field] as string) ?? '';
       const result = applyPatch(fieldValue, [{ old: r.old, new: r.new }]);
 
-      if (!result.success) {
+      const applied = result.successCount ?? 0;
+      if (applied > 0) {
+        successCount += 1;
+      } else {
         failures.push(`${r.field}: ${result.error}`);
       }
     }
   }
 
-  if (failures.length > 0) {
+  if (successCount === 0 && failures.length > 0) {
     return invalidResult(`Patch validation failed:\n${failures.join('\n')}`);
+  }
+
+  return validResult();
+};
+
+// ============================================================================
+// OUTLINE PARENT VALIDATORS
+// ============================================================================
+
+export const validateOutlineParentExists: Validator = async (args, functionName, context) => {
+  if (functionName !== 'create_outline_act') {
+    return validResult();
+  }
+
+  const outlineId = args.outlineId as string | undefined;
+  if (!outlineId || !outlineId.trim()) {
+    return invalidResult('Missing outlineId for create_outline_act');
+  }
+
+  const store = useUnifiedObjectStore.getState();
+
+  let outline = store.getObject(outlineId);
+  if (!outline) {
+    try {
+      await store.fetchObject('outline', outlineId);
+      outline = store.getObject(outlineId);
+    } catch (error) {
+      return invalidResult(`Failed to fetch outline ${outlineId}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  if (!outline) {
+    return invalidResult(`Parent outline not found: ${outlineId}`);
+  }
+
+  const projectId = outline.metadata?.project_id;
+  if (!projectId) {
+    return invalidResult(`Parent outline ${outlineId} is missing project_id metadata`);
+  }
+
+  if (projectId !== context.projectId) {
+    return invalidResult(`Parent outline ${outlineId} belongs to a different project`);
+  }
+
+  return validResult();
+};
+
+export const validateActParentExists: Validator = async (args, functionName, context) => {
+  if (functionName !== 'create_outline_chapter') {
+    return validResult();
+  }
+
+  const actId = args.actId as string | undefined;
+  if (!actId || !actId.trim()) {
+    return invalidResult('Missing actId for create_outline_chapter');
+  }
+
+  const store = useUnifiedObjectStore.getState();
+
+  let act = store.getObject(actId);
+  if (!act) {
+    try {
+      await store.fetchObject('act', actId);
+      act = store.getObject(actId);
+    } catch (error) {
+      return invalidResult(`Failed to fetch act ${actId}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  if (!act) {
+    return invalidResult(`Parent act not found: ${actId}`);
+  }
+
+  const projectId = act.metadata?.project_id;
+  if (!projectId) {
+    return invalidResult(`Parent act ${actId} is missing project_id metadata`);
+  }
+
+  if (projectId !== context.projectId) {
+    return invalidResult(`Parent act ${actId} belongs to a different project`);
   }
 
   return validResult();

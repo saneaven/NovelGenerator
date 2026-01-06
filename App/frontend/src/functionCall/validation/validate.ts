@@ -8,7 +8,7 @@
  */
 
 import type { NormalizedFunctionCall } from '../types';
-import type { ValidationResult } from './types';
+import type { ValidationContext, ValidationResult } from './types';
 import { validResult } from './types';
 import { getValidators } from './ValidatorRegistry';
 
@@ -19,7 +19,8 @@ import { getValidators } from './ValidatorRegistry';
  * @returns Map from function call ID to validation result
  */
 export async function validate(
-  functionCalls: NormalizedFunctionCall[]
+  functionCalls: NormalizedFunctionCall[],
+  context: ValidationContext
 ): Promise<Map<string, ValidationResult>> {
   const results = new Map<string, ValidationResult>();
 
@@ -30,7 +31,7 @@ export async function validate(
       // Run validators in sequence (first failure stops chain)
       for (const validator of validators) {
         try {
-          const result = await validator(fc.arguments, fc.functionName);
+          const result = await validator(fc.arguments, fc.functionName, context);
           if (!result.valid) {
             results.set(fc.id, result);
             return;
@@ -62,8 +63,9 @@ export async function validate(
  * @returns Validation result
  */
 export async function validateOne(
-  functionCall: NormalizedFunctionCall
+  functionCall: NormalizedFunctionCall,
+  context: ValidationContext
 ): Promise<ValidationResult> {
-  const results = await validate([functionCall]);
+  const results = await validate([functionCall], context);
   return results.get(functionCall.id) ?? validResult();
 }

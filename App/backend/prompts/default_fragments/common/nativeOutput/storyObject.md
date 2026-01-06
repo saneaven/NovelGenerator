@@ -20,7 +20,7 @@ Output a JSON array containing all function calls. Each object in the array repr
     ]
   },
   {
-    "function": "create_chapter",
+    "function": "create_outline_chapter",
     "actId": "act-1",
     "name": "The Awakening",
     "description": "The hero discovers their power"
@@ -53,14 +53,14 @@ Output a JSON array containing all function calls. Each object in the array repr
 { "function": "delete_story_object", "id": "obj-123", "type": "character" }
 ```
 
-**create_chapter**
+**create_outline_chapter**
 ```json
-{ "function": "create_chapter", "actId": "act-123", "name": "Chapter Name", "description": "Description" }
+{ "function": "create_outline_chapter", "actId": "act-123", "name": "Chapter Name", "description": "Description" }
 ```
 
-**delete_chapter**
+**delete_outline_chapter**
 ```json
-{ "function": "delete_chapter", "id": "ch-123" }
+{ "function": "delete_outline_chapter", "id": "ch-123" }
 ```
 
 #### Replace Operations
@@ -75,9 +75,9 @@ Output a JSON array containing all function calls. Each object in the array repr
 { "function": "replace_story_object", "id": "obj-123", "type": "character", "name": "New Name", "description": "New description" }
 ```
 
-**replace_chapter_outline** (only include fields to change)
+**replace_outline_chapter** (only include fields to change)
 ```json
-{ "function": "replace_chapter_outline", "id": "ch-123", "name": "New Name", "description": "New description", "actId": "act-456", "order": 2 }
+{ "function": "replace_outline_chapter", "id": "ch-123", "name": "New Name", "description": "New description", "actId": "act-456", "order": 2 }
 ```
 
 #### Patch Operations
@@ -92,9 +92,9 @@ Output a JSON array containing all function calls. Each object in the array repr
 { "function": "patch_story_object", "id": "obj-123", "type": "character", "replacements": [{ "field": "description", "old": "text to find", "new": "replacement" }] }
 ```
 
-**patch_chapter_outline**
+**patch_outline_chapter**
 ```json
-{ "function": "patch_chapter_outline", "id": "ch-123", "replacements": [{ "field": "description", "old": "text to find", "new": "replacement" }], "order": 3 } // order is 1 oriented
+{ "function": "patch_outline_chapter", "id": "ch-123", "replacements": [{ "field": "description", "old": "text to find", "new": "replacement" }], "actId": "act-456", "order": 3 } // order is 1-based
 ```
 
 **Important:**

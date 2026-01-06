@@ -5,7 +5,6 @@ import { OperationPreview } from './OperationPreview';
 import { Warning } from '../icons';
 
 interface PendingOperationItemProps {
-  id: string;
   title: string;
   previews: FunctionCallOperationPreview[];
   isSelected: boolean;
@@ -16,7 +15,6 @@ interface PendingOperationItemProps {
 }
 
 export const PendingOperationItem: React.FC<PendingOperationItemProps> = ({
-  id,
   title,
   previews,
   isSelected,

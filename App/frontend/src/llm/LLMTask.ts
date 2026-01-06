@@ -7,11 +7,9 @@ import type {
 } from './requestTypes';
 import { streamLLM } from './llmService';
 import { useSettingsStore, type AIFunctionType } from '../store/settingsStore';
-import { useLLMTaskStore } from '../store/llmTaskStore';
 import { useLLMLogStore } from '../store/llmLogStore';
 import { FunctionCallStreamTracker } from '../agent/streaming/FunctionCallStreamTracker';
 import { PromptManager } from './PromptManager';
-import { LLMTaskManager } from './LLMTaskManager';
 import type {
   LLMTaskConfig,
   LLMTaskCallbacks,
@@ -44,7 +42,7 @@ const MODE_TO_FUNCTION_TYPE: Record<LLMTaskModeType, AIFunctionType> = {
  * - Message preparation (template rendering via PromptManager)
  * - Stream LLM response via streamChat()
  * - Content part accumulation (thinking, content)
- * - RAF-throttled updates (callback + llmTaskStore)
+ * - RAF-throttled updates (callback)
  * - Tool call tracking via FunctionCallStreamTracker
  * - Abort handling
  */
@@ -143,17 +141,6 @@ export class LLMTask {
       // 5. Initialize function tracker
       this.functionTracker = new FunctionCallStreamTracker(functions);
 
-      // 6. Setup abort controller
-      this.config.abortControllerRef.current = new AbortController();
-
-      // Register abort controller with task manager for centralized cancellation
-      if (this.config.sessionId) {
-        LLMTaskManager.registerAbortController(
-          this.config.sessionId,
-          this.config.abortControllerRef.current
-        );
-      }
-
       // 7. Stream with RAF throttling
       let currentPartType: ContentPartType | null = null;
       let currentBuffer = '';
@@ -178,7 +165,7 @@ export class LLMTask {
         provider,
         providerConfig,
         {
-          signal: this.config.abortControllerRef.current.signal,
+          signal: this.config.abortController.signal,
           functions,
           model,
           temperature,
@@ -219,12 +206,6 @@ export class LLMTask {
                 ...this.pendingParts,
                 { type: 'content', text: currentBuffer },
               ]);
-              if (this.config.sessionId) {
-                useLLMTaskStore.getState().setContentParts(this.config.sessionId, [
-                  ...this.pendingParts,
-                  { type: 'content', text: currentBuffer },
-                ]);
-              }
             });
           }
           continue;
@@ -255,12 +236,6 @@ export class LLMTask {
                 ...this.pendingParts,
                 { type: 'thinking', text: currentBuffer },
               ]);
-              if (this.config.sessionId) {
-                useLLMTaskStore.getState().setContentParts(this.config.sessionId, [
-                  ...this.pendingParts,
-                  { type: 'thinking', text: currentBuffer },
-                ]);
-              }
             });
           }
         }
@@ -285,16 +260,10 @@ export class LLMTask {
           if (this.rafId === null) {
             this.rafId = requestAnimationFrame(() => {
               this.rafId = null;
-              this.callbacks.onUpdate([
-                ...this.pendingParts,
-                { type: 'content', text: currentBuffer },
-              ]);
-              if (this.config.sessionId) {
-                useLLMTaskStore.getState().setContentParts(this.config.sessionId, [
-                  ...this.pendingParts,
-                  { type: 'content', text: currentBuffer },
-                ]);
-              }
+            this.callbacks.onUpdate([
+              ...this.pendingParts,
+              { type: 'content', text: currentBuffer },
+            ]);
             });
           }
         }
@@ -333,9 +302,6 @@ export class LLMTask {
 
       // Final update
       this.callbacks.onUpdate([...this.pendingParts]);
-      if (this.config.sessionId) {
-        useLLMTaskStore.getState().setContentParts(this.config.sessionId, [...this.pendingParts]);
-      }
 
       // 9. Complete with results
       const rawFunctionCalls = this.functionTracker?.finalize() ?? [];
@@ -349,6 +315,9 @@ export class LLMTask {
         contentParts: [...this.pendingParts],
         functionCalls,
         thinkingDetails: accumulatedThinkingDetails,
+        provider,
+        model,
+        usage: capturedUsage,
       };
 
       // Log streaming completion
@@ -369,15 +338,6 @@ export class LLMTask {
             functionCalls,
             thinkingDetails: accumulatedThinkingDetails,
           },
-        });
-      }
-
-      // Store debug info (provider, model, usage) in session
-      if (this.config.sessionId) {
-        useLLMTaskStore.getState().updateSession(this.config.sessionId, {
-          provider,
-          model,
-          usage: capturedUsage,
         });
       }
 
@@ -405,9 +365,6 @@ export class LLMTask {
       throw err;
     } finally {
       this.isRunning = false;
-      if (this.config.abortControllerRef.current) {
-        this.config.abortControllerRef.current = null;
-      }
     }
   }
 
@@ -415,10 +372,7 @@ export class LLMTask {
    * Abort the running task
    */
   abort(): void {
-    if (this.config.abortControllerRef.current) {
-      this.config.abortControllerRef.current.abort();
-      this.config.abortControllerRef.current = null;
-    }
+    this.config.abortController.abort();
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;

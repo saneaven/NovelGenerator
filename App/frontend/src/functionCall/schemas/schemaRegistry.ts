@@ -9,8 +9,6 @@
 import type { FunctionSchema, FunctionCategory, TargetType, ExecutionMode } from '../types';
 import {
   storyObjectTypeSchema,
-  translationObjectTypeSchema,
-  chapterTypeSchema,
   nameDescReplacementSchema,
   basicInfoReplacementSchema,
   manuscriptReplacementSchema,
@@ -52,37 +50,6 @@ const DELETE_STORY_OBJECT: FunctionSchema = {
       type: storyObjectTypeSchema,
     },
     required: ['id', 'type'],
-  },
-};
-
-const CREATE_CHAPTER: FunctionSchema = {
-  name: 'create_chapter',
-  description: 'Create a chapter within an act.',
-  category: 'crud',
-  target: 'chapter',
-  parameters: {
-    type: 'object',
-    properties: {
-      actId: { type: 'string', description: 'ID of the parent act' },
-      name: { type: 'string', description: 'Chapter name' },
-      description: { type: 'string', description: 'Chapter description' },
-    },
-    required: ['actId', 'name', 'description'],
-  },
-};
-
-const DELETE_CHAPTER: FunctionSchema = {
-  name: 'delete_chapter',
-  description: 'Delete a chapter by ID.',
-  category: 'crud',
-  target: 'chapter',
-  idParam: 'id',
-  parameters: {
-    type: 'object',
-    properties: {
-      id: { type: 'string', description: 'ID of the chapter to delete' },
-    },
-    required: ['id'],
   },
 };
 
@@ -220,25 +187,6 @@ const REPLACE_STORY_OBJECT: FunctionSchema = {
   },
 };
 
-const REPLACE_CHAPTER_OUTLINE: FunctionSchema = {
-  name: 'replace_chapter_outline',
-  description: 'Replace chapter outline fields. Only include fields you want to change.',
-  category: 'replace',
-  target: 'chapter',
-  idParam: 'id',
-  parameters: {
-    type: 'object',
-    properties: {
-      id: idProperty,
-      actId: { type: 'string', description: 'New parent act ID' },
-      name: { type: 'string', description: 'New chapter name' },
-      description: { type: 'string', description: 'New chapter description' },
-      order: { type: 'integer', description: 'New position (1-based). Chapters will be reordered automatically.' },
-    },
-    required: ['id'],
-  },
-};
-
 // ============================================================================
 // OUTLINE REPLACE FUNCTIONS
 // ============================================================================
@@ -356,27 +304,6 @@ const PATCH_STORY_OBJECT: FunctionSchema = {
   },
 };
 
-const PATCH_CHAPTER_OUTLINE: FunctionSchema = {
-  name: 'patch_chapter_outline',
-  description: 'Patch chapter outline fields using search and replace. Can also change order.',
-  category: 'patch',
-  target: 'chapter',
-  idParam: 'id',
-  parameters: {
-    type: 'object',
-    properties: {
-      id: idProperty,
-      replacements: {
-        type: 'array',
-        items: nameDescReplacementSchema,
-        description: 'List of replacements to apply',
-      },
-      order: { type: 'integer', description: 'New position (1-based). Chapters will be reordered automatically.' },
-    },
-    required: ['id', 'replacements'],
-  },
-};
-
 // ============================================================================
 // OUTLINE PATCH FUNCTIONS
 // ============================================================================
@@ -424,7 +351,7 @@ const PATCH_OUTLINE_ACT: FunctionSchema = {
 
 const PATCH_OUTLINE_CHAPTER: FunctionSchema = {
   name: 'patch_outline_chapter',
-  description: 'Patch chapter fields using search and replace. Can also change order.',
+  description: 'Patch chapter fields using search and replace. Can also change order or move to another act.',
   category: 'patch',
   target: 'outline',
   idParam: 'id',
@@ -437,6 +364,7 @@ const PATCH_OUTLINE_CHAPTER: FunctionSchema = {
         items: nameDescReplacementSchema,
         description: 'List of replacements to apply',
       },
+      actId: { type: 'string', description: 'New parent act ID' },
       order: { type: 'integer', description: 'New position (1-based). Chapters will be reordered automatically.' },
     },
     required: ['id', 'replacements'],
@@ -464,187 +392,6 @@ const PATCH_MANUSCRIPT: FunctionSchema = {
 };
 
 // ============================================================================
-// TRANSLATION SET FUNCTIONS
-// ============================================================================
-
-const SET_BASIC_INFO_TRANSLATION: FunctionSchema = {
-  name: 'set_basic_info_translation',
-  description: 'Set translation for project basic info.',
-  category: 'translation',
-  target: 'basic_info',
-  idParam: 'id',
-  parameters: {
-    type: 'object',
-    properties: {
-      id: idProperty,
-      title: { type: 'string', description: 'Translated title' },
-      logline: { type: 'string', description: 'Translated logline' },
-      genre: { type: 'string', description: 'Translated genre' },
-    },
-    required: ['id', 'title', 'logline', 'genre'],
-  },
-};
-
-const SET_OBJECT_TRANSLATION: FunctionSchema = {
-  name: 'set_object_translation',
-  description: 'Set translation for story objects (character, organization, location, lorebook).',
-  category: 'translation',
-  target: 'story_object',
-  idParam: 'id',
-  parameters: {
-    type: 'object',
-    properties: {
-      id: idProperty,
-      type: translationObjectTypeSchema,
-      name: { type: 'string', description: 'Translated name' },
-      description: { type: 'string', description: 'Translated description' },
-    },
-    required: ['id', 'type', 'name', 'description'],
-  },
-};
-
-const SET_CHAPTER_OUTLINE_TRANSLATION: FunctionSchema = {
-  name: 'set_chapter_outline_translation',
-  description: 'Set translation for acts or chapters.',
-  category: 'translation',
-  target: 'chapter',
-  idParam: 'id',
-  parameters: {
-    type: 'object',
-    properties: {
-      id: idProperty,
-      type: chapterTypeSchema,
-      name: { type: 'string', description: 'Translated name' },
-      description: { type: 'string', description: 'Translated description' },
-    },
-    required: ['id', 'type', 'name', 'description'],
-  },
-};
-
-const SET_MANUSCRIPT_TRANSLATION: FunctionSchema = {
-  name: 'set_manuscript_translation',
-  description: 'Set translation for manuscript content.',
-  category: 'translation',
-  target: 'manuscript',
-  idParam: 'id',
-  parameters: {
-    type: 'object',
-    properties: {
-      id: idProperty,
-      content: { type: 'string', description: 'Translated manuscript content' },
-    },
-    required: ['id', 'content'],
-  },
-};
-
-// ============================================================================
-// TRANSLATION PATCH FUNCTIONS
-// ============================================================================
-
-const PATCH_BASIC_INFO_TRANSLATION: FunctionSchema = {
-  name: 'patch_basic_info_translation',
-  description: 'Patch basic info translation with search-replace.',
-  category: 'translation',
-  target: 'basic_info',
-  idParam: 'id',
-  parameters: {
-    type: 'object',
-    properties: {
-      id: idProperty,
-      replacements: {
-        type: 'array',
-        items: basicInfoReplacementSchema,
-        description: 'List of search-replace operations',
-      },
-    },
-    required: ['id', 'replacements'],
-  },
-};
-
-const PATCH_OBJECT_TRANSLATION: FunctionSchema = {
-  name: 'patch_object_translation',
-  description: 'Patch object translation with search-replace.',
-  category: 'translation',
-  target: 'story_object',
-  idParam: 'id',
-  parameters: {
-    type: 'object',
-    properties: {
-      id: idProperty,
-      type: translationObjectTypeSchema,
-      replacements: {
-        type: 'array',
-        items: nameDescReplacementSchema,
-        description: 'List of search-replace operations',
-      },
-    },
-    required: ['id', 'type', 'replacements'],
-  },
-};
-
-const PATCH_CHAPTER_OUTLINE_TRANSLATION: FunctionSchema = {
-  name: 'patch_chapter_outline_translation',
-  description: 'Patch act/chapter translation with search-replace.',
-  category: 'translation',
-  target: 'chapter',
-  idParam: 'id',
-  parameters: {
-    type: 'object',
-    properties: {
-      id: idProperty,
-      type: chapterTypeSchema,
-      replacements: {
-        type: 'array',
-        items: nameDescReplacementSchema,
-        description: 'List of search-replace operations',
-      },
-    },
-    required: ['id', 'type', 'replacements'],
-  },
-};
-
-const PATCH_MANUSCRIPT_TRANSLATION: FunctionSchema = {
-  name: 'patch_manuscript_translation',
-  description: 'Patch manuscript translation with search-replace.',
-  category: 'translation',
-  target: 'manuscript',
-  idParam: 'id',
-  parameters: {
-    type: 'object',
-    properties: {
-      id: idProperty,
-      replacements: {
-        type: 'array',
-        items: manuscriptReplacementSchema,
-        description: 'List of search-replace operations',
-      },
-    },
-    required: ['id', 'replacements'],
-  },
-};
-
-// ============================================================================
-// AGENT MESSAGE TRANSLATION
-// ============================================================================
-
-const SET_AGENT_MESSAGE_TRANSLATION: FunctionSchema = {
-  name: 'set_agent_message_translation',
-  description: 'Translate an agent message from one language to another.',
-  category: 'translation',
-  target: 'basic_info', // Special case - not really a target but needed for typing
-  parameters: {
-    type: 'object',
-    properties: {
-      content: {
-        type: 'string',
-        description: 'Translated message content',
-      },
-    },
-    required: ['content'],
-  },
-};
-
-// ============================================================================
 // SCHEMA REGISTRY CLASS
 // ============================================================================
 
@@ -659,8 +406,6 @@ class SchemaRegistryClass {
     // CRUD - Story Objects
     this.register(CREATE_STORY_OBJECT);
     this.register(DELETE_STORY_OBJECT);
-    this.register(CREATE_CHAPTER);
-    this.register(DELETE_CHAPTER);
 
     // CRUD - Outline
     this.register(CREATE_OUTLINE);
@@ -673,7 +418,6 @@ class SchemaRegistryClass {
     // Replace - Basic
     this.register(REPLACE_BASIC_INFO);
     this.register(REPLACE_STORY_OBJECT);
-    this.register(REPLACE_CHAPTER_OUTLINE);
     this.register(REPLACE_MANUSCRIPT);
 
     // Replace - Outline
@@ -684,28 +428,12 @@ class SchemaRegistryClass {
     // Patch - Basic
     this.register(PATCH_BASIC_INFO);
     this.register(PATCH_STORY_OBJECT);
-    this.register(PATCH_CHAPTER_OUTLINE);
     this.register(PATCH_MANUSCRIPT);
 
     // Patch - Outline
     this.register(PATCH_OUTLINE);
     this.register(PATCH_OUTLINE_ACT);
     this.register(PATCH_OUTLINE_CHAPTER);
-
-    // Translation Set
-    this.register(SET_BASIC_INFO_TRANSLATION);
-    this.register(SET_OBJECT_TRANSLATION);
-    this.register(SET_CHAPTER_OUTLINE_TRANSLATION);
-    this.register(SET_MANUSCRIPT_TRANSLATION);
-
-    // Translation Patch
-    this.register(PATCH_BASIC_INFO_TRANSLATION);
-    this.register(PATCH_OBJECT_TRANSLATION);
-    this.register(PATCH_CHAPTER_OUTLINE_TRANSLATION);
-    this.register(PATCH_MANUSCRIPT_TRANSLATION);
-
-    // Agent message translation
-    this.register(SET_AGENT_MESSAGE_TRANSLATION);
   }
 
   register(schema: FunctionSchema): void {
@@ -783,8 +511,6 @@ export const schemaRegistry = new SchemaRegistryClass();
 export const CRUD_FUNCTION_NAMES = new Set([
   'create_story_object',
   'delete_story_object',
-  'create_chapter',
-  'delete_chapter',
   'create_outline',
   'delete_outline',
   'create_outline_act',
@@ -797,7 +523,6 @@ export const CRUD_FUNCTION_NAMES = new Set([
 export const REPLACE_FUNCTION_NAMES = new Set([
   'replace_basic_info',
   'replace_story_object',
-  'replace_chapter_outline',
   'replace_manuscript',
   'replace_outline',
   'replace_outline_act',
@@ -808,30 +533,11 @@ export const REPLACE_FUNCTION_NAMES = new Set([
 export const PATCH_FUNCTION_NAMES = new Set([
   'patch_basic_info',
   'patch_story_object',
-  'patch_chapter_outline',
   'patch_manuscript',
   'patch_outline',
   'patch_outline_act',
   'patch_outline_chapter',
 ]);
-
-/** All translation function names */
-export const TRANSLATION_FUNCTION_NAMES = new Set([
-  'set_basic_info_translation',
-  'set_object_translation',
-  'set_chapter_outline_translation',
-  'set_manuscript_translation',
-  'patch_basic_info_translation',
-  'patch_object_translation',
-  'patch_chapter_outline_translation',
-  'patch_manuscript_translation',
-  'set_agent_message_translation',
-]);
-
-/** Check if a function name is a translation function */
-export function isTranslationFunction(name: string): boolean {
-  return TRANSLATION_FUNCTION_NAMES.has(name);
-}
 
 /** Check if a function name is a CRUD function */
 export function isCrudFunction(name: string): boolean {
@@ -856,14 +562,14 @@ export function isPatchFunction(name: string): boolean {
 export const STORY_OBJECT_EDIT_FUNCTIONS = [
   CREATE_STORY_OBJECT,
   DELETE_STORY_OBJECT,
-  CREATE_CHAPTER,
-  DELETE_CHAPTER,
+  CREATE_OUTLINE_CHAPTER,
+  DELETE_OUTLINE_CHAPTER,
   REPLACE_BASIC_INFO,
   REPLACE_STORY_OBJECT,
-  REPLACE_CHAPTER_OUTLINE,
+  REPLACE_OUTLINE_CHAPTER,
   PATCH_BASIC_INFO,
   PATCH_STORY_OBJECT,
-  PATCH_CHAPTER_OUTLINE,
+  PATCH_OUTLINE_CHAPTER,
 ].map(s => ({ name: s.name, description: s.description, parameters: s.parameters }));
 
 /** Manuscript edit functions (for edit assistant) */
@@ -897,8 +603,6 @@ export const AGENT_FUNCTIONS = [
   // CRUD - Story Objects
   CREATE_STORY_OBJECT,
   DELETE_STORY_OBJECT,
-  CREATE_CHAPTER,
-  DELETE_CHAPTER,
   // CRUD - Outline
   CREATE_OUTLINE,
   DELETE_OUTLINE,
@@ -909,7 +613,6 @@ export const AGENT_FUNCTIONS = [
   // Replace
   REPLACE_BASIC_INFO,
   REPLACE_STORY_OBJECT,
-  REPLACE_CHAPTER_OUTLINE,
   REPLACE_MANUSCRIPT,
   REPLACE_OUTLINE,
   REPLACE_OUTLINE_ACT,
@@ -917,7 +620,6 @@ export const AGENT_FUNCTIONS = [
   // Patch
   PATCH_BASIC_INFO,
   PATCH_STORY_OBJECT,
-  PATCH_CHAPTER_OUTLINE,
   PATCH_MANUSCRIPT,
   PATCH_OUTLINE,
   PATCH_OUTLINE_ACT,
@@ -932,24 +634,24 @@ export const AGENT_FUNCTION_NAMES = AGENT_FUNCTIONS.map(f => f.name);
 // ============================================================================
 
 /** Available function set names */
-export type FunctionSetName = 'agent' | 'manuscript' | 'storyObject' | 'outline';
+export type FunctionSetName = 'agent' | 'manuscript' | 'storyObject' | 'outline' | 'translateObjects';
 
 /** Function set definitions */
 const FUNCTION_SET_SCHEMAS: Record<FunctionSetName, FunctionSchema[]> = {
   agent: [
-    CREATE_STORY_OBJECT, DELETE_STORY_OBJECT, CREATE_CHAPTER, DELETE_CHAPTER,
+    CREATE_STORY_OBJECT, DELETE_STORY_OBJECT,
     CREATE_OUTLINE, DELETE_OUTLINE, CREATE_OUTLINE_ACT, DELETE_OUTLINE_ACT,
     CREATE_OUTLINE_CHAPTER, DELETE_OUTLINE_CHAPTER,
-    REPLACE_BASIC_INFO, REPLACE_STORY_OBJECT, REPLACE_CHAPTER_OUTLINE, REPLACE_MANUSCRIPT,
+    REPLACE_BASIC_INFO, REPLACE_STORY_OBJECT, REPLACE_MANUSCRIPT,
     REPLACE_OUTLINE, REPLACE_OUTLINE_ACT, REPLACE_OUTLINE_CHAPTER,
-    PATCH_BASIC_INFO, PATCH_STORY_OBJECT, PATCH_CHAPTER_OUTLINE, PATCH_MANUSCRIPT,
+    PATCH_BASIC_INFO, PATCH_STORY_OBJECT, PATCH_MANUSCRIPT,
     PATCH_OUTLINE, PATCH_OUTLINE_ACT, PATCH_OUTLINE_CHAPTER,
   ],
   manuscript: [REPLACE_MANUSCRIPT, PATCH_MANUSCRIPT],
   storyObject: [
-    CREATE_STORY_OBJECT, DELETE_STORY_OBJECT, CREATE_CHAPTER, DELETE_CHAPTER,
-    REPLACE_BASIC_INFO, REPLACE_STORY_OBJECT, REPLACE_CHAPTER_OUTLINE,
-    PATCH_BASIC_INFO, PATCH_STORY_OBJECT, PATCH_CHAPTER_OUTLINE,
+    CREATE_STORY_OBJECT, DELETE_STORY_OBJECT,
+    REPLACE_BASIC_INFO, REPLACE_STORY_OBJECT,
+    PATCH_BASIC_INFO, PATCH_STORY_OBJECT,
   ],
   outline: [
     CREATE_OUTLINE, DELETE_OUTLINE, CREATE_OUTLINE_ACT, DELETE_OUTLINE_ACT,
@@ -957,12 +659,18 @@ const FUNCTION_SET_SCHEMAS: Record<FunctionSetName, FunctionSchema[]> = {
     REPLACE_OUTLINE, REPLACE_OUTLINE_ACT, REPLACE_OUTLINE_CHAPTER,
     PATCH_OUTLINE, PATCH_OUTLINE_ACT, PATCH_OUTLINE_CHAPTER,
   ],
+  translateObjects: [
+    REPLACE_BASIC_INFO, REPLACE_STORY_OBJECT, REPLACE_MANUSCRIPT,
+    REPLACE_OUTLINE, REPLACE_OUTLINE_ACT, REPLACE_OUTLINE_CHAPTER,
+    PATCH_BASIC_INFO, PATCH_STORY_OBJECT, PATCH_MANUSCRIPT,
+    PATCH_OUTLINE, PATCH_OUTLINE_ACT, PATCH_OUTLINE_CHAPTER,
+  ],
 };
 
 /**
  * Get LLM-compatible function schemas for a specific set
  */
-export function getFunctionsForSet(setName: FunctionSetName): Array<{ name: string; description: string; parameters: unknown }> {
+export function getFunctionsForSet(setName: FunctionSetName): FunctionCallSchema[] {
   const schemas = FUNCTION_SET_SCHEMAS[setName];
   return schemas.map(s => ({ name: s.name, description: s.description, parameters: s.parameters }));
 }

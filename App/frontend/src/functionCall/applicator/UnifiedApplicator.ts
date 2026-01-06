@@ -10,11 +10,11 @@
 
 import type {
   ApplicationResult,
-  ExecutionContext,
   RawFunctionCall,
   NormalizedFunctionCall,
 } from '../types';
-import type { ApplicatorConfig, HandlerContext, Handler, StoreActions } from './types';
+import type { ApplicatorConfig, HandlerContext, Handler, StoreActions, ApplicatorContext } from './types';
+import { CRUD_OPTIONS } from './types';
 import { normalizeFunctionCall, isKnownFunction } from '../normalizer';
 import { ALL_HANDLERS } from './handlers';
 
@@ -39,7 +39,7 @@ export class UnifiedApplicator {
    */
   async apply(
     functionCall: RawFunctionCall | NormalizedFunctionCall,
-    context: ExecutionContext
+    context: ApplicatorContext
   ): Promise<ApplicationResult> {
     // Normalize the function call
     const normalized = this.normalize(functionCall);
@@ -58,6 +58,7 @@ export class UnifiedApplicator {
     const handlerContext: HandlerContext = {
       ...context,
       store: this.store,
+      options: context.options ?? CRUD_OPTIONS,
     };
 
     // Execute the handler
@@ -81,7 +82,7 @@ export class UnifiedApplicator {
    */
   async applyAll(
     functionCalls: Array<RawFunctionCall | NormalizedFunctionCall>,
-    context: ExecutionContext
+    context: ApplicatorContext
   ): Promise<ApplicationResult[]> {
     const results: ApplicationResult[] = [];
 

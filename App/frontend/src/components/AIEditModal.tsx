@@ -1,11 +1,9 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { BaseModal } from './BaseModal';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
-import type { ObjectType, ManuscriptObject, ChapterObject } from '../types/unifiedObject';
-import type { FunctionCallMetadata } from '../llm/requestTypes';
-import { LLMTask, LLMTaskMode, LLMTaskManager, type LLMTaskModeType, type EditAssistantStoryObjectPromptContext, type EditAssistantManuscriptPromptContext } from '../llm';
-import { convertNativeOutputToFunctionCalls, processFunctionCallsForSession } from '../functionCall';
+import type { ObjectType, ChapterObject } from '../types/unifiedObject';
+import { TaskRuntime } from '../llmTask';
 import { Expand, Collapse } from './icons';
 import { ObjectPicker } from './ObjectPicker';
 import { TextButton } from './TextButton';
@@ -19,7 +17,7 @@ interface AIEditModalProps {
   category: AIEditCategory;
   projectId: string;
   targetId?: string;
-  onResult?: (result?: any) => void | Promise<void>;
+  onTaskStarted?: (sessionId: string) => void;
   defaultUserRequest?: string;
   defaultSelectedContextIds?: string[];
 }
@@ -45,7 +43,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   category,
   projectId,
   targetId,
-  onResult,
+  onTaskStarted,
   defaultUserRequest,
   defaultSelectedContextIds,
 }) => {
@@ -60,7 +58,6 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
 
   const unifiedStore = useUnifiedObjectStore();
   const settingsStore = useSettingsStore();
-  const abortControllerRef = useRef<AbortController | null>(null);
 
   const isManuscriptMode = category === 'manuscript';
   const categoryDisplayName = getCategoryDisplayName(category);
@@ -90,14 +87,6 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     return null;
   }, [targetId, isManuscriptMode, mainLanguage, unifiedStore]);
 
-  // Get manuscript content for manuscript mode
-  const getActiveLanguageContent = useCallback((chapterId: string): string => {
-    const manuscriptObj = unifiedStore.getManuscriptByChapterId(chapterId) as ManuscriptObject | null;
-    if (!manuscriptObj?.data) return '';
-    const langData = manuscriptObj.data[mainLanguage] || Object.values(manuscriptObj.data)[0];
-    return langData?.content || '';
-  }, [unifiedStore, mainLanguage]);
-
   // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
@@ -126,15 +115,6 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
     return [targetId];
   }, [targetId, isManuscriptMode, unifiedStore]);
 
-  // Build contextIds for LLM (filter out target)
-  const buildContextIds = useCallback((): string[] => {
-    if (isManuscriptMode && targetId) {
-      const manuscriptObj = unifiedStore.getManuscriptByChapterId(targetId);
-      return selectedContextIds.filter(id => id !== manuscriptObj?.id);
-    }
-    return selectedContextIds.filter(id => id !== targetId);
-  }, [selectedContextIds, targetId, isManuscriptMode, unifiedStore]);
-
   // On picker load complete
   const handlePickerLoadComplete = useCallback(() => {
     setPickerLoading(false);
@@ -142,145 +122,26 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userRequest.trim()) return;
-
     setError(null);
-
-    // Build title with item name if available
-    const titleParts = [`AI ${categoryDisplayName} ${editTypeText} Edit`];
-    if (itemName) {
-      titleParts.push(`: ${itemName}`);
+    const trimmedRequest = userRequest.trim();
+    if (!trimmedRequest) {
+      setError('Please enter an edit request.');
+      return;
     }
-    const toastLabel = titleParts.join('');
 
-    // Start task via LLMTaskManager
-    const task = LLMTaskManager.startTask({
-      taskType: 'ai-edit',
-      label: toastLabel,
-      retryContext: {
-        taskType: 'ai-edit',
-        modalProps: { category, projectId, targetId, onResult },
-        formState: { userRequest: userRequest.trim(), selectedContextIds },
-      },
+    if (isManuscriptMode && !targetId) {
+      setError('Manuscript edit requires a target chapter ID.');
+      return;
+    }
+
+    const sessionId = TaskRuntime.start('aiEdit', {
+      projectId,
+      category,
+      targetId,
+      userRequest: trimmedRequest,
+      selectedContextIds,
     });
-
-    const editAssistantConfig = settingsStore.getFunctionConfig('editAssistant');
-    const providerConfig = settingsStore.getProviderConfig(editAssistantConfig.provider);
-    const isNativeOutput = settingsStore.settings.nativeOutputMode;
-
-    const contextIds = buildContextIds();
-
-    // Build prompt context based on mode
-    let promptContext: EditAssistantStoryObjectPromptContext | EditAssistantManuscriptPromptContext;
-    let llmMode: LLMTaskModeType;
-
-    if (isManuscriptMode) {
-      if (!targetId) {
-        task.error('Manuscript edit requires a target chapter ID');
-        return;
-      }
-
-      const manuscriptObj = unifiedStore.getManuscriptByChapterId(targetId);
-      if (!manuscriptObj) {
-        task.error(`Manuscript not found for chapter ${targetId}`);
-        return;
-      }
-
-      const currentContent = getActiveLanguageContent(targetId);
-
-      promptContext = {
-        userInput: userRequest.trim(),
-        projectId,
-        currentId: manuscriptObj.id,
-        currentChapterId: targetId,
-        currentChapterName: itemName || '',
-        currentChapterContent: currentContent,
-        objectIds: contextIds.length > 0 ? contextIds : undefined,
-        isNativeOutput,
-        outputLanguage: mainLanguage,
-        enablePrefill: editAssistantConfig.advanced.enablePrefill,
-        enableThinking: editAssistantConfig.advanced.thinkingMode === 'model',
-        enableCustomThinking: editAssistantConfig.advanced.thinkingMode === 'custom',
-      } as EditAssistantManuscriptPromptContext;
-
-      llmMode = LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT;
-    } else {
-      const targetIds = targetId ? [targetId] : [];
-
-      promptContext = {
-        userInput: userRequest.trim(),
-        projectId,
-        targetIds,
-        contextIds: contextIds.length > 0 ? contextIds : undefined,
-        isNativeOutput,
-        outputLanguage: mainLanguage,
-        enablePrefill: editAssistantConfig.advanced.enablePrefill,
-        enableThinking: editAssistantConfig.advanced.thinkingMode === 'model',
-        enableCustomThinking: editAssistantConfig.advanced.thinkingMode === 'custom',
-      } as EditAssistantStoryObjectPromptContext;
-
-      llmMode = LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT;
-    }
-
-    // Fire-and-forget: Start LLM task with callbacks, close modal immediately
-    const llmTask = new LLMTask(
-      {
-        mode: llmMode,
-        projectId,
-        promptContext,
-        abortControllerRef,
-        sessionId: task.sessionId,
-        provider: editAssistantConfig.provider,
-        providerConfig,
-        model: editAssistantConfig.model,
-        temperature: editAssistantConfig.temperature,
-        thinkingMode: editAssistantConfig.advanced.thinkingMode as any,
-        thinkingConfig: editAssistantConfig.advanced.thinkingConfig,
-        retryConfig: settingsStore.settings.retryConfig,
-      },
-      {
-        onUpdate: () => {},
-        onComplete: async (result) => {
-          try {
-            let functionCalls: FunctionCallMetadata[];
-
-            if (isNativeOutput) {
-              const text = result.contentParts
-                .filter(part => part.type === 'content')
-                .map(part => part.text)
-                .join('');
-
-              functionCalls = convertNativeOutputToFunctionCalls(text);
-            } else {
-              functionCalls = result.functionCalls;
-            }
-
-            if (!functionCalls?.length) {
-              task.error('AI response did not include structured edits to apply.');
-              return;
-            }
-
-            // Process function calls and store in EditCardStore for confirmation
-            await processFunctionCallsForSession(functionCalls, {
-              projectId,
-              language: mainLanguage,
-              sessionId: task.sessionId,
-            });
-          } catch (err) {
-            task.error(err instanceof Error ? err.message : 'An unknown error occurred.');
-          }
-        },
-        onError: (err) => {
-          if (err instanceof Error && err.name === 'AbortError') {
-            task.cancel();
-            return;
-          }
-          task.error(err instanceof Error ? err.message : 'An unknown error occurred.');
-        },
-      }
-    );
-
-    llmTask.run();
+    onTaskStarted?.(sessionId);
 
     // Close modal immediately - task continues in background via toast
     onClose();

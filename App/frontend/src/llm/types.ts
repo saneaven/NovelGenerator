@@ -1,4 +1,3 @@
-import type { MutableRefObject } from 'react';
 import type { ContentPart, FunctionCallMetadata, FunctionCallProgress } from './requestTypes';
 import type { ProviderConfig, ProviderType, ThinkingConfig, RetryConfig, CustomApiFormat } from '../store/settingsStore';
 import type { FunctionCallSchema } from '../functionCall';
@@ -289,7 +288,7 @@ export interface LLMTaskConfig {
   mode: LLMTaskModeType;
   projectId: string;
   promptContext: PromptContext;
-  abortControllerRef: MutableRefObject<AbortController | null>;
+  abortController: AbortController;
   sessionId?: string;
   // Provider overrides (optional - defaults from settings)
   provider?: ProviderType;
@@ -310,6 +309,9 @@ export interface LLMTaskResult {
   contentParts: ContentPart[];
   functionCalls: FunctionCallMetadata[];
   thinkingDetails?: any[];
+  provider: string;
+  model: string;
+  usage?: import('./requestTypes').TokenUsage;
 }
 
 /**

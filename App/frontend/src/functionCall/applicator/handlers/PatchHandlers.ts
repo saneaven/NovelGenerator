@@ -10,8 +10,7 @@
 
 import type { ApplicationResult } from '../../types';
 import { getObjectData, ALL_OBJECT_TYPE_MAP } from '../../types';
-import type { HandlerContext, HandlerOptions } from '../types';
-import { CRUD_OPTIONS } from '../types';
+import type { HandlerContext } from '../types';
 import type { ObjectType, UnifiedObject } from '../../../types/unifiedObject';
 import type { Replacement } from '../../../types/patchTypes';
 import { applyPatch } from '../../../utils/patchUtils';
@@ -51,30 +50,36 @@ async function ensureObject(
 }
 
 function buildPatchResult(
-  objectId: string,
-  objectType: string | undefined,
-  failures: PatchFailure[],
-  totalReplacements: number,
-  successMessage: string
+  params: {
+    objectId: string;
+    objectType: string | undefined;
+    successCount: number;
+    failureCount: number;
+    totalCount: number;
+    errorDetails?: string;
+    successMessage: string;
+  }
 ): ApplicationResult {
-  if (failures.length > 0) {
-    const failureCount = failures.length;
-    const successCount = totalReplacements - failureCount;
+  const { objectId, objectType, successCount, failureCount, totalCount, errorDetails, successMessage } = params;
+
+  const data = { id: objectId, successCount, failureCount, totalCount };
+
+  if (failureCount > 0) {
     const statusMsg = successCount > 0
       ? `${objectType ?? 'Object'} patch: ${successCount} succeeded, ${failureCount} failed`
       : `${objectType ?? 'Object'} patch: ${failureCount} failed`;
-    const errorDetails = failures.map(f => `[${f.fieldName}] ${f.error}`).join('\n');
 
     return {
       success: false,
       message: statusMsg,
-      error: errorDetails,
+      error: errorDetails ?? 'Patch failed',
       objectId,
       objectType,
+      data,
     };
   }
 
-  return ok(successMessage, { id: objectId });
+  return ok(successMessage, data);
 }
 
 // ============================================================================
@@ -86,17 +91,19 @@ function buildPatchResult(
  */
 export async function patchBasicInfo(
   args: Record<string, unknown>,
-  context: HandlerContext,
-  options: HandlerOptions = CRUD_OPTIONS
+  context: HandlerContext
 ): Promise<ApplicationResult> {
   const { replacements } = args as { replacements?: Replacement[] };
 
   if (!replacements || !Array.isArray(replacements)) {
     return error('Missing replacements for patch_basic_info');
   }
+  if (replacements.length === 0) {
+    return error('No replacements provided for patch_basic_info');
+  }
 
   const { store, projectId, language } = context;
-  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = context.options;
 
   const existing = await store.listObjects('basic_info', projectId);
   if (existing.length === 0) {
@@ -106,6 +113,7 @@ export async function patchBasicInfo(
   const basic = existing[0];
   const currentData = getObjectData(basic, language);
   const failures: PatchFailure[] = [];
+  let appliedCount = 0;
 
   // Apply patches to each field
   const newData: Record<string, string> = {
@@ -115,17 +123,36 @@ export async function patchBasicInfo(
   };
 
   for (const r of replacements) {
-    if (!r.field || !Object.prototype.hasOwnProperty.call(newData, r.field)) continue;
+    if (!r.field || !Object.prototype.hasOwnProperty.call(newData, r.field)) {
+      failures.push({ fieldName: r.field ?? 'unknown', error: 'Unknown field' });
+      continue;
+    }
 
     const result = applyPatch(newData[r.field], [{ old: r.old, new: r.new }]);
     if (result.success) {
       newData[r.field] = result.value;
+      appliedCount += 1;
     } else {
       failures.push({
         fieldName: r.field,
         error: result.error || 'Patch failed',
       });
     }
+  }
+
+  const failureCount = failures.length;
+  const totalCount = replacements.length;
+
+  if (appliedCount === 0) {
+    return buildPatchResult({
+      objectId: basic.id,
+      objectType: 'basic_info',
+      successCount: 0,
+      failureCount,
+      totalCount,
+      errorDetails: failures.map(f => `[${f.fieldName}] ${f.error}`).join('\n'),
+      successMessage: 'Updated basic info',
+    });
   }
 
   await store.updateObject('basic_info', basic.id, {
@@ -135,7 +162,15 @@ export async function patchBasicInfo(
     user_request: userRequest,
   });
 
-  return buildPatchResult(basic.id, 'basic_info', failures, replacements.length, 'Updated basic info');
+  return buildPatchResult({
+    objectId: basic.id,
+    objectType: 'basic_info',
+    successCount: appliedCount,
+    failureCount,
+    totalCount,
+    errorDetails: failures.length > 0 ? failures.map(f => `[${f.fieldName}] ${f.error}`).join('\n') : undefined,
+    successMessage: 'Updated basic info',
+  });
 }
 
 /**
@@ -145,8 +180,7 @@ export async function patchBasicInfo(
  */
 export async function patchStoryObject(
   args: Record<string, unknown>,
-  context: HandlerContext,
-  options: HandlerOptions = CRUD_OPTIONS
+  context: HandlerContext
 ): Promise<ApplicationResult> {
   // Args are pre-validated
   const { id, type, replacements } = args as {
@@ -158,12 +192,13 @@ export async function patchStoryObject(
   // Use ALL_OBJECT_TYPE_MAP to support both story objects and outline types (for translation)
   const objectType = ALL_OBJECT_TYPE_MAP[type];
   const { store, language } = context;
-  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = context.options;
 
   // Object should be in cache from validation, but fetch if needed for safety
   const object = await ensureObject(store, objectType, id);
   const currentData = getObjectData(object, language);
   const failures: PatchFailure[] = [];
+  let appliedCount = 0;
 
   const newData: Record<string, string> = {
     name: (currentData.name as string) ?? '',
@@ -171,17 +206,36 @@ export async function patchStoryObject(
   };
 
   for (const r of replacements) {
-    if (!r.field || !Object.prototype.hasOwnProperty.call(newData, r.field)) continue;
+    if (!r.field || !Object.prototype.hasOwnProperty.call(newData, r.field)) {
+      failures.push({ fieldName: r.field ?? 'unknown', error: 'Unknown field' });
+      continue;
+    }
 
     const result = applyPatch(newData[r.field], [{ old: r.old, new: r.new }]);
     if (result.success) {
       newData[r.field] = result.value;
+      appliedCount += 1;
     } else {
       failures.push({
         fieldName: r.field,
         error: result.error || 'Patch failed',
       });
     }
+  }
+
+  const failureCount = failures.length;
+  const totalCount = replacements.length;
+
+  if (appliedCount === 0) {
+    return buildPatchResult({
+      objectId: id,
+      objectType: type,
+      successCount: 0,
+      failureCount,
+      totalCount,
+      errorDetails: failures.map(f => `[${f.fieldName}] ${f.error}`).join('\n'),
+      successMessage: `Updated ${type}`,
+    });
   }
 
   await store.updateObject(objectType, id, {
@@ -191,7 +245,15 @@ export async function patchStoryObject(
     user_request: userRequest,
   });
 
-  return buildPatchResult(id, type, failures, replacements.length, `Updated ${type}`);
+  return buildPatchResult({
+    objectId: id,
+    objectType: type,
+    successCount: appliedCount,
+    failureCount,
+    totalCount,
+    errorDetails: failures.length > 0 ? failures.map(f => `[${f.fieldName}] ${f.error}`).join('\n') : undefined,
+    successMessage: `Updated ${type}`,
+  });
 }
 
 /**
@@ -199,8 +261,7 @@ export async function patchStoryObject(
  */
 export async function patchManuscript(
   args: Record<string, unknown>,
-  context: HandlerContext,
-  options: HandlerOptions = CRUD_OPTIONS
+  context: HandlerContext
 ): Promise<ApplicationResult> {
   const { id, replacements } = args as {
     id?: string;
@@ -210,25 +271,34 @@ export async function patchManuscript(
   if (!id || !replacements) {
     return error('Missing required fields for patch_manuscript');
   }
+  if (replacements.length === 0) {
+    return error('No replacements provided for patch_manuscript');
+  }
 
   const { store, language } = context;
-  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = context.options;
 
   // Ensure manuscript is in cache (fetch from API if needed)
   const manuscript = await ensureObject(store, 'manuscript', id);
 
   const currentData = getObjectData(manuscript, language);
   const currentContent = (currentData.content as string) ?? '';
-  const failures: PatchFailure[] = [];
-
   // Apply all replacements to content
   const result = applyPatch(currentContent, replacements);
 
-  if (!result.success) {
-    failures.push({
-      fieldName: 'content',
-      error: result.error || 'Patch failed',
-    });
+  const successCount = result.successCount ?? 0;
+  const failureCount = result.failureCount ?? 0;
+  const totalCount = replacements.length;
+
+  if (successCount === 0) {
+    return {
+      success: false,
+      message: `Manuscript patch: ${failureCount} failed`,
+      error: result.error,
+      objectId: manuscript.id,
+      objectType: 'manuscript',
+      data: { id: manuscript.id, successCount, failureCount, totalCount },
+    };
   }
 
   const wordCount = result.value.trim().split(/\s+/).filter(Boolean).length;
@@ -240,9 +310,7 @@ export async function patchManuscript(
     user_request: userRequest,
   });
 
-  if (failures.length > 0) {
-    const successCount = result.successCount ?? 0;
-    const failureCount = result.failureCount ?? 0;
+  if (failureCount > 0) {
     const statusMsg = successCount > 0
       ? `Manuscript patch: ${successCount} succeeded, ${failureCount} failed`
       : `Manuscript patch: ${failureCount} failed`;
@@ -253,10 +321,11 @@ export async function patchManuscript(
       error: result.error,
       objectId: manuscript.id,
       objectType: 'manuscript',
+      data: { id: manuscript.id, successCount, failureCount, totalCount },
     };
   }
 
-  return ok('Updated manuscript', { id: manuscript.id });
+  return ok('Updated manuscript', { id: manuscript.id, successCount, failureCount: 0, totalCount });
 }
 
 // ============================================================================
@@ -268,8 +337,7 @@ export async function patchManuscript(
  */
 export async function patchOutline(
   args: Record<string, unknown>,
-  context: HandlerContext,
-  options: HandlerOptions = CRUD_OPTIONS
+  context: HandlerContext
 ): Promise<ApplicationResult> {
   const { id, replacements } = args as {
     id?: string;
@@ -279,13 +347,17 @@ export async function patchOutline(
   if (!id || !replacements) {
     return error('Missing required fields for patch_outline');
   }
+  if (replacements.length === 0) {
+    return error('No replacements provided for patch_outline');
+  }
 
   const { store, language } = context;
-  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = context.options;
 
   const object = await ensureObject(store, 'outline', id);
   const currentData = getObjectData(object, language);
   const failures: PatchFailure[] = [];
+  let appliedCount = 0;
 
   const newData: Record<string, string> = {
     name: (currentData.name as string) ?? '',
@@ -293,17 +365,36 @@ export async function patchOutline(
   };
 
   for (const r of replacements) {
-    if (!r.field || !Object.prototype.hasOwnProperty.call(newData, r.field)) continue;
+    if (!r.field || !Object.prototype.hasOwnProperty.call(newData, r.field)) {
+      failures.push({ fieldName: r.field ?? 'unknown', error: 'Unknown field' });
+      continue;
+    }
 
     const result = applyPatch(newData[r.field], [{ old: r.old, new: r.new }]);
     if (result.success) {
       newData[r.field] = result.value;
+      appliedCount += 1;
     } else {
       failures.push({
         fieldName: r.field,
         error: result.error || 'Patch failed',
       });
     }
+  }
+
+  const failureCount = failures.length;
+  const totalCount = replacements.length;
+
+  if (appliedCount === 0) {
+    return buildPatchResult({
+      objectId: id,
+      objectType: 'outline',
+      successCount: 0,
+      failureCount,
+      totalCount,
+      errorDetails: failures.map(f => `[${f.fieldName}] ${f.error}`).join('\n'),
+      successMessage: 'Updated outline',
+    });
   }
 
   await store.updateObject('outline', id, {
@@ -313,7 +404,15 @@ export async function patchOutline(
     user_request: userRequest,
   });
 
-  return buildPatchResult(id, 'outline', failures, replacements.length, 'Updated outline');
+  return buildPatchResult({
+    objectId: id,
+    objectType: 'outline',
+    successCount: appliedCount,
+    failureCount,
+    totalCount,
+    errorDetails: failures.length > 0 ? failures.map(f => `[${f.fieldName}] ${f.error}`).join('\n') : undefined,
+    successMessage: 'Updated outline',
+  });
 }
 
 /**
@@ -321,8 +420,7 @@ export async function patchOutline(
  */
 export async function patchOutlineAct(
   args: Record<string, unknown>,
-  context: HandlerContext,
-  options: HandlerOptions = CRUD_OPTIONS
+  context: HandlerContext
 ): Promise<ApplicationResult> {
   const { id, replacements, order } = args as {
     id?: string;
@@ -335,11 +433,12 @@ export async function patchOutlineAct(
   }
 
   const { store, language } = context;
-  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = context.options;
 
   const object = await ensureObject(store, 'act', id);
   const currentData = getObjectData(object, language);
   const failures: PatchFailure[] = [];
+  let appliedCount = 0;
 
   const newData: Record<string, string> = {
     name: (currentData.name as string) ?? '',
@@ -347,11 +446,15 @@ export async function patchOutlineAct(
   };
 
   for (const r of replacements) {
-    if (!r.field || !Object.prototype.hasOwnProperty.call(newData, r.field)) continue;
+    if (!r.field || !Object.prototype.hasOwnProperty.call(newData, r.field)) {
+      failures.push({ fieldName: r.field ?? 'unknown', error: 'Unknown field' });
+      continue;
+    }
 
     const result = applyPatch(newData[r.field], [{ old: r.old, new: r.new }]);
     if (result.success) {
       newData[r.field] = result.value;
+      appliedCount += 1;
     } else {
       failures.push({
         fieldName: r.field,
@@ -364,6 +467,27 @@ export async function patchOutlineAct(
   const metadata: Record<string, unknown> = {};
   if (order !== undefined && typeof order === 'number') {
     metadata.order = order;
+  }
+
+  const orderOpCount = Object.keys(metadata).length > 0 ? 1 : 0;
+  const failureCount = failures.length;
+  const totalCount = replacements.length + orderOpCount;
+  const successCount = appliedCount + orderOpCount;
+
+  if (totalCount === 0) {
+    return error('No changes provided for patch_outline_act');
+  }
+
+  if (successCount === 0) {
+    return buildPatchResult({
+      objectId: id,
+      objectType: 'act',
+      successCount: 0,
+      failureCount,
+      totalCount,
+      errorDetails: failures.map(f => `[${f.fieldName}] ${f.error}`).join('\n'),
+      successMessage: 'Updated act',
+    });
   }
 
   await store.updateObject('act', id, {
@@ -374,7 +498,15 @@ export async function patchOutlineAct(
     ...(Object.keys(metadata).length > 0 && { metadata }),
   });
 
-  return buildPatchResult(id, 'act', failures, replacements.length, 'Updated act');
+  return buildPatchResult({
+    objectId: id,
+    objectType: 'act',
+    successCount,
+    failureCount,
+    totalCount,
+    errorDetails: failures.length > 0 ? failures.map(f => `[${f.fieldName}] ${f.error}`).join('\n') : undefined,
+    successMessage: 'Updated act',
+  });
 }
 
 /**
@@ -382,25 +514,30 @@ export async function patchOutlineAct(
  */
 export async function patchOutlineChapter(
   args: Record<string, unknown>,
-  context: HandlerContext,
-  options: HandlerOptions = CRUD_OPTIONS
+  context: HandlerContext
 ): Promise<ApplicationResult> {
-  const { id, replacements, order } = args as {
+  const { id, replacements, order, actId } = args as {
     id?: string;
     replacements?: Replacement[];
     order?: number;
+    actId?: string;
   };
 
   if (!id || !replacements) {
     return error('Missing required fields for patch_outline_chapter');
   }
 
+  if (actId !== undefined && (typeof actId !== 'string' || !actId.trim())) {
+    return error('Invalid actId for patch_outline_chapter');
+  }
+
   const { store, language } = context;
-  const { createNewVersion = true, userRequest = 'AI Edit' } = options;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = context.options;
 
   const object = await ensureObject(store, 'chapter', id);
   const currentData = getObjectData(object, language);
   const failures: PatchFailure[] = [];
+  let appliedCount = 0;
 
   const newData: Record<string, string> = {
     name: (currentData.name as string) ?? '',
@@ -408,11 +545,15 @@ export async function patchOutlineChapter(
   };
 
   for (const r of replacements) {
-    if (!r.field || !Object.prototype.hasOwnProperty.call(newData, r.field)) continue;
+    if (!r.field || !Object.prototype.hasOwnProperty.call(newData, r.field)) {
+      failures.push({ fieldName: r.field ?? 'unknown', error: 'Unknown field' });
+      continue;
+    }
 
     const result = applyPatch(newData[r.field], [{ old: r.old, new: r.new }]);
     if (result.success) {
       newData[r.field] = result.value;
+      appliedCount += 1;
     } else {
       failures.push({
         fieldName: r.field,
@@ -423,8 +564,32 @@ export async function patchOutlineChapter(
 
   // Build metadata for order change
   const metadata: Record<string, unknown> = {};
+  if (actId) {
+    metadata.act_id = actId;
+  }
   if (order !== undefined && typeof order === 'number') {
     metadata.order = order;
+  }
+
+  const metadataOpCount = (actId ? 1 : 0) + (order !== undefined && typeof order === 'number' ? 1 : 0);
+  const failureCount = failures.length;
+  const totalCount = replacements.length + metadataOpCount;
+  const successCount = appliedCount + metadataOpCount;
+
+  if (totalCount === 0) {
+    return error('No changes provided for patch_outline_chapter');
+  }
+
+  if (successCount === 0) {
+    return buildPatchResult({
+      objectId: id,
+      objectType: 'chapter',
+      successCount: 0,
+      failureCount,
+      totalCount,
+      errorDetails: failures.map(f => `[${f.fieldName}] ${f.error}`).join('\n'),
+      successMessage: 'Updated chapter',
+    });
   }
 
   await store.updateObject('chapter', id, {
@@ -435,7 +600,15 @@ export async function patchOutlineChapter(
     ...(Object.keys(metadata).length > 0 && { metadata }),
   });
 
-  return buildPatchResult(id, 'chapter', failures, replacements.length, 'Updated chapter');
+  return buildPatchResult({
+    objectId: id,
+    objectType: 'chapter',
+    successCount,
+    failureCount,
+    totalCount,
+    errorDetails: failures.length > 0 ? failures.map(f => `[${f.fieldName}] ${f.error}`).join('\n') : undefined,
+    successMessage: 'Updated chapter',
+  });
 }
 
 // ============================================================================

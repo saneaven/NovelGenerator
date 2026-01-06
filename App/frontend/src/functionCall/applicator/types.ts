@@ -51,6 +51,16 @@ export interface ApplicatorConfig {
   store: StoreActions;
 }
 
+/**
+ * Context passed to the applicator.
+ *
+ * `language` is the target language for the operation.
+ * `options` controls versioning and user_request metadata.
+ */
+export interface ApplicatorContext extends ExecutionContext {
+  options?: HandlerOptions;
+}
+
 // ============================================================================
 // HANDLER CONTEXT
 // ============================================================================
@@ -64,6 +74,7 @@ export interface ApplicatorConfig {
  */
 export interface HandlerContext extends ExecutionContext {
   store: StoreActions;
+  options: HandlerOptions;
 }
 
 /**

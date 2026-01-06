@@ -3,20 +3,13 @@
  * Handles three context types: object, cover_image, and scene
  */
 
-import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { BaseModal } from '../BaseModal';
 import { useProjectStore } from '../../store/projectStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import {
-  LLMTask,
-  LLMTaskMode,
-  LLMTaskManager,
-  type ObjectImagePromptContext,
-  type SceneImagePromptContext,
-  type CoverImagePromptContext,
-  type SelectedObjectContext,
-} from '../../llm';
+import { useLLMTaskStore } from '../../store/llmTaskStore';
+import { TaskRuntime } from '../../llmTask';
 import { TextButton } from '../TextButton';
 import { ObjectPicker } from '../ObjectPicker';
 import './UnifiedImagePromptModal.css';
@@ -83,9 +76,11 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>(
     defaultSelectedObjectIds ?? []
   );
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const taskRef = useRef<LLMTask | null>(null);
+  const activeSession = useLLMTaskStore((state) =>
+    activeSessionId ? state.sessions[activeSessionId] : undefined
+  );
 
   // Get object data for 'object' context
   const objectData = objectId ? unifiedStore.objects[objectId] : null;
@@ -111,25 +106,6 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     };
   }, [contextType, unifiedStore.objects, settings.mainLanguage]);
 
-  // Get saved prompts based on context type
-  const savedPrompts = useMemo(() => {
-    if (contextType === 'object' && objectData?.metadata) {
-      return {
-        natural: objectData.metadata.image_prompt || null,
-        positive: objectData.metadata.image_prompt_positive || null,
-        negative: objectData.metadata.image_prompt_negative || null,
-      };
-    }
-    if (contextType === 'cover_image' && basicInfoData?.metadata) {
-      return {
-        natural: basicInfoData.metadata.image_prompt || null,
-        positive: basicInfoData.metadata.image_prompt_positive || null,
-        negative: basicInfoData.metadata.image_prompt_negative || null,
-      };
-    }
-    return null;
-  }, [contextType, objectData, basicInfoData]);
-
   // Reset form when modal closes
   useEffect(() => {
     if (!isOpen) {
@@ -138,44 +114,30 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     }
   }, [isOpen, defaultUserRequest, defaultSelectedObjectIds]);
 
-  // Cleanup on unmount
   useEffect(() => {
-    return () => {
-      taskRef.current?.abort();
-    };
-  }, []);
+    if (!activeSessionId || !activeSession) return;
 
-  // Build selected objects from store for LLM context
-  const selectedObjects = useMemo((): SelectedObjectContext[] => {
-    const results: SelectedObjectContext[] = [];
-
-    for (const id of selectedObjectIds) {
-      const obj = unifiedStore.objects[id];
-      if (!obj) continue;
-
-      const data = obj.data[settings.mainLanguage] || Object.values(obj.data)[0] || {};
-
-      // Get saved image prompt based on mode
-      let imagePrompt: string | undefined;
-      if (obj.metadata) {
-        switch (promptMode) {
-          case 'natural': imagePrompt = obj.metadata.image_prompt || undefined; break;
-          case 'positive': imagePrompt = obj.metadata.image_prompt_positive || undefined; break;
-          case 'negative': imagePrompt = obj.metadata.image_prompt_negative || undefined; break;
-        }
+    if (activeSession.status === 'success') {
+      const result = activeSession.result as PromptResult | undefined;
+      if (result?.prompt) {
+        onPromptGenerated(result);
+      } else {
+        onStreamingError?.('AI did not generate a prompt.', promptMode);
       }
-
-      results.push({
-        id: obj.id,
-        type: obj.type as string,
-        name: (data.name || data.title || '') as string,
-        description: (data.description || data.logline || '') as string,
-        imagePrompt,
-      });
+      setActiveSessionId(null);
+      return;
     }
 
-    return results;
-  }, [selectedObjectIds, unifiedStore.objects, settings.mainLanguage, promptMode]);
+    if (activeSession.status === 'error') {
+      onStreamingError?.(activeSession.error || 'Failed to generate prompt.', promptMode);
+      setActiveSessionId(null);
+      return;
+    }
+
+    if (activeSession.status === 'cancelled') {
+      setActiveSessionId(null);
+    }
+  }, [activeSessionId, activeSession, onPromptGenerated, onStreamingError, promptMode]);
 
   const getModalTitle = (): string => {
     switch (contextType) {
@@ -206,203 +168,40 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     }
   };
 
-  const handleGenerate = useCallback(async () => {
+  const handleGenerate = useCallback(() => {
     if (!currentProjectId) {
       console.error('Project ID is required');
       return;
     }
 
-    const imagePromptConfig = settings.functionConfigs.imagePrompt;
-    const providerConfig = settings.providerCredentials[imagePromptConfig.provider];
-    const isNativeOutput = settings.nativeOutputMode;
-
-    // Determine task type and label based on context
-    const taskType = contextType === 'scene' ? 'scene-image' : 'image-prompt';
-    const taskLabel = contextType === 'scene' ? 'Scene Prompt Generation' :
-                      contextType === 'cover_image' ? 'Cover Image Prompt Generation' :
-                      'Image Prompt Generation';
-
-    // Start task via LLMTaskManager
-    const task = LLMTaskManager.startTask({
-      taskType,
-      label: taskLabel,
-      retryContext: {
-        taskType,
-        modalProps: { contextType, objectType, objectId, basicInfoId, sceneContext, promptMode, onPromptGenerated },
-        formState: { userRequest, selectedObjectIds },
-      },
+    const kind = contextType === 'scene' ? 'sceneImage' : 'imagePrompt';
+    const sessionId = TaskRuntime.start(kind, {
+      projectId: currentProjectId,
+      promptMode,
+      contextType,
+      userRequest,
+      objectType,
+      objectId,
+      basicInfoId,
+      sceneContext,
+      selectedObjectIds,
     });
 
-    // Notify parent that streaming has started with session ID
-    onStreamingStart?.(task.sessionId, promptMode);
-
+    setActiveSessionId(sessionId);
+    onStreamingStart?.(sessionId, promptMode);
     onClose();
-
-    // Build context and mode based on contextType
-    let llmMode: typeof LLMTaskMode[keyof typeof LLMTaskMode];
-    let promptContext: ObjectImagePromptContext | SceneImagePromptContext | CoverImagePromptContext;
-
-    if (contextType === 'object') {
-      const objectInfo = targetObject
-        ? `**${targetObject.name}**\n${targetObject.description}`
-        : '';
-
-      llmMode = LLMTaskMode.OBJECT_IMAGE_PROMPT;
-      promptContext = {
-        userInput: userRequest,
-        projectId: currentProjectId,
-        promptMode,
-        objectType: objectType!,
-        objectInfo,
-        currentPrompt: savedPrompts?.natural || null,
-        currentPromptPositive: savedPrompts?.positive || null,
-        currentPromptNegative: savedPrompts?.negative || null,
-        isNativeOutput,
-        outputLanguage: settings.mainLanguage,
-        enablePrefill: imagePromptConfig.advanced.enablePrefill,
-        enableThinking: imagePromptConfig.advanced.thinkingMode === 'model',
-        enableCustomThinking: imagePromptConfig.advanced.thinkingMode === 'custom',
-      } as ObjectImagePromptContext;
-    } else if (contextType === 'cover_image') {
-      llmMode = LLMTaskMode.COVER_IMAGE_PROMPT;
-      promptContext = {
-        userInput: userRequest,
-        projectId: currentProjectId,
-        promptMode,
-        basicInfo: {
-          title: basicInfoData?.title || '',
-          logline: basicInfoData?.logline || '',
-          genre: basicInfoData?.genre || '',
-        },
-        selectedObjects,
-        currentPrompt: savedPrompts?.natural || null,
-        currentPromptPositive: savedPrompts?.positive || null,
-        currentPromptNegative: savedPrompts?.negative || null,
-        isNativeOutput: true,
-        outputLanguage: settings.mainLanguage,
-        enablePrefill: imagePromptConfig.advanced.enablePrefill,
-        enableThinking: imagePromptConfig.advanced.thinkingMode === 'model',
-        enableCustomThinking: imagePromptConfig.advanced.thinkingMode === 'custom',
-      } as CoverImagePromptContext;
-    } else {
-      // scene context
-      llmMode = LLMTaskMode.SCENE_IMAGE_PROMPT;
-      promptContext = {
-        userInput: userRequest,
-        projectId: currentProjectId,
-        promptMode,
-        scenePreContext: sceneContext?.preContext || '',
-        scenePostContext: sceneContext?.postContext || '',
-        selectedObjects,
-        isNativeOutput: true,
-        outputLanguage: settings.mainLanguage,
-        enablePrefill: imagePromptConfig.advanced.enablePrefill,
-        enableThinking: imagePromptConfig.advanced.thinkingMode === 'model',
-        enableCustomThinking: imagePromptConfig.advanced.thinkingMode === 'custom',
-      } as SceneImagePromptContext;
-    }
-
-    try {
-      taskRef.current = new LLMTask(
-        {
-          mode: llmMode,
-          projectId: currentProjectId,
-          promptContext,
-          abortControllerRef,
-          sessionId: task.sessionId,
-          provider: imagePromptConfig.provider,
-          providerConfig,
-          model: imagePromptConfig.model,
-          temperature: imagePromptConfig.temperature,
-          thinkingMode: imagePromptConfig.advanced.thinkingMode as any,
-          thinkingConfig: imagePromptConfig.advanced.thinkingConfig,
-          retryConfig: settings.retryConfig,
-        },
-        {
-          onUpdate: () => {},
-          onComplete: (result) => {
-            // For cover_image and scene, always use native output
-            if (contextType === 'cover_image' || contextType === 'scene' || isNativeOutput) {
-              const text = result.contentParts
-                .filter(part => part.type === 'content')
-                .map(part => part.text)
-                .join('');
-
-              if (text.trim()) {
-                onPromptGenerated({ prompt: text.trim(), mode: promptMode });
-                task.complete();
-              } else {
-                onStreamingError?.('AI did not generate a prompt.', promptMode);
-                task.error('AI did not generate a prompt.');
-              }
-            } else {
-              // For object context with function call mode
-              const call = result.functionCalls.find(c => c.function_name === 'generate_object_image_prompt');
-              if (call?.arguments) {
-                try {
-                  const args = typeof call.arguments === 'string' ? JSON.parse(call.arguments) : call.arguments;
-                  if (args.prompt) {
-                    onPromptGenerated({ prompt: args.prompt, mode: promptMode });
-                    task.complete();
-                  }
-                } catch {
-                  onStreamingError?.('Failed to parse generated prompt.', promptMode);
-                  task.error('Failed to parse generated prompt.');
-                }
-              } else {
-                const text = result.contentParts.filter(part => part.type === 'content').map(part => part.text).join('');
-                if (text.trim()) {
-                  onPromptGenerated({ prompt: text.trim(), mode: promptMode });
-                  task.complete();
-                } else {
-                  onStreamingError?.('AI did not generate a prompt.', promptMode);
-                  task.error('AI did not generate a prompt.');
-                }
-              }
-            }
-          },
-          onError: (err) => {
-            if (err.name === 'AbortError') {
-              task.cancel();
-            } else {
-              const errMsg = err.message || 'Failed to generate prompt';
-              onStreamingError?.(errMsg, promptMode);
-              task.error(errMsg);
-            }
-          },
-        }
-      );
-
-      await taskRef.current.run();
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        task.cancel();
-        return;
-      }
-      const errMsg = err instanceof Error ? err.message : 'Failed to generate prompt';
-      onStreamingError?.(errMsg, promptMode);
-      task.error(errMsg);
-    } finally {
-      taskRef.current = null;
-    }
   }, [
-    settings,
     currentProjectId,
     contextType,
+    promptMode,
+    userRequest,
     objectType,
     objectId,
-    targetObject,
-    basicInfoData,
+    basicInfoId,
     sceneContext,
-    selectedObjects,
-    savedPrompts,
-    userRequest,
-    promptMode,
     selectedObjectIds,
-    onClose,
-    onPromptGenerated,
     onStreamingStart,
-    onStreamingError,
+    onClose,
   ]);
 
   const showObjectPicker = contextType === 'cover_image' || contextType === 'scene';

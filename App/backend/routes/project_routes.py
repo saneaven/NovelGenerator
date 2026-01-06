@@ -3,9 +3,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from typing import List
 import uuid
+from datetime import datetime
 
 from ..database import get_db
-from ..models.db_models import User, Project, StoryObjectAsset, Asset
+from ..models.db_models import User, Project, StoryObjectAsset, Asset, BasicInfo
+from ..models.translation_models import ObjectVersion, ObjectTranslation
 from ..schemas.projects import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse
 from ..auth import get_current_user
 
@@ -51,15 +53,58 @@ async def create_project(
     Create a new project
 
     Creates a new story project for the authenticated user.
+    Also creates an empty BasicInfo with ObjectVersion and ObjectTranslation.
     """
+    project_id = uuid.uuid4()
+    basic_info_id = uuid.uuid4()
+    now = datetime.utcnow()
+
+    # Create project
     new_project = Project(
-        id=uuid.uuid4(),
+        id=project_id,
         user_id=current_user.id,
         name=project_data.name,
         description=project_data.description
     )
-
     db.add(new_project)
+    db.flush()  # Flush to get project_id for foreign key
+
+    # Create empty BasicInfo
+    basic_info = BasicInfo(
+        id=basic_info_id,
+        project_id=project_id,
+        created_at=now,
+        updated_at=now
+    )
+    db.add(basic_info)
+
+    # Create initial ObjectVersion for BasicInfo
+    empty_data = {'title': '', 'logline': '', 'genre': ''}
+    version = ObjectVersion(
+        id=uuid.uuid4(),
+        object_type='basic_info',
+        object_id=basic_info_id,
+        version_number=1,
+        data={project_data.main_language: empty_data},
+        user_request='Project Creation',
+        created_by=current_user.id,
+        created_at=now
+    )
+    db.add(version)
+
+    # Create ObjectTranslation cache for main language
+    translation = ObjectTranslation(
+        id=uuid.uuid4(),
+        object_type='basic_info',
+        object_id=basic_info_id,
+        language=project_data.main_language,
+        data=empty_data,
+        is_active=True,
+        created_at=now,
+        updated_at=now
+    )
+    db.add(translation)
+
     db.commit()
     db.refresh(new_project)
 

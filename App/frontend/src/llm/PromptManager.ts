@@ -1,6 +1,5 @@
 import type { FunctionCallSchema } from '../functionCall';
-import { STORY_OBJECT_EDIT_FUNCTIONS, MANUSCRIPT_EDIT_FUNCTIONS } from '../functionCall';
-import { TRANSLATION_FUNCTIONS, AGENT_TRANSLATION_FUNCTIONS } from './schemas/translationFunctions';
+import { STORY_OBJECT_EDIT_FUNCTIONS, MANUSCRIPT_EDIT_FUNCTIONS, getFunctionsForSet } from '../functionCall';
 import { OBJECT_IMAGE_PROMPT_FUNCTIONS } from './schemas/imagePromptFunctions';
 import { renderTemplate, registerFragments, type PromptFragment } from '../templateEngine/engine';
 import { useSettingsStore } from '../store/settingsStore';
@@ -144,9 +143,9 @@ export class PromptManager {
       case LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT:
         return this.getEditAssistantFunctions(context as EditAssistantManuscriptPromptContext, 'manuscript');
       case LLMTaskMode.TRANSLATION:
-        return this.getTranslationFunctions(context as StoryTranslationPromptContext);
+        return getFunctionsForSet('translateObjects');
       case LLMTaskMode.AGENT_TRANSLATION:
-        return this.getAgentTranslationFunctions(context as AgentTranslationPromptContext);
+        return undefined;
       case LLMTaskMode.OBJECT_IMAGE_PROMPT:
         return this.getObjectImagePromptFunctions(context as ObjectImagePromptContext);
       case LLMTaskMode.SCENE_IMAGE_PROMPT:
@@ -276,10 +275,9 @@ export class PromptManager {
       ]) as [string, string, string | null];
     }
 
-    const settings = useSettingsStore.getState().settings;
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
-      project: this.buildProjectData(context.projectId, settings.mainLanguage),
+      project: this.buildProjectData(context.projectId, context.sourceLanguage),
       input: { userMessage: context.userInput },
       translation: {
         sourceLanguage: context.sourceLanguage,
@@ -311,10 +309,9 @@ export class PromptManager {
       this.getTemplate('translation', 'prefill', 'agent'),
     ]);
 
-    const settings = useSettingsStore.getState().settings;
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
-      project: this.buildProjectData(context.projectId, settings.mainLanguage),
+      project: this.buildProjectData(context.projectId, context.sourceLanguage),
       input: { userMessage: context.userInput },
       translation: {
         sourceLanguage: context.sourceLanguage,
@@ -819,20 +816,6 @@ export class PromptManager {
   ): FunctionCallSchema[] | undefined {
     if (context.isNativeOutput) return undefined;
     return mode === 'manuscript' ? MANUSCRIPT_EDIT_FUNCTIONS : STORY_OBJECT_EDIT_FUNCTIONS;
-  }
-
-  private static getTranslationFunctions(
-    context: StoryTranslationPromptContext
-  ): FunctionCallSchema[] | undefined {
-    if (context.isNativeOutput) return undefined;
-    return TRANSLATION_FUNCTIONS;
-  }
-
-  private static getAgentTranslationFunctions(
-    context: AgentTranslationPromptContext
-  ): FunctionCallSchema[] | undefined {
-    if (context.isNativeOutput) return undefined;
-    return AGENT_TRANSLATION_FUNCTIONS;
   }
 
   private static getObjectImagePromptFunctions(

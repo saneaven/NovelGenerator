@@ -7,6 +7,11 @@
  * 2. Pre-apply: Before executing the function call
  */
 
+export interface ValidationContext {
+  projectId: string;
+  language?: string;
+}
+
 /**
  * Result of validating a function call
  */
@@ -25,7 +30,8 @@ export interface ValidationResult {
  */
 export type Validator = (
   args: Record<string, unknown>,
-  functionName: string
+  functionName: string,
+  context: ValidationContext
 ) => Promise<ValidationResult> | ValidationResult;
 
 /**

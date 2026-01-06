@@ -9,6 +9,7 @@ class ProjectCreate(BaseModel):
     """Create project request"""
     name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
+    main_language: str = Field(default="en", description="Main language for the project's basic_info")
 
 
 class ProjectUpdate(BaseModel):

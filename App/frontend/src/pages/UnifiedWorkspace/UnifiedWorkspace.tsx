@@ -21,7 +21,6 @@ import WorkspaceTabsSidebar from '../workspace/components/WorkspaceTabsSidebar';
 import { PageHeader, MobileFooter } from '../../components/layout';
 
 import { useWorkspaceSubPage, type SubPageType } from './hooks/useWorkspaceSubPage';
-import { WorkspaceHeaderDropdown } from './components/WorkspaceHeaderDropdown';
 import { useStoryObjectTab } from '../workspace/hooks/useStoryObjectTab';
 
 import './UnifiedWorkspace.css';
@@ -181,16 +180,6 @@ const UnifiedWorkspace: React.FC = () => {
 
     return count;
   }, [unifiedStore.objects, projectId, subLanguages, translationTypes]);
-
-  // Handler for translation complete
-  const handleTranslateComplete = () => {
-    if (projectId) {
-      translationTypes.forEach(type => {
-        listObjects(type as any, projectId);
-      });
-    }
-    setShowTranslateModal(false);
-  };
 
   // Selected chapter for novel-editor
   const selectedChapterId = selectedChapterByProject[projectId ?? '']
@@ -498,7 +487,6 @@ const UnifiedWorkspace: React.FC = () => {
         isOpen={showTranslateModal}
         onClose={() => setShowTranslateModal(false)}
         projectId={projectId || ''}
-        onComplete={handleTranslateComplete}
         allowedObjectTypes={translationTypes}
       />
 

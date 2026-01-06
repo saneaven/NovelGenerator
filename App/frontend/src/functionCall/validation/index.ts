@@ -8,7 +8,7 @@
  */
 
 // Types
-export type { ValidationResult, Validator } from './types';
+export type { ValidationContext, ValidationResult, Validator } from './types';
 export { validResult, invalidResult } from './types';
 
 // Main validation function
@@ -24,5 +24,7 @@ export {
   validatePatchRequiredFields,
   validateObjectExists,
   validatePatchApplicable,
+  validateOutlineParentExists,
+  validateActParentExists,
   resolveObjectType,
 } from './validators';

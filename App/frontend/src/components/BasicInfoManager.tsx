@@ -34,7 +34,6 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   const fetchObject = useUnifiedObjectStore((state) => state.fetchObject);
   const updateObject = useUnifiedObjectStore((state) => state.updateObject);
   const listObjects = useUnifiedObjectStore((state) => state.listObjects);
-  const createObject = useUnifiedObjectStore((state) => state.createObject);
   const { settings } = useSettingsStore();
   const { showError } = useErrorStore();
 
@@ -100,20 +99,10 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
       const existing = await listObjects('basic_info', projectId);
       if (existing.length > 0) {
         setBasicInfoId(existing[0].id);
-        return;
+      } else {
+        // BasicInfo should be auto-created with the project
+        setInitializationError('BasicInfo not found. This should not happen.');
       }
-
-      const newBasicInfo = await createObject(
-        'basic_info',
-        projectId,
-        {
-          title: '',
-          logline: '',
-          genre: '',
-        },
-        settings.mainLanguage
-      );
-      setBasicInfoId(newBasicInfo.id);
     } catch (err) {
       console.error('Failed to initialize basic info:', err);
       setInitializationError(
@@ -122,7 +111,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
     } finally {
       setInitializing(false);
     }
-  }, [projectId, listObjects, createObject, settings.mainLanguage]);
+  }, [projectId, listObjects]);
 
   useEffect(() => {
     setBasicInfoId(null);
@@ -174,28 +163,6 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   const handleEdit = () => {
     setEditFormData(currentData);
     setIsEditing(true);
-  };
-
-  const handleAIResult = async (result: any) => {
-    if (!basicInfo || !basicInfoId || !result) return;
-
-    try {
-      const updates: Partial<BasicInfoData> = {};
-      if (result.title !== undefined) updates.title = result.title;
-      if (result.logline !== undefined) updates.logline = result.logline;
-      if (result.genre !== undefined) updates.genre = result.genre;
-
-      await updateObject('basic_info', basicInfoId, {
-        data: { ...currentData, ...updates },
-        language: effectiveLanguage,
-        user_request: 'AI Edit',
-        create_new_version: true,
-      });
-
-    } catch (err) {
-      console.error('Failed to apply AI edit:', err);
-      showError('AI Edit Error', 'Failed to apply AI edit. Please try again.');
-    }
   };
 
   // Called after modal restores a version - just refresh the object
@@ -420,7 +387,6 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
         category="basic_info"
         projectId={projectId}
         targetId={basicInfoId || ''}
-        onResult={handleAIResult}
       />
 
       {basicInfoId && (
@@ -438,7 +404,6 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
           isOpen={showRetranslateModal}
           onClose={() => setShowRetranslateModal(false)}
           projectId={projectId}
-          onComplete={() => setShowRetranslateModal(false)}
           allowedObjectTypes={['basic_info']}
           preSelectedObjectIds={[basicInfoId]}
           defaultSourceLanguage={settings.mainLanguage}

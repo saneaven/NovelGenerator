@@ -101,6 +101,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       organization: 'Organization',
       location: 'Location',
       lorebook: 'Lorebook',
+      outline: 'Outline',
       act: 'Act',
       chapter: 'Chapter',
       manuscript: 'Manuscript',

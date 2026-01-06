@@ -30,6 +30,7 @@ import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
+import { useLLMTaskStore } from '../../../store/llmTaskStore';
 import AIEditModal from '../../../components/AIEditModal';
 import TranslationModal from '../../../components/TranslationModal';
 import VersionHistoryModal from '../../../components/VersionHistoryModal';
@@ -107,6 +108,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const [isResolvingContentId, setIsResolvingContentId] = useState(false);
   const [contentIdError, setContentIdError] = useState<string | null>(null);
   const [isAIEditModalOpen, setIsAIEditModalOpen] = useState(false);
+  const [aiEditSessionId, setAiEditSessionId] = useState<string | null>(null);
   const [showRetranslateModal, setShowRetranslateModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [cursorContext, setCursorContext] = useState<{ before: string; after: string }>({ before: '', after: '' });
@@ -135,6 +137,24 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const editorRef = useRef<RichTextEditorRef>(null);
+
+  const aiEditSession = useLLMTaskStore((state) =>
+    aiEditSessionId ? state.sessions[aiEditSessionId] : undefined
+  );
+
+  useEffect(() => {
+    if (!aiEditSessionId || !aiEditSession) return;
+    if (aiEditSession.status === 'success') {
+      if (manuscriptId) {
+        fetchObject('manuscript', manuscriptId);
+      }
+      setAiEditSessionId(null);
+      return;
+    }
+    if (aiEditSession.status === 'error' || aiEditSession.status === 'cancelled') {
+      setAiEditSessionId(null);
+    }
+  }, [aiEditSessionId, aiEditSession, manuscriptId, fetchObject]);
 
   // Get manuscript from store
   const manuscript = manuscriptId
@@ -600,47 +620,11 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     // Provider-specific settings from generation_settings JSON
     const genSettings = asset.generation_settings as Record<string, unknown> | null;
     if (genSettings) {
+      settings.settings = genSettings as Record<string, any>;
+
       // Size
       if (typeof genSettings.size === 'string') {
         settings.size = genSettings.size;
-      }
-
-      // Gemini settings
-      if (typeof genSettings.aspect_ratio === 'string') {
-        settings.geminiAspectRatio = genSettings.aspect_ratio;
-      }
-      if (typeof genSettings.image_resolution === 'string') {
-        settings.geminiResolution = genSettings.image_resolution;
-      }
-
-      // OpenAI settings
-      if (genSettings.quality === 'standard' || genSettings.quality === 'hd') {
-        settings.openaiQuality = genSettings.quality;
-      }
-      if (genSettings.style === 'natural' || genSettings.style === 'vivid') {
-        settings.openaiStyle = genSettings.style;
-      }
-
-      // NovelAI settings
-      if (typeof genSettings.sampler === 'string') {
-        settings.novelaiSampler = genSettings.sampler;
-      }
-      if (typeof genSettings.steps === 'number') {
-        settings.novelaiSteps = genSettings.steps;
-      }
-      if (typeof genSettings.scale === 'number') {
-        settings.novelaiScale = genSettings.scale;
-      }
-      if (typeof genSettings.noise_schedule === 'string') {
-        settings.novelaiNoiseSchedule = genSettings.noise_schedule;
-      }
-
-      // Style IDs
-      if (typeof genSettings.natural_style_id === 'string') {
-        settings.selectedNaturalStyleId = genSettings.natural_style_id;
-      }
-      if (typeof genSettings.tag_based_style_id === 'string') {
-        settings.selectedTagBasedStyleId = genSettings.tag_based_style_id;
       }
     }
 
@@ -690,13 +674,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     setRegenerateAsset(null);
     setPendingRegenerationBounds(null);
   }, []);
-
-  const handleAIEditComplete = useCallback(() => {
-    // Reload the manuscript after AI edit
-    if (manuscriptId) {
-      fetchObject('manuscript', manuscriptId);
-    }
-  }, [manuscriptId]);
 
   // ============================================================================
   // RENDER
@@ -999,7 +976,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
           category="manuscript"
           projectId={projectId}
           targetId={selectedChapter.id}
-          onResult={handleAIEditComplete}
+          onTaskStarted={(sessionId) => setAiEditSessionId(sessionId)}
         />
       )}
 
@@ -1009,7 +986,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
           isOpen={showRetranslateModal}
           onClose={() => setShowRetranslateModal(false)}
           projectId={projectId}
-          onComplete={() => setShowRetranslateModal(false)}
           allowedObjectTypes={['manuscript']}
           preSelectedObjectIds={[manuscriptId]}
           defaultSourceLanguage={

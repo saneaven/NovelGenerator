@@ -7,8 +7,6 @@ export {
   CRUD_FUNCTION_NAMES,
   REPLACE_FUNCTION_NAMES,
   PATCH_FUNCTION_NAMES,
-  TRANSLATION_FUNCTION_NAMES,
-  isTranslationFunction,
   isCrudFunction,
   isReplaceFunction,
   isPatchFunction,

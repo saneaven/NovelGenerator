@@ -52,6 +52,7 @@ export interface AuthResponse {
 export interface ProjectCreate {
   name: string;
   description?: string;
+  main_language: string;
 }
 
 export interface ProjectUpdate {
@@ -236,7 +237,7 @@ export interface AgentResponse extends BaseMetadata {
 }
 
 export interface ContentPart {
-  type: 'content' | 'thinking';
+  type: 'content' | 'thinking' | 'error';
   text: string;
 }
 

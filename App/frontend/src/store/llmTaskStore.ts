@@ -1,92 +1,25 @@
 import { create } from 'zustand';
-import type { ContentPart, FunctionCallProgress, TokenUsage } from '../llm/requestTypes';
-import type { AggregatedFunctionCallResults, ConversationSnapshot } from '../llm/retry/types';
-
-export type TaskSessionStatus = 'idle' | 'running' | 'pending_confirmation' | 'success' | 'error' | 'cancelled';
+import type { ContentPart, FunctionCallProgress } from '../llm/requestTypes';
+import type { TaskSessionState } from '../llmTask';
 
 // AbortController registry (outside Zustand store to avoid serialization issues)
 const abortControllers = new Map<string, AbortController>();
 
-// Task types for different LLM operations
-export type LLMTaskType =
-  | 'ai-edit'           // AIEditModal (story objects and manuscript)
-  | 'translation'       // TranslationModal (story objects)
-  | 'agent-translation' // AgentPanel inline (single message)
-  | 'image-prompt'      // UnifiedImagePromptModal
-  | 'scene-image'       // Novel editor scene image generation
-  | 'agent';            // Main agent in Workspace
-
-export interface TaskProgress {
-  current: number;
-  total: number;
-  currentItemLabel?: string;
-}
-
-export interface RetryContext {
-  taskType: LLMTaskType;
-  modalProps: Record<string, any>;
-  formState?: Record<string, any>;
-  callbacks?: {
-    onResult?: (result?: any) => void;
-  };
-}
-
-export interface LLMTaskSessionState {
-  id: string;
-  status: TaskSessionStatus;
-  contentParts: ContentPart[];
-  thinkingParts: ContentPart[];
-  functionCallProgress: FunctionCallProgress[];
-  error?: string;
-  updatedAt: number;
-  // Notification-related fields
-  taskType?: LLMTaskType;
-  label?: string;
-  progress?: TaskProgress;
-  retryContext?: RetryContext;
-  isRead: boolean;
-  createdAt: number;
-  // Debug info fields
-  provider?: string;
-  model?: string;
-  usage?: TokenUsage;
-  // Retry support
-  functionCallResults?: AggregatedFunctionCallResults;
-  conversationSnapshot?: ConversationSnapshot;
-}
-
-const createDefaultSession = (id: string): LLMTaskSessionState => ({
-  id,
-  status: 'idle',
-  contentParts: [],
-  thinkingParts: [],
-  functionCallProgress: [],
-  updatedAt: Date.now(),
-  createdAt: Date.now(),
-  isRead: false,
-});
+type AnySession = TaskSessionState<any, any>;
 
 interface LLMTaskStore {
-  sessions: Record<string, LLMTaskSessionState | undefined>;
+  sessions: Record<string, AnySession | undefined>;
 
   // Core session management
-  initializeSession: (id: string) => void;
-  updateSession: (id: string, partial: Partial<Omit<LLMTaskSessionState, 'id'>>) => void;
+  createSession: (session: AnySession) => void;
+  updateSession: (id: string, partial: Partial<Omit<AnySession, 'id' | 'kind' | 'input'>>) => void;
   setContentParts: (id: string, contentParts: ContentPart[]) => void;
-  setThinkingParts: (id: string, thinkingParts: ContentPart[]) => void;
   setFunctionCallProgress: (id: string, progress: FunctionCallProgress[]) => void;
   clearSession: (id: string) => void;
 
-  // Notification convenience methods
-  setRunning: (id: string, label: string, taskType: LLMTaskType, retryContext?: RetryContext) => void;
-  setSuccess: (id: string) => void;
-  setTaskError: (id: string, message: string) => void;
-  setCancelled: (id: string) => void;
-  setProgress: (id: string, current: number, total: number, currentItemLabel?: string) => void;
-
   // Query helpers
-  getActiveSessions: () => LLMTaskSessionState[];
-  getSessionById: (id: string) => LLMTaskSessionState | undefined;
+  getActiveSessions: () => AnySession[];
+  getSessionById: (id: string) => AnySession | undefined;
   hasUnread: () => boolean;
   hasRunningTasks: () => boolean;
 
@@ -99,29 +32,21 @@ interface LLMTaskStore {
   registerAbortController: (id: string, controller: AbortController) => void;
   unregisterAbortController: (id: string) => void;
   cancelTask: (id: string) => void;
-
-  // Retry support
-  setFunctionCallResults: (id: string, results: AggregatedFunctionCallResults) => void;
-  setConversationSnapshot: (id: string, snapshot: ConversationSnapshot) => void;
 }
 
 export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
   sessions: {},
-  initializeSession: (id: string) =>
-    set((state) => {
-      if (state.sessions[id]) {
-        return state;
-      }
-      return {
-        sessions: {
-          ...state.sessions,
-          [id]: createDefaultSession(id),
-        },
-      };
-    }),
+  createSession: (session) =>
+    set((state) => ({
+      sessions: {
+        ...state.sessions,
+        [session.id]: session,
+      },
+    })),
   updateSession: (id, partial) =>
     set((state) => {
-      const existing = state.sessions[id] ?? createDefaultSession(id);
+      const existing = state.sessions[id];
+      if (!existing) return state;
       return {
         sessions: {
           ...state.sessions,
@@ -135,7 +60,8 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
     }),
   setContentParts: (id, contentParts) =>
     set((state) => {
-      const existing = state.sessions[id] ?? createDefaultSession(id);
+      const existing = state.sessions[id];
+      if (!existing) return state;
       return {
         sessions: {
           ...state.sessions,
@@ -147,23 +73,10 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
         },
       };
     }),
-  setThinkingParts: (id, thinkingParts) =>
-    set((state) => {
-      const existing = state.sessions[id] ?? createDefaultSession(id);
-      return {
-        sessions: {
-          ...state.sessions,
-          [id]: {
-            ...existing,
-            thinkingParts,
-            updatedAt: Date.now(),
-          },
-        },
-      };
-    }),
   setFunctionCallProgress: (id, progress) =>
     set((state) => {
-      const existing = state.sessions[id] ?? createDefaultSession(id);
+      const existing = state.sessions[id];
+      if (!existing) return state;
       return {
         sessions: {
           ...state.sessions,
@@ -185,121 +98,11 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
       return { sessions: next };
     }),
 
-  // Toast convenience methods
-  setRunning: (id, label, taskType, retryContext) => {
-    const now = Date.now();
-    set((state) => ({
-      sessions: {
-        ...state.sessions,
-        [id]: {
-          ...(state.sessions[id] ?? createDefaultSession(id)),
-          status: 'running',
-          label,
-          taskType,
-          retryContext,
-          progress: undefined,
-          error: undefined,
-          isRead: false,
-          createdAt: state.sessions[id]?.createdAt ?? now,
-          updatedAt: now,
-        },
-      },
-    }));
-  },
-
-  setSuccess: (id) => {
-    set((state) => {
-      const existing = state.sessions[id];
-      if (!existing) return state;
-      return {
-        sessions: {
-          ...state.sessions,
-          [id]: {
-            ...existing,
-            status: 'success',
-            error: undefined,
-            updatedAt: Date.now(),
-          },
-        },
-      };
-    });
-  },
-
-  setTaskError: (id, message) => {
-    // Log detailed error to console for debugging
-    const existing = get().sessions[id];
-    if (existing) {
-      console.error(`[LLM Task Error] ${existing.label || 'Unknown Task'}`, {
-        sessionId: id,
-        taskType: existing.taskType,
-        error: message,
-        provider: existing.provider,
-        model: existing.model,
-        usage: existing.usage,
-        hadContent: existing.contentParts && existing.contentParts.length > 0,
-        progress: existing.progress,
-        timestamp: new Date().toISOString(),
-      });
-    } else {
-      console.error(`[LLM Task Error] Session not found: ${id}`, message);
-    }
-
-    set((state) => {
-      const session = state.sessions[id];
-      if (!session) return state;
-      return {
-        sessions: {
-          ...state.sessions,
-          [id]: {
-            ...session,
-            status: 'error',
-            error: message,
-            updatedAt: Date.now(),
-          },
-        },
-      };
-    });
-  },
-
-  setCancelled: (id) => {
-    set((state) => {
-      const existing = state.sessions[id];
-      if (!existing) return state;
-      return {
-        sessions: {
-          ...state.sessions,
-          [id]: {
-            ...existing,
-            status: 'cancelled',
-            updatedAt: Date.now(),
-          },
-        },
-      };
-    });
-  },
-
-  setProgress: (id, current, total, currentItemLabel) => {
-    set((state) => {
-      const existing = state.sessions[id];
-      if (!existing) return state;
-      return {
-        sessions: {
-          ...state.sessions,
-          [id]: {
-            ...existing,
-            progress: { current, total, currentItemLabel },
-            updatedAt: Date.now(),
-          },
-        },
-      };
-    });
-  },
-
   // Query helpers
   getActiveSessions: () => {
     const { sessions } = get();
     return Object.values(sessions)
-      .filter((s): s is LLMTaskSessionState => s !== undefined && s.status !== 'idle')
+      .filter((s): s is AnySession => s !== undefined && s.status !== 'idle')
       .sort((a, b) => b.createdAt - a.createdAt);
   },
 
@@ -324,7 +127,7 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
   // Notification actions
   markAllAsRead: () => {
     set((state) => {
-      const updated: Record<string, LLMTaskSessionState> = {};
+      const updated: Record<string, AnySession | undefined> = {};
       for (const [id, session] of Object.entries(state.sessions)) {
         if (session) {
           updated[id] = { ...session, isRead: true };
@@ -375,41 +178,6 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
           [id]: {
             ...existing,
             status: 'cancelled',
-            updatedAt: Date.now(),
-          },
-        },
-      };
-    });
-  },
-
-  // Retry support
-  setFunctionCallResults: (id, results) => {
-    set((state) => {
-      const existing = state.sessions[id];
-      if (!existing) return state;
-      return {
-        sessions: {
-          ...state.sessions,
-          [id]: {
-            ...existing,
-            functionCallResults: results,
-            updatedAt: Date.now(),
-          },
-        },
-      };
-    });
-  },
-
-  setConversationSnapshot: (id, snapshot) => {
-    set((state) => {
-      const existing = state.sessions[id];
-      if (!existing) return state;
-      return {
-        sessions: {
-          ...state.sessions,
-          [id]: {
-            ...existing,
-            conversationSnapshot: snapshot,
             updatedAt: Date.now(),
           },
         },

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../store/projectStore';
 import { useAuthStore } from '../store/authStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { API_BASE_URL } from '../api/client';
 import SettingsModal from '../components/SettingsModal/SettingsModal';
 import { IconButton } from '../components/IconButton';
@@ -11,6 +12,7 @@ const Home: React.FC = () => {
   const navigate = useNavigate();
   const { projects, createProject, deleteProject, setCurrentProject, fetchProjects, isLoading, error } = useProjectStore();
   const { logout, user } = useAuthStore();
+  const { settings } = useSettingsStore();
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [projectName, setProjectName] = useState('');
   const [projectDescription, setProjectDescription] = useState('');
@@ -35,7 +37,7 @@ const Home: React.FC = () => {
     e.preventDefault();
     if (projectName.trim()) {
       try {
-        const newProject = await createProject(projectName.trim(), projectDescription.trim());
+        const newProject = await createProject(projectName.trim(), projectDescription.trim(), settings.mainLanguage);
         setCurrentProject(newProject.id);
         navigate(`/project/${newProject.id}`);
         setProjectName('');

@@ -114,9 +114,12 @@ export function useImageGeneration(options: UseImageGenerationOptions = {}) {
                         // Add asset to asset store for display
                         if (result.asset) {
                             // Transform to Asset format expected by assetStore
+                            const manuscriptIdForAsset =
+                                request.assetType === 'scene' ? request.manuscriptId ?? null : null;
                             const asset = {
                                 id: result.asset.id,
                                 project_id: result.asset.projectId,
+                                manuscript_id: manuscriptIdForAsset,
                                 name: result.asset.name,
                                 file_path: result.asset.filePath,
                                 thumbnail_path: result.asset.thumbnailPath,

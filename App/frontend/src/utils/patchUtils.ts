@@ -41,14 +41,6 @@ export function applySingleReplacement(
   const index = normalizedText.indexOf(normalizedOld);
 
   if (index === -1) {
-
-    // Try to find a partial match to see where it diverges
-    const searchLen = Math.min(50, normalizedOld.length);
-    for (let i = searchLen; i >= 10; i -= 5) {
-      const partial = normalizedOld.slice(0, i);
-      const partialIndex = normalizedText.indexOf(partial);
-    }
-
     return {
       success: false,
       value: text,

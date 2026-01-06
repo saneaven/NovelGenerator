@@ -72,6 +72,19 @@ Use `replace_outline_chapter` with `actId` to move a chapter to a different act:
 }
 ```
 
+If you need to move a chapter **and** make targeted text edits at the same time, you can use `patch_outline_chapter` with `actId`:
+```json
+{
+  "function": "patch_outline_chapter",
+  "id": "chapter-123",
+  "actId": "new-act-id",
+  "order": 1,
+  "replacements": [
+    { "field": "description", "old": "text to find", "new": "replacement" }
+  ]
+}
+```
+
 ## Guidelines
 
 - Use `replace_*` when changing most of the content or for short fields

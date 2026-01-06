@@ -13,6 +13,7 @@ import type {
 } from '../types';
 import { normalizeFunctionCall, validateFunctionCall } from '../normalizer';
 import type { ValidationResult } from '../validation';
+import type { FunctionCallMetadata } from '../../llm/requestTypes';
 
 // ============================================================================
 // EDIT TYPES
@@ -52,18 +53,6 @@ const FUNCTION_META: Record<string, FunctionMeta> = {
     description: 'Delete a story object',
     summary: (args) => `${args.type}: ${args.id}`,
   },
-  create_chapter: {
-    editType: 'add',
-    title: 'Create Chapter',
-    description: 'Create a chapter',
-    summary: (args) => args.name as string,
-  },
-  delete_chapter: {
-    editType: 'remove',
-    title: 'Delete Chapter',
-    description: 'Delete a chapter',
-    summary: (args) => args.id as string,
-  },
 
   // Replace
   replace_basic_info: {
@@ -80,12 +69,6 @@ const FUNCTION_META: Record<string, FunctionMeta> = {
     title: 'Update Object',
     description: 'Replace story object fields',
     summary: (args) => `${args.type}: ${args.name || args.id}`,
-  },
-  replace_chapter_outline: {
-    editType: 'edit',
-    title: 'Update Chapter Outline',
-    description: 'Replace chapter outline fields',
-    summary: (args) => args.name as string || args.id as string,
   },
   replace_manuscript: {
     editType: 'edit',
@@ -116,15 +99,6 @@ const FUNCTION_META: Record<string, FunctionMeta> = {
       const type = args.type as string;
       const replacements = args.replacements as unknown[];
       return `${type}: ${replacements?.length ?? 0} replacements`;
-    },
-  },
-  patch_chapter_outline: {
-    editType: 'edit',
-    title: 'Patch Chapter Outline',
-    description: 'Search-replace in chapter outline',
-    summary: (args) => {
-      const replacements = args.replacements as unknown[];
-      return `${replacements?.length ?? 0} replacements`;
     },
   },
   patch_manuscript: {
@@ -473,6 +447,41 @@ export function applyValidationResults(
         status: newStatus,
         reason: newReason,
         failureType: newStatus === 'failed' ? 'validation' : undefined,
+      },
+    };
+  });
+}
+
+/**
+ * Build EditCards from function calls already stored in chat history.
+ * Preserves status/result fields instead of re-running validation.
+ */
+export function buildEditCardsFromFunctionCallMetadata(
+  functionCalls: FunctionCallMetadata[]
+): EditCard[] {
+  return functionCalls.map((fc) => {
+    const card = buildEditCard({
+      id: fc.id,
+      function_name: fc.function_name,
+      arguments: fc.arguments,
+    });
+
+    const acceptedAt =
+      fc.acceptedAt instanceof Date
+        ? fc.acceptedAt
+        : fc.acceptedAt
+          ? new Date(fc.acceptedAt as any)
+          : undefined;
+
+    return {
+      ...card,
+      functionCall: {
+        ...card.functionCall,
+        status: fc.status,
+        reason: fc.reason,
+        failureType: fc.failureType,
+        result: fc.result,
+        acceptedAt,
       },
     };
   });

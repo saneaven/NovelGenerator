@@ -5,6 +5,7 @@ import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import AIEditModal from '../../../components/AIEditModal';
+import { BaseModal } from '../../../components/BaseModal';
 import OutlineSidebar from './OutlineSidebar';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
 import { IconButton } from '../../../components/IconButton';
@@ -770,6 +771,55 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
           onAIEditOutline={(outlineId) => setShowOutlineAIModal(outlineId)}
           onDeleteOutline={handleDeleteOutline}
         />
+      )}
+
+      {/* Edit Outline Modal */}
+      {editingOutline && (
+        <BaseModal
+          isOpen={true}
+          onClose={cancelEditingOutline}
+          size="medium"
+          title="Edit Outline"
+          footer={
+            <div className="form-actions">
+              <TextButton variant="ghost" size="sm" onClick={cancelEditingOutline}>
+                Cancel
+              </TextButton>
+              <TextButton
+                variant="secondary"
+                size="sm"
+                onClick={handleUpdateOutline}
+                disabled={!editOutlineData.name.trim()}
+              >
+                Save
+              </TextButton>
+            </div>
+          }
+        >
+          <div className="item-form edit-form">
+            <div className="form-group">
+              <label htmlFor="edit-outline-name">Outline Title</label>
+              <input
+                id="edit-outline-name"
+                type="text"
+                value={editOutlineData.name}
+                onChange={(e) => setEditOutlineData((prev) => ({ ...prev, name: e.target.value }))}
+                autoFocus
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="edit-outline-description">Description (Optional)</label>
+              <textarea
+                id="edit-outline-description"
+                value={editOutlineData.description}
+                onChange={(e) =>
+                  setEditOutlineData((prev) => ({ ...prev, description: e.target.value }))
+                }
+                rows={4}
+              />
+            </div>
+          </div>
+        </BaseModal>
       )}
 
       {/* AI Edit Modals */}

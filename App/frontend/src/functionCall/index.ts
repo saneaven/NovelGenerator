@@ -6,7 +6,6 @@
  * Main exports:
  * - UnifiedApplicator: Apply function calls to the store
  * - schemaRegistry: Single source of truth for function schemas
- * - useEditCardStore: Zustand store for EditCard state
  * - buildEditCard: Build EditCard from function call
  */
 
@@ -39,8 +38,6 @@ export {
   CRUD_FUNCTION_NAMES,
   REPLACE_FUNCTION_NAMES,
   PATCH_FUNCTION_NAMES,
-  TRANSLATION_FUNCTION_NAMES,
-  isTranslationFunction,
   isCrudFunction,
   isReplaceFunction,
   isPatchFunction,
@@ -86,11 +83,6 @@ export { createStoreActions, createApplicatorWithStore, useApplicator } from './
 
 // EditCards
 export {
-  useEditCardStore,
-  useCardsForMessage,
-  useIsMessageConfirmed,
-  useCardsForSession,
-  useIsSessionConfirmed,
   getEditType,
   getFunctionTitle,
   getFunctionDescription,
@@ -98,22 +90,10 @@ export {
   generateFunctionSummary,
   buildEditCard,
   buildEditCards,
+  buildEditCardsFromFunctionCallMetadata,
   applyValidationResults,
 } from './editCards';
-
-// Hooks
-export {
-  useFunctionCallHandlers,
-  processFunctionCallsForSession,
-  batchConfirmSession,
-  type ProcessFunctionCallsConfig,
-} from './hooks';
-export type {
-  UseFunctionCallHandlersConfig,
-  UseFunctionCallHandlersReturn,
-  FunctionCallHandlersState,
-  FunctionCallHandlersActions,
-} from './hooks';
+export type { BuildEditCardOptions, BuildEditCardsOptions } from './editCards';
 
 // Validation
 export { validate, validateOne } from './validation';

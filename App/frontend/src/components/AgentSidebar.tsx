@@ -3,7 +3,7 @@ import { useAgentStore, type Agent } from '../store/agentStore';
 import { useSidebarStore } from '../store/sidebarStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
-import { TranslationService } from '../services/translationService';
+import { getBestLanguageData } from '../utils/languageData';
 import { BaseSidebar } from './BaseSidebar';
 import { IconButton } from './IconButton';
 import { SpeechBubble, Plus, Trash, Edit, Close } from './icons';
@@ -97,7 +97,7 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
       return content.length > 50 ? `${content.substring(0, 50)}...` : content || 'No content';
     }
 
-    const fallback = TranslationService.getBestLanguageData(lastMessage.data, mainLanguage, defaultSubLanguage);
+    const fallback = getBestLanguageData(lastMessage.data, mainLanguage, defaultSubLanguage);
     if (fallback) {
       const content = extractText(fallback.data);
       return content.length > 50 ? `${content.substring(0, 50)}...` : content || 'No content';

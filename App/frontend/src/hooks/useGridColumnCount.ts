@@ -5,7 +5,7 @@
  * Calculates based on grid width and 30dvh minimum column width.
  */
 
-import { useState, useEffect, RefObject } from 'react';
+import { useState, useEffect, type RefObject } from 'react';
 
 const DVH = window.innerHeight * 0.2; // 20dvh
 

@@ -4,6 +4,7 @@
  */
 
 import apiClient from '../api/client';
+import { assetService, type Asset } from '../api/assetService';
 import type {
     ProcessedImageRequest,
     ImageGenerationProgress,
@@ -146,33 +147,10 @@ export async function* generateImage(
  * Fetch full asset details after generation
  */
 export async function fetchAsset(projectId: string, assetId: string): Promise<AssetResponse> {
-    return apiClient.get<AssetResponse>(`/api/v1/assets/${projectId}/${assetId}`);
+    return assetService.getAsset(projectId, assetId);
 }
 
-// Asset response type (matching backend)
-interface AssetResponse {
-    id: string;
-    project_id: string;
-    name: string;
-    file_path: string;
-    thumbnail_path: string | null;
-    mime_type: string;
-    asset_type: 'scene' | 'object' | null;
-    generation_prompt: string | null;
-    generation_positive_prompt: string | null;
-    generation_negative_prompt: string | null;
-    generation_provider: string | null;
-    generation_model: string | null;
-    generation_settings: Record<string, unknown> | null;
-    generation_reference_objects: Array<{ id: string; type: string; name: string }> | null;
-    width: number | null;
-    height: number | null;
-    file_size: number | null;
-    created_at: string;
-    updated_at: string;
-    file_url: string;
-    thumbnail_url: string | null;
-}
+export type AssetResponse = Asset;
 
 /**
  * List available image providers

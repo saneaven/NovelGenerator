@@ -5,7 +5,7 @@ Translate the following content from **{{ translation.sourceLanguage }}** to **{
 {{#if (hasItems translation.currentTranslatedContents)}}
 ## Preview Translations ({{ translation.targetLanguage }})
 
-Review these existing translations to decide whether to use `set_*` (full rewrite) or `patch_*` (minor fixes):
+Review these existing translations to decide whether to use `replace_*` (full rewrite) or `patch_*` (minor fixes):
 
 <current>
 {{#each translation.currentTranslatedContents}}

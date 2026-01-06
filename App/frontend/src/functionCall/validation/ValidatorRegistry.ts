@@ -12,6 +12,8 @@ import {
   validatePatchRequiredFields,
   validateObjectExists,
   validatePatchApplicable,
+  validateOutlineParentExists,
+  validateActParentExists,
 } from './validators';
 
 // ============================================================================
@@ -28,21 +30,18 @@ export const FUNCTION_VALIDATORS: Record<string, Validator[]> = {
   // -------------------------------------------------------------------------
   create_story_object: [validateTypeMapping],
   delete_story_object: [validateTypeMapping, validateRequiredId, validateObjectExists],
-  create_chapter: [],
-  delete_chapter: [validateRequiredId, validateObjectExists],
   create_outline: [],
   delete_outline: [validateRequiredId, validateObjectExists],
-  create_outline_act: [],
+  create_outline_act: [validateOutlineParentExists],
   delete_outline_act: [validateRequiredId, validateObjectExists],
-  create_outline_chapter: [],
+  create_outline_chapter: [validateActParentExists],
   delete_outline_chapter: [validateRequiredId, validateObjectExists],
 
   // -------------------------------------------------------------------------
   // Replace Operations
   // -------------------------------------------------------------------------
-  replace_basic_info: [validateRequiredId, validateObjectExists],
+  replace_basic_info: [],
   replace_story_object: [validateTypeMapping, validateRequiredId, validateObjectExists],
-  replace_chapter_outline: [validateRequiredId, validateObjectExists],
   replace_manuscript: [validateRequiredId, validateObjectExists],
   replace_outline: [validateRequiredId, validateObjectExists],
   replace_outline_act: [validateRequiredId, validateObjectExists],
@@ -54,12 +53,6 @@ export const FUNCTION_VALIDATORS: Record<string, Validator[]> = {
   patch_basic_info: [validatePatchRequiredFields, validateObjectExists, validatePatchApplicable],
   patch_story_object: [
     validateTypeMapping,
-    validateRequiredId,
-    validatePatchRequiredFields,
-    validateObjectExists,
-    validatePatchApplicable,
-  ],
-  patch_chapter_outline: [
     validateRequiredId,
     validatePatchRequiredFields,
     validateObjectExists,
