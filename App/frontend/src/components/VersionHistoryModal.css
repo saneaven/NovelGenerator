@@ -356,10 +356,8 @@
   display: block;
   white-space: pre-wrap;
   word-break: break-word;
-  background: var(--color-surface-subtle);
   padding: var(--spacing-md);
   border-radius: var(--border-radius-sm);
-  border-left: 3px solid var(--color-brand-primary-border);
   font-size: var(--font-size-sm);
 }
 

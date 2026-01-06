@@ -10,7 +10,7 @@ import OutlineSidebar from './OutlineSidebar';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
-import { Expand, Collapse, Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close, HamburgerMenu } from '../../../components/icons';
+import { Expand, Collapse, Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close, HamburgerMenu, ChevronRight } from '../../../components/icons';
 import { Warning } from '../../../components/icons';
 import type { UnifiedObject, OutlineObject, ActObject, ChapterObject } from '../../../types/unifiedObject';
 import './OutlinePanel.css';
@@ -34,6 +34,11 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const [editingOutline, setEditingOutline] = useState<string | null>(null);
   const [editOutlineData, setEditOutlineData] = useState<{ name: string; description: string }>({ name: '', description: '' });
   const [showOutlineAIModal, setShowOutlineAIModal] = useState<string | null>(null);
+
+  // Header description expansion and inline editing state
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [editingDescriptionValue, setEditingDescriptionValue] = useState('');
 
   // Editing state for acts
   const [editingAct, setEditingAct] = useState<string | null>(null);
@@ -224,6 +229,52 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     setEditOutlineData({ name: '', description: '' });
   };
 
+  // Inline description editing handlers
+  const handleStartEditDescription = () => {
+    setEditingDescriptionValue(selectedOutlineData.description || '');
+    setIsEditingDescription(true);
+  };
+
+  const handleSaveDescription = async () => {
+    if (!selectedOutlineId) return;
+
+    const outline = store.objects[selectedOutlineId] as OutlineObject;
+    if (!outline) return;
+
+    const { effectiveLanguage } = getEffectiveLanguage(outline);
+
+    try {
+      await store.updateObject('outline', selectedOutlineId, {
+        data: {
+          name: selectedOutlineData.name,
+          description: editingDescriptionValue.trim()
+        },
+        language: effectiveLanguage,
+        create_new_version: true,
+        user_request: 'Manual Edit',
+      });
+      setIsEditingDescription(false);
+    } catch (error) {
+      console.error('Failed to update outline description:', error);
+      showError('Update Error', 'Failed to update outline description. Please try again.');
+    }
+  };
+
+  const handleCancelEditDescription = () => {
+    setIsEditingDescription(false);
+    setEditingDescriptionValue('');
+  };
+
+  const handleDescriptionKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      handleCancelEditDescription();
+    }
+    // Ctrl/Cmd + Enter to save
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      handleSaveDescription();
+    }
+  };
+
   const handleDeleteOutline = async (outlineId: string) => {
     if (!confirm('Are you sure you want to delete this outline? All acts and chapters within it will also be deleted.')) {
       return;
@@ -407,28 +458,77 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   return (
     <div className="outline-panel">
       <div className="outline-panel-header">
-        <h2>{selectedOutlineData.name || 'Outline'}</h2>
-
-        <div className="header-actions">
-          {selectedOutlineId && (
-            <TextButton
-              onClick={() => setShowAddActForm(selectedOutlineId)}
-              iconLeft={<Plus size="xs" />}
-              size="sm"
-            >
-              Add Act
-            </TextButton>
-          )}
-          <TextButton
-            onClick={handleOpenSidebar}
-            iconLeft={<HamburgerMenu size="xs" />}
-            size="sm"
-            variant="ghost"
-            className="desktop-only"
+        <div className="header-top-row">
+          <div
+            className="header-title-section"
+            onClick={() => selectedOutlineId && setIsDescriptionExpanded(!isDescriptionExpanded)}
           >
-            Select Outline
-          </TextButton>
+            {selectedOutlineId && (
+              <span className={`expand-toggle ${isDescriptionExpanded ? 'expanded' : ''}`}>
+                <ChevronRight size="xs" />
+              </span>
+            )}
+            <h2>{selectedOutlineData.name || 'Outline'}</h2>
+          </div>
+
+          <div className="header-actions">
+            {selectedOutlineId && (
+              <TextButton
+                onClick={() => setShowAddActForm(selectedOutlineId)}
+                iconLeft={<Plus size="xs" />}
+                size="sm"
+              >
+                Add Act
+              </TextButton>
+            )}
+            <TextButton
+              onClick={handleOpenSidebar}
+              iconLeft={<HamburgerMenu size="xs" />}
+              size="sm"
+              variant="ghost"
+              className="desktop-only"
+            >
+              Select Outline
+            </TextButton>
+          </div>
         </div>
+
+        {selectedOutlineId && (
+          <div className={`description-section ${isDescriptionExpanded ? 'expanded' : ''}`}>
+            {isEditingDescription ? (
+              <div className="description-edit-container">
+                <textarea
+                  value={editingDescriptionValue}
+                  onChange={(e) => setEditingDescriptionValue(e.target.value)}
+                  onKeyDown={handleDescriptionKeyDown}
+                  autoFocus
+                  placeholder="Enter description..."
+                />
+                <div className="description-edit-actions">
+                  <TextButton size="sm" variant="ghost" onClick={handleCancelEditDescription}>
+                    Cancel
+                  </TextButton>
+                  <TextButton size="sm" onClick={handleSaveDescription}>
+                    Save
+                  </TextButton>
+                </div>
+              </div>
+            ) : (
+              <div className="description-display">
+                <p className="description-text">
+                  {selectedOutlineData.description || 'No description'}
+                </p>
+                <button
+                  className="description-edit-button"
+                  onClick={handleStartEditDescription}
+                  title="Edit description"
+                >
+                  <Edit size="xs" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="outline-panel-content">

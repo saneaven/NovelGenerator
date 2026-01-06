@@ -211,7 +211,11 @@ const NotificationDetailModal: React.FC<NotificationDetailModalProps> = ({
         {session.contentParts.length > 0 ? (
           <>
             <div className="notification-detail-thinking">
-              <ThinkingDisplay messageId={session.id} contentParts={session.contentParts} displayMode="inline" />
+              <ThinkingDisplay
+                messageId={session.id}
+                contentParts={session.contentParts}
+                isStreaming={session.status === 'running'}
+              />
             </div>
 
             <div className="notification-detail-stream">

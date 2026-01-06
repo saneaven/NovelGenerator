@@ -290,7 +290,6 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                             <ThinkingDisplay
                                 messageId={streamingSessionId!}
                                 contentParts={streamingSession.contentParts}
-                                displayMode="separate"
                                 isStreaming={streamingSession.status === 'running'}
                             />
                         )}
@@ -339,7 +338,6 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                             <ThinkingDisplay
                                 messageId={streamingSessionId!}
                                 contentParts={streamingSession.contentParts}
-                                displayMode="separate"
                                 isStreaming={streamingSession.status === 'running'}
                             />
                         )}
@@ -388,7 +386,6 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
                             <ThinkingDisplay
                                 messageId={streamingSessionId!}
                                 contentParts={streamingSession.contentParts}
-                                displayMode="separate"
                                 isStreaming={streamingSession.status === 'running'}
                             />
                         )}

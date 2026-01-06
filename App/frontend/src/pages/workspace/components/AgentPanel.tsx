@@ -630,7 +630,6 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                 <ThinkingDisplay
                                     messageId={message.chatMessage.id}
                                     contentParts={message.chatMessage.contentParts}
-                                    displayMode="separate"
                                     isStreaming={isLoading && message.chatMessage.id === storedMessages[storedMessages.length - 1]?.id}
                                 />
                             )}

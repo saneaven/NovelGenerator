@@ -1,45 +1,5 @@
 /* ===================================
-   INLINE MODE - Thinking appears where it occurred
-   =================================== */
-.message-content-interleaved {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.content-part {
-  line-height: 1.6;
-}
-
-.content-part-content .content-text {
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-
-.content-part-thinking {
-  background: rgba(100, 150, 255, 0.05);
-  border-left: 3px solid rgba(100, 150, 255, 0.3);
-  padding: 12px;
-  border-radius: 4px;
-}
-
-.thinking-indicator {
-  font-size: 0.85em;
-  font-weight: 600;
-  color: rgba(100, 150, 255, 0.8);
-  margin-bottom: 8px;
-}
-
-.thinking-block .thinking-text {
-  color: #666;
-  font-style: italic;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-
-/* ===================================
-   SEPARATE MODE - Individual minimal thinking cards
+   ThinkingDisplay - Collapsible thinking cards
    =================================== */
 .message-with-thinking {
   display: flex;
@@ -106,6 +66,8 @@
   white-space: pre-wrap;
   word-wrap: break-word;
   animation: fadeIn 0.2s ease-in;
+  max-height: 200px;
+  overflow-y: auto;
 }
 
 @keyframes fadeIn {
@@ -119,29 +81,10 @@
   }
 }
 
-.message-content-clean {
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-
 /* ===================================
    DARK MODE SUPPORT
    =================================== */
 @media (prefers-color-scheme: dark) {
-  .content-part-thinking {
-    background: rgba(100, 150, 255, 0.08);
-    border-left-color: rgba(100, 150, 255, 0.4);
-  }
-
-  .thinking-indicator {
-    color: rgba(130, 180, 255, 0.9);
-  }
-
-  .thinking-block .thinking-text {
-    color: #bbb;
-  }
-
   .thinking-card-minimal {
     border-color: rgba(255, 255, 255, 0.1);
   }

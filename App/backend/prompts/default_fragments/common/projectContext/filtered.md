@@ -64,25 +64,33 @@
 {{/with}}
 
 {{#if project.outline}}
-{{#each project.outline.outlines}}
-{{#each this.acts}}
+{{#with (filterByIds project.outline.outlines params.[0]) as |selectedOutlines|}}
+{{#each selectedOutlines}}
+### Story Outline - {{ this.name }} (id: {{ this.id }})
+
+{{ this.description }}
+
+{{#with (filterByIds this.acts @root.params.[0]) as |selectedActs|}}
+{{#if (hasItems selectedActs)}}
+{{#each selectedActs}}
+#### Act: {{ this.name }} (id: {{ this.id }})
+
+{{ this.description }}
+
 {{#with (filterByIds this.chapters @root.params.[0]) as |selectedChapters|}}
 {{#if (hasItems selectedChapters)}}
-### Story Outline - {{ ../../name }}
-
-#### Act: {{ ../name }} (id: {{ ../id }})
-
-{{ ../description }}
-
 **Chapters:**
 {{#each selectedChapters}}
 - **{{ this.name }}** (id: {{ this.id }}): {{ this.description }}
 {{/each}}
+{{/if}}
+{{/with}}
 
+{{/each}}
 {{/if}}
 {{/with}}
 {{/each}}
-{{/each}}
+{{/with}}
 {{/if}}
 
 {{#with (filterByIds project.manuscripts params.[0]) as |selectedManuscripts|}}

@@ -54,18 +54,24 @@
 
 {{#if project.outline}}
 {{#each project.outline.outlines}}
-### Story Outline - {{ this.name }}
+### Story Outline - {{ this.name }} (id: {{ this.id }})
 
+{{ this.description }}
+
+{{#if (hasItems this.acts)}}
 {{#each this.acts}}
 #### Act: {{ this.name }} (id: {{ this.id }})
 
 {{ this.description }}
 
+{{#if (hasItems this.chapters)}}
 **Chapters:**
 {{#each this.chapters}}
 - **{{ this.name }}** (id: {{ this.id }}): {{ this.description }}
 {{/each}}
+{{/if}}
 
 {{/each}}
+{{/if}}
 {{/each}}
 {{/if}}
