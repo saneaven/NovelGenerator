@@ -242,6 +242,7 @@ class OpenAIResponsesProvider(BaseProvider):
         captured_usage: Optional[Dict] = None
         stream = None
         native_fc_parser = NativeFunctionCallsStreamParser() if native_function_call else None
+        tool_call_indices: Dict[str, int] = {}
 
         try:
             stream = await client.responses.create(**request)
@@ -313,13 +314,17 @@ class OpenAIResponsesProvider(BaseProvider):
                     call_id = getattr(event, "call_id", "")
                     name = getattr(event, "name", "")
                     if delta_args:
+                        call_key = call_id or f"tool-call-{len(tool_call_indices)}"
+                        if call_key not in tool_call_indices:
+                            tool_call_indices[call_key] = len(tool_call_indices)
+                        tool_index = tool_call_indices[call_key]
                         chunk = {
                             "choices": [{
                                 "index": 0,
                                 "delta": {
                                     "tool_calls": [{
-                                        "index": 0,
-                                        "id": call_id,
+                                        "index": tool_index,
+                                        "id": call_id or call_key,
                                         "type": "function",
                                         "function": {
                                             "name": name,

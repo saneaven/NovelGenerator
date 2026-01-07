@@ -2,38 +2,23 @@
 export { FunctionCallCardContainer } from './FunctionCallCardContainer';
 export { default as FunctionCallCard } from './FunctionCallCardContainer';
 
-// Sub-components (for advanced usage)
-export { FunctionCallCardHeader } from './FunctionCallCardHeader';
-export { FunctionCallCardList } from './FunctionCallCardList';
-export { StreamingOperationItem } from './StreamingOperationItem';
-export { PendingOperationItem } from './PendingOperationItem';
-export { ConfirmedOperationItem } from './ConfirmedOperationItem';
-export { OperationPreview } from './OperationPreview';
-export { CardFooter } from './CardFooter';
-export { ConfirmedFooter } from './ConfirmedFooter';
-export { StatusBadge } from './StatusBadge';
+// Sub-components
 export { ActionBadge } from './ActionBadge';
-export { SelectionIndicator } from './SelectionIndicator';
+export { OperationItem } from './OperationItem';
+export { OperationDetails } from './OperationDetails';
 
 // Hooks
-export { useCardSelection, useCardExpansion } from './hooks';
+export { useCardSelection } from './hooks';
 
 // Types
 export type {
   CardMode,
   FunctionCallCardContainerProps,
-  CardWithPreview,
-  StreamingPreview,
-  SelectionState,
-  StoryObjectsLike,
 } from './types';
 
 // Constants
 export {
   ACTION_LABELS,
   TYPE_LABELS,
-  STATUS_LABELS,
-  MODE_TITLES,
   humanize,
-  formatRelativeTime,
 } from './constants';

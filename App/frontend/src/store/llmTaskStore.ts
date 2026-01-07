@@ -7,6 +7,45 @@ const abortControllers = new Map<string, AbortController>();
 
 type AnySession = TaskSessionState<any, any>;
 
+function getProgressKey(progress: FunctionCallProgress): string {
+  const index = progress?.draft?.index;
+  if (typeof index === 'number') {
+    return `index:${index}`;
+  }
+  return `id:${progress?.draft?.id ?? ''}`;
+}
+
+function mergeFunctionCallProgress(
+  existing: FunctionCallProgress[] | undefined,
+  incoming: FunctionCallProgress[]
+): FunctionCallProgress[] {
+  // Explicit empty array means "clear"
+  if (incoming.length === 0) {
+    return [];
+  }
+
+  const order: string[] = [];
+  const map = new Map<string, FunctionCallProgress>();
+
+  for (const p of existing ?? []) {
+    const key = getProgressKey(p);
+    if (!map.has(key)) {
+      order.push(key);
+    }
+    map.set(key, p);
+  }
+
+  for (const p of incoming) {
+    const key = getProgressKey(p);
+    if (!map.has(key)) {
+      order.push(key);
+    }
+    map.set(key, p);
+  }
+
+  return order.map((key) => map.get(key)!).filter(Boolean);
+}
+
 interface LLMTaskStore {
   sessions: Record<string, AnySession | undefined>;
 
@@ -47,12 +86,17 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
     set((state) => {
       const existing = state.sessions[id];
       if (!existing) return state;
+      const mergedProgress =
+        partial.functionCallProgress !== undefined
+          ? mergeFunctionCallProgress(existing.functionCallProgress, partial.functionCallProgress)
+          : existing.functionCallProgress;
       return {
         sessions: {
           ...state.sessions,
           [id]: {
             ...existing,
             ...partial,
+            functionCallProgress: mergedProgress,
             updatedAt: Date.now(),
           },
         },

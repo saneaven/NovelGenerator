@@ -308,6 +308,13 @@ class _FunctionCallArgsStreamer:
                             if not self._reported_function_name:
                                 newly_discovered_fn = fn
                                 self._reported_function_name = True
+            else:
+                # Start of any JSON string (keys or values) outside our dedicated capture modes.
+                # Without this, commas/braces inside string values can be misinterpreted as
+                # top-level JSON delimiters while streaming.
+                if ch == '"':
+                    self._in_string = True
+                    self._escape = False
 
             # Update structural stack (only when not inside a string).
             if not self._in_string:

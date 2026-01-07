@@ -159,7 +159,7 @@ export class LLMTask {
       }
 
       // 5. Initialize function tracker
-      this.functionTracker = new FunctionCallStreamTracker(functions);
+      this.functionTracker = new FunctionCallStreamTracker();
 
       // 7. Stream with RAF throttling
       let currentPartType: ContentPartType | null = null;

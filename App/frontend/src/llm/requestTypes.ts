@@ -81,7 +81,6 @@ export interface FunctionCallDraft {
   functionName: string;
   rawArguments: string;
   parsedArguments: any | null;
-  segments: string[];
 }
 
 export interface FunctionCallOperationFieldPreview {

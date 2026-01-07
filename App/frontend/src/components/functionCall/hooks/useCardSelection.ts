@@ -1,6 +1,14 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { EditCard } from '../../../functionCall/types';
-import type { SelectionState } from '../types';
+
+interface SelectionState {
+  selections: Record<string, boolean>;
+  selectedCount: number;
+  rejectedCount: number;
+  toggleSelection: (cardId: string) => void;
+  selectAll: () => void;
+  deselectAll: () => void;
+}
 
 export function useCardSelection(
   cards: EditCard[],

@@ -4,6 +4,7 @@ export const ACTION_LABELS: Record<string, string> = {
   delete: 'Delete',
   replace: 'Replace',
   patch: 'Patch',
+  set: 'Set',
 };
 
 export const TYPE_LABELS: Record<string, string> = {
@@ -12,9 +13,11 @@ export const TYPE_LABELS: Record<string, string> = {
   organization: 'Organization',
   location: 'Location',
   lorebook: 'Lorebook',
+  outline: 'Outline',
   act: 'Act',
   chapter: 'Chapter',
   manuscript: 'Manuscript',
+  story_object: 'Story Object',
 };
 
 export const STATUS_LABELS: Record<string, string> = {

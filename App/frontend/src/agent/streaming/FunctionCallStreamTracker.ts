@@ -1,12 +1,9 @@
 import { Allow, parse } from 'partial-json';
 import type {
   FunctionCallDraft,
-  FunctionCallOperationPreview,
   FunctionCallProgress,
   FunctionCallProgressStatus,
 } from '../../llm/requestTypes';
-import type { FunctionCallSchema } from '../../functionCall';
-import { buildPreviewFromOperation } from '../utils/functionCallPreview';
 
 type ToolCallDelta = {
   index?: number;
@@ -17,25 +14,83 @@ type ToolCallDelta = {
   };
 };
 
+type JsonObjectStreamState = {
+  started: boolean;
+  depth: number;
+  inString: boolean;
+  escape: boolean;
+  completed: boolean;
+};
+
+function createJsonObjectStreamState(): JsonObjectStreamState {
+  return {
+    started: false,
+    depth: 0,
+    inString: false,
+    escape: false,
+    completed: false,
+  };
+}
+
+function advanceJsonObjectStreamState(state: JsonObjectStreamState, text: string): void {
+  if (state.completed || !text) {
+    return;
+  }
+
+  for (const ch of text) {
+    if (!state.started) {
+      if (ch === '{') {
+        state.started = true;
+        state.depth = 1;
+      }
+      continue;
+    }
+
+    if (state.inString) {
+      if (state.escape) {
+        state.escape = false;
+        continue;
+      }
+      if (ch === '\\') {
+        state.escape = true;
+        continue;
+      }
+      if (ch === '"') {
+        state.inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      state.inString = true;
+      continue;
+    }
+
+    if (ch === '{') {
+      state.depth += 1;
+      continue;
+    }
+
+    if (ch === '}') {
+      state.depth -= 1;
+      if (state.depth === 0) {
+        state.completed = true;
+        return;
+      }
+    }
+  }
+}
+
 interface DraftState {
   draft: FunctionCallDraft;
   status: FunctionCallProgressStatus;
   error?: string;
   updatedAt: number;
-  operationPreviews: FunctionCallOperationPreview[];
+  jsonState: JsonObjectStreamState;
 }
 
 export class FunctionCallStreamTracker {
   private drafts = new Map<number, DraftState>();
-  private schemaByName: Record<string, FunctionCallSchema> = {};
-
-  constructor(functionSchemas?: FunctionCallSchema[]) {
-    if (functionSchemas) {
-      for (const schema of functionSchemas) {
-        this.schemaByName[schema.name] = schema;
-      }
-    }
-  }
 
   applyDelta(deltas?: ToolCallDelta[] | null): FunctionCallProgress[] {
     if (!deltas || deltas.length === 0) {
@@ -58,7 +113,7 @@ export class FunctionCallStreamTracker {
       if (delta.function?.arguments) {
         const chunk = delta.function.arguments;
         state.draft.rawArguments += chunk;
-        state.draft.segments.push(chunk);
+        advanceJsonObjectStreamState(state.jsonState, chunk);
         state.updatedAt = Date.now();
         this.parseArguments(state);
       } else if (delta.function?.name) {
@@ -112,11 +167,10 @@ export class FunctionCallStreamTracker {
           functionName: '',
           rawArguments: '',
           parsedArguments: null,
-          segments: [],
         },
         status: 'collecting',
         updatedAt: now,
-        operationPreviews: [],
+        jsonState: createJsonObjectStreamState(),
       });
     }
 
@@ -126,86 +180,27 @@ export class FunctionCallStreamTracker {
   private parseArguments(state: DraftState): void {
     const raw = state.draft.rawArguments;
     try {
-      if (raw.trim()) {
-        const parsed = parse(raw, Allow.ALL);
-        state.draft.parsedArguments = parsed;
-      }
-      state.error = undefined;
-      const coverage = this.computeCoverage(state);
-      state.status = coverage >= 0.98 ? 'ready' : 'validating';
-    } catch (error) {
-      state.error = error instanceof Error ? error.message : String(error);
-      state.status = 'collecting';
-    } finally {
-      state.operationPreviews = this.buildOperationPreviews(state);
-    }
-  }
-
-  private computeCoverage(state: DraftState): number {
-    const args = state.draft.parsedArguments;
-    if (!args) {
-      return 0;
-    }
-
-    const schema = this.schemaByName[state.draft.functionName];
-    if (!schema) {
-      return 1;
-    }
-
-    return this.computeSchemaCoverage(schema.parameters, args);
-  }
-
-  private computeSchemaCoverage(schema: any, value: any): number {
-    if (!schema) {
-      return value ? 1 : 0;
-    }
-
-    const required: string[] = Array.isArray(schema.required) ? schema.required : [];
-    const properties = schema.properties || {};
-
-    if (!required.length) {
-      if (schema.type === 'array' && Array.isArray(value) && schema.items) {
-        if (value.length === 0) {
-          return 0.5;
-        }
-        const perItem = value.reduce((acc: number, item: any) => acc + this.computeSchemaCoverage(schema.items, item), 0);
-        return Math.min(1, perItem / value.length);
-      }
-
-      if (schema.type === 'object' && typeof value === 'object' && value !== null) {
-        const keys = Object.keys(properties);
-        if (!keys.length) {
-          return 1;
-        }
-        const perKey = keys.reduce((acc, key) => acc + this.computeSchemaCoverage(properties[key], value[key]), 0);
-        return Math.min(1, perKey / keys.length);
-      }
-
-      return value !== undefined && value !== null ? 1 : 0;
-    }
-
-    let covered = 0;
-    required.forEach((key) => {
-      if (!(key in value)) {
+      if (!raw.trim()) {
+        state.draft.parsedArguments = null;
+        state.error = undefined;
+        state.status = 'collecting';
         return;
       }
 
-      const propSchema = properties[key];
-      const childValue = value[key];
+      state.draft.parsedArguments = parse(raw, Allow.ALL);
+      state.error = undefined;
 
-      if (propSchema?.type === 'array') {
-        if (Array.isArray(childValue) && childValue.length > 0) {
-          const sum = childValue.reduce((acc: number, item: any) => acc + this.computeSchemaCoverage(propSchema.items, item), 0);
-          covered += Math.min(1, sum / childValue.length);
-        }
-      } else if (propSchema?.type === 'object') {
-        covered += this.computeSchemaCoverage(propSchema, childValue);
-      } else if (childValue !== undefined && childValue !== null && childValue !== '') {
-        covered += 1;
+      if (state.jsonState.completed) {
+        state.draft.parsedArguments = JSON.parse(raw);
+        state.status = 'ready';
+      } else {
+        state.status = 'validating';
       }
-    });
-
-    return required.length ? Math.min(1, covered / required.length) : 1;
+    } catch (error) {
+      state.error = error instanceof Error ? error.message : String(error);
+      state.draft.parsedArguments = null;
+      state.status = 'error';
+    }
   }
 
   private toProgress(state: DraftState): FunctionCallProgress {
@@ -214,96 +209,13 @@ export class FunctionCallStreamTracker {
       status: state.status,
       preview: state.draft.parsedArguments || undefined,
       rawPreview: this.buildRawPreview(state),
-      operationPreviews: state.operationPreviews,
       error: state.error,
       updatedAt: state.updatedAt,
     };
   }
 
   private buildRawPreview(state: DraftState): string {
-    if (state.draft.parsedArguments) {
-      try {
-        return JSON.stringify(state.draft.parsedArguments, null, 2);
-      } catch {
-        // Fall through to raw text
-      }
-    }
-
-    if (state.draft.segments.length > 0) {
-      const joined = state.draft.segments.join('');
-      return joined || '';
-    }
-
-    return '';
+    return state.draft.rawArguments;
   }
 
-  private buildOperationPreviews(state: DraftState): FunctionCallOperationPreview[] {
-    if (!state.draft.rawArguments.trim()) {
-      return [];
-    }
-
-    if (!state.error && state.draft.parsedArguments) {
-      return this.buildParsedOperationPreviews(state);
-    }
-
-    return this.buildFallbackOperationPreviews(state);
-  }
-
-  private buildParsedOperationPreviews(state: DraftState): FunctionCallOperationPreview[] {
-    const args = state.draft.parsedArguments;
-    if (!args) {
-      return [];
-    }
-
-    const schema = this.schemaByName[state.draft.functionName];
-    const operationsProperty = schema?.parameters?.properties?.operations as Record<string, unknown> | undefined;
-    const operationsSchema = operationsProperty?.items;
-
-    if (Array.isArray(args.operations)) {
-      return args.operations.map((operation: unknown, index: number) =>
-        buildPreviewFromOperation(operation, index, operationsSchema)
-      );
-    }
-
-    return [buildPreviewFromOperation(args, 0, schema?.parameters)];
-  }
-
-  private buildFallbackOperationPreviews(state: DraftState): FunctionCallOperationPreview[] {
-    const raw = state.draft.rawArguments;
-    if (!raw.trim()) {
-      return [];
-    }
-
-    const matches = Array.from(raw.matchAll(/"action"\s*:\s*"([^"]+)"/g));
-    if (!matches.length) {
-      return [
-        {
-          key: 'raw',
-          rawSnippet: this.truncate(raw, 400),
-        },
-      ];
-    }
-
-    return matches.map((match, index) => {
-      const start = Math.max(0, (match.index ?? 0) - 80);
-      const end = Math.min(raw.length, (match.index ?? 0) + 220);
-      const slice = raw.slice(start, end);
-      const typeMatch = slice.match(/"type"\s*:\s*"([^"]+)"/);
-      const idMatch = slice.match(/"id"\s*:\s*"([^"]+)"/);
-      return {
-        key: `raw-${index}`,
-        action: match[1],
-        type: typeMatch?.[1],
-        id: idMatch?.[1],
-        rawSnippet: this.truncate(slice, 360),
-      };
-    });
-  }
-
-  private truncate(value: string, limit: number): string {
-    if (value.length <= limit) {
-      return value;
-    }
-    return `${value.slice(0, limit)}…`;
-  }
 }

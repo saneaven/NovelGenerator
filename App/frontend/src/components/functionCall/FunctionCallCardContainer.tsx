@@ -1,16 +1,105 @@
-import React, { useMemo, useState, useCallback } from 'react';
-import type { FunctionCallOperationPreview } from '../../llm/requestTypes';
-import { buildOperationPreviewsFromArgs } from '../../agent/utils/functionCallPreview';
-import { resolveStoryObjectName, parseFunctionName } from '../../agent/utils/objectNameResolver';
-import { useCardSelection, useCardExpansion } from './hooks';
-import { FunctionCallCardHeader } from './FunctionCallCardHeader';
-import { FunctionCallCardList } from './FunctionCallCardList';
-import { CardFooter } from './CardFooter';
-import { ConfirmedFooter } from './ConfirmedFooter';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { getFunctionDisplayName } from '../../functionCall';
+import type { FunctionCallProgress } from '../../llm/requestTypes';
+import { resolveStoryObjectName } from '../../agent/utils/objectNameResolver';
 import { useStoryObjects } from '../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import type { FunctionCallCardContainerProps, CardWithPreview, StreamingPreview } from './types';
+import type { FunctionCallCardContainerProps, CardMode } from './types';
+import { useCardSelection } from './hooks';
+import { OperationItem } from './OperationItem';
 import './FunctionCallCard.css';
+
+function getAction(functionName: string): string | undefined {
+  if (!functionName) return undefined;
+  if (functionName.startsWith('create_')) return 'create';
+  if (functionName.startsWith('delete_')) return 'delete';
+  if (functionName.startsWith('replace_')) return 'replace';
+  if (functionName.startsWith('patch_')) return 'patch';
+  if (functionName.startsWith('set_')) return 'set';
+  return undefined;
+}
+
+function getType(functionName: string, args: Record<string, unknown> | undefined): string | undefined {
+  const argType = args?.type;
+  if (typeof argType === 'string' && argType.trim()) return argType;
+
+  if (functionName.includes('basic_info')) return 'basic_info';
+  if (functionName.includes('manuscript')) return 'manuscript';
+  if (functionName.includes('outline_act')) return 'act';
+  if (functionName.includes('outline_chapter')) return 'chapter';
+  if (functionName.includes('outline')) return 'outline';
+  if (functionName.includes('story_object')) return 'story_object';
+
+  return undefined;
+}
+
+function getTargetId(type: string | undefined, args: Record<string, unknown> | undefined): string | undefined {
+  if (!args) return undefined;
+
+  if (type === 'manuscript') {
+    const chapterId = args.chapterId;
+    if (typeof chapterId === 'string' && chapterId.trim()) return chapterId;
+  }
+
+  const id = args.id;
+  if (typeof id === 'string' && id.trim()) return id;
+
+  const chapterId = args.chapterId;
+  if (typeof chapterId === 'string' && chapterId.trim()) return chapterId;
+
+  const actId = args.actId;
+  if (typeof actId === 'string' && actId.trim()) return actId;
+
+  const outlineId = args.outlineId;
+  if (typeof outlineId === 'string' && outlineId.trim()) return outlineId;
+
+  return undefined;
+}
+
+function getLabel(params: {
+  functionName: string;
+  fallbackTitle: string;
+  action?: string;
+  type?: string;
+  args?: Record<string, unknown>;
+  storyObjects: ReturnType<typeof useStoryObjects>;
+}): string {
+  const { functionName, fallbackTitle, action, type, args, storyObjects } = params;
+
+  // Create operations should show the provided name/title when present.
+  if (action === 'create') {
+    const name = args?.name;
+    if (typeof name === 'string' && name.trim()) return name;
+    const title = args?.title;
+    if (typeof title === 'string' && title.trim()) return title;
+  }
+
+  const targetId = getTargetId(type, args);
+  const resolved = resolveStoryObjectName(storyObjects, type, targetId);
+  if (resolved) return resolved;
+
+  const name = args?.name;
+  if (typeof name === 'string' && name.trim()) return name;
+
+  const title = args?.title;
+  if (typeof title === 'string' && title.trim()) return title;
+
+  if (!fallbackTitle.trim()) return functionName || 'Function call';
+  return fallbackTitle;
+}
+
+function modeLabel(mode: CardMode): string {
+  switch (mode) {
+    case 'streaming':
+      return 'Streaming';
+    case 'pending':
+      return 'Pending';
+    case 'confirmed':
+      return 'Completed';
+    default:
+      return mode;
+  }
+}
 
 export const FunctionCallCardContainer: React.FC<FunctionCallCardContainerProps> = ({
   mode,
@@ -23,136 +112,160 @@ export const FunctionCallCardContainer: React.FC<FunctionCallCardContainerProps>
 }) => {
   const mainLanguage = useSettingsStore(state => state.settings.mainLanguage);
   const storyObjects = useStoryObjects(projectId, mainLanguage);
+
   const isStreaming = mode === 'streaming';
-  const isConfirmed = mode === 'confirmed';
   const isPending = mode === 'pending';
 
-  const { isExpanded, toggleExpand } = useCardExpansion(!isConfirmed);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
+
+  // Selection is only relevant for pending mode
+  const selectionDisabled = !isPending || isConfirming || isApplyDisabled;
   const {
     selections,
     selectedCount,
-    rejectedCount,
     toggleSelection,
-    selectAll,
-    deselectAll,
-  } = useCardSelection(cards, isStreaming);
+  } = useCardSelection(cards, selectionDisabled);
 
-  const [isConfirming, setIsConfirming] = useState(false);
+  // Auto-expand the most recently updated streaming operation.
+  const activeStreamingId = useMemo(() => {
+    if (!isStreaming || streamingProgress.length === 0) return null;
+    let best = streamingProgress[0];
+    for (const p of streamingProgress) {
+      if ((p.updatedAt ?? 0) > (best.updatedAt ?? 0)) {
+        best = p;
+      }
+    }
+    return best?.draft?.id ?? null;
+  }, [isStreaming, streamingProgress]);
 
-  // Build previews for each card (pending/confirmed modes)
-  const cardsWithPreviews: CardWithPreview[] = useMemo(() => {
-    if (isStreaming) return [];
-    return cards.map((card) => {
-      const rawPreviews = buildOperationPreviewsFromArgs(card.data);
-      const functionName = card.functionCall?.functionName;
-      const parsed = functionName ? parseFunctionName(functionName) : undefined;
+  useEffect(() => {
+    if (isStreaming) {
+      setExpandedId(activeStreamingId);
+      return;
+    }
+    // Reset when leaving streaming or changing modes
+    setExpandedId(null);
+  }, [isStreaming, activeStreamingId, mode]);
 
-      const enrichedPreviews = rawPreviews.map((preview) => {
-        const objectType = preview.type || parsed?.objectType;
-        const action = preview.action || parsed?.action;
-        const objectId = (preview.id || card.data?.id || card.data?.chapterId) as string | undefined;
-
-        return {
-          ...preview,
-          type: objectType,
-          action,
-          id: objectId,
-          targetName: resolveStoryObjectName(storyObjects, objectType, objectId),
-        } as FunctionCallOperationPreview;
-      });
-
-      return { card, previews: enrichedPreviews };
-    });
-  }, [cards, storyObjects, isStreaming]);
-
-  // Build streaming previews (streaming mode)
-  const streamingPreviews: StreamingPreview[] = useMemo(() => {
-    if (!isStreaming) return [];
-    return streamingProgress.map((progress) => {
-      const functionName = progress.draft.functionName;
-      const parsed = functionName ? parseFunctionName(functionName) : undefined;
-
-      const enrichedPreviews = (progress.operationPreviews ?? []).map((preview) => {
-        const objectType = preview.type || parsed?.objectType;
-        const action = preview.action || parsed?.action;
-        const objectId = preview.id;
-
-        return {
-          ...preview,
-          type: objectType,
-          action,
-          targetName: preview.targetName ?? resolveStoryObjectName(storyObjects, objectType, objectId),
-        };
-      });
-
-      return {
-        progress,
-        functionName: functionName || `Function #${progress.draft.index + 1}`,
-        previews: enrichedPreviews,
-      };
-    });
-  }, [streamingProgress, storyObjects, isStreaming]);
+  const handleToggleExpanded = useCallback((id: string) => {
+    if (isStreaming) return;
+    setExpandedId(prev => (prev === id ? null : id));
+  }, [isStreaming]);
 
   const handleConfirm = useCallback(async () => {
-    if (isConfirming || isConfirmed || !onConfirm) return;
+    if (!onConfirm || isConfirming || !isPending) return;
     setIsConfirming(true);
     try {
       await onConfirm(selections);
     } finally {
       setIsConfirming(false);
     }
-  }, [selections, onConfirm, isConfirming, isConfirmed]);
+  }, [onConfirm, isConfirming, isPending, selections]);
 
-  // Empty state check
   if (isStreaming && streamingProgress.length === 0) return null;
   if (!isStreaming && cards.length === 0) return null;
 
   const itemCount = isStreaming ? streamingProgress.length : cards.length;
-  const streamingStatus = isStreaming && streamingProgress.length > 0
-    ? streamingProgress[0].status
-    : undefined;
 
   return (
     <div className={`fc-card fc-card--${mode}`}>
-      <FunctionCallCardHeader
-        mode={mode}
-        isExpanded={isExpanded}
-        onToggleExpand={toggleExpand}
-        itemCount={itemCount}
-        streamingStatus={streamingStatus}
-      />
+      <div className="fc-card__header">
+        <div className="fc-card__header-left">
+          <div className="fc-card__title">AI Changes</div>
+          <div className="fc-card__count">{itemCount}</div>
+        </div>
+        <div className={`fc-pill fc-pill--${mode}`}>{modeLabel(mode)}</div>
+      </div>
 
-      {isExpanded && (
-        <div className="fc-card__content">
-          <FunctionCallCardList
-            mode={mode}
-            streamingPreviews={streamingPreviews}
-            cardsWithPreviews={cardsWithPreviews}
-            selections={selections}
-            onToggle={toggleSelection}
-            isConfirming={isConfirming}
-          />
+      <div className="fc-card__list">
+        {isStreaming && streamingProgress.map((p: FunctionCallProgress) => {
+          const functionName = p.draft.functionName || '';
+          const args = (p.preview && typeof p.preview === 'object') ? (p.preview as Record<string, unknown>) : undefined;
+          const action = getAction(functionName);
+          const type = getType(functionName, args);
+          const label = getLabel({
+            functionName,
+            fallbackTitle: getFunctionDisplayName(functionName),
+            action,
+            type,
+            args,
+            storyObjects,
+          });
 
-          {isPending && (
-            <CardFooter
-              selectedCount={selectedCount}
-              rejectedCount={rejectedCount}
-              totalCount={cards.length}
-              isApplyDisabled={isApplyDisabled}
-              applyDisabledReason={applyDisabledReason}
-              isConfirming={isConfirming}
-              onSelectAll={selectAll}
-              onDeselectAll={deselectAll}
-              onConfirm={handleConfirm}
+          return (
+            <OperationItem
+              key={p.draft.id}
+              mode={mode}
+              id={p.draft.id}
+              label={label}
+              action={action}
+              type={type}
+              status={p.status as any}
+              isExpanded={expandedId === p.draft.id}
+              detailsData={p.preview}
+              rawText={p.rawPreview}
+              errorMessage={p.error}
             />
-          )}
+          );
+        })}
 
-          {isConfirmed && (
-            <ConfirmedFooter
-              appliedCount={selectedCount}
-              rejectedCount={rejectedCount}
+        {!isStreaming && cards.map((card) => {
+          const functionName = card.functionCall.functionName;
+          const args = card.data;
+          const action = getAction(functionName);
+          const type = getType(functionName, args);
+          const label = getLabel({
+            functionName,
+            fallbackTitle: card.title,
+            action,
+            type,
+            args,
+            storyObjects,
+          });
+
+          const fcStatus = card.functionCall.status;
+          const isValidationFailed = fcStatus === 'failed' && card.functionCall.failureType === 'validation';
+          const showCheckbox = isPending;
+
+          return (
+            <OperationItem
+              key={card.id}
+              mode={mode}
+              id={card.id}
+              label={label}
+              action={action}
+              type={type}
+              status={fcStatus as any}
+              isExpanded={expandedId === card.id}
+              onToggle={() => handleToggleExpanded(card.id)}
+              showCheckbox={showCheckbox}
+              isSelected={selections[card.id] ?? true}
+              isCheckboxDisabled={selectionDisabled || isValidationFailed}
+              onToggleSelected={() => toggleSelection(card.id)}
+              detailsData={args}
+              errorMessage={card.functionCall.reason}
             />
-          )}
+          );
+        })}
+      </div>
+
+      {isPending && (
+        <div className="fc-card__footer">
+          <div className="fc-card__footer-left">
+            <span className="fc-card__footer-count">{selectedCount} selected</span>
+            {isApplyDisabled && applyDisabledReason && (
+              <span className="fc-card__footer-warning">{applyDisabledReason}</span>
+            )}
+          </div>
+          <button
+            type="button"
+            className="fc-btn fc-btn--primary"
+            onClick={handleConfirm}
+            disabled={isConfirming || isApplyDisabled}
+          >
+            {isConfirming ? 'Applying…' : 'Confirm'}
+          </button>
         </div>
       )}
     </div>
