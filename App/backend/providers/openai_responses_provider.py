@@ -27,6 +27,7 @@ from openai import (
 )
 
 from .base import BaseProvider
+from .function_calls_parser import FunctionCallsStreamParser
 from .registry import ProviderRegistry
 
 # Text/chat model patterns: gpt-* or o{number}*
@@ -181,6 +182,7 @@ class OpenAIResponsesProvider(BaseProvider):
         thinking_mode: Optional[str] = None,
         custom_api_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
+        native_function_call: bool = False,
     ) -> AsyncGenerator[bytes, None]:
         """
         Stream chat using OpenAI Responses API.
@@ -239,6 +241,7 @@ class OpenAIResponsesProvider(BaseProvider):
         # Track state for SSE conversion
         captured_usage: Optional[Dict] = None
         stream = None
+        fc_parser = FunctionCallsStreamParser() if native_function_call else None
 
         try:
             stream = await client.responses.create(**request)
@@ -250,15 +253,31 @@ class OpenAIResponsesProvider(BaseProvider):
                 if event_type == "response.output_text.delta":
                     delta_text = getattr(event, "delta", "")
                     if delta_text:
-                        # Convert to Chat Completions format
-                        chunk = {
-                            "choices": [{
-                                "index": 0,
-                                "delta": {"content": delta_text},
-                                "finish_reason": None
-                            }]
-                        }
-                        yield self._format_sse(chunk)
+                        text_to_emit = delta_text
+                        tool_calls = None
+                        if fc_parser:
+                            text_to_emit, tool_calls = fc_parser.process_chunk(delta_text)
+
+                        if text_to_emit:
+                            # Convert to Chat Completions format
+                            chunk = {
+                                "choices": [{
+                                    "index": 0,
+                                    "delta": {"content": text_to_emit},
+                                    "finish_reason": None
+                                }]
+                            }
+                            yield self._format_sse(chunk)
+
+                        if tool_calls:
+                            tool_chunk = {
+                                "choices": [{
+                                    "index": 0,
+                                    "delta": {"tool_calls": tool_calls},
+                                    "finish_reason": None
+                                }]
+                            }
+                            yield self._format_sse(tool_chunk)
 
                 # Handle reasoning/thinking text delta
                 elif event_type == "response.reasoning_text.delta":
@@ -315,6 +334,29 @@ class OpenAIResponsesProvider(BaseProvider):
 
                 # Handle response completion
                 elif event_type == "response.completed":
+                    # Flush any buffered function_calls content before emitting finish_reason.
+                    if fc_parser:
+                        tail_text, tail_tool_calls = fc_parser.finalize()
+                        if tail_text:
+                            chunk = {
+                                "choices": [{
+                                    "index": 0,
+                                    "delta": {"content": tail_text},
+                                    "finish_reason": None
+                                }]
+                            }
+                            yield self._format_sse(chunk)
+                        if tail_tool_calls:
+                            chunk = {
+                                "choices": [{
+                                    "index": 0,
+                                    "delta": {"tool_calls": tail_tool_calls},
+                                    "finish_reason": None
+                                }]
+                            }
+                            yield self._format_sse(chunk)
+                        fc_parser = None
+
                     response_obj = getattr(event, "response", None)
                     if response_obj:
                         # Extract usage information
@@ -363,6 +405,27 @@ class OpenAIResponsesProvider(BaseProvider):
         finally:
             if stream is not None and hasattr(stream, "close"):
                 await stream.close()
+
+        if fc_parser:
+            tail_text, tail_tool_calls = fc_parser.finalize()
+            if tail_text:
+                chunk = {
+                    "choices": [{
+                        "index": 0,
+                        "delta": {"content": tail_text},
+                        "finish_reason": None
+                    }]
+                }
+                yield self._format_sse(chunk)
+            if tail_tool_calls:
+                chunk = {
+                    "choices": [{
+                        "index": 0,
+                        "delta": {"tool_calls": tail_tool_calls},
+                        "finish_reason": None
+                    }]
+                }
+                yield self._format_sse(chunk)
 
         # Emit usage information before [DONE]
         if captured_usage:

@@ -1,42 +1,24 @@
-## Native Output Format
+## Native Function Call Output
 
-Output a JSON array containing all function calls. Each object in the array represents one function call.
+You are in native function call mode.
+
+Output a `<function_calls>` block containing one or more `<function_call>` entries.
+Each `<function_call>` MUST contain exactly one JSON object (no markdown code fences).
 
 ### Example: Multiple edits
-```json
-[
-  {
-    "function": "replace_story_object",
-    "id": "char-123",
-    "type": "character",
-    "name": "Alexander the Bold"
-  },
-  {
-    "function": "patch_story_object",
-    "id": "char-456",
-    "type": "character",
-    "replacements": [
-      { "field": "description", "old": "fights alone", "new": "leads a rebellion" }
-    ]
-  },
-  {
-    "function": "create_outline_chapter",
-    "actId": "act-1",
-    "name": "The Awakening",
-    "description": "The hero discovers their power"
-  }
-]
+```xml
+<function_calls>
+  <function_call>{"function":"replace_story_object","id":"char-123","type":"character","name":"Alexander the Bold"}</function_call>
+  <function_call>{"function":"patch_story_object","id":"char-456","type":"character","replacements":[{"field":"description","old":"fights alone","new":"leads a rebellion"}]}</function_call>
+  <function_call>{"function":"create_outline_chapter","actId":"act-1","name":"The Awakening","description":"The hero discovers their power"}</function_call>
+</function_calls>
 ```
 
 ### Example: Single edit
-```json
-[
-  {
-    "function": "replace_basic_info",
-    "title": "The New Title",
-    "genre": "Fantasy Adventure"
-  }
-]
+```xml
+<function_calls>
+  <function_call>{"function":"replace_basic_info","title":"The New Title","genre":"Fantasy Adventure"}</function_call>
+</function_calls>
 ```
 
 ### Function Schemas
@@ -98,7 +80,9 @@ Output a JSON array containing all function calls. Each object in the array repr
 ```
 
 **Important:**
-- Always output a JSON array, even for a single function call
+- Always output a `<function_calls>` wrapper, even for a single function call
+- Use exactly one `<function_call>...</function_call>` per function call
+- Each `<function_call>` must contain exactly one JSON object
 - Include the correct `id` for items you are editing
 - Omit fields that should not change in replace operations
 - Use `patch_*` for targeted edits, `replace_*` for full replacements

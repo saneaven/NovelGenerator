@@ -26,7 +26,7 @@ export const UNIFIED_SCHEMA = {
     isThinkingEnabled: { desc: "Thinking mode enabled", example: true },
     isPrefillEnabled: { desc: "Prefill enabled", example: true },
     isCustomThinkingEnabled: { desc: "Custom thinking enabled", example: false },
-    isNativeOutputMode: { desc: "Native XML output mode (no function calls)", example: false },
+    isNativeOutputMode: { desc: "Native output mode (XML-tagged function calls or plain text, depending on task)", example: false },
   },
 
   project: {

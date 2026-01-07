@@ -137,6 +137,12 @@ async def get_models(provider: str, config: ProviderConfig):
 async def stream_chat(provider: str, request: ChatCompletionRequest, req: Request):
     """Stream chat completions from specified provider"""
     try:
+        if request.native_function_call and request.functions:
+            raise HTTPException(
+                status_code=400,
+                detail="native_function_call requires functions to be omitted",
+            )
+
         provider_instance = ProviderRegistry.get_provider(
             provider,
             request.config.model_dump()
@@ -184,7 +190,8 @@ async def stream_chat(provider: str, request: ChatCompletionRequest, req: Reques
                 thinking_config=thinking_cfg,
                 thinking_mode=request.thinking_mode,
                 custom_api_format=request.custom_api_format,
-                retry_config=retry_cfg
+                retry_config=retry_cfg,
+                native_function_call=request.native_function_call,
             )
 
             try:

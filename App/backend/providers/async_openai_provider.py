@@ -13,6 +13,7 @@ from openai import (
 )
 
 from .base import BaseProvider
+from .function_calls_parser import FunctionCallsStreamParser
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
 
 
@@ -210,6 +211,48 @@ class AsyncOpenAIProvider(BaseProvider):
 
         return updated_chunk, extra_chunks
 
+    def _apply_function_calls_parser(
+        self,
+        chunk: Optional[Dict],
+        parser: Optional[FunctionCallsStreamParser],
+    ) -> Tuple[Optional[Dict], List[Dict]]:
+        if parser is None or chunk is None:
+            return chunk, []
+
+        choices = chunk.get("choices")
+        if not choices:
+            return chunk, []
+
+        first_choice = choices[0]
+        delta = copy.deepcopy(first_choice.get("delta") or {})
+        if not delta:
+            return chunk, []
+
+        content = delta.get("content")
+        extra_chunks: List[Dict] = []
+
+        if isinstance(content, str) and content:
+            clean_content, tool_calls = parser.process_chunk(content)
+            if clean_content:
+                delta["content"] = clean_content
+            else:
+                delta.pop("content", None)
+
+            if tool_calls:
+                extra_chunks.append(
+                    {"choices": [{"delta": {"tool_calls": tool_calls}}]}
+                )
+
+        updated_choice = copy.deepcopy(first_choice)
+        updated_choice["delta"] = delta
+        updated_chunk = copy.deepcopy(chunk)
+        updated_chunk["choices"][0] = updated_choice
+
+        if not self._has_meaningful_payload(updated_chunk):
+            updated_chunk = None
+
+        return updated_chunk, extra_chunks
+
     def _finalize_parser(
         self,
         parser: Optional[ThinkingStreamParser],
@@ -225,6 +268,21 @@ class AsyncOpenAIProvider(BaseProvider):
             final_chunks.append({"choices": [{"delta": {"thinking": {"text": final_thinking}}}]})
         return final_chunks
 
+    def _finalize_function_calls_parser(
+        self,
+        parser: Optional[FunctionCallsStreamParser],
+    ) -> List[Dict]:
+        if parser is None:
+            return []
+
+        final_chunks: List[Dict] = []
+        final_content, final_tool_calls = parser.finalize()
+        if final_content:
+            final_chunks.append({"choices": [{"delta": {"content": final_content}}]})
+        if final_tool_calls:
+            final_chunks.append({"choices": [{"delta": {"tool_calls": final_tool_calls}}]})
+        return final_chunks
+
     async def stream_chat(
         self,
         messages: List[Dict],
@@ -238,6 +296,7 @@ class AsyncOpenAIProvider(BaseProvider):
         thinking_mode: Optional[str] = None,
         custom_api_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
+        native_function_call: bool = False,
     ) -> AsyncGenerator[bytes, None]:
         if not self.validate_config():
             yield self._format_error("Invalid provider configuration")
@@ -264,6 +323,7 @@ class AsyncOpenAIProvider(BaseProvider):
         # Always parse <thinking> tags from text content to prevent leakage into regular content
         prefill_has_thinking = has_unclosed_thinking_tag(messages) if thinking_mode == "custom" else False
         parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking)
+        fc_parser = FunctionCallsStreamParser() if native_function_call else None
         last_finish_reason = None
         stream = None
         captured_usage: Optional[Dict] = None
@@ -287,12 +347,22 @@ class AsyncOpenAIProvider(BaseProvider):
                 chunk_dict, parser_chunks = self._apply_thinking_parser(chunk_dict, parser)
                 extra_chunks.extend(parser_chunks)
 
+                chunk_dict, fc_chunks = self._apply_function_calls_parser(chunk_dict, fc_parser)
+
                 if chunk_dict and self._has_meaningful_payload(chunk_dict):
                     yield self._format_sse(chunk_dict)
 
-                for extra in extra_chunks:
+                for extra in fc_chunks:
                     if self._has_meaningful_payload(extra):
                         yield self._format_sse(extra)
+
+                for extra in extra_chunks:
+                    extra, extra_fc_chunks = self._apply_function_calls_parser(extra, fc_parser)
+                    if extra and self._has_meaningful_payload(extra):
+                        yield self._format_sse(extra)
+                    for extra_fc in extra_fc_chunks:
+                        if self._has_meaningful_payload(extra_fc):
+                            yield self._format_sse(extra_fc)
 
         except (APIConnectionError, RateLimitError, AuthenticationError, BadRequestError, APIStatusError) as exc:
             status = getattr(exc, "status_code", None)
@@ -311,8 +381,22 @@ class AsyncOpenAIProvider(BaseProvider):
             if stream is not None:
                 await stream.close()
 
-        for final_chunk in self._finalize_parser(parser):
-            yield self._format_sse(final_chunk)
+        try:
+            for final_chunk in self._finalize_parser(parser):
+                final_chunk, final_fc_chunks = self._apply_function_calls_parser(final_chunk, fc_parser)
+                if final_chunk and self._has_meaningful_payload(final_chunk):
+                    yield self._format_sse(final_chunk)
+                for extra in final_fc_chunks:
+                    if self._has_meaningful_payload(extra):
+                        yield self._format_sse(extra)
+
+            for final_fc_chunk in self._finalize_function_calls_parser(fc_parser):
+                if self._has_meaningful_payload(final_fc_chunk):
+                    yield self._format_sse(final_fc_chunk)
+        except Exception as exc:
+            yield self._format_error(str(exc))
+            yield b"data: [DONE]\n\n"
+            return
 
         # Check for error finish_reasons and emit error if needed
         if last_finish_reason == "content_filter":

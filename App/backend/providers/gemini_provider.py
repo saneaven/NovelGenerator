@@ -5,6 +5,7 @@ from google import genai
 from google.genai import types, errors
 
 from .base import BaseProvider
+from .function_calls_parser import FunctionCallsStreamParser
 from .registry import ProviderRegistry
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
 
@@ -214,6 +215,7 @@ class GeminiProvider(BaseProvider):
         thinking_mode: Optional[str] = None,
         custom_api_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
+        native_function_call: bool = False,
     ) -> AsyncGenerator[bytes, None]:
         if not self.validate_config():
             yield self._format_error("Gemini API key is required")
@@ -268,6 +270,7 @@ class GeminiProvider(BaseProvider):
         # Always parse <thinking> tags from text content to prevent leakage into regular content
         prefill_has_thinking = has_unclosed_thinking_tag(messages) if thinking_mode == "custom" else False
         parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking)
+        fc_parser = FunctionCallsStreamParser() if native_function_call else None
         tool_call_counter = 0
         stream = None
 
@@ -383,6 +386,14 @@ class GeminiProvider(BaseProvider):
                                         {"choices": [{"delta": {"thinking": {"text": thinking_block}}}]}
                                     )
 
+                            if fc_parser and text_to_emit:
+                                clean_content, tool_calls = fc_parser.process_chunk(text_to_emit)
+                                text_to_emit = clean_content
+                                if tool_calls:
+                                    extra_chunks.append(
+                                        {"choices": [{"delta": {"tool_calls": tool_calls}}]}
+                                    )
+
                             if text_to_emit:
                                 payload = {"choices": [{"delta": {"content": text_to_emit}}]}
                                 if self._has_meaningful_payload(payload):
@@ -393,8 +404,32 @@ class GeminiProvider(BaseProvider):
                                     yield self._format_sse(extra)
 
             for final_chunk in self._finalize_parser(parser):
-                if self._has_meaningful_payload(final_chunk):
-                    yield self._format_sse(final_chunk)
+                delta = (final_chunk.get("choices") or [{}])[0].get("delta") or {}
+                content = delta.get("content")
+                if fc_parser and isinstance(content, str) and content:
+                    clean_content, tool_calls = fc_parser.process_chunk(content)
+                    if clean_content:
+                        payload = {"choices": [{"delta": {"content": clean_content}}]}
+                        if self._has_meaningful_payload(payload):
+                            yield self._format_sse(payload)
+                    if tool_calls:
+                        payload = {"choices": [{"delta": {"tool_calls": tool_calls}}]}
+                        if self._has_meaningful_payload(payload):
+                            yield self._format_sse(payload)
+                else:
+                    if self._has_meaningful_payload(final_chunk):
+                        yield self._format_sse(final_chunk)
+
+            if fc_parser:
+                tail_text, tail_tool_calls = fc_parser.finalize()
+                if tail_text:
+                    payload = {"choices": [{"delta": {"content": tail_text}}]}
+                    if self._has_meaningful_payload(payload):
+                        yield self._format_sse(payload)
+                if tail_tool_calls:
+                    payload = {"choices": [{"delta": {"tool_calls": tail_tool_calls}}]}
+                    if self._has_meaningful_payload(payload):
+                        yield self._format_sse(payload)
 
             # Check for error finish_reasons and emit error if needed
             if last_finish_reason is not None:

@@ -3,7 +3,6 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { LLMTask, LLMTaskMode, type StoryTranslationPromptContext } from '../../llm';
 import type { LLMTaskResult } from '../../llm/types';
-import { convertNativeOutputToFunctionCalls } from '../../functionCall';
 import { stageSessionEdits } from '../functionCalls/functionCallEngine';
 
 export interface TranslateObjectsTaskInput {
@@ -135,14 +134,7 @@ export const translateObjectsSpec: TaskSpec<'translateObjects', TranslateObjects
 
     updateSession({ provider: finalResult.provider, model: finalResult.model, usage: finalResult.usage });
 
-    const functionCalls = isNativeOutput
-      ? convertNativeOutputToFunctionCalls(
-          finalResult.contentParts
-            .filter(p => p.type === 'content')
-            .map(p => p.text)
-            .join('')
-        )
-      : finalResult.functionCalls;
+    const functionCalls = finalResult.functionCalls;
 
     if (!functionCalls.length) {
       updateSession({ status: 'error', error: 'AI response did not include any actions to apply.' });

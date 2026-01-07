@@ -35,10 +35,12 @@ Please follow these instructions while maintaining all other translation require
 ## Critical Requirements
 
 {{#if config.isNativeOutputMode}}
+- **MUST wrap output in `<function_calls>...</function_calls>`**
+- **MUST use one `<function_call>...</function_call>` per operation**
+- **Each `<function_call>` MUST contain exactly one JSON object** (no markdown code fences)
 - **MUST include `function` field** to specify the operation type (`replace_*` or `patch_*`)
 - **MUST use the exact object ID** in the `id` field (required for most operations; `replace_basic_info` does not require `id`)
 - **MUST include `type` field** for story object operations (`replace_story_object` / `patch_story_object`)
-- **MUST output a JSON array** with one item per object
 - Keep terminology consistent across all translations
 {{else}}
 - **MUST call the appropriate function for EACH object** - Do not skip any objects

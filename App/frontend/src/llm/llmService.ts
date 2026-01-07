@@ -43,6 +43,7 @@ export async function* streamLLM(
         thinkingMode?: 'off' | 'custom' | 'model';
         customApiFormat?: CustomApiFormat;
         retryConfig?: RetryConfig;
+        nativeFunctionCall?: boolean;
     }
 ): AsyncGenerator<string | { content: string | null; tool_calls?: any[]; thinking?: string; thinking_details?: ThinkingDetail[]; thinking_text?: string; thinking_signature?: string; usage?: TokenUsage }>
 {
@@ -90,6 +91,11 @@ export async function* streamLLM(
     if (opts?.customApiFormat)
     {
         requestBody.custom_api_format = opts.customApiFormat;
+    }
+
+    if (opts?.nativeFunctionCall === true)
+    {
+        requestBody.native_function_call = true;
     }
 
     // Retry configuration

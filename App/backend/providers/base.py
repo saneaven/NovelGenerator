@@ -20,7 +20,8 @@ class BaseProvider(ABC):
         thinking_config: Optional[Dict] = None,
         thinking_mode: Optional[str] = None,
         custom_api_format: Optional[str] = None,
-        retry_config: Optional[Dict] = None
+        retry_config: Optional[Dict] = None,
+        native_function_call: bool = False,
     ) -> AsyncGenerator[bytes, None]:
         """
         Stream chat completions from the provider
@@ -37,6 +38,7 @@ class BaseProvider(ABC):
             thinking_mode: Thinking mode ('off', 'custom', 'model')
             custom_api_format: API format for custom provider ('openai', 'claude', 'gemini', 'openrouter')
             retry_config: Retry configuration for error handling
+            native_function_call: If true, provider should parse <function_calls> tags from text and emit tool_calls deltas.
 
         Yields:
             SSE-formatted bytes

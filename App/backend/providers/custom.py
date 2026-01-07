@@ -181,6 +181,7 @@ class CustomProvider(BaseProvider):
         thinking_mode: Optional[str] = None,
         custom_api_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
+        native_function_call: bool = False,
     ) -> AsyncGenerator[bytes, None]:
         """Stream chat completions by delegating to the appropriate native SDK provider.
 
@@ -216,6 +217,7 @@ class CustomProvider(BaseProvider):
             thinking_mode=thinking_mode,
             custom_api_format=custom_api_format,
             retry_config=retry_config,
+            native_function_call=native_function_call,
         ):
             yield chunk
 

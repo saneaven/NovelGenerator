@@ -66,9 +66,6 @@ export {
   getIdFromArgs,
 } from './normalizer';
 
-// Native Output Converter
-export { convertNativeOutputToFunctionCalls } from './nativeOutputConverter';
-
 // Applicator
 export { UnifiedApplicator, createApplicator } from './applicator';
 export type {

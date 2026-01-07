@@ -143,7 +143,9 @@ export class PromptManager {
       case LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT:
         return this.getEditAssistantFunctions(context as EditAssistantManuscriptPromptContext, 'manuscript');
       case LLMTaskMode.TRANSLATION:
-        return getFunctionsForSet('translateObjects');
+        return (context as StoryTranslationPromptContext).isNativeOutput
+          ? undefined
+          : getFunctionsForSet('translateObjects');
       case LLMTaskMode.AGENT_TRANSLATION:
         return undefined;
       case LLMTaskMode.OBJECT_IMAGE_PROMPT:

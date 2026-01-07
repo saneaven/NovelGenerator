@@ -108,6 +108,17 @@ export class LLMTask {
         this.config.promptContext
       );
 
+      const context: any = this.config.promptContext;
+      const nativeFunctionCall =
+        context?.isNativeOutput === true &&
+        (this.config.mode === LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT ||
+          this.config.mode === LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT ||
+          this.config.mode === LLMTaskMode.TRANSLATION);
+
+      if (nativeFunctionCall && functions?.length) {
+        throw new Error('native_function_call requires functions to be omitted');
+      }
+
       // 4. Prepare messages
       const messages = await this.prepareMessages(history, promptBundle);
 
@@ -173,6 +184,7 @@ export class LLMTask {
           thinkingMode,
           customApiFormat,
           retryConfig,
+          nativeFunctionCall,
         }
       )) {
         // Handle string chunk (content)
