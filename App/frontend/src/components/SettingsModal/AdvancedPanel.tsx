@@ -198,9 +198,8 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                         icon={<Document size="sm" />}
                     />
                     <p className="field-hint">
-                        When enabled, non-agent AI features use a native output format. Edit/translation tasks emit
-                        <code>&lt;function_calls&gt;</code> blocks (converted server-side into normal function calls),
-                        while image prompt tasks output raw text.
+                        When enabled, edit/translation tasks emit <code>&lt;function_calls&gt;</code> blocks (converted
+                        server-side into normal function calls). Image prompt tasks always output raw text.
                     </p>
                 </div>
             </div>

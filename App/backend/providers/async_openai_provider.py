@@ -13,7 +13,7 @@ from openai import (
 )
 
 from .base import BaseProvider
-from .function_calls_parser import FunctionCallsStreamParser
+from .native_function_calls_parser import NativeFunctionCallsStreamParser
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
 
 
@@ -211,10 +211,10 @@ class AsyncOpenAIProvider(BaseProvider):
 
         return updated_chunk, extra_chunks
 
-    def _apply_function_calls_parser(
+    def _apply_native_function_calls_parser(
         self,
         chunk: Optional[Dict],
-        parser: Optional[FunctionCallsStreamParser],
+        parser: Optional[NativeFunctionCallsStreamParser],
     ) -> Tuple[Optional[Dict], List[Dict]]:
         if parser is None or chunk is None:
             return chunk, []
@@ -268,9 +268,9 @@ class AsyncOpenAIProvider(BaseProvider):
             final_chunks.append({"choices": [{"delta": {"thinking": {"text": final_thinking}}}]})
         return final_chunks
 
-    def _finalize_function_calls_parser(
+    def _finalize_native_function_calls_parser(
         self,
-        parser: Optional[FunctionCallsStreamParser],
+        parser: Optional[NativeFunctionCallsStreamParser],
     ) -> List[Dict]:
         if parser is None:
             return []
@@ -323,7 +323,7 @@ class AsyncOpenAIProvider(BaseProvider):
         # Always parse <thinking> tags from text content to prevent leakage into regular content
         prefill_has_thinking = has_unclosed_thinking_tag(messages) if thinking_mode == "custom" else False
         parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking)
-        fc_parser = FunctionCallsStreamParser() if native_function_call else None
+        native_fc_parser = NativeFunctionCallsStreamParser() if native_function_call else None
         last_finish_reason = None
         stream = None
         captured_usage: Optional[Dict] = None
@@ -347,7 +347,7 @@ class AsyncOpenAIProvider(BaseProvider):
                 chunk_dict, parser_chunks = self._apply_thinking_parser(chunk_dict, parser)
                 extra_chunks.extend(parser_chunks)
 
-                chunk_dict, fc_chunks = self._apply_function_calls_parser(chunk_dict, fc_parser)
+                chunk_dict, fc_chunks = self._apply_native_function_calls_parser(chunk_dict, native_fc_parser)
 
                 if chunk_dict and self._has_meaningful_payload(chunk_dict):
                     yield self._format_sse(chunk_dict)
@@ -357,7 +357,7 @@ class AsyncOpenAIProvider(BaseProvider):
                         yield self._format_sse(extra)
 
                 for extra in extra_chunks:
-                    extra, extra_fc_chunks = self._apply_function_calls_parser(extra, fc_parser)
+                    extra, extra_fc_chunks = self._apply_native_function_calls_parser(extra, native_fc_parser)
                     if extra and self._has_meaningful_payload(extra):
                         yield self._format_sse(extra)
                     for extra_fc in extra_fc_chunks:
@@ -383,14 +383,14 @@ class AsyncOpenAIProvider(BaseProvider):
 
         try:
             for final_chunk in self._finalize_parser(parser):
-                final_chunk, final_fc_chunks = self._apply_function_calls_parser(final_chunk, fc_parser)
+                final_chunk, final_fc_chunks = self._apply_native_function_calls_parser(final_chunk, native_fc_parser)
                 if final_chunk and self._has_meaningful_payload(final_chunk):
                     yield self._format_sse(final_chunk)
                 for extra in final_fc_chunks:
                     if self._has_meaningful_payload(extra):
                         yield self._format_sse(extra)
 
-            for final_fc_chunk in self._finalize_function_calls_parser(fc_parser):
+            for final_fc_chunk in self._finalize_native_function_calls_parser(native_fc_parser):
                 if self._has_meaningful_payload(final_fc_chunk):
                     yield self._format_sse(final_fc_chunk)
         except Exception as exc:

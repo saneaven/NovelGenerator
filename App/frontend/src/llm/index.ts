@@ -5,6 +5,7 @@ export { PromptManager } from './PromptManager';
 export {
   LLMTaskMode,
   type LLMTaskModeType,
+  type OutputMode,
   type LLMTaskConfig,
   type LLMTaskResult,
   type LLMTaskCallbacks,

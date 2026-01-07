@@ -1,7 +1,7 @@
 import React from 'react';
 import type { FunctionCallOperationPreview, FunctionCallProgressStatus } from '../../llm/requestTypes';
 import { StatusBadge } from './StatusBadge';
-import { OperationPreview } from './OperationPreview';
+import { StreamingOperationPreview } from './StreamingOperationPreview';
 import { formatRelativeTime } from './constants';
 
 interface StreamingOperationItemProps {
@@ -21,6 +21,7 @@ export const StreamingOperationItem: React.FC<StreamingOperationItemProps> = ({
 }) => {
   const hasPreviews = previews.length > 0;
   const isError = status === 'error';
+  const isStreaming = status === 'collecting' || status === 'validating';
 
   return (
     <div className={`fc-item fc-item--streaming fc-item--${status}`}>
@@ -43,7 +44,11 @@ export const StreamingOperationItem: React.FC<StreamingOperationItemProps> = ({
       {hasPreviews && (
         <div className="fc-item__previews">
           {previews.map((preview, idx) => (
-            <OperationPreview key={preview.key || idx} preview={preview} />
+            <StreamingOperationPreview
+              key={preview.key || idx}
+              preview={preview}
+              isStreaming={isStreaming}
+            />
           ))}
         </div>
       )}

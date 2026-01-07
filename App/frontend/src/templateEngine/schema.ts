@@ -26,7 +26,10 @@ export const UNIFIED_SCHEMA = {
     isThinkingEnabled: { desc: "Thinking mode enabled", example: true },
     isPrefillEnabled: { desc: "Prefill enabled", example: true },
     isCustomThinkingEnabled: { desc: "Custom thinking enabled", example: false },
-    isNativeOutputMode: { desc: "Native output mode (XML-tagged function calls or plain text, depending on task)", example: false },
+    outputMode: { desc: "LLM output mode ('tool_call' | 'native_function_call' | 'raw_output')", example: "tool_call" },
+    isNativeOutputMode: { desc: "Backward-compat alias: true when outputMode is not 'tool_call'", example: false },
+    isNativeFunctionCallMode: { desc: "True when outputMode is 'native_function_call'", example: false },
+    isRawOutputMode: { desc: "True when outputMode is 'raw_output'", example: false },
   },
 
   project: {

@@ -37,7 +37,7 @@ export const agentTranslationSpec: TaskSpec<'agentTranslation', AgentTranslation
       sourceLanguage: input.sourceLanguage,
       targetLanguage: input.targetLanguage,
       sourceContent: input.sourceContent,
-      isNativeOutput: true,
+      outputMode: 'raw_output',
       outputLanguage: input.targetLanguage,
       enablePrefill: translationConfig.advanced.enablePrefill,
       enableThinking: translationConfig.advanced.thinkingMode === 'model',

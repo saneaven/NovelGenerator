@@ -60,7 +60,7 @@ export const aiEditSpec: TaskSpec<'aiEdit', AiEditTaskInput, void> = {
 
     const editAssistantConfig = settingsStore.getFunctionConfig('editAssistant');
     const providerConfig = settingsStore.getProviderConfig(editAssistantConfig.provider);
-    const isNativeOutput = settingsStore.settings.nativeOutputMode;
+    const outputMode = settingsStore.settings.nativeOutputMode ? 'native_function_call' : 'tool_call';
     const mainLanguage = settingsStore.settings.mainLanguage;
 
     const isManuscriptMode = input.category === 'manuscript';
@@ -107,7 +107,7 @@ export const aiEditSpec: TaskSpec<'aiEdit', AiEditTaskInput, void> = {
         currentChapterName: chapterName,
         currentChapterContent: currentContent,
         objectIds: contextIds.length > 0 ? contextIds : undefined,
-        isNativeOutput,
+        outputMode,
         outputLanguage: mainLanguage,
         enablePrefill: editAssistantConfig.advanced.enablePrefill,
         enableThinking: editAssistantConfig.advanced.thinkingMode === 'model',
@@ -123,7 +123,7 @@ export const aiEditSpec: TaskSpec<'aiEdit', AiEditTaskInput, void> = {
         projectId: input.projectId,
         targetIds,
         contextIds: contextIds.length > 0 ? contextIds : undefined,
-        isNativeOutput,
+        outputMode,
         outputLanguage: mainLanguage,
         enablePrefill: editAssistantConfig.advanced.enablePrefill,
         enableThinking: editAssistantConfig.advanced.thinkingMode === 'model',

@@ -51,14 +51,11 @@ async function runImagePromptTask(params: {
   const providerConfig = settingsStore.getProviderConfig(imagePromptConfig.provider);
 
   const mainLanguage = settingsStore.settings.mainLanguage;
-  const nativeOutputMode = settingsStore.settings.nativeOutputMode;
 
   let llmMode: LLMTaskModeType = LLMTaskMode.OBJECT_IMAGE_PROMPT;
   let promptContext: ObjectImagePromptContext | SceneImagePromptContext | CoverImagePromptContext;
-  let forceNativeOutput = false;
 
   if (input.contextType === 'cover_image') {
-    forceNativeOutput = true;
     llmMode = LLMTaskMode.COVER_IMAGE_PROMPT;
 
     const basicInfoObj = Object.values(unifiedStore.objects).find(o => o.type === 'basic_info');
@@ -78,14 +75,13 @@ async function runImagePromptTask(params: {
         genre: (data as any).genre || '',
       },
       selectedObjects: [],
-      isNativeOutput: true,
+      outputMode: 'raw_output',
       outputLanguage: mainLanguage,
       enablePrefill: imagePromptConfig.advanced.enablePrefill,
       enableThinking: imagePromptConfig.advanced.thinkingMode === 'model',
       enableCustomThinking: imagePromptConfig.advanced.thinkingMode === 'custom',
     };
   } else if (input.contextType === 'scene') {
-    forceNativeOutput = true;
     llmMode = LLMTaskMode.SCENE_IMAGE_PROMPT;
 
     const selectedObjects: SelectedObjectContext[] = (input.selectedObjectIds ?? [])
@@ -109,7 +105,7 @@ async function runImagePromptTask(params: {
       scenePreContext: input.sceneContext?.preContext || '',
       scenePostContext: input.sceneContext?.postContext || '',
       selectedObjects,
-      isNativeOutput: true,
+      outputMode: 'raw_output',
       outputLanguage: mainLanguage,
       enablePrefill: imagePromptConfig.advanced.enablePrefill,
       enableThinking: imagePromptConfig.advanced.thinkingMode === 'model',
@@ -137,7 +133,6 @@ async function runImagePromptTask(params: {
       negative: obj.metadata?.image_prompt_negative || null,
     };
 
-    const isNativeOutput = nativeOutputMode;
     promptContext = {
       userInput: input.userRequest,
       projectId: input.projectId,
@@ -147,7 +142,7 @@ async function runImagePromptTask(params: {
       currentPrompt: savedPrompts.natural,
       currentPromptPositive: savedPrompts.positive,
       currentPromptNegative: savedPrompts.negative,
-      isNativeOutput,
+      outputMode: 'raw_output',
       outputLanguage: mainLanguage,
       enablePrefill: imagePromptConfig.advanced.enablePrefill,
       enableThinking: imagePromptConfig.advanced.thinkingMode === 'model',
@@ -198,24 +193,6 @@ async function runImagePromptTask(params: {
     .map(p => p.text)
     .join('')
     .trim();
-
-  if (forceNativeOutput || nativeOutputMode) {
-    if (!text) {
-      updateSession({ status: 'error', error: 'AI did not generate a prompt.' });
-      return;
-    }
-    return { prompt: text, mode: input.promptMode };
-  }
-
-  // Function-call mode (object context only)
-  const call = finalResult.functionCalls.find(c => c.function_name === 'generate_object_image_prompt');
-  if (call?.arguments) {
-    const args = typeof call.arguments === 'string' ? JSON.parse(call.arguments) : call.arguments;
-    const prompt = (args as any)?.prompt;
-    if (typeof prompt === 'string' && prompt.trim()) {
-      return { prompt: prompt.trim(), mode: input.promptMode };
-    }
-  }
 
   if (!text) {
     updateSession({ status: 'error', error: 'AI did not generate a prompt.' });

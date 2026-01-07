@@ -14,6 +14,7 @@ import type {
   LLMTaskConfig,
   LLMTaskCallbacks,
   LLMTaskResult,
+  OutputMode,
   PromptBundle,
   LLMTaskModeType,
 } from './types';
@@ -109,14 +110,20 @@ export class LLMTask {
       );
 
       const context: any = this.config.promptContext;
-      const nativeFunctionCall =
-        context?.isNativeOutput === true &&
-        (this.config.mode === LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT ||
-          this.config.mode === LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT ||
-          this.config.mode === LLMTaskMode.TRANSLATION);
+      const outputMode: OutputMode =
+        context?.outputMode ??
+        (context?.isNativeOutput === true
+          ? (this.config.mode === LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT ||
+              this.config.mode === LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT ||
+              this.config.mode === LLMTaskMode.TRANSLATION
+              ? 'native_function_call'
+              : 'raw_output')
+          : 'tool_call');
 
-      if (nativeFunctionCall && functions?.length) {
-        throw new Error('native_function_call requires functions to be omitted');
+      const nativeFunctionCall = outputMode === 'native_function_call';
+
+      if (outputMode !== 'tool_call' && functions?.length) {
+        throw new Error(`${outputMode} requires functions to be omitted`);
       }
 
       // 4. Prepare messages
@@ -129,6 +136,7 @@ export class LLMTask {
         model,
         temperature,
         thinkingMode,
+        outputMode,
         functions,
         messages,
       });
@@ -143,6 +151,7 @@ export class LLMTask {
             model,
             temperature,
             thinkingMode,
+            outputMode,
             functions,
             messages,
           },

@@ -74,7 +74,7 @@ export const translateObjectsSpec: TaskSpec<'translateObjects', TranslateObjects
 
     const translationConfig = settingsStore.getFunctionConfig('translation');
     const providerConfig = settingsStore.getProviderConfig(translationConfig.provider);
-    const isNativeOutput = settingsStore.settings.nativeOutputMode;
+    const outputMode = settingsStore.settings.nativeOutputMode ? 'native_function_call' : 'tool_call';
 
     const promptContext: StoryTranslationPromptContext = {
       userInput: input.userInput?.trim() || '',
@@ -88,7 +88,7 @@ export const translateObjectsSpec: TaskSpec<'translateObjects', TranslateObjects
         objectIds: input.objectIds,
         targetLanguage: input.targetLanguage,
       }),
-      isNativeOutput,
+      outputMode,
       outputLanguage: input.targetLanguage,
       enablePrefill: translationConfig.advanced.enablePrefill,
       enableThinking: translationConfig.advanced.thinkingMode === 'model',

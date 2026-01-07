@@ -21,6 +21,15 @@ export const LLMTaskMode = {
 export type LLMTaskModeType = typeof LLMTaskMode[keyof typeof LLMTaskMode];
 
 /**
+ * Output mode - determines how LLM output is interpreted
+ *
+ * - tool_call: provider-native tool calling (tools/functions included in request)
+ * - native_function_call: model emits <function_calls> tags in text; backend parses into tool_calls deltas
+ * - raw_output: plain text content only (no tool schemas, no parsing/conversion)
+ */
+export type OutputMode = 'tool_call' | 'native_function_call' | 'raw_output';
+
+/**
  * Template data structure passed to all templates
  * Uses unified schema: config/project/input + mode-specific groups
  */
@@ -32,7 +41,10 @@ export interface TemplateData {
     isThinkingEnabled: boolean;
     isPrefillEnabled: boolean;
     isCustomThinkingEnabled: boolean;
+    outputMode: OutputMode;
     isNativeOutputMode: boolean;
+    isNativeFunctionCallMode: boolean;
+    isRawOutputMode: boolean;
   };
   project: {
     basicInfo: { id: string; title: string; logline: string; genre: string } | null;
@@ -125,6 +137,7 @@ export interface BasePromptContext {
   enablePrefill?: boolean;
   enableThinking?: boolean;
   enableCustomThinking?: boolean;
+  outputMode?: OutputMode;
 }
 
 /**

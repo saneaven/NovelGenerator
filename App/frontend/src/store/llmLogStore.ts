@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { ContentPart, FunctionCallMetadata, ConversationBlock } from '../llm/requestTypes';
 import type { ProviderType } from './settingsStore';
-import type { LLMTaskModeType } from '../llm/types';
+import type { LLMTaskModeType, OutputMode } from '../llm/types';
 
 export interface LLMLogRequest {
   mode: LLMTaskModeType;
@@ -9,6 +9,7 @@ export interface LLMLogRequest {
   model: string;
   temperature: number;
   thinkingMode: 'off' | 'model' | 'custom';
+  outputMode?: OutputMode;
   functions?: any[];
   messages: ConversationBlock[];
 }

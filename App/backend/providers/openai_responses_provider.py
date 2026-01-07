@@ -27,7 +27,7 @@ from openai import (
 )
 
 from .base import BaseProvider
-from .function_calls_parser import FunctionCallsStreamParser
+from .native_function_calls_parser import NativeFunctionCallsStreamParser
 from .registry import ProviderRegistry
 
 # Text/chat model patterns: gpt-* or o{number}*
@@ -241,7 +241,7 @@ class OpenAIResponsesProvider(BaseProvider):
         # Track state for SSE conversion
         captured_usage: Optional[Dict] = None
         stream = None
-        fc_parser = FunctionCallsStreamParser() if native_function_call else None
+        native_fc_parser = NativeFunctionCallsStreamParser() if native_function_call else None
 
         try:
             stream = await client.responses.create(**request)
@@ -255,8 +255,8 @@ class OpenAIResponsesProvider(BaseProvider):
                     if delta_text:
                         text_to_emit = delta_text
                         tool_calls = None
-                        if fc_parser:
-                            text_to_emit, tool_calls = fc_parser.process_chunk(delta_text)
+                        if native_fc_parser:
+                            text_to_emit, tool_calls = native_fc_parser.process_chunk(delta_text)
 
                         if text_to_emit:
                             # Convert to Chat Completions format
@@ -335,8 +335,8 @@ class OpenAIResponsesProvider(BaseProvider):
                 # Handle response completion
                 elif event_type == "response.completed":
                     # Flush any buffered function_calls content before emitting finish_reason.
-                    if fc_parser:
-                        tail_text, tail_tool_calls = fc_parser.finalize()
+                    if native_fc_parser:
+                        tail_text, tail_tool_calls = native_fc_parser.finalize()
                         if tail_text:
                             chunk = {
                                 "choices": [{
@@ -355,7 +355,7 @@ class OpenAIResponsesProvider(BaseProvider):
                                 }]
                             }
                             yield self._format_sse(chunk)
-                        fc_parser = None
+                        native_fc_parser = None
 
                     response_obj = getattr(event, "response", None)
                     if response_obj:
@@ -406,8 +406,8 @@ class OpenAIResponsesProvider(BaseProvider):
             if stream is not None and hasattr(stream, "close"):
                 await stream.close()
 
-        if fc_parser:
-            tail_text, tail_tool_calls = fc_parser.finalize()
+        if native_fc_parser:
+            tail_text, tail_tool_calls = native_fc_parser.finalize()
             if tail_text:
                 chunk = {
                     "choices": [{

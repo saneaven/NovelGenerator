@@ -571,6 +571,95 @@
 }
 
 /* ========================================
+   Streaming Field Display
+   ======================================== */
+
+.fc-streaming-field {
+  margin-bottom: var(--spacing-md);
+}
+
+.fc-streaming-field:last-child {
+  margin-bottom: 0;
+}
+
+.fc-streaming-field__label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--spacing-xs);
+}
+
+.fc-streaming-field__value {
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.fc-streaming-field__value--multiline {
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+}
+
+/* Streaming indicator - subtle border glow */
+.fc-streaming-field__value--streaming {
+  border-color: var(--color-brand-accent);
+}
+
+/* ========================================
+   Streaming Operation Preview
+   ======================================== */
+
+.fc-streaming-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--color-surface-base);
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-border-subtle);
+}
+
+.fc-streaming-preview__header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.fc-streaming-preview__target {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.fc-streaming-preview__target-name {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.fc-streaming-preview__fields {
+  display: flex;
+  flex-direction: column;
+}
+
+.fc-streaming-preview__replacements,
+.fc-streaming-preview__chapters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+/* ========================================
    Footer
    ======================================== */
 

@@ -5,7 +5,7 @@ from google import genai
 from google.genai import types, errors
 
 from .base import BaseProvider
-from .function_calls_parser import FunctionCallsStreamParser
+from .native_function_calls_parser import NativeFunctionCallsStreamParser
 from .registry import ProviderRegistry
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
 
@@ -270,7 +270,7 @@ class GeminiProvider(BaseProvider):
         # Always parse <thinking> tags from text content to prevent leakage into regular content
         prefill_has_thinking = has_unclosed_thinking_tag(messages) if thinking_mode == "custom" else False
         parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking)
-        fc_parser = FunctionCallsStreamParser() if native_function_call else None
+        native_fc_parser = NativeFunctionCallsStreamParser() if native_function_call else None
         tool_call_counter = 0
         stream = None
 
@@ -386,8 +386,8 @@ class GeminiProvider(BaseProvider):
                                         {"choices": [{"delta": {"thinking": {"text": thinking_block}}}]}
                                     )
 
-                            if fc_parser and text_to_emit:
-                                clean_content, tool_calls = fc_parser.process_chunk(text_to_emit)
+                            if native_fc_parser and text_to_emit:
+                                clean_content, tool_calls = native_fc_parser.process_chunk(text_to_emit)
                                 text_to_emit = clean_content
                                 if tool_calls:
                                     extra_chunks.append(
@@ -406,8 +406,8 @@ class GeminiProvider(BaseProvider):
             for final_chunk in self._finalize_parser(parser):
                 delta = (final_chunk.get("choices") or [{}])[0].get("delta") or {}
                 content = delta.get("content")
-                if fc_parser and isinstance(content, str) and content:
-                    clean_content, tool_calls = fc_parser.process_chunk(content)
+                if native_fc_parser and isinstance(content, str) and content:
+                    clean_content, tool_calls = native_fc_parser.process_chunk(content)
                     if clean_content:
                         payload = {"choices": [{"delta": {"content": clean_content}}]}
                         if self._has_meaningful_payload(payload):
@@ -420,8 +420,8 @@ class GeminiProvider(BaseProvider):
                     if self._has_meaningful_payload(final_chunk):
                         yield self._format_sse(final_chunk)
 
-            if fc_parser:
-                tail_text, tail_tool_calls = fc_parser.finalize()
+            if native_fc_parser:
+                tail_text, tail_tool_calls = native_fc_parser.finalize()
                 if tail_text:
                     payload = {"choices": [{"delta": {"content": tail_text}}]}
                     if self._has_meaningful_payload(payload):

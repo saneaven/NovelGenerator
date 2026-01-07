@@ -1,6 +1,5 @@
 import type { FunctionCallSchema } from '../functionCall';
 import { STORY_OBJECT_EDIT_FUNCTIONS, MANUSCRIPT_EDIT_FUNCTIONS, getFunctionsForSet } from '../functionCall';
-import { OBJECT_IMAGE_PROMPT_FUNCTIONS } from './schemas/imagePromptFunctions';
 import { renderTemplate, registerFragments, type PromptFragment } from '../templateEngine/engine';
 import { useSettingsStore } from '../store/settingsStore';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
@@ -9,6 +8,7 @@ import type { UnifiedObject } from '../types/unifiedObject';
 import {
   LLMTaskMode,
   type LLMTaskModeType,
+  type OutputMode,
   type PromptBundle,
   type PromptContext,
   type TemplateData,
@@ -30,6 +30,27 @@ import {
  */
 export class PromptManager {
   private static fragmentsLoaded = false;
+
+  private static resolveOutputMode(
+    llmMode: LLMTaskModeType,
+    context: { outputMode?: OutputMode; isNativeOutput?: boolean }
+  ): OutputMode {
+    if (context.outputMode) return context.outputMode;
+
+    // Backward-compat: legacy contexts only set isNativeOutput.
+    if (context.isNativeOutput === true) {
+      if (
+        llmMode === LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT ||
+        llmMode === LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT ||
+        llmMode === LLMTaskMode.TRANSLATION
+      ) {
+        return 'native_function_call';
+      }
+      return 'raw_output';
+    }
+
+    return 'tool_call';
+  }
 
   /**
    * Ensure fragments are loaded and registered before rendering templates
@@ -133,23 +154,24 @@ export class PromptManager {
     mode: LLMTaskModeType,
     context: PromptContext
   ): FunctionCallSchema[] | undefined {
+    const outputMode = this.resolveOutputMode(mode, context as any);
+    if (outputMode !== 'tool_call') return undefined;
+
     switch (mode) {
       case LLMTaskMode.AGENT_STORYOBJECT:
       case LLMTaskMode.AGENT_NOVEL_EDITOR:
       case LLMTaskMode.AGENT_OUTLINE_MANAGER:
         return (context as AgentWorkspacePromptContext).functions;
       case LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT:
-        return this.getEditAssistantFunctions(context as EditAssistantStoryObjectPromptContext, 'storyObject');
+        return this.getEditAssistantFunctions('storyObject');
       case LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT:
-        return this.getEditAssistantFunctions(context as EditAssistantManuscriptPromptContext, 'manuscript');
+        return this.getEditAssistantFunctions('manuscript');
       case LLMTaskMode.TRANSLATION:
-        return (context as StoryTranslationPromptContext).isNativeOutput
-          ? undefined
-          : getFunctionsForSet('translateObjects');
+        return getFunctionsForSet('translateObjects');
       case LLMTaskMode.AGENT_TRANSLATION:
         return undefined;
       case LLMTaskMode.OBJECT_IMAGE_PROMPT:
-        return this.getObjectImagePromptFunctions(context as ObjectImagePromptContext);
+        return undefined; // Image prompt always uses raw output
       case LLMTaskMode.SCENE_IMAGE_PROMPT:
         return undefined;
       case LLMTaskMode.COVER_IMAGE_PROMPT:
@@ -173,8 +195,14 @@ export class PromptManager {
     ]);
 
     const settings = useSettingsStore.getState().settings;
+    const llmMode: LLMTaskModeType =
+      mode === 'storyObject'
+        ? LLMTaskMode.AGENT_STORYOBJECT
+        : mode === 'outlineManager'
+          ? LLMTaskMode.AGENT_OUTLINE_MANAGER
+          : LLMTaskMode.AGENT_NOVEL_EDITOR;
     const templateData: TemplateData = {
-      config: this.buildConfigData(context),
+      config: this.buildConfigData(llmMode, context),
       project: this.buildProjectData(context.projectId, settings.mainLanguage),
       input: {
         userMessage: context.userInput,
@@ -206,13 +234,17 @@ export class PromptManager {
     ]);
 
     const settings = useSettingsStore.getState().settings;
+    const llmMode: LLMTaskModeType =
+      mode === 'manuscript'
+        ? LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT
+        : LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT;
 
     let templateData: TemplateData;
 
     if (mode === 'manuscript') {
       const msContext = context as EditAssistantManuscriptPromptContext;
       templateData = {
-        config: this.buildConfigData(context),
+        config: this.buildConfigData(llmMode, context),
         project: this.buildProjectData(context.projectId, settings.mainLanguage),
         input: { userMessage: context.userInput },
         editAssistant: {
@@ -229,7 +261,7 @@ export class PromptManager {
     } else {
       const soContext = context as EditAssistantStoryObjectPromptContext;
       templateData = {
-        config: this.buildConfigData(context),
+        config: this.buildConfigData(llmMode, context),
         project: this.buildProjectData(context.projectId, settings.mainLanguage),
         input: { userMessage: context.userInput },
         editAssistant: {
@@ -278,7 +310,7 @@ export class PromptManager {
     }
 
     const templateData: TemplateData = {
-      config: this.buildConfigData(context),
+      config: this.buildConfigData(LLMTaskMode.TRANSLATION, context),
       project: this.buildProjectData(context.projectId, context.sourceLanguage),
       input: { userMessage: context.userInput },
       translation: {
@@ -312,7 +344,7 @@ export class PromptManager {
     ]);
 
     const templateData: TemplateData = {
-      config: this.buildConfigData(context),
+      config: this.buildConfigData(LLMTaskMode.AGENT_TRANSLATION, context),
       project: this.buildProjectData(context.projectId, context.sourceLanguage),
       input: { userMessage: context.userInput },
       translation: {
@@ -345,7 +377,7 @@ export class PromptManager {
 
     const settings = useSettingsStore.getState().settings;
     const templateData: TemplateData = {
-      config: this.buildConfigData(context),
+      config: this.buildConfigData(LLMTaskMode.OBJECT_IMAGE_PROMPT, context),
       project: this.buildProjectData(context.projectId, settings.mainLanguage),
       input: { userMessage: context.userInput },
       imagePrompt: {
@@ -381,7 +413,7 @@ export class PromptManager {
 
     const settings = useSettingsStore.getState().settings;
     const templateData: TemplateData = {
-      config: this.buildConfigData(context),
+      config: this.buildConfigData(LLMTaskMode.SCENE_IMAGE_PROMPT, context),
       project: this.buildProjectData(context.projectId, settings.mainLanguage),
       input: { userMessage: context.userInput },
       imagePrompt: {
@@ -415,7 +447,7 @@ export class PromptManager {
 
     const settings = useSettingsStore.getState().settings;
     const templateData: TemplateData = {
-      config: this.buildConfigData(context),
+      config: this.buildConfigData(LLMTaskMode.COVER_IMAGE_PROMPT, context),
       project: this.buildProjectData(context.projectId, settings.mainLanguage),
       input: { userMessage: context.userInput },
       imagePrompt: {
@@ -444,14 +476,16 @@ export class PromptManager {
 
   // ==================== Helpers ====================
 
-  private static buildConfigData(context: {
+  private static buildConfigData(llmMode: LLMTaskModeType, context: {
     enableThinking?: boolean;
     enableCustomThinking?: boolean;
     enablePrefill?: boolean;
     isNativeOutput?: boolean;
+    outputMode?: OutputMode;
   }): TemplateData['config'] {
     const store = useSettingsStore.getState();
     const settings = store.settings;
+    const outputMode = this.resolveOutputMode(llmMode, context);
 
     return {
       mainLanguage: settings.mainLanguage,
@@ -460,7 +494,11 @@ export class PromptManager {
       isThinkingEnabled: context.enableThinking ?? false,
       isPrefillEnabled: context.enablePrefill ?? false,
       isCustomThinkingEnabled: context.enableCustomThinking ?? false,
-      isNativeOutputMode: context.isNativeOutput ?? false,
+      outputMode,
+      // Backward-compatible variable kept for existing templates.
+      isNativeOutputMode: outputMode !== 'tool_call',
+      isNativeFunctionCallMode: outputMode === 'native_function_call',
+      isRawOutputMode: outputMode === 'raw_output',
     };
   }
 
@@ -813,17 +851,8 @@ export class PromptManager {
   // ==================== Function Schemas ====================
 
   private static getEditAssistantFunctions(
-    context: EditAssistantStoryObjectPromptContext | EditAssistantManuscriptPromptContext,
     mode: 'manuscript' | 'storyObject'
   ): FunctionCallSchema[] | undefined {
-    if (context.isNativeOutput) return undefined;
     return mode === 'manuscript' ? MANUSCRIPT_EDIT_FUNCTIONS : STORY_OBJECT_EDIT_FUNCTIONS;
-  }
-
-  private static getObjectImagePromptFunctions(
-    context: ObjectImagePromptContext
-  ): FunctionCallSchema[] | undefined {
-    if (context.isNativeOutput) return undefined;
-    return OBJECT_IMAGE_PROMPT_FUNCTIONS;
   }
 }
