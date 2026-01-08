@@ -495,8 +495,6 @@ export class PromptManager {
       isPrefillEnabled: context.enablePrefill ?? false,
       isCustomThinkingEnabled: context.enableCustomThinking ?? false,
       outputMode,
-      // Backward-compatible variable kept for existing templates.
-      isNativeOutputMode: outputMode !== 'tool_call',
       isNativeFunctionCallMode: outputMode === 'native_function_call',
       isRawOutputMode: outputMode === 'raw_output',
     };

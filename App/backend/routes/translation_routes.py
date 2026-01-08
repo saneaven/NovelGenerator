@@ -2,7 +2,7 @@
 Translation Management Endpoints
 
 Advanced translation operations:
-- Single and batch translation
+- Translation
 - Translation status/progress
 - Language availability queries
 - Bulk operations

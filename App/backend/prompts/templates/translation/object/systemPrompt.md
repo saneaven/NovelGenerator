@@ -8,7 +8,7 @@ Translate content from **{{ translation.sourceLanguage }}** to **{{ translation.
 
 {{prompt "translation/functions"}}
 
-{{#if config.isNativeOutputMode}}
+{{#if config.isNativeFunctionCallMode}}
 
 {{prompt "translation/nativeOutput"}}
 
@@ -34,7 +34,7 @@ Please follow these instructions while maintaining all other translation require
 
 ## Critical Requirements
 
-{{#if config.isNativeOutputMode}}
+{{#if config.isNativeFunctionCallMode}}
 - **MUST wrap output in `<function_calls>...</function_calls>`**
 - **MUST use one `<function_call>...</function_call>` per operation**
 - **Each `<function_call>` MUST contain exactly one JSON object** (no markdown code fences)

@@ -42,7 +42,6 @@ export interface TemplateData {
     isPrefillEnabled: boolean;
     isCustomThinkingEnabled: boolean;
     outputMode: OutputMode;
-    isNativeOutputMode: boolean;
     isNativeFunctionCallMode: boolean;
     isRawOutputMode: boolean;
   };

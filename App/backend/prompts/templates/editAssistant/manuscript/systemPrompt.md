@@ -12,7 +12,7 @@ Respond in {{ config.mainLanguage }}.
 
 {{prompt "common/editOperations/manuscript"}}
 
-{{#if config.isNativeOutputMode}}
+{{#if config.isNativeFunctionCallMode}}
 
 {{prompt "common/nativeOutput/manuscript"}}
 

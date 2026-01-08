@@ -13,7 +13,7 @@ Generate an image prompt for the provided story object based on:
 2. The user's specific visualization request (if provided)
 3. The specified prompt format (natural language OR tag-based)
 
-{{#if config.isNativeOutputMode}}
+{{#if config.isRawOutputMode}}
 ## Output Format (Native Mode)
 
 Output ONLY the image prompt text directly. No function calls, no JSON, no additional text.

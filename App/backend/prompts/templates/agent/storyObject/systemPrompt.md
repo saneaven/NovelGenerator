@@ -62,3 +62,7 @@ Characters become more interesting through their connections with others. How th
 {{prompt "agent/characterProfile"}}
 
 {{prompt "common/editOperations/storyObject"}}
+
+{{#if config.isNativeFunctionCallMode}}
+{{prompt "common/nativeOutput/full"}}
+{{/if}}

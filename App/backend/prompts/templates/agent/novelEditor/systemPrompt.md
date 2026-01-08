@@ -91,3 +91,7 @@ Respond in {{ config.mainLanguage }}.
 - Contextual Awareness: Consider how edits affect the broader story. Changes in one chapter may have implications for previous or subsequent chapters.
 
 {{prompt "common/editOperations/manuscript"}}
+
+{{#if config.isNativeFunctionCallMode}}
+{{prompt "common/nativeOutput/full"}}
+{{/if}}

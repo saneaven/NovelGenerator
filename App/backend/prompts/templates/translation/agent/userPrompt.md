@@ -14,7 +14,7 @@ Content (translate this):
 {{/each}}
 
 ## Requirements
-{{#if config.isNativeOutputMode}}
+{{#if config.isRawOutputMode}}
 - Output ONLY the translated text directly.
 - Do NOT wrap in JSON, function calls, or any markup.
 - Do NOT translate any function-call/json snippets; keep them untouched.

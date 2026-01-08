@@ -3,7 +3,7 @@ import { useAgentStore } from '../../store/agentStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { generateTempId } from '../../utils/tempId';
 import { LLMTask, LLMTaskMode, type AgentWorkspacePromptContext } from '../../llm';
-import type { LLMTaskResult } from '../../llm/types';
+import type { LLMTaskResult, OutputMode } from '../../llm/types';
 import { getFunctionsForSet } from '../../functionCall';
 import { stageSessionEdits } from '../functionCalls/functionCallEngine';
 
@@ -40,6 +40,7 @@ export const agentSpec: TaskSpec<'agent', AgentTaskInput, AgentTaskResult> = {
 
     const userInput = input.userInput ?? '';
     const language = input.outputLanguage;
+    const outputMode: OutputMode = settings.nativeOutputMode ? 'native_function_call' : 'tool_call';
 
     // 1) Create user message (if any) and assistant placeholder
     if (userInput.trim()) {
@@ -99,10 +100,11 @@ export const agentSpec: TaskSpec<'agent', AgentTaskInput, AgentTaskResult> = {
       userInput: combinedUserInput,
       projectId: input.projectId,
       outputLanguage: language,
+      outputMode,
       enablePrefill: agentConfig.advanced.enablePrefill,
       enableThinking: agentConfig.advanced.thinkingMode === 'model',
       enableCustomThinking: agentConfig.advanced.thinkingMode === 'custom',
-      functions: getFunctionsForSet('agent'),
+      functions: outputMode === 'tool_call' ? getFunctionsForSet('agent') : undefined,
       contextObjectIds: input.contextObjectIds,
     };
 

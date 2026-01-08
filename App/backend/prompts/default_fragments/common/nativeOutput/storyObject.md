@@ -35,16 +35,6 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 { "function": "delete_story_object", "id": "obj-123", "type": "character" }
 ```
 
-**create_outline_chapter**
-```json
-{ "function": "create_outline_chapter", "actId": "act-123", "name": "Chapter Name", "description": "Description" }
-```
-
-**delete_outline_chapter**
-```json
-{ "function": "delete_outline_chapter", "id": "ch-123" }
-```
-
 #### Replace Operations
 
 **replace_basic_info** (only include fields to change)
@@ -72,11 +62,6 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 **patch_story_object**
 ```json
 { "function": "patch_story_object", "id": "obj-123", "type": "character", "replacements": [{ "field": "description", "old": "text to find", "new": "replacement" }] }
-```
-
-**patch_outline_chapter**
-```json
-{ "function": "patch_outline_chapter", "id": "ch-123", "replacements": [{ "field": "description", "old": "text to find", "new": "replacement" }], "actId": "act-456", "order": 3 } // order is 1-based
 ```
 
 **Important:**

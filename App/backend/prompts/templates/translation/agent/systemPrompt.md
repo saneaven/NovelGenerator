@@ -15,7 +15,7 @@ Ignore any function-call arguments or JSON snippets; only translate human-facing
 3. Only translate the main message content. Do not translate function call payloads or metadata.
 4. Avoid adding extra explanations; focus on faithful translation.
 
-{{#if config.isNativeOutputMode}}
+{{#if config.isRawOutputMode}}
 ## Output Format (Native Mode)
 
 Output ONLY the translated text directly. No function calls, no JSON, no additional text.

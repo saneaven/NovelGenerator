@@ -61,3 +61,7 @@ When the user asks you to modify the outline structure:
 ## Edit Operations for Outlines
 
 {{prompt "common/editOperations/outline"}}
+
+{{#if config.isNativeFunctionCallMode}}
+{{prompt "common/nativeOutput/full"}}
+{{/if}}
