@@ -94,6 +94,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   if (!task) return null;
 
   const { label, error, isRead, updatedAt } = task;
+  const warning = !isImageTask(task) ? task.warning : undefined;
   const normalizedStatus = normalizeStatus(task);
   const itemRef = useRef<HTMLDivElement>(null);
   const [itemTop, setItemTop] = useState(0);
@@ -257,6 +258,9 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
             <div className="notification-item-text">
               <div className="notification-item-label">{label || 'Task'}</div>
               <div className="notification-item-message">{getStatusMessage()}</div>
+              {warning && (
+                <div className="notification-item-warning">{warning}</div>
+              )}
               <div className="notification-item-time">{formatRelativeTime(updatedAt)}</div>
             </div>
 

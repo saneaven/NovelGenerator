@@ -12,10 +12,19 @@ Respond in {{ config.mainLanguage }}.
 
 {{prompt "common/editOperations/manuscript"}}
 
+{{#if config.isRawOutputMode}}
+
+## Output Format (Raw Mode)
+
+Output ONLY the complete revised manuscript content directly. No function calls, no JSON, no XML tags.
+Just output the full chapter content as plain text, ready to replace the current manuscript.
+
+{{else}}
 {{#if config.isNativeFunctionCallMode}}
 
 {{prompt "common/nativeOutput/manuscript"}}
 
+{{/if}}
 {{/if}}
 
 ## Editing Guidelines

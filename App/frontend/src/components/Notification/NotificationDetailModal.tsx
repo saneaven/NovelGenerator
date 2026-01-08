@@ -150,6 +150,12 @@ const NotificationDetailModal: React.FC<NotificationDetailModalProps> = ({
               <div className="notification-detail-error-summary-text">{session.error}</div>
             </div>
           )}
+
+          {session.warning && (
+            <div className="notification-detail-warning-container">
+              <div className="notification-detail-warning-text">{session.warning}</div>
+            </div>
+          )}
         </div>
 
         <IconButton

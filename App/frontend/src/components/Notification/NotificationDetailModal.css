@@ -81,6 +81,23 @@
   white-space: nowrap;
 }
 
+/* Warning Container in Header */
+.notification-detail-warning-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+  padding: var(--spacing-sm);
+  background: color-mix(in oklch, var(--color-warning, #f59e0b) 15%, transparent);
+  border-radius: var(--border-radius-sm);
+}
+
+.notification-detail-warning-text {
+  flex: 1;
+  color: var(--color-warning, #f59e0b);
+  font-size: var(--font-size-sm);
+}
+
 .notification-detail-close {
   width: 28px;
   height: 28px;

@@ -60,7 +60,9 @@ export const aiEditSpec: TaskSpec<'aiEdit', AiEditTaskInput, void> = {
 
     const editAssistantConfig = settingsStore.getFunctionConfig('editAssistant');
     const providerConfig = settingsStore.getProviderConfig(editAssistantConfig.provider);
-    const outputMode = settingsStore.settings.nativeOutputMode ? 'native_function_call' : 'tool_call';
+    const outputMode = settingsStore.settings.nativeOutputMode
+      ? (settingsStore.settings.rawOutputMode ? 'raw_output' : 'native_function_call')
+      : 'tool_call';
     const mainLanguage = settingsStore.settings.mainLanguage;
 
     const isManuscriptMode = input.category === 'manuscript';
@@ -169,6 +171,53 @@ export const aiEditSpec: TaskSpec<'aiEdit', AiEditTaskInput, void> = {
     const finalResult = result as unknown as LLMTaskResult;
 
     updateSession({ provider: finalResult.provider, model: finalResult.model, usage: finalResult.usage });
+
+    // Handle raw output mode - apply content directly without function calls
+    if (outputMode === 'raw_output') {
+      const rawContent = finalResult.contentParts
+        .filter(p => p.type === 'content')
+        .map(p => p.text)
+        .join('')
+        .trim();
+
+      if (!rawContent) {
+        updateSession({ status: 'error', error: 'AI response was empty.' });
+        return;
+      }
+
+      if (isManuscriptMode) {
+        // For manuscript: apply raw output to content field
+        const manuscriptObj = unifiedStore.getManuscriptByChapterId(input.targetId!);
+        if (manuscriptObj) {
+          const currentData = manuscriptObj.data[mainLanguage] || {};
+          await unifiedStore.updateObject('manuscript', manuscriptObj.id, {
+            language: mainLanguage,
+            data: {
+              ...currentData,
+              content: rawContent,
+            },
+            user_request: input.userRequest,
+          });
+        }
+      } else if (input.targetId) {
+        // For story object: apply raw output to description field
+        const obj = unifiedStore.getObject(input.targetId);
+        if (obj) {
+          const currentData = obj.data[mainLanguage] || {};
+          await unifiedStore.updateObject(obj.type, input.targetId, {
+            language: mainLanguage,
+            data: {
+              ...currentData,
+              description: rawContent,
+            },
+            user_request: input.userRequest,
+          });
+        }
+      }
+
+      updateSession({ status: 'success' });
+      return;
+    }
 
     const functionCalls = finalResult.functionCalls;
 

@@ -8,10 +8,23 @@ Translate content from **{{ translation.sourceLanguage }}** to **{{ translation.
 
 {{prompt "translation/functions"}}
 
+{{#if config.isRawOutputMode}}
+
+## Output Format (Raw Mode)
+
+Output ONLY the translated content directly. No function calls, no JSON, no XML tags.
+
+- For story objects (character, location, etc.): Output only the translated **description** text
+- For manuscripts: Output only the translated **content** text
+
+Just output the translated text as plain text, nothing else.
+
+{{else}}
 {{#if config.isNativeFunctionCallMode}}
 
 {{prompt "translation/nativeOutput"}}
 
+{{/if}}
 {{/if}}
 
 ## Translation Requirements
@@ -34,6 +47,11 @@ Please follow these instructions while maintaining all other translation require
 
 ## Critical Requirements
 
+{{#if config.isRawOutputMode}}
+- **MUST output ONLY the translated text** - no function calls, no JSON, no XML tags
+- **Do NOT include any prefixes** like "name:" or "description:" - just the text itself
+- Keep terminology consistent with any provided context
+{{else}}
 {{#if config.isNativeFunctionCallMode}}
 - **MUST wrap output in `<function_calls>...</function_calls>`**
 - **MUST use one `<function_call>...</function_call>` per operation**
@@ -48,4 +66,5 @@ Please follow these instructions while maintaining all other translation require
 - **MUST use the exact objectId as the `id` parameter** (when required)
 - **MUST include all required fields** for the chosen function
 - Keep terminology consistent across all translations
+{{/if}}
 {{/if}}

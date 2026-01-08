@@ -12,10 +12,19 @@ Respond in {{ config.mainLanguage }}.
 
 {{prompt "common/editOperations/storyObject"}}
 
+{{#if config.isRawOutputMode}}
+
+## Output Format (Raw Mode)
+
+Output ONLY the revised description directly. No function calls, no JSON, no XML tags.
+Just output the updated description text as plain text.
+
+{{else}}
 {{#if config.isNativeFunctionCallMode}}
 
 {{prompt "common/nativeOutput/storyObject"}}
 
+{{/if}}
 {{/if}}
 
 ## Editing Guidelines

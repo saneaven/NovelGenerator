@@ -1,7 +1,7 @@
 import type { TaskSpec } from './types';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import { LLMTask, LLMTaskMode, type StoryTranslationPromptContext } from '../../llm';
+import { LLMTask, LLMTaskMode, type StoryTranslationPromptContext, type OutputMode } from '../../llm';
 import type { LLMTaskResult } from '../../llm/types';
 import { stageSessionEdits } from '../functionCalls/functionCallEngine';
 
@@ -71,10 +71,29 @@ export const translateObjectsSpec: TaskSpec<'translateObjects', TranslateObjects
   label: () => 'Translation',
   run: async ({ sessionId, input, abortController, updateSession }) => {
     const settingsStore = useSettingsStore.getState();
+    const unifiedStore = useUnifiedObjectStore.getState();
 
     const translationConfig = settingsStore.getFunctionConfig('translation');
     const providerConfig = settingsStore.getProviderConfig(translationConfig.provider);
-    const outputMode = settingsStore.settings.nativeOutputMode ? 'native_function_call' : 'tool_call';
+
+    // Determine output mode with fallback for unsupported raw mode cases
+    let outputMode: OutputMode = settingsStore.settings.nativeOutputMode
+      ? (settingsStore.settings.rawOutputMode ? 'raw_output' : 'native_function_call')
+      : 'tool_call';
+
+    // Check if raw mode is supported for this translation
+    if (outputMode === 'raw_output') {
+      const targetObject = input.objectIds.length === 1 ? unifiedStore.getObject(input.objectIds[0]) : null;
+      const isUnsupported = input.objectIds.length > 1 || targetObject?.type === 'basic_info';
+
+      if (isUnsupported) {
+        // Show warning and fall back to native_function_call
+        updateSession({
+          warning: 'Raw output mode not supported for this translation. Using native function call mode.',
+        });
+        outputMode = 'native_function_call';
+      }
+    }
 
     const promptContext: StoryTranslationPromptContext = {
       userInput: input.userInput?.trim() || '',
@@ -133,6 +152,52 @@ export const translateObjectsSpec: TaskSpec<'translateObjects', TranslateObjects
     const finalResult = result as unknown as LLMTaskResult;
 
     updateSession({ provider: finalResult.provider, model: finalResult.model, usage: finalResult.usage });
+
+    // Handle raw output mode - apply translation directly without function calls
+    if (outputMode === 'raw_output' && input.objectIds.length === 1) {
+      const rawContent = finalResult.contentParts
+        .filter(p => p.type === 'content')
+        .map(p => p.text)
+        .join('')
+        .trim();
+
+      if (!rawContent) {
+        updateSession({ status: 'error', error: 'AI response was empty.' });
+        return;
+      }
+
+      const targetId = input.objectIds[0];
+      const obj = unifiedStore.getObject(targetId);
+
+      if (obj) {
+        const currentData = obj.data[input.targetLanguage] || {};
+
+        if (obj.type === 'manuscript') {
+          // For manuscript: apply raw output to content field
+          await unifiedStore.updateObject('manuscript', targetId, {
+            language: input.targetLanguage,
+            data: {
+              ...currentData,
+              content: rawContent,
+            },
+            create_new_version: false,
+          });
+        } else {
+          // For story objects: apply raw output to description field
+          await unifiedStore.updateObject(obj.type, targetId, {
+            language: input.targetLanguage,
+            data: {
+              ...currentData,
+              description: rawContent,
+            },
+            create_new_version: false,
+          });
+        }
+      }
+
+      updateSession({ status: 'success' });
+      return;
+    }
 
     const functionCalls = finalResult.functionCalls;
 

@@ -42,6 +42,7 @@ export interface TaskSessionState<TInput = unknown, TResult = unknown> {
 
   result?: TResult;
   error?: string;
+  warning?: string;
 
   provider?: string;
   model?: string;
