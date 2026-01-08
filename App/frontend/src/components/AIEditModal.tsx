@@ -4,9 +4,10 @@ import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import type { ObjectType, ChapterObject } from '../types/unifiedObject';
 import { TaskRuntime } from '../llmTask';
-import { Expand, Collapse } from './icons';
+import { Expand, Collapse, Document } from './icons';
 import { ObjectPicker } from './ObjectPicker';
 import { TextButton } from './TextButton';
+import ToggleSwitch from './ToggleSwitch';
 import './AIEditModal.css';
 
 type AIEditCategory = ObjectType | 'manuscript';
@@ -55,6 +56,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   const [isContextExpanded, setIsContextExpanded] = useState(false);
   const [pickerLoading, setPickerLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [rawMode, setRawMode] = useState(false);
 
   const unifiedStore = useUnifiedObjectStore();
   const settingsStore = useSettingsStore();
@@ -94,6 +96,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       setSelectedContextIds(defaultSelectedContextIds ?? []);
       setPickerLoading(true);
       setError(null);
+      setRawMode(false);
     }
   }, [isOpen, defaultUserRequest, defaultSelectedContextIds]);
 
@@ -140,6 +143,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       targetId,
       userRequest: trimmedRequest,
       selectedContextIds,
+      rawMode,
     });
     onTaskStarted?.(sessionId);
 
@@ -164,6 +168,18 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
             rows={4}
             required
           />
+        </div>
+
+        <div className="form-group raw-mode-toggle">
+          <ToggleSwitch
+            checked={rawMode}
+            onChange={setRawMode}
+            label="Raw output mode"
+            icon={<Document size="sm" />}
+          />
+          <p className="field-hint">
+            Output text directly without function calls. Replaces description (story objects) or content (manuscripts).
+          </p>
         </div>
 
         <div className="form-group context-options">

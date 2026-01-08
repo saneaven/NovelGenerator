@@ -4,6 +4,7 @@ import { fetchModels, fetchModelEndpoints } from '../../llm/llmService';
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
 import { Check, Expand, Collapse } from '../icons';
+import './ModelBrowser.css';
 
 interface ModelBrowserProps {
   provider: ProviderType;

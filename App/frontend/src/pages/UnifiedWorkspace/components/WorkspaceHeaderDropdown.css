@@ -53,12 +53,32 @@
 /* Mobile adjustments */
 @media (max-width: 768px) {
   .workspace-page-selector {
-    padding: var(--spacing-xs);
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
+    background: var(--color-surface-base);
+    color: var(--color-text-tertiary);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-xs);
+    justify-content: center;
   }
 
-  .workspace-page-selector-label {
-    max-width: 120px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .workspace-page-selector:hover {
+    background: var(--color-surface-hover);
+    border-color: var(--color-border-medium);
+    color: var(--color-text-secondary);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .workspace-page-selector:active {
+    transform: translateY(0);
+    box-shadow: var(--shadow-xs);
+  }
+
+  .workspace-page-selector-label,
+  .workspace-page-selector-chevron {
+    display: none;
   }
 }

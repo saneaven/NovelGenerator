@@ -11,8 +11,6 @@ interface AdvancedPanelProps {
     onRetryConfigChange: (config: RetryConfig) => void;
     nativeOutputMode: boolean;
     onNativeOutputModeChange: (enabled: boolean) => void;
-    rawOutputMode: boolean;
-    onRawOutputModeChange: (enabled: boolean) => void;
     functionCallHistoryLimit: number;
     onFunctionCallHistoryLimitChange: (limit: number) => void;
 }
@@ -22,8 +20,6 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
     onRetryConfigChange,
     nativeOutputMode,
     onNativeOutputModeChange,
-    rawOutputMode,
-    onRawOutputModeChange,
     functionCallHistoryLimit,
     onFunctionCallHistoryLimitChange,
 }) => {
@@ -206,20 +202,6 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                         server-side into normal function calls). Image prompt tasks always output raw text.
                     </p>
                 </div>
-                {nativeOutputMode && (
-                    <div className="form-field nested-field">
-                        <ToggleSwitch
-                            checked={rawOutputMode}
-                            onChange={onRawOutputModeChange}
-                            label="Enable raw output mode"
-                            icon={<Document size="sm" />}
-                        />
-                        <p className="field-hint">
-                            When enabled, edit/translation tasks output plain text directly without function calls.
-                            The AI output replaces the target content (description for story objects, content for manuscripts).
-                        </p>
-                    </div>
-                )}
             </div>
 
             {/* Function Call History */}

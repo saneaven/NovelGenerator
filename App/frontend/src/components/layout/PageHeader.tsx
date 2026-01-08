@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Settings, HamburgerMenu, Save, Check, Bullet } from '../icons';
+import { Settings, HamburgerMenu, Save, Check, Bullet } from '../icons';
 import LanguageDropdown from '../ui/LanguageDropdown';
 import { NotificationButton } from '../Notification';
 import { IconButton } from '../IconButton';
@@ -61,14 +61,10 @@ const PageHeader: React.FC<PageHeaderProps> = ({
       <div className="page-header-desktop">
         <div className="page-header-unified">
           <div className="page-header-unified-left">
-            <IconButton
-              icon={<ArrowLeft size="lg" />}
-              onClick={() => navigate('/')}
-              title="Back to home"
-            />
             <WorkspaceHeaderDropdown
               currentSubPage={currentSubPage}
               onSubPageChange={onSubPageChange}
+              onHomeClick={() => navigate('/')}
             />
           </div>
           <div className="page-header-unified-center">
@@ -100,11 +96,10 @@ const PageHeader: React.FC<PageHeaderProps> = ({
       <div className="page-header-mobile">
         {/* Left side */}
         <div className="page-header-mobile-left">
-          <IconButton
-            icon={<ArrowLeft size="md" />}
-            onClick={() => navigate('/')}
-            title="Back to home"
-            size="sm"
+          <WorkspaceHeaderDropdown
+            currentSubPage={currentSubPage}
+            onSubPageChange={onSubPageChange}
+            onHomeClick={() => navigate('/')}
           />
 
           {showSaveIndicator && (
@@ -118,10 +113,6 @@ const PageHeader: React.FC<PageHeaderProps> = ({
 
         {/* Center - absolutely positioned */}
         <div className="page-header-mobile-center">
-          <WorkspaceHeaderDropdown
-            currentSubPage={currentSubPage}
-            onSubPageChange={onSubPageChange}
-          />
           {mobileSubtitle && (
             <span className="page-header-mobile-subtitle">{mobileSubtitle}</span>
           )}

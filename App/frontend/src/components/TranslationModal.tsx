@@ -6,11 +6,12 @@ import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import type { UnifiedObject, ObjectType } from '../types/unifiedObject';
 import { TaskRuntime } from '../llmTask';
-import { Globe, Swap } from './icons';
+import { Globe, Swap, Document } from './icons';
 import { ObjectPicker, CATEGORY_CONFIG as PICKER_CATEGORY_CONFIG } from './ObjectPicker';
 import CollapsibleSection from './ui/CollapsibleSection';
 import { TextButton } from './TextButton';
 import { IconButton } from './IconButton';
+import ToggleSwitch from './ToggleSwitch';
 
 interface TranslationModalProps {
   isOpen: boolean;
@@ -58,6 +59,9 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     () => new Set(defaultSelectedContextIds)
   );
   const [isContextCollapsed, setIsContextCollapsed] = useState(true);
+
+  // Raw output mode
+  const [rawMode, setRawMode] = useState(false);
 
   const hasInitializedSelectionRef = useRef(false);
   // Use selector to only subscribe to objects, preventing re-renders from unrelated store changes
@@ -237,6 +241,20 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     return availableObjects.filter(obj => selectedIds.has(obj.objectId));
   }, [availableObjects, selectedIds]);
 
+  // Determine if raw mode is available (single object, not basic_info)
+  const canUseRawMode = useMemo(() => {
+    if (objectsToTranslate.length !== 1) return false;
+    const obj = objectsToTranslate[0];
+    return obj.objectType !== 'basic_info';
+  }, [objectsToTranslate]);
+
+  // Reset rawMode when canUseRawMode becomes false
+  useEffect(() => {
+    if (!canUseRawMode && rawMode) {
+      setRawMode(false);
+    }
+  }, [canUseRawMode, rawMode]);
+
   // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
@@ -247,6 +265,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       // Reset languages so they re-initialize from props on next open
       setSourceLanguage(defaultSourceLanguage || '');
       setTargetLanguage(defaultTargetLanguage || '');
+      setRawMode(false);
     }
   }, [isOpen, defaultSourceLanguage, defaultTargetLanguage, defaultUserInput, preSelectedObjectIds, defaultSelectedContextIds]);
 
@@ -265,6 +284,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       userInput: userInput.trim() || undefined,
       objectIds: objectsToTranslate.map(o => o.objectId),
       contextObjectIds: Array.from(selectedContextIds),
+      rawMode,
     });
   };
 
@@ -383,6 +403,20 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
               selectAllOnLoad={true}
             />
           </CollapsibleSection>
+        )}
+
+        {canUseRawMode && (
+          <div className="form-group raw-mode-toggle">
+            <ToggleSwitch
+              checked={rawMode}
+              onChange={setRawMode}
+              label="Raw output mode"
+              icon={<Document size="sm" />}
+            />
+            <p className="field-hint">
+              Output translation directly without function calls.
+            </p>
+          </div>
         )}
 
         <div className="form-group">

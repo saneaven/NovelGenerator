@@ -329,6 +329,21 @@
   color: var(--color-text-muted);
 }
 
+/* ==================== RAW MODE TOGGLE ==================== */
+.translation-modal .raw-mode-toggle {
+  padding: var(--spacing-md);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+}
+
+.translation-modal .raw-mode-toggle .field-hint {
+  margin: var(--spacing-sm) 0 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
 /* ==================== RESPONSIVE ==================== */
 
 /* Tablet and small desktop */

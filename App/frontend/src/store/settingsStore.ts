@@ -180,9 +180,6 @@ export interface Settings {
     // Native output mode - skip function calling and output raw text/XML
     nativeOutputMode: boolean;
 
-    // Raw output mode - output plain text directly without function calls (requires nativeOutputMode)
-    rawOutputMode: boolean;
-
     // LLM request logging - enable logging of LLM requests for debugging
     llmLoggingEnabled: boolean;
 
@@ -324,9 +321,6 @@ const defaultSettings: Settings = {
     // Native output mode disabled by default
     nativeOutputMode: false,
 
-    // Raw output mode disabled by default
-    rawOutputMode: false,
-
     // LLM logging disabled by default
     llmLoggingEnabled: false,
 
@@ -378,9 +372,6 @@ interface SettingsStore {
 
     // Native output mode setter
     setNativeOutputMode: (enabled: boolean) => void;
-
-    // Raw output mode setter
-    setRawOutputMode: (enabled: boolean) => void;
 
     // LLM logging setter
     setLLMLoggingEnabled: (enabled: boolean) => void;
@@ -481,7 +472,6 @@ const mergeWithDefaults = (stored: any): Settings => {
             ...stored.retryConfig,
         },
         nativeOutputMode: stored.nativeOutputMode ?? defaultSettings.nativeOutputMode,
-        rawOutputMode: stored.rawOutputMode ?? defaultSettings.rawOutputMode,
         llmLoggingEnabled: stored.llmLoggingEnabled ?? defaultSettings.llmLoggingEnabled,
         functionCallHistoryLimit: stored.functionCallHistoryLimit ?? defaultSettings.functionCallHistoryLimit,
     };
@@ -732,13 +722,6 @@ export const useSettingsStore = create<SettingsStore>()(
             setNativeOutputMode: (enabled) => {
                 set((state) => ({
                     settings: { ...state.settings, nativeOutputMode: enabled },
-                }));
-            },
-
-            // Raw output mode setter
-            setRawOutputMode: (enabled) => {
-                set((state) => ({
-                    settings: { ...state.settings, rawOutputMode: enabled },
                 }));
             },
 

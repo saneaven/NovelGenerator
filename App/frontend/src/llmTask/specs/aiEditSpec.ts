@@ -14,6 +14,7 @@ export interface AiEditTaskInput {
   targetId?: string;
   userRequest: string;
   selectedContextIds: string[];
+  rawMode?: boolean;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -60,9 +61,11 @@ export const aiEditSpec: TaskSpec<'aiEdit', AiEditTaskInput, void> = {
 
     const editAssistantConfig = settingsStore.getFunctionConfig('editAssistant');
     const providerConfig = settingsStore.getProviderConfig(editAssistantConfig.provider);
-    const outputMode = settingsStore.settings.nativeOutputMode
-      ? (settingsStore.settings.rawOutputMode ? 'raw_output' : 'native_function_call')
-      : 'tool_call';
+
+    // Determine output mode: rawMode from input takes priority
+    const outputMode = input.rawMode
+      ? 'raw_output'
+      : (settingsStore.settings.nativeOutputMode ? 'native_function_call' : 'tool_call');
     const mainLanguage = settingsStore.settings.mainLanguage;
 
     const isManuscriptMode = input.category === 'manuscript';

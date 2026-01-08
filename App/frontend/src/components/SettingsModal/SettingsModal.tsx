@@ -297,16 +297,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             }
             nativeOutputMode={localSettings.nativeOutputMode}
             onNativeOutputModeChange={(enabled) =>
-              setLocalSettings(prev => ({
-                ...prev,
-                nativeOutputMode: enabled,
-                // Auto-disable rawOutputMode when nativeOutputMode is disabled
-                rawOutputMode: enabled ? prev.rawOutputMode : false,
-              }))
-            }
-            rawOutputMode={localSettings.rawOutputMode}
-            onRawOutputModeChange={(enabled) =>
-              setLocalSettings(prev => ({ ...prev, rawOutputMode: enabled }))
+              setLocalSettings(prev => ({ ...prev, nativeOutputMode: enabled }))
             }
             functionCallHistoryLimit={localSettings.functionCallHistoryLimit}
             onFunctionCallHistoryLimitChange={(limit) =>

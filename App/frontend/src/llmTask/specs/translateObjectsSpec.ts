@@ -12,6 +12,7 @@ export interface TranslateObjectsTaskInput {
   userInput?: string;
   objectIds: string[];
   contextObjectIds?: string[];
+  rawMode?: boolean;
 }
 
 function buildCurrentTranslatedContents(params: {
@@ -76,24 +77,11 @@ export const translateObjectsSpec: TaskSpec<'translateObjects', TranslateObjects
     const translationConfig = settingsStore.getFunctionConfig('translation');
     const providerConfig = settingsStore.getProviderConfig(translationConfig.provider);
 
-    // Determine output mode with fallback for unsupported raw mode cases
-    let outputMode: OutputMode = settingsStore.settings.nativeOutputMode
-      ? (settingsStore.settings.rawOutputMode ? 'raw_output' : 'native_function_call')
-      : 'tool_call';
-
-    // Check if raw mode is supported for this translation
-    if (outputMode === 'raw_output') {
-      const targetObject = input.objectIds.length === 1 ? unifiedStore.getObject(input.objectIds[0]) : null;
-      const isUnsupported = input.objectIds.length > 1 || targetObject?.type === 'basic_info';
-
-      if (isUnsupported) {
-        // Show warning and fall back to native_function_call
-        updateSession({
-          warning: 'Raw output mode not supported for this translation. Using native function call mode.',
-        });
-        outputMode = 'native_function_call';
-      }
-    }
+    // Determine output mode: rawMode from input takes priority
+    // Note: The modal only shows rawMode toggle when it's valid (single object, not basic_info)
+    const outputMode: OutputMode = input.rawMode
+      ? 'raw_output'
+      : (settingsStore.settings.nativeOutputMode ? 'native_function_call' : 'tool_call');
 
     const promptContext: StoryTranslationPromptContext = {
       userInput: input.userInput?.trim() || '',

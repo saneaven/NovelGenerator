@@ -1,6 +1,6 @@
 import React from 'react';
-import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
-import { Workspace, Clipboard, Document, ChevronDown } from '../../../components/icons';
+import { DropdownMenu, DropdownItem, DropdownSection } from '../../../components/ui/DropdownMenu';
+import { Workspace, Clipboard, Document, ChevronDown, Home } from '../../../components/icons';
 import type { SubPageType } from '../hooks/useWorkspaceSubPage';
 import './WorkspaceHeaderDropdown.css';
 
@@ -19,11 +19,13 @@ const SUB_PAGES: SubPageConfig[] = [
 interface WorkspaceHeaderDropdownProps {
   currentSubPage: SubPageType;
   onSubPageChange: (subPage: SubPageType) => void;
+  onHomeClick: () => void;
 }
 
 export const WorkspaceHeaderDropdown: React.FC<WorkspaceHeaderDropdownProps> = ({
   currentSubPage,
   onSubPageChange,
+  onHomeClick,
 }) => {
   const currentPage = SUB_PAGES.find((p) => p.id === currentSubPage) ?? SUB_PAGES[0];
 
@@ -38,15 +40,24 @@ export const WorkspaceHeaderDropdown: React.FC<WorkspaceHeaderDropdownProps> = (
       }
       align="left"
     >
-      {SUB_PAGES.map((page) => (
+      <DropdownSection>
+        {SUB_PAGES.map((page) => (
+          <DropdownItem
+            key={page.id}
+            icon={page.icon}
+            label={page.label}
+            onClick={() => onSubPageChange(page.id)}
+            className={currentSubPage === page.id ? 'active' : ''}
+          />
+        ))}
+      </DropdownSection>
+      <DropdownSection>
         <DropdownItem
-          key={page.id}
-          icon={page.icon}
-          label={page.label}
-          onClick={() => onSubPageChange(page.id)}
-          className={currentSubPage === page.id ? 'active' : ''}
+          icon={<Home size="md" />}
+          label="Home"
+          onClick={onHomeClick}
         />
-      ))}
+      </DropdownSection>
     </DropdownMenu>
   );
 };
