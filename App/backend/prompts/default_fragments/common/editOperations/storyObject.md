@@ -14,24 +14,25 @@ Use for **full content replacement**:
 Use for **targeted search-and-replace edits**:
 - Changing specific phrases in long text
 - When most of the original content remains unchanged
-- Multiple small changes in a single field
 
 ## Patch Format (Search & Replace)
 
-The patch operation uses a simple search-and-replace approach:
+Each patch operation applies a single search-and-replace:
 
 ```json
 {
-  "replacements": [
-    { "field": "description", "old": "text to find", "new": "replacement text" }
-  ]
+  "id": "char-123",
+  "type": "character",
+  "field": "description",
+  "old": "text to find",
+  "new": "replacement text"
 }
 ```
 
 **Important Rules:**
 - The `old` string must be **unique** in the field - include enough context to ensure uniqueness
 - If multiple matches exist, add more surrounding text to `old` to make it unique
-- For multiple changes, use multiple replacement objects in the array
+- For multiple changes, make multiple patch function calls
 
 ### Example: Changing a phrase in a description
 
@@ -45,10 +46,21 @@ To change "fights alone" to "leads a small band":
 {
   "id": "char-123",
   "type": "character",
-  "replacements": [
-    { "field": "description", "old": "He fights alone in the mountains", "new": "He leads a small band in the mountains" }
-  ]
+  "field": "description",
+  "old": "He fights alone in the mountains",
+  "new": "He leads a small band in the mountains"
 }
+```
+
+### Example: Multiple changes
+
+For multiple edits, call patch_story_object multiple times:
+```json
+// First patch call
+{ "id": "char-123", "type": "character", "field": "description", "old": "fights alone", "new": "leads a small band" }
+
+// Second patch call
+{ "id": "char-123", "type": "character", "field": "description", "old": "His sword gleams", "new": "His banner waves" }
 ```
 
 ## Available Functions
@@ -62,12 +74,13 @@ To change "fights alone" to "leads a small band":
 - `replace_story_object` - Replace story object fields (name, description)
 
 ### Patch Operations
-- `patch_basic_info` - Patch basic info using search-replace
-- `patch_story_object` - Patch story object using search-replace
+- `patch_basic_info` - Patch basic info using search-replace (single edit per call)
+- `patch_story_object` - Patch story object using search-replace (single edit per call)
 
 ## Guidelines
 
 - Use `replace_*` when changing most of the content or for short fields
 - Use `patch_*` for targeted changes in long descriptions
 - For patch operations, ensure the `old` string is unique in the field
+- For multiple edits, make multiple patch calls
 - Omit fields you don't need to change

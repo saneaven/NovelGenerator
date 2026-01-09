@@ -60,68 +60,6 @@ export const chapterTypeSchema = {
 };
 
 // ============================================================================
-// REPLACEMENT SCHEMAS
-// ============================================================================
-
-/** Schema for name/description field replacement */
-export const nameDescReplacementSchema = {
-  type: 'object',
-  properties: {
-    field: {
-      type: 'string',
-      enum: ['name', 'description'],
-      description: 'Field to patch',
-    },
-    old: {
-      type: 'string',
-      description: 'Text to find. Include surrounding context to ensure uniqueness.',
-    },
-    new: {
-      type: 'string',
-      description: 'Replacement text',
-    },
-  },
-  required: ['field', 'old', 'new'],
-};
-
-/** Schema for basic info field replacement */
-export const basicInfoReplacementSchema = {
-  type: 'object',
-  properties: {
-    field: {
-      type: 'string',
-      enum: ['title', 'logline', 'genre'],
-      description: 'Field to patch',
-    },
-    old: {
-      type: 'string',
-      description: 'Text to find. Include surrounding context to ensure uniqueness.',
-    },
-    new: {
-      type: 'string',
-      description: 'Replacement text',
-    },
-  },
-  required: ['field', 'old', 'new'],
-};
-
-/** Schema for manuscript replacement (content only, no field) */
-export const manuscriptReplacementSchema = {
-  type: 'object',
-  properties: {
-    old: {
-      type: 'string',
-      description: 'Text to find. Include surrounding context to ensure uniqueness.',
-    },
-    new: {
-      type: 'string',
-      description: 'Replacement text',
-    },
-  },
-  required: ['old', 'new'],
-};
-
-// ============================================================================
 // COMMON PROPERTIES
 // ============================================================================
 

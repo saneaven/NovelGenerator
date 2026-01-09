@@ -1,6 +1,5 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { useLLMTaskStore } from '../../store/llmTaskStore';
-import { useImageTaskStore } from '../../imageGeneration/store/imageTaskStore';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useNotificationStore } from '../../store/notificationStore';
 import { Bell } from '../icons';
 import { IconButton } from '../IconButton';
 import NotificationPanel from './NotificationPanel';
@@ -20,40 +19,27 @@ const NotificationButton: React.FC<NotificationButtonProps> = ({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // LLM task store
-  const llmSessionsMap = useLLMTaskStore((state) => state.sessions);
-  const llmHasUnread = useMemo(() =>
-    Object.values(llmSessionsMap).some(s => s && !s.isRead && s.status !== 'running'),
-    [llmSessionsMap]
-  );
-  const llmHasRunning = useMemo(() =>
-    Object.values(llmSessionsMap).some(s => s && s.status === 'running'),
-    [llmSessionsMap]
-  );
-  const markAllLLMAsRead = useLLMTaskStore((state) => state.markAllAsRead);
+  // Subscribe to raw state, derive values with useMemo
+  const notificationsMap = useNotificationStore((state) => state.notifications);
+  const markAllAsRead = useNotificationStore((state) => state.markAllAsRead);
 
-  // Image task store
-  const imageTasksMap = useImageTaskStore((state) => state.tasks);
-  const imageHasUnread = useMemo(() =>
-    Object.values(imageTasksMap).some(t => t && !t.isRead && t.status !== 'idle'),
-    [imageTasksMap]
+  const hasUnread = useMemo(
+    () =>
+      Object.values(notificationsMap).some(
+        (n) => n !== undefined && n.status !== 'idle' && !n.isRead
+      ),
+    [notificationsMap]
   );
-  const imageHasRunning = useMemo(() =>
-    Object.values(imageTasksMap).some(t => t && (t.status === 'preparing' || t.status === 'generating' || t.status === 'processing')),
-    [imageTasksMap]
+
+  const hasRunning = useMemo(
+    () =>
+      Object.values(notificationsMap).some(
+        (n) => n !== undefined && n.status === 'running'
+      ),
+    [notificationsMap]
   );
-  const markAllImageAsRead = useImageTaskStore((state) => state.markAllAsRead);
 
-  // Combined state
-  const hasUnread = llmHasUnread || imageHasUnread;
-  const hasRunning = llmHasRunning || imageHasRunning;
-
-  const markAllAsRead = useCallback(() => {
-    markAllLLMAsRead();
-    markAllImageAsRead();
-  }, [markAllLLMAsRead, markAllImageAsRead]);
-
-  const handleToggle = () => {
+  const handleToggle = useCallback(() => {
     if (!isOpen) {
       // Opening the panel - mark all as read
       markAllAsRead();
@@ -66,15 +52,15 @@ const NotificationButton: React.FC<NotificationButtonProps> = ({
         setIsClosing(false);
       }, 150);
     }
-  };
+  }, [isOpen, markAllAsRead]);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setIsClosing(true);
     setTimeout(() => {
       setIsOpen(false);
       setIsClosing(false);
     }, 150);
-  };
+  }, []);
 
   // Close on click outside
   useEffect(() => {
@@ -98,7 +84,7 @@ const NotificationButton: React.FC<NotificationButtonProps> = ({
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen, isClosing]);
+  }, [isOpen, isClosing, handleClose]);
 
   // Close on escape
   useEffect(() => {
@@ -110,7 +96,7 @@ const NotificationButton: React.FC<NotificationButtonProps> = ({
 
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [isOpen, isClosing]);
+  }, [isOpen, isClosing, handleClose]);
 
   const buttonSize = position === 'mobile' ? 'sm' : 'md';
 

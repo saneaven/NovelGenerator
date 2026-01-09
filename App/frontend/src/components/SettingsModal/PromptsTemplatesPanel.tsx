@@ -3,6 +3,7 @@ import PromptTreeNav from './PromptTreeNav';
 import FragmentTreeNav from './FragmentTreeNav';
 import TemplateEditor from './TemplateEditor';
 import VersionHistoryModal from '../VersionHistoryModal';
+import { BaseModal } from '../BaseModal';
 import { usePromptEditor } from './hooks/usePromptEditor';
 import { useFragmentEditor } from './hooks/useFragmentEditor';
 import { fragmentService } from '../../api/fragmentService';
@@ -38,12 +39,14 @@ interface EditorState {
 }
 
 interface CreateFragmentModalProps {
+    isOpen: boolean;
     folderPath: string | null;
     onClose: () => void;
     onCreate: (folderPath: string | null, fragmentName: string) => void;
 }
 
 const CreateFragmentModal: React.FC<CreateFragmentModalProps> = ({
+    isOpen,
     folderPath,
     onClose,
     onCreate,
@@ -92,67 +95,14 @@ const CreateFragmentModal: React.FC<CreateFragmentModalProps> = ({
     };
 
     return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                <header className="modal-header">
-                    <h3>Create New Fragment</h3>
-                </header>
-
-                <div className="modal-body">
-                    <div className="form-group">
-                        <label className="form-label" htmlFor="fragment-folder">Folder Path (optional)</label>
-                        <input
-                            id="fragment-folder"
-                            className="form-input"
-                            type="text"
-                            value={newFolderPath}
-                            onChange={(e) => setNewFolderPath(e.target.value)}
-                            placeholder="e.g., common/context"
-                        />
-                        <small className="form-hint">Use forward slashes to create nested folders</small>
-                    </div>
-
-                    <div className="form-group">
-                        <label className="form-label" htmlFor="fragment-name">Fragment Name *</label>
-                        <input
-                            id="fragment-name"
-                            className="form-input"
-                            type="text"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder="e.g., customThinkingInstruction"
-                            autoFocus
-                        />
-                    </div>
-
-                    <div className="form-group">
-                        <label className="form-label" htmlFor="fragment-desc">Description (optional)</label>
-                        <input
-                            id="fragment-desc"
-                            className="form-input"
-                            type="text"
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            placeholder="Brief description of this fragment"
-                        />
-                    </div>
-
-                    <div className="form-group">
-                        <label className="form-label" htmlFor="fragment-content">Initial Content (optional)</label>
-                        <textarea
-                            id="fragment-content"
-                            className="form-textarea"
-                            value={content}
-                            onChange={(e) => setContent(e.target.value)}
-                            placeholder="{{! Your fragment content here }}"
-                            rows={4}
-                        />
-                    </div>
-
-                    {error && <div className="form-error">{error}</div>}
-                </div>
-
-                <footer className="modal-footer">
+        <BaseModal
+            isOpen={isOpen}
+            onClose={onClose}
+            title="Create New Fragment"
+            size="small"
+            zIndexLayer={1}
+            footer={
+                <>
                     <TextButton variant="secondary" onClick={onClose}>
                         Cancel
                     </TextButton>
@@ -164,9 +114,61 @@ const CreateFragmentModal: React.FC<CreateFragmentModalProps> = ({
                     >
                         Create Fragment
                     </TextButton>
-                </footer>
+                </>
+            }
+        >
+            <div className="form-group">
+                <label className="form-label" htmlFor="fragment-folder">Folder Path (optional)</label>
+                <input
+                    id="fragment-folder"
+                    className="form-input"
+                    type="text"
+                    value={newFolderPath}
+                    onChange={(e) => setNewFolderPath(e.target.value)}
+                    placeholder="e.g., common/context"
+                />
+                <small className="form-hint">Use forward slashes to create nested folders</small>
             </div>
-        </div>
+
+            <div className="form-group">
+                <label className="form-label" htmlFor="fragment-name">Fragment Name *</label>
+                <input
+                    id="fragment-name"
+                    className="form-input"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g., customThinkingInstruction"
+                    autoFocus
+                />
+            </div>
+
+            <div className="form-group">
+                <label className="form-label" htmlFor="fragment-desc">Description (optional)</label>
+                <input
+                    id="fragment-desc"
+                    className="form-input"
+                    type="text"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Brief description of this fragment"
+                />
+            </div>
+
+            <div className="form-group">
+                <label className="form-label" htmlFor="fragment-content">Initial Content (optional)</label>
+                <textarea
+                    id="fragment-content"
+                    className="form-textarea"
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder="{{! Your fragment content here }}"
+                    rows={4}
+                />
+            </div>
+
+            {error && <div className="form-error">{error}</div>}
+        </BaseModal>
     );
 };
 
@@ -628,13 +630,12 @@ const PromptsTemplatesPanel: React.FC = () => {
             </div>
 
             {/* Create fragment modal */}
-            {showCreateModal && (
-                <CreateFragmentModal
-                    folderPath={createFolderPath}
-                    onClose={() => setShowCreateModal(false)}
-                    onCreate={handleFragmentCreated}
-                />
-            )}
+            <CreateFragmentModal
+                isOpen={showCreateModal}
+                folderPath={createFolderPath}
+                onClose={() => setShowCreateModal(false)}
+                onCreate={handleFragmentCreated}
+            />
 
             {/* Version history modal */}
             {showVersionHistory && editorState?.versionHistoryProps && (

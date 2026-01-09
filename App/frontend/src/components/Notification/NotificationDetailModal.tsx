@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useState, useEffect } from 'react';
 import { BaseModal } from '../BaseModal';
 import { useLLMTaskStore } from '../../store/llmTaskStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -82,6 +82,16 @@ const NotificationDetailModal: React.FC<NotificationDetailModalProps> = ({
   const hasCards = (session.editCards?.length ?? 0) > 0;
   const isApplying = session.status === 'applying';
   const isPending = session.status === 'pending_confirmation' || isApplying;
+  const hasFunctionCalls = hasStreamingCalls || hasCards;
+
+  const [outputExpanded, setOutputExpanded] = useState(!hasFunctionCalls);
+  const [errorExpanded, setErrorExpanded] = useState(false);
+
+  useEffect(() => {
+    if (hasFunctionCalls) {
+      setOutputExpanded(false);
+    }
+  }, [hasFunctionCalls]);
 
   const projectId = ((session.input as any)?.projectId as string | undefined) ?? '';
   const applyLanguage = useMemo(() => getApplyLanguage(session, mainLanguage), [session, mainLanguage]);
@@ -146,7 +156,10 @@ const NotificationDetailModal: React.FC<NotificationDetailModalProps> = ({
           </span>
 
           {session.status === 'error' && session.error && (
-            <div className="notification-detail-error-container">
+            <div
+              className={`notification-detail-error-container ${errorExpanded ? 'notification-detail-error-container--expanded' : ''}`}
+              onClick={() => setErrorExpanded(prev => !prev)}
+            >
               <div className="notification-detail-error-summary-text">{session.error}</div>
             </div>
           )}
@@ -183,56 +196,60 @@ const NotificationDetailModal: React.FC<NotificationDetailModalProps> = ({
         </div>
       )}
 
-      {hasStreamingCalls && (
-        <div className="notification-detail-pending-confirmation">
-          <FunctionCallCard
-            mode="streaming"
-            streamingProgress={session.functionCallProgress}
-            projectId={projectId}
-          />
-        </div>
-      )}
+      <div className="notification-detail-body">
+        {session.contentParts.length > 0 && (
+          <div className="notification-detail-thinking">
+            <ThinkingDisplay
+              messageId={session.id}
+              contentParts={session.contentParts}
+              isStreaming={session.status === 'running'}
+            />
+          </div>
+        )}
 
-      {hasCards && (
-        <div className="notification-detail-pending-confirmation">
-          <FunctionCallCard
-            mode={isPending ? 'pending' : 'confirmed'}
-            cards={session.editCards}
-            onConfirm={isPending ? handleConfirm : undefined}
-            projectId={projectId}
-            isApplyDisabled={isApplying}
-            applyDisabledReason={isApplying ? 'Applying changes...' : undefined}
-          />
-          {session.status === 'pending_confirmation' && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
-              <TextButton variant="secondary" onClick={handleRejectAll}>
-                Reject All
-              </TextButton>
+        <div className="notification-detail-stream">
+          <button
+            className="notification-detail-stream-toggle"
+            onClick={() => setOutputExpanded(prev => !prev)}
+          >
+            <span className="toggle-icon">{outputExpanded ? '-' : '+'}</span>
+            <span className="notification-detail-stream-label">Output</span>
+          </button>
+          {outputExpanded && (
+            <div className="notification-detail-stream-content">
+              {contentText || <span className="notification-detail-waiting">Waiting...</span>}
             </div>
           )}
         </div>
-      )}
 
-      <div className="notification-detail-body">
-        {session.contentParts.length > 0 ? (
-          <>
-            <div className="notification-detail-thinking">
-              <ThinkingDisplay
-                messageId={session.id}
-                contentParts={session.contentParts}
-                isStreaming={session.status === 'running'}
-              />
-            </div>
+        {hasStreamingCalls && (
+          <div className="notification-detail-function-calls">
+            <FunctionCallCard
+              mode="streaming"
+              streamingProgress={session.functionCallProgress}
+              projectId={projectId}
+            />
+          </div>
+        )}
 
-            <div className="notification-detail-stream">
-              <div className="notification-detail-stream-label">Output</div>
-              <div className="notification-detail-stream-content">
-                {contentText || <span className="notification-detail-waiting">Waiting...</span>}
+        {hasCards && (
+          <div className="notification-detail-function-calls">
+            <FunctionCallCard
+              mode={isPending ? 'pending' : 'confirmed'}
+              cards={session.editCards}
+              onConfirm={isPending ? handleConfirm : undefined}
+              projectId={projectId}
+              isApplyDisabled={isApplying}
+              applyDisabledReason={isApplying ? 'Applying changes...' : undefined}
+            />
+            {session.status === 'pending_confirmation' && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                <TextButton variant="secondary" onClick={handleRejectAll}>
+                  Reject All
+                </TextButton>
               </div>
-            </div>
-          </>
-        ) : (
-          <div className="notification-detail-no-content">No output yet.</div>
+            )}
+          </div>
         )}
       </div>
     </BaseModal>

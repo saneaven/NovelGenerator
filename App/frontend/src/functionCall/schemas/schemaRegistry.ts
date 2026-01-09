@@ -9,9 +9,6 @@
 import type { FunctionSchema, FunctionCategory, TargetType, ExecutionMode } from '../types';
 import {
   storyObjectTypeSchema,
-  nameDescReplacementSchema,
-  basicInfoReplacementSchema,
-  manuscriptReplacementSchema,
   idProperty,
   nameProperty,
   descriptionProperty,
@@ -267,25 +264,33 @@ const REPLACE_MANUSCRIPT: FunctionSchema = {
 
 const PATCH_BASIC_INFO: FunctionSchema = {
   name: 'patch_basic_info',
-  description: 'Patch basic info fields using search and replace. Each replacement finds text and replaces it.',
+  description: 'Patch a basic info field using search and replace. For multiple edits, call this function multiple times.',
   category: 'patch',
   target: 'basic_info',
   parameters: {
     type: 'object',
     properties: {
-      replacements: {
-        type: 'array',
-        items: basicInfoReplacementSchema,
-        description: 'List of replacements to apply',
+      field: {
+        type: 'string',
+        enum: ['title', 'logline', 'genre'],
+        description: 'Field to patch',
+      },
+      old: {
+        type: 'string',
+        description: 'Text to find. Include surrounding context to ensure uniqueness.',
+      },
+      new: {
+        type: 'string',
+        description: 'Replacement text',
       },
     },
-    required: ['replacements'],
+    required: ['field', 'old', 'new'],
   },
 };
 
 const PATCH_STORY_OBJECT: FunctionSchema = {
   name: 'patch_story_object',
-  description: 'Patch story object fields using search and replace. Include enough context in "old" to ensure uniqueness.',
+  description: 'Patch a story object field using search and replace. For multiple edits, call this function multiple times.',
   category: 'patch',
   target: 'story_object',
   idParam: 'id',
@@ -294,13 +299,21 @@ const PATCH_STORY_OBJECT: FunctionSchema = {
     properties: {
       id: idProperty,
       type: storyObjectTypeSchema,
-      replacements: {
-        type: 'array',
-        items: nameDescReplacementSchema,
-        description: 'List of replacements to apply',
+      field: {
+        type: 'string',
+        enum: ['name', 'description'],
+        description: 'Field to patch',
+      },
+      old: {
+        type: 'string',
+        description: 'Text to find. Include surrounding context to ensure uniqueness.',
+      },
+      new: {
+        type: 'string',
+        description: 'Replacement text',
       },
     },
-    required: ['id', 'type', 'replacements'],
+    required: ['id', 'type', 'field', 'old', 'new'],
   },
 };
 
@@ -310,7 +323,7 @@ const PATCH_STORY_OBJECT: FunctionSchema = {
 
 const PATCH_OUTLINE: FunctionSchema = {
   name: 'patch_outline',
-  description: 'Patch outline fields using search and replace.',
+  description: 'Patch an outline field using search and replace. For multiple edits, call this function multiple times.',
   category: 'patch',
   target: 'outline',
   idParam: 'id',
@@ -318,19 +331,27 @@ const PATCH_OUTLINE: FunctionSchema = {
     type: 'object',
     properties: {
       id: idProperty,
-      replacements: {
-        type: 'array',
-        items: nameDescReplacementSchema,
-        description: 'List of replacements to apply',
+      field: {
+        type: 'string',
+        enum: ['name', 'description'],
+        description: 'Field to patch',
+      },
+      old: {
+        type: 'string',
+        description: 'Text to find. Include surrounding context to ensure uniqueness.',
+      },
+      new: {
+        type: 'string',
+        description: 'Replacement text',
       },
     },
-    required: ['id', 'replacements'],
+    required: ['id', 'field', 'old', 'new'],
   },
 };
 
 const PATCH_OUTLINE_ACT: FunctionSchema = {
   name: 'patch_outline_act',
-  description: 'Patch act fields using search and replace. Can also change order.',
+  description: 'Patch an act field using search and replace. For multiple edits, call this function multiple times. Can also change order.',
   category: 'patch',
   target: 'outline',
   idParam: 'id',
@@ -338,20 +359,28 @@ const PATCH_OUTLINE_ACT: FunctionSchema = {
     type: 'object',
     properties: {
       id: idProperty,
-      replacements: {
-        type: 'array',
-        items: nameDescReplacementSchema,
-        description: 'List of replacements to apply',
+      field: {
+        type: 'string',
+        enum: ['name', 'description'],
+        description: 'Field to patch',
+      },
+      old: {
+        type: 'string',
+        description: 'Text to find. Include surrounding context to ensure uniqueness.',
+      },
+      new: {
+        type: 'string',
+        description: 'Replacement text',
       },
       order: { type: 'integer', description: 'New position (1-based). Acts will be reordered automatically.' },
     },
-    required: ['id', 'replacements'],
+    required: ['id', 'field', 'old', 'new'],
   },
 };
 
 const PATCH_OUTLINE_CHAPTER: FunctionSchema = {
   name: 'patch_outline_chapter',
-  description: 'Patch chapter fields using search and replace. Can also change order or move to another act.',
+  description: 'Patch a chapter field using search and replace. For multiple edits, call this function multiple times. Can also change order or move to another act.',
   category: 'patch',
   target: 'outline',
   idParam: 'id',
@@ -359,21 +388,29 @@ const PATCH_OUTLINE_CHAPTER: FunctionSchema = {
     type: 'object',
     properties: {
       id: idProperty,
-      replacements: {
-        type: 'array',
-        items: nameDescReplacementSchema,
-        description: 'List of replacements to apply',
+      field: {
+        type: 'string',
+        enum: ['name', 'description'],
+        description: 'Field to patch',
+      },
+      old: {
+        type: 'string',
+        description: 'Text to find. Include surrounding context to ensure uniqueness.',
+      },
+      new: {
+        type: 'string',
+        description: 'Replacement text',
       },
       actId: { type: 'string', description: 'New parent act ID' },
       order: { type: 'integer', description: 'New position (1-based). Chapters will be reordered automatically.' },
     },
-    required: ['id', 'replacements'],
+    required: ['id', 'field', 'old', 'new'],
   },
 };
 
 const PATCH_MANUSCRIPT: FunctionSchema = {
   name: 'patch_manuscript',
-  description: 'Patch manuscript content using search and replace. Include enough context in "old" to ensure uniqueness.',
+  description: 'Patch manuscript content using search and replace. For multiple edits, call this function multiple times.',
   category: 'patch',
   target: 'manuscript',
   idParam: 'id',
@@ -381,13 +418,16 @@ const PATCH_MANUSCRIPT: FunctionSchema = {
     type: 'object',
     properties: {
       id: { type: 'string', description: 'ID of the manuscript' },
-      replacements: {
-        type: 'array',
-        items: manuscriptReplacementSchema,
-        description: 'List of replacements to apply',
+      old: {
+        type: 'string',
+        description: 'Text to find. Include surrounding context to ensure uniqueness.',
+      },
+      new: {
+        type: 'string',
+        description: 'Replacement text',
       },
     },
-    required: ['id', 'replacements'],
+    required: ['id', 'old', 'new'],
   },
 };
 

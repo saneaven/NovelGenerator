@@ -19,21 +19,20 @@ Use for **targeted search-and-replace edits**:
 
 ## Patch Format (Search & Replace)
 
-The patch operation uses a simple search-and-replace approach:
+Each patch operation applies a single search-and-replace:
 
 ```json
 {
   "id": "manuscript-123",
-  "replacements": [
-    { "old": "text to find", "new": "replacement text" }
-  ]
+  "old": "text to find",
+  "new": "replacement text"
 }
 ```
 
 **Important Rules:**
 - The `old` string must be **unique** in the manuscript - include enough context to ensure uniqueness
 - If multiple matches exist, add more surrounding text to `old` to make it unique
-- For multiple changes, use multiple replacement objects in the array
+- For multiple changes, make multiple patch function calls
 
 ### Example: Changing a phrase
 
@@ -46,10 +45,20 @@ To change "walked slowly" to "ran desperately":
 ```json
 {
   "id": "manuscript-123",
-  "replacements": [
-    { "old": "She walked slowly through the forest", "new": "She ran desperately through the forest" }
-  ]
+  "old": "She walked slowly through the forest",
+  "new": "She ran desperately through the forest"
 }
+```
+
+### Example: Multiple changes
+
+For multiple edits, call patch_manuscript multiple times:
+```json
+// First patch call
+{ "id": "manuscript-123", "old": "walked slowly", "new": "ran desperately" }
+
+// Second patch call
+{ "id": "manuscript-123", "old": "The shadows deepened", "new": "Darkness fell" }
 ```
 
 ## Available Functions
@@ -58,10 +67,11 @@ To change "walked slowly" to "ran desperately":
 - `replace_manuscript` - Replace manuscript content (full chapter rewrite)
 
 ### Patch Operations
-- `patch_manuscript` - Patch manuscript using search-replace (targeted edits)
+- `patch_manuscript` - Patch manuscript using search-replace (single targeted edit per call)
 
 ## Guidelines
 
 - Use `replace_manuscript` when changing most of the content or for short chapters
 - Use `patch_manuscript` for targeted changes in long chapters
 - For patch operations, ensure the `old` string is unique
+- For multiple edits, make multiple patch calls

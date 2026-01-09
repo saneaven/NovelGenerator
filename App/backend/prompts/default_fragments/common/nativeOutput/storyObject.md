@@ -9,7 +9,7 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 ```xml
 <function_calls>
   <function_call>{"function":"replace_story_object","id":"char-123","type":"character","name":"Alexander the Bold"}</function_call>
-  <function_call>{"function":"patch_story_object","id":"char-456","type":"character","replacements":[{"field":"description","old":"fights alone","new":"leads a rebellion"}]}</function_call>
+  <function_call>{"function":"patch_story_object","id":"char-456","type":"character","field":"description","old":"fights alone","new":"leads a rebellion"}</function_call>
   <function_call>{"function":"create_outline_chapter","actId":"act-1","name":"The Awakening","description":"The hero discovers their power"}</function_call>
 </function_calls>
 ```
@@ -54,14 +54,14 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 
 #### Patch Operations
 
-**patch_basic_info**
+**patch_basic_info** (single targeted edit)
 ```json
-{ "function": "patch_basic_info", "replacements": [{ "field": "logline", "old": "text to find", "new": "replacement" }] }
+{ "function": "patch_basic_info", "field": "logline", "old": "text to find", "new": "replacement" }
 ```
 
-**patch_story_object**
+**patch_story_object** (single targeted edit)
 ```json
-{ "function": "patch_story_object", "id": "obj-123", "type": "character", "replacements": [{ "field": "description", "old": "text to find", "new": "replacement" }] }
+{ "function": "patch_story_object", "id": "obj-123", "type": "character", "field": "description", "old": "text to find", "new": "replacement" }
 ```
 
 **Important:**
@@ -71,4 +71,5 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 - Include the correct `id` for items you are editing
 - Omit fields that should not change in replace operations
 - Use `patch_*` for targeted edits, `replace_*` for full replacements
+- For multiple patch edits, use multiple `patch_*` calls
 - Valid story object types: `character`, `location`, `organization`, `lorebook`

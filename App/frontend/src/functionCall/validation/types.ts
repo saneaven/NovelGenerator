@@ -9,7 +9,7 @@
 
 export interface ValidationContext {
   projectId: string;
-  language?: string;
+  language: string;
 }
 
 /**

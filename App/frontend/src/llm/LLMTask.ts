@@ -4,6 +4,7 @@ import type {
   ContentPartType,
   ConversationBlock,
   FunctionCallMetadata,
+  FunctionCallProgress,
 } from './requestTypes';
 import { streamLLM } from './llmService';
 import { useSettingsStore, type AIFunctionType } from '../store/settingsStore';
@@ -54,6 +55,8 @@ export class LLMTask {
   private pendingParts: ContentPart[] = [];
   private isRunning = false;
   private functionTracker: FunctionCallStreamTracker | null = null;
+  private progressRafId: number | null = null;
+  private pendingProgress: FunctionCallProgress[] | null = null;
 
   constructor(config: LLMTaskConfig, callbacks: LLMTaskCallbacks) {
     this.config = config;
@@ -289,11 +292,19 @@ export class LLMTask {
           }
         }
 
-        // Handle tool calls
+        // Handle tool calls (RAF-throttled to prevent "Maximum update depth exceeded")
         if (chunk.tool_calls && this.functionTracker) {
           const progressEvents = this.functionTracker.applyDelta(chunk.tool_calls);
           if (progressEvents.length && this.callbacks.onFunctionProgress) {
-            this.callbacks.onFunctionProgress(progressEvents);
+            this.pendingProgress = progressEvents;
+            if (this.progressRafId === null) {
+              this.progressRafId = requestAnimationFrame(() => {
+                this.progressRafId = null;
+                if (this.pendingProgress && this.callbacks.onFunctionProgress) {
+                  this.callbacks.onFunctionProgress(this.pendingProgress);
+                }
+              });
+            }
           }
         }
 
@@ -317,6 +328,16 @@ export class LLMTask {
       if (this.rafId !== null) {
         cancelAnimationFrame(this.rafId);
         this.rafId = null;
+      }
+
+      // Flush any pending progress updates
+      if (this.progressRafId !== null) {
+        cancelAnimationFrame(this.progressRafId);
+        this.progressRafId = null;
+      }
+      if (this.pendingProgress && this.callbacks.onFunctionProgress) {
+        this.callbacks.onFunctionProgress(this.pendingProgress);
+        this.pendingProgress = null;
       }
 
       finalizeCurrentBuffer();
@@ -397,6 +418,10 @@ export class LLMTask {
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
+    }
+    if (this.progressRafId !== null) {
+      cancelAnimationFrame(this.progressRafId);
+      this.progressRafId = null;
     }
     this.isRunning = false;
   }

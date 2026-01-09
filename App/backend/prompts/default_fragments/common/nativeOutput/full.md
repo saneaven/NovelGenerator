@@ -9,7 +9,7 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 ```xml
 <function_calls>
   <function_call>{"function":"replace_story_object","id":"char-123","type":"character","name":"Alexander the Bold"}</function_call>
-  <function_call>{"function":"patch_story_object","id":"char-456","type":"character","replacements":[{"field":"description","old":"fights alone","new":"leads a rebellion"}]}</function_call>
+  <function_call>{"function":"patch_story_object","id":"char-456","type":"character","field":"description","old":"fights alone","new":"leads a rebellion"}</function_call>
   <function_call>{"function":"create_outline_chapter","actId":"act-1","name":"The Awakening","description":"The hero discovers their power"}</function_call>
 </function_calls>
 ```
@@ -51,14 +51,14 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 
 ### Patch Operations
 
-**patch_basic_info**
+**patch_basic_info** (single targeted edit)
 ```json
-{ "function": "patch_basic_info", "replacements": [{ "field": "logline", "old": "text to find", "new": "replacement" }] }
+{ "function": "patch_basic_info", "field": "logline", "old": "text to find", "new": "replacement" }
 ```
 
-**patch_story_object**
+**patch_story_object** (single targeted edit)
 ```json
-{ "function": "patch_story_object", "id": "obj-123", "type": "character", "replacements": [{ "field": "description", "old": "text to find", "new": "replacement" }] }
+{ "function": "patch_story_object", "id": "obj-123", "type": "character", "field": "description", "old": "text to find", "new": "replacement" }
 ```
 
 ---
@@ -80,9 +80,9 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 { "function": "replace_outline", "id": "outline-123", "name": "New Name", "description": "New description" }
 ```
 
-**patch_outline**
+**patch_outline** (single targeted edit)
 ```json
-{ "function": "patch_outline", "id": "outline-123", "replacements": [{ "field": "description", "old": "text to find", "new": "replacement" }] }
+{ "function": "patch_outline", "id": "outline-123", "field": "description", "old": "text to find", "new": "replacement" }
 ```
 
 ---
@@ -104,9 +104,9 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 { "function": "replace_outline_act", "id": "act-123", "name": "New Name", "description": "New description", "order": 2 }
 ```
 
-**patch_outline_act**
+**patch_outline_act** (single targeted edit, can also change order)
 ```json
-{ "function": "patch_outline_act", "id": "act-123", "replacements": [{ "field": "description", "old": "text to find", "new": "replacement" }], "order": 3 }
+{ "function": "patch_outline_act", "id": "act-123", "field": "description", "old": "text to find", "new": "replacement", "order": 3 }
 ```
 
 ---
@@ -128,9 +128,9 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 { "function": "replace_outline_chapter", "id": "ch-123", "name": "New Name", "description": "New description", "actId": "act-456", "order": 2 }
 ```
 
-**patch_outline_chapter**
+**patch_outline_chapter** (single targeted edit, can also change order/actId)
 ```json
-{ "function": "patch_outline_chapter", "id": "ch-123", "replacements": [{ "field": "description", "old": "text to find", "new": "replacement" }], "actId": "act-456", "order": 3 }
+{ "function": "patch_outline_chapter", "id": "ch-123", "field": "description", "old": "text to find", "new": "replacement", "actId": "act-456", "order": 3 }
 ```
 
 ---
@@ -142,9 +142,9 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 { "function": "replace_manuscript", "id": "manuscript-123", "content": "The complete chapter content..." }
 ```
 
-**patch_manuscript** (targeted search-replace edits)
+**patch_manuscript** (single targeted search-replace edit)
 ```json
-{ "function": "patch_manuscript", "id": "manuscript-123", "replacements": [{ "old": "text to find", "new": "replacement text" }] }
+{ "function": "patch_manuscript", "id": "manuscript-123", "old": "text to find", "new": "replacement text" }
 ```
 
 **Important:** Prefer `patch_manuscript` for targeted edits to avoid regenerating unchanged content.
@@ -159,4 +159,5 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 - Include the correct `id` for items you are editing
 - Omit fields that should not change in replace operations
 - Use `patch_*` for targeted edits, `replace_*` for full replacements
+- For multiple patch edits, use multiple `patch_*` calls
 - Valid story object types: `character`, `location`, `organization`, `lorebook`

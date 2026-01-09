@@ -14,24 +14,24 @@ Use for **full content replacement**:
 Use for **targeted search-and-replace edits**:
 - Changing specific phrases in descriptions
 - When most of the original content remains unchanged
-- Multiple small changes in a single field
 
 ## Patch Format (Search & Replace)
 
-The patch operation uses a simple search-and-replace approach:
+Each patch operation applies a single search-and-replace:
 
 ```json
 {
-  "replacements": [
-    { "field": "description", "old": "text to find", "new": "replacement text" }
-  ]
+  "id": "act-123",
+  "field": "description",
+  "old": "text to find",
+  "new": "replacement text"
 }
 ```
 
 **Important Rules:**
 - The `old` string must be **unique** in the field - include enough context to ensure uniqueness
 - If multiple matches exist, add more surrounding text to `old` to make it unique
-- For multiple changes, use multiple replacement objects in the array
+- For multiple changes, make multiple patch function calls
 
 ## Available Functions
 
@@ -49,9 +49,9 @@ The patch operation uses a simple search-and-replace approach:
 - `replace_outline_chapter` - Replace chapter fields (name, description, actId, order)
 
 ### Outline Patch Operations
-- `patch_outline` - Patch outline using search-replace
-- `patch_outline_act` - Patch act using search-replace (can also change order)
-- `patch_outline_chapter` - Patch chapter using search-replace (can also change order/actId)
+- `patch_outline` - Patch outline using search-replace (single edit per call)
+- `patch_outline_act` - Patch act using search-replace (single edit per call, can also change order)
+- `patch_outline_chapter` - Patch chapter using search-replace (single edit per call, can also change order/actId)
 
 ## Ordering
 
@@ -72,16 +72,16 @@ Use `replace_outline_chapter` with `actId` to move a chapter to a different act:
 }
 ```
 
-If you need to move a chapter **and** make targeted text edits at the same time, you can use `patch_outline_chapter` with `actId`:
+If you need to move a chapter **and** make a targeted text edit at the same time, you can use `patch_outline_chapter` with `actId`:
 ```json
 {
   "function": "patch_outline_chapter",
   "id": "chapter-123",
+  "field": "description",
+  "old": "text to find",
+  "new": "replacement",
   "actId": "new-act-id",
-  "order": 1,
-  "replacements": [
-    { "field": "description", "old": "text to find", "new": "replacement" }
-  ]
+  "order": 1
 }
 ```
 
@@ -90,6 +90,7 @@ If you need to move a chapter **and** make targeted text edits at the same time,
 - Use `replace_*` when changing most of the content or for short fields
 - Use `patch_*` for targeted changes in long descriptions
 - For patch operations, ensure the `old` string is unique in the field
+- For multiple edits, make multiple patch calls
 - Omit fields you don't need to change
 - Use `order` to reposition acts within outline or chapters within act
 - Use `actId` to move chapters between acts

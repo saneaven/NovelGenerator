@@ -11,11 +11,12 @@ You are in native function call mode. Output translations using `<function_calls
 </function_calls>
 ```
 
-### Patch Output (Minor Fixes)
+### Patch Output (Minor Fixes - One Edit Per Call)
 ```xml
 <function_calls>
-  <function_call>{"function":"patch_story_object","id":"char-1","type":"character","replacements":[{"field":"name","old":"Old","new":"New"}]}</function_call>
-  <function_call>{"function":"patch_manuscript","id":"ms-1","replacements":[{"old":"wrong text","new":"correct text"}]}</function_call>
+  <function_call>{"function":"patch_story_object","id":"char-1","type":"character","field":"name","old":"Old","new":"New"}</function_call>
+  <function_call>{"function":"patch_story_object","id":"char-1","type":"character","field":"description","old":"wrong","new":"correct"}</function_call>
+  <function_call>{"function":"patch_manuscript","id":"ms-1","old":"wrong text","new":"correct text"}</function_call>
 </function_calls>
 ```
 
@@ -24,6 +25,8 @@ You can mix `replace_*` and `patch_*` operations in the same output:
 ```xml
 <function_calls>
   <function_call>{"function":"replace_story_object","id":"char-1","type":"character","name":"New Translation","description":"Full description"}</function_call>
-  <function_call>{"function":"patch_story_object","id":"char-2","type":"character","replacements":[{"field":"description","old":"typo","new":"correct"}]}</function_call>
+  <function_call>{"function":"patch_story_object","id":"char-2","type":"character","field":"description","old":"typo","new":"correct"}</function_call>
 </function_calls>
 ```
+
+**Note:** For multiple patch edits on the same object, use multiple `patch_*` calls (one per edit).

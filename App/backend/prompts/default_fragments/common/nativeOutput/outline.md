@@ -10,6 +10,14 @@ You are in native function call mode.
 </function_calls>
 ```
 
+### Example: Multiple patch edits
+```xml
+<function_calls>
+  <function_call>{"function":"patch_outline_act","id":"act-123","field":"description","old":"the hero fails","new":"the hero succeeds"}</function_call>
+  <function_call>{"function":"patch_outline_chapter","id":"ch-456","field":"name","old":"Chapter One","new":"The Beginning"}</function_call>
+</function_calls>
+```
+
 ### Outline Operations
 
 **create_outline**
@@ -27,9 +35,9 @@ You are in native function call mode.
 { "function": "replace_outline", "id": "outline-123", "name": "New Name", "description": "New description" }
 ```
 
-**patch_outline**
+**patch_outline** (single targeted edit)
 ```json
-{ "function": "patch_outline", "id": "outline-123", "replacements": [{ "field": "description", "old": "text to find", "new": "replacement" }] }
+{ "function": "patch_outline", "id": "outline-123", "field": "description", "old": "text to find", "new": "replacement" }
 ```
 
 ### Act Operations
@@ -49,7 +57,34 @@ You are in native function call mode.
 { "function": "replace_outline_act", "id": "act-123", "name": "New Name", "description": "New description", "order": 2 }
 ```
 
-**patch_outline_act**
+**patch_outline_act** (single targeted edit, can also change order)
 ```json
-{ "function": "patch_outline_act", "id": "act-123", "replacements": [{ "field": "description", "old": "text to find", "new": "replacement" }], "order": 3 }
+{ "function": "patch_outline_act", "id": "act-123", "field": "description", "old": "text to find", "new": "replacement", "order": 3 }
 ```
+
+### Chapter Operations
+
+**create_outline_chapter**
+```json
+{ "function": "create_outline_chapter", "actId": "act-123", "name": "Chapter Name", "description": "Description" }
+```
+
+**delete_outline_chapter**
+```json
+{ "function": "delete_outline_chapter", "id": "ch-123" }
+```
+
+**replace_outline_chapter** (only include fields to change)
+```json
+{ "function": "replace_outline_chapter", "id": "ch-123", "name": "New Name", "description": "New description", "actId": "act-456", "order": 2 }
+```
+
+**patch_outline_chapter** (single targeted edit, can also change order/actId)
+```json
+{ "function": "patch_outline_chapter", "id": "ch-123", "field": "description", "old": "text to find", "new": "replacement", "actId": "act-456", "order": 3 }
+```
+
+**Important:**
+- For multiple patch edits, use multiple `patch_*` calls
+- Use `order` to reposition acts/chapters
+- Use `actId` in chapter operations to move chapters between acts

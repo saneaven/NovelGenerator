@@ -1,12 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useLLMTaskStore } from '../../store/llmTaskStore';
-import { useImageTaskStore } from '../../imageGeneration/store/imageTaskStore';
-import type { ImageTaskState } from '../../imageGeneration/types';
-import NotificationItem, { type NotificationTask } from './NotificationItem';
-import NotificationDetailModal from './NotificationDetailModal';
-import ImagePreviewModal from './ImagePreviewModal';
+import { useNotificationStore } from '../../store/notificationStore';
+import NotificationItem from './NotificationItem';
 import { useScroll } from 'motion/react';
-import { UnifiedImageModal } from '../AssetManager';
 
 interface NotificationPanelProps {
   onClose: () => void;
@@ -19,137 +14,54 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
   const [itemStride, setItemStride] = useState(80);
   const [viewportHeight, setViewportHeight] = useState(320);
   const [isMobile, setIsMobile] = useState(false);
+
+  // Stack visualization constants
   const frontCount = 4;
   const depthRange = 4;
   const maxDepthZ = 260;
   const stackLift = 40;
   const maxBlur = 6;
-  // LLM Task Store - get sessions map for deriving task refs
-  const llmSessionsMap = useLLMTaskStore((state) => state.sessions);
-  const clearLLMNotification = useLLMTaskStore((state) => state.clearNotification);
-  const clearAllLLMNotifications = useLLMTaskStore((state) => state.clearAllNotifications);
-  const cancelLLMTask = useLLMTaskStore((state) => state.cancelTask);
 
-  // Image Task Store - get tasks map for deriving task refs
-  const imageTasksMap = useImageTaskStore((state) => state.tasks);
-  const clearImageTask = useImageTaskStore((state) => state.clearTask);
-  const clearAllImageTasks = useImageTaskStore((state) => state.clearAllTasks);
-  const cancelImageTask = useImageTaskStore((state) => state.cancelTask);
+  // Subscribe to raw state, derive sorted list with useMemo
+  const notificationsMap = useNotificationStore((state) => state.notifications);
+  const removeAll = useNotificationStore((state) => state.removeAll);
+  const remove = useNotificationStore((state) => state.remove);
+  const invokeHandler = useNotificationStore((state) => state.invokeHandler);
 
-  // Derive task refs from maps (memoized to prevent infinite loops)
-  const allTaskRefs = useMemo(() => {
-    const llmRefs = Object.entries(llmSessionsMap)
-      .filter(([_, s]) => s && s.status !== 'idle')
-      .map(([id, s]) => ({ id, source: 'llm' as const, createdAt: s!.createdAt }));
-    const imageRefs = Object.entries(imageTasksMap)
-      .filter(([_, t]) => t && t.status !== 'idle')
-      .map(([id, t]) => ({ id, source: 'image' as const, createdAt: t!.createdAt }));
-    return [...llmRefs, ...imageRefs].sort((a, b) => b.createdAt - a.createdAt);
-  }, [llmSessionsMap, imageTasksMap]);
+  // Derive sorted notifications from raw state
+  const notifications = useMemo(
+    () =>
+      Object.values(notificationsMap)
+        .filter((n): n is NonNullable<typeof n> => n !== undefined && n.status !== 'idle')
+        .sort((a, b) => b.createdAt - a.createdAt),
+    [notificationsMap]
+  );
 
-  const orderedTaskRefs = useMemo(() => {
-    if (!isMobile) return allTaskRefs;
-    return [...allTaskRefs].reverse();
-  }, [allTaskRefs, isMobile]);
-
-  const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
-  const [imageRetryTask, setImageRetryTask] = useState<ImageTaskState | null>(null);
-  const [previewAssetId, setPreviewAssetId] = useState<string | null>(null);
+  // Reverse order for mobile (bottom-to-top stacking)
+  const orderedNotifications = useMemo(() => {
+    if (!isMobile) return notifications;
+    return [...notifications].reverse();
+  }, [notifications, isMobile]);
 
   const handleDismiss = useCallback(
-    (task: NotificationTask) => {
-      if (task.source === 'llm') {
-        // If LLM task is running, cancel it first
-        if (task.status === 'running') {
-          cancelLLMTask(task.id);
-        }
-        clearLLMNotification(task.id);
-      } else {
-        // If image task is running, cancel it first
-        if (task.status === 'preparing' || task.status === 'generating' || task.status === 'processing') {
-          cancelImageTask(task.id);
-        }
-        clearImageTask(task.id);
-      }
+    (id: string) => {
+      remove(id);
     },
-    [cancelLLMTask, clearLLMNotification, cancelImageTask, clearImageTask]
+    [remove]
   );
 
-  const handleOpenDetail = useCallback((task: NotificationTask) => {
-    if (task.source === 'llm') {
-      setDetailSessionId(task.id);
-    } else {
-      // For image tasks, if error with retry context, open retry modal
-      if (task.status === 'error' && task.retryContext) {
-        setImageRetryTask(task);
-      } else if (task.status === 'success' && task.result?.assetId) {
-        // For success, show image preview
-        setPreviewAssetId(task.result.assetId);
-      }
-    }
-  }, []);
-
-  const handleCloseDetail = useCallback(() => {
-    setDetailSessionId(null);
-  }, []);
-
-  const handleDismissToast = useCallback((id: string) => {
-    setDetailSessionId(null);
-    clearLLMNotification(id);
-  }, [clearLLMNotification]);
-
-  const handleImageRetryModalClose = useCallback(() => {
-    if (imageRetryTask) {
-      clearImageTask(imageRetryTask.id);
-    }
-    setImageRetryTask(null);
-  }, [imageRetryTask, clearImageTask]);
+  const handleClick = useCallback(
+    (id: string) => {
+      invokeHandler(id, 'onClick');
+    },
+    [invokeHandler]
+  );
 
   const handleClearAll = useCallback(() => {
-    clearAllLLMNotifications();
-    clearAllImageTasks();
-  }, [clearAllLLMNotifications, clearAllImageTasks]);
+    removeAll();
+  }, [removeAll]);
 
-  const renderImageRetryModal = () => {
-    if (!imageRetryTask?.retryContext) return null;
-
-    const { request } = imageRetryTask.retryContext;
-
-    // Use UnifiedImageModal for retry with initial settings from failed request
-    return (
-      <UnifiedImageModal
-        isOpen={true}
-        onClose={handleImageRetryModalClose}
-        preset={imageRetryTask.taskType === 'scene-image' ? 'sceneManager' : 'objectManager'}
-        onImageGenerated={() => handleImageRetryModalClose()}
-        title="Retry Image Generation"
-        initialGenerationSettings={{
-          provider: request.provider,
-          model: request.model,
-          size: request.size,
-          prompt: request.prompt,
-          positivePrompt: request.positivePrompt,
-          negativePrompt: request.negativePrompt,
-          settings: {
-            // Provider-specific settings
-            quality: request.quality,
-            style: request.style,
-            sampler: request.sampler,
-            steps: request.steps,
-            scale: request.scale,
-            noiseSchedule: request.noiseSchedule,
-            styleId: request.styleId,
-          },
-        }}
-      />
-    );
-  };
-
-  // Get detail session directly from store (per-item subscription pattern)
-  const detailSession = useLLMTaskStore((state) =>
-    detailSessionId ? state.sessions[detailSessionId] : null
-  );
-
+  // Detect mobile viewport
   useEffect(() => {
     const mediaQuery = window.matchMedia('(max-width: 480px)');
     const handleChange = () => setIsMobile(mediaQuery.matches);
@@ -160,6 +72,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
     };
   }, []);
 
+  // Measure item stride for stack visualization
   useLayoutEffect(() => {
     const container = itemsContainerRef.current;
     const viewport = itemsViewportRef.current;
@@ -206,23 +119,21 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
       resizeObserver.disconnect();
       window.removeEventListener('resize', scheduleMeasure);
     };
-  }, [orderedTaskRefs.length, orderedTaskRefs[0]?.id]);
+  }, [orderedNotifications.length, orderedNotifications[0]?.id]);
 
+  // Auto-scroll to bottom on mobile
   useLayoutEffect(() => {
     if (!isMobile) return;
     const viewport = itemsViewportRef.current;
     if (!viewport) return;
     viewport.scrollTop = viewport.scrollHeight;
-  }, [isMobile, orderedTaskRefs.length]);
+  }, [isMobile, orderedNotifications.length]);
 
   const headerNode = (
     <div className="notification-header">
       <h3 className="notification-header-title">Notifications</h3>
-      {allTaskRefs.length > 0 && (
-        <button
-          className="notification-header-clear"
-          onClick={handleClearAll}
-        >
+      {notifications.length > 0 && (
+        <button className="notification-header-clear" onClick={handleClearAll}>
           Clear All
         </button>
       )}
@@ -231,10 +142,10 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
 
   return (
     <>
-      {/* Thin Header Card */}
+      {/* Header (top on desktop) */}
       {!isMobile && headerNode}
 
-      {/* Floating Items */}
+      {/* Items viewport */}
       <div className="notification-items-viewport" ref={itemsViewportRef}>
         <div
           className="notification-items-container"
@@ -244,18 +155,17 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
             paddingBottom: !isMobile ? stackLift * (depthRange + 2) : undefined,
           }}
         >
-          {orderedTaskRefs.length === 0 ? (
+          {orderedNotifications.length === 0 ? (
             <div className="notification-empty">
               <p>No notifications</p>
             </div>
           ) : (
-            orderedTaskRefs.map((ref, index) => (
+            orderedNotifications.map((notification, index) => (
               <NotificationItem
-                key={ref.id}
-                taskId={ref.id}
-                source={ref.source}
+                key={notification.id}
+                notification={notification}
                 index={index}
-                totalCount={orderedTaskRefs.length}
+                totalCount={orderedNotifications.length}
                 scrollY={scrollY}
                 itemStride={itemStride}
                 viewportHeight={viewportHeight}
@@ -266,32 +176,15 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
                 maxBlur={maxBlur}
                 isMobile={isMobile}
                 onDismiss={handleDismiss}
-                onOpenDetail={handleOpenDetail}
+                onClick={handleClick}
               />
             ))
           )}
         </div>
       </div>
 
+      {/* Header (bottom on mobile) */}
       {isMobile && headerNode}
-
-      {detailSession && (
-        <NotificationDetailModal
-          session={detailSession}
-          onClose={handleCloseDetail}
-          onDismissToast={() => handleDismissToast(detailSession.id)}
-        />
-      )}
-
-      {renderImageRetryModal()}
-
-      {previewAssetId && (
-        <ImagePreviewModal
-          isOpen={true}
-          onClose={() => setPreviewAssetId(null)}
-          assetId={previewAssetId}
-        />
-      )}
     </>
   );
 };

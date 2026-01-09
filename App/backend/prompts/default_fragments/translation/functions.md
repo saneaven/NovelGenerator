@@ -17,28 +17,28 @@ These overwrite the target-language fields for the object.
 
 ### Patch Functions (Search-Replace Edits)
 Use these when the existing translation only needs minor corrections/refinements.
+Each patch call applies a single search-replace operation.
 
 | Function | Use Case | Notes |
 |----------|----------|-------|
-| `patch_basic_info` | Fix basic info via replacements | `replacements[]` targets `title` / `logline` / `genre` |
-| `patch_story_object` | Fix story objects via replacements | Requires `id` and `type` |
-| `patch_outline` | Fix outline root via replacements | Requires `id` |
-| `patch_outline_act` | Fix act via replacements | Requires `id` |
-| `patch_outline_chapter` | Fix chapter via replacements | Requires `id` |
-| `patch_manuscript` | Fix manuscript via replacements | No `field` needed in replacements |
+| `patch_basic_info` | Fix basic info via search-replace | Requires `field` (title/logline/genre), `old`, `new` |
+| `patch_story_object` | Fix story objects via search-replace | Requires `id`, `type`, `field`, `old`, `new` |
+| `patch_outline` | Fix outline root via search-replace | Requires `id`, `field`, `old`, `new` |
+| `patch_outline_act` | Fix act via search-replace | Requires `id`, `field`, `old`, `new` |
+| `patch_outline_chapter` | Fix chapter via search-replace | Requires `id`, `field`, `old`, `new` |
+| `patch_manuscript` | Fix manuscript via search-replace | Requires `id`, `old`, `new` (no `field` needed) |
 
-### Patch Replacement Format
+### Patch Format
 
-For object/basic/outline patches, the `replacements` array contains search-replace operations:
+For object/basic/outline patches (single targeted edit):
 
 ```json
 {
   "id": "object-id",
   "type": "character",
-  "replacements": [
-    {"field": "name", "old": "Text to find", "new": "Replacement text"},
-    {"field": "description", "old": "Another text", "new": "Its replacement"}
-  ]
+  "field": "description",
+  "old": "Text to find",
+  "new": "Replacement text"
 }
 ```
 
@@ -47,11 +47,19 @@ For manuscript patches (no `field` needed):
 ```json
 {
   "id": "manuscript-id",
-  "replacements": [
-    {"old": "Text to find", "new": "Replacement text"},
-    {"old": "Another text", "new": "Its replacement"}
-  ]
+  "old": "Text to find",
+  "new": "Replacement text"
 }
+```
+
+For multiple edits, make multiple patch calls:
+
+```json
+// First patch call
+{ "id": "char-123", "type": "character", "field": "name", "old": "Old Name", "new": "New Name" }
+
+// Second patch call
+{ "id": "char-123", "type": "character", "field": "description", "old": "old text", "new": "new text" }
 ```
 
 ## Decision Guide
@@ -60,5 +68,4 @@ For each object to translate:
 
 1. **No existing translation** → Use `replace_*`
 2. **Existing translation needs a full rewrite** → Use `replace_*`
-3. **Existing translation needs only small fixes** → Use `patch_*`
-
+3. **Existing translation needs only small fixes** → Use `patch_*` (multiple calls for multiple fixes)

@@ -72,6 +72,15 @@
   flex-direction: column;
   gap: var(--spacing-xs);
   margin-top: var(--spacing-xs);
+  cursor: pointer;
+  padding: var(--spacing-sm);
+  background: var(--color-error-light);
+  border-radius: var(--border-radius-sm);
+  transition: background var(--transition-fast);
+}
+
+.notification-detail-error-container:hover {
+  background: color-mix(in oklch, var(--color-error) 20%, transparent);
 }
 
 .notification-detail-error-summary-text {
@@ -79,6 +88,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+}
+
+.notification-detail-error-container--expanded .notification-detail-error-summary-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: visible;
+  text-overflow: unset;
 }
 
 /* Warning Container in Header */
@@ -194,8 +212,40 @@
   margin-bottom: var(--spacing-lg);
 }
 
+/* Function Calls Section in Body */
+.notification-detail-function-calls {
+  margin-bottom: var(--spacing-md);
+}
+
 .notification-detail-stream {
   margin-bottom: var(--spacing-md);
+}
+
+.notification-detail-stream-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  background: transparent;
+  border: none;
+  padding: var(--spacing-xs) 0;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+
+.notification-detail-stream-toggle:hover {
+  opacity: 0.8;
+}
+
+.notification-detail-stream-toggle .toggle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-tertiary);
 }
 
 .notification-detail-stream-label {
@@ -204,7 +254,6 @@
   color: var(--color-text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-bottom: var(--spacing-sm);
 }
 
 .notification-detail-stream-content {
@@ -220,6 +269,7 @@
   word-break: break-word;
   max-height: 300px;
   overflow-y: auto;
+  margin-top: var(--spacing-sm);
 }
 
 /* Waiting State */

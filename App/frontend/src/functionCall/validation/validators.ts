@@ -10,7 +10,7 @@ import type { ObjectType } from '../../types/unifiedObject';
 import type { Validator } from './types';
 import { validResult, invalidResult } from './types';
 import { STORY_OBJECT_TYPE_MAP, ALL_OBJECT_TYPE_MAP, type StoryObjectSubtype } from '../types';
-import { applyPatch } from '../../utils/patchUtils';
+import { applySingleReplacement } from '../../utils/patchUtils';
 import { getObjectData } from '../types';
 
 // ============================================================================
@@ -119,15 +119,19 @@ export const validatePatchRequiredFields: Validator = (args, functionName, _cont
     return validResult();
   }
 
-  const replacements = args.replacements as unknown[] | undefined;
-  if (!replacements || !Array.isArray(replacements)) {
-    return invalidResult(`Missing replacements for ${functionName}`);
+  const oldText = args.old as string | undefined;
+  const newText = args.new as string | undefined;
+
+  if (!oldText || newText === undefined) {
+    return invalidResult(`Missing required fields (old, new) for ${functionName}`);
   }
 
-  const hasStructuralChange = args.order !== undefined || args.actId !== undefined;
-
-  if (replacements.length === 0 && !hasStructuralChange) {
-    return invalidResult(`No replacements provided for ${functionName}`);
+  // For non-manuscript patches, field is required
+  if (!functionName.includes('manuscript')) {
+    const field = args.field as string | undefined;
+    if (!field) {
+      return invalidResult(`Missing required field 'field' for ${functionName}`);
+    }
   }
 
   return validResult();
@@ -185,68 +189,70 @@ export const validateObjectExists: Validator = async (args, functionName, contex
 };
 
 /**
- * Validate that patch replacements can be applied to current content.
- * Note: applyPatch returns original text on failure, so running it is effectively a dry run.
+ * Validate that patch replacement can be applied to current content.
+ * Uses applySingleReplacement as a dry run to check if the patch will succeed.
  */
-export const validatePatchApplicable: Validator = async (args, functionName, _context) => {
+export const validatePatchApplicable: Validator = async (args, functionName, context) => {
   if (!functionName.startsWith('patch_')) {
     return validResult();
   }
 
   const id = args.id as string | undefined;
-  const replacements = args.replacements as Array<{ old: string; new: string; field?: string }> | undefined;
+  const oldText = args.old as string | undefined;
+  const newText = args.new as string | undefined;
+  const field = args.field as string | undefined;
 
-  if (!id || !replacements) {
+  // For basic_info, id is not required
+  if (functionName !== 'patch_basic_info' && !id) {
     return validResult(); // Already validated by other validators
   }
 
-  const store = useUnifiedObjectStore.getState();
-  const object = store.getObject(id);
+  if (!oldText || newText === undefined) {
+    return validResult(); // Already validated by validatePatchRequiredFields
+  }
 
+  const store = useUnifiedObjectStore.getState();
+
+  // For basic_info, we need to get the object differently
+  if (functionName === 'patch_basic_info') {
+    const existing = await store.listObjects('basic_info', context.projectId);
+    if (existing.length === 0) {
+      return invalidResult('No basic info found to patch');
+    }
+    const object = existing[0];
+    const currentData = getObjectData(object, context.language);
+    const fieldValue = (currentData[field as string] as string) ?? '';
+    const result = applySingleReplacement(fieldValue, oldText, newText);
+    if (!result.success) {
+      return invalidResult(`Patch validation failed: [${field}] ${result.error}`);
+    }
+    return validResult();
+  }
+
+  const object = store.getObject(id as string);
   if (!object) {
     return validResult(); // Already validated by validateObjectExists
   }
 
-  // Get current data - use first available language for validation
-  const languages = Object.keys(object.data);
-  if (languages.length === 0) {
-    return validResult(); // No data to validate against
-  }
-
-  const currentData = getObjectData(object, languages[0]);
-  const failures: string[] = [];
-  let successCount = 0;
+  const currentData = getObjectData(object, context.language);
 
   // For manuscript patches (no field property), validate against content
   if (functionName.includes('manuscript')) {
     const content = (currentData.content as string) ?? '';
-    const result = applyPatch(content, replacements);
-    successCount = result.successCount ?? 0;
-    if (successCount === 0) {
-      failures.push(`content: ${result.error}`);
+    const result = applySingleReplacement(content, oldText, newText);
+    if (!result.success) {
+      return invalidResult(`Patch validation failed: ${result.error}`);
     }
   } else {
     // For other patches with field property
-    for (const r of replacements) {
-      if (!r.field) {
-        failures.push(`unknown: missing field for replacement`);
-        continue;
-      }
-
-      const fieldValue = (currentData[r.field] as string) ?? '';
-      const result = applyPatch(fieldValue, [{ old: r.old, new: r.new }]);
-
-      const applied = result.successCount ?? 0;
-      if (applied > 0) {
-        successCount += 1;
-      } else {
-        failures.push(`${r.field}: ${result.error}`);
-      }
+    if (!field) {
+      return invalidResult('Missing field for patch validation');
     }
-  }
-
-  if (successCount === 0 && failures.length > 0) {
-    return invalidResult(`Patch validation failed:\n${failures.join('\n')}`);
+    const fieldValue = (currentData[field] as string) ?? '';
+    const result = applySingleReplacement(fieldValue, oldText, newText);
+    if (!result.success) {
+      return invalidResult(`Patch validation failed: [${field}] ${result.error}`);
+    }
   }
 
   return validResult();

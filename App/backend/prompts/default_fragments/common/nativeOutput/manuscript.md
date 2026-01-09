@@ -5,7 +5,15 @@ You are in native function call mode.
 ### Example: Targeted edit (preferred for long content)
 ```xml
 <function_calls>
-  <function_call>{"function":"patch_manuscript","id":"manuscript-123","replacements":[{"old":"She walked slowly","new":"She ran desperately"}]}</function_call>
+  <function_call>{"function":"patch_manuscript","id":"manuscript-123","old":"She walked slowly","new":"She ran desperately"}</function_call>
+</function_calls>
+```
+
+### Example: Multiple targeted edits
+```xml
+<function_calls>
+  <function_call>{"function":"patch_manuscript","id":"manuscript-123","old":"She walked slowly","new":"She ran desperately"}</function_call>
+  <function_call>{"function":"patch_manuscript","id":"manuscript-123","old":"The shadows deepened","new":"Darkness fell"}</function_call>
 </function_calls>
 ```
 
@@ -23,9 +31,11 @@ You are in native function call mode.
 { "function": "replace_manuscript", "id": "manuscript-123", "content": "The complete chapter content..." }
 ```
 
-**patch_manuscript** (targeted search-replace edits)
+**patch_manuscript** (single targeted search-replace edit)
 ```json
-{ "function": "patch_manuscript", "id": "manuscript-123", "replacements": [{ "old": "text to find", "new": "replacement text" }] }
+{ "function": "patch_manuscript", "id": "manuscript-123", "old": "text to find", "new": "replacement text" }
 ```
 
-**Important:** Prefer `patch_manuscript` for targeted edits to avoid regenerating unchanged content.
+**Important:**
+- Prefer `patch_manuscript` for targeted edits to avoid regenerating unchanged content.
+- For multiple edits, use multiple `patch_manuscript` calls.
