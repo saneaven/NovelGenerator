@@ -386,7 +386,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
         onClose={() => setShowAIModal(false)}
         category="basic_info"
         projectId={projectId}
-        targetId={basicInfoId || ''}
+        targetId={basicInfoId ?? undefined}
       />
 
       {basicInfoId && (

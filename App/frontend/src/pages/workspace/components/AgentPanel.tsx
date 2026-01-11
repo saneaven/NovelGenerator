@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useShallow } from 'zustand/react/shallow';
 import { useAgentStore, type StoredAgentMessage } from '../../../store/agentStore';
 import { useAgentUIStore } from '../../../store/agentUIStore';
+import { useStreamingStore } from '../../../store/streamingStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import { useProjectStore } from '../../../store/projectStore';
 import { useSettingsStore } from '../../../store/settingsStore';
@@ -213,11 +215,15 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     const displayProcessor = useMemo(() => new DefaultDisplayProcessor(), []);
     const { convertToDisplayMessage } = useAgentStore();
 
-    // Use selectors for agentUI to avoid re-rendering on input changes
-    const isLoading = useAgentUIStore((state) => state.loadingByProject[projectId] ?? false);
-    const agentVisibleState = useAgentUIStore((state) => state.agentVisibleByProject[projectId] ?? false);
-    const editingMessageId = useAgentUIStore((state) => state.editingByProject[projectId]?.messageId ?? null);
-    const setAgentVisible = useAgentUIStore((state) => state.setAgentVisible);
+    // Use shallow selector to combine multiple store reads into one (reduces re-renders)
+    const { isLoading, agentVisibleState, editingMessageId, setAgentVisible } = useAgentUIStore(
+        useShallow((state) => ({
+            isLoading: state.loadingByProject[projectId] ?? false,
+            agentVisibleState: state.agentVisibleByProject[projectId] ?? false,
+            editingMessageId: state.editingByProject[projectId]?.messageId ?? null,
+            setAgentVisible: state.setAgentVisible,
+        }))
+    );
 
     // Handle desktop visibility separately to avoid selector side effects
     const isDesktop = typeof window !== 'undefined' && window.innerWidth > 768;
@@ -239,13 +245,22 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     // Use state selectors for proper Zustand reactivity (re-render when store changes)
     // IMPORTANT: Get agentId from state inside selector, not from closure (avoids stale value)
     const selectedAgentId = useAgentStore((state) => state.selectedAgentByProject[projectId]);
-    const selectedAgent = useAgentStore((state) => {
-        const agentId = state.selectedAgentByProject[projectId];
-        if (!agentId) return undefined;
-        return state.agentsByProject[projectId]?.find((a) => a.id === agentId);
-    });
+    // Memoize the selector function to avoid creating new function references on each render
+    const agentSelector = useMemo(
+        () => (state: ReturnType<typeof useAgentStore.getState>) => {
+            const agentId = state.selectedAgentByProject[projectId];
+            if (!agentId) return undefined;
+            return state.agentsByProject[projectId]?.find((a) => a.id === agentId);
+        },
+        [projectId]
+    );
+    const selectedAgent = useAgentStore(agentSelector);
     const storedMessages = useMemo(() => selectedAgent?.messages ?? [], [selectedAgent]);
 
+    // Subscribe to streaming content for real-time updates (lightweight, only streaming messages)
+    const streamingContent = useStreamingStore((state) => state.streamingContent);
+
+    // Only subscribe to agent sessions for this project (reduces re-renders from other sessions)
     const llmSessions = useLLMTaskStore((state) => state.sessions);
     const agentSessionByMessageId = useMemo(() => {
         const map: Record<string, any> = {};
@@ -338,12 +353,15 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         return () => container.removeEventListener('scroll', handleScroll);
     }, [handleScroll]);
 
-    // Auto-scroll only when user is near bottom
+    // Auto-scroll only when user is near bottom (instant during streaming)
     useEffect(() =>
     {
         if (isUserNearBottomRef.current && scrollContainerRef.current)
         {
-            scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+            scrollContainerRef.current.scrollTo({
+                top: scrollContainerRef.current.scrollHeight,
+                behavior: 'instant'
+            });
         }
     }, [storedMessages, isLoading]);
 
@@ -364,11 +382,20 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
             const requestedLanguage = wantsTranslation && defaultSubLanguage ? defaultSubLanguage : mainLanguage;
             const hasRequestedLanguage = Boolean(requestedLanguage && message.data[requestedLanguage]);
 
+            // Check for streaming content (takes priority during active streaming)
+            const streaming = streamingContent.get(message.id);
+
             if (hasRequestedLanguage)
             {
+                const baseChatMessage = convertToDisplayMessage(message, requestedLanguage);
+                // Override with streaming content if available
+                const chatMessage = streaming
+                    ? { ...baseChatMessage, contentParts: streaming.contentParts, thinking_details: streaming.thinkingDetails }
+                    : baseChatMessage;
+
                 return {
                     storedMessage: message,
-                    chatMessage: convertToDisplayMessage(message, requestedLanguage),
+                    chatMessage,
                     requestedLanguage,
                     displayLanguage: requestedLanguage,
                     hasRequestedLanguage: true,
@@ -384,7 +411,11 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
 
             const displayLanguage = fallback?.language ?? requestedLanguage ?? mainLanguage;
             const fallbackLanguage = fallback ? fallback.language : null;
-            const chatMessage = convertToDisplayMessage(message, displayLanguage);
+            const baseChatMessage = convertToDisplayMessage(message, displayLanguage);
+            // Override with streaming content if available
+            const chatMessage = streaming
+                ? { ...baseChatMessage, contentParts: streaming.contentParts, thinking_details: streaming.thinkingDetails }
+                : baseChatMessage;
 
             return {
                 storedMessage: message,
@@ -395,7 +426,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                 fallbackLanguage
             };
         },
-        [messageLanguageView, mainLanguage, defaultSubLanguage, convertToDisplayMessage]
+        [messageLanguageView, mainLanguage, defaultSubLanguage, convertToDisplayMessage, streamingContent]
     );
 
     const displayMessages = useMemo(
@@ -617,7 +648,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                     const isApplying = agentSession?.status === 'applying' || applyingMessageEdits[message.chatMessage.id] === true;
                     const hasPendingCards = cardsToRender.some((card: any) => card.functionCall.status === 'pending' || card.functionCall.status === 'validating');
                     const cardMode = hasSessionCards
-                        ? (agentSession?.status === 'pending_confirmation' || isApplying ? 'pending' : 'confirmed')
+                        ? (agentSession?.status === 'pending_confirmation' || isApplying || hasPendingCards ? 'pending' : 'confirmed')
                         : (hasPendingCards || isApplying ? 'pending' : 'confirmed');
 
                     return (
@@ -795,7 +826,10 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                         onClick={() => {
                             if (scrollContainerRef.current) {
                                 isUserNearBottomRef.current = true;
-                                scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+                                scrollContainerRef.current.scrollTo({
+                                    top: scrollContainerRef.current.scrollHeight,
+                                    behavior: 'smooth'
+                                });
                                 setShowScrollButton(false);
                             }
                         }}

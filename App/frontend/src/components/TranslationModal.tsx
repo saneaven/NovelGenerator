@@ -5,7 +5,7 @@ import './TranslationModal.css';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import type { UnifiedObject, ObjectType } from '../types/unifiedObject';
-import { TaskRuntime } from '../llmTask';
+import { JourneyRuntime } from '../llmTaskJourney';
 import { Globe, Swap, Document } from './icons';
 import { ObjectPicker, CATEGORY_CONFIG as PICKER_CATEGORY_CONFIG } from './ObjectPicker';
 import CollapsibleSection from './ui/CollapsibleSection';
@@ -277,7 +277,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     // Auto-close modal - request continues in background, toast shows progress
     onClose();
 
-    TaskRuntime.start('translateObjects', {
+    JourneyRuntime.start('translateObjects', {
       projectId,
       sourceLanguage,
       targetLanguage,

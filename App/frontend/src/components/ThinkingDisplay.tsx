@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { ContentPart } from '../llm/requestTypes';
+import { ChevronRight } from './icons/navigation/ChevronRight';
 import './ThinkingDisplay.css';
 
 interface ThinkingDisplayProps {
@@ -58,25 +59,27 @@ const ThinkingDisplay: React.FC<ThinkingDisplayProps> = ({
         const streaming = isStreaming && isLast;
 
         return (
-          <div key={key} className="thinking-card-minimal">
+          <div key={key} className={`thinking-card ${isExpanded ? 'expanded' : ''}`}>
             <button
               className="thinking-card-toggle"
               onClick={() => toggleExpanded(key)}
             >
-              <span className="toggle-icon">{isExpanded ? '-' : '+'}</span>
+              <span className="toggle-icon">
+                <ChevronRight size="sm"/>
+              </span>
               <span className="toggle-label">Thinking</span>
-              {streaming && <span className="streaming-indicator">...</span>}
+              {streaming && <span className="streaming-indicator" />}
             </button>
 
-            {isExpanded && (
+            <div className="thinking-card-content">
               <div
                 ref={isLast ? contentRef : undefined}
-                className="thinking-card-content"
+                className="thinking-card-content-inner"
                 onScroll={isLast ? handleScroll : undefined}
               >
                 {part.text}
               </div>
-            )}
+            </div>
           </div>
         );
       })}

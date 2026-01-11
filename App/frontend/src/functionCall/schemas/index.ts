@@ -24,5 +24,4 @@ export {
 export {
   STORY_OBJECT_TYPES,
   TRANSLATION_OBJECT_TYPES,
-  CHAPTER_TYPES,
 } from './schemaBuilders';

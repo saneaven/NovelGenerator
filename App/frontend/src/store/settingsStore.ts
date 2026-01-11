@@ -107,8 +107,6 @@ export interface TagBasedImageStyle {
     negativePostfix: string;  // Appended to negative prompt
 }
 
-// Legacy alias for backwards compatibility during migration
-export type CustomImageStyle = NaturalImageStyle;
 
 // NovelAI-specific settings
 export interface NovelAIImageSettings {
@@ -141,10 +139,6 @@ export interface ImageGenConfig {
     tagBasedStyles: TagBasedImageStyle[];    // For NovelAI
     selectedNaturalStyleId: string | null;
     selectedTagBasedStyleId: string | null;
-
-    // Legacy field for backwards compatibility
-    customStyles?: NaturalImageStyle[];
-    selectedStyleId?: string | null;
 
     // Per-provider settings
     openaiSettings: OpenAIImageSettings;
@@ -400,26 +394,6 @@ const mergeWithDefaults = (stored: any): Settings => {
         return defaultSettings;
     }
 
-    // Migration: storyObjectEdit/manuscriptEdit → editAssistant
-    if (stored.functionConfigs && !stored.functionConfigs.editAssistant) {
-        // Use manuscriptEdit settings if available (has prefill enabled), otherwise storyObjectEdit
-        if (stored.functionConfigs.manuscriptEdit) {
-            stored.functionConfigs.editAssistant = {
-                ...stored.functionConfigs.manuscriptEdit,
-                temperature: 0.7, // Force unified temperature
-            };
-        } else if (stored.functionConfigs.storyObjectEdit) {
-            stored.functionConfigs.editAssistant = {
-                ...stored.functionConfigs.storyObjectEdit,
-                temperature: 0.7, // Force unified temperature
-            };
-        }
-        // Clean up old keys
-        delete stored.functionConfigs.storyObjectEdit;
-        delete stored.functionConfigs.manuscriptEdit;
-        delete stored.functionConfigs.chapterGen;
-    }
-
     const migratedFunctionConfigs: any = {};
     if (stored.functionConfigs) {
         for (const [key, config] of Object.entries(stored.functionConfigs) as [string, any][]) {
@@ -443,10 +417,9 @@ const mergeWithDefaults = (stored: any): Settings => {
         imageGenConfig: {
             ...defaultSettings.imageGenConfig,
             ...stored.imageGenConfig,
-            // Migrate legacy customStyles to naturalStyles if needed
-            naturalStyles: stored.imageGenConfig?.naturalStyles ?? stored.imageGenConfig?.customStyles ?? [],
+            naturalStyles: stored.imageGenConfig?.naturalStyles ?? [],
             tagBasedStyles: stored.imageGenConfig?.tagBasedStyles ?? [],
-            selectedNaturalStyleId: stored.imageGenConfig?.selectedNaturalStyleId ?? stored.imageGenConfig?.selectedStyleId ?? null,
+            selectedNaturalStyleId: stored.imageGenConfig?.selectedNaturalStyleId ?? null,
             selectedTagBasedStyleId: stored.imageGenConfig?.selectedTagBasedStyleId ?? null,
             // Ensure provider settings exist
             openaiSettings: {

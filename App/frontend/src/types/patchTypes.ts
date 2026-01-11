@@ -6,14 +6,6 @@
  * - patch_* functions: Search and replace within fields (single replacement per call)
  */
 
-import {
-  STORY_OBJECT_TYPES,
-  type StoryObjectType,
-} from '../functionCall/schemas/schemaBuilders';
-
-// Re-export for backward compatibility
-export { STORY_OBJECT_TYPES, type StoryObjectType };
-
 // ============================================
 // PATCH RESULT TYPE
 // ============================================

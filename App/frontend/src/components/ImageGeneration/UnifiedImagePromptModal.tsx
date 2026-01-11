@@ -9,7 +9,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useLLMTaskStore } from '../../store/llmTaskStore';
-import { TaskRuntime } from '../../llmTask';
+import { JourneyRuntime } from '../../llmTaskJourney';
 import { TextButton } from '../TextButton';
 import { ObjectPicker } from '../ObjectPicker';
 import './UnifiedImagePromptModal.css';
@@ -175,7 +175,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     }
 
     const kind = contextType === 'scene' ? 'sceneImage' : 'imagePrompt';
-    const sessionId = TaskRuntime.start(kind, {
+    const sessionId = JourneyRuntime.start(kind, {
       projectId: currentProjectId,
       promptMode,
       contextType,

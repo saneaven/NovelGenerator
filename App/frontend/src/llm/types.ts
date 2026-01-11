@@ -1,4 +1,4 @@
-import type { ContentPart, FunctionCallMetadata, FunctionCallProgress } from './requestTypes';
+import type { ContentPart, ConversationBlock, FunctionCallMetadata, FunctionCallProgress } from './requestTypes';
 import type { ProviderConfig, ProviderType, ThinkingConfig, RetryConfig, CustomApiFormat } from '../store/settingsStore';
 import type { FunctionCallSchema } from '../functionCall';
 
@@ -75,6 +75,9 @@ export interface TemplateData {
   };
   input: {
     userMessage: string;
+  };
+  feedback?: {
+    editingObjectIds: string[];
   };
   // Mode-specific groups (only one should be set)
   agent?: {
@@ -177,7 +180,6 @@ export interface EditAssistantStoryObjectPromptContext extends BasePromptContext
   contextIds?: string[];
   categoryName?: string;
   editScope?: string;
-  isNativeOutput?: boolean;
 }
 
 /**
@@ -190,7 +192,6 @@ export interface EditAssistantManuscriptPromptContext extends BasePromptContext 
   currentChapterContent: string;
   objectIds?: string[];
   contextData?: Record<string, unknown>;
-  isNativeOutput?: boolean;
 }
 
 /**
@@ -214,7 +215,6 @@ export interface StoryTranslationPromptContext extends BasePromptContext {
   contextObjectIds?: string[];
   currentTranslatedContents?: CurrentTranslatedContent[];
   contextData?: Record<string, any>;
-  isNativeOutput?: boolean;
 }
 
 /**
@@ -224,7 +224,6 @@ export interface AgentTranslationPromptContext extends BasePromptContext {
   sourceLanguage: string;
   targetLanguage: string;
   sourceContent: string;
-  isNativeOutput?: boolean;
 }
 
 /**
@@ -237,7 +236,6 @@ export interface ObjectImagePromptContext extends BasePromptContext {
   currentPrompt?: string | null;
   currentPromptPositive?: string | null;
   currentPromptNegative?: string | null;
-  isNativeOutput?: boolean;
 }
 
 /**
@@ -259,7 +257,6 @@ export interface SceneImagePromptContext extends BasePromptContext {
   scenePreContext: string;
   scenePostContext: string;
   selectedObjects: SelectedObjectContext[];
-  isNativeOutput?: boolean;
 }
 
 /**
@@ -276,7 +273,6 @@ export interface CoverImagePromptContext extends BasePromptContext {
   currentPrompt?: string | null;
   currentPromptPositive?: string | null;
   currentPromptNegative?: string | null;
-  isNativeOutput?: boolean;
 }
 
 /**
@@ -302,6 +298,15 @@ export interface LLMTaskConfig {
   promptContext: PromptContext;
   abortController: AbortController;
   sessionId?: string;
+  /**
+   * Optional: bypass PromptManager + prepareMessages and stream an already-built request.
+   * Used by journey mode to keep `preConversation` fixed and render feedback turns externally.
+   */
+  prepared?: {
+    messages: ConversationBlock[];
+    functions?: FunctionCallSchema[];
+    outputMode: OutputMode;
+  };
   // Provider overrides (optional - defaults from settings)
   provider?: ProviderType;
   providerConfig?: ProviderConfig;

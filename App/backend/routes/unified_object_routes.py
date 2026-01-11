@@ -1094,55 +1094,20 @@ async def create_object(
         # Need outline_id from metadata
         outline_id_value = metadata.get('outline_id')
         if not outline_id_value:
-            # Fallback: use first outline if exists (backward compatibility)
-            outline = db.query(Outline).filter(Outline.project_id == project_id).first()
-            if not outline:
-                # Auto-create outline on demand for backward compatibility
-                outline = Outline(
-                    id=uuid4(),
-                    project_id=project_id,
-                    order=0,
-                    created_at=datetime.utcnow(),
-                    updated_at=datetime.utcnow()
-                )
-                db.add(outline)
-                db.flush()
-                # Create translation for auto-created outline
-                outline_translation = ObjectTranslation(
-                    id=uuid4(),
-                    object_type='outline',
-                    object_id=outline.id,
-                    language=request.language,
-                    data={'name': 'Main Outline', 'description': ''},
-                    is_active=True,
-                    created_at=datetime.utcnow(),
-                    updated_at=datetime.utcnow()
-                )
-                db.add(outline_translation)
-                outline_version = ObjectVersion(
-                    id=uuid4(),
-                    object_type='outline',
-                    object_id=outline.id,
-                    version_number=1,
-                    data={request.language: {'name': 'Main Outline', 'description': ''}},
-                    user_request='Auto-created',
-                    created_at=datetime.utcnow()
-                )
-                db.add(outline_version)
-            outline_uuid = outline.id
-        else:
-            try:
-                outline_uuid = UUID(str(outline_id_value))
-            except (ValueError, TypeError):
-                raise HTTPException(status_code=400, detail="Invalid outline_id format")
+            raise HTTPException(status_code=400, detail="outline_id is required for act creation")
 
-            # Verify outline belongs to project
-            outline = db.query(Outline).filter(
-                Outline.id == outline_uuid,
-                Outline.project_id == project_id
-            ).first()
-            if not outline:
-                raise HTTPException(status_code=404, detail="Outline not found for project")
+        try:
+            outline_uuid = UUID(str(outline_id_value))
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid outline_id format")
+
+        # Verify outline belongs to project
+        outline = db.query(Outline).filter(
+            Outline.id == outline_uuid,
+            Outline.project_id == project_id
+        ).first()
+        if not outline:
+            raise HTTPException(status_code=404, detail="Outline not found for project")
 
         requested_order = metadata.get('order')
         if isinstance(requested_order, int):

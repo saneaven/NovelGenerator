@@ -1,5 +1,8 @@
 {{! Feedback Template }}
 
+# Context (targets)
+{{prompt "common/projectContext/filtered" feedback.editingObjectIds}}
+
 # User Feedback
 
 The user has a feedback on your operation

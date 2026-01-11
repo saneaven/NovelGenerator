@@ -31,9 +31,6 @@ export const TRANSLATION_OBJECT_TYPES = [
 /** Outline structure types (outline, act, chapter) */
 export const OUTLINE_TYPES = ['outline', 'act', 'chapter'] as const;
 
-/** Chapter types (act or chapter) - legacy, use OUTLINE_TYPES for new code */
-export const CHAPTER_TYPES = ['act', 'chapter'] as const;
-
 // ============================================================================
 // FIELD SCHEMAS
 // ============================================================================
@@ -50,13 +47,6 @@ export const translationObjectTypeSchema = {
   type: 'string',
   enum: TRANSLATION_OBJECT_TYPES,
   description: 'Type of the object',
-};
-
-/** Schema for chapter type field */
-export const chapterTypeSchema = {
-  type: 'string',
-  enum: CHAPTER_TYPES,
-  description: 'Type: act or chapter',
 };
 
 // ============================================================================

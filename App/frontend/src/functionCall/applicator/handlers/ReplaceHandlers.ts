@@ -146,14 +146,8 @@ export async function replaceManuscript(
   const { store, projectId, language } = context;
   const { createNewVersion = true, userRequest = 'AI Edit' } = context.options;
 
-  // Get manuscript by ID or find by chapter reference
+  // Get manuscript by ID
   let manuscript = store.getObject(id) ?? null;
-
-  // If not found, the ID might be a chapter ID (for legacy compatibility during transition)
-  if (!manuscript) {
-    const manuscripts = await store.listObjects('manuscript', projectId);
-    manuscript = manuscripts.find((m: UnifiedObject) => m.metadata?.chapter_id === id) ?? null;
-  }
 
   if (!manuscript) {
     // Create new manuscript if it doesn't exist

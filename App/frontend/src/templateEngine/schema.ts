@@ -27,7 +27,6 @@ export const UNIFIED_SCHEMA = {
     isPrefillEnabled: { desc: "Prefill enabled", example: true },
     isCustomThinkingEnabled: { desc: "Custom thinking enabled", example: false },
     outputMode: { desc: "LLM output mode ('tool_call' | 'native_function_call' | 'raw_output')", example: "tool_call" },
-    isNativeOutputMode: { desc: "Backward-compat alias: true when outputMode is not 'tool_call'", example: false },
     isNativeFunctionCallMode: { desc: "True when outputMode is 'native_function_call'", example: false },
     isRawOutputMode: { desc: "True when outputMode is 'raw_output'", example: false },
   },
@@ -115,6 +114,13 @@ export const UNIFIED_SCHEMA = {
         resultMessage: "Applied successfully",
         acceptedAt: "2025-01-02T00:00:00Z"
       }] as Array<{ functionCallId: string; functionName: string; success: boolean; status: string; resultMessage: string; acceptedAt?: string }>
+    },
+  },
+
+  feedback: {
+    editingObjectIds: {
+      desc: "IDs of target objects for the current operation (used by common/feedback templates)",
+      example: ["char-1", "ms-1"] as string[],
     },
   },
 

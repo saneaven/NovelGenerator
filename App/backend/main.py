@@ -215,7 +215,15 @@ async def stream_chat(provider: str, request: ChatCompletionRequest, req: Reques
                 if hasattr(stream, 'aclose'):
                     await stream.aclose()
 
-        return StreamingResponse(event_gen(), media_type="text/event-stream")
+        return StreamingResponse(
+            event_gen(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive",
+            }
+        )
 
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

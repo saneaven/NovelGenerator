@@ -1,111 +1,127 @@
-/* ===================================
-   ThinkingDisplay - Collapsible thinking cards
-   =================================== */
+/* ========================================
+   THINKING DISPLAY
+   Modern, minimal thinking card design
+   ======================================== */
+
 .message-with-thinking {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
 }
 
-/* Individual minimal thinking card */
-.thinking-card-minimal {
-  border: 1px solid var(--color-border-default);
-  border-radius: 4px;
-  padding: 8px 12px;
-  background: transparent;
-  margin-bottom: 8px;
+/* ===== Thinking Card ===== */
+.thinking-card {
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    transition: all var(--transition-fast);
 }
 
+.thinking-card:hover {
+    border-color: var(--color-border-default);
+    box-shadow: var(--shadow-md);
+    padding-bottom: var(--spacing-sm);
+}
+
+.thinking-card .expanded:hover{
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    transition: all var(--transition-fast);
+}
+
+/* ===== Toggle Button ===== */
 .thinking-card-toggle {
-  width: 100%;
-  background: none;
-  border: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  font-size: 0.85em;
-  color: var(--color-text-tertiary, #888);
-  padding: 4px 0;
-  font-family: inherit;
-  text-align: left;
-  transition: color 0.2s;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    width: 100%;
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    transition: background-color var(--transition-fast);
 }
 
-.thinking-card-toggle:hover {
-  color: var(--color-text-secondary, #555);
-}
-
+/* ===== Toggle Icon ===== */
 .toggle-icon {
-  font-size: 0.75em;
-  color: var(--color-text-muted, #999);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    color: var(--color-text-tertiary);
+    flex-shrink: 0;
+    transition: transform var(--transition-base);
 }
 
+.thinking-card.expanded .toggle-icon {
+    transform: rotate(90deg);
+}
+/* ===== Toggle Label ===== */
 .toggle-label {
-  font-weight: 500;
-  color: var(--color-text-tertiary, #888);
+    font-family: var(--font-family-base);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+    letter-spacing: 0.01em;
 }
 
+/* ===== Streaming Indicator ===== */
 .streaming-indicator {
-  margin-left: auto;
-  color: rgba(100, 150, 255, 0.8);
-  animation: pulse 1.5s infinite;
+    margin-left: auto;
+    width: 6px;
+    height: 6px;
+    background: var(--color-text-brand);
+    border-radius: var(--border-radius-full);
+    animation: pulse 1.5s ease-in-out infinite;
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+    0%, 100% {
+        opacity: 0.4;
+        transform: scale(0.9);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
+/* ===== Content Area ===== */
 .thinking-card-content {
-  padding-top: 8px;
-  font-size: 0.9em;
-  color: var(--color-text-secondary, #666);
-  font-style: italic;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  animation: fadeIn 0.2s ease-in;
-  max-height: 200px;
-  overflow-y: auto;
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--transition-base);
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.thinking-card.expanded .thinking-card-content {
+    grid-template-rows: 1fr;
 }
 
-/* ===================================
-   DARK MODE SUPPORT
-   =================================== */
-@media (prefers-color-scheme: dark) {
-  .thinking-card-minimal {
-    border-color: rgba(255, 255, 255, 0.1);
-  }
+.thinking-card-content-inner {
+    min-height: 0;
+    max-height: 24rem;
+    padding: 0 var(--spacing-lg) 0;
+    overflow: hidden;
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-sm);
+    line-height: var(--line-height-relaxed);
+    color: var(--color-text-tertiary);
+    white-space: pre-wrap;
+    word-break: break-word;
+    transition: padding var(--transition-base);
+}
 
-  .thinking-card-toggle {
-    color: #aaa;
-  }
+.thinking-card.expanded .thinking-card-content-inner {
+    padding: 0 var(--spacing-lg) var(--spacing-lg);
+    overflow-y: auto;
+}
 
-  .thinking-card-toggle:hover {
-    color: #ccc;
-  }
-
-  .toggle-label {
-    color: #aaa;
-  }
-
-  .streaming-indicator {
-    color: rgba(130, 180, 255, 0.9);
-  }
-
-  .thinking-card-content {
-    color: #bbb;
-  }
+.thinking-card.expanded .thinking-card-content-inner {
+    padding: 0 var(--spacing-lg) var(--spacing-lg);
+    overflow-y: auto;
 }

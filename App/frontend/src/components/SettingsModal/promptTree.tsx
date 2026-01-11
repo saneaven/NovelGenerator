@@ -439,13 +439,22 @@ export const PROMPT_TREE: PromptNode[] = [
     type: 'category',
     children: [
       {
-        id: 'common-feedback',
-        label: 'Feedback',
+        id: 'common-feedback-user',
+        label: 'Feedback User Prompt',
         type: 'prompt',
         functionType: 'common',
         category: 'userPrompt',
         name: 'feedback',
-        description: 'Template for feedback message about function call results. Appended to user input on retry.'
+        description: 'Template for the last user feedback message in LLM task journeys.'
+      },
+      {
+        id: 'common-feedback-nonlast',
+        label: 'Feedback Non-Last User Prompt',
+        type: 'prompt',
+        functionType: 'common',
+        category: 'nonLastUserPrompt',
+        name: 'feedback',
+        description: 'Template for previous user feedback messages in LLM task journeys.'
       }
     ]
   },

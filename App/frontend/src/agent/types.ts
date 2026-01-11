@@ -1,7 +1,5 @@
 import type { ChatMessage, ContentPart } from '../llm/requestTypes';
 
-// Re-export EditCard from functionCall module for compatibility
-export type { EditCard } from '../functionCall/types';
 
 /**
  * Extended ChatMessage for display processing

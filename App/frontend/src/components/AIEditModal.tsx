@@ -3,7 +3,7 @@ import { BaseModal } from './BaseModal';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import type { ObjectType, ChapterObject } from '../types/unifiedObject';
-import { TaskRuntime } from '../llmTask';
+import { JourneyRuntime } from '../llmTaskJourney';
 import { Expand, Collapse, Document } from './icons';
 import { ObjectPicker } from './ObjectPicker';
 import { TextButton } from './TextButton';
@@ -63,7 +63,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
 
   const isManuscriptMode = category === 'manuscript';
   const categoryDisplayName = getCategoryDisplayName(category);
-  const editTypeText = targetId ? 'Item' : 'All';
+  const editTypeText = 'Item';
   const mainLanguage = settingsStore.settings.mainLanguage;
 
   // Get item name for title (fetch from store)
@@ -132,12 +132,12 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       return;
     }
 
-    if (isManuscriptMode && !targetId) {
-      setError('Manuscript edit requires a target chapter ID.');
+    if (!targetId) {
+      setError('AI Edit requires a target ID.');
       return;
     }
 
-    const sessionId = TaskRuntime.start('aiEdit', {
+    const sessionId = JourneyRuntime.start('aiEdit', {
       projectId,
       category,
       targetId,

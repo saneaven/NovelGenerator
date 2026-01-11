@@ -38,25 +38,29 @@ const MODE_TO_FUNCTION_TYPE: Record<LLMTaskModeType, AIFunctionType> = {
 };
 
 /**
- * LLMTask - Core streaming class with RAF throttling
+ * LLMTask - Core streaming class with interval-based smoothing
  *
  * Responsibilities:
  * - Message preparation (template rendering via PromptManager)
  * - Stream LLM response via streamChat()
  * - Content part accumulation (thinking, content)
- * - RAF-throttled updates (callback)
+ * - Interval-based updates for smooth streaming (50ms cadence)
  * - Tool call tracking via FunctionCallStreamTracker
  * - Abort handling
  */
 export class LLMTask {
   private readonly config: LLMTaskConfig;
   private readonly callbacks: LLMTaskCallbacks;
-  private rafId: number | null = null;
   private pendingParts: ContentPart[] = [];
   private isRunning = false;
   private functionTracker: FunctionCallStreamTracker | null = null;
-  private progressRafId: number | null = null;
   private pendingProgress: FunctionCallProgress[] | null = null;
+
+  // Interval-based smoothing for consistent update cadence
+  private updateIntervalId: number | null = null;
+  private pendingContentUpdate = false;
+  private pendingProgressUpdate = false;
+  private readonly UPDATE_INTERVAL_MS = 50;
 
   constructor(config: LLMTaskConfig, callbacks: LLMTaskCallbacks) {
     this.config = config;
@@ -100,37 +104,46 @@ export class LLMTask {
       const customApiFormat = this.config.customApiFormat ?? functionConfig.advanced.customApiFormat;
       const retryConfig = this.config.retryConfig ?? settings.retryConfig;
 
-      // 2. Generate prompt bundle
-      const promptBundle = await PromptManager.generatePromptBundle(
-        this.config.mode,
-        this.config.promptContext
-      );
+      let messages: ConversationBlock[];
+      let functions = this.config.prepared?.functions;
+      let outputMode: OutputMode;
 
-      // 3. Get functions for this mode
-      const functions = PromptManager.getFunctionsForMode(
-        this.config.mode,
-        this.config.promptContext
-      );
+      if (this.config.prepared) {
+        messages = this.config.prepared.messages;
+        outputMode = this.config.prepared.outputMode;
+      } else {
+        // 2. Generate prompt bundle
+        const promptBundle = await PromptManager.generatePromptBundle(
+          this.config.mode,
+          this.config.promptContext
+        );
 
-      const context: any = this.config.promptContext;
-      const outputMode: OutputMode =
-        context?.outputMode ??
-        (context?.isNativeOutput === true
-          ? (this.config.mode === LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT ||
-              this.config.mode === LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT ||
-              this.config.mode === LLMTaskMode.TRANSLATION
-              ? 'native_function_call'
-              : 'raw_output')
-          : 'tool_call');
+        // 3. Get functions for this mode
+        functions = PromptManager.getFunctionsForMode(
+          this.config.mode,
+          this.config.promptContext
+        );
+
+        const context: any = this.config.promptContext;
+        outputMode =
+          context?.outputMode ??
+          (context?.isNativeOutput === true
+            ? (this.config.mode === LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT ||
+                this.config.mode === LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT ||
+                this.config.mode === LLMTaskMode.TRANSLATION
+                ? 'native_function_call'
+                : 'raw_output')
+            : 'tool_call');
+
+        // 4. Prepare messages
+        messages = await this.prepareMessages(history, promptBundle);
+      }
 
       const nativeFunctionCall = outputMode === 'native_function_call';
 
       if (outputMode !== 'tool_call' && functions?.length) {
         throw new Error(`${outputMode} requires functions to be omitted`);
       }
-
-      // 4. Prepare messages
-      const messages = await this.prepareMessages(history, promptBundle);
 
       // Log LLM request structure for debugging
       console.log('LLM Request:', {
@@ -164,7 +177,7 @@ export class LLMTask {
       // 5. Initialize function tracker
       this.functionTracker = new FunctionCallStreamTracker();
 
-      // 7. Stream with RAF throttling
+      // 7. Stream with interval-based smoothing for consistent update cadence
       let currentPartType: ContentPartType | null = null;
       let currentBuffer = '';
       let accumulatedThinkingDetails: any[] | undefined;
@@ -175,6 +188,29 @@ export class LLMTask {
           this.pendingParts.push({ type: currentPartType, text: currentBuffer });
           currentBuffer = '';
           currentPartType = null;
+        }
+      };
+
+      // Start interval-based update loop for smooth streaming
+      const startUpdateInterval = () => {
+        if (this.updateIntervalId === null) {
+          this.updateIntervalId = window.setInterval(() => {
+            // Update content if pending
+            if (this.pendingContentUpdate) {
+              this.pendingContentUpdate = false;
+              if (currentPartType && currentBuffer) {
+                this.callbacks.onUpdate([
+                  ...this.pendingParts,
+                  { type: currentPartType, text: currentBuffer },
+                ]);
+              }
+            }
+            // Update function call progress if pending
+            if (this.pendingProgressUpdate && this.pendingProgress && this.callbacks.onFunctionProgress) {
+              this.pendingProgressUpdate = false;
+              this.callbacks.onFunctionProgress(this.pendingProgress);
+            }
+          }, this.UPDATE_INTERVAL_MS);
         }
       };
 
@@ -217,21 +253,9 @@ export class LLMTask {
           }
           currentBuffer += chunkToAdd;
 
-          // Schedule RAF update with current state
-          const currentParts = [
-            ...this.pendingParts,
-            { type: 'content' as ContentPartType, text: currentBuffer },
-          ];
-          this.pendingParts = currentParts.slice(0, -1);
-          if (this.rafId === null) {
-            this.rafId = requestAnimationFrame(() => {
-              this.rafId = null;
-              this.callbacks.onUpdate([
-                ...this.pendingParts,
-                { type: 'content', text: currentBuffer },
-              ]);
-            });
-          }
+          // Mark pending update and ensure interval is running
+          this.pendingContentUpdate = true;
+          startUpdateInterval();
           continue;
         }
 
@@ -253,15 +277,9 @@ export class LLMTask {
           }
           currentBuffer += textToAdd;
 
-          if (this.rafId === null) {
-            this.rafId = requestAnimationFrame(() => {
-              this.rafId = null;
-              this.callbacks.onUpdate([
-                ...this.pendingParts,
-                { type: 'thinking', text: currentBuffer },
-              ]);
-            });
-          }
+          // Mark pending update and ensure interval is running
+          this.pendingContentUpdate = true;
+          startUpdateInterval();
         }
 
         // Handle content in object form
@@ -281,30 +299,18 @@ export class LLMTask {
           }
           currentBuffer += contentToAdd;
 
-          if (this.rafId === null) {
-            this.rafId = requestAnimationFrame(() => {
-              this.rafId = null;
-            this.callbacks.onUpdate([
-              ...this.pendingParts,
-              { type: 'content', text: currentBuffer },
-            ]);
-            });
-          }
+          // Mark pending update and ensure interval is running
+          this.pendingContentUpdate = true;
+          startUpdateInterval();
         }
 
-        // Handle tool calls (RAF-throttled to prevent "Maximum update depth exceeded")
+        // Handle tool calls (interval-throttled for smooth updates)
         if (chunk.tool_calls && this.functionTracker) {
           const progressEvents = this.functionTracker.applyDelta(chunk.tool_calls);
           if (progressEvents.length && this.callbacks.onFunctionProgress) {
             this.pendingProgress = progressEvents;
-            if (this.progressRafId === null) {
-              this.progressRafId = requestAnimationFrame(() => {
-                this.progressRafId = null;
-                if (this.pendingProgress && this.callbacks.onFunctionProgress) {
-                  this.callbacks.onFunctionProgress(this.pendingProgress);
-                }
-              });
-            }
+            this.pendingProgressUpdate = true;
+            startUpdateInterval();
           }
         }
 
@@ -324,17 +330,13 @@ export class LLMTask {
         }
       }
 
-      // 8. Finalize
-      if (this.rafId !== null) {
-        cancelAnimationFrame(this.rafId);
-        this.rafId = null;
+      // 8. Finalize - stop interval and flush pending updates
+      if (this.updateIntervalId !== null) {
+        clearInterval(this.updateIntervalId);
+        this.updateIntervalId = null;
       }
 
       // Flush any pending progress updates
-      if (this.progressRafId !== null) {
-        cancelAnimationFrame(this.progressRafId);
-        this.progressRafId = null;
-      }
       if (this.pendingProgress && this.callbacks.onFunctionProgress) {
         this.callbacks.onFunctionProgress(this.pendingProgress);
         this.pendingProgress = null;
@@ -415,14 +417,12 @@ export class LLMTask {
    */
   abort(): void {
     this.config.abortController.abort();
-    if (this.rafId !== null) {
-      cancelAnimationFrame(this.rafId);
-      this.rafId = null;
+    if (this.updateIntervalId !== null) {
+      clearInterval(this.updateIntervalId);
+      this.updateIntervalId = null;
     }
-    if (this.progressRafId !== null) {
-      cancelAnimationFrame(this.progressRafId);
-      this.progressRafId = null;
-    }
+    this.pendingContentUpdate = false;
+    this.pendingProgressUpdate = false;
     this.isRunning = false;
   }
 

@@ -1,4 +1,4 @@
-import type { EditCard } from '../types';
+import type { EditCard } from '../../functionCall/types';
 
 type EditCardMap = Record<string, EditCard[]>;
 

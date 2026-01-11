@@ -118,6 +118,18 @@ export const FunctionCallCardContainer: React.FC<FunctionCallCardContainerProps>
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [isCardCollapsed, setIsCardCollapsed] = useState(false);
+
+  const handleToggleCardCollapse = useCallback(() => {
+    setIsCardCollapsed(prev => !prev);
+  }, []);
+
+  // Auto-collapse when mode changes to 'confirmed'
+  useEffect(() => {
+    if (mode === 'confirmed') {
+      setIsCardCollapsed(true);
+    }
+  }, [mode]);
 
   // Selection is only relevant for pending mode
   const selectionDisabled = !isPending || isConfirming || isApplyDisabled;
@@ -169,16 +181,35 @@ export const FunctionCallCardContainer: React.FC<FunctionCallCardContainerProps>
   const itemCount = isStreaming ? streamingProgress.length : cards.length;
 
   return (
-    <div className={`fc-card fc-card--${mode}`}>
-      <div className="fc-card__header">
+    <div className={`fc-card fc-card--${mode}${isCardCollapsed ? ' fc-card--collapsed' : ''}`}>
+      <button
+        type="button"
+        className="fc-card__header"
+        onClick={handleToggleCardCollapse}
+      >
         <div className="fc-card__header-left">
           <div className="fc-card__title">AI Changes</div>
           <div className="fc-card__count">{itemCount}</div>
         </div>
-        <div className={`fc-pill fc-pill--${mode}`}>{modeLabel(mode)}</div>
-      </div>
+        <div className="fc-card__header-right">
+          <div className={`fc-pill fc-pill--${mode}`}>{modeLabel(mode)}</div>
+          <svg
+            className={`fc-card__chevron${isCardCollapsed ? '' : ' fc-card__chevron--open'}`}
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </div>
+      </button>
 
-      <div className="fc-card__list">
+      <div className={`fc-card__list${isCardCollapsed ? ' fc-card__list--collapsed' : ''}`}>
         {isStreaming && streamingProgress.map((p: FunctionCallProgress) => {
           const functionName = p.draft.functionName || '';
           const args = (p.preview && typeof p.preview === 'object') ? (p.preview as Record<string, unknown>) : undefined;
@@ -250,7 +281,7 @@ export const FunctionCallCardContainer: React.FC<FunctionCallCardContainerProps>
         })}
       </div>
 
-      {isPending && (
+      {isPending && !isCardCollapsed && (
         <div className="fc-card__footer">
           <div className="fc-card__footer-left">
             <span className="fc-card__footer-count">{selectedCount} selected</span>

@@ -1,5 +1,6 @@
 import type { TaskSpec } from './types';
 import { useAgentStore } from '../../store/agentStore';
+import { useStreamingStore } from '../../store/streamingStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { generateTempId } from '../../utils/tempId';
 import { LLMTask, LLMTaskMode, type AgentWorkspacePromptContext } from '../../llm';
@@ -33,6 +34,7 @@ export const agentSpec: TaskSpec<'agent', AgentTaskInput, AgentTaskResult> = {
   label: () => 'AI Response',
   run: async ({ sessionId, input, abortController, updateSession }) => {
     const agentStore = useAgentStore.getState();
+    const streamingStore = useStreamingStore.getState();
     const settingsStore = useSettingsStore.getState();
     const settings = settingsStore.settings;
     const agentConfig = settingsStore.getFunctionConfig('agent');
@@ -126,14 +128,19 @@ export const agentSpec: TaskSpec<'agent', AgentTaskInput, AgentTaskResult> = {
       },
       {
         onUpdate: (parts) => {
-          agentStore.updateMessageContentLocal(input.projectId, input.agentId, assistantMessageId, parts, language);
+          // Use lightweight streamingStore during streaming (instead of heavy agentStore)
+          streamingStore.setStreamingContent(assistantMessageId, parts);
           updateSession({ contentParts: parts });
         },
         onFunctionProgress: (progress) => updateSession({ functionCallProgress: progress }),
         onComplete: (r) => {
+          // Clear streaming content - agentStore will be updated after task.run() completes
+          streamingStore.clearStreamingContent(assistantMessageId);
           result = r;
         },
         onError: () => {
+          // Clear streaming content on error as well
+          streamingStore.clearStreamingContent(assistantMessageId);
           // Error is handled by LLMTask.run() throwing
         },
       }

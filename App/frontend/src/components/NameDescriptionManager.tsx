@@ -44,7 +44,7 @@ import StoryObjectCardExpanded from './StoryObjectCardExpanded';
 import { DropdownMenu, DropdownItem, DropdownDivider } from './ui/DropdownMenu';
 import { IconButton } from './IconButton';
 import { TextButton } from './TextButton';
-import { Expand, Collapse, Plus, AIAssist, MoreHorizontal } from './icons';
+import { Expand, Collapse, Plus, MoreHorizontal } from './icons';
 import { getSpanType, type SpanType } from '../hooks/useCardSpanType';
 import { useFitText } from '../hooks/useFitText';
 import { useGridColumnCount } from '../hooks/useGridColumnCount';
@@ -84,7 +84,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   const objects = store.objects;
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
-  const [aiEditTargetId, setAiEditTargetId] = useState<string | undefined>(undefined);
+  const [aiEditTargetId, setAiEditTargetId] = useState<string | null>(null);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [versionHistoryTargetId, setVersionHistoryTargetId] = useState<string | undefined>(undefined);
   const [showRetranslateModal, setShowRetranslateModal] = useState(false);
@@ -348,7 +348,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   // AI & VERSION MANAGEMENT
   // ============================================================================
 
-  const handleAIEdit = (itemId?: string) => {
+  const handleAIEdit = (itemId: string) => {
     setAiEditTargetId(itemId);
     setShowAIModal(true);
   };
@@ -410,16 +410,6 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
             {allCollapsed ? "Expand" : "Collapse"}
           </TextButton>
           <TextButton
-            variant="ghost"
-            size="sm"
-            onClick={() => handleAIEdit()}
-            disabled={isCreatingNew}
-            iconLeft={<AIAssist size="xs" />}
-            className="desktop-only"
-          >
-            AI Edit All
-          </TextButton>
-          <TextButton
             variant="secondary"
             size="sm"
             onClick={() => setIsCreatingNew(true)}
@@ -444,12 +434,6 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
               onClick={toggleAllCards}
             />
             <DropdownDivider />
-            <DropdownItem
-              icon={<AIAssist size="sm" />}
-              label="AI Edit All"
-              onClick={() => handleAIEdit()}
-              disabled={isCreatingNew}
-            />
             <DropdownItem
               icon={<Plus size="sm" />}
               label={`Add ${singularName}`}
@@ -603,11 +587,11 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
         isOpen={showAIModal}
         onClose={() => {
           setShowAIModal(false);
-          setAiEditTargetId(undefined);
+          setAiEditTargetId(null);
         }}
         category={category}
         projectId={projectId || ''}
-        targetId={aiEditTargetId}
+        targetId={aiEditTargetId ?? undefined}
       />
 
       {versionHistoryTargetId && (

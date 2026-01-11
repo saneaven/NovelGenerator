@@ -1,5 +1,6 @@
 import type { ContentPart, FunctionCallProgress, TokenUsage } from '../llm/requestTypes';
 import type { StoredEditCard } from './uiTypes';
+import type { LLMTaskJourney } from '../llmTaskJourney/types';
 
 export type TaskKind =
   | 'aiEdit'
@@ -39,6 +40,7 @@ export interface TaskSessionState<TInput = unknown, TResult = unknown> {
   functionCallProgress: FunctionCallProgress[];
 
   editCards?: StoredEditCard[];
+  journey?: LLMTaskJourney;
 
   result?: TResult;
   error?: string;
@@ -49,4 +51,3 @@ export interface TaskSessionState<TInput = unknown, TResult = unknown> {
   usage?: TokenUsage;
   progress?: TaskProgress;
 }
-

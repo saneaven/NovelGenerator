@@ -32,24 +32,9 @@ export class PromptManager {
   private static fragmentsLoaded = false;
 
   private static resolveOutputMode(
-    llmMode: LLMTaskModeType,
-    context: { outputMode?: OutputMode; isNativeOutput?: boolean }
+    context: { outputMode?: OutputMode }
   ): OutputMode {
-    if (context.outputMode) return context.outputMode;
-
-    // Backward-compat: legacy contexts only set isNativeOutput.
-    if (context.isNativeOutput === true) {
-      if (
-        llmMode === LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT ||
-        llmMode === LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT ||
-        llmMode === LLMTaskMode.TRANSLATION
-      ) {
-        return 'native_function_call';
-      }
-      return 'raw_output';
-    }
-
-    return 'tool_call';
+    return context.outputMode ?? 'tool_call';
   }
 
   /**
@@ -154,7 +139,7 @@ export class PromptManager {
     mode: LLMTaskModeType,
     context: PromptContext
   ): FunctionCallSchema[] | undefined {
-    const outputMode = this.resolveOutputMode(mode, context as any);
+    const outputMode = this.resolveOutputMode(context);
     if (outputMode !== 'tool_call') return undefined;
 
     switch (mode) {
@@ -195,14 +180,8 @@ export class PromptManager {
     ]);
 
     const settings = useSettingsStore.getState().settings;
-    const llmMode: LLMTaskModeType =
-      mode === 'storyObject'
-        ? LLMTaskMode.AGENT_STORYOBJECT
-        : mode === 'outlineManager'
-          ? LLMTaskMode.AGENT_OUTLINE_MANAGER
-          : LLMTaskMode.AGENT_NOVEL_EDITOR;
     const templateData: TemplateData = {
-      config: this.buildConfigData(llmMode, context),
+      config: this.buildConfigData(context),
       project: this.buildProjectData(context.projectId, settings.mainLanguage),
       input: {
         userMessage: context.userInput,
@@ -234,17 +213,12 @@ export class PromptManager {
     ]);
 
     const settings = useSettingsStore.getState().settings;
-    const llmMode: LLMTaskModeType =
-      mode === 'manuscript'
-        ? LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT
-        : LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT;
-
     let templateData: TemplateData;
 
     if (mode === 'manuscript') {
       const msContext = context as EditAssistantManuscriptPromptContext;
       templateData = {
-        config: this.buildConfigData(llmMode, context),
+        config: this.buildConfigData(context),
         project: this.buildProjectData(context.projectId, settings.mainLanguage),
         input: { userMessage: context.userInput },
         editAssistant: {
@@ -261,7 +235,7 @@ export class PromptManager {
     } else {
       const soContext = context as EditAssistantStoryObjectPromptContext;
       templateData = {
-        config: this.buildConfigData(llmMode, context),
+        config: this.buildConfigData(context),
         project: this.buildProjectData(context.projectId, settings.mainLanguage),
         input: { userMessage: context.userInput },
         editAssistant: {
@@ -310,7 +284,7 @@ export class PromptManager {
     }
 
     const templateData: TemplateData = {
-      config: this.buildConfigData(LLMTaskMode.TRANSLATION, context),
+      config: this.buildConfigData(context),
       project: this.buildProjectData(context.projectId, context.sourceLanguage),
       input: { userMessage: context.userInput },
       translation: {
@@ -344,7 +318,7 @@ export class PromptManager {
     ]);
 
     const templateData: TemplateData = {
-      config: this.buildConfigData(LLMTaskMode.AGENT_TRANSLATION, context),
+      config: this.buildConfigData(context),
       project: this.buildProjectData(context.projectId, context.sourceLanguage),
       input: { userMessage: context.userInput },
       translation: {
@@ -377,7 +351,7 @@ export class PromptManager {
 
     const settings = useSettingsStore.getState().settings;
     const templateData: TemplateData = {
-      config: this.buildConfigData(LLMTaskMode.OBJECT_IMAGE_PROMPT, context),
+      config: this.buildConfigData(context),
       project: this.buildProjectData(context.projectId, settings.mainLanguage),
       input: { userMessage: context.userInput },
       imagePrompt: {
@@ -413,7 +387,7 @@ export class PromptManager {
 
     const settings = useSettingsStore.getState().settings;
     const templateData: TemplateData = {
-      config: this.buildConfigData(LLMTaskMode.SCENE_IMAGE_PROMPT, context),
+      config: this.buildConfigData(context),
       project: this.buildProjectData(context.projectId, settings.mainLanguage),
       input: { userMessage: context.userInput },
       imagePrompt: {
@@ -447,7 +421,7 @@ export class PromptManager {
 
     const settings = useSettingsStore.getState().settings;
     const templateData: TemplateData = {
-      config: this.buildConfigData(LLMTaskMode.COVER_IMAGE_PROMPT, context),
+      config: this.buildConfigData(context),
       project: this.buildProjectData(context.projectId, settings.mainLanguage),
       input: { userMessage: context.userInput },
       imagePrompt: {
@@ -476,16 +450,15 @@ export class PromptManager {
 
   // ==================== Helpers ====================
 
-  private static buildConfigData(llmMode: LLMTaskModeType, context: {
+  private static buildConfigData(context: {
     enableThinking?: boolean;
     enableCustomThinking?: boolean;
     enablePrefill?: boolean;
-    isNativeOutput?: boolean;
     outputMode?: OutputMode;
   }): TemplateData['config'] {
     const store = useSettingsStore.getState();
     const settings = store.settings;
-    const outputMode = this.resolveOutputMode(llmMode, context);
+    const outputMode = this.resolveOutputMode(context);
 
     return {
       mainLanguage: settings.mainLanguage,
@@ -520,7 +493,7 @@ export class PromptManager {
    * @param projectId - The project ID to filter objects by
    * @param language - The language to extract data for (mainLanguage)
    */
-  private static buildProjectData(projectId: string | undefined, language: string): TemplateData['project'] {
+  static buildProjectData(projectId: string | undefined, language: string): TemplateData['project'] {
     if (!projectId) {
       throw new Error('projectId is required for buildProjectData. Ensure promptContext includes projectId.');
     }
