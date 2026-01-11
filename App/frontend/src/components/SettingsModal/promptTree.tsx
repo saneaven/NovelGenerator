@@ -439,13 +439,13 @@ export const PROMPT_TREE: PromptNode[] = [
     type: 'category',
     children: [
       {
-        id: 'common-retry',
-        label: 'Function Call Retry',
+        id: 'common-feedback',
+        label: 'Feedback',
         type: 'prompt',
         functionType: 'common',
         category: 'userPrompt',
-        name: 'functionCallRetry',
-        description: 'Template for retry message when function calls fail. Appended to user input on retry.'
+        name: 'feedback',
+        description: 'Template for feedback message about function call results. Appended to user input on retry.'
       }
     ]
   },

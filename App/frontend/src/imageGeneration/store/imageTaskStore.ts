@@ -9,6 +9,11 @@ import type { ImageTaskState, ImageTaskStatus, ImageTaskType, ImageRetryContext 
 interface ImageTaskStore {
     tasks: Record<string, ImageTaskState | undefined>;
 
+    // Modal state (for notification click handling)
+    modalTaskId: string | null;
+    openModal: (taskId: string) => void;
+    closeModal: () => void;
+
     // Task lifecycle
     startTask: (id: string, taskType: ImageTaskType, label: string, retryContext?: ImageRetryContext) => void;
     updateProgress: (id: string, stage: string, message: string, percentage?: number) => void;
@@ -33,6 +38,11 @@ interface ImageTaskStore {
 
 export const useImageTaskStore = create<ImageTaskStore>()((set, get) => ({
     tasks: {},
+
+    // Modal state
+    modalTaskId: null,
+    openModal: (taskId) => set({ modalTaskId: taskId }),
+    closeModal: () => set({ modalTaskId: null }),
 
     startTask: (id, taskType, label, retryContext) =>
         set((state) => ({

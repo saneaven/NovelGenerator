@@ -1,17 +1,12 @@
 import type { FunctionCallStatus, FunctionCallFailureType, ApplicationResult } from '../functionCall/types';
 
-export type Role = "system" | "user" | "assistant" | "function" | "tool_results";
+export type Role = "system" | "user" | "assistant" | "tool_results";
 
 export type ContentPartType = "content" | "thinking" | "error";
 
 export interface ContentPart {
   type: ContentPartType;
   text: string;
-}
-
-export interface FunctionCall {
-  name: string;
-  arguments: string;
 }
 
 export interface ToolCall {
@@ -36,8 +31,6 @@ export interface ToolResultBlock {
 export interface ConversationBlock {
   role: Role;
   contentParts: ContentPart[];
-  function_call?: FunctionCall;
-  name?: string; // for function role messages
   tool_calls?: ToolCall[]; // for assistant messages with function calls
   tool_results?: ToolResultBlock[]; // for tool_results role messages
 }

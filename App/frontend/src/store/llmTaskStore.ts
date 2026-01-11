@@ -49,6 +49,11 @@ function mergeFunctionCallProgress(
 interface LLMTaskStore {
   sessions: Record<string, AnySession | undefined>;
 
+  // Modal state (for notification click handling)
+  detailSessionId: string | null;
+  openDetail: (sessionId: string) => void;
+  closeDetail: () => void;
+
   // Core session management
   createSession: (session: AnySession) => void;
   updateSession: (id: string, partial: Partial<Omit<AnySession, 'id' | 'kind' | 'input'>>) => void;
@@ -75,6 +80,12 @@ interface LLMTaskStore {
 
 export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
   sessions: {},
+
+  // Modal state
+  detailSessionId: null,
+  openDetail: (sessionId) => set({ detailSessionId: sessionId }),
+  closeDetail: () => set({ detailSessionId: null }),
+
   createSession: (session) =>
     set((state) => ({
       sessions: {

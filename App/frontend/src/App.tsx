@@ -2,8 +2,14 @@ import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { useSettingsStore } from './store/settingsStore';
 import { useTheme } from './hooks/useTheme';
-import NotificationModals from './components/NotificationModals';
+import { NotificationModals } from './components/Notification';
+import { initLLMNotificationSubscriber } from './llmTask/notificationSubscriber';
+import { initImageNotificationSubscriber } from './imageGeneration/notificationSubscriber';
 import './App.css';
+
+// Initialize notification subscribers at module load
+initLLMNotificationSubscriber();
+initImageNotificationSubscriber();
 
 function App() {
   const settingsStore = useSettingsStore();

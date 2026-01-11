@@ -716,7 +716,7 @@ export function getFunctionsForSet(setName: FunctionSetName): FunctionCallSchema
 }
 
 // ============================================================================
-// LEGACY TYPES (for backward compatibility with llm module)
+// LLM TYPES
 // ============================================================================
 
 /** LLM-compatible function call schema (simplified, no metadata) */
@@ -728,36 +728,4 @@ export interface FunctionCallSchema {
     properties: Record<string, unknown>;
     required: string[];
   };
-}
-
-/** Function call from LLM response */
-export interface FunctionCall {
-  name: string;
-  arguments: string; // JSON string
-}
-
-/** Result of executing a function call */
-export interface FunctionCallResult {
-  success: boolean;
-  message: string;
-  error?: string;
-  data?: unknown;
-}
-
-/** Message containing a function call (assistant role) */
-export interface FunctionCallMessage {
-  id: string;
-  role: 'assistant';
-  content: string | null;
-  function_call?: FunctionCall;
-  timestamp: Date;
-}
-
-/** Message containing function result */
-export interface FunctionResultMessage {
-  id: string;
-  role: 'function';
-  name: string;
-  content: string;
-  timestamp: Date;
 }

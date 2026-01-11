@@ -3,11 +3,13 @@ import type {
   NotificationData,
   NotificationEntry,
   NotificationHandlers,
+  ModalRenderer,
 } from './types';
 
 interface NotificationStore {
   // State
   notifications: Record<string, NotificationEntry | undefined>;
+  modalRenderers: Record<string, ModalRenderer>;
 
   // Registration API
   register: (data: NotificationData, handlers: NotificationHandlers) => void;
@@ -37,10 +39,15 @@ interface NotificationStore {
 
   // Handler invocation (used by components)
   invokeHandler: (id: string, handler: keyof NotificationHandlers) => void;
+
+  // Modal registry (for consumer-registered modals)
+  registerModalRenderer: (source: string, render: ModalRenderer) => void;
+  unregisterModalRenderer: (source: string) => void;
 }
 
 export const useNotificationStore = create<NotificationStore>((set, get) => ({
   notifications: {},
+  modalRenderers: {},
 
   register: (data, handlers) =>
     set((state) => ({
@@ -151,8 +158,19 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
       entry.handlers[handler]!();
     }
   },
+
+  registerModalRenderer: (source, render) =>
+    set((state) => ({
+      modalRenderers: { ...state.modalRenderers, [source]: render },
+    })),
+
+  unregisterModalRenderer: (source) =>
+    set((state) => {
+      const { [source]: _, ...rest } = state.modalRenderers;
+      return { modalRenderers: rest };
+    }),
 }));
 
 // Re-export types
-export type { NotificationData, NotificationEntry, NotificationHandlers } from './types';
+export type { NotificationData, NotificationEntry, NotificationHandlers, ModalRenderer } from './types';
 export type { NotificationStatus, NotificationCustomSlot, NotificationProgress } from './types';

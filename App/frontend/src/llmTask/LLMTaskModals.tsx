@@ -1,24 +1,23 @@
-import React, { useMemo, useCallback, useState, useEffect } from 'react';
-import { BaseModal } from '../BaseModal';
-import { useLLMTaskStore } from '../../store/llmTaskStore';
-import { useSettingsStore } from '../../store/settingsStore';
-import ThinkingDisplay from '../ThinkingDisplay';
-import NotificationProgressBar from './NotificationProgressBar';
-import { Close } from '../icons';
-import { TextButton } from '../TextButton';
-import { IconButton } from '../IconButton';
-import { FunctionCallCard } from '../functionCall';
-import { TaskRuntime, type TaskSessionState } from '../../llmTask';
-import { applySessionEdits, rejectAllSessionEdits } from '../../llmTask/functionCalls/functionCallEngine';
-import type { HandlerOptions } from '../../functionCall/applicator/types';
-import { CRUD_OPTIONS, TRANSLATION_OPTIONS } from '../../functionCall/applicator/types';
-import './NotificationDetailModal.css';
+/**
+ * LLM Task Modals
+ * Renders modals based on llmTaskStore modal state
+ */
 
-interface NotificationDetailModalProps {
-  session: TaskSessionState;
-  onClose: () => void;
-  onDismissToast: () => void;
-}
+import React, { useMemo, useCallback, useState, useEffect } from 'react';
+import { BaseModal } from '../components/BaseModal';
+import { useLLMTaskStore } from '../store/llmTaskStore';
+import { useSettingsStore } from '../store/settingsStore';
+import ThinkingDisplay from '../components/ThinkingDisplay';
+import NotificationProgressBar from '../components/Notification/NotificationProgressBar';
+import { Close } from '../components/icons';
+import { TextButton } from '../components/TextButton';
+import { IconButton } from '../components/IconButton';
+import { FunctionCallCard } from '../components/functionCall';
+import { TaskRuntime, type TaskSessionState } from '.';
+import { applySessionEdits, rejectAllSessionEdits } from './functionCalls/functionCallEngine';
+import type { HandlerOptions } from '../functionCall/applicator/types';
+import { CRUD_OPTIONS, TRANSLATION_OPTIONS } from '../functionCall/applicator/types';
+import './LLMTaskModals.css';
 
 function getApplyLanguage(session: TaskSessionState, mainLanguage: string): string {
   if (session.kind === 'translateObjects') {
@@ -45,15 +44,33 @@ function getHandlerOptions(session: TaskSessionState): HandlerOptions {
   return CRUD_OPTIONS;
 }
 
-const NotificationDetailModal: React.FC<NotificationDetailModalProps> = ({
-  session,
-  onClose,
-  onDismissToast,
-}) => {
-  const mainLanguage = useSettingsStore(state => state.settings.mainLanguage);
-  const cancelTask = useLLMTaskStore(state => state.cancelTask);
+export const LLMTaskModals: React.FC = () => {
+  const detailSessionId = useLLMTaskStore((s) => s.detailSessionId);
+  const session = useLLMTaskStore((s) =>
+    detailSessionId ? s.sessions[detailSessionId] : null
+  );
+  const closeDetail = useLLMTaskStore((s) => s.closeDetail);
+  const clearNotification = useLLMTaskStore((s) => s.clearNotification);
+  const cancelTask = useLLMTaskStore((s) => s.cancelTask);
+  const mainLanguage = useSettingsStore((s) => s.settings.mainLanguage);
+
+  const [outputExpanded, setOutputExpanded] = useState(false);
+  const [errorExpanded, setErrorExpanded] = useState(false);
+
+  const hasStreamingCalls = session?.status === 'running' && (session.functionCallProgress?.length ?? 0) > 0;
+  const hasCards = (session?.editCards?.length ?? 0) > 0;
+  const hasFunctionCalls = hasStreamingCalls || hasCards;
+
+  useEffect(() => {
+    if (hasFunctionCalls) {
+      setOutputExpanded(false);
+    } else {
+      setOutputExpanded(true);
+    }
+  }, [hasFunctionCalls]);
 
   const statusLabel = useMemo(() => {
+    if (!session) return '';
     switch (session.status) {
       case 'pending_confirmation':
         return 'Needs confirmation';
@@ -62,52 +79,51 @@ const NotificationDetailModal: React.FC<NotificationDetailModalProps> = ({
       default:
         return session.status;
     }
-  }, [session.status]);
+  }, [session?.status]);
 
   const userInput = useMemo(() => {
+    if (!session) return '';
     if (session.kind === 'aiEdit') return ((session.input as any)?.userRequest as string | undefined) ?? '';
     if (session.kind === 'translateObjects') return ((session.input as any)?.userInput as string | undefined) ?? '';
     if (session.kind === 'agent') return ((session.input as any)?.userInput as string | undefined) ?? '';
     return '';
-  }, [session.kind, session.input]);
+  }, [session?.kind, session?.input]);
 
   const contentText = useMemo(() => {
+    if (!session) return '';
     return session.contentParts
       .filter(p => p.type === 'content')
       .map(p => p.text)
       .join('');
-  }, [session.contentParts]);
+  }, [session?.contentParts]);
 
-  const hasStreamingCalls = session.status === 'running' && (session.functionCallProgress?.length ?? 0) > 0;
-  const hasCards = (session.editCards?.length ?? 0) > 0;
-  const isApplying = session.status === 'applying';
-  const isPending = session.status === 'pending_confirmation' || isApplying;
-  const hasFunctionCalls = hasStreamingCalls || hasCards;
+  const projectId = ((session?.input as any)?.projectId as string | undefined) ?? '';
+  const applyLanguage = useMemo(() => session ? getApplyLanguage(session, mainLanguage) : mainLanguage, [session, mainLanguage]);
+  const handlerOptions = useMemo(() => session ? getHandlerOptions(session) : CRUD_OPTIONS, [session]);
 
-  const [outputExpanded, setOutputExpanded] = useState(!hasFunctionCalls);
-  const [errorExpanded, setErrorExpanded] = useState(false);
+  const isApplying = session?.status === 'applying';
+  const isPending = session?.status === 'pending_confirmation' || isApplying;
 
-  useEffect(() => {
-    if (hasFunctionCalls) {
-      setOutputExpanded(false);
+  const handleDismissToast = useCallback(() => {
+    if (detailSessionId) {
+      clearNotification(detailSessionId);
     }
-  }, [hasFunctionCalls]);
-
-  const projectId = ((session.input as any)?.projectId as string | undefined) ?? '';
-  const applyLanguage = useMemo(() => getApplyLanguage(session, mainLanguage), [session, mainLanguage]);
-  const handlerOptions = useMemo(() => getHandlerOptions(session), [session]);
+    closeDetail();
+  }, [detailSessionId, clearNotification, closeDetail]);
 
   const handleRetry = useCallback(() => {
+    if (!session) return;
     TaskRuntime.retry(session.id);
-    onClose();
-  }, [session.id, onClose]);
+    closeDetail();
+  }, [session?.id, closeDetail]);
 
   const handleCancel = useCallback(() => {
+    if (!session) return;
     cancelTask(session.id);
-  }, [cancelTask, session.id]);
+  }, [cancelTask, session?.id]);
 
   const handleConfirm = useCallback(async (selections: Record<string, boolean>) => {
-    if (!projectId) return;
+    if (!projectId || !session) return;
     await applySessionEdits({
       sessionId: session.id,
       projectId,
@@ -115,15 +131,18 @@ const NotificationDetailModal: React.FC<NotificationDetailModalProps> = ({
       selections,
       options: handlerOptions,
     });
-  }, [projectId, session.id, applyLanguage, handlerOptions]);
+  }, [projectId, session?.id, applyLanguage, handlerOptions]);
 
   const handleRejectAll = useCallback(() => {
+    if (!session) return;
     rejectAllSessionEdits({ sessionId: session.id });
-  }, [session.id]);
+  }, [session?.id]);
+
+  if (!session) return null;
 
   const footer = (
     <div className="notification-detail-footer-actions">
-      <TextButton variant="secondary" onClick={onDismissToast}>
+      <TextButton variant="secondary" onClick={handleDismissToast}>
         Dismiss
       </TextButton>
       {(session.status === 'error' || session.status === 'cancelled') && (
@@ -142,7 +161,7 @@ const NotificationDetailModal: React.FC<NotificationDetailModalProps> = ({
   return (
     <BaseModal
       isOpen={true}
-      onClose={onClose}
+      onClose={closeDetail}
       showHeader={false}
       className="notification-detail-modal"
       size="large"
@@ -173,7 +192,7 @@ const NotificationDetailModal: React.FC<NotificationDetailModalProps> = ({
 
         <IconButton
           icon={<Close size="sm" />}
-          onClick={onClose}
+          onClick={closeDetail}
           title="Close"
           size="sm"
           className="notification-detail-close"
@@ -256,5 +275,4 @@ const NotificationDetailModal: React.FC<NotificationDetailModalProps> = ({
   );
 };
 
-export default NotificationDetailModal;
-
+export default LLMTaskModals;

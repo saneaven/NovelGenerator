@@ -18,11 +18,7 @@ export {
   AGENT_FUNCTION_NAMES,
   getFunctionsForSet,
   type FunctionSetName,
-  // Legacy types
   type FunctionCallSchema,
-  type FunctionCallResult,
-  type FunctionCallMessage,
-  type FunctionResultMessage,
 } from './schemaRegistry';
 
 export {

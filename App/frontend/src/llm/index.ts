@@ -30,7 +30,6 @@ export {
   type Role,
   type ContentPartType,
   type ContentPart,
-  type FunctionCall,
   type ConversationBlock,
   type ThinkingDetail,
   type FunctionCallMetadata,
@@ -49,9 +48,6 @@ export { streamLLM, BackendError, fetchModels, fetchProviders, fetchModelEndpoin
 // Function schemas - all from unified functionCall module
 export {
   type FunctionCallSchema,
-  type FunctionCallResult,
-  type FunctionCallMessage,
-  type FunctionResultMessage,
   AGENT_FUNCTIONS,
   AGENT_FUNCTION_NAMES,
   STORY_OBJECT_EDIT_FUNCTIONS,

@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 
 /**
  * Normalized notification status for display purposes.
@@ -82,3 +82,8 @@ export interface NotificationHandlers {
 export interface NotificationEntry extends NotificationData {
   handlers: NotificationHandlers;
 }
+
+/**
+ * Modal renderer function for consumer-registered modals
+ */
+export type ModalRenderer = () => ReactNode;
