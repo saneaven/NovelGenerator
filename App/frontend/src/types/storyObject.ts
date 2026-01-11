@@ -68,7 +68,7 @@ export type StoryObjectCategory =
   | 'chapter';
 
 // UI Tab types for story object panels
-export type StoryObjectTabType = 'basicInfo' | 'characters' | 'organizations' | 'locations' | 'lorebook' | 'outline';
+export type StoryObjectTabType = 'basicInfo' | 'guidelines' | 'characters' | 'organizations' | 'locations' | 'lorebook' | 'outline';
 
 // Combined Story Objects type
 export interface StoryObjects {

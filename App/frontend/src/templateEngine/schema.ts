@@ -100,6 +100,12 @@ export const UNIFIED_SCHEMA = {
         manuscripts: Array<{ id: string; chapterId: string; chapterName: string; content: string; wordCount: number }>;
       }>
     },
+    guidelines: {
+      desc: "Project guidelines for AI",
+      example: {
+        authorNote: "Focus on character development. Use formal tone."
+      } as { authorNote: string }
+    },
   },
 
   input: {

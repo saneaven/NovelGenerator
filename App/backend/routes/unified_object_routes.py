@@ -21,7 +21,7 @@ from datetime import datetime
 from ..database import get_db
 from ..auth import get_current_user
 from ..models.db_models import (
-    User, BasicInfo, Character, Organization, Location, LorebookEntry,
+    User, BasicInfo, Guidelines, Character, Organization, Location, LorebookEntry,
     Act, Chapter, Manuscript, Outline, Asset, StoryObjectAsset
 )
 from ..schemas.story_objects import ImagePromptUpdate
@@ -114,6 +114,7 @@ def get_object_model_class(object_type: str):
     object_type = normalize_object_type(object_type)
     type_map = {
         'basic_info': BasicInfo,
+        'guidelines': Guidelines,
         'character': Character,
         'organization': Organization,
         'location': Location,
@@ -172,6 +173,8 @@ def get_object_metadata(obj: Any, object_type: str, db: Optional[Session] = None
         metadata['image_prompt'] = getattr(obj, 'image_prompt', None)
         metadata['image_prompt_positive'] = getattr(obj, 'image_prompt_positive', None)
         metadata['image_prompt_negative'] = getattr(obj, 'image_prompt_negative', None)
+    elif object_type == 'guidelines':
+        metadata['project_id'] = str(obj.project_id)
     elif object_type in ['character', 'organization', 'location', LOREBOOK_TYPE]:
         metadata['project_id'] = str(obj.project_id)
         # Include order field for story objects
@@ -916,7 +919,7 @@ async def list_objects(
     query = db.query(model_class)
 
     # Filter by project_id or parent relationship
-    if object_type in ['basic_info', 'character', 'organization', 'location', LOREBOOK_TYPE]:
+    if object_type in ['basic_info', 'guidelines', 'character', 'organization', 'location', LOREBOOK_TYPE]:
         query = query.filter(model_class.project_id == project_id)
     elif object_type == 'outline':
         query = query.filter(model_class.project_id == project_id)
@@ -1038,11 +1041,16 @@ async def create_object(
     """
     object_type = normalize_object_type(object_type)
 
-    # Block basic_info creation - it's auto-created with the project
+    # Block basic_info and guidelines creation - they are auto-created with the project
     if object_type == 'basic_info':
         raise HTTPException(
             status_code=400,
             detail="BasicInfo is automatically created when a project is created. Use update endpoint instead."
+        )
+    if object_type == 'guidelines':
+        raise HTTPException(
+            status_code=400,
+            detail="Guidelines is automatically created when a project is created. Use update endpoint instead."
         )
 
     # Get model class

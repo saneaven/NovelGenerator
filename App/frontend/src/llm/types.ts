@@ -72,6 +72,9 @@ export interface TemplateData {
     } | null;
     manuscripts: Array<{ id: string; chapterId: string; chapterName: string; content: string; wordCount: number }>;
     languages: Record<string, any>;
+    guidelines: {
+      authorNote: string;
+    };
   };
   input: {
     userMessage: string;

@@ -2,8 +2,9 @@ import React, { useRef, useState, useEffect } from 'react';
 import './StoryObjectPanel.css';
 import '../../../components/ManagerCommon.css';
 import BasicInfoManager from '../../../components/BasicInfoManager';
+import GuidelinesManager from '../../../components/GuidelinesManager';
 import NameDescriptionManager from '../../../components/NameDescriptionManager';
-import { Clipboard, People, Organization, Map, Books, ChevronLeft, ChevronRight } from '../../../components/icons';
+import { Clipboard, People, Organization, Map, Books, ChevronLeft, ChevronRight, Document } from '../../../components/icons';
 import type { StoryObjectTabType } from '../../../types/storyObject';
 import { useStoryObjectTab } from '../hooks/useStoryObjectTab';
 
@@ -21,6 +22,7 @@ const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
 
   const storyObjectTabs: { id: StoryObjectTabType; label: string; icon: React.ReactNode }[] = [
     { id: 'basicInfo', label: 'Basic Info', icon: <Clipboard size="sm" /> },
+    { id: 'guidelines', label: 'Guidelines', icon: <Document size="sm" /> },
     { id: 'characters', label: 'Characters', icon: <People size="sm" /> },
     { id: 'organizations', label: 'Organizations', icon: <Organization size="sm" /> },
     { id: 'locations', label: 'Locations', icon: <Map size="sm" /> },
@@ -78,6 +80,8 @@ const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
     switch (activeStoryObjectTab) {
       case 'basicInfo':
         return <BasicInfoManager globalDisplayLanguage={globalDisplayLanguage} />;
+      case 'guidelines':
+        return <GuidelinesManager globalDisplayLanguage={globalDisplayLanguage} />;
       case 'characters':
         return (
           <NameDescriptionManager

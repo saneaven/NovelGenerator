@@ -13,6 +13,7 @@
 
 export type ObjectType =
   | 'basic_info'
+  | 'guidelines'
   | 'character'
   | 'organization'
   | 'location'
@@ -140,6 +141,10 @@ export interface ManuscriptData {
   wordCount: number;
 }
 
+export interface GuidelinesData {
+  authorNote: string;
+}
+
 // ============================================================================
 // TYPED UNIFIED OBJECTS
 // ============================================================================
@@ -153,6 +158,7 @@ export type OutlineObject = UnifiedObject<OutlineData>;
 export type ActObject = UnifiedObject<ActData>;
 export type ChapterObject = UnifiedObject<ChapterData>;
 export type ManuscriptObject = UnifiedObject<ManuscriptData>;
+export type GuidelinesObject = UnifiedObject<GuidelinesData>;
 
 // ============================================================================
 // REQUEST TYPES

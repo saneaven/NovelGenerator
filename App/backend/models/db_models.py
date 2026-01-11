@@ -204,6 +204,7 @@ class Project(Base):
     # Relationships
     user = relationship("User", back_populates="projects")
     basic_info = relationship("BasicInfo", back_populates="project", uselist=False, cascade="all, delete-orphan")
+    guidelines = relationship("Guidelines", back_populates="project", uselist=False, cascade="all, delete-orphan")
     characters = relationship("Character", back_populates="project", cascade="all, delete-orphan")
     organizations = relationship("Organization", back_populates="project", cascade="all, delete-orphan")
     locations = relationship("Location", back_populates="project", cascade="all, delete-orphan")
@@ -234,6 +235,24 @@ class BasicInfo(Base):
 
     # Relationships
     project = relationship("Project", back_populates="basic_info")
+
+
+# ============================================================================
+# STORY OBJECTS - GUIDELINES
+# ============================================================================
+
+class Guidelines(Base):
+    """Project guidelines - structure only (content in object_translations)"""
+    __tablename__ = 'guidelines'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, unique=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Relationships
+    project = relationship("Project", back_populates="guidelines")
 
 
 # ============================================================================

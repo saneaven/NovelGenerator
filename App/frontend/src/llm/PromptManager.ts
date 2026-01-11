@@ -506,6 +506,7 @@ export class PromptManager {
 
     // Group by type
     const basicInfoList = projectObjects.filter(obj => obj.type === 'basic_info');
+    const guidelinesList = projectObjects.filter(obj => obj.type === 'guidelines');
     const characters = projectObjects.filter(obj => obj.type === 'character');
     const organizations = projectObjects.filter(obj => obj.type === 'organization');
     const locations = projectObjects.filter(obj => obj.type === 'location');
@@ -810,12 +811,23 @@ export class PromptManager {
       };
     });
 
+    // Build guidelines
+    const guidelines: TemplateData['project']['guidelines'] = guidelinesList.length > 0
+      ? (() => {
+          const data = this.getObjectDataForLanguage(guidelinesList[0], language) as { authorNote?: string };
+          return {
+            authorNote: data?.authorNote || '',
+          };
+        })()
+      : { authorNote: '' };
+
     return {
       basicInfo,
       objects,
       outline,
       manuscripts: manuscriptList,
       languages,
+      guidelines,
     };
   }
 
