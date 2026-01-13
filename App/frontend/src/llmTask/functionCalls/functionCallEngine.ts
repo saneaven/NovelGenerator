@@ -1,7 +1,6 @@
 import type { FunctionCallMetadata } from '../../llm/requestTypes';
 import { useLLMTaskStore } from '../../store/llmTaskStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import { useAgentStore } from '../../store/agentStore';
 import {
   UnifiedApplicator,
   createStoreActions,
@@ -23,7 +22,7 @@ function stripCallbacks(card: EditCard): StoredEditCard {
   return rest;
 }
 
-function toFunctionCallMetadata(cards: StoredEditCard[]): FunctionCallMetadata[] {
+export function toFunctionCallMetadata(cards: StoredEditCard[]): FunctionCallMetadata[] {
   return cards.map((card) => ({
     id: card.functionCall.id,
     function_name: card.functionCall.functionName,
@@ -34,29 +33,6 @@ function toFunctionCallMetadata(cards: StoredEditCard[]): FunctionCallMetadata[]
     result: card.functionCall.result,
     acceptedAt: card.functionCall.acceptedAt,
   }));
-}
-
-async function syncAgentFunctionCallsIfNeeded(params: {
-  sessionId: string;
-  projectId: string;
-  cards: StoredEditCard[];
-}): Promise<void> {
-  const { sessionId, projectId, cards } = params;
-  const store = useLLMTaskStore.getState();
-  const session = store.getSessionById(sessionId);
-
-  if (session?.kind !== 'agent') return;
-
-  const agentId = (session.input as any)?.agentId as string | undefined;
-  const assistantMessageId = (session.result as any)?.assistantMessageId as string | undefined;
-  if (!agentId || !assistantMessageId) return;
-
-  await useAgentStore.getState().updateMessageFunctionCalls(
-    projectId,
-    agentId,
-    assistantMessageId,
-    toFunctionCallMetadata(cards)
-  );
 }
 
 function getFailureTypeFromResult(params: {
@@ -100,7 +76,6 @@ export async function stageSessionEdits(params: {
   const finalCards = applyValidationResults(validatingCards, validationResults);
 
   store.updateSession(sessionId, { editCards: finalCards.map(stripCallbacks) });
-  await syncAgentFunctionCallsIfNeeded({ sessionId, projectId, cards: finalCards.map(stripCallbacks) });
 
   const hasAnyPending = finalCards.some(c => c.functionCall.status === 'pending');
   if (hasAnyPending) {
@@ -217,7 +192,6 @@ export async function applySessionEdits(params: {
   }
 
   store.updateSession(sessionId, { editCards: nextCards });
-  await syncAgentFunctionCallsIfNeeded({ sessionId, projectId, cards: nextCards });
 
   const acceptedCount = nextCards.filter(c => c.functionCall.status === 'accepted').length;
   const failedCount = nextCards.filter(c => c.functionCall.status === 'failed').length;
@@ -255,11 +229,6 @@ export function rejectAllSessionEdits(params: { sessionId: string; reason?: stri
   }));
 
   store.updateSession(sessionId, { editCards: next, status: 'cancelled' });
-
-  const projectId = (session.input as any)?.projectId as string | undefined;
-  if (projectId) {
-    void syncAgentFunctionCallsIfNeeded({ sessionId, projectId, cards: next });
-  }
 }
 
 export async function applyFunctionCallsDirect(params: {

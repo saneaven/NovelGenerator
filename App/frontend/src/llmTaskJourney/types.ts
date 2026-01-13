@@ -1,5 +1,6 @@
 import type { ChatMessage, ContentPart, Role } from '../llm/requestTypes';
 import type { FunctionCallSchema } from '../functionCall';
+import type { ExecutorConfig } from '../llmTask/LLMTaskExecutor';
 import { generateTempId } from '../utils/tempId';
 
 export type EditingTargets =
@@ -87,5 +88,31 @@ export function collapseContentParts(parts: ContentPart[]): string {
     .filter((p) => p.type === 'content')
     .map((p) => p.text)
     .join('');
+}
+
+/**
+ * JourneySpec - High-level spec for UI components
+ *
+ * UI components create JourneySpecs (fire-and-forget).
+ * JourneyRuntime converts them to ExecutorConfig and manages:
+ * - Multi-turn conversations
+ * - Notifications
+ * - Modals
+ * - Session state
+ */
+export interface JourneySpec<TInput, TResult = void> {
+  kind: string;
+
+  /** Generate human-readable label for notifications/UI */
+  label: (input: TInput) => string;
+
+  /** Build editing targets for context tracking */
+  buildEditingTargets: (input: TInput) => EditingTargets;
+
+  /** Build LLM executor config for each attempt */
+  buildLLMConfig: (input: TInput, journey: LLMTaskJourney) => Omit<ExecutorConfig, 'projectId'> & { projectId: string };
+
+  /** Handle result when outputMode is 'raw_output' */
+  handleRawOutput?: (input: TInput, journey: LLMTaskJourney, text: string) => Promise<TResult>;
 }
 

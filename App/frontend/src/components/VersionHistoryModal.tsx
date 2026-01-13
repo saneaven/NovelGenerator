@@ -105,6 +105,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       act: 'Act',
       chapter: 'Chapter',
       manuscript: 'Manuscript',
+      guidelines: 'Guidelines',
     };
     return names[type] || type;
   };

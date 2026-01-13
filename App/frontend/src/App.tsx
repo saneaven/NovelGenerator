@@ -3,13 +3,15 @@ import { Outlet } from 'react-router-dom';
 import { useSettingsStore } from './store/settingsStore';
 import { useTheme } from './hooks/useTheme';
 import { NotificationModals } from './components/Notification';
-import { initLLMNotificationSubscriber } from './llmTask/notificationSubscriber';
-import { initImageNotificationSubscriber } from './imageGeneration/notificationSubscriber';
+import { registerLLMModals } from './llmTask/notificationHelpers';
+import { registerJourneyModals } from './llmTaskJourney/notificationHelpers';
+import { registerImageModals } from './imageGeneration/notificationHelpers';
 import './App.css';
 
-// Initialize notification subscribers at module load
-initLLMNotificationSubscriber();
-initImageNotificationSubscriber();
+// Register notification modal renderers at module load (push-based - no subscribers)
+registerLLMModals();
+registerJourneyModals();
+registerImageModals();
 
 function App() {
   const settingsStore = useSettingsStore();

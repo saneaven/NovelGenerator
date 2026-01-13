@@ -356,6 +356,11 @@ class AsyncOpenAIProvider(BaseProvider):
                     if self._has_meaningful_payload(extra):
                         yield self._format_sse(extra)
 
+                # Stop streaming after function_calls block completes
+                if native_fc_parser and native_fc_parser.function_calls_completed:
+                    yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
+                    return
+
                 for extra in extra_chunks:
                     extra, extra_fc_chunks = self._apply_native_function_calls_parser(extra, native_fc_parser)
                     if extra and self._has_meaningful_payload(extra):
@@ -363,6 +368,11 @@ class AsyncOpenAIProvider(BaseProvider):
                     for extra_fc in extra_fc_chunks:
                         if self._has_meaningful_payload(extra_fc):
                             yield self._format_sse(extra_fc)
+
+                    # Stop streaming after function_calls block completes
+                    if native_fc_parser and native_fc_parser.function_calls_completed:
+                        yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
+                        return
 
         except (APIConnectionError, RateLimitError, AuthenticationError, BadRequestError, APIStatusError) as exc:
             status = getattr(exc, "status_code", None)
@@ -393,6 +403,11 @@ class AsyncOpenAIProvider(BaseProvider):
             for final_fc_chunk in self._finalize_native_function_calls_parser(native_fc_parser):
                 if self._has_meaningful_payload(final_fc_chunk):
                     yield self._format_sse(final_fc_chunk)
+
+            # Emit finish_reason if function calls were completed
+            if native_fc_parser and native_fc_parser.function_calls_completed:
+                yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
+                return
         except Exception as exc:
             yield self._format_error(str(exc))
             yield b"data: [DONE]\n\n"

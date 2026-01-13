@@ -22,7 +22,7 @@ import { collapseContentParts } from '../../../agent/utils/contentParts';
 import { Settings, Edit, Trash, Globe, CircularArrow, ChevronUp, ChevronDown } from '../../../components/icons';
 import { useAgentOrchestration } from '../../../agent/hooks';
 import { getBestLanguageData } from '../../../utils/languageData';
-import { TaskRuntime } from '../../../llmTask/TaskRuntime';
+import { AgentExecutor } from '../../../agent';
 import { applyFunctionCallsDirect, applySessionEdits } from '../../../llmTask/functionCalls/functionCallEngine';
 import { CRUD_OPTIONS } from '../../../functionCall/applicator/types';
 import { buildEditCardsFromFunctionCallMetadata } from '../../../functionCall';
@@ -527,7 +527,8 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         setTranslatingMessages(prev => ({ ...prev, [message.id]: true }));
         setTranslationErrors(prev => ({ ...prev, [message.id]: null }));
 
-        const sessionId = TaskRuntime.start('agentTranslation', {
+        // Use AgentExecutor directly for translation
+        void AgentExecutor.translate({
             projectId,
             agentId: selectedAgentId,
             messageId: message.id,
@@ -535,9 +536,9 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
             targetLanguage,
             sourceContent,
             originalContentParts: contentParts as any,
+        }).then((sessionId) => {
+            setTranslationSessionByMessageId(prev => ({ ...prev, [message.id]: sessionId }));
         });
-
-        setTranslationSessionByMessageId(prev => ({ ...prev, [message.id]: sessionId }));
     };
 
     const renderMessageContent = (

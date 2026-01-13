@@ -327,24 +327,6 @@
   overflow: auto;
 }
 
-.fc-details__panel::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-.fc-details__panel::-webkit-scrollbar-track {
-  background: var(--color-surface-muted);
-}
-
-.fc-details__panel::-webkit-scrollbar-thumb {
-  background: var(--color-scrollbar-thumb);
-  border-radius: var(--border-radius-full);
-}
-
-.fc-details__panel::-webkit-scrollbar-thumb:hover {
-  background: var(--color-scrollbar-thumb-hover);
-}
-
 .fc-field {
   padding: var(--spacing-md);
 }

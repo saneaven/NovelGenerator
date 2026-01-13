@@ -348,6 +348,7 @@ class NativeFunctionCallsStreamParser:
         self._json_extractor: Optional[_JSONObjectExtractor] = None
         self._args_streamer: Optional[_FunctionCallArgsStreamer] = None
         self._emitted_call_start = False
+        self.function_calls_completed = False  # True when </function_calls> is processed
 
     def process_chunk(self, content_chunk: str) -> Tuple[str, List[Dict]]:
         """Process a streaming content chunk and return (clean_content, tool_calls)."""
@@ -389,6 +390,7 @@ class NativeFunctionCallsStreamParser:
                 if close_calls_idx >= 0 and (open_idx < 0 or close_calls_idx < open_idx):
                     self.buffer = self.buffer[close_calls_idx + len(CLOSE_CALLS):]
                     self.inside_calls = False
+                    self.function_calls_completed = True  # Signal that function calls block is complete
                     continue
 
                 # Enter a <function_call> block.

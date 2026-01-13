@@ -72,15 +72,19 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
       };
     }),
 
-  remove: (id) =>
+  remove: (id) => {
+    const existing = get().notifications[id];
+    if (!existing) return;
+
+    // First update state (remove notification)
     set((state) => {
-      const existing = state.notifications[id];
-      if (!existing) return state;
-      // Invoke onDismiss handler before removal
-      existing.handlers.onDismiss?.();
       const { [id]: _, ...rest } = state.notifications;
       return { notifications: rest };
-    }),
+    });
+
+    // Then call the handler (after state is updated)
+    existing.handlers.onDismiss?.();
+  },
 
   removeAll: () => {
     const { notifications } = get();
@@ -89,18 +93,25 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
     set({ notifications: {} });
   },
 
-  removeBySource: (source) =>
-    set((state) => {
-      const filtered: Record<string, NotificationEntry | undefined> = {};
-      for (const [id, entry] of Object.entries(state.notifications)) {
-        if (entry && entry.source !== source) {
-          filtered[id] = entry;
-        } else if (entry) {
-          entry.handlers.onDismiss?.();
-        }
+  removeBySource: (source) => {
+    const { notifications } = get();
+    const toRemove: NotificationEntry[] = [];
+    const filtered: Record<string, NotificationEntry | undefined> = {};
+
+    for (const [id, entry] of Object.entries(notifications)) {
+      if (entry && entry.source !== source) {
+        filtered[id] = entry;
+      } else if (entry) {
+        toRemove.push(entry);
       }
-      return { notifications: filtered };
-    }),
+    }
+
+    // Update state first
+    set({ notifications: filtered });
+
+    // Then invoke handlers
+    toRemove.forEach((entry) => entry.handlers.onDismiss?.());
+  },
 
   getNotification: (id) => get().notifications[id],
 

@@ -403,6 +403,11 @@ class GeminiProvider(BaseProvider):
                                 if self._has_meaningful_payload(extra):
                                     yield self._format_sse(extra)
 
+                            # Stop streaming after function_calls block completes
+                            if native_fc_parser and native_fc_parser.function_calls_completed:
+                                yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
+                                return
+
             for final_chunk in self._finalize_parser(parser):
                 delta = (final_chunk.get("choices") or [{}])[0].get("delta") or {}
                 content = delta.get("content")
@@ -430,6 +435,10 @@ class GeminiProvider(BaseProvider):
                     payload = {"choices": [{"delta": {"tool_calls": tail_tool_calls}}]}
                     if self._has_meaningful_payload(payload):
                         yield self._format_sse(payload)
+                # Emit finish_reason if function calls were completed
+                if native_fc_parser.function_calls_completed:
+                    yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
+                    return
 
             # Check for error finish_reasons and emit error if needed
             if last_finish_reason is not None:

@@ -10,6 +10,10 @@ import { useAssetStore } from '../../store/assetStore';
 import { ImageRequestManager } from '../ImageRequestManager';
 import { useImageTaskStore } from '../store/imageTaskStore';
 import { getApiKey, type ProviderCredentials } from '../config/providerConfig';
+import {
+    registerImageNotification,
+    updateImageNotification,
+} from '../notificationHelpers';
 import type {
     ImageGenerationRequest,
     ImageTaskType,
@@ -92,6 +96,22 @@ export function useImageGeneration(options: UseImageGenerationOptions = {}) {
             // Start task in store with retry context
             startTask(taskId, options.taskType || 'object-image', 'Generating image...', retryContext);
 
+            // Get the created task and register notification (push-based)
+            const initialTask = getTask(taskId);
+            if (initialTask) {
+                registerImageNotification(initialTask, {
+                    onClick: () => useImageTaskStore.getState().openModal(taskId),
+                    onDismiss: () => {
+                        const task = getTask(taskId);
+                        if (task && (task.status === 'preparing' || task.status === 'generating' || task.status === 'processing')) {
+                            cancelTask(taskId);
+                        }
+                        useImageTaskStore.getState().clearTask(taskId);
+                    },
+                    onCancel: () => cancelTask(taskId),
+                });
+            }
+
             // Create manager
             managerRef.current = new ImageRequestManager(
                 {
@@ -103,6 +123,11 @@ export function useImageGeneration(options: UseImageGenerationOptions = {}) {
                 {
                     onProgress: (progress) => {
                         updateProgress(taskId, progress.stage, progress.message, progress.percentage);
+                        // Update notification with progress
+                        const task = getTask(taskId);
+                        if (task) {
+                            updateImageNotification(taskId, task);
+                        }
                     },
                     onComplete: (result) => {
                         completeTask(taskId, {
@@ -110,6 +135,11 @@ export function useImageGeneration(options: UseImageGenerationOptions = {}) {
                             revisedPrompt: result.revisedPrompt,
                             thumbnailUrl: result.asset?.thumbnailUrl ?? undefined,
                         });
+                        // Update notification with completion
+                        const task = getTask(taskId);
+                        if (task) {
+                            updateImageNotification(taskId, task);
+                        }
 
                         // Add asset to asset store for display
                         if (result.asset) {
@@ -151,6 +181,11 @@ export function useImageGeneration(options: UseImageGenerationOptions = {}) {
                     },
                     onError: (error) => {
                         failTask(taskId, error.message);
+                        // Update notification with error
+                        const task = getTask(taskId);
+                        if (task) {
+                            updateImageNotification(taskId, task);
+                        }
                         options.onError?.(error);
                     },
                 }
@@ -181,8 +216,13 @@ export function useImageGeneration(options: UseImageGenerationOptions = {}) {
         managerRef.current?.abort();
         if (currentTaskId) {
             cancelTask(currentTaskId);
+            // Update notification with cancelled status
+            const task = getTask(currentTaskId);
+            if (task) {
+                updateImageNotification(currentTaskId, task);
+            }
         }
-    }, [currentTaskId, cancelTask]);
+    }, [currentTaskId, cancelTask, getTask]);
 
     /**
      * Check if currently generating

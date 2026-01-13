@@ -1,7 +1,7 @@
 /**
  * Unified Agent Orchestration Hook
  *
- * Starts agent requests via TaskRuntime and provides UI helpers
+ * Starts agent requests via AgentExecutor and provides UI helpers
  * (context selection, abort, edit/delete message).
  */
 
@@ -13,7 +13,7 @@ import { useSidebarStore } from '../../store/sidebarStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useLLMTaskStore } from '../../store/llmTaskStore';
-import { TaskRuntime } from '../../llmTask/TaskRuntime';
+import { AgentExecutor } from '../AgentExecutor';
 import type { AgentOrchestrationConfig, AgentOrchestrationReturn, AgentHandlersReturn, ContextIdState } from './types';
 
 export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOrchestrationReturn {
@@ -144,16 +144,19 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     clearInput(projectId);
     useAgentUIStore.getState().setLoading(projectId, true);
 
-    const sessionId = TaskRuntime.start('agent', {
-      projectId,
-      agentId,
-      mode,
-      userInput: input?.trim() ?? '',
-      outputLanguage: mainLanguage,
-      contextObjectIds: selectedContextIds,
-    });
-
-    setActiveSessionId(sessionId);
+    // Use AgentExecutor directly (no JourneyRuntime)
+    // Pass callback to get sessionId immediately for stop button to work
+    void AgentExecutor.start(
+      {
+        projectId,
+        agentId,
+        mode,
+        userInput: input?.trim() ?? '',
+        outputLanguage: mainLanguage,
+        contextObjectIds: selectedContextIds,
+      },
+      (sessionId) => setActiveSessionId(sessionId)
+    );
   }, [projectId, getSelectedAgentId, getObjectsMissingMainLanguage, mainLanguage, clearInput, mode, selectedContextIds]);
 
   const handleStop = useCallback(() => {

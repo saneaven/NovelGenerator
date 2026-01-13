@@ -33,6 +33,9 @@ interface AgentUIState {
 
   // Per-project editing state
   editingByProject: Record<string, EditingState>;
+
+  // Modal state for agent detail modal
+  detailSessionId: string | null;
 }
 
 interface AgentUIActions {
@@ -59,6 +62,10 @@ interface AgentUIActions {
 
   // Reset
   resetProjectState: (projectId: string) => void;
+
+  // Modal management
+  openDetailModal: (sessionId: string) => void;
+  closeDetailModal: () => void;
 }
 
 type AgentUIStore = AgentUIState & AgentUIActions;
@@ -74,6 +81,7 @@ const initialState: AgentUIState = {
   loadingByProject: {},
   inputByProject: {},
   editingByProject: {},
+  detailSessionId: null,
 };
 
 export const useAgentUIStore = create<AgentUIStore>()((set, get) => ({
@@ -191,5 +199,14 @@ export const useAgentUIStore = create<AgentUIStore>()((set, get) => ({
       delete newState.editingByProject[projectId];
       return newState;
     });
+  },
+
+  // Modal management
+  openDetailModal: (sessionId: string) => {
+    set({ detailSessionId: sessionId });
+  },
+
+  closeDetailModal: () => {
+    set({ detailSessionId: null });
   },
 }));

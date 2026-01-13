@@ -280,6 +280,11 @@ class OpenAIResponsesProvider(BaseProvider):
                             }
                             yield self._format_sse(tool_chunk)
 
+                        # Stop streaming after function_calls block completes
+                        if native_fc_parser and native_fc_parser.function_calls_completed:
+                            yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
+                            return
+
                 # Handle reasoning/thinking text delta
                 elif event_type == "response.reasoning_text.delta":
                     delta_text = getattr(event, "delta", "")
@@ -360,6 +365,10 @@ class OpenAIResponsesProvider(BaseProvider):
                                 }]
                             }
                             yield self._format_sse(chunk)
+                        # Emit finish_reason if function calls were completed
+                        if native_fc_parser.function_calls_completed:
+                            yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
+                            return
                         native_fc_parser = None
 
                     response_obj = getattr(event, "response", None)
@@ -431,6 +440,10 @@ class OpenAIResponsesProvider(BaseProvider):
                     }]
                 }
                 yield self._format_sse(chunk)
+            # Emit finish_reason if function calls were completed
+            if native_fc_parser.function_calls_completed:
+                yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
+                return
 
         # Emit usage information before [DONE]
         if captured_usage:
