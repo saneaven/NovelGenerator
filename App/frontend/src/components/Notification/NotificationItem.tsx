@@ -1,7 +1,7 @@
 import React, { useLayoutEffect, useRef, useState, useCallback } from 'react';
-import { motion, useMotionTemplate, useTransform, type MotionValue } from 'motion/react';
+import { motion, useMotionTemplate, useTransform, useMotionValue, animate, useDragControls, type MotionValue } from 'motion/react';
 import type { NotificationEntry } from '../../store/notificationStore';
-import { Check, Close } from '../icons';
+import { Check, Close, ChevronRight, Trash } from '../icons';
 
 interface NotificationItemProps {
   notification: NotificationEntry;
@@ -55,6 +55,14 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   const [itemTop, setItemTop] = useState(0);
   const [itemHeight, setItemHeight] = useState(0);
 
+  // Swipe-to-delete
+  const DELETE_THRESHOLD = 80;
+  const dragX = useMotionValue(0);
+  const dragControls = useDragControls();
+  const deleteWidth = useTransform(dragX, (v) => Math.abs(Math.min(0, v)));
+  const deleteOpacity = useTransform(dragX, (v) => (v < -10 ? 1 : 0));
+  const hasDraggedRef = useRef(false);
+
   useLayoutEffect(() => {
     const node = itemRef.current;
     if (!node) return;
@@ -96,11 +104,65 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   const transform = useMotionTemplate`translateY(${y}px) translateZ(${z}px)`;
   const bodyFilter = useMotionTemplate`blur(${blur}px)`;
 
-  const handleClick = useCallback(() => {
+  // Start drag manually - this allows buttons to work without triggering drag
+  const startDrag = useCallback((e: React.PointerEvent) => {
+    hasDraggedRef.current = false;
+    dragControls.start(e);
+  }, [dragControls]);
+
+  // Track when actual drag movement occurs
+  const handleDrag = useCallback(() => {
+    hasDraggedRef.current = true;
+  }, []);
+
+  // Handle tap - check if drag occurred first
+  const handleTap = useCallback(() => {
+    if (hasDraggedRef.current) {
+      return;
+    }
+    const currentX = dragX.get();
+    if (currentX < 0) {
+      animate(dragX, 0, { type: 'spring', stiffness: 500, damping: 30 });
+      return;
+    }
     if (status !== 'idle') {
       onClick(id);
     }
-  }, [status, onClick, id]);
+  }, [status, onClick, id, dragX]);
+
+  // Snap based on current position, not offset from drag start
+  const handleDragEnd = useCallback(
+    () => {
+      const currentX = dragX.get();
+      if (currentX < -DELETE_THRESHOLD / 2) {
+        animate(dragX, -DELETE_THRESHOLD, { type: 'spring', stiffness: 500, damping: 30 });
+      } else {
+        animate(dragX, 0, { type: 'spring', stiffness: 500, damping: 30 });
+      }
+    },
+    [dragX, DELETE_THRESHOLD]
+  );
+
+  const handleChevronClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const currentX = dragX.get();
+      if (currentX < 0) {
+        animate(dragX, 0, { type: 'spring', stiffness: 500, damping: 30 });
+      } else {
+        animate(dragX, -DELETE_THRESHOLD, { type: 'spring', stiffness: 500, damping: 30 });
+      }
+    },
+    [dragX, DELETE_THRESHOLD]
+  );
+
+  const handleDelete = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onDismiss(id);
+    },
+    [onDismiss, id]
+  );
 
   const getStatusIcon = () => {
     switch (status) {
@@ -154,57 +216,79 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
       ref={itemRef}
       className={`notification-item notification-item--${status} notification-item--${source} ${isClickable ? 'notification-item--clickable' : ''} ${!isRead ? 'notification-item--unread' : ''}`}
       style={{ opacity, transform, pointerEvents, zIndex }}
-      onClick={isClickable ? handleClick : undefined}
-      role={isClickable ? 'button' : undefined}
-      tabIndex={isClickable ? 0 : undefined}
-      onKeyDown={
-        isClickable
-          ? (e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                handleClick();
-              }
-            }
-          : undefined
-      }
     >
-      <div
-        className="notification-item-surface"
-        style={surfaceStyle}
-      >
+      <div className="notification-item-swipe-container">
         <motion.div
-          className="notification-item-backdrop"
-          style={{ '--notification-surface-fill-opacity': surfaceFillOpacity } as React.CSSProperties}
-        />
-        <motion.div
-          className="notification-item-body"
-          style={{ filter: bodyFilter }}
+          className="notification-item-swipe-content"
+          drag="x"
+          dragControls={dragControls}
+          dragListener={false}
+          dragConstraints={{ left: -DELETE_THRESHOLD, right: 0 }}
+          dragElastic={0.2}
+          style={{ x: dragX }}
+          onDrag={handleDrag}
+          onDragEnd={handleDragEnd}
+          onTap={isClickable ? handleTap : undefined}
         >
-          <div className="notification-item-content">
-            <div className="notification-item-icon">{getStatusIcon()}</div>
-            <div className="notification-item-text">
-              <div className="notification-item-label">{label || 'Task'}</div>
-              <div className="notification-item-message">{message}</div>
-              {warning && (
-                <div className="notification-item-warning">{warning}</div>
-              )}
-              <div className="notification-item-time">{formatRelativeTime(updatedAt)}</div>
-            </div>
-
-            {renderCustomSlot()}
-
-            <button
-              className="notification-item-close"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDismiss(id);
-              }}
-              title="Dismiss"
-              aria-label="Dismiss notification"
+          <div
+            className="notification-item-surface"
+            style={surfaceStyle}
+            onPointerDown={startDrag}
+            role={isClickable ? 'button' : undefined}
+            tabIndex={isClickable ? 0 : undefined}
+            onKeyDown={
+              isClickable
+                ? (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleTap();
+                    }
+                  }
+                : undefined
+            }
+          >
+            <motion.div
+              className="notification-item-backdrop"
+              style={{ '--notification-surface-fill-opacity': surfaceFillOpacity } as React.CSSProperties}
+            />
+            <motion.div
+              className="notification-item-body"
+              style={{ filter: bodyFilter }}
             >
-              <Close size="xs" />
-            </button>
+              <div className="notification-item-content">
+                <div className="notification-item-icon">{getStatusIcon()}</div>
+                <div className="notification-item-text">
+                  <div className="notification-item-label">{label || 'Task'}</div>
+                  <div className="notification-item-message">{message}</div>
+                  {warning && (
+                    <div className="notification-item-warning">{warning}</div>
+                  )}
+                  <div className="notification-item-time">{formatRelativeTime(updatedAt)}</div>
+                </div>
+
+                {renderCustomSlot()}
+
+                <button
+                  className="notification-item-chevron"
+                  onClick={handleChevronClick}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  title="Show delete"
+                  aria-label="Show delete action"
+                >
+                  <ChevronRight size="xs" />
+                </button>
+              </div>
+            </motion.div>
           </div>
+        </motion.div>
+
+        <motion.div
+          className="notification-item-delete"
+          style={{ width: deleteWidth, opacity: deleteOpacity }}
+        >
+          <button onClick={handleDelete} title="Delete" aria-label="Delete notification">
+            <Trash size="lg" />
+          </button>
         </motion.div>
       </div>
     </motion.div>

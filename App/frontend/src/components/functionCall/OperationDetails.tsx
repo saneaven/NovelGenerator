@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useEffect, useCallback } from 'react';
 import { humanizePreviewKey } from '../../agent/utils/functionCallPreview';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -25,6 +25,24 @@ export interface OperationDetailsProps {
 }
 
 export const OperationDetails: React.FC<OperationDetailsProps> = ({ data, rawText, errorMessage }) => {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const userScrolledUpRef = useRef(false);
+
+  const handleScroll = useCallback(() => {
+    const el = panelRef.current;
+    if (!el) return;
+    const threshold = 50;
+    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+    userScrolledUpRef.current = !isAtBottom;
+  }, []);
+
+  useEffect(() => {
+    if (userScrolledUpRef.current) return;
+    const el = panelRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [data, rawText]);
+
   const fields = useMemo(() => {
     if (isRecord(data)) {
       return Object.entries(data).map(([key, value]) => {
@@ -57,7 +75,7 @@ export const OperationDetails: React.FC<OperationDetailsProps> = ({ data, rawTex
   return (
     <div className="fc-details">
       {errorMessage && <div className="fc-details__error">{errorMessage}</div>}
-      <div className="fc-details__panel">
+      <div className="fc-details__panel" ref={panelRef} onScroll={handleScroll}>
         {fields.map((f) => (
           <div key={f.key} className="fc-field">
             <div className="fc-field__label">{f.label}</div>

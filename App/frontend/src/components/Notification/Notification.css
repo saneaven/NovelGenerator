@@ -108,6 +108,11 @@
   max-height: min(60vh, 420px);
   overflow-y: auto;
   padding-right: 2px;
+  padding-left: 86px;
+  padding-right: 86px;
+  margin-left: -86px;
+  margin-right: -86px;
+  width: calc(100% + 86px + 86px);
   perspective: 650px;
   perspective-origin: center top;
   scrollbar-width: none;
@@ -157,11 +162,12 @@
 /* ===== Notification Item (Floating Card) ===== */
 .notification-item {
   will-change: transform, opacity, filter;
+  overflow: visible;
 }
 
 .notification-item-surface {
-  --notification-surface-fill-color: var(--color-surface-elevated);
   position: relative;
+  background-color: var(--color-surface-elevated);
   border-radius: var(--border-radius-lg);
   box-shadow: var(--shadow-lg);
   border: 1px solid var(--color-border-default);
@@ -173,25 +179,74 @@
   overflow: hidden;
 }
 
-.notification-item-backdrop {
-  --notification-surface-fill-opacity: 1;
-  position: absolute;
-  inset: 0;
-  background: var(--notification-surface-fill-color);
-  background: color-mix(
-    in oklch,
-    var(--notification-surface-fill-color) calc(var(--notification-surface-fill-opacity) * 100%),
-    transparent
-  );
-  border-radius: inherit;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  transition: background var(--transition-fast);
-  pointer-events: none;
-}
-
 .notification-item-body {
   position: relative;
+}
+
+/* Swipe-to-delete container */
+.notification-item-swipe-container {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: var(--spacing-sm);
+  overflow: visible;
+}
+
+.notification-item-swipe-content {
+  flex: 1;
+  min-width: 100%;
+  touch-action: pan-y;
+}
+
+/* Delete action button */
+.notification-item-delete {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  padding-left: var(--spacing-sm);
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.notification-item-delete button {
+  width: 100%;
+  height: 100%;
+  background: var(--color-surface-elevated);
+  border: 1.5px solid var(--color-error);
+  cursor: pointer;
+  padding: var(--spacing-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-lg);
+  transition: all var(--transition-base);
+}
+
+.notification-item-delete button:hover {
+  background: var(--color-error-light);
+}
+
+/* Chevron button */
+.notification-item-chevron {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-fast);
+  margin-left: auto;
+}
+
+.notification-item-chevron:hover {
+  color: var(--color-text-secondary);
 }
 
 .notification-panel-container--closing .notification-item-surface {
@@ -300,7 +355,7 @@
 
 .notification-item-warning {
   font-size: var(--font-size-xs);
-  color: var(--color-warning, #f59e0b);
+  color: var(--color-warning);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -328,34 +383,8 @@
   object-fit: cover;
 }
 
-/* Close button */
-.notification-item-close {
-  flex-shrink: 0;
-  width: 18px;
-  height: 18px;
-  border: none;
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  border-radius: var(--border-radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: all var(--transition-fast);
-}
-
-.notification-item:hover .notification-item-close {
-  opacity: 1;
-}
-
-.notification-item-close:hover {
-  background: var(--color-surface-muted);
-  color: var(--color-text-primary);
-}
-
 /* Mobile adjustments */
-@media (max-width: 480px) {
+@media (max-width: 768px) {
   .notification-panel-container {
     width: calc(100vw - 2rem);
     max-width: 360px;

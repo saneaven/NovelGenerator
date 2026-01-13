@@ -23,8 +23,8 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
 }
 
-function buildConfigTemplateData(params: { outputMode: OutputMode }): TemplateData['config'] {
-  const { outputMode } = params;
+function buildConfigTemplateData(params: { outputMode: OutputMode; isPrefillEnabled?: boolean }): TemplateData['config'] {
+  const { outputMode, isPrefillEnabled = false } = params;
   const store = useSettingsStore.getState();
   const settings = store.settings;
 
@@ -33,7 +33,7 @@ function buildConfigTemplateData(params: { outputMode: OutputMode }): TemplateDa
     displayLanguage: settings.displayLanguage || settings.mainLanguage,
     today: new Date().toISOString().split('T')[0],
     isThinkingEnabled: false,
-    isPrefillEnabled: false,
+    isPrefillEnabled,
     isCustomThinkingEnabled: false,
     outputMode,
     isNativeFunctionCallMode: outputMode === 'native_function_call',
@@ -41,8 +41,27 @@ function buildConfigTemplateData(params: { outputMode: OutputMode }): TemplateDa
   };
 }
 
+function isPrefillEnabledForJourney(kind: string): boolean {
+  const settingsStore = useSettingsStore.getState();
+
+  const kindToFunctionType: Record<string, 'editAssistant' | 'translation' | 'imagePrompt'> = {
+    aiEdit: 'editAssistant',
+    translateObjects: 'translation',
+    imagePrompt: 'imagePrompt',
+    sceneImage: 'imagePrompt',
+  };
+
+  const functionType = kindToFunctionType[kind];
+  if (!functionType) {
+    throw new Error(`Unknown journey kind for prefill config: ${kind}`);
+  }
+
+  const config = settingsStore.getFunctionConfig(functionType);
+  return config.advanced.enablePrefill;
+}
+
 async function loadCommonPrompt(params: {
-  category: 'userPrompt' | 'nonLastUserPrompt';
+  category: 'userPrompt' | 'nonLastUserPrompt' | 'prefill';
   name: string;
 }): Promise<string> {
   const { category, name } = params;
@@ -270,12 +289,15 @@ async function buildPreparedRequest(params: {
     return -1;
   })();
 
-  const [userPromptTemplate, nonLastUserPromptTemplate] = lastUserIndex >= 0
+  const prefillEnabled = lastUserIndex >= 0 && isPrefillEnabledForJourney(journey.editingTargets.kind);
+
+  const [userPromptTemplate, nonLastUserPromptTemplate, prefillTemplate] = lastUserIndex >= 0
     ? await Promise.all([
         loadCommonPrompt({ category: 'userPrompt', name: 'feedback' }),
         loadCommonPrompt({ category: 'nonLastUserPrompt', name: 'feedback' }),
+        prefillEnabled ? loadCommonPrompt({ category: 'prefill', name: 'feedback' }) : Promise.resolve(null),
       ])
-    : [null, null];
+    : [null, null, null];
 
   const editingObjectIds = (() => {
     const t = journey.editingTargets;
@@ -292,7 +314,7 @@ async function buildPreparedRequest(params: {
   })();
 
   const baseTemplateData: Pick<TemplateData, 'config' | 'project' | 'feedback'> = {
-    config: buildConfigTemplateData({ outputMode }),
+    config: buildConfigTemplateData({ outputMode, isPrefillEnabled: prefillEnabled }),
     project: PromptManager.buildProjectData(config.projectId, templateProjectLanguage),
     feedback: { editingObjectIds },
   };
@@ -362,6 +384,15 @@ async function buildPreparedRequest(params: {
     blocks.push({
       role: msg.role,
       contentParts: msg.contentParts.length > 0 ? msg.contentParts : [{ type: 'content', text: '' }],
+    });
+  }
+
+  // 4) Add prefill if enabled
+  if (prefillEnabled && prefillTemplate) {
+    const rendered = PromptManager.renderTemplate(prefillTemplate, baseTemplateData);
+    blocks.push({
+      role: 'assistant',
+      contentParts: [{ type: 'content', text: rendered }],
     });
   }
 

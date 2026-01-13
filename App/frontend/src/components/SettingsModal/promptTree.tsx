@@ -455,6 +455,15 @@ export const PROMPT_TREE: PromptNode[] = [
         category: 'nonLastUserPrompt',
         name: 'feedback',
         description: 'Template for previous user feedback messages in LLM task journeys.'
+      },
+      {
+        id: 'common-feedback-prefill',
+        label: 'Feedback Prefill',
+        type: 'prompt',
+        functionType: 'common',
+        category: 'prefill',
+        name: 'feedback',
+        description: 'AI response starter for feedback in LLM task journeys.'
       }
     ]
   },

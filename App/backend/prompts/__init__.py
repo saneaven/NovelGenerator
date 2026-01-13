@@ -74,6 +74,7 @@ _SCENE_IMAGE_PROMPT_PREFILL = _load_prompt_file('imagePrompt/scene/prefill.md')
 # Common - Feedback
 _COMMON_FEEDBACK_USER_PROMPT = _load_prompt_file('common/feedback/userPrompt.md')
 _COMMON_FEEDBACK_NON_LAST_USER_PROMPT = _load_prompt_file('common/feedback/nonLastUserPrompt.md')
+_COMMON_FEEDBACK_PREFILL = _load_prompt_file('common/feedback/prefill.md')
 
 # Default prompts structure
 # Format matches the frontend structure: {function_type: {category: {name?: content}}}
@@ -144,6 +145,9 @@ DEFAULT_PROMPTS = {
         },
         'nonLastUserPrompt': {
             'feedback': _COMMON_FEEDBACK_NON_LAST_USER_PROMPT,
+        },
+        'prefill': {
+            'feedback': _COMMON_FEEDBACK_PREFILL,
         },
     },
 }

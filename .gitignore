@@ -2,3 +2,5 @@
 *.env
 /App/backend/storage/assets
 nul
+/.claude
+/.claude

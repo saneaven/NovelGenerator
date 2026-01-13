@@ -63,7 +63,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
 
   // Detect mobile viewport
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(max-width: 480px)');
+    const mediaQuery = window.matchMedia('(max-width: 768px)');
     const handleChange = () => setIsMobile(mediaQuery.matches);
     handleChange();
     mediaQuery.addEventListener('change', handleChange);
