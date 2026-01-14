@@ -105,14 +105,14 @@
 
 /* ===== Notification Items Container ===== */
 .notification-items-viewport {
+  --margin-offset: 30dvw;
   max-height: min(60vh, 420px);
   overflow-y: auto;
-  padding-right: 2px;
-  padding-left: 86px;
-  padding-right: 86px;
-  margin-left: -86px;
-  margin-right: -86px;
-  width: calc(100% + 86px + 86px);
+  padding-left: var(--margin-offset);
+  padding-right: var(--margin-offset);
+  margin-left: calc(var(--margin-offset) * -1);
+  margin-right: calc(var(--margin-offset) * -1);
+  width: calc(100% + var(--margin-offset) * 2);
   perspective: 650px;
   perspective-origin: center top;
   scrollbar-width: none;

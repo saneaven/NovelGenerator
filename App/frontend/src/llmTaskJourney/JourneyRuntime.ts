@@ -1,7 +1,5 @@
-import type { ConversationBlock, ChatMessage, ToolResultBlock, FunctionCallMetadata } from '../llm/requestTypes';
-import type { FunctionCallSchema } from '../functionCall';
+import type { ChatMessage, FunctionCallMetadata } from '../llm/requestTypes';
 import { PromptManager } from '../llm/PromptManager';
-import type { OutputMode, TemplateData } from '../llm/types';
 import { useSettingsStore } from '../store/settingsStore';
 import { useLLMTaskStore } from '../store/llmTaskStore';
 import { useJourneyStore, type Journey } from '../store/journeyStore';
@@ -15,7 +13,7 @@ import {
 import type { HandlerOptions } from '../functionCall/applicator/types';
 import { registerJourneyNotification, updateJourneyNotification } from './notificationHelpers';
 import { generateTempId } from '../utils/tempId';
-import { journeySpecs, getJourneySpec, type JourneyKind } from './journeySpecs';
+import { getJourneySpec, type JourneyKind } from './journeySpecs';
 import type { LLMTaskJourney, JourneySpec } from './types';
 import { createChatMessage, collapseContentParts } from './types';
 
@@ -23,90 +21,8 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
 }
 
-function buildConfigTemplateData(params: { outputMode: OutputMode; isPrefillEnabled?: boolean }): TemplateData['config'] {
-  const { outputMode, isPrefillEnabled = false } = params;
-  const store = useSettingsStore.getState();
-  const settings = store.settings;
-
-  return {
-    mainLanguage: settings.mainLanguage,
-    displayLanguage: settings.displayLanguage || settings.mainLanguage,
-    today: new Date().toISOString().split('T')[0],
-    isThinkingEnabled: false,
-    isPrefillEnabled,
-    isCustomThinkingEnabled: false,
-    outputMode,
-    isNativeFunctionCallMode: outputMode === 'native_function_call',
-    isRawOutputMode: outputMode === 'raw_output',
-  };
-}
-
-function isPrefillEnabledForJourney(kind: string): boolean {
-  const settingsStore = useSettingsStore.getState();
-
-  const kindToFunctionType: Record<string, 'editAssistant' | 'translation' | 'imagePrompt'> = {
-    aiEdit: 'editAssistant',
-    translateObjects: 'translation',
-    imagePrompt: 'imagePrompt',
-    sceneImage: 'imagePrompt',
-  };
-
-  const functionType = kindToFunctionType[kind];
-  if (!functionType) {
-    throw new Error(`Unknown journey kind for prefill config: ${kind}`);
-  }
-
-  const config = settingsStore.getFunctionConfig(functionType);
-  return config.advanced.enablePrefill;
-}
-
-async function loadCommonPrompt(params: {
-  category: 'userPrompt' | 'nonLastUserPrompt' | 'prefill';
-  name: string;
-}): Promise<string> {
-  const { category, name } = params;
-  const store = useSettingsStore.getState();
-
-  const cached = store.getPromptFromCache('common', category, name);
-  if (cached) return cached;
-
-  return await store.loadPrompt('common', category, name);
-}
-
-function toToolResultBlock(params: { fc: NonNullable<ChatMessage['functionCalls']>[number] }): ToolResultBlock {
-  const { fc } = params;
-
-  let content: string;
-  switch (fc.status) {
-    case 'accepted':
-      content = fc.result?.message || 'Applied successfully';
-      break;
-    case 'rejected':
-      content = fc.reason ? `User rejected: ${fc.reason}` : 'User rejected this action';
-      break;
-    case 'failed':
-      content = `Failed: ${fc.reason || 'Unknown error'}`;
-      break;
-    default:
-      content = 'Pending user confirmation';
-  }
-
-  return {
-    tool_call_id: fc.id,
-    function_name: fc.function_name,
-    content,
-  };
-}
-
-function getMessageText(msg: ChatMessage): string {
-  return msg.contentParts
-    .filter((p) => p.type === 'content')
-    .map((p) => p.text)
-    .join('');
-}
-
 // =====================================================================
-// Journey Function Call Sync Helpers
+// Journey Function Call Sync Helpers (Simplified)
 // =====================================================================
 
 function findLastAssistantMessageId(journey: Journey | LLMTaskJourney): string | null {
@@ -149,6 +65,9 @@ function syncAssistantFunctionCallsFromCards(params: {
   });
 }
 
+/**
+ * Stage edits for journey - stores in both llmTaskStore and journeyStore
+ */
 async function stageJourneyEdits(params: {
   journeyId: string;
   assistantMessageId: string;
@@ -158,37 +77,20 @@ async function stageJourneyEdits(params: {
 }): Promise<void> {
   const { journeyId, assistantMessageId, projectId, language, functionCalls } = params;
 
-  // Store the initial (pending) tool calls on the assistant message.
+  // Store initial (pending) tool calls on the assistant message
   updateJourneyAssistantFunctionCalls({ journeyId, assistantMessageId, functionCalls });
 
-  // Stage edits - this stores editCards in journeyStore now
-  await stageJourneyEditsInStore({ journeyId, projectId, language, functionCalls });
-
-  // Mirror validation results back into the assistant message for tool_results.
-  syncAssistantFunctionCallsFromCards({ journeyId, assistantMessageId });
-}
-
-/**
- * Stage edit cards in journeyStore (not llmTaskStore)
- */
-async function stageJourneyEditsInStore(params: {
-  journeyId: string;
-  projectId: string;
-  language: string;
-  functionCalls: FunctionCallMetadata[];
-}): Promise<void> {
-  const { journeyId, projectId, language, functionCalls } = params;
-
-  // Use existing stageSessionEdits but with journeyId as sessionId
-  // The function will store editCards which we'll then copy to journeyStore
+  // Stage edits using sessionId = journeyId
   await stageSessionEdits({ sessionId: journeyId, projectId, language, functionCalls });
 
-  // Copy editCards from llmTaskStore session to journeyStore
-  const llmTaskStore = useLLMTaskStore.getState();
-  const session = llmTaskStore.getSessionById(journeyId);
+  // Copy editCards from llmTaskStore to journeyStore
+  const session = useLLMTaskStore.getState().getSessionById(journeyId);
   if (session?.editCards) {
     useJourneyStore.getState().updateJourney(journeyId, { editCards: session.editCards });
   }
+
+  // Mirror validation results back into assistant message
+  syncAssistantFunctionCallsFromCards({ journeyId, assistantMessageId });
 }
 
 /**
@@ -262,143 +164,72 @@ export function rejectAllJourneyEdits(params: { journeyId: string; reason?: stri
   }
 }
 
-async function buildPreparedRequest(params: {
-  journey: LLMTaskJourney;
-  config: ReturnType<JourneySpec<any>['buildLLMConfig']>;
-}): Promise<{ messages: ConversationBlock[]; functions?: FunctionCallSchema[]; outputMode: OutputMode }> {
-  const { journey, config } = params;
-  const { settings } = useSettingsStore.getState();
-  const fcLimit = settings.functionCallHistoryLimit;
-
-  const outputMode = config.prepared?.outputMode ?? 'raw_output';
-  const blocks: ConversationBlock[] = [];
-
-  // 1) Prefix is fixed (no re-render)
-  for (const msg of journey.preConversation) {
-    blocks.push({
-      role: msg.role,
-      contentParts: msg.contentParts.length > 0 ? msg.contentParts : [{ type: 'content', text: '' }],
-    });
-  }
-
-  // 2) Load feedback templates only if we have user messages after prefix
-  const lastUserIndex = (() => {
-    for (let i = journey.messages.length - 1; i >= 0; i--) {
-      if (journey.messages[i].role === 'user') return i;
-    }
-    return -1;
-  })();
-
-  const prefillEnabled = lastUserIndex >= 0 && isPrefillEnabledForJourney(journey.editingTargets.kind);
-
-  const [userPromptTemplate, nonLastUserPromptTemplate, prefillTemplate] = lastUserIndex >= 0
-    ? await Promise.all([
-        loadCommonPrompt({ category: 'userPrompt', name: 'feedback' }),
-        loadCommonPrompt({ category: 'nonLastUserPrompt', name: 'feedback' }),
-        prefillEnabled ? loadCommonPrompt({ category: 'prefill', name: 'feedback' }) : Promise.resolve(null),
-      ])
-    : [null, null, null];
-
-  const editingObjectIds = (() => {
-    const t = journey.editingTargets;
-    if (t.kind === 'aiEdit') return [t.targetId];
-    if (t.kind === 'translateObjects') return t.objectIds;
-    return [];
-  })();
-
-  const templateProjectLanguage = (() => {
-    const t = journey.editingTargets;
-    if (t.kind === 'aiEdit') return t.language;
-    if (t.kind === 'translateObjects') return t.targetLanguage;
-    return useSettingsStore.getState().settings.mainLanguage;
-  })();
-
-  const baseTemplateData: Pick<TemplateData, 'config' | 'project' | 'feedback'> = {
-    config: buildConfigTemplateData({ outputMode, isPrefillEnabled: prefillEnabled }),
-    project: PromptManager.buildProjectData(config.projectId, templateProjectLanguage),
-    feedback: { editingObjectIds },
-  };
-
-  // 3) Count assistant messages to decide which include tool_calls
-  const assistantIndices: number[] = [];
-  for (let i = 0; i < journey.messages.length; i++) {
-    if (journey.messages[i].role === 'assistant') assistantIndices.push(i);
-  }
-  const totalAssistants = assistantIndices.length;
-
-  let assistantCount = 0;
-  for (let i = 0; i < journey.messages.length; i++) {
-    const msg = journey.messages[i];
-
-    if (msg.role === 'user') {
-      if (!userPromptTemplate || !nonLastUserPromptTemplate) {
-        throw new Error('Feedback prompt templates are missing.');
-      }
-
-      const template = i === lastUserIndex ? userPromptTemplate : nonLastUserPromptTemplate;
-      const rendered = PromptManager.renderTemplate(template, {
-        ...baseTemplateData,
-        input: { userMessage: getMessageText(msg) },
-      });
-
-      blocks.push({
-        role: 'user',
-        contentParts: [{ type: 'content', text: rendered }],
-      });
-      continue;
-    }
-
-    if (msg.role === 'assistant') {
-      assistantCount++;
-      const shouldIncludeFC =
-        fcLimit === -1 || (fcLimit > 0 && assistantCount > totalAssistants - fcLimit);
-
-      const block: ConversationBlock = {
-        role: 'assistant',
-        contentParts: msg.contentParts.length > 0 ? msg.contentParts : [{ type: 'content', text: '' }],
-      };
-
-      if (shouldIncludeFC && (msg.functionCalls?.length ?? 0) > 0) {
-        block.tool_calls = msg.functionCalls!.map((fc) => ({
-          id: fc.id,
-          type: 'function',
-          function: {
-            name: fc.function_name,
-            arguments: typeof fc.arguments === 'string' ? fc.arguments : JSON.stringify(fc.arguments),
-          },
-        }));
-      }
-
-      blocks.push(block);
-
-      const toolResults = (msg.functionCalls ?? []).filter((fc) => fc.status !== 'pending').map((fc) =>
-        toToolResultBlock({ fc })
-      );
-      if (toolResults.length) {
-        blocks.push({ role: 'tool_results', contentParts: [], tool_results: toolResults });
-      }
-      continue;
-    }
-
-    // Other roles (rare)
-    blocks.push({
-      role: msg.role,
-      contentParts: msg.contentParts.length > 0 ? msg.contentParts : [{ type: 'content', text: '' }],
-    });
-  }
-
-  // 4) Add prefill if enabled
-  if (prefillEnabled && prefillTemplate) {
-    const rendered = PromptManager.renderTemplate(prefillTemplate, baseTemplateData);
-    blocks.push({
-      role: 'assistant',
-      contentParts: [{ type: 'content', text: rendered }],
-    });
-  }
-
-  return { messages: blocks, functions: config.prepared?.functions, outputMode };
+/**
+ * Get language for journey based on editing targets
+ */
+function getJourneyLanguage(journey: Journey): string {
+  const t = journey.editingTargets;
+  if (t.kind === 'translateObjects') return t.targetLanguage;
+  if (t.kind === 'aiEdit') return t.language;
+  return useSettingsStore.getState().settings.mainLanguage;
 }
 
+/**
+ * Convert Journey to LLMTaskJourney for spec compatibility
+ */
+function toLegacyJourney(journey: Journey): LLMTaskJourney {
+  return {
+    id: journey.id,
+    label: journey.label,
+    createdAt: journey.createdAt,
+    updatedAt: journey.updatedAt,
+    editingTargets: journey.editingTargets,
+    functions: journey.functions,
+    messages: journey.messages,
+  };
+}
+
+// =====================================================================
+// Core Runtime Functions (Simplified like Agent)
+// =====================================================================
+
+/**
+ * Initialize journey - just store initial user message and functions
+ * Like Agent: store raw user message, let LLMTask render templates
+ */
+async function initJourney(params: { journeyId: string; kind: JourneyKind; input: any }): Promise<void> {
+  const { journeyId, kind, input } = params;
+  const journeyStore = useJourneyStore.getState();
+  const journey = journeyStore.getJourneyById(journeyId);
+  if (!journey) return;
+
+  const spec = getJourneySpec(kind);
+
+  // Extract user input based on journey kind
+  const userInput = (() => {
+    if (kind === 'aiEdit') return (input as any).userRequest || '';
+    if (kind === 'translateObjects') return (input as any).userInput || '';
+    if (kind === 'imagePrompt' || kind === 'sceneImage') return (input as any).userRequest || '';
+    return '';
+  })();
+
+  // Build LLM config to get functions
+  const llmConfig = spec.buildLLMConfig(input, toLegacyJourney(journey));
+  const functions = PromptManager.getFunctionsForMode(llmConfig.mode, llmConfig.promptContext);
+
+  // Store initial user message as raw text (like Agent)
+  journeyStore.updateJourney(journeyId, {
+    messages: [
+      createChatMessage({ role: 'user', content: userInput, idPrefix: 'journey-user' }),
+    ],
+    functions,
+  });
+}
+
+/**
+ * Run attempt - pass raw history to LLMTask like Agent
+ * LLMTask handles all template rendering
+ */
 async function runAttempt(params: { journeyId: string }): Promise<void> {
   const { journeyId } = params;
   const journeyStore = useJourneyStore.getState();
@@ -409,32 +240,10 @@ async function runAttempt(params: { journeyId: string }): Promise<void> {
     throw new Error(`Journey not found: ${journeyId}`);
   }
 
-  const kind = journey.kind;
-  if (!(kind in journeySpecs)) {
-    throw new Error(`Task kind is not supported by journey mode: ${kind}`);
-  }
+  const spec = getJourneySpec(journey.kind);
+  const legacyJourney = toLegacyJourney(journey);
 
-  const spec = getJourneySpec(kind);
-
-  if (journey.preConversation.length === 0) {
-    journeyStore.updateJourney(journeyId, { status: 'error', error: 'Journey is missing preConversation.' });
-    updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
-    return;
-  }
-
-  // Build LLM config using the new spec interface
-  // We need to convert Journey to LLMTaskJourney for the spec
-  const legacyJourney: LLMTaskJourney = {
-    id: journey.id,
-    label: journey.label,
-    createdAt: journey.createdAt,
-    updatedAt: journey.updatedAt,
-    preConversation: journey.preConversation,
-    editingTargets: journey.editingTargets,
-    functions: journey.functions,
-    messages: journey.messages,
-  };
-
+  // Build LLM config using spec
   let llmConfig: ReturnType<typeof spec.buildLLMConfig>;
   try {
     llmConfig = spec.buildLLMConfig(journey.input, legacyJourney);
@@ -445,18 +254,10 @@ async function runAttempt(params: { journeyId: string }): Promise<void> {
     return;
   }
 
-  // Build request BEFORE adding the assistant placeholder message.
-  let prepared: Awaited<ReturnType<typeof buildPreparedRequest>>;
-  try {
-    prepared = await buildPreparedRequest({ journey: legacyJourney, config: llmConfig });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    journeyStore.updateJourney(journeyId, { status: 'error', error: message });
-    updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
-    return;
-  }
+  // Get history BEFORE adding assistant placeholder (like Agent)
+  const history = [...journey.messages];
 
-  // Append assistant placeholder for streaming UI.
+  // Append assistant placeholder for streaming UI
   const assistantMessage = createChatMessage({ role: 'assistant', content: '', idPrefix: 'journey-assistant' });
   const assistantIndex = journey.messages.length;
 
@@ -473,11 +274,11 @@ async function runAttempt(params: { journeyId: string }): Promise<void> {
   // Update notification status
   updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
 
-  // Create executor and register abort controller in journeyStore
+  // Create executor and register abort controller
   const executor = new LLMTaskExecutor();
   journeyStore.registerAbortController(journeyId, { abort: () => executor.abort() } as AbortController);
 
-  // Also create a minimal session in llmTaskStore for edit card staging
+  // Create minimal session in llmTaskStore for edit card staging
   llmTaskStore.createSession({
     id: journeyId,
     kind: journey.kind,
@@ -494,12 +295,14 @@ async function runAttempt(params: { journeyId: string }): Promise<void> {
   let finalResult: any = null;
 
   try {
+    // Like Agent: pass raw history, LLMTask renders templates
     await executor.execute(
       {
         mode: llmConfig.mode,
         projectId: llmConfig.projectId,
         promptContext: llmConfig.promptContext,
-        prepared,
+        thinkingMode: llmConfig.thinkingMode,
+        thinkingConfig: llmConfig.thinkingConfig,
       },
       {
         onStreamingUpdate: (parts) => {
@@ -527,7 +330,8 @@ async function runAttempt(params: { journeyId: string }): Promise<void> {
         onError: () => {
           // handled by catch
         },
-      }
+      },
+      history  // Pass raw history like Agent
     );
   } catch (error) {
     if (isAbortError(error)) {
@@ -568,8 +372,8 @@ async function runAttempt(params: { journeyId: string }): Promise<void> {
     usage: finalResult.usage,
   });
 
-  // Determine output mode
-  const outputMode = prepared.outputMode;
+  // Determine output mode from promptContext
+  const outputMode = (llmConfig.promptContext as any).outputMode ?? 'tool_call';
 
   // Raw output mode: delegate to spec.handleRawOutput
   if (outputMode === 'raw_output') {
@@ -584,16 +388,7 @@ async function runAttempt(params: { journeyId: string }): Promise<void> {
     try {
       const specWithHandler = spec as JourneySpec<any, any>;
       const updatedJourney = journeyStore.getJourneyById(journeyId)!;
-      const updatedLegacyJourney: LLMTaskJourney = {
-        id: updatedJourney.id,
-        label: updatedJourney.label,
-        createdAt: updatedJourney.createdAt,
-        updatedAt: updatedJourney.updatedAt,
-        preConversation: updatedJourney.preConversation,
-        editingTargets: updatedJourney.editingTargets,
-        functions: updatedJourney.functions,
-        messages: updatedJourney.messages,
-      };
+      const updatedLegacyJourney = toLegacyJourney(updatedJourney);
 
       if (specWithHandler.handleRawOutput) {
         const result = await specWithHandler.handleRawOutput(journey.input, updatedLegacyJourney, text);
@@ -611,7 +406,7 @@ async function runAttempt(params: { journeyId: string }): Promise<void> {
     return;
   }
 
-  // Tool call modes: stage edit cards for confirmation.
+  // Tool call modes: stage edit cards for confirmation
   const functionCalls = finalResult.functionCalls ?? [];
   if (!functionCalls.length) {
     journeyStore.updateJourney(journeyId, { status: 'error', error: 'AI response did not include any actions to apply.' });
@@ -621,12 +416,7 @@ async function runAttempt(params: { journeyId: string }): Promise<void> {
   }
 
   const updatedJourney = journeyStore.getJourneyById(journeyId)!;
-  const language = (() => {
-    const t = updatedJourney.editingTargets;
-    if (t.kind === 'translateObjects') return t.targetLanguage;
-    if (t.kind === 'aiEdit') return t.language;
-    return useSettingsStore.getState().settings.mainLanguage;
-  })();
+  const language = getJourneyLanguage(updatedJourney);
 
   try {
     await stageJourneyEdits({
@@ -646,43 +436,9 @@ async function runAttempt(params: { journeyId: string }): Promise<void> {
   }
 }
 
-async function initJourney(params: { journeyId: string; kind: JourneyKind; input: any }): Promise<void> {
-  const { journeyId, kind, input } = params;
-  const journeyStore = useJourneyStore.getState();
-  const journey = journeyStore.getJourneyById(journeyId);
-  if (!journey) return;
-
-  const spec = getJourneySpec(kind);
-
-  // Convert to legacy format for spec
-  const legacyJourney: LLMTaskJourney = {
-    id: journey.id,
-    label: journey.label,
-    createdAt: journey.createdAt,
-    updatedAt: journey.updatedAt,
-    preConversation: journey.preConversation,
-    editingTargets: journey.editingTargets,
-    functions: journey.functions,
-    messages: journey.messages,
-  };
-
-  // Build LLM config to get prompt context
-  const llmConfig = spec.buildLLMConfig(input, legacyJourney);
-
-  const promptBundle = await PromptManager.generatePromptBundle(llmConfig.mode, llmConfig.promptContext);
-  const preConversation: ChatMessage[] = [
-    createChatMessage({ role: 'system', content: promptBundle.systemPrompt, idPrefix: 'journey-pre' }),
-    createChatMessage({ role: 'user', content: promptBundle.userPrompt, idPrefix: 'journey-pre' }),
-  ];
-  if (promptBundle.prefill) {
-    preConversation.push(createChatMessage({ role: 'assistant', content: promptBundle.prefill, idPrefix: 'journey-pre' }));
-  }
-
-  journeyStore.updateJourney(journeyId, {
-    preConversation,
-    functions: llmConfig.prepared?.functions,
-  });
-}
+// =====================================================================
+// Public API
+// =====================================================================
 
 export const JourneyRuntime = {
   /**
@@ -693,7 +449,6 @@ export const JourneyRuntime = {
     const journeyId = `llm-journey-${generateTempId()}`;
     const journeyStore = useJourneyStore.getState();
 
-    // Cast spec to any to handle the generic type variance
     const spec = getJourneySpec(kind) as JourneySpec<TInput>;
     const label = spec.label(input);
     const now = Date.now();
@@ -708,7 +463,6 @@ export const JourneyRuntime = {
       createdAt: now,
       updatedAt: now,
       isRead: false,
-      preConversation: [],
       editingTargets: spec.buildEditingTargets(input),
       functions: undefined,
       messages: [],
@@ -740,6 +494,7 @@ export const JourneyRuntime = {
 
   /**
    * Send feedback to continue a journey (multi-turn)
+   * Like Agent: just add raw user message and run attempt
    */
   sendFeedback(params: { journeyId: string; text: string }): void {
     const { journeyId, text } = params;
@@ -757,6 +512,7 @@ export const JourneyRuntime = {
     const trimmed = text.trim();
     if (!trimmed) return;
 
+    // Like Agent: just add raw user message
     journeyStore.updateJourney(journeyId, {
       messages: [
         ...journey.messages,

@@ -54,16 +54,13 @@ export type LLMTaskJourney = {
   createdAt: number;
   updatedAt: number;
 
-  // Already-rendered prefix blocks (system + initial userPrompt + optional prefill)
-  preConversation: ChatMessage[];
-
   // Operation metadata for computing context + apply targets
   editingTargets: EditingTargets;
 
   // Functions allowed for this journey (undefined when outputMode != tool_call)
   functions?: FunctionCallSchema[];
 
-  // All post-prefix messages (user feedback + assistant outputs)
+  // All messages (user input + assistant outputs) - LLMTask renders templates
   messages: ChatMessage[];
 };
 

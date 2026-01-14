@@ -37,14 +37,6 @@ Just output the translated text as plain text, nothing else.
 
 {{prompt "translation/referenceContext"}}
 
-{{#if input.userMessage}}
-## User Instructions
-
-{{ input.userMessage }}
-
-Please follow these instructions while maintaining all other translation requirements.
-{{/if}}
-
 ## Critical Requirements
 
 {{#if config.isRawOutputMode}}

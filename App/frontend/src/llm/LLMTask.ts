@@ -104,40 +104,31 @@ export class LLMTask {
       const customApiFormat = this.config.customApiFormat ?? functionConfig.advanced.customApiFormat;
       const retryConfig = this.config.retryConfig ?? settings.retryConfig;
 
-      let messages: ConversationBlock[];
-      let functions = this.config.prepared?.functions;
-      let outputMode: OutputMode;
+      // 2. Generate prompt bundle
+      const promptBundle = await PromptManager.generatePromptBundle(
+        this.config.mode,
+        this.config.promptContext
+      );
 
-      if (this.config.prepared) {
-        messages = this.config.prepared.messages;
-        outputMode = this.config.prepared.outputMode;
-      } else {
-        // 2. Generate prompt bundle
-        const promptBundle = await PromptManager.generatePromptBundle(
-          this.config.mode,
-          this.config.promptContext
-        );
+      // 3. Get functions for this mode
+      const functions = PromptManager.getFunctionsForMode(
+        this.config.mode,
+        this.config.promptContext
+      );
 
-        // 3. Get functions for this mode
-        functions = PromptManager.getFunctionsForMode(
-          this.config.mode,
-          this.config.promptContext
-        );
+      const context: any = this.config.promptContext;
+      const outputMode: OutputMode =
+        context?.outputMode ??
+        (context?.isNativeOutput === true
+          ? (this.config.mode === LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT ||
+              this.config.mode === LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT ||
+              this.config.mode === LLMTaskMode.TRANSLATION
+              ? 'native_function_call'
+              : 'raw_output')
+          : 'tool_call');
 
-        const context: any = this.config.promptContext;
-        outputMode =
-          context?.outputMode ??
-          (context?.isNativeOutput === true
-            ? (this.config.mode === LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT ||
-                this.config.mode === LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT ||
-                this.config.mode === LLMTaskMode.TRANSLATION
-                ? 'native_function_call'
-                : 'raw_output')
-            : 'tool_call');
-
-        // 4. Prepare messages
-        messages = await this.prepareMessages(history, promptBundle);
-      }
+      // 4. Prepare messages
+      const messages = await this.prepareMessages(history, promptBundle);
 
       const nativeFunctionCall = outputMode === 'native_function_call';
 
@@ -453,19 +444,37 @@ export class LLMTask {
     }
     const totalAssistants = assistantIndices.length;
 
+    // Find all user message indices for position-based template selection
+    const userIndices: number[] = [];
+    for (let i = 0; i < history.length; i++) {
+      if (history[i].role === 'user') userIndices.push(i);
+    }
+    const totalUsers = userIndices.length;
+    const firstUserIndex = userIndices[0] ?? -1;
+    const lastUserIndex = userIndices[userIndices.length - 1] ?? -1;
+    const isSingleUser = totalUsers === 1;
+
     // 3. Process history (all previous messages - AgentManager passes history without current user message)
     let assistantCount = 0;
     for (let i = 0; i < history.length; i++) {
       const msg = history[i];
 
-      if (msg.role === 'user' && promptBundle.nonLastUserPrompt) {
-        // Render non-last user message with template, inheriting all templateData but overriding userMessage
-        const rendered = PromptManager.renderTemplate(promptBundle.nonLastUserPrompt, {
+      if (msg.role === 'user') {
+        // Position-based template selection
+        let template: string;
+        if (isSingleUser) {
+          template = promptBundle.initialUserPrompt ?? promptBundle.userPrompt;
+        } else if (i === firstUserIndex) {
+          template = promptBundle.firstUserPrompt ?? promptBundle.userPrompt;
+        } else if (i === lastUserIndex) {
+          template = promptBundle.lastUserPrompt ?? promptBundle.userPrompt;
+        } else {
+          template = promptBundle.userPrompt;
+        }
+
+        const rendered = PromptManager.renderTemplate(template, {
           ...promptBundle.templateData,
-          input: {
-            ...promptBundle.templateData.input,
-            userMessage: this.getMessageText(msg),
-          },
+          input: { userMessage: this.getMessageText(msg) },
         });
         messages.push({
           role: 'user',
@@ -548,13 +557,7 @@ export class LLMTask {
       }
     }
 
-    // 4. Last user message (rendered from userPrompt template with userRequest)
-    messages.push({
-      role: 'user',
-      contentParts: [{ type: 'content', text: promptBundle.userPrompt }],
-    });
-
-    // 5. Prefill (if configured)
+    // 4. Prefill (if configured)
     if (promptBundle.prefill) {
       messages.push({
         role: 'assistant',

@@ -11,7 +11,7 @@ import { useLLMTaskStore } from '../store/llmTaskStore';
 import { useSettingsStore } from '../store/settingsStore';
 import ThinkingDisplay from '../components/ThinkingDisplay';
 import NotificationProgressBar from '../components/Notification/NotificationProgressBar';
-import { Close } from '../components/icons';
+import { Close, Edit, Trash } from '../components/icons';
 import { TextButton } from '../components/TextButton';
 import { IconButton } from '../components/IconButton';
 import { FunctionCallCard } from '../components/functionCall';
@@ -47,6 +47,8 @@ export const JourneyDetailModal: React.FC = () => {
   const closeDetailModal = useJourneyStore((s) => s.closeDetailModal);
   const clearJourney = useJourneyStore((s) => s.clearJourney);
   const cancelJourney = useJourneyStore((s) => s.cancelJourney);
+  const updateMessage = useJourneyStore((s) => s.updateMessage);
+  const deleteMessage = useJourneyStore((s) => s.deleteMessage);
 
   const journey = useJourneyStore((s) =>
     detailJourneyId ? s.journeys[detailJourneyId] : null
@@ -57,6 +59,8 @@ export const JourneyDetailModal: React.FC = () => {
   const [errorExpanded, setErrorExpanded] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
 
   // Auto-scroll to bottom unless user has scrolled up
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -166,6 +170,28 @@ export const JourneyDetailModal: React.FC = () => {
     setFeedbackOpen(false);
   }, [journey, feedbackText]);
 
+  const handleStartEdit = useCallback((messageId: string, currentText: string) => {
+    setEditingMessageId(messageId);
+    setEditingText(currentText);
+  }, []);
+
+  const handleSaveEdit = useCallback((messageId: string) => {
+    if (!journey) return;
+    updateMessage(journey.id, messageId, editingText);
+    setEditingMessageId(null);
+    setEditingText('');
+  }, [journey, editingText, updateMessage]);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingMessageId(null);
+    setEditingText('');
+  }, []);
+
+  const handleDeleteMessage = useCallback((messageId: string) => {
+    if (!journey) return;
+    deleteMessage(journey.id, messageId);
+  }, [journey, deleteMessage]);
+
   // Find the last assistant message ID
   const lastAssistantMessageId = useMemo(() => {
     if (!journey) return null;
@@ -274,20 +300,58 @@ export const JourneyDetailModal: React.FC = () => {
                 (isLastAssistant && (hasStreamingCalls || hasCards));
 
               const showContent = text || (m.role === 'assistant' && !messageHasFunctionCalls);
+              const isEditing = editingMessageId === m.id;
+              const canEditDelete = !['running', 'applying', 'pending_confirmation'].includes(journey.status);
 
               return (
                 <div key={m.id} className={`llm-task-modal-journey-message llm-task-modal-journey-message--${m.role}`}>
-                  <div className="llm-task-modal-journey-message-role">
-                    {m.role === 'user' ? 'User' : m.role === 'assistant' ? 'AI' : m.role}
+                  <div className="llm-task-modal-journey-message-header">
+                    <div className="llm-task-modal-journey-message-role">
+                      {m.role === 'user' ? 'User' : m.role === 'assistant' ? 'AI' : m.role}
+                    </div>
+                    {canEditDelete && !isEditing && (
+                      <div className="llm-task-modal-journey-message-actions">
+                        <button
+                          onClick={() => handleStartEdit(m.id, text)}
+                          title="Edit message"
+                        >
+                          <Edit size="sm" />
+                        </button>
+                        <button
+                          className="delete"
+                          onClick={() => handleDeleteMessage(m.id)}
+                          title="Delete message"
+                        >
+                          <Trash size="sm" />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  {m.role === 'assistant' && (
+                  {m.role === 'assistant' && !isEditing && (
                     <ThinkingDisplay
                       messageId={m.id}
                       contentParts={m.contentParts}
                       isStreaming={isStreamingStatus && m.id === lastAssistantMessageId}
                     />
                   )}
-                  {showContent && (
+                  {isEditing ? (
+                    <>
+                      <textarea
+                        className="llm-task-modal-journey-message-edit-textarea"
+                        value={editingText}
+                        onChange={(e) => setEditingText(e.target.value)}
+                        autoFocus
+                      />
+                      <div className="llm-task-modal-journey-message-edit-actions">
+                        <TextButton variant="secondary" onClick={handleCancelEdit}>
+                          Cancel
+                        </TextButton>
+                        <TextButton variant="primary" onClick={() => handleSaveEdit(m.id)}>
+                          Save
+                        </TextButton>
+                      </div>
+                    </>
+                  ) : showContent && (
                     <div className="llm-task-modal-journey-message-content">
                       {text || (m.role === 'assistant' ? <span className="llm-task-modal-waiting">Waiting...</span> : null)}
                     </div>

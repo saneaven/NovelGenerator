@@ -1,6 +1,5 @@
-import type { ConversationBlock, ContentPart, FunctionCallProgress, ChatMessage } from '../llm/requestTypes';
-import type { FunctionCallSchema } from '../functionCall';
-import type { LLMTaskModeType, OutputMode, PromptContext, LLMTaskResult } from '../llm/types';
+import type { ContentPart, FunctionCallProgress, ChatMessage } from '../llm/requestTypes';
+import type { LLMTaskModeType, PromptContext, LLMTaskResult } from '../llm/types';
 import type { ProviderType, ProviderConfig, ThinkingConfig, CustomApiFormat, RetryConfig } from '../store/settingsStore';
 import { LLMTask } from '../llm/LLMTask';
 
@@ -12,13 +11,6 @@ export interface ExecutorConfig {
   mode: LLMTaskModeType;
   projectId: string;
   promptContext: PromptContext;
-
-  // Pre-built messages (for multi-turn conversations)
-  prepared?: {
-    messages: ConversationBlock[];
-    functions?: FunctionCallSchema[];
-    outputMode: OutputMode;
-  };
 
   // Provider overrides
   provider?: ProviderType;
@@ -76,7 +68,6 @@ export class LLMTaskExecutor {
         projectId: config.projectId,
         promptContext: config.promptContext,
         abortController: this.abortController,
-        prepared: config.prepared,
         provider: config.provider,
         providerConfig: config.providerConfig,
         model: config.model,

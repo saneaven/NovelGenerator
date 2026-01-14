@@ -5,7 +5,7 @@
 
 import React from 'react';
 import type { FunctionType, PromptCategory } from '../../types/prompts';
-import { SpeechBubble, Globe, Edit, Palette, Settings } from '../icons';
+import { SpeechBubble, Globe, Edit, Palette } from '../icons';
 
 export interface PromptNode {
   id: string;
@@ -57,16 +57,25 @@ export const PROMPT_TREE: PromptNode[] = [
             functionType: 'agent',
             category: 'userPrompt',
             name: 'storyObject',
-            description: 'Template for the last user message in agent'
+            description: 'Default template for user messages (middle messages in multi-turn)'
           },
           {
-            id: 'agent-storyobject-nonlast',
-            label: 'Non-Last User Prompt',
+            id: 'agent-storyobject-first',
+            label: 'First User Prompt',
             type: 'prompt',
             functionType: 'agent',
-            category: 'nonLastUserPrompt',
+            category: 'firstUserPrompt',
             name: 'storyObject',
-            description: 'Template for previous user messages in agent history'
+            description: 'Template for the first user message in conversation'
+          },
+          {
+            id: 'agent-storyobject-last',
+            label: 'Last User Prompt',
+            type: 'prompt',
+            functionType: 'agent',
+            category: 'lastUserPrompt',
+            name: 'storyObject',
+            description: 'Template for the last (current) user message in agent'
           },
           {
             id: 'agent-storyobject-prefill',
@@ -100,16 +109,25 @@ export const PROMPT_TREE: PromptNode[] = [
             functionType: 'agent',
             category: 'userPrompt',
             name: 'novelEditor',
-            description: 'Template for the last user message in novel editor agent'
+            description: 'Default template for user messages (middle messages in multi-turn)'
           },
           {
-            id: 'agent-noveleditor-nonlast',
-            label: 'Non-Last User Prompt',
+            id: 'agent-noveleditor-first',
+            label: 'First User Prompt',
             type: 'prompt',
             functionType: 'agent',
-            category: 'nonLastUserPrompt',
+            category: 'firstUserPrompt',
             name: 'novelEditor',
-            description: 'Template for previous user messages in novel editor agent history'
+            description: 'Template for the first user message in novel editor conversation'
+          },
+          {
+            id: 'agent-noveleditor-last',
+            label: 'Last User Prompt',
+            type: 'prompt',
+            functionType: 'agent',
+            category: 'lastUserPrompt',
+            name: 'novelEditor',
+            description: 'Template for the last (current) user message in novel editor agent'
           },
           {
             id: 'agent-noveleditor-prefill',
@@ -143,16 +161,25 @@ export const PROMPT_TREE: PromptNode[] = [
             functionType: 'agent',
             category: 'userPrompt',
             name: 'outlineManager',
-            description: 'Template for the last user message in outline manager agent'
+            description: 'Default template for user messages (middle messages in multi-turn)'
           },
           {
-            id: 'agent-outlinemanager-nonlast',
-            label: 'Non-Last User Prompt',
+            id: 'agent-outlinemanager-first',
+            label: 'First User Prompt',
             type: 'prompt',
             functionType: 'agent',
-            category: 'nonLastUserPrompt',
+            category: 'firstUserPrompt',
             name: 'outlineManager',
-            description: 'Template for previous user messages in outline manager agent history'
+            description: 'Template for the first user message in outline manager conversation'
+          },
+          {
+            id: 'agent-outlinemanager-last',
+            label: 'Last User Prompt',
+            type: 'prompt',
+            functionType: 'agent',
+            category: 'lastUserPrompt',
+            name: 'outlineManager',
+            description: 'Template for the last (current) user message in outline manager agent'
           },
           {
             id: 'agent-outlinemanager-prefill',
@@ -196,6 +223,33 @@ export const PROMPT_TREE: PromptNode[] = [
             category: 'userPrompt',
             name: 'object',
             description: 'Auto-generated user message with story object payload'
+          },
+          {
+            id: 'translation-object-initial',
+            label: 'Initial User Prompt',
+            type: 'prompt',
+            functionType: 'translation',
+            category: 'initialUserPrompt',
+            name: 'object',
+            description: 'Template for single-message translation requests (rich context)'
+          },
+          {
+            id: 'translation-object-first',
+            label: 'First User Prompt',
+            type: 'prompt',
+            functionType: 'translation',
+            category: 'firstUserPrompt',
+            name: 'object',
+            description: 'Template for first feedback in multi-turn translation sessions'
+          },
+          {
+            id: 'translation-object-last',
+            label: 'Last User Prompt',
+            type: 'prompt',
+            functionType: 'translation',
+            category: 'lastUserPrompt',
+            name: 'object',
+            description: 'Template for last feedback in multi-turn translation sessions'
           },
           {
             id: 'translation-object-prefill',
@@ -275,6 +329,33 @@ export const PROMPT_TREE: PromptNode[] = [
             description: 'Auto-generated user message that conveys manuscript content and requests'
           },
           {
+            id: 'editassistant-manuscript-initial',
+            label: 'Initial User Prompt',
+            type: 'prompt',
+            functionType: 'editAssistant',
+            category: 'initialUserPrompt',
+            name: 'manuscript',
+            description: 'Template for single-message manuscript edit requests (rich context)'
+          },
+          {
+            id: 'editassistant-manuscript-first',
+            label: 'First User Prompt',
+            type: 'prompt',
+            functionType: 'editAssistant',
+            category: 'firstUserPrompt',
+            name: 'manuscript',
+            description: 'Template for first feedback in multi-turn manuscript edit sessions'
+          },
+          {
+            id: 'editassistant-manuscript-last',
+            label: 'Last User Prompt',
+            type: 'prompt',
+            functionType: 'editAssistant',
+            category: 'lastUserPrompt',
+            name: 'manuscript',
+            description: 'Template for last feedback in multi-turn manuscript edit sessions'
+          },
+          {
             id: 'editassistant-manuscript-prefill',
             label: 'Prefill Template',
             type: 'prompt',
@@ -307,6 +388,33 @@ export const PROMPT_TREE: PromptNode[] = [
             category: 'userPrompt',
             name: 'storyObject',
             description: 'Auto-generated user message that delivers object context and current data'
+          },
+          {
+            id: 'editassistant-storyobject-initial',
+            label: 'Initial User Prompt',
+            type: 'prompt',
+            functionType: 'editAssistant',
+            category: 'initialUserPrompt',
+            name: 'storyObject',
+            description: 'Template for single-message story object edit requests (rich context)'
+          },
+          {
+            id: 'editassistant-storyobject-first',
+            label: 'First User Prompt',
+            type: 'prompt',
+            functionType: 'editAssistant',
+            category: 'firstUserPrompt',
+            name: 'storyObject',
+            description: 'Template for first feedback in multi-turn story object edit sessions'
+          },
+          {
+            id: 'editassistant-storyobject-last',
+            label: 'Last User Prompt',
+            type: 'prompt',
+            functionType: 'editAssistant',
+            category: 'lastUserPrompt',
+            name: 'storyObject',
+            description: 'Template for last feedback in multi-turn story object edit sessions'
           },
           {
             id: 'editassistant-storyobject-prefill',
@@ -352,6 +460,33 @@ export const PROMPT_TREE: PromptNode[] = [
             description: 'Template for object image prompt requests'
           },
           {
+            id: 'imageprompt-object-initial',
+            label: 'Initial User Prompt',
+            type: 'prompt',
+            functionType: 'imagePrompt',
+            category: 'initialUserPrompt',
+            name: 'object',
+            description: 'Template for single-message object image prompt requests (rich context)'
+          },
+          {
+            id: 'imageprompt-object-first',
+            label: 'First User Prompt',
+            type: 'prompt',
+            functionType: 'imagePrompt',
+            category: 'firstUserPrompt',
+            name: 'object',
+            description: 'Template for first feedback in multi-turn object image prompt sessions'
+          },
+          {
+            id: 'imageprompt-object-last',
+            label: 'Last User Prompt',
+            type: 'prompt',
+            functionType: 'imagePrompt',
+            category: 'lastUserPrompt',
+            name: 'object',
+            description: 'Template for last feedback in multi-turn object image prompt sessions'
+          },
+          {
             id: 'imageprompt-object-prefill',
             label: 'Prefill Template',
             type: 'prompt',
@@ -384,6 +519,33 @@ export const PROMPT_TREE: PromptNode[] = [
             category: 'userPrompt',
             name: 'scene',
             description: 'Template for scene image prompt requests with available objects'
+          },
+          {
+            id: 'imageprompt-scene-initial',
+            label: 'Initial User Prompt',
+            type: 'prompt',
+            functionType: 'imagePrompt',
+            category: 'initialUserPrompt',
+            name: 'scene',
+            description: 'Template for single-message scene image prompt requests (rich context)'
+          },
+          {
+            id: 'imageprompt-scene-first',
+            label: 'First User Prompt',
+            type: 'prompt',
+            functionType: 'imagePrompt',
+            category: 'firstUserPrompt',
+            name: 'scene',
+            description: 'Template for first feedback in multi-turn scene image prompt sessions'
+          },
+          {
+            id: 'imageprompt-scene-last',
+            label: 'Last User Prompt',
+            type: 'prompt',
+            functionType: 'imagePrompt',
+            category: 'lastUserPrompt',
+            name: 'scene',
+            description: 'Template for last feedback in multi-turn scene image prompt sessions'
           },
           {
             id: 'imageprompt-scene-prefill',
@@ -420,6 +582,33 @@ export const PROMPT_TREE: PromptNode[] = [
             description: 'Template for cover image prompt requests with title, logline, and selected objects'
           },
           {
+            id: 'imageprompt-coverimage-initial',
+            label: 'Initial User Prompt',
+            type: 'prompt',
+            functionType: 'imagePrompt',
+            category: 'initialUserPrompt',
+            name: 'coverImage',
+            description: 'Template for single-message cover image prompt requests (rich context)'
+          },
+          {
+            id: 'imageprompt-coverimage-first',
+            label: 'First User Prompt',
+            type: 'prompt',
+            functionType: 'imagePrompt',
+            category: 'firstUserPrompt',
+            name: 'coverImage',
+            description: 'Template for first feedback in multi-turn cover image prompt sessions'
+          },
+          {
+            id: 'imageprompt-coverimage-last',
+            label: 'Last User Prompt',
+            type: 'prompt',
+            functionType: 'imagePrompt',
+            category: 'lastUserPrompt',
+            name: 'coverImage',
+            description: 'Template for last feedback in multi-turn cover image prompt sessions'
+          },
+          {
             id: 'imageprompt-coverimage-prefill',
             label: 'Prefill Template',
             type: 'prompt',
@@ -429,41 +618,6 @@ export const PROMPT_TREE: PromptNode[] = [
             description: 'Template for cover image prompt responses'
           }
         ]
-      }
-    ]
-  },
-  {
-    id: 'common',
-    label: 'Common',
-    icon: <Settings size="sm" />,
-    type: 'category',
-    children: [
-      {
-        id: 'common-feedback-user',
-        label: 'Feedback User Prompt',
-        type: 'prompt',
-        functionType: 'common',
-        category: 'userPrompt',
-        name: 'feedback',
-        description: 'Template for the last user feedback message in LLM task journeys.'
-      },
-      {
-        id: 'common-feedback-nonlast',
-        label: 'Feedback Non-Last User Prompt',
-        type: 'prompt',
-        functionType: 'common',
-        category: 'nonLastUserPrompt',
-        name: 'feedback',
-        description: 'Template for previous user feedback messages in LLM task journeys.'
-      },
-      {
-        id: 'common-feedback-prefill',
-        label: 'Feedback Prefill',
-        type: 'prompt',
-        functionType: 'common',
-        category: 'prefill',
-        name: 'feedback',
-        description: 'AI response starter for feedback in LLM task journeys.'
       }
     ]
   },

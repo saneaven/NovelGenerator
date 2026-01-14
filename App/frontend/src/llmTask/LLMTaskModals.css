@@ -360,6 +360,72 @@
   margin-top: var(--spacing-sm);
 }
 
+/* Message header with role and actions */
+.llm-task-modal-journey-message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Action buttons container (edit/delete) */
+.llm-task-modal-journey-message-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.llm-task-modal-journey-message:hover .llm-task-modal-journey-message-actions {
+  opacity: 1;
+}
+
+.llm-task-modal-journey-message-actions button {
+  padding: var(--spacing-xs);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  border-radius: var(--border-radius-sm);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.llm-task-modal-journey-message-actions button:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface-subtle);
+}
+
+.llm-task-modal-journey-message-actions button.delete:hover {
+  color: var(--color-danger);
+}
+
+/* Edit textarea */
+.llm-task-modal-journey-message-edit-textarea {
+  width: 100%;
+  min-height: 80px;
+  resize: vertical;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-sm);
+  background: var(--color-surface-default);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  font-family: inherit;
+}
+
+.llm-task-modal-journey-message-edit-textarea:focus {
+  outline: none;
+  border-color: var(--color-brand-primary);
+}
+
+/* Edit actions (Save/Cancel buttons) */
+.llm-task-modal-journey-message-edit-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: flex-end;
+  margin-top: var(--spacing-sm);
+}
+
 /* Feedback */
 .llm-task-modal-feedback {
   border: 1px solid var(--color-border-default);

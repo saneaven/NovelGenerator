@@ -1,4 +1,4 @@
-import type { ContentPart, ConversationBlock, FunctionCallMetadata, FunctionCallProgress } from './requestTypes';
+import type { ContentPart, FunctionCallMetadata, FunctionCallProgress } from './requestTypes';
 import type { ProviderConfig, ProviderType, ThinkingConfig, RetryConfig, CustomApiFormat } from '../store/settingsStore';
 import type { FunctionCallSchema } from '../functionCall';
 
@@ -77,7 +77,8 @@ export interface TemplateData {
     };
   };
   input: {
-    userMessage: string;
+    // userMessage is injected per user block in prepareMessages()
+    userMessage?: string;
   };
   feedback?: {
     editingObjectIds: string[];
@@ -133,10 +134,10 @@ export interface TemplateData {
 }
 
 /**
- * Base interface for all prompt contexts - all must include userInput
+ * Base interface for all prompt contexts
+ * Note: userInput removed - input.userMessage is injected per-message in LLMTask.prepareMessages()
  */
 export interface BasePromptContext {
-  userInput: string;
   projectId?: string;  // For fetching project data from unifiedObjectStore
   outputLanguage?: string;
   enablePrefill?: boolean;
@@ -301,15 +302,6 @@ export interface LLMTaskConfig {
   promptContext: PromptContext;
   abortController: AbortController;
   sessionId?: string;
-  /**
-   * Optional: bypass PromptManager + prepareMessages and stream an already-built request.
-   * Used by journey mode to keep `preConversation` fixed and render feedback turns externally.
-   */
-  prepared?: {
-    messages: ConversationBlock[];
-    functions?: FunctionCallSchema[];
-    outputMode: OutputMode;
-  };
   // Provider overrides (optional - defaults from settings)
   provider?: ProviderType;
   providerConfig?: ProviderConfig;
@@ -346,11 +338,20 @@ export interface LLMTaskCallbacks {
 
 /**
  * Prompt bundle returned by PromptManager
+ *
+ * User prompt templates:
+ * - userPrompt: Default template for middle user messages
+ * - firstUserPrompt: Optional template for the first user message
+ * - lastUserPrompt: Optional template for the last user message
+ *
+ * Template selection priority (for single message): lastUserPrompt > firstUserPrompt > userPrompt
  */
 export interface PromptBundle {
   systemPrompt: string;
-  userPrompt: string;
-  nonLastUserPrompt?: string;
+  userPrompt: string;              // Default template for middle user messages in multi-turn
+  initialUserPrompt?: string;      // Template for single user message case (rich context)
+  firstUserPrompt?: string;        // Template for first user message in multi-turn
+  lastUserPrompt?: string;         // Template for last user message in multi-turn
   prefill?: string;
   templateData: TemplateData;
 }

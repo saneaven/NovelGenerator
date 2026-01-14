@@ -74,7 +74,7 @@ export class PromptManager {
    */
   private static async getTemplate(
     functionType: 'agent' | 'translation' | 'editAssistant' | 'imagePrompt',
-    category: 'systemPrompt' | 'prefill' | 'userPrompt' | 'nonLastUserPrompt',
+    category: 'systemPrompt' | 'prefill' | 'userPrompt' | 'initialUserPrompt' | 'firstUserPrompt' | 'lastUserPrompt',
     name?: string
   ): Promise<string | null> {
     const store = useSettingsStore.getState();
@@ -87,7 +87,8 @@ export class PromptManager {
     try {
       return await store.loadPrompt(functionType, category as any, name);
     } catch (error) {
-      if (category === 'nonLastUserPrompt') {
+      // Optional templates return null if not found
+      if (category === 'initialUserPrompt' || category === 'firstUserPrompt' || category === 'lastUserPrompt') {
         return null;
       }
       console.error('Failed to load prompt:', error);
@@ -172,10 +173,11 @@ export class PromptManager {
     context: AgentWorkspacePromptContext | AgentNovelEditorPromptContext | AgentOutlineManagerPromptContext,
     mode: 'storyObject' | 'novelEditor' | 'outlineManager'
   ): Promise<PromptBundle> {
-    const [systemTemplate, userTemplate, nonLastTemplate, prefillTemplate] = await Promise.all([
+    const [systemTemplate, userTemplate, firstTemplate, lastTemplate, prefillTemplate] = await Promise.all([
       this.getTemplate('agent', 'systemPrompt', mode),
       this.getTemplate('agent', 'userPrompt', mode),
-      this.getTemplate('agent', 'nonLastUserPrompt', mode),
+      this.getTemplate('agent', 'firstUserPrompt', mode),
+      this.getTemplate('agent', 'lastUserPrompt', mode),
       this.getTemplate('agent', 'prefill', mode),
     ]);
 
@@ -184,15 +186,16 @@ export class PromptManager {
       config: this.buildConfigData(context),
       project: this.buildProjectData(context.projectId, settings.mainLanguage),
       input: {
-        userMessage: context.userInput,
+        // userMessage is injected per user block in prepareMessages()
       },
       agent: { mode, contextObjectIds: context.contextObjectIds },
     };
 
     return {
       systemPrompt: renderTemplate(systemTemplate!, templateData),
-      userPrompt: userTemplate ? renderTemplate(userTemplate, templateData) : context.userInput,
-      nonLastUserPrompt: nonLastTemplate ?? undefined,
+      userPrompt: userTemplate!,                     // Default template for user messages
+      firstUserPrompt: firstTemplate ?? undefined,   // Optional template for first message
+      lastUserPrompt: lastTemplate ?? undefined,     // Optional template for last message
       prefill: prefillTemplate && context.enablePrefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
@@ -206,9 +209,12 @@ export class PromptManager {
     context: EditAssistantManuscriptPromptContext | EditAssistantStoryObjectPromptContext,
     mode: 'manuscript' | 'storyObject'
   ): Promise<PromptBundle> {
-    const [systemTemplate, userTemplate, prefillTemplate] = await Promise.all([
+    const [systemTemplate, userTemplate, initialTemplate, firstTemplate, lastTemplate, prefillTemplate] = await Promise.all([
       this.getTemplate('editAssistant', 'systemPrompt', mode),
       this.getTemplate('editAssistant', 'userPrompt', mode),
+      this.getTemplate('editAssistant', 'initialUserPrompt', mode),
+      this.getTemplate('editAssistant', 'firstUserPrompt', mode),
+      this.getTemplate('editAssistant', 'lastUserPrompt', mode),
       this.getTemplate('editAssistant', 'prefill', mode),
     ]);
 
@@ -220,7 +226,8 @@ export class PromptManager {
       templateData = {
         config: this.buildConfigData(context),
         project: this.buildProjectData(context.projectId, settings.mainLanguage),
-        input: { userMessage: context.userInput },
+        // Note: input.userMessage is injected per-message in LLMTask.prepareMessages()
+        input: { userMessage: '' },
         editAssistant: {
           mode: 'manuscript',
           manuscript: {
@@ -237,7 +244,8 @@ export class PromptManager {
       templateData = {
         config: this.buildConfigData(context),
         project: this.buildProjectData(context.projectId, settings.mainLanguage),
-        input: { userMessage: context.userInput },
+        // Note: input.userMessage is injected per-message in LLMTask.prepareMessages()
+        input: { userMessage: '' },
         editAssistant: {
           mode: 'storyObject',
           storyObject: {
@@ -252,7 +260,10 @@ export class PromptManager {
 
     return {
       systemPrompt: renderTemplate(systemTemplate!, templateData),
-      userPrompt: renderTemplate(userTemplate!, templateData),
+      userPrompt: userTemplate!,  // NOT rendered - will be rendered per-message
+      initialUserPrompt: initialTemplate ?? undefined,
+      firstUserPrompt: firstTemplate ?? undefined,
+      lastUserPrompt: lastTemplate ?? undefined,
       prefill: prefillTemplate && context.enablePrefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
@@ -267,26 +278,37 @@ export class PromptManager {
   ): Promise<PromptBundle> {
     let systemTemplate: string;
     let userTemplate: string;
+    let initialTemplate: string | null;
+    let firstTemplate: string | null;
+    let lastTemplate: string | null;
     let prefillTemplate: string | null;
 
     try {
-      [systemTemplate, userTemplate, prefillTemplate] = await Promise.all([
+      [systemTemplate, userTemplate, initialTemplate, firstTemplate, lastTemplate, prefillTemplate] = await Promise.all([
         this.getTemplate('translation', 'systemPrompt', 'object'),
         this.getTemplate('translation', 'userPrompt', 'object'),
+        this.getTemplate('translation', 'initialUserPrompt', 'object'),
+        this.getTemplate('translation', 'firstUserPrompt', 'object'),
+        this.getTemplate('translation', 'lastUserPrompt', 'object'),
         this.getTemplate('translation', 'prefill', 'object'),
-      ]) as [string, string, string | null];
+      ]) as [string, string, string | null, string | null, string | null, string | null];
     } catch {
-      [systemTemplate, userTemplate, prefillTemplate] = await Promise.all([
+      [systemTemplate, userTemplate, initialTemplate, firstTemplate, lastTemplate, prefillTemplate] = await Promise.all([
         this.getTemplate('translation', 'systemPrompt'),
         this.getTemplate('translation', 'userPrompt'),
+        this.getTemplate('translation', 'initialUserPrompt'),
+        this.getTemplate('translation', 'firstUserPrompt'),
+        this.getTemplate('translation', 'lastUserPrompt'),
         this.getTemplate('translation', 'prefill'),
-      ]) as [string, string, string | null];
+      ]) as [string, string, string | null, string | null, string | null, string | null];
     }
 
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
       project: this.buildProjectData(context.projectId, context.sourceLanguage),
-      input: { userMessage: context.userInput },
+      input: {
+        // userMessage is injected per user block in prepareMessages()
+      },
       translation: {
         sourceLanguage: context.sourceLanguage,
         targetLanguage: context.targetLanguage,
@@ -298,7 +320,10 @@ export class PromptManager {
 
     return {
       systemPrompt: renderTemplate(systemTemplate!, templateData),
-      userPrompt: renderTemplate(userTemplate!, templateData),
+      userPrompt: userTemplate!,  // NOT rendered - will be rendered per-message
+      initialUserPrompt: initialTemplate ?? undefined,
+      firstUserPrompt: firstTemplate ?? undefined,
+      lastUserPrompt: lastTemplate ?? undefined,
       prefill: prefillTemplate && context.enablePrefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
@@ -320,7 +345,9 @@ export class PromptManager {
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
       project: this.buildProjectData(context.projectId, context.sourceLanguage),
-      input: { userMessage: context.userInput },
+      input: {
+        // userMessage is injected per user block in prepareMessages()
+      },
       translation: {
         sourceLanguage: context.sourceLanguage,
         targetLanguage: context.targetLanguage,
@@ -343,9 +370,12 @@ export class PromptManager {
   private static async generateObjectImagePromptBundle(
     context: ObjectImagePromptContext
   ): Promise<PromptBundle> {
-    const [systemTemplate, userTemplate, prefillTemplate] = await Promise.all([
+    const [systemTemplate, userTemplate, initialTemplate, firstTemplate, lastTemplate, prefillTemplate] = await Promise.all([
       this.getTemplate('imagePrompt', 'systemPrompt', 'object'),
       this.getTemplate('imagePrompt', 'userPrompt', 'object'),
+      this.getTemplate('imagePrompt', 'initialUserPrompt', 'object'),
+      this.getTemplate('imagePrompt', 'firstUserPrompt', 'object'),
+      this.getTemplate('imagePrompt', 'lastUserPrompt', 'object'),
       this.getTemplate('imagePrompt', 'prefill', 'object'),
     ]);
 
@@ -353,7 +383,9 @@ export class PromptManager {
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
       project: this.buildProjectData(context.projectId, settings.mainLanguage),
-      input: { userMessage: context.userInput },
+      input: {
+        // userMessage is injected per user block in prepareMessages()
+      },
       imagePrompt: {
         objectType: context.objectType,
         objectInfo: context.objectInfo,
@@ -366,7 +398,10 @@ export class PromptManager {
 
     return {
       systemPrompt: renderTemplate(systemTemplate!, templateData),
-      userPrompt: renderTemplate(userTemplate!, templateData),
+      userPrompt: userTemplate!,  // NOT rendered - will be rendered per-message
+      initialUserPrompt: initialTemplate ?? undefined,
+      firstUserPrompt: firstTemplate ?? undefined,
+      lastUserPrompt: lastTemplate ?? undefined,
       prefill: prefillTemplate && context.enablePrefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
@@ -379,9 +414,12 @@ export class PromptManager {
   private static async generateSceneImagePromptBundle(
     context: SceneImagePromptContext
   ): Promise<PromptBundle> {
-    const [systemTemplate, userTemplate, prefillTemplate] = await Promise.all([
+    const [systemTemplate, userTemplate, initialTemplate, firstTemplate, lastTemplate, prefillTemplate] = await Promise.all([
       this.getTemplate('imagePrompt', 'systemPrompt', 'scene'),
       this.getTemplate('imagePrompt', 'userPrompt', 'scene'),
+      this.getTemplate('imagePrompt', 'initialUserPrompt', 'scene'),
+      this.getTemplate('imagePrompt', 'firstUserPrompt', 'scene'),
+      this.getTemplate('imagePrompt', 'lastUserPrompt', 'scene'),
       this.getTemplate('imagePrompt', 'prefill', 'scene'),
     ]);
 
@@ -389,7 +427,9 @@ export class PromptManager {
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
       project: this.buildProjectData(context.projectId, settings.mainLanguage),
-      input: { userMessage: context.userInput },
+      input: {
+        // userMessage is injected per user block in prepareMessages()
+      },
       imagePrompt: {
         promptMode: context.promptMode,
         scenePreContext: context.scenePreContext,
@@ -400,7 +440,10 @@ export class PromptManager {
 
     return {
       systemPrompt: renderTemplate(systemTemplate!, templateData),
-      userPrompt: renderTemplate(userTemplate!, templateData),
+      userPrompt: userTemplate!,  // NOT rendered - will be rendered per-message
+      initialUserPrompt: initialTemplate ?? undefined,
+      firstUserPrompt: firstTemplate ?? undefined,
+      lastUserPrompt: lastTemplate ?? undefined,
       prefill: prefillTemplate && context.enablePrefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
@@ -413,9 +456,12 @@ export class PromptManager {
   private static async generateCoverImagePromptBundle(
     context: CoverImagePromptContext
   ): Promise<PromptBundle> {
-    const [systemTemplate, userTemplate, prefillTemplate] = await Promise.all([
+    const [systemTemplate, userTemplate, initialTemplate, firstTemplate, lastTemplate, prefillTemplate] = await Promise.all([
       this.getTemplate('imagePrompt', 'systemPrompt', 'coverImage'),
       this.getTemplate('imagePrompt', 'userPrompt', 'coverImage'),
+      this.getTemplate('imagePrompt', 'initialUserPrompt', 'coverImage'),
+      this.getTemplate('imagePrompt', 'firstUserPrompt', 'coverImage'),
+      this.getTemplate('imagePrompt', 'lastUserPrompt', 'coverImage'),
       this.getTemplate('imagePrompt', 'prefill', 'coverImage'),
     ]);
 
@@ -423,7 +469,9 @@ export class PromptManager {
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
       project: this.buildProjectData(context.projectId, settings.mainLanguage),
-      input: { userMessage: context.userInput },
+      input: {
+        // userMessage is injected per user block in prepareMessages()
+      },
       imagePrompt: {
         promptMode: context.promptMode,
         selectedObjectIds: context.selectedObjects.map(o => o.id),
@@ -440,7 +488,10 @@ export class PromptManager {
 
     return {
       systemPrompt: renderTemplate(systemTemplate!, templateData),
-      userPrompt: renderTemplate(userTemplate!, templateData),
+      userPrompt: userTemplate!,  // NOT rendered - will be rendered per-message
+      initialUserPrompt: initialTemplate ?? undefined,
+      firstUserPrompt: firstTemplate ?? undefined,
+      lastUserPrompt: lastTemplate ?? undefined,
       prefill: prefillTemplate && context.enablePrefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,

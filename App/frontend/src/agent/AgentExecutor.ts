@@ -137,22 +137,27 @@ export const AgentExecutor = {
     // Notify caller of sessionId immediately (for stop button to work during execution)
     onSessionCreated?.(sessionId);
 
-    // 3) Build history (exclude the empty assistant message we just added)
+    // 3) Build history (exclude the empty assistant message we just added, keep current user)
     const fullHistory = agentStore.getMessages(input.projectId, input.agentId, language);
     const historyWithoutAssistant = fullHistory.slice(0, -1);
 
-    // Remove the user message we just added (it goes into promptContext.userInput)
-    const baseHistory = userInput.trim() ? historyWithoutAssistant.slice(0, -1) : historyWithoutAssistant;
-
-    // Merge trailing user messages (failed previous runs)
-    let previousHistory = baseHistory;
+    // Merge trailing user messages (failed previous runs) into one
+    let history = [...historyWithoutAssistant];
     const trailingUserTexts: string[] = [];
-    while (previousHistory.length > 0 && previousHistory[previousHistory.length - 1].role === 'user') {
-      const last = previousHistory[previousHistory.length - 1];
+    while (history.length > 0 && history[history.length - 1].role === 'user') {
+      const last = history[history.length - 1];
       trailingUserTexts.unshift(getMessageText(last.contentParts));
-      previousHistory = previousHistory.slice(0, -1);
+      history = history.slice(0, -1);
     }
-    const combinedUserInput = [...trailingUserTexts, userInput].filter(Boolean).join('\n\n');
+
+    if (trailingUserTexts.length > 0) {
+      history.push({
+        id: generateTempId(),
+        role: 'user' as const,
+        contentParts: [{ type: 'content', text: trailingUserTexts.join('\n\n') }],
+        timestamp: new Date(),
+      });
+    }
 
     const llmMode =
       input.mode === 'storyObject'
@@ -162,7 +167,6 @@ export const AgentExecutor = {
           : LLMTaskMode.AGENT_NOVEL_EDITOR;
 
     const promptContext: AgentWorkspacePromptContext = {
-      userInput: combinedUserInput,
       projectId: input.projectId,
       outputLanguage: language,
       outputMode,
@@ -217,7 +221,7 @@ export const AgentExecutor = {
             streamingStore.clearStreamingContent(assistantMessageId);
           },
         },
-        previousHistory
+        history
       );
     } catch (error) {
       if (isAbortError(error)) {
@@ -328,7 +332,6 @@ export const AgentExecutor = {
     onSessionCreated?.(sessionId);
 
     const promptContext: AgentTranslationPromptContext = {
-      userInput: '',
       projectId: input.projectId,
       sourceLanguage: input.sourceLanguage,
       targetLanguage: input.targetLanguage,

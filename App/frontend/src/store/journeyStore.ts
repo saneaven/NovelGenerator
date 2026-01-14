@@ -37,11 +37,10 @@ export interface Journey<TInput = unknown, TResult = unknown> {
   // Status
   status: JourneyStatus;
 
-  // Journey-specific data
-  preConversation: ChatMessage[];
+  // Journey-specific data (no preConversation - LLMTask handles templates)
   editingTargets: EditingTargets;
   functions?: FunctionCallSchema[];
-  messages: ChatMessage[];
+  messages: ChatMessage[];  // All messages (user input + assistant outputs)
 
   // Current turn execution state (updated during streaming)
   currentContentParts: ContentPart[];
@@ -101,6 +100,10 @@ interface JourneyStore {
   registerAbortController: (id: string, controller: AbortController) => void;
   unregisterAbortController: (id: string) => void;
   cancelJourney: (id: string) => void;
+
+  // Message editing
+  updateMessage: (journeyId: string, messageId: string, newContent: string) => void;
+  deleteMessage: (journeyId: string, messageId: string) => void;
 }
 
 function getProgressKey(progress: FunctionCallProgress): string {
@@ -275,4 +278,49 @@ export const useJourneyStore = create<JourneyStore>((set, get) => ({
       };
     });
   },
+
+  // Message editing
+  updateMessage: (journeyId, messageId, newContent) =>
+    set((state) => {
+      const journey = state.journeys[journeyId];
+      if (!journey) return state;
+
+      const updatedMessages = journey.messages.map((msg) => {
+        if (msg.id !== messageId) return msg;
+        return {
+          ...msg,
+          contentParts: msg.contentParts.map((part) =>
+            part.type === 'content' ? { ...part, text: newContent } : part
+          ),
+        };
+      });
+
+      return {
+        journeys: {
+          ...state.journeys,
+          [journeyId]: {
+            ...journey,
+            messages: updatedMessages,
+            updatedAt: Date.now(),
+          },
+        },
+      };
+    }),
+
+  deleteMessage: (journeyId, messageId) =>
+    set((state) => {
+      const journey = state.journeys[journeyId];
+      if (!journey) return state;
+
+      return {
+        journeys: {
+          ...state.journeys,
+          [journeyId]: {
+            ...journey,
+            messages: journey.messages.filter((msg) => msg.id !== messageId),
+            updatedAt: Date.now(),
+          },
+        },
+      };
+    }),
 }));

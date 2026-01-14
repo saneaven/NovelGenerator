@@ -39,16 +39,27 @@ def _load_prompt_file(relative_path: str) -> str:
 # Agent - Story Object
 _STORYOBJECT_SYSTEM_PROMPT = _load_prompt_file('agent/storyObject/systemPrompt.md')
 _STORYOBJECT_USER_PROMPT = _load_prompt_file('agent/storyObject/userPrompt.md')
-_STORYOBJECT_NON_LAST_USER_PROMPT = _load_prompt_file('agent/storyObject/nonLastUserPrompt.md')
+_STORYOBJECT_FIRST_USER_PROMPT = _load_prompt_file('agent/storyObject/firstUserPrompt.md')
+_STORYOBJECT_LAST_USER_PROMPT = _load_prompt_file('agent/storyObject/lastUserPrompt.md')
 _STORYOBJECT_PREFILL = _load_prompt_file('agent/storyObject/prefill.md')
 # Agent - Novel Editor
 _NOVEL_EDITOR_SYSTEM_PROMPT = _load_prompt_file('agent/novelEditor/systemPrompt.md')
 _NOVEL_EDITOR_USER_PROMPT = _load_prompt_file('agent/novelEditor/userPrompt.md')
-_NOVEL_EDITOR_NON_LAST_USER_PROMPT = _load_prompt_file('agent/novelEditor/nonLastUserPrompt.md')
+_NOVEL_EDITOR_FIRST_USER_PROMPT = _load_prompt_file('agent/novelEditor/firstUserPrompt.md')
+_NOVEL_EDITOR_LAST_USER_PROMPT = _load_prompt_file('agent/novelEditor/lastUserPrompt.md')
 _NOVEL_EDITOR_PREFILL = _load_prompt_file('agent/novelEditor/prefill.md')
+# Agent - Outline Manager
+_OUTLINE_MANAGER_SYSTEM_PROMPT = _load_prompt_file('agent/outlineManager/systemPrompt.md')
+_OUTLINE_MANAGER_USER_PROMPT = _load_prompt_file('agent/outlineManager/userPrompt.md')
+_OUTLINE_MANAGER_FIRST_USER_PROMPT = _load_prompt_file('agent/outlineManager/firstUserPrompt.md')
+_OUTLINE_MANAGER_LAST_USER_PROMPT = _load_prompt_file('agent/outlineManager/lastUserPrompt.md')
+_OUTLINE_MANAGER_PREFILL = _load_prompt_file('agent/outlineManager/prefill.md')
 # Translation - Object
 _TRANSLATION_SYSTEM_PROMPT_OBJECT = _load_prompt_file('translation/object/systemPrompt.md')
 _TRANSLATION_USER_PROMPT_OBJECT = _load_prompt_file('translation/object/userPrompt.md')
+_TRANSLATION_INITIAL_USER_PROMPT_OBJECT = _load_prompt_file('translation/object/initialUserPrompt.md')
+_TRANSLATION_FIRST_USER_PROMPT_OBJECT = _load_prompt_file('translation/object/firstUserPrompt.md')
+_TRANSLATION_LAST_USER_PROMPT_OBJECT = _load_prompt_file('translation/object/lastUserPrompt.md')
 _TRANSLATION_PREFILL_OBJECT = _load_prompt_file('translation/object/prefill.md')
 # Translation - Agent
 _TRANSLATION_SYSTEM_PROMPT_AGENT = _load_prompt_file('translation/agent/systemPrompt.md')
@@ -57,24 +68,38 @@ _TRANSLATION_PREFILL_AGENT = _load_prompt_file('translation/agent/prefill.md')
 # Edit Assistant - Manuscript
 _EDIT_ASSISTANT_MANUSCRIPT_SYSTEM_PROMPT = _load_prompt_file('editAssistant/manuscript/systemPrompt.md')
 _EDIT_ASSISTANT_MANUSCRIPT_USER_PROMPT = _load_prompt_file('editAssistant/manuscript/userPrompt.md')
+_EDIT_ASSISTANT_MANUSCRIPT_INITIAL_USER_PROMPT = _load_prompt_file('editAssistant/manuscript/initialUserPrompt.md')
+_EDIT_ASSISTANT_MANUSCRIPT_FIRST_USER_PROMPT = _load_prompt_file('editAssistant/manuscript/firstUserPrompt.md')
+_EDIT_ASSISTANT_MANUSCRIPT_LAST_USER_PROMPT = _load_prompt_file('editAssistant/manuscript/lastUserPrompt.md')
 _EDIT_ASSISTANT_MANUSCRIPT_PREFILL = _load_prompt_file('editAssistant/manuscript/prefill.md')
 # Edit Assistant - Story Object
 _EDIT_ASSISTANT_STORY_OBJECT_SYSTEM_PROMPT = _load_prompt_file('editAssistant/storyObject/systemPrompt.md')
 _EDIT_ASSISTANT_STORY_OBJECT_USER_PROMPT = _load_prompt_file('editAssistant/storyObject/userPrompt.md')
+_EDIT_ASSISTANT_STORY_OBJECT_INITIAL_USER_PROMPT = _load_prompt_file('editAssistant/storyObject/initialUserPrompt.md')
+_EDIT_ASSISTANT_STORY_OBJECT_FIRST_USER_PROMPT = _load_prompt_file('editAssistant/storyObject/firstUserPrompt.md')
+_EDIT_ASSISTANT_STORY_OBJECT_LAST_USER_PROMPT = _load_prompt_file('editAssistant/storyObject/lastUserPrompt.md')
 _EDIT_ASSISTANT_STORY_OBJECT_PREFILL = _load_prompt_file('editAssistant/storyObject/prefill.md')
 # Image Prompt - Object
 _OBJECT_IMAGE_PROMPT_SYSTEM_PROMPT = _load_prompt_file('imagePrompt/object/systemPrompt.md')
 _OBJECT_IMAGE_PROMPT_USER_PROMPT = _load_prompt_file('imagePrompt/object/userPrompt.md')
+_OBJECT_IMAGE_PROMPT_INITIAL_USER_PROMPT = _load_prompt_file('imagePrompt/object/initialUserPrompt.md')
+_OBJECT_IMAGE_PROMPT_FIRST_USER_PROMPT = _load_prompt_file('imagePrompt/object/firstUserPrompt.md')
+_OBJECT_IMAGE_PROMPT_LAST_USER_PROMPT = _load_prompt_file('imagePrompt/object/lastUserPrompt.md')
 _OBJECT_IMAGE_PROMPT_PREFILL = _load_prompt_file('imagePrompt/object/prefill.md')
 # Image Prompt - Scene
 _SCENE_IMAGE_PROMPT_SYSTEM_PROMPT = _load_prompt_file('imagePrompt/scene/systemPrompt.md')
 _SCENE_IMAGE_PROMPT_USER_PROMPT = _load_prompt_file('imagePrompt/scene/userPrompt.md')
+_SCENE_IMAGE_PROMPT_INITIAL_USER_PROMPT = _load_prompt_file('imagePrompt/scene/initialUserPrompt.md')
+_SCENE_IMAGE_PROMPT_FIRST_USER_PROMPT = _load_prompt_file('imagePrompt/scene/firstUserPrompt.md')
+_SCENE_IMAGE_PROMPT_LAST_USER_PROMPT = _load_prompt_file('imagePrompt/scene/lastUserPrompt.md')
 _SCENE_IMAGE_PROMPT_PREFILL = _load_prompt_file('imagePrompt/scene/prefill.md')
-
-# Common - Feedback
-_COMMON_FEEDBACK_USER_PROMPT = _load_prompt_file('common/feedback/userPrompt.md')
-_COMMON_FEEDBACK_NON_LAST_USER_PROMPT = _load_prompt_file('common/feedback/nonLastUserPrompt.md')
-_COMMON_FEEDBACK_PREFILL = _load_prompt_file('common/feedback/prefill.md')
+# Image Prompt - Cover Image
+_COVER_IMAGE_PROMPT_SYSTEM_PROMPT = _load_prompt_file('imagePrompt/coverImage/systemPrompt.md')
+_COVER_IMAGE_PROMPT_USER_PROMPT = _load_prompt_file('imagePrompt/coverImage/userPrompt.md')
+_COVER_IMAGE_PROMPT_INITIAL_USER_PROMPT = _load_prompt_file('imagePrompt/coverImage/initialUserPrompt.md')
+_COVER_IMAGE_PROMPT_FIRST_USER_PROMPT = _load_prompt_file('imagePrompt/coverImage/firstUserPrompt.md')
+_COVER_IMAGE_PROMPT_LAST_USER_PROMPT = _load_prompt_file('imagePrompt/coverImage/lastUserPrompt.md')
+_COVER_IMAGE_PROMPT_PREFILL = _load_prompt_file('imagePrompt/coverImage/prefill.md')
 
 # Default prompts structure
 # Format matches the frontend structure: {function_type: {category: {name?: content}}}
@@ -83,18 +108,27 @@ DEFAULT_PROMPTS = {
         'systemPrompt': {
             'storyObject': _STORYOBJECT_SYSTEM_PROMPT,
             'novelEditor': _NOVEL_EDITOR_SYSTEM_PROMPT,
+            'outlineManager': _OUTLINE_MANAGER_SYSTEM_PROMPT,
         },
         'userPrompt': {
             'storyObject': _STORYOBJECT_USER_PROMPT,
             'novelEditor': _NOVEL_EDITOR_USER_PROMPT,
+            'outlineManager': _OUTLINE_MANAGER_USER_PROMPT,
         },
-        'nonLastUserPrompt': {
-            'storyObject': _STORYOBJECT_NON_LAST_USER_PROMPT,
-            'novelEditor': _NOVEL_EDITOR_NON_LAST_USER_PROMPT,
+        'firstUserPrompt': {
+            'storyObject': _STORYOBJECT_FIRST_USER_PROMPT,
+            'novelEditor': _NOVEL_EDITOR_FIRST_USER_PROMPT,
+            'outlineManager': _OUTLINE_MANAGER_FIRST_USER_PROMPT,
+        },
+        'lastUserPrompt': {
+            'storyObject': _STORYOBJECT_LAST_USER_PROMPT,
+            'novelEditor': _NOVEL_EDITOR_LAST_USER_PROMPT,
+            'outlineManager': _OUTLINE_MANAGER_LAST_USER_PROMPT,
         },
         'prefill': {
             'storyObject': _STORYOBJECT_PREFILL,
             'novelEditor': _NOVEL_EDITOR_PREFILL,
+            'outlineManager': _OUTLINE_MANAGER_PREFILL,
         },
     },
     'translation': {
@@ -105,6 +139,15 @@ DEFAULT_PROMPTS = {
         'userPrompt': {
             'object': _TRANSLATION_USER_PROMPT_OBJECT,
             'agent': _TRANSLATION_USER_PROMPT_AGENT,
+        },
+        'initialUserPrompt': {
+            'object': _TRANSLATION_INITIAL_USER_PROMPT_OBJECT,
+        },
+        'firstUserPrompt': {
+            'object': _TRANSLATION_FIRST_USER_PROMPT_OBJECT,
+        },
+        'lastUserPrompt': {
+            'object': _TRANSLATION_LAST_USER_PROMPT_OBJECT,
         },
         'prefill': {
             'object': _TRANSLATION_PREFILL_OBJECT,
@@ -120,6 +163,18 @@ DEFAULT_PROMPTS = {
             'manuscript': _EDIT_ASSISTANT_MANUSCRIPT_USER_PROMPT,
             'storyObject': _EDIT_ASSISTANT_STORY_OBJECT_USER_PROMPT,
         },
+        'initialUserPrompt': {
+            'manuscript': _EDIT_ASSISTANT_MANUSCRIPT_INITIAL_USER_PROMPT,
+            'storyObject': _EDIT_ASSISTANT_STORY_OBJECT_INITIAL_USER_PROMPT,
+        },
+        'firstUserPrompt': {
+            'manuscript': _EDIT_ASSISTANT_MANUSCRIPT_FIRST_USER_PROMPT,
+            'storyObject': _EDIT_ASSISTANT_STORY_OBJECT_FIRST_USER_PROMPT,
+        },
+        'lastUserPrompt': {
+            'manuscript': _EDIT_ASSISTANT_MANUSCRIPT_LAST_USER_PROMPT,
+            'storyObject': _EDIT_ASSISTANT_STORY_OBJECT_LAST_USER_PROMPT,
+        },
         'prefill': {
             'manuscript': _EDIT_ASSISTANT_MANUSCRIPT_PREFILL,
             'storyObject': _EDIT_ASSISTANT_STORY_OBJECT_PREFILL,
@@ -129,25 +184,32 @@ DEFAULT_PROMPTS = {
         'systemPrompt': {
             'object': _OBJECT_IMAGE_PROMPT_SYSTEM_PROMPT,
             'scene': _SCENE_IMAGE_PROMPT_SYSTEM_PROMPT,
+            'coverImage': _COVER_IMAGE_PROMPT_SYSTEM_PROMPT,
         },
         'userPrompt': {
             'object': _OBJECT_IMAGE_PROMPT_USER_PROMPT,
             'scene': _SCENE_IMAGE_PROMPT_USER_PROMPT,
+            'coverImage': _COVER_IMAGE_PROMPT_USER_PROMPT,
+        },
+        'initialUserPrompt': {
+            'object': _OBJECT_IMAGE_PROMPT_INITIAL_USER_PROMPT,
+            'scene': _SCENE_IMAGE_PROMPT_INITIAL_USER_PROMPT,
+            'coverImage': _COVER_IMAGE_PROMPT_INITIAL_USER_PROMPT,
+        },
+        'firstUserPrompt': {
+            'object': _OBJECT_IMAGE_PROMPT_FIRST_USER_PROMPT,
+            'scene': _SCENE_IMAGE_PROMPT_FIRST_USER_PROMPT,
+            'coverImage': _COVER_IMAGE_PROMPT_FIRST_USER_PROMPT,
+        },
+        'lastUserPrompt': {
+            'object': _OBJECT_IMAGE_PROMPT_LAST_USER_PROMPT,
+            'scene': _SCENE_IMAGE_PROMPT_LAST_USER_PROMPT,
+            'coverImage': _COVER_IMAGE_PROMPT_LAST_USER_PROMPT,
         },
         'prefill': {
             'object': _OBJECT_IMAGE_PROMPT_PREFILL,
             'scene': _SCENE_IMAGE_PROMPT_PREFILL,
-        },
-    },
-    'common': {
-        'userPrompt': {
-            'feedback': _COMMON_FEEDBACK_USER_PROMPT,
-        },
-        'nonLastUserPrompt': {
-            'feedback': _COMMON_FEEDBACK_NON_LAST_USER_PROMPT,
-        },
-        'prefill': {
-            'feedback': _COMMON_FEEDBACK_PREFILL,
+            'coverImage': _COVER_IMAGE_PROMPT_PREFILL,
         },
     },
 }

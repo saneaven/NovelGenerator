@@ -224,7 +224,6 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
       const currentContent = (manuscriptData as any)?.content ?? '';
 
       const promptContext: EditAssistantManuscriptPromptContext = {
-        userInput: input.userRequest.trim(),
         projectId: input.projectId,
         currentId: manuscriptObj.id,
         currentChapterId: targetId,
@@ -247,11 +246,12 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
           functions: PromptManager.getFunctionsForMode(LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT, promptContext),
           outputMode,
         },
+        thinkingMode: editAssistantConfig.advanced.thinkingMode,
+        thinkingConfig: editAssistantConfig.advanced.thinkingConfig,
       };
     }
 
     const promptContext: EditAssistantStoryObjectPromptContext = {
-      userInput: input.userRequest.trim(),
       projectId: input.projectId,
       targetIds: [targetId],
       contextIds: contextIds.length > 0 ? contextIds : undefined,
@@ -271,6 +271,8 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
         functions: PromptManager.getFunctionsForMode(LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT, promptContext),
         outputMode,
       },
+      thinkingMode: editAssistantConfig.advanced.thinkingMode,
+      thinkingConfig: editAssistantConfig.advanced.thinkingConfig,
     };
   },
 
@@ -331,7 +333,6 @@ const translateObjectsSpec: JourneySpec<TranslateObjectsInput> = {
     const outputMode = computeOutputMode(input.rawMode);
 
     const promptContext: StoryTranslationPromptContext = {
-      userInput: input.userInput?.trim() || '',
       projectId: input.projectId,
       sourceLanguage: input.sourceLanguage,
       targetLanguage: input.targetLanguage,
@@ -358,6 +359,8 @@ const translateObjectsSpec: JourneySpec<TranslateObjectsInput> = {
         functions: PromptManager.getFunctionsForMode(LLMTaskMode.TRANSLATION, promptContext),
         outputMode,
       },
+      thinkingMode: translationConfig.advanced.thinkingMode,
+      thinkingConfig: translationConfig.advanced.thinkingConfig,
     };
   },
 
@@ -436,7 +439,6 @@ const imagePromptSpec: JourneySpec<ImagePromptInput, ImagePromptResult> = {
 
       const data = basicInfoObj.data[mainLanguage] || Object.values(basicInfoObj.data)[0] || {};
       const promptContext: CoverImagePromptContext = {
-        userInput: input.userRequest,
         projectId: input.projectId,
         promptMode: input.promptMode,
         basicInfo: {
@@ -456,6 +458,8 @@ const imagePromptSpec: JourneySpec<ImagePromptInput, ImagePromptResult> = {
         mode: LLMTaskMode.COVER_IMAGE_PROMPT,
         projectId: input.projectId,
         promptContext,
+        thinkingMode: imagePromptConfig.advanced.thinkingMode,
+        thinkingConfig: imagePromptConfig.advanced.thinkingConfig,
       };
     }
 
@@ -475,7 +479,6 @@ const imagePromptSpec: JourneySpec<ImagePromptInput, ImagePromptResult> = {
         });
 
       const promptContext: SceneImagePromptContext = {
-        userInput: input.userRequest,
         projectId: input.projectId,
         promptMode: input.promptMode,
         scenePreContext: input.sceneContext?.preContext || '',
@@ -492,6 +495,8 @@ const imagePromptSpec: JourneySpec<ImagePromptInput, ImagePromptResult> = {
         mode: LLMTaskMode.SCENE_IMAGE_PROMPT,
         projectId: input.projectId,
         promptContext,
+        thinkingMode: imagePromptConfig.advanced.thinkingMode,
+        thinkingConfig: imagePromptConfig.advanced.thinkingConfig,
       };
     }
 
@@ -513,7 +518,6 @@ const imagePromptSpec: JourneySpec<ImagePromptInput, ImagePromptResult> = {
     };
 
     const promptContext: ObjectImagePromptContext = {
-      userInput: input.userRequest,
       projectId: input.projectId,
       promptMode: input.promptMode,
       objectType: input.objectType,
@@ -532,6 +536,8 @@ const imagePromptSpec: JourneySpec<ImagePromptInput, ImagePromptResult> = {
       mode: LLMTaskMode.OBJECT_IMAGE_PROMPT,
       projectId: input.projectId,
       promptContext,
+      thinkingMode: imagePromptConfig.advanced.thinkingMode,
+      thinkingConfig: imagePromptConfig.advanced.thinkingConfig,
     };
   },
 

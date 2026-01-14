@@ -1,5 +1,5 @@
-export type FunctionType = 'agent' | 'translation' | 'editAssistant' | 'imagePrompt' | 'common';
-export type PromptCategory = 'systemPrompt' | 'userPrompt' | 'nonLastUserPrompt' | 'prefill';
+export type FunctionType = 'agent' | 'translation' | 'editAssistant' | 'imagePrompt';
+export type PromptCategory = 'systemPrompt' | 'userPrompt' | 'initialUserPrompt' | 'firstUserPrompt' | 'lastUserPrompt' | 'prefill';
 
 /**
  * Get prompt key for cache lookup

@@ -1,4 +1,4 @@
-{{! Middle user message in multi-turn - simplified }}
+{{! First user feedback in multi-turn }}
 
 <previous_feedback>
 {{ input.userMessage }}

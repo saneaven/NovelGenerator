@@ -1,4 +1,4 @@
-{{! Feedback Template (Non-Last User Message) }}
+{{! First user feedback in multi-turn }}
 
 <previous_feedback>
 {{ input.userMessage }}
