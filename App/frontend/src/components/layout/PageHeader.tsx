@@ -61,16 +61,12 @@ const PageHeader: React.FC<PageHeaderProps> = ({
       <div className="page-header-desktop">
         <div className="page-header-unified">
           <div className="page-header-unified-left">
-            <WorkspaceHeaderDropdown
-              currentSubPage={currentSubPage}
-              onSubPageChange={onSubPageChange}
-              onHomeClick={() => navigate('/')}
+            <IconButton
+              icon={<Settings size="xl" />}
+              onClick={onSettingsClick}
+              title="Settings"
             />
-          </div>
-          <div className="page-header-unified-center">
-            <Link to="/" className="page-header-project-link">{projectName}</Link>
-          </div>
-          <div className="page-header-controls">
+            <NotificationButton position="desktop" />
             {availableLanguages.length > 1 && (
               <LanguageDropdown
                 languages={availableLanguages}
@@ -82,11 +78,15 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                 onTranslateAllClick={onTranslateAllClick}
               />
             )}
-            <NotificationButton position="desktop" />
-            <IconButton
-              icon={<Settings size="xl" />}
-              onClick={onSettingsClick}
-              title="Settings"
+          </div>
+          <div className="page-header-unified-center">
+            <Link to="/" className="page-header-project-link">{projectName}</Link>
+          </div>
+          <div className="page-header-controls">
+            <WorkspaceHeaderDropdown
+              currentSubPage={currentSubPage}
+              onSubPageChange={onSubPageChange}
+              onHomeClick={() => navigate('/')}
             />
           </div>
         </div>
@@ -100,6 +100,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
             currentSubPage={currentSubPage}
             onSubPageChange={onSubPageChange}
             onHomeClick={() => navigate('/')}
+            align="left"
           />
 
           {showSaveIndicator && (

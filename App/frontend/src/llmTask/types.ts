@@ -33,7 +33,6 @@ export interface TaskSessionState<TInput = unknown, TResult = unknown> {
   label: string;
   createdAt: number;
   updatedAt: number;
-  isRead: boolean;
 
   contentParts: ContentPart[];
   functionCallProgress: FunctionCallProgress[];

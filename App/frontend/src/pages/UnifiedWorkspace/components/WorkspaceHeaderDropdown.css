@@ -1,26 +1,26 @@
 .workspace-page-selector {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-xs) var(--spacing-sm);
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
   background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-lg);
   color: var(--color-text-primary);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
   cursor: pointer;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-xs);
 }
 
 .workspace-page-selector:hover {
-  background: var(--color-bg-hover);
-  border-color: var(--color-border-hover);
+  transform: translateY(-2px);
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-medium);
+  box-shadow: var(--shadow-md);
 }
 
-.workspace-page-selector:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
+.workspace-page-selector.open {
+  border: 1px solid var(--color-brand-primary);
 }
 
 .workspace-page-selector-icon {
@@ -31,8 +31,9 @@
 }
 
 .workspace-page-selector-label {
-    font-size: var(--font-size-lg);
-    white-space: nowrap;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
 }
 
 .workspace-page-selector-chevron {
@@ -40,14 +41,23 @@
   transition: transform var(--transition-fast);
 }
 
-/* Active state in dropdown */
-.dropdown-item.active {
-  background: var(--color-bg-selected);
-  color: var(--color-primary);
+.workspace-page-selector-chevron.open {
+  transform: rotate(180deg);
 }
 
-.dropdown-item.active .dropdown-item-icon {
-  color: var(--color-primary);
+/* Workspace dropdown items - compact size */
+.workspace-dropdown-item {
+  font-size: var(--font-size-md);
+}
+
+/* Active state in dropdown */
+.workspace-dropdown-item.active {
+  background: var(--color-brand-primary-soft);
+  color: var(--color-brand-primary);
+}
+
+.workspace-dropdown-item.active .dropdown-item-icon {
+  color: var(--color-brand-primary);
 }
 
 /* Mobile adjustments */

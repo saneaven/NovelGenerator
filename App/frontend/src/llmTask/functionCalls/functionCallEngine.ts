@@ -1,5 +1,5 @@
 import type { FunctionCallMetadata } from '../../llm/requestTypes';
-import { useLLMTaskStore } from '../../store/llmTaskStore';
+import { useLLMSessionStore } from '../../store/llmSessionStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import {
   UnifiedApplicator,
@@ -60,7 +60,7 @@ export async function stageSessionEdits(params: {
   functionCalls: FunctionCallMetadata[];
 }): Promise<void> {
   const { sessionId, projectId, language, functionCalls } = params;
-  const store = useLLMTaskStore.getState();
+  const store = useLLMSessionStore.getState();
 
   const rawCalls: RawFunctionCall[] = functionCalls.map(fc => ({
     id: fc.id,
@@ -107,7 +107,7 @@ export async function applySessionEdits(params: {
   options: HandlerOptions;
 }): Promise<void> {
   const { sessionId, projectId, language, selections, options } = params;
-  const store = useLLMTaskStore.getState();
+  const store = useLLMSessionStore.getState();
   const session = store.getSessionById(sessionId);
   if (!session?.editCards || session.editCards.length === 0) return;
 
@@ -214,7 +214,7 @@ export async function applySessionEdits(params: {
 
 export function rejectAllSessionEdits(params: { sessionId: string; reason?: string }): void {
   const { sessionId, reason } = params;
-  const store = useLLMTaskStore.getState();
+  const store = useLLMSessionStore.getState();
   const session = store.getSessionById(sessionId);
   if (!session?.editCards || session.editCards.length === 0) return;
 

@@ -1,11 +1,11 @@
 /**
  * Agent Detail Modal
- * Renders modal for agent session details from llmTaskStore
+ * Renders modal for agent session details from llmSessionStore
  */
 
 import React, { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import { BaseModal } from '../components/BaseModal';
-import { useLLMTaskStore } from '../store/llmTaskStore';
+import { useLLMSessionStore } from '../store/llmSessionStore';
 import { useAgentUIStore } from '../store/agentUIStore';
 import { useSettingsStore } from '../store/settingsStore';
 import ThinkingDisplay from '../components/ThinkingDisplay';
@@ -29,11 +29,11 @@ export const LLMTaskModals: React.FC = () => {
   const detailSessionId = useAgentUIStore((s) => s.detailSessionId);
   const closeDetailModal = useAgentUIStore((s) => s.closeDetailModal);
 
-  const session = useLLMTaskStore((s) =>
+  const session = useLLMSessionStore((s) =>
     detailSessionId ? s.sessions[detailSessionId] : null
   );
-  const clearSession = useLLMTaskStore((s) => s.clearSession);
-  const cancelTask = useLLMTaskStore((s) => s.cancelTask);
+  const clearSession = useLLMSessionStore((s) => s.clearSession);
+  const cancelSession = useLLMSessionStore((s) => s.cancelSession);
   const mainLanguage = useSettingsStore((s) => s.settings.mainLanguage);
 
   const [outputExpanded, setOutputExpanded] = useState(false);
@@ -133,8 +133,8 @@ export const LLMTaskModals: React.FC = () => {
 
   const handleCancel = useCallback(() => {
     if (!session) return;
-    cancelTask(session.id);
-  }, [cancelTask, session?.id]);
+    cancelSession(session.id);
+  }, [cancelSession, session?.id]);
 
   const handleConfirm = useCallback(async (selections: Record<string, boolean>) => {
     if (!projectId || !session) return;

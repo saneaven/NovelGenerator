@@ -11,8 +11,8 @@
 import { useAgentStore } from '../store/agentStore';
 import { useAgentUIStore } from '../store/agentUIStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { useLLMTaskStore } from '../store/llmTaskStore';
-import { LLMTaskExecutor } from '../llmTask/LLMTaskExecutor';
+import { useLLMSessionStore } from '../store/llmSessionStore';
+import { startLLMSession } from '../llmSession';
 import { LLMTaskMode, type AgentWorkspacePromptContext, type AgentTranslationPromptContext } from '../llm';
 import type { OutputMode } from '../llm/types';
 import type { ContentPart } from '../llm/requestTypes';
@@ -25,7 +25,6 @@ import {
 } from '../llmTask/functionCalls/functionCallEngine';
 import type { HandlerOptions } from '../functionCall/applicator/types';
 import { generateTempId } from '../utils/tempId';
-import type { TaskSessionState } from '../llmTask';
 import { registerSessionNotification, updateSessionNotification } from '../llmTask/notificationHelpers';
 
 export interface AgentExecutorInput {
@@ -75,7 +74,7 @@ export const AgentExecutor = {
   async start(input: AgentExecutorInput, onSessionCreated?: (sessionId: string) => void): Promise<string> {
     const agentStore = useAgentStore.getState();
     const settingsStore = useSettingsStore.getState();
-    const llmTaskStore = useLLMTaskStore.getState();
+    const sessionStore = useLLMSessionStore.getState();
 
     const settings = settingsStore.settings;
     const agentConfig = settingsStore.getFunctionConfig('agent');
@@ -142,114 +141,88 @@ export const AgentExecutor = {
       contextObjectIds: input.contextObjectIds,
     };
 
-    // 3) Execute using LLMTaskExecutor
-    const executor = new LLMTaskExecutor();
-    const resultRef: { current: TaskSessionState | null } = { current: null };
-
-    try {
-      await executor.execute(
-        {
-          mode: llmMode,
-          projectId: input.projectId,
-          promptContext,
-          provider: agentConfig.provider,
-          providerConfig,
-          model: agentConfig.model,
-          temperature: agentConfig.temperature,
-          thinkingMode: agentConfig.advanced.thinkingMode as any,
-          thinkingConfig: agentConfig.advanced.thinkingConfig,
-          retryConfig: settings.retryConfig,
-        },
-        {
-          onComplete: (session) => {
-            resultRef.current = session;
-          },
-          onError: () => {
-            // Error status already set by LLMTask
-          },
-        },
-        history
-      );
-    } catch (error) {
-      // Session status already updated by LLMTask on error
-      const sessionId = resultRef.current?.id ?? '';
-      if (sessionId) {
-        const currentSession = llmTaskStore.getSessionById(sessionId);
-        if (currentSession) {
-          updateSessionNotification(sessionId, currentSession);
-        }
-      }
-      return sessionId;
-    }
-
-    if (!resultRef.current) {
-      throw new Error('LLM task completed without result');
-    }
-
-    // resultRef.current is now TaskSessionState directly
-    const session = resultRef.current;
-    const sessionId = session.id;
-
-    // Register notification now that we have sessionId
-    registerSessionNotification(session, {
-      onClick: () => useAgentUIStore.getState().openDetailModal(sessionId),
-      onDismiss: () => llmTaskStore.clearSession(sessionId),
+    // 3) Start session + stream via llmSessionStore
+    const handle = startLLMSession<AgentExecutorInput, AgentExecutorResult>({
+      kind: 'agent',
+      label: 'AI Response',
+      input,
+      mode: llmMode,
+      projectId: input.projectId,
+      promptContext,
+      provider: agentConfig.provider,
+      providerConfig,
+      model: agentConfig.model,
+      temperature: agentConfig.temperature,
+      thinkingMode: agentConfig.advanced.thinkingMode as any,
+      thinkingConfig: agentConfig.advanced.thinkingConfig,
+      retryConfig: settings.retryConfig,
+      history,
     });
+
+    const sessionId = handle.sessionId;
+
+    // Attach agent-specific result immediately (so AgentPanel can map streaming session -> message)
+    sessionStore.updateSession(sessionId, {
+      result: { agentId: input.agentId, assistantMessageId },
+    } as any);
+
+    const initialSession = sessionStore.getSessionById(sessionId);
+    if (initialSession) {
+      // Register notification now that we have sessionId
+      registerSessionNotification(initialSession, {
+        onClick: () => useAgentUIStore.getState().openDetailModal(sessionId),
+        onDismiss: () => sessionStore.clearSession(sessionId),
+      });
+    }
 
     // Notify caller of sessionId
     onSessionCreated?.(sessionId);
 
-    // Register abort controller for potential cancellation
-    llmTaskStore.registerAbortController(sessionId, { abort: () => executor.abort() } as AbortController);
+    void handle.done.then(async (finalSession) => {
+      const currentSession = useLLMSessionStore.getState().getSessionById(sessionId);
+      if (currentSession) updateSessionNotification(sessionId, currentSession);
 
-    // Update session with agent-specific result info
-    llmTaskStore.updateSession(sessionId, {
-      kind: 'agent',
-      label: 'AI Response',
-      result: { agentId: input.agentId, assistantMessageId },
-    } as any);
+      if (finalSession.status !== 'success') {
+        return;
+      }
 
-    // 4) Final update + backend sync
-    agentStore.updateMessageContentLocal(
-      input.projectId,
-      input.agentId,
-      assistantMessageId,
-      session.contentParts,
-      language,
-      session.thinkingDetails
-    );
-
-    try {
-      await agentStore.updateMessage(
+      // 4) Final update + backend sync
+      agentStore.updateMessageContentLocal(
         input.projectId,
         input.agentId,
         assistantMessageId,
-        session.contentParts,
+        finalSession.contentParts,
         language,
-        session.thinkingDetails
+        finalSession.thinkingDetails
       );
-    } catch (error) {
-      console.error('Failed to sync message to backend:', error);
-    }
 
-    // 5) Handle function calls
-    if (session.functionCalls.length > 0) {
-      await stageSessionEdits({
-        sessionId,
-        projectId: input.projectId,
-        language: settings.mainLanguage,
-        functionCalls: session.functionCalls,
-      });
-      // Sync to agentStore
-      await syncAgentFunctionCalls(sessionId);
-      llmTaskStore.updateSession(sessionId, { status: 'pending_confirmation' });
-      const currentSession = llmTaskStore.getSessionById(sessionId);
-      if (currentSession) updateSessionNotification(sessionId, currentSession);
-    } else {
-      llmTaskStore.updateSession(sessionId, { status: 'success' });
-      const currentSession = llmTaskStore.getSessionById(sessionId);
-      if (currentSession) updateSessionNotification(sessionId, currentSession);
-    }
+      try {
+        await agentStore.updateMessage(
+          input.projectId,
+          input.agentId,
+          assistantMessageId,
+          finalSession.contentParts,
+          language,
+          finalSession.thinkingDetails
+        );
+      } catch (error) {
+        console.error('Failed to sync message to backend:', error);
+      }
+
+      // 5) Handle function calls
+      if (finalSession.functionCalls.length > 0) {
+        await stageSessionEdits({
+          sessionId,
+          projectId: input.projectId,
+          language: settings.mainLanguage,
+          functionCalls: finalSession.functionCalls,
+        });
+        // Sync to agentStore
+        await syncAgentFunctionCalls(sessionId);
+        const updatedSession = useLLMSessionStore.getState().getSessionById(sessionId);
+        if (updatedSession) updateSessionNotification(sessionId, updatedSession);
+      }
+    });
 
     return sessionId;
   },
@@ -263,7 +236,7 @@ export const AgentExecutor = {
   async translate(input: AgentTranslationInput, onSessionCreated?: (sessionId: string) => void): Promise<string> {
     const agentStore = useAgentStore.getState();
     const settingsStore = useSettingsStore.getState();
-    const llmTaskStore = useLLMTaskStore.getState();
+    const sessionStore = useLLMSessionStore.getState();
 
     const translationConfig = settingsStore.getFunctionConfig('translation');
     const providerConfig = settingsStore.getProviderConfig(translationConfig.provider);
@@ -280,101 +253,83 @@ export const AgentExecutor = {
       enableCustomThinking: translationConfig.advanced.thinkingMode === 'custom',
     };
 
-    const executor = new LLMTaskExecutor();
-    const resultRef: { current: TaskSessionState | null } = { current: null };
-
-    try {
-      await executor.execute(
-        {
-          mode: LLMTaskMode.AGENT_TRANSLATION,
-          projectId: input.projectId,
-          promptContext,
-          provider: translationConfig.provider,
-          providerConfig,
-          model: translationConfig.model,
-          temperature: translationConfig.temperature,
-          thinkingMode: translationConfig.advanced.thinkingMode as any,
-          thinkingConfig: translationConfig.advanced.thinkingConfig,
-          retryConfig: settingsStore.settings.retryConfig,
-        },
-        {
-          onComplete: (session) => {
-            resultRef.current = session;
-          },
-          onError: () => {
-            // Error status already set by LLMTask
-          },
-        }
-      );
-    } catch (error) {
-      // Session status already updated by LLMTask on error
-      const sessionId = resultRef.current?.id ?? '';
-      if (sessionId) {
-        const currentSession = llmTaskStore.getSessionById(sessionId);
-        if (currentSession) {
-          updateSessionNotification(sessionId, currentSession);
-        }
-      }
-      return sessionId;
-    }
-
-    if (!resultRef.current) {
-      throw new Error('Translation task completed without result');
-    }
-
-    const session = resultRef.current;
-    const sessionId = session.id;
-
-    // Register notification now that we have sessionId
-    registerSessionNotification(session, {
-      onClick: () => useAgentUIStore.getState().openDetailModal(sessionId),
-      onDismiss: () => llmTaskStore.clearSession(sessionId),
+    const handle = startLLMSession<AgentTranslationInput, AgentTranslationResult>({
+      kind: 'agentTranslation',
+      label: 'Agent Translation',
+      input,
+      mode: LLMTaskMode.AGENT_TRANSLATION,
+      projectId: input.projectId,
+      promptContext,
+      provider: translationConfig.provider,
+      providerConfig,
+      model: translationConfig.model,
+      temperature: translationConfig.temperature,
+      thinkingMode: translationConfig.advanced.thinkingMode as any,
+      thinkingConfig: translationConfig.advanced.thinkingConfig,
+      retryConfig: settingsStore.settings.retryConfig,
     });
+
+    const sessionId = handle.sessionId;
+
+    const initialSession = sessionStore.getSessionById(sessionId);
+    if (initialSession) {
+      // Register notification now that we have sessionId
+      registerSessionNotification(initialSession, {
+        onClick: () => useAgentUIStore.getState().openDetailModal(sessionId),
+        onDismiss: () => sessionStore.clearSession(sessionId),
+      });
+    }
 
     // Notify caller of sessionId
     onSessionCreated?.(sessionId);
 
-    // Update session with translation-specific info
-    llmTaskStore.updateSession(sessionId, {
-      kind: 'agentTranslation',
-      label: 'Agent Translation',
-    } as any);
-
-    const translated = session.contentParts
-      .filter((p: ContentPart) => p.type === 'content')
-      .map((p: ContentPart) => p.text)
-      .join('')
-      .trim();
-
-    if (!translated) {
-      llmTaskStore.updateSession(sessionId, { status: 'error', error: 'AI did not generate a translation.' });
-      const currentSession = llmTaskStore.getSessionById(sessionId);
+    void handle.done.then(async (finalSession) => {
+      const currentSession = useLLMSessionStore.getState().getSessionById(sessionId);
       if (currentSession) updateSessionNotification(sessionId, currentSession);
-      return sessionId;
-    }
 
-    // Replace content in original content parts
-    const translatedContentParts = input.originalContentParts.map((part) => {
-      if (part.type === 'content') {
-        return { ...part, text: translated };
+      if (finalSession.status !== 'success') {
+        return;
       }
-      return part;
-    });
 
-    await agentStore.addTranslatedMessage(
-      input.projectId,
-      input.agentId,
-      input.messageId,
-      { contentParts: translatedContentParts },
-      input.targetLanguage
-    );
+      const translated = finalSession.contentParts
+        .filter((p: ContentPart) => p.type === 'content')
+        .map((p: ContentPart) => p.text)
+        .join('')
+        .trim();
 
-    llmTaskStore.updateSession(sessionId, {
-      status: 'success',
-      result: { agentId: input.agentId, messageId: input.messageId, targetLanguage: input.targetLanguage },
+      if (!translated) {
+        useLLMSessionStore.getState().updateSession(sessionId, {
+          status: 'error',
+          error: 'AI did not generate a translation.',
+        } as any);
+        const updated = useLLMSessionStore.getState().getSessionById(sessionId);
+        if (updated) updateSessionNotification(sessionId, updated);
+        return;
+      }
+
+      // Replace content in original content parts
+      const translatedContentParts = input.originalContentParts.map((part) => {
+        if (part.type === 'content') {
+          return { ...part, text: translated };
+        }
+        return part;
+      });
+
+      await agentStore.addTranslatedMessage(
+        input.projectId,
+        input.agentId,
+        input.messageId,
+        { contentParts: translatedContentParts },
+        input.targetLanguage
+      );
+
+      useLLMSessionStore.getState().updateSession(sessionId, {
+        status: 'success',
+        result: { agentId: input.agentId, messageId: input.messageId, targetLanguage: input.targetLanguage },
+      } as any);
+      const updated = useLLMSessionStore.getState().getSessionById(sessionId);
+      if (updated) updateSessionNotification(sessionId, updated);
     });
-    const currentSession = llmTaskStore.getSessionById(sessionId);
-    if (currentSession) updateSessionNotification(sessionId, currentSession);
 
     return sessionId;
   },
@@ -384,9 +339,9 @@ export const AgentExecutor = {
  * Sync function call status from editCards to agentStore message
  */
 async function syncAgentFunctionCalls(sessionId: string): Promise<void> {
-  const llmTaskStore = useLLMTaskStore.getState();
+  const sessionStore = useLLMSessionStore.getState();
   const agentStore = useAgentStore.getState();
-  const session = llmTaskStore.getSessionById(sessionId);
+  const session = sessionStore.getSessionById(sessionId);
 
   if (!session || session.kind !== 'agent') return;
 
@@ -434,7 +389,7 @@ export async function applyAgentEdits(params: {
   await syncAgentFunctionCalls(params.sessionId);
 
   // Update notification with new status
-  const session = useLLMTaskStore.getState().getSessionById(params.sessionId);
+  const session = useLLMSessionStore.getState().getSessionById(params.sessionId);
   if (session) {
     updateSessionNotification(params.sessionId, session);
   }
@@ -451,7 +406,7 @@ export async function rejectAllAgentEdits(params: {
   await syncAgentFunctionCalls(params.sessionId);
 
   // Update notification with new status
-  const session = useLLMTaskStore.getState().getSessionById(params.sessionId);
+  const session = useLLMSessionStore.getState().getSessionById(params.sessionId);
   if (session) {
     updateSessionNotification(params.sessionId, session);
   }

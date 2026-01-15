@@ -3,6 +3,7 @@ import type { ChatMessage, TokenUsage } from '../llm/requestTypes';
 import type { FunctionCallSchema } from '../functionCall';
 import type { StoredEditCard } from '../llmTask/uiTypes';
 import type { EditingTargets } from '../llmTaskJourney/types';
+import { useLLMSessionStore } from './llmSessionStore';
 
 /**
  * JourneyStore - Permanent storage for Journey data
@@ -42,8 +43,10 @@ export interface Journey<TInput = unknown, TResult = unknown> {
   functions?: FunctionCallSchema[];
   messages: ChatMessage[];  // All messages (user input + assistant outputs)
 
-  // Reference to llmTaskStore session for streaming data
-  sessionId?: string;
+  // Reference to current session for streaming data
+  activeSessionId?: string;
+  // Optional history of attempts (oldest -> newest)
+  sessionHistory?: string[];
 
   // Function call confirmation
   editCards?: StoredEditCard[];
@@ -63,11 +66,7 @@ export interface Journey<TInput = unknown, TResult = unknown> {
   label: string;
   createdAt: number;
   updatedAt: number;
-  isRead: boolean;
 }
-
-// AbortController registry (outside Zustand store to avoid serialization issues)
-const abortControllers = new Map<string, AbortController>();
 
 type AnyJourney = Journey<any, any>;
 
@@ -88,16 +87,9 @@ interface JourneyStore {
   // Query helpers
   getJourneyById: (id: string) => AnyJourney | undefined;
   getActiveJourneys: () => AnyJourney[];
-  hasUnread: () => boolean;
   hasRunning: () => boolean;
 
-  // Notification actions
-  markAsRead: (id: string) => void;
-  markAllAsRead: () => void;
-
-  // Abort controller management
-  registerAbortController: (id: string, controller: AbortController) => void;
-  unregisterAbortController: (id: string) => void;
+  // Cancellation (delegates to activeSessionId)
   cancelJourney: (id: string) => void;
 
   // Message editing
@@ -163,13 +155,6 @@ export const useJourneyStore = create<JourneyStore>((set, get) => ({
       .sort((a, b) => b.createdAt - a.createdAt);
   },
 
-  hasUnread: () => {
-    const { journeys } = get();
-    return Object.values(journeys).some(
-      (j) => j !== undefined && j.status !== 'idle' && !j.isRead
-    );
-  },
-
   hasRunning: () => {
     const { journeys } = get();
     return Object.values(journeys).some(
@@ -177,47 +162,16 @@ export const useJourneyStore = create<JourneyStore>((set, get) => ({
     );
   },
 
-  // Notification actions
-  markAsRead: (id) =>
-    set((state) => {
-      const existing = state.journeys[id];
-      if (!existing) return state;
-      return {
-        journeys: {
-          ...state.journeys,
-          [id]: { ...existing, isRead: true },
-        },
-      };
-    }),
-
-  markAllAsRead: () =>
-    set((state) => {
-      const updated: Record<string, AnyJourney | undefined> = {};
-      for (const [id, journey] of Object.entries(state.journeys)) {
-        if (journey) {
-          updated[id] = { ...journey, isRead: true };
-        }
-      }
-      return { journeys: updated };
-    }),
-
-  // Abort controller management
-  registerAbortController: (id, controller) => {
-    abortControllers.set(id, controller);
-  },
-
-  unregisterAbortController: (id) => {
-    abortControllers.delete(id);
-  },
-
+  // Cancellation (delegates to activeSessionId)
   cancelJourney: (id) => {
-    // 1. Abort the request
-    const controller = abortControllers.get(id);
-    if (controller) {
-      controller.abort();
-      abortControllers.delete(id);
+    // 1) Abort the current session (if any)
+    const journey = get().journeys[id];
+    const sessionId = journey?.activeSessionId;
+    if (sessionId) {
+      useLLMSessionStore.getState().cancelSession(sessionId);
     }
-    // 2. Update status to cancelled
+
+    // 2) Update status to cancelled
     set((state) => {
       const existing = state.journeys[id];
       if (!existing) return state;

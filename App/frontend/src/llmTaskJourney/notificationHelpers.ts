@@ -65,6 +65,7 @@ export function registerJourneyNotification(
   journey: Journey,
   handlers: NotificationHandlers
 ): void {
+  const existing = useNotificationStore.getState().getNotification(journey.id);
   useNotificationStore.getState().register(
     {
       id: journey.id,
@@ -73,7 +74,7 @@ export function registerJourneyNotification(
       status: mapStatus(journey.status),
       createdAt: journey.createdAt,
       updatedAt: journey.updatedAt,
-      isRead: journey.isRead,
+      isRead: existing?.isRead ?? false,
       progress: journey.progress
         ? {
             current: journey.progress.current,
@@ -100,7 +101,6 @@ export function updateJourneyNotification(
     message: getMessage(journey),
     status: mapStatus(journey.status),
     updatedAt: journey.updatedAt,
-    isRead: journey.isRead,
     progress: journey.progress
       ? {
           current: journey.progress.current,

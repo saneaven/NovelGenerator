@@ -30,7 +30,7 @@ import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
-import { useLLMTaskStore } from '../../../store/llmTaskStore';
+import { useLLMSessionStore } from '../../../store/llmSessionStore';
 import AIEditModal from '../../../components/AIEditModal';
 import TranslationModal from '../../../components/TranslationModal';
 import VersionHistoryModal from '../../../components/VersionHistoryModal';
@@ -138,7 +138,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const editorRef = useRef<RichTextEditorRef>(null);
 
-  const aiEditSession = useLLMTaskStore((state) =>
+  const aiEditSession = useLLMSessionStore((state) =>
     aiEditSessionId ? state.sessions[aiEditSessionId] : undefined
   );
 

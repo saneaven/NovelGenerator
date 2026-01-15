@@ -1,7 +1,6 @@
-import type { ContentPart, FunctionCallProgress } from './requestTypes';
+import type { ContentPart, FunctionCallMetadata, FunctionCallProgress, TokenUsage } from './requestTypes';
 import type { ProviderConfig, ProviderType, ThinkingConfig, RetryConfig, CustomApiFormat } from '../store/settingsStore';
 import type { FunctionCallSchema } from '../functionCall';
-import type { TaskSessionState } from '../llmTask/types';
 
 /**
  * LLM Task Mode - determines which prompts and functions to use
@@ -316,17 +315,23 @@ export interface LLMTaskConfig {
 }
 
 /**
- * LLM Task result - now TaskSessionState for single source of truth
+ * LLM Task result - pure execution output (no store coupling)
  */
-export type LLMTaskResult = TaskSessionState;
+export type LLMTaskResult = {
+  contentParts: ContentPart[];
+  functionCalls: FunctionCallMetadata[];
+  thinkingDetails?: any[];
+  usage?: TokenUsage;
+  warning?: string;
+  provider: ProviderType;
+  model: string;
+};
 
 /**
  * LLM Task callbacks
  */
 export interface LLMTaskCallbacks {
   onUpdate: (parts: ContentPart[]) => void;
-  onComplete: (result: LLMTaskResult) => void | Promise<void>;
-  onError: (error: Error) => void;
   onFunctionProgress?: (progress: FunctionCallProgress[]) => void;
 }
 

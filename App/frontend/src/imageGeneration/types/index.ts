@@ -227,8 +227,6 @@ export interface ImageTaskState {
     };
     createdAt: number;
     updatedAt: number;
-    // Notification fields
-    isRead: boolean;
     retryContext?: ImageRetryContext;
 }
 

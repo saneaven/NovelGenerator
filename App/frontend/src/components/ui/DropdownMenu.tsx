@@ -6,14 +6,20 @@ interface DropdownMenuProps {
   trigger: React.ReactNode;
   children: React.ReactNode;
   align?: 'left' | 'right';
+  onOpenChange?: (isOpen: boolean) => void;
 }
 
 export const DropdownMenu: React.FC<DropdownMenuProps> = ({
   trigger,
   children,
   align = 'right',
+  onOpenChange,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    onOpenChange?.(isOpen);
+  }, [isOpen, onOpenChange]);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const triggerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);

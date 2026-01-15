@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useSettingsStore } from '../../store/settingsStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import { useLLMTaskStore } from '../../store/llmTaskStore';
+import { useLLMSessionStore } from '../../store/llmSessionStore';
 import {
     useImageGeneration,
     PROVIDER_LABELS,
@@ -289,7 +289,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     }, [provider]);
 
     // Subscribe to streaming session from the store
-    const streamingSession = useLLMTaskStore((state) =>
+    const streamingSession = useLLMSessionStore((state) =>
         streamingSessionId ? state.sessions[streamingSessionId] : undefined
     );
 

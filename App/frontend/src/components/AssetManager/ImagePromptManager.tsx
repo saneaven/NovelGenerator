@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import { useLLMTaskStore } from '../../store/llmTaskStore';
+import { useLLMSessionStore } from '../../store/llmSessionStore';
 import UnifiedImagePromptModal, { type PromptMode } from '../ImageGeneration/UnifiedImagePromptModal';
 import ThinkingDisplay from '../ThinkingDisplay';
 import type { ObjectType } from '../../types/unifiedObject';
@@ -44,7 +44,7 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
     const [streamingError, setStreamingError] = useState<string | null>(null);
 
     // Subscribe to streaming session from the store
-    const streamingSession = useLLMTaskStore((state) =>
+    const streamingSession = useLLMSessionStore((state) =>
         streamingSessionId ? state.sessions[streamingSessionId] : undefined
     );
 

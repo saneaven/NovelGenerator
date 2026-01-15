@@ -9,13 +9,12 @@ import type {
 import { streamLLM } from './llmService';
 import { useSettingsStore, type AIFunctionType } from '../store/settingsStore';
 import { useLLMLogStore } from '../store/llmLogStore';
-import { useLLMTaskStore } from '../store/llmTaskStore';
-import { generateTempId } from '../utils/tempId';
 import { FunctionCallStreamTracker } from '../agent/streaming/FunctionCallStreamTracker';
 import { PromptManager } from './PromptManager';
 import type {
   LLMTaskConfig,
   LLMTaskCallbacks,
+  LLMTaskResult,
   OutputMode,
   PromptBundle,
   LLMTaskModeType,
@@ -56,7 +55,6 @@ export class LLMTask {
   private isRunning = false;
   private functionTracker: FunctionCallStreamTracker | null = null;
   private pendingProgress: FunctionCallProgress[] | null = null;
-  private sessionId: string | null = null;
 
   // Interval-based smoothing for consistent update cadence
   private updateIntervalId: number | null = null;
@@ -73,10 +71,10 @@ export class LLMTask {
    * Run the LLM task with the given message history
    * @param history - Optional message history (AgentManager passes this, modals don't)
    */
-  async run(history: ChatMessage[] = []): Promise<void> {
+  async run(history: ChatMessage[] = []): Promise<LLMTaskResult> {
     if (this.isRunning) {
       console.warn('LLMTask: Already running');
-      return;
+      throw new Error('LLMTask: Already running');
     }
 
     this.isRunning = true;
@@ -88,23 +86,6 @@ export class LLMTask {
     const isLoggingEnabled = settingsStore.settings.llmLoggingEnabled;
     let logEntryId: string | undefined;
     const requestStartTime = Date.now();
-
-    // Create session in llmTaskStore for streaming tracking
-    this.sessionId = `llm-${generateTempId()}`;
-    const llmTaskStoreRef = useLLMTaskStore.getState();
-    llmTaskStoreRef.createSession({
-      id: this.sessionId,
-      kind: this.config.mode as any,
-      input: this.config.promptContext,
-      status: 'running',
-      label: this.config.mode,
-      createdAt: requestStartTime,
-      updatedAt: requestStartTime,
-      isRead: false,
-      contentParts: [],
-      functionCallProgress: [],
-      functionCalls: [],
-    });
 
     try {
       // 1. Get provider/model config (from settings or overrides)
@@ -122,11 +103,6 @@ export class LLMTask {
       const thinkingConfig = this.config.thinkingConfig ?? functionConfig.advanced.thinkingConfig;
       const customApiFormat = this.config.customApiFormat ?? functionConfig.advanced.customApiFormat;
       const retryConfig = this.config.retryConfig ?? settings.retryConfig;
-
-      // Set provider/model early so UI can display during streaming and on error
-      if (this.sessionId) {
-        useLLMTaskStore.getState().updateSession(this.sessionId, { provider, model });
-      }
 
       // 2. Generate prompt bundle
       const promptBundle = await PromptManager.generatePromptBundle(
@@ -219,10 +195,6 @@ export class LLMTask {
                   { type: currentPartType, text: currentBuffer },
                 ];
                 this.callbacks.onUpdate(currentParts);
-                // Update llmTaskStore for UI subscribers
-                if (this.sessionId) {
-                  useLLMTaskStore.getState().setContentParts(this.sessionId, currentParts);
-                }
               }
             }
             // Update function call progress if pending
@@ -230,10 +202,6 @@ export class LLMTask {
               this.pendingProgressUpdate = false;
               if (this.callbacks.onFunctionProgress) {
                 this.callbacks.onFunctionProgress(this.pendingProgress);
-              }
-              // Update llmTaskStore for UI subscribers
-              if (this.sessionId) {
-                useLLMTaskStore.getState().setFunctionCallProgress(this.sessionId, this.pendingProgress);
               }
             }
           }, this.UPDATE_INTERVAL_MS);
@@ -381,18 +349,7 @@ export class LLMTask {
         arguments: this.parseArguments(fc.function?.arguments),
         status: 'pending',
       }));
-      // Update session with final data (provider/model already set earlier)
-      const llmTaskStoreRef = useLLMTaskStore.getState();
-      if (this.sessionId) {
-        llmTaskStoreRef.updateSession(this.sessionId, {
-          status: 'success',
-          contentParts: [...this.pendingParts],
-          functionCalls,
-          thinkingDetails: accumulatedThinkingDetails,
-          usage: capturedUsage,
-        });
-      }
-
+      
       // Log streaming completion
       console.log('✅ LLM Streaming Complete:', {
         success: true,
@@ -414,9 +371,14 @@ export class LLMTask {
         });
       }
 
-      // Return session as result
-      const result = llmTaskStoreRef.getSessionById(this.sessionId!)!;
-      await this.callbacks.onComplete(result);
+      return {
+        contentParts: [...this.pendingParts],
+        functionCalls,
+        thinkingDetails: accumulatedThinkingDetails,
+        usage: capturedUsage,
+        provider,
+        model,
+      };
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
 
@@ -436,14 +398,14 @@ export class LLMTask {
         });
       }
 
-      // Update session status in llmTaskStore
-      if (this.sessionId) {
-        useLLMTaskStore.getState().updateSession(this.sessionId, { status: 'error', error: err.message });
-      }
-
-      this.callbacks.onError(err);
       throw err;
     } finally {
+      if (this.updateIntervalId !== null) {
+        clearInterval(this.updateIntervalId);
+        this.updateIntervalId = null;
+      }
+      this.pendingContentUpdate = false;
+      this.pendingProgressUpdate = false;
       this.isRunning = false;
     }
   }

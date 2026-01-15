@@ -1,6 +1,6 @@
 import type { ChatMessage, ContentPart, Role } from '../llm/requestTypes';
 import type { FunctionCallSchema } from '../functionCall';
-import type { ExecutorConfig } from '../llmTask/LLMTaskExecutor';
+import type { LLMRunConfig } from '../llmSession';
 import { generateTempId } from '../utils/tempId';
 
 export type EditingTargets =
@@ -107,9 +107,8 @@ export interface JourneySpec<TInput, TResult = void> {
   buildEditingTargets: (input: TInput) => EditingTargets;
 
   /** Build LLM executor config for each attempt */
-  buildLLMConfig: (input: TInput, journey: LLMTaskJourney) => Omit<ExecutorConfig, 'projectId'> & { projectId: string };
+  buildLLMConfig: (input: TInput, journey: LLMTaskJourney) => LLMRunConfig;
 
   /** Handle result when outputMode is 'raw_output' */
   handleRawOutput?: (input: TInput, journey: LLMTaskJourney, text: string) => Promise<TResult>;
 }
-

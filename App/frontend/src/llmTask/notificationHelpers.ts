@@ -65,6 +65,7 @@ export function registerSessionNotification(
   session: TaskSessionState,
   handlers: NotificationHandlers
 ): void {
+  const existing = useNotificationStore.getState().getNotification(session.id);
   useNotificationStore.getState().register(
     {
       id: session.id,
@@ -73,7 +74,7 @@ export function registerSessionNotification(
       status: mapStatus(session.status),
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
-      isRead: session.isRead,
+      isRead: existing?.isRead ?? false,
       progress: session.progress
         ? {
             current: session.progress.current,
@@ -100,7 +101,6 @@ export function updateSessionNotification(
     message: getMessage(session),
     status: mapStatus(session.status),
     updatedAt: session.updatedAt,
-    isRead: session.isRead,
     progress: session.progress
       ? {
           current: session.progress.current,

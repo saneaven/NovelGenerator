@@ -4,7 +4,7 @@ import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import type { ObjectType, ChapterObject } from '../types/unifiedObject';
 import { JourneyRuntime } from '../llmTaskJourney';
-import { Expand, Collapse, Document } from './icons';
+import { Document } from './icons';
 import { ObjectPicker } from './ObjectPicker';
 import { TextButton } from './TextButton';
 import ToggleSwitch from './ToggleSwitch';
@@ -53,7 +53,6 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   const [selectedContextIds, setSelectedContextIds] = useState<string[]>(
     defaultSelectedContextIds ?? []
   );
-  const [isContextExpanded, setIsContextExpanded] = useState(false);
   const [pickerLoading, setPickerLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rawMode, setRawMode] = useState(false);
@@ -137,7 +136,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
       return;
     }
 
-    const sessionId = JourneyRuntime.start('aiEdit', {
+    const { sessionId } = JourneyRuntime.start('aiEdit', {
       projectId,
       category,
       targetId,
@@ -182,39 +181,27 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
           </p>
         </div>
 
-        <div className="form-group context-options">
-          <div
-            className="context-options-header"
-            onClick={() => setIsContextExpanded(!isContextExpanded)}
-          >
-            <span className={`context-options-toggle ${isContextExpanded ? 'expanded' : ''}`}>
-              {isContextExpanded ? <Collapse size="xs" /> : <Expand size="xs" />}
-            </span>
-            <label>Context Inclusion Options</label>
+        <div className="form-group">
+          <label>Context Options</label>
+          <div className="context-selector">
+            <ObjectPicker
+              mode="all"
+              selectionMode="multi"
+              selectedIds={selectedContextIds}
+              onChange={handleContextChange}
+              projectId={projectId}
+              language={mainLanguage}
+              excludedIds={excludedIds}
+              showSearch={true}
+              maxHeight="300px"
+              emptyMessage="No context objects available"
+              onLoadComplete={handlePickerLoadComplete}
+              selectAllOnLoad={!defaultSelectedContextIds?.length}
+            />
           </div>
-          {isContextExpanded && (
-            <>
-              <div className="context-selector">
-                <ObjectPicker
-                  mode="all"
-                  selectionMode="multi"
-                  selectedIds={selectedContextIds}
-                  onChange={handleContextChange}
-                  projectId={projectId}
-                  language={mainLanguage}
-                  excludedIds={excludedIds}
-                  showSearch={true}
-                  maxHeight="300px"
-                  emptyMessage="No context objects available"
-                  onLoadComplete={handlePickerLoadComplete}
-                  selectAllOnLoad={!defaultSelectedContextIds?.length}
-                />
-              </div>
-              <p className="context-help">
-                Select individual objects to include as context for the AI.
-              </p>
-            </>
-          )}
+          <p className="context-help">
+            Select individual objects to include as context for the AI.
+          </p>
         </div>
       </form>
     );

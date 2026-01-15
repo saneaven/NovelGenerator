@@ -46,34 +46,27 @@ function mergeFunctionCallProgress(
   return order.map((key) => map.get(key)!).filter(Boolean);
 }
 
-interface LLMTaskStore {
+interface LLMSessionStore {
   sessions: Record<string, AnySession | undefined>;
 
   // Core session management
   createSession: (session: AnySession) => void;
   updateSession: (id: string, partial: Partial<Omit<AnySession, 'id' | 'kind' | 'input'>>) => void;
   setContentParts: (id: string, contentParts: ContentPart[]) => void;
-  setFunctionCallProgress: (id: string, progress: FunctionCallProgress[]) => void;
   clearSession: (id: string) => void;
 
   // Query helpers
   getActiveSessions: () => AnySession[];
   getSessionById: (id: string) => AnySession | undefined;
-  hasUnread: () => boolean;
-  hasRunningTasks: () => boolean;
-
-  // Notification actions
-  markAllAsRead: () => void;
-  clearNotification: (id: string) => void;
-  clearAllNotifications: () => void;
+  hasRunningSessions: () => boolean;
 
   // Abort controller management
   registerAbortController: (id: string, controller: AbortController) => void;
   unregisterAbortController: (id: string) => void;
-  cancelTask: (id: string) => void;
+  cancelSession: (id: string) => void;
 }
 
-export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
+export const useLLMSessionStore = create<LLMSessionStore>((set, get) => ({
   sessions: {},
 
   createSession: (session) =>
@@ -83,14 +76,17 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
         [session.id]: session,
       },
     })),
+
   updateSession: (id, partial) =>
     set((state) => {
       const existing = state.sessions[id];
       if (!existing) return state;
+
       const mergedProgress =
         partial.functionCallProgress !== undefined
           ? mergeFunctionCallProgress(existing.functionCallProgress, partial.functionCallProgress)
           : existing.functionCallProgress;
+
       return {
         sessions: {
           ...state.sessions,
@@ -103,6 +99,7 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
         },
       };
     }),
+
   setContentParts: (id, contentParts) =>
     set((state) => {
       const existing = state.sessions[id];
@@ -118,21 +115,7 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
         },
       };
     }),
-  setFunctionCallProgress: (id, progress) =>
-    set((state) => {
-      const existing = state.sessions[id];
-      if (!existing) return state;
-      return {
-        sessions: {
-          ...state.sessions,
-          [id]: {
-            ...existing,
-            functionCallProgress: progress,
-            updatedAt: Date.now(),
-          },
-        },
-      };
-    }),
+
   clearSession: (id) =>
     set((state) => {
       if (!state.sessions[id]) {
@@ -151,50 +134,13 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
       .sort((a, b) => b.createdAt - a.createdAt);
   },
 
-  getSessionById: (id) => {
-    return get().sessions[id];
-  },
+  getSessionById: (id) => get().sessions[id],
 
-  hasUnread: () => {
-    const { sessions } = get();
-    return Object.values(sessions).some(
-      (s) => s !== undefined && s.status !== 'idle' && !s.isRead
-    );
-  },
-
-  hasRunningTasks: () => {
+  hasRunningSessions: () => {
     const { sessions } = get();
     return Object.values(sessions).some(
       (s) => s !== undefined && s.status === 'running'
     );
-  },
-
-  // Notification actions
-  markAllAsRead: () => {
-    set((state) => {
-      const updated: Record<string, AnySession | undefined> = {};
-      for (const [id, session] of Object.entries(state.sessions)) {
-        if (session) {
-          updated[id] = { ...session, isRead: true };
-        }
-      }
-      return { sessions: updated };
-    });
-  },
-
-  clearNotification: (id) => {
-    set((state) => {
-      if (!state.sessions[id]) {
-        return state;
-      }
-      const next = { ...state.sessions };
-      delete next[id];
-      return { sessions: next };
-    });
-  },
-
-  clearAllNotifications: () => {
-    set({ sessions: {} });
   },
 
   // Abort controller management
@@ -206,14 +152,15 @@ export const useLLMTaskStore = create<LLMTaskStore>((set, get) => ({
     abortControllers.delete(id);
   },
 
-  cancelTask: (id) => {
-    // 1. Abort the request
+  cancelSession: (id) => {
+    // 1) Abort the request
     const controller = abortControllers.get(id);
     if (controller) {
       controller.abort();
       abortControllers.delete(id);
     }
-    // 2. Update status to cancelled
+
+    // 2) Update status to cancelled
     set((state) => {
       const existing = state.sessions[id];
       if (!existing) return state;

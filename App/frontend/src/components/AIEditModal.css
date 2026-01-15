@@ -59,14 +59,7 @@
   color: var(--color-text-muted);
 }
 
-/* Context Options - Card-based Checkboxes */
-.context-options {
-  background: var(--color-surface-elevated);
-  padding: var(--spacing-xl);
-  border-radius: var(--border-radius-lg);
-  border: 2px solid var(--color-border-default);
-  box-shadow: var(--shadow-sm);
-}
+/* Context Options */
 
 .checkbox-group {
   display: grid;
@@ -151,36 +144,6 @@
   box-shadow: none;
 }
 
-/* Context Options Header - Collapsible */
-.context-options-header {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-md) 0;
-  cursor: pointer;
-  user-select: none;
-}
-
-.context-options-header:hover {
-  opacity: 0.8;
-}
-
-.context-options-header label {
-  cursor: pointer;
-  margin: 0;
-}
-
-.context-options-toggle {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  width: 16px;
-  text-align: center;
-  transition: transform 0.2s ease;
-}
-
-.context-options-toggle.expanded {
-  transform: rotate(0deg);
-}
 
 /* Context Selector - Object-based selection */
 .context-selector {

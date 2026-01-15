@@ -60,6 +60,7 @@ export function registerImageNotification(
   task: ImageTaskState,
   handlers: NotificationHandlers
 ): void {
+  const existing = useNotificationStore.getState().getNotification(task.id);
   const thumbnailUrl =
     task.status === 'success' && task.result?.thumbnailUrl
       ? `${API_BASE_URL}${task.result.thumbnailUrl}`
@@ -73,7 +74,7 @@ export function registerImageNotification(
       status: mapStatus(task.status),
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
-      isRead: task.isRead,
+      isRead: existing?.isRead ?? false,
       progress: task.progress
         ? {
             current: 0,
@@ -107,7 +108,6 @@ export function updateImageNotification(
     message: getMessage(task),
     status: mapStatus(task.status),
     updatedAt: task.updatedAt,
-    isRead: task.isRead,
     progress: task.progress
       ? {
           current: 0,

@@ -12,7 +12,7 @@ import { useAgentUIStore } from '../../store/agentUIStore';
 import { useSidebarStore } from '../../store/sidebarStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import { useLLMTaskStore } from '../../store/llmTaskStore';
+import { useLLMSessionStore } from '../../store/llmSessionStore';
 import { AgentExecutor } from '../AgentExecutor';
 import type { AgentOrchestrationConfig, AgentOrchestrationReturn, AgentHandlersReturn, ContextIdState } from './types';
 
@@ -85,7 +85,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
   // ============================================================================
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const activeSessionStatus = useLLMTaskStore(
+  const activeSessionStatus = useLLMSessionStore(
     (state) => (activeSessionId ? state.sessions[activeSessionId]?.status : undefined)
   );
 
@@ -161,7 +161,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
 
   const handleStop = useCallback(() => {
     if (!activeSessionId) return;
-    useLLMTaskStore.getState().cancelTask(activeSessionId);
+    useLLMSessionStore.getState().cancelSession(activeSessionId);
   }, [activeSessionId]);
 
   const adjustTextareaHeight = useCallback(() => {
@@ -228,4 +228,3 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     contextIds,
   };
 }
-

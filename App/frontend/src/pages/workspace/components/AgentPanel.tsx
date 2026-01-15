@@ -8,7 +8,7 @@ import { useProjectStore } from '../../../store/projectStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
-import { useLLMTaskStore } from '../../../store/llmTaskStore';
+import { useLLMSessionStore } from '../../../store/llmSessionStore';
 import ObjectPicker from '../../../components/ObjectPicker/ObjectPicker';
 import AgentSidebar from '../../../components/AgentSidebar';
 import { DefaultDisplayProcessor } from '../../../agent/processors/DisplayProcessor';
@@ -257,7 +257,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     const storedMessages = useMemo(() => selectedAgent?.messages ?? [], [selectedAgent]);
 
     // Only subscribe to agent sessions for this project (reduces re-renders from other sessions)
-    const llmSessions = useLLMTaskStore((state) => state.sessions);
+    const llmSessions = useLLMSessionStore((state) => state.sessions);
     const agentSessionByMessageId = useMemo(() => {
         const map: Record<string, any> = {};
         for (const session of Object.values(llmSessions)) {

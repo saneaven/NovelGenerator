@@ -79,8 +79,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   // Watch journey for status/result (activeSessionId is journeyId)
-  // Note: If streaming display is needed, import useLLMTaskStore and watch
-  // activeJourney?.sessionId to get contentParts from llmTaskStore session
+  // Note: Streaming display should come from llmSessionStore using the returned sessionId.
   const activeJourney = useJourneyStore((state) =>
     activeSessionId ? state.journeys[activeSessionId] : undefined
   );
@@ -178,7 +177,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
     }
 
     const kind = contextType === 'scene' ? 'sceneImage' : 'imagePrompt';
-    const sessionId = JourneyRuntime.start(kind, {
+    const { journeyId, sessionId } = JourneyRuntime.start(kind, {
       projectId: currentProjectId,
       promptMode,
       contextType,
@@ -190,7 +189,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
       selectedObjectIds,
     });
 
-    setActiveSessionId(sessionId);
+    setActiveSessionId(journeyId);
     onStreamingStart?.(sessionId, promptMode);
     onClose();
   }, [

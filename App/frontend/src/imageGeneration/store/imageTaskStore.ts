@@ -26,14 +26,6 @@ interface ImageTaskStore {
     getTask: (id: string) => ImageTaskState | undefined;
     getActiveTasks: () => ImageTaskState[];
     isAnyTaskGenerating: () => boolean;
-
-    // Notification support
-    getNotifiableTasks: () => ImageTaskState[];
-    markAsRead: (id: string) => void;
-    markAllAsRead: () => void;
-    hasUnread: () => boolean;
-    hasRunningTasks: () => boolean;
-    clearAllTasks: () => void;
 }
 
 export const useImageTaskStore = create<ImageTaskStore>()((set, get) => ({
@@ -55,7 +47,6 @@ export const useImageTaskStore = create<ImageTaskStore>()((set, get) => ({
                     label,
                     createdAt: Date.now(),
                     updatedAt: Date.now(),
-                    isRead: false,
                     retryContext,
                 },
             },
@@ -151,55 +142,6 @@ export const useImageTaskStore = create<ImageTaskStore>()((set, get) => ({
                 t !== undefined &&
                 (t.status === 'preparing' || t.status === 'generating' || t.status === 'processing')
         ),
-
-    // Notification support methods
-    getNotifiableTasks: () =>
-        Object.values(get().tasks)
-            .filter(
-                (t): t is ImageTaskState =>
-                    t !== undefined && t.status !== 'idle'
-            )
-            .sort((a, b) => b.createdAt - a.createdAt),
-
-    markAsRead: (id) =>
-        set((state) => {
-            const task = state.tasks[id];
-            if (!task) return state;
-            return {
-                tasks: {
-                    ...state.tasks,
-                    [id]: {
-                        ...task,
-                        isRead: true,
-                    },
-                },
-            };
-        }),
-
-    markAllAsRead: () =>
-        set((state) => {
-            const updated: Record<string, ImageTaskState> = {};
-            for (const [id, task] of Object.entries(state.tasks)) {
-                if (task) {
-                    updated[id] = { ...task, isRead: true };
-                }
-            }
-            return { tasks: updated };
-        }),
-
-    hasUnread: () =>
-        Object.values(get().tasks).some(
-            (t) => t !== undefined && t.status !== 'idle' && !t.isRead
-        ),
-
-    hasRunningTasks: () =>
-        Object.values(get().tasks).some(
-            (t) =>
-                t !== undefined &&
-                (t.status === 'preparing' || t.status === 'generating' || t.status === 'processing')
-        ),
-
-    clearAllTasks: () => set({ tasks: {} }),
 }));
 
 export default useImageTaskStore;

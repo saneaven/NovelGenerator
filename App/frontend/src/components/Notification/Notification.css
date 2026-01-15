@@ -18,7 +18,7 @@
 
 .notification-button-wrapper--desktop .notification-panel-container {
   top: calc(100% + var(--spacing-sm));
-  right: 0;
+  left: 0;
 }
 
 .notification-button-wrapper--mobile .notification-panel-container {

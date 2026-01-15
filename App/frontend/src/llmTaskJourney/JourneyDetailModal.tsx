@@ -7,7 +7,7 @@ import React, { useMemo, useCallback, useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'motion/react';
 import { BaseModal } from '../components/BaseModal';
 import { useJourneyStore, type Journey } from '../store/journeyStore';
-import { useLLMTaskStore } from '../store/llmTaskStore';
+import { useLLMSessionStore } from '../store/llmSessionStore';
 import { useSettingsStore } from '../store/settingsStore';
 import ThinkingDisplay from '../components/ThinkingDisplay';
 import NotificationProgressBar from '../components/Notification/NotificationProgressBar';
@@ -54,9 +54,9 @@ export const JourneyDetailModal: React.FC = () => {
     detailJourneyId ? s.journeys[detailJourneyId] : null
   );
 
-  // Get streaming data from llmTaskStore via journey.sessionId
-  const session = useLLMTaskStore((s) =>
-    journey?.sessionId ? s.sessions[journey.sessionId] : undefined
+  // Get streaming data from llmSessionStore via journey.activeSessionId
+  const session = useLLMSessionStore((s) =>
+    journey?.activeSessionId ? s.sessions[journey.activeSessionId] : undefined
   );
 
   const mainLanguage = useSettingsStore((s) => s.settings.mainLanguage);
@@ -136,10 +136,15 @@ export const JourneyDetailModal: React.FC = () => {
 
   const handleDismiss = useCallback(() => {
     if (detailJourneyId) {
-      // Clear llmTaskStore session if exists
+      // Clear llmSessionStore sessions if exist
       const j = useJourneyStore.getState().getJourneyById(detailJourneyId);
-      if (j?.sessionId) {
-        useLLMTaskStore.getState().clearSession(j.sessionId);
+      const sessionIds = new Set<string>();
+      if (j?.activeSessionId) sessionIds.add(j.activeSessionId);
+      for (const id of j?.sessionHistory ?? []) {
+        sessionIds.add(id);
+      }
+      for (const id of sessionIds) {
+        useLLMSessionStore.getState().clearSession(id);
       }
       clearJourney(detailJourneyId);
     }
@@ -290,13 +295,16 @@ export const JourneyDetailModal: React.FC = () => {
               <div className="llm-task-modal-no-content">No messages yet.</div>
             )}
             {journey.messages.map((m) => {
-              const text = m.contentParts
+              const isLastAssistant = m.id === lastAssistantMessageId;
+              const displayContentParts =
+                isLastAssistant && isStreamingStatus ? (session?.contentParts ?? m.contentParts) : m.contentParts;
+
+              const text = displayContentParts
                 .filter(p => p.type === 'content')
                 .map(p => p.text)
                 .join('')
                 .trim();
 
-              const isLastAssistant = m.id === lastAssistantMessageId;
               const storedFunctionCalls = m.functionCalls ?? [];
               const historicalCards = !isLastAssistant && storedFunctionCalls.length > 0
                 ? buildEditCardsFromFunctionCallMetadata(storedFunctionCalls)
@@ -336,7 +344,7 @@ export const JourneyDetailModal: React.FC = () => {
                   {m.role === 'assistant' && !isEditing && (
                     <ThinkingDisplay
                       messageId={m.id}
-                      contentParts={m.contentParts}
+                      contentParts={displayContentParts}
                       isStreaming={isStreamingStatus && m.id === lastAssistantMessageId}
                     />
                   )}
