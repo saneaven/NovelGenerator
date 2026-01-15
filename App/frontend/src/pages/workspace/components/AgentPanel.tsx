@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { useAgentStore, type StoredAgentMessage } from '../../../store/agentStore';
 import { useAgentUIStore } from '../../../store/agentUIStore';
-import { useStreamingStore } from '../../../store/streamingStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import { useProjectStore } from '../../../store/projectStore';
 import { useSettingsStore } from '../../../store/settingsStore';
@@ -257,9 +256,6 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     const selectedAgent = useAgentStore(agentSelector);
     const storedMessages = useMemo(() => selectedAgent?.messages ?? [], [selectedAgent]);
 
-    // Subscribe to streaming content for real-time updates (lightweight, only streaming messages)
-    const streamingContent = useStreamingStore((state) => state.streamingContent);
-
     // Only subscribe to agent sessions for this project (reduces re-renders from other sessions)
     const llmSessions = useLLMTaskStore((state) => state.sessions);
     const agentSessionByMessageId = useMemo(() => {
@@ -382,8 +378,11 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
             const requestedLanguage = wantsTranslation && defaultSubLanguage ? defaultSubLanguage : mainLanguage;
             const hasRequestedLanguage = Boolean(requestedLanguage && message.data[requestedLanguage]);
 
-            // Check for streaming content (takes priority during active streaming)
-            const streaming = streamingContent.get(message.id);
+            // Check for streaming content from llmTaskStore (takes priority during active streaming)
+            const agentSession = agentSessionByMessageId[message.id];
+            const streaming = agentSession?.status === 'running'
+                ? { contentParts: agentSession.contentParts, thinkingDetails: agentSession.thinkingDetails }
+                : undefined;
 
             if (hasRequestedLanguage)
             {
@@ -426,7 +425,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                 fallbackLanguage
             };
         },
-        [messageLanguageView, mainLanguage, defaultSubLanguage, convertToDisplayMessage, streamingContent]
+        [messageLanguageView, mainLanguage, defaultSubLanguage, convertToDisplayMessage, agentSessionByMessageId]
     );
 
     const displayMessages = useMemo(

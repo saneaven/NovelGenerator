@@ -9,12 +9,13 @@ import type {
 import { streamLLM } from './llmService';
 import { useSettingsStore, type AIFunctionType } from '../store/settingsStore';
 import { useLLMLogStore } from '../store/llmLogStore';
+import { useLLMTaskStore } from '../store/llmTaskStore';
+import { generateTempId } from '../utils/tempId';
 import { FunctionCallStreamTracker } from '../agent/streaming/FunctionCallStreamTracker';
 import { PromptManager } from './PromptManager';
 import type {
   LLMTaskConfig,
   LLMTaskCallbacks,
-  LLMTaskResult,
   OutputMode,
   PromptBundle,
   LLMTaskModeType,
@@ -55,6 +56,7 @@ export class LLMTask {
   private isRunning = false;
   private functionTracker: FunctionCallStreamTracker | null = null;
   private pendingProgress: FunctionCallProgress[] | null = null;
+  private sessionId: string | null = null;
 
   // Interval-based smoothing for consistent update cadence
   private updateIntervalId: number | null = null;
@@ -87,6 +89,23 @@ export class LLMTask {
     let logEntryId: string | undefined;
     const requestStartTime = Date.now();
 
+    // Create session in llmTaskStore for streaming tracking
+    this.sessionId = `llm-${generateTempId()}`;
+    const llmTaskStoreRef = useLLMTaskStore.getState();
+    llmTaskStoreRef.createSession({
+      id: this.sessionId,
+      kind: this.config.mode as any,
+      input: this.config.promptContext,
+      status: 'running',
+      label: this.config.mode,
+      createdAt: requestStartTime,
+      updatedAt: requestStartTime,
+      isRead: false,
+      contentParts: [],
+      functionCallProgress: [],
+      functionCalls: [],
+    });
+
     try {
       // 1. Get provider/model config (from settings or overrides)
       const { settings, getProviderConfig } = settingsStore;
@@ -103,6 +122,11 @@ export class LLMTask {
       const thinkingConfig = this.config.thinkingConfig ?? functionConfig.advanced.thinkingConfig;
       const customApiFormat = this.config.customApiFormat ?? functionConfig.advanced.customApiFormat;
       const retryConfig = this.config.retryConfig ?? settings.retryConfig;
+
+      // Set provider/model early so UI can display during streaming and on error
+      if (this.sessionId) {
+        useLLMTaskStore.getState().updateSession(this.sessionId, { provider, model });
+      }
 
       // 2. Generate prompt bundle
       const promptBundle = await PromptManager.generatePromptBundle(
@@ -190,16 +214,27 @@ export class LLMTask {
             if (this.pendingContentUpdate) {
               this.pendingContentUpdate = false;
               if (currentPartType && currentBuffer) {
-                this.callbacks.onUpdate([
+                const currentParts = [
                   ...this.pendingParts,
                   { type: currentPartType, text: currentBuffer },
-                ]);
+                ];
+                this.callbacks.onUpdate(currentParts);
+                // Update llmTaskStore for UI subscribers
+                if (this.sessionId) {
+                  useLLMTaskStore.getState().setContentParts(this.sessionId, currentParts);
+                }
               }
             }
             // Update function call progress if pending
-            if (this.pendingProgressUpdate && this.pendingProgress && this.callbacks.onFunctionProgress) {
+            if (this.pendingProgressUpdate && this.pendingProgress) {
               this.pendingProgressUpdate = false;
-              this.callbacks.onFunctionProgress(this.pendingProgress);
+              if (this.callbacks.onFunctionProgress) {
+                this.callbacks.onFunctionProgress(this.pendingProgress);
+              }
+              // Update llmTaskStore for UI subscribers
+              if (this.sessionId) {
+                useLLMTaskStore.getState().setFunctionCallProgress(this.sessionId, this.pendingProgress);
+              }
             }
           }, this.UPDATE_INTERVAL_MS);
         }
@@ -346,14 +381,17 @@ export class LLMTask {
         arguments: this.parseArguments(fc.function?.arguments),
         status: 'pending',
       }));
-      const result: LLMTaskResult = {
-        contentParts: [...this.pendingParts],
-        functionCalls,
-        thinkingDetails: accumulatedThinkingDetails,
-        provider,
-        model,
-        usage: capturedUsage,
-      };
+      // Update session with final data (provider/model already set earlier)
+      const llmTaskStoreRef = useLLMTaskStore.getState();
+      if (this.sessionId) {
+        llmTaskStoreRef.updateSession(this.sessionId, {
+          status: 'success',
+          contentParts: [...this.pendingParts],
+          functionCalls,
+          thinkingDetails: accumulatedThinkingDetails,
+          usage: capturedUsage,
+        });
+      }
 
       // Log streaming completion
       console.log('✅ LLM Streaming Complete:', {
@@ -376,6 +414,8 @@ export class LLMTask {
         });
       }
 
+      // Return session as result
+      const result = llmTaskStoreRef.getSessionById(this.sessionId!)!;
       await this.callbacks.onComplete(result);
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -394,6 +434,11 @@ export class LLMTask {
           durationMs: Date.now() - requestStartTime,
           error: err.message,
         });
+      }
+
+      // Update session status in llmTaskStore
+      if (this.sessionId) {
+        useLLMTaskStore.getState().updateSession(this.sessionId, { status: 'error', error: err.message });
       }
 
       this.callbacks.onError(err);
@@ -463,7 +508,7 @@ export class LLMTask {
         // Position-based template selection
         let template: string;
         if (isSingleUser) {
-          template = promptBundle.initialUserPrompt ?? promptBundle.userPrompt;
+          template = promptBundle.initialUserPrompt ?? promptBundle.lastUserPrompt ?? promptBundle.firstUserPrompt ?? promptBundle.userPrompt;
         } else if (i === firstUserIndex) {
           template = promptBundle.firstUserPrompt ?? promptBundle.userPrompt;
         } else if (i === lastUserIndex) {

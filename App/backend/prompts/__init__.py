@@ -61,10 +61,10 @@ _TRANSLATION_INITIAL_USER_PROMPT_OBJECT = _load_prompt_file('translation/object/
 _TRANSLATION_FIRST_USER_PROMPT_OBJECT = _load_prompt_file('translation/object/firstUserPrompt.md')
 _TRANSLATION_LAST_USER_PROMPT_OBJECT = _load_prompt_file('translation/object/lastUserPrompt.md')
 _TRANSLATION_PREFILL_OBJECT = _load_prompt_file('translation/object/prefill.md')
-# Translation - Agent
-_TRANSLATION_SYSTEM_PROMPT_AGENT = _load_prompt_file('translation/agent/systemPrompt.md')
-_TRANSLATION_USER_PROMPT_AGENT = _load_prompt_file('translation/agent/userPrompt.md')
-_TRANSLATION_PREFILL_AGENT = _load_prompt_file('translation/agent/prefill.md')
+# Translation - Message
+_TRANSLATION_SYSTEM_PROMPT_MESSAGE = _load_prompt_file('translation/message/systemPrompt.md')
+_TRANSLATION_USER_PROMPT_MESSAGE = _load_prompt_file('translation/message/userPrompt.md')
+_TRANSLATION_PREFILL_MESSAGE = _load_prompt_file('translation/message/prefill.md')
 # Edit Assistant - Manuscript
 _EDIT_ASSISTANT_MANUSCRIPT_SYSTEM_PROMPT = _load_prompt_file('editAssistant/manuscript/systemPrompt.md')
 _EDIT_ASSISTANT_MANUSCRIPT_USER_PROMPT = _load_prompt_file('editAssistant/manuscript/userPrompt.md')
@@ -134,11 +134,11 @@ DEFAULT_PROMPTS = {
     'translation': {
         'systemPrompt': {
             'object': _TRANSLATION_SYSTEM_PROMPT_OBJECT,
-            'agent': _TRANSLATION_SYSTEM_PROMPT_AGENT,
+            'message': _TRANSLATION_SYSTEM_PROMPT_MESSAGE,
         },
         'userPrompt': {
             'object': _TRANSLATION_USER_PROMPT_OBJECT,
-            'agent': _TRANSLATION_USER_PROMPT_AGENT,
+            'message': _TRANSLATION_USER_PROMPT_MESSAGE,
         },
         'initialUserPrompt': {
             'object': _TRANSLATION_INITIAL_USER_PROMPT_OBJECT,
@@ -151,7 +151,7 @@ DEFAULT_PROMPTS = {
         },
         'prefill': {
             'object': _TRANSLATION_PREFILL_OBJECT,
-            'agent': _TRANSLATION_PREFILL_AGENT,
+            'message': _TRANSLATION_PREFILL_MESSAGE,
         },
     },
     'editAssistant': {

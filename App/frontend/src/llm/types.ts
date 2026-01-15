@@ -1,6 +1,7 @@
-import type { ContentPart, FunctionCallMetadata, FunctionCallProgress } from './requestTypes';
+import type { ContentPart, FunctionCallProgress } from './requestTypes';
 import type { ProviderConfig, ProviderType, ThinkingConfig, RetryConfig, CustomApiFormat } from '../store/settingsStore';
 import type { FunctionCallSchema } from '../functionCall';
+import type { TaskSessionState } from '../llmTask/types';
 
 /**
  * LLM Task Mode - determines which prompts and functions to use
@@ -112,7 +113,7 @@ export interface TemplateData {
     objectIds?: string[];
     contextObjectIds?: string[];
     currentTranslatedContents?: Array<{ id: string; type: string; name: string; translatedContent: string }>;
-    agentMessages?: Array<{ id: string; content: string }>;
+    messages?: Array<{ id: string; content: string }>;
   };
   imagePrompt?: {
     objectType?: string;
@@ -315,16 +316,9 @@ export interface LLMTaskConfig {
 }
 
 /**
- * LLM Task result
+ * LLM Task result - now TaskSessionState for single source of truth
  */
-export interface LLMTaskResult {
-  contentParts: ContentPart[];
-  functionCalls: FunctionCallMetadata[];
-  thinkingDetails?: any[];
-  provider: string;
-  model: string;
-  usage?: import('./requestTypes').TokenUsage;
-}
+export type LLMTaskResult = TaskSessionState;
 
 /**
  * LLM Task callbacks

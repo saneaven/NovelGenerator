@@ -1,4 +1,4 @@
-import type { ContentPart, FunctionCallProgress, TokenUsage } from '../llm/requestTypes';
+import type { ContentPart, FunctionCallProgress, FunctionCallMetadata, TokenUsage } from '../llm/requestTypes';
 import type { StoredEditCard } from './uiTypes';
 
 export type TaskKind =
@@ -37,6 +37,8 @@ export interface TaskSessionState<TInput = unknown, TResult = unknown> {
 
   contentParts: ContentPart[];
   functionCallProgress: FunctionCallProgress[];
+  functionCalls: FunctionCallMetadata[];
+  thinkingDetails?: any[];
 
   editCards?: StoredEditCard[];
 

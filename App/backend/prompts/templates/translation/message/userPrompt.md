@@ -9,7 +9,7 @@ Translate the message below from **{{ translation.sourceLanguage }}** to **{{ tr
 
 ## Message
 Content (translate this):
-{{#each translation.agentMessages}}
+{{#each translation.messages}}
 {{ this.content }}
 {{/each}}
 
@@ -20,7 +20,7 @@ Content (translate this):
 - Do NOT translate any function-call/json snippets; keep them untouched.
 - Do not add extra commentary - just the pure translated content.
 {{else}}
-- Return the translation via `translate_agent_message`.
+- Return the translation via `set_message_translation`.
 - Only include translated `content` in the function call.
 - Do NOT translate any function-call/json snippets; keep them untouched.
 - Do not add extra commentary outside the function call.

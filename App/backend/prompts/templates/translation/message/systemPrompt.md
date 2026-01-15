@@ -24,7 +24,7 @@ Just the pure translated content.
 {{else}}
 ## Output Requirements
 
-- Use the `translate_agent_message` function.
+- Use the `set_message_translation` function.
 - Provide only the translated `content`.
 - Leave any function-call snippets untouched (do not modify or translate them).
 {{/if}}

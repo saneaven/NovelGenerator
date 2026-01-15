@@ -269,7 +269,7 @@ const FUNCTION_META: Record<string, FunctionMeta> = {
   },
 
   // Agent message translation
-  set_agent_message_translation: {
+  set_message_translation: {
     editType: 'translate',
     title: 'Translate Message',
     description: 'Translate agent message',

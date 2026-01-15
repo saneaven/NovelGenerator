@@ -263,35 +263,35 @@ export const PROMPT_TREE: PromptNode[] = [
         ]
       },
       {
-        id: 'translation-agentMessages',
+        id: 'translation-message',
         label: 'Agent Messages',
         type: 'category',
         children: [
           {
-            id: 'translation-agentMessages-system',
+            id: 'translation-message-system',
             label: 'System Prompt',
             type: 'prompt',
             functionType: 'translation',
             category: 'systemPrompt',
-            name: 'agentMessages',
+            name: 'message',
             description: 'Instructions for translating agent messages'
           },
           {
-            id: 'translation-agentMessages-user',
+            id: 'translation-message-user',
             label: 'User Prompt',
             type: 'prompt',
             functionType: 'translation',
             category: 'userPrompt',
-            name: 'agentMessages',
+            name: 'message',
             description: 'Auto-generated user message with agent message payload'
           },
           {
-            id: 'translation-agentMessages-prefill',
+            id: 'translation-message-prefill',
             label: 'Prefill Template',
             type: 'prompt',
             functionType: 'translation',
             category: 'prefill',
-            name: 'agentMessages',
+            name: 'message',
             description: 'Template for agent message translation responses'
           }
         ]

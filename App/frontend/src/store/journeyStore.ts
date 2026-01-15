@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ChatMessage, ContentPart, FunctionCallProgress, TokenUsage } from '../llm/requestTypes';
+import type { ChatMessage, TokenUsage } from '../llm/requestTypes';
 import type { FunctionCallSchema } from '../functionCall';
 import type { StoredEditCard } from '../llmTask/uiTypes';
 import type { EditingTargets } from '../llmTaskJourney/types';
@@ -42,9 +42,8 @@ export interface Journey<TInput = unknown, TResult = unknown> {
   functions?: FunctionCallSchema[];
   messages: ChatMessage[];  // All messages (user input + assistant outputs)
 
-  // Current turn execution state (updated during streaming)
-  currentContentParts: ContentPart[];
-  currentFunctionCallProgress: FunctionCallProgress[];
+  // Reference to llmTaskStore session for streaming data
+  sessionId?: string;
 
   // Function call confirmation
   editCards?: StoredEditCard[];
@@ -106,44 +105,6 @@ interface JourneyStore {
   deleteMessage: (journeyId: string, messageId: string) => void;
 }
 
-function getProgressKey(progress: FunctionCallProgress): string {
-  const index = progress?.draft?.index;
-  if (typeof index === 'number') {
-    return `index:${index}`;
-  }
-  return `id:${progress?.draft?.id ?? ''}`;
-}
-
-function mergeFunctionCallProgress(
-  existing: FunctionCallProgress[] | undefined,
-  incoming: FunctionCallProgress[]
-): FunctionCallProgress[] {
-  if (incoming.length === 0) {
-    return [];
-  }
-
-  const order: string[] = [];
-  const map = new Map<string, FunctionCallProgress>();
-
-  for (const p of existing ?? []) {
-    const key = getProgressKey(p);
-    if (!map.has(key)) {
-      order.push(key);
-    }
-    map.set(key, p);
-  }
-
-  for (const p of incoming) {
-    const key = getProgressKey(p);
-    if (!map.has(key)) {
-      order.push(key);
-    }
-    map.set(key, p);
-  }
-
-  return order.map((key) => map.get(key)!).filter(Boolean);
-}
-
 export const useJourneyStore = create<JourneyStore>((set, get) => ({
   journeys: {},
 
@@ -166,18 +127,12 @@ export const useJourneyStore = create<JourneyStore>((set, get) => ({
       const existing = state.journeys[id];
       if (!existing) return state;
 
-      const mergedProgress =
-        partial.currentFunctionCallProgress !== undefined
-          ? mergeFunctionCallProgress(existing.currentFunctionCallProgress, partial.currentFunctionCallProgress)
-          : existing.currentFunctionCallProgress;
-
       return {
         journeys: {
           ...state.journeys,
           [id]: {
             ...existing,
             ...partial,
-            currentFunctionCallProgress: mergedProgress,
             updatedAt: Date.now(),
           },
         },

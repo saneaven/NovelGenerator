@@ -337,9 +337,9 @@ export class PromptManager {
     context: AgentTranslationPromptContext
   ): Promise<PromptBundle> {
     const [systemTemplate, userTemplate, prefillTemplate] = await Promise.all([
-      this.getTemplate('translation', 'systemPrompt', 'agent'),
-      this.getTemplate('translation', 'userPrompt', 'agent'),
-      this.getTemplate('translation', 'prefill', 'agent'),
+      this.getTemplate('translation', 'systemPrompt', 'message'),
+      this.getTemplate('translation', 'userPrompt', 'message'),
+      this.getTemplate('translation', 'prefill', 'message'),
     ]);
 
     const templateData: TemplateData = {
@@ -351,7 +351,7 @@ export class PromptManager {
       translation: {
         sourceLanguage: context.sourceLanguage,
         targetLanguage: context.targetLanguage,
-        agentMessages: [{ id: 'source', content: context.sourceContent }],
+        messages: [{ id: 'source', content: context.sourceContent }],
       },
     };
 

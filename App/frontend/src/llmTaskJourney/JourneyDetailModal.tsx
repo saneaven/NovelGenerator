@@ -54,6 +54,11 @@ export const JourneyDetailModal: React.FC = () => {
     detailJourneyId ? s.journeys[detailJourneyId] : null
   );
 
+  // Get streaming data from llmTaskStore via journey.sessionId
+  const session = useLLMTaskStore((s) =>
+    journey?.sessionId ? s.sessions[journey.sessionId] : undefined
+  );
+
   const mainLanguage = useSettingsStore((s) => s.settings.mainLanguage);
 
   const [errorExpanded, setErrorExpanded] = useState(false);
@@ -82,8 +87,8 @@ export const JourneyDetailModal: React.FC = () => {
 
   // Auto-scroll to bottom when content changes
   const journeyMessagesLength = journey?.messages?.length ?? 0;
-  const lastContentPart = journey?.currentContentParts?.[journey.currentContentParts.length - 1]?.text ?? '';
-  const functionCallProgressLength = journey?.currentFunctionCallProgress?.length ?? 0;
+  const lastContentPart = session?.contentParts?.[session.contentParts.length - 1]?.text ?? '';
+  const functionCallProgressLength = session?.functionCallProgress?.length ?? 0;
 
   useEffect(() => {
     if (userScrolledUpRef.current) return;
@@ -97,7 +102,7 @@ export const JourneyDetailModal: React.FC = () => {
     setFeedbackText('');
   }, [detailJourneyId]);
 
-  const hasStreamingCalls = journey?.status === 'running' && (journey.currentFunctionCallProgress?.length ?? 0) > 0;
+  const hasStreamingCalls = journey?.status === 'running' && (session?.functionCallProgress?.length ?? 0) > 0;
   const hasCards = (journey?.editCards?.length ?? 0) > 0;
 
   const statusLabel = useMemo(() => {
@@ -131,6 +136,11 @@ export const JourneyDetailModal: React.FC = () => {
 
   const handleDismiss = useCallback(() => {
     if (detailJourneyId) {
+      // Clear llmTaskStore session if exists
+      const j = useJourneyStore.getState().getJourneyById(detailJourneyId);
+      if (j?.sessionId) {
+        useLLMTaskStore.getState().clearSession(j.sessionId);
+      }
       clearJourney(detailJourneyId);
     }
     closeDetailModal();
@@ -150,15 +160,11 @@ export const JourneyDetailModal: React.FC = () => {
       selections,
       options: handlerOptions,
     });
-    // Clear temporary session from llmTaskStore after apply
-    useLLMTaskStore.getState().clearSession(journey.id);
   }, [projectId, journey?.id, applyLanguage, handlerOptions]);
 
   const handleRejectAll = useCallback(() => {
     if (!journey) return;
     rejectAllJourneyEdits({ journeyId: journey.id });
-    // Clear temporary session from llmTaskStore after reject
-    useLLMTaskStore.getState().clearSession(journey.id);
   }, [journey?.id]);
 
   const handleSendFeedback = useCallback(() => {
@@ -373,7 +379,7 @@ export const JourneyDetailModal: React.FC = () => {
                         <div className="llm-task-modal-journey-message-function-calls">
                           <FunctionCallCard
                             mode="streaming"
-                            streamingProgress={journey.currentFunctionCallProgress}
+                            streamingProgress={session?.functionCallProgress}
                             projectId={projectId}
                           />
                         </div>

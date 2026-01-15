@@ -76,17 +76,24 @@ async function stageJourneyEdits(params: {
   functionCalls: FunctionCallMetadata[];
 }): Promise<void> {
   const { journeyId, assistantMessageId, projectId, language, functionCalls } = params;
+  const journeyStore = useJourneyStore.getState();
+  const journey = journeyStore.getJourneyById(journeyId);
+  const sessionId = journey?.sessionId;
+
+  if (!sessionId) {
+    throw new Error('No session found for journey');
+  }
 
   // Store initial (pending) tool calls on the assistant message
   updateJourneyAssistantFunctionCalls({ journeyId, assistantMessageId, functionCalls });
 
-  // Stage edits using sessionId = journeyId
-  await stageSessionEdits({ sessionId: journeyId, projectId, language, functionCalls });
+  // Stage edits using journey.sessionId
+  await stageSessionEdits({ sessionId, projectId, language, functionCalls });
 
   // Copy editCards from llmTaskStore to journeyStore
-  const session = useLLMTaskStore.getState().getSessionById(journeyId);
+  const session = useLLMTaskStore.getState().getSessionById(sessionId);
   if (session?.editCards) {
-    useJourneyStore.getState().updateJourney(journeyId, { editCards: session.editCards });
+    journeyStore.updateJourney(journeyId, { editCards: session.editCards });
   }
 
   // Mirror validation results back into assistant message
@@ -107,12 +114,17 @@ export async function applyJourneyEdits(params: {
   const journeyStore = useJourneyStore.getState();
   const journey = journeyStore.getJourneyById(journeyId);
   const assistantMessageId = journey ? findLastAssistantMessageId(journey) : null;
+  const sessionId = journey?.sessionId;
 
-  // Use journeyId as sessionId for applySessionEdits
-  await applySessionEdits({ sessionId: journeyId, projectId, language, selections, options });
+  if (!sessionId) {
+    throw new Error('No session found for journey');
+  }
+
+  // Use journey.sessionId for applySessionEdits
+  await applySessionEdits({ sessionId, projectId, language, selections, options });
 
   // Copy updated editCards and status from llmTaskStore to journeyStore
-  const session = useLLMTaskStore.getState().getSessionById(journeyId);
+  const session = useLLMTaskStore.getState().getSessionById(sessionId);
   if (session) {
     journeyStore.updateJourney(journeyId, {
       editCards: session.editCards,
@@ -140,12 +152,18 @@ export function rejectAllJourneyEdits(params: { journeyId: string; reason?: stri
   const journeyStore = useJourneyStore.getState();
   const journey = journeyStore.getJourneyById(journeyId);
   const assistantMessageId = journey ? findLastAssistantMessageId(journey) : null;
+  const sessionId = journey?.sessionId;
 
-  // Use journeyId as sessionId for rejectAllSessionEdits
-  rejectAllSessionEdits({ sessionId: journeyId, reason });
+  if (!sessionId) {
+    console.error('No session found for journey');
+    return;
+  }
+
+  // Use journey.sessionId for rejectAllSessionEdits
+  rejectAllSessionEdits({ sessionId, reason });
 
   // Copy updated editCards and status from llmTaskStore to journeyStore
-  const session = useLLMTaskStore.getState().getSessionById(journeyId);
+  const session = useLLMTaskStore.getState().getSessionById(sessionId);
   if (session) {
     journeyStore.updateJourney(journeyId, {
       editCards: session.editCards,
@@ -233,7 +251,6 @@ async function initJourney(params: { journeyId: string; kind: JourneyKind; input
 async function runAttempt(params: { journeyId: string }): Promise<void> {
   const { journeyId } = params;
   const journeyStore = useJourneyStore.getState();
-  const llmTaskStore = useLLMTaskStore.getState();
 
   const journey = journeyStore.getJourneyById(journeyId);
   if (!journey) {
@@ -266,8 +283,7 @@ async function runAttempt(params: { journeyId: string }): Promise<void> {
     status: 'running',
     error: undefined,
     warning: undefined,
-    currentContentParts: [],
-    currentFunctionCallProgress: [],
+    sessionId: undefined,
     editCards: undefined,
   });
 
@@ -277,20 +293,6 @@ async function runAttempt(params: { journeyId: string }): Promise<void> {
   // Create executor and register abort controller
   const executor = new LLMTaskExecutor();
   journeyStore.registerAbortController(journeyId, { abort: () => executor.abort() } as AbortController);
-
-  // Create minimal session in llmTaskStore for edit card staging
-  llmTaskStore.createSession({
-    id: journeyId,
-    kind: journey.kind,
-    input: journey.input,
-    label: journey.label,
-    status: 'running',
-    createdAt: journey.createdAt,
-    updatedAt: Date.now(),
-    isRead: false,
-    contentParts: [],
-    functionCallProgress: [],
-  } as any);
 
   let finalResult: any = null;
 
@@ -316,16 +318,12 @@ async function runAttempt(params: { journeyId: string }): Promise<void> {
           const nextMessages = currentJourney.messages.slice();
           nextMessages[assistantIndex] = nextAssistant;
 
-          journeyStore.updateJourney(journeyId, {
-            messages: nextMessages,
-            currentContentParts: parts,
-          });
+          journeyStore.updateJourney(journeyId, { messages: nextMessages });
         },
-        onFunctionProgress: (progress) => {
-          journeyStore.updateJourney(journeyId, { currentFunctionCallProgress: progress });
-        },
-        onComplete: (r) => {
-          finalResult = r;
+        onComplete: (session) => {
+          finalResult = session;
+          // Store sessionId for UI to read streaming from llmTaskStore
+          journeyStore.updateJourney(journeyId, { sessionId: session.id });
         },
         onError: () => {
           // handled by catch
@@ -341,7 +339,6 @@ async function runAttempt(params: { journeyId: string }): Promise<void> {
       journeyStore.updateJourney(journeyId, { status: 'error', error: message });
     }
     updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
-    llmTaskStore.clearSession(journeyId);
     return;
   } finally {
     journeyStore.unregisterAbortController(journeyId);
@@ -350,7 +347,6 @@ async function runAttempt(params: { journeyId: string }): Promise<void> {
   if (!finalResult) {
     journeyStore.updateJourney(journeyId, { status: 'error', error: 'AI request finished without a result.' });
     updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
-    llmTaskStore.clearSession(journeyId);
     return;
   }
 
@@ -381,7 +377,6 @@ async function runAttempt(params: { journeyId: string }): Promise<void> {
     if (!text) {
       journeyStore.updateJourney(journeyId, { status: 'error', error: 'AI response was empty.' });
       updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
-      llmTaskStore.clearSession(journeyId);
       return;
     }
 
@@ -402,7 +397,6 @@ async function runAttempt(params: { journeyId: string }): Promise<void> {
       journeyStore.updateJourney(journeyId, { status: 'error', error: message });
     }
     updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
-    llmTaskStore.clearSession(journeyId);
     return;
   }
 
@@ -411,7 +405,6 @@ async function runAttempt(params: { journeyId: string }): Promise<void> {
   if (!functionCalls.length) {
     journeyStore.updateJourney(journeyId, { status: 'error', error: 'AI response did not include any actions to apply.' });
     updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
-    llmTaskStore.clearSession(journeyId);
     return;
   }
 
@@ -432,7 +425,6 @@ async function runAttempt(params: { journeyId: string }): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     journeyStore.updateJourney(journeyId, { status: 'error', error: message });
     updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
-    llmTaskStore.clearSession(journeyId);
   }
 }
 
@@ -466,8 +458,7 @@ export const JourneyRuntime = {
       editingTargets: spec.buildEditingTargets(input),
       functions: undefined,
       messages: [],
-      currentContentParts: [],
-      currentFunctionCallProgress: [],
+      sessionId: undefined,
     };
 
     journeyStore.createJourney(journey as any);

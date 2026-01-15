@@ -8,7 +8,7 @@ import { BaseModal } from '../BaseModal';
 import { useProjectStore } from '../../store/projectStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import { useLLMTaskStore } from '../../store/llmTaskStore';
+import { useJourneyStore } from '../../store/journeyStore';
 import { JourneyRuntime } from '../../llmTaskJourney';
 import { TextButton } from '../TextButton';
 import { ObjectPicker } from '../ObjectPicker';
@@ -78,8 +78,11 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   );
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
-  const activeSession = useLLMTaskStore((state) =>
-    activeSessionId ? state.sessions[activeSessionId] : undefined
+  // Watch journey for status/result (activeSessionId is journeyId)
+  // Note: If streaming display is needed, import useLLMTaskStore and watch
+  // activeJourney?.sessionId to get contentParts from llmTaskStore session
+  const activeJourney = useJourneyStore((state) =>
+    activeSessionId ? state.journeys[activeSessionId] : undefined
   );
 
   // Get object data for 'object' context
@@ -115,10 +118,10 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   }, [isOpen, defaultUserRequest, defaultSelectedObjectIds]);
 
   useEffect(() => {
-    if (!activeSessionId || !activeSession) return;
+    if (!activeSessionId || !activeJourney) return;
 
-    if (activeSession.status === 'success') {
-      const result = activeSession.result as PromptResult | undefined;
+    if (activeJourney.status === 'success') {
+      const result = activeJourney.result as PromptResult | undefined;
       if (result?.prompt) {
         onPromptGenerated(result);
       } else {
@@ -128,16 +131,16 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
       return;
     }
 
-    if (activeSession.status === 'error') {
-      onStreamingError?.(activeSession.error || 'Failed to generate prompt.', promptMode);
+    if (activeJourney.status === 'error') {
+      onStreamingError?.(activeJourney.error || 'Failed to generate prompt.', promptMode);
       setActiveSessionId(null);
       return;
     }
 
-    if (activeSession.status === 'cancelled') {
+    if (activeJourney.status === 'cancelled') {
       setActiveSessionId(null);
     }
-  }, [activeSessionId, activeSession, onPromptGenerated, onStreamingError, promptMode]);
+  }, [activeSessionId, activeJourney, onPromptGenerated, onStreamingError, promptMode]);
 
   const getModalTitle = (): string => {
     switch (contextType) {

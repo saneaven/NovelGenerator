@@ -207,8 +207,8 @@ export const PATCH_MANUSCRIPT_TRANSLATION: FunctionCallSchema = {
 // AGENT MESSAGE TRANSLATION
 // ============================================================================
 
-export const SET_AGENT_MESSAGE_TRANSLATION: FunctionCallSchema = {
-  name: 'set_agent_message_translation',
+export const SET_MESSAGE_TRANSLATION: FunctionCallSchema = {
+  name: 'set_message_translation',
   description: 'Translate an agent message from one language to another.',
   parameters: {
     type: 'object',
@@ -246,7 +246,7 @@ export const TRANSLATION_FUNCTIONS: FunctionCallSchema[] = [
 ];
 
 export const AGENT_TRANSLATION_FUNCTIONS: FunctionCallSchema[] = [
-  SET_AGENT_MESSAGE_TRANSLATION,
+  SET_MESSAGE_TRANSLATION,
 ];
 
 // ============================================================================

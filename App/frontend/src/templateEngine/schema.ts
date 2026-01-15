@@ -172,7 +172,7 @@ export const UNIFIED_SCHEMA = {
         translatedContent: "Name: 캐릭터\nDescription: 설명..."
       }] as Array<{ id: string; type: string; name: string; translatedContent: string }>
     },
-    agentMessages: {
+    messages: {
       desc: "Agent messages to translate (only for agent message translation)",
       example: [{ id: "msg-1", content: "Hello there" }] as Array<{ id: string; content: string }>
     },
