@@ -3,6 +3,7 @@ import { BaseModal } from '../BaseModal';
 import ImageTabContent, { type ImageContentMode } from './ImageTabContent';
 import { TextButton } from '../TextButton';
 import { type Asset } from '../../api/assetService';
+import type { GenerationRecipe } from '../../imageTask';
 import './UnifiedImageModal.css';
 
 // Modal preset types for common use cases
@@ -11,17 +12,6 @@ export type ModalPreset =
     | 'sceneManager'    // Manage scene assets (delete, view usage)
     | 'assetPicker'     // Pick from all project assets
     | 'referencePicker'; // Pick reference images for image generation
-
-// Initial settings for regeneration mode
-export interface InitialGenerationSettings {
-    prompt?: string;
-    positivePrompt?: string;
-    negativePrompt?: string;
-    provider?: string;
-    model?: string;
-    size?: string;
-    settings?: Record<string, any>;
-}
 
 interface UnifiedImageModalProps {
     isOpen: boolean;
@@ -55,7 +45,7 @@ interface UnifiedImageModalProps {
 
     // Image generation callback
     onImageGenerated?: (asset: Asset) => void;
-    initialGenerationSettings?: InitialGenerationSettings;
+    initialGenerationRecipe?: GenerationRecipe | null;
 }
 
 // Preset configurations
@@ -102,7 +92,7 @@ const UnifiedImageModal: React.FC<UnifiedImageModalProps> = ({
     excludeAssetIds,
     sceneContext,
     onImageGenerated,
-    initialGenerationSettings,
+    initialGenerationRecipe,
 }) => {
     // Get config from preset or use direct props
     const presetConfig = preset ? PRESET_CONFIGS[preset] : null;
@@ -164,7 +154,7 @@ const UnifiedImageModal: React.FC<UnifiedImageModalProps> = ({
                     showPromptTab={mode === 'object'}
                     sceneContext={sceneContext}
                     onImageGenerated={onImageGenerated}
-                    initialGenerationSettings={initialGenerationSettings}
+                    initialGenerationRecipe={initialGenerationRecipe}
                 />
             </div>
         </BaseModal>

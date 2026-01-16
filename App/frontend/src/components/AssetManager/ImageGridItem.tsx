@@ -1,19 +1,33 @@
 import { memo, type RefObject } from 'react';
 import { IconButton } from '../IconButton';
-import { Star, Edit, MoreHorizontal, Trash, Info } from '../icons';
+import { Star, Edit, MoreHorizontal, Trash, Info, Close, Refresh } from '../icons';
 import { API_BASE_URL } from '../../api/client';
 import type { Asset, SceneAsset } from '../../api/assetService';
+import type { GenerationRecipe, ImageProgressStage, ImageTaskBinding, ImageTaskStatus } from '../../imageTask';
 
 export type ImageContentMode = 'object' | 'scene' | 'picker';
 
-export type DisplayAsset = {
-    id: string;
-    asset: Asset | SceneAsset;
-    is_main?: boolean;
-    usage_count?: number;
-    used_in_manuscripts?: Array<{ id: string; name: string; act_name?: string | null }>;
-    linkId?: string;
-};
+export type DisplayAsset =
+    | {
+        kind: 'asset';
+        id: string;
+        asset: Asset | SceneAsset;
+        is_main?: boolean;
+        usage_count?: number;
+        used_in_manuscripts?: Array<{ id: string; name: string; act_name?: string | null }>;
+        linkId?: string;
+    }
+    | {
+        kind: 'placeholder';
+        id: string;
+        taskId: string;
+        status: Exclude<ImageTaskStatus, 'idle' | 'success'>;
+        stage?: ImageProgressStage;
+        message: string;
+        error?: string;
+        binding: ImageTaskBinding;
+        recipe: GenerationRecipe;
+    };
 
 export interface ImageGridItemProps {
     item: DisplayAsset;
@@ -34,6 +48,10 @@ export interface ImageGridItemProps {
     onOpenDetail: (asset: Asset | SceneAsset) => void;
     onDeleteAsset: (asset: Asset | SceneAsset) => void;
     onToggleMoreDropdown: (assetId: string | null) => void;
+    onCancelTask?: (taskId: string) => void;
+    onRetryTask?: (taskId: string, recipe: GenerationRecipe) => void;
+    onDismissTask?: (taskId: string) => void;
+    onRegenerateAsset?: (assetId: string) => void;
     height: number;
 }
 
@@ -56,8 +74,76 @@ export const ImageGridItem = memo<ImageGridItemProps>(({
     onOpenDetail,
     onDeleteAsset,
     onToggleMoreDropdown,
+    onCancelTask,
+    onRetryTask,
+    onDismissTask,
+    onRegenerateAsset,
     height,
 }) => {
+    if (item.kind === 'placeholder') {
+        const canCancel = item.status === 'running';
+        const canRetry = item.status === 'error' || item.status === 'cancelled';
+
+        return (
+            <div
+                className={`asset-item placeholder placeholder--${item.status} ${isActive ? 'active' : ''}`}
+                style={{ height }}
+                onClick={onItemClick}
+            >
+                <div className="asset-thumbnail">
+                    <div className="placeholder-skeleton" />
+                </div>
+
+                <div className="asset-info">
+                    <span className="asset-name" title={item.message}>
+                        {item.status === 'running'
+                            ? item.message
+                            : item.status === 'error'
+                                ? (item.error ?? 'An error occurred')
+                                : 'Cancelled'}
+                    </span>
+                </div>
+
+                <div className="asset-actions" onClick={(e) => e.stopPropagation()}>
+                    {canRetry && (
+                        <IconButton
+                            size="xs"
+                            icon={<Refresh size="xs" />}
+                            onClick={() => onRetryTask?.(item.taskId, item.recipe)}
+                            title="Retry"
+                            variant="primary"
+                        />
+                    )}
+                    {canCancel && (
+                        <IconButton
+                            size="xs"
+                            icon={<Close size="xs" />}
+                            onClick={() => onCancelTask?.(item.taskId)}
+                            title="Cancel"
+                            variant="danger"
+                        />
+                    )}
+                    {(item.status === 'error' || item.status === 'cancelled') && (
+                        <IconButton
+                            size="xs"
+                            icon={<Trash size="xs" />}
+                            onClick={() => onDismissTask?.(item.taskId)}
+                            title="Dismiss"
+                            variant="danger"
+                        />
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    const canRegenerate =
+        !!onRegenerateAsset
+        && mode !== 'picker'
+        && !!item.asset.generation_provider
+        && !!item.asset.generation_model
+        && (!!item.asset.generation_prompt || !!item.asset.generation_positive_prompt);
+
     return (
         <div
             className={`asset-item ${item.is_main ? 'main' : ''} ${isActive ? 'active' : ''} ${isSelected ? 'selected' : ''} ${isExcluded ? 'excluded' : ''}`}
@@ -147,6 +233,15 @@ export const ImageGridItem = memo<ImageGridItemProps>(({
                     />
                     {moreDropdownAssetId === item.id && (
                         <div className="more-dropdown">
+                            {canRegenerate && (
+                                <button
+                                    className="more-dropdown-item"
+                                    onClick={() => onRegenerateAsset?.(item.asset.id)}
+                                >
+                                    <Refresh size="xs" />
+                                    <span>Regenerate</span>
+                                </button>
+                            )}
                             <button
                                 className="more-dropdown-item"
                                 onClick={() => onOpenDetail(item.asset)}
@@ -179,5 +274,36 @@ export function calculateItemHeight(asset: { width?: number | null; height?: num
     const aspectRatio = asset.width / asset.height;
     const height = Math.round(columnWidth / aspectRatio);
     // Clamp between reasonable min/max
+    return Math.max(100, Math.min(height, 400));
+}
+
+function parseSize(size?: string): { width: number; height: number } | null {
+    if (!size) return null;
+    const match = size.trim().match(/^(\d+)\s*x\s*(\d+)$/i);
+    if (!match) return null;
+    const width = Number(match[1]);
+    const height = Number(match[2]);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+    return { width, height };
+}
+
+function parseAspectRatio(aspectRatio?: unknown): number | null {
+    if (typeof aspectRatio !== 'string') return null;
+    const match = aspectRatio.trim().match(/^(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)$/);
+    if (!match) return null;
+    const w = Number(match[1]);
+    const h = Number(match[2]);
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return null;
+    return w / h;
+}
+
+export function calculatePlaceholderHeight(recipe: GenerationRecipe, columnWidth: number): number {
+    const fromSize = parseSize(recipe.size);
+    const aspect =
+        (fromSize ? fromSize.width / fromSize.height : null)
+        ?? parseAspectRatio(recipe.providerSettings?.aspect_ratio)
+        ?? 1; // default to 1:1 if we cannot infer
+
+    const height = Math.round(columnWidth / aspect);
     return Math.max(100, Math.min(height, 400));
 }

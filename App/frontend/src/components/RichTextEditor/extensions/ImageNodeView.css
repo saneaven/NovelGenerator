@@ -55,7 +55,7 @@
     pointer-events: auto;
 }
 
-/* Buttons group (Regenerate + Replace) */
+/* Buttons group */
 .overlay-buttons {
     display: flex;
     flex-direction: column;

@@ -3,12 +3,20 @@
  */
 
 import apiClient from './client';
-import type { StyledPrompt } from '../imageGeneration/types';
 
 // Helper to format StyledPrompt for display
 export function formatStyledPrompt(prompt: StyledPrompt | null): string {
     if (!prompt) return '';
     return [prompt.prefix, prompt.content, prompt.postfix].filter(Boolean).join('');
+}
+
+/**
+ * Structured prompt with style components (matches backend StyledPrompt schema)
+ */
+export interface StyledPrompt {
+    prefix: string;
+    content: string;
+    postfix: string;
 }
 
 // Types
@@ -37,6 +45,7 @@ export interface Asset {
     generation_provider: string | null;
     generation_model: string | null;
     generation_settings: Record<string, any> | null;  // Provider-specific settings
+    generation_reference_images: ReferenceImage[] | null;  // Reference images used during generation
     generation_reference_objects: ReferenceObjectData[] | null;  // Story objects referenced during generation
     width: number | null;
     height: number | null;
@@ -75,19 +84,7 @@ export interface ManuscriptInfo {
     act_name: string | null;
 }
 
-export interface ManuscriptAssetUsage {
-    id: string;
-    manuscript_id: string;
-    asset_id: string;
-    created_at: string;
-    asset: Asset;
-}
-
-export interface ManuscriptAssetUsagesResponse {
-    assets: ManuscriptAssetUsage[];
-}
-
-export interface SceneAsset extends Omit<Asset, 'generation_settings' | 'generation_reference_objects'> {
+export interface SceneAsset extends Omit<Asset, 'generation_settings' | 'generation_reference_objects' | 'generation_reference_images'> {
     manuscript_id: string | null;  // Ownership
     used_in_manuscripts: ManuscriptInfo[];
     usage_count: number;
@@ -117,49 +114,6 @@ export interface ReferenceImage {
     strength: number;  // 0-1, how much to use this reference
 }
 
-// Reference object for generation (stored in metadata)
-export interface ReferenceObject {
-    id: string;
-    type: string;  // 'character', 'location', 'organization', 'lorebook'
-    name: string;
-}
-
-export interface ImageGenerationRequest {
-    // For natural language providers (OpenAI, Gemini, xAI)
-    prompt?: string;
-
-    // For tag-based providers (NovelAI)
-    positive_prompt?: string;
-    negative_prompt?: string;
-
-    provider: string;
-    model: string;
-    size?: string;
-    quality?: string;
-    style?: string;
-
-    // Provider-specific settings (e.g., sampler/steps for NovelAI, aspect_ratio/resolution for Gemini)
-    provider_settings?: Record<string, any>;
-
-    // Reference images for image-to-image generation (OpenAI GPT-Image, Gemini)
-    reference_images?: ReferenceImage[];
-
-    // Reference objects used (stored in Asset metadata)
-    reference_objects?: ReferenceObject[];
-
-    // Asset type for categorization ('scene' for novel editor scenes, 'object' from AssetManager)
-    asset_type?: 'scene' | 'object';
-}
-
-export interface ImageGenerationResponse {
-    success: boolean;
-    asset_id?: string;
-    file_path?: string;
-    thumbnail_path?: string;
-    revised_prompt?: string;
-    error?: string;
-}
-
 export const assetService = {
     /**
      * List available image providers
@@ -180,26 +134,6 @@ export const assetService = {
             formData
         );
         return response.data;
-    },
-
-    /**
-     * Generate an image
-     */
-    async generateImage(
-        projectId: string,
-        request: ImageGenerationRequest,
-        apiKey: string,
-        manuscriptId?: string
-    ): Promise<ImageGenerationResponse> {
-        // Send api_key in request body (consistent with LLM endpoints)
-        const url = manuscriptId
-            ? `/api/v1/assets/${projectId}/generate?manuscript_id=${manuscriptId}`
-            : `/api/v1/assets/${projectId}/generate`;
-        const response = await apiClient.post<ImageGenerationResponse>(
-            url,
-            { ...request, api_key: apiKey }
-        );
-        return response;
     },
 
     /**
@@ -295,12 +229,11 @@ export const assetService = {
         projectId: string,
         objectType: string,
         objectId: string,
-        assetId: string,
-        isMain: boolean = false
+        assetId: string
     ): Promise<StoryObjectAsset> {
         return apiClient.post<StoryObjectAsset>(
             `/api/v1/assets/${projectId}/object/${objectType}/${objectId}`,
-            { asset_id: assetId, is_main: isMain }
+            { asset_id: assetId }
         );
     },
 
@@ -319,20 +252,6 @@ export const assetService = {
         );
     },
 
-    /**
-     * Unlink an asset from a story object
-     */
-    async unlinkAssetFromObject(
-        projectId: string,
-        objectType: string,
-        objectId: string,
-        linkId: string
-    ): Promise<void> {
-        await apiClient.delete<void>(
-            `/api/v1/assets/${projectId}/object/${objectType}/${objectId}/${linkId}`
-        );
-    },
-
     // Scene Assets
 
     /**
@@ -343,44 +262,6 @@ export const assetService = {
             ? `/api/v1/assets/${projectId}/scene?manuscript_id=${manuscriptId}`
             : `/api/v1/assets/${projectId}/scene`;
         return apiClient.get<SceneAssetsResponse>(url);
-    },
-
-    // Manuscript Asset Usage
-
-    /**
-     * Get all asset usages for a manuscript
-     */
-    async getManuscriptAssetUsages(projectId: string, manuscriptId: string): Promise<ManuscriptAssetUsagesResponse> {
-        return apiClient.get<ManuscriptAssetUsagesResponse>(
-            `/api/v1/assets/${projectId}/manuscript/${manuscriptId}/usage`
-        );
-    },
-
-    /**
-     * Link an asset to a manuscript (usage tracking)
-     */
-    async linkAssetToManuscript(
-        projectId: string,
-        manuscriptId: string,
-        assetId: string
-    ): Promise<ManuscriptAssetUsage> {
-        return apiClient.post<ManuscriptAssetUsage>(
-            `/api/v1/assets/${projectId}/manuscript/${manuscriptId}/usage`,
-            { asset_id: assetId }
-        );
-    },
-
-    /**
-     * Unlink an asset from a manuscript
-     */
-    async unlinkAssetFromManuscript(
-        projectId: string,
-        manuscriptId: string,
-        assetId: string
-    ): Promise<void> {
-        await apiClient.delete<void>(
-            `/api/v1/assets/${projectId}/manuscript/${manuscriptId}/usage/${assetId}`
-        );
     },
 };
 

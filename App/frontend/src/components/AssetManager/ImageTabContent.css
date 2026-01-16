@@ -127,14 +127,6 @@
     gap: var(--spacing-sm);
 }
 
-/* Virtualized grid container */
-.image-tab-content .virtualized-grid-container {
-    flex: 1;
-    min-height: 0;
-    width: 100%;
-    overflow-y: auto;
-}
-
 /* Base asset item */
 .image-tab-content .asset-item {
     position: relative;
@@ -152,6 +144,57 @@
 
 .image-tab-content .asset-item.main {
     border-color: var(--color-brand-primary);
+}
+
+/* ========================================
+   PLACEHOLDER TASK ITEMS
+   ======================================== */
+
+.image-tab-content .asset-item.placeholder {
+    cursor: default;
+    border-style: dashed;
+    border-color: var(--color-border-medium);
+}
+
+.image-tab-content .asset-item.placeholder:hover {
+    border-color: var(--color-border-medium);
+}
+
+.image-tab-content .asset-item.placeholder--error {
+    border-color: var(--color-danger, #c0392b);
+}
+
+.image-tab-content .asset-item.placeholder--cancelled {
+    border-color: var(--color-border-default);
+    opacity: 0.9;
+}
+
+.image-tab-content .asset-item.placeholder .placeholder-skeleton {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.05) 0%,
+        rgba(255, 255, 255, 0.12) 50%,
+        rgba(255, 255, 255, 0.05) 100%
+    );
+    background-size: 200% 100%;
+    animation: placeholderShimmer 1.2s ease-in-out infinite;
+}
+
+.image-tab-content .asset-item.placeholder--error .placeholder-skeleton,
+.image-tab-content .asset-item.placeholder--cancelled .placeholder-skeleton {
+    animation: none;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+@keyframes placeholderShimmer {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
 }
 
 /* Hover overlay gradient */

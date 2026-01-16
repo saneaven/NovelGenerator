@@ -1,16 +1,21 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useAssetStore } from '../../store/assetStore';
+import { useErrorStore } from '../../store/errorStore';
 import { useProjectStore } from '../../store/projectStore';
+import { useNotificationStore } from '../../store/notificationStore';
 import { ImageGenerationModal } from '../ImageGeneration';
 import ImagePromptManager from './ImagePromptManager';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
-import { formatStyledPrompt, type Asset } from '../../api/assetService';
+import { assetService, formatStyledPrompt, type Asset } from '../../api/assetService';
 import { API_BASE_URL } from '../../api/client';
 import { Folder, AIAssistMini, Close } from '../icons';
 import { VirtualizedImageGrid } from './VirtualizedImageGrid';
 import ToggleSwitch from '../ToggleSwitch';
 import type { DisplayAsset } from './ImageGridItem';
+import { ImageTaskRuntime, type GenerationRecipe } from '../../imageTask';
+import { useImageTaskStore } from '../../imageTask/store';
+import { fromAsset } from '../../imageTask/recipe/fromAsset';
 import './ImageTabContent.css';
 
 // Basic asset info needed for display
@@ -35,16 +40,6 @@ type SubTabType = 'library' | 'prompt';
 
 // Content mode determines what data to display and what actions are available
 export type ImageContentMode = 'object' | 'scene' | 'picker';
-
-export interface RegenerateSettings {
-    provider: string;
-    model: string;
-    prompt?: string;
-    positive_prompt?: string;
-    negative_prompt?: string;
-    size?: string;
-    settings?: Record<string, any>;
-}
 
 interface ImageTabContentProps {
     // Mode (defaults to 'object' for backward compatibility)
@@ -74,16 +69,9 @@ interface ImageTabContentProps {
 
     // Image generation callback (for parent to receive generated images)
     onImageGenerated?: (asset: Asset) => void;
-    // Initial settings for regeneration mode
-    initialGenerationSettings?: {
-        prompt?: string;
-        positivePrompt?: string;
-        negativePrompt?: string;
-        provider?: string;
-        model?: string;
-        size?: string;
-        settings?: Record<string, any>;
-    };
+
+    // Optional initial recipe for generation UI (e.g., retry flow)
+    initialGenerationRecipe?: GenerationRecipe | null;
 }
 
 const ImageTabContent: React.FC<ImageTabContentProps> = ({
@@ -99,9 +87,11 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     showPromptTab: showPromptTabProp,
     sceneContext,
     onImageGenerated: onImageGeneratedProp,
-    initialGenerationSettings,
+    initialGenerationRecipe,
 }) => {
     const { currentProjectId } = useProjectStore();
+    const showError = useErrorStore((s) => s.showError);
+    const imageTaskSessions = useImageTaskStore((s) => s.sessions);
     const {
         assets,
         storyObjectAssets,
@@ -132,9 +122,9 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
     const [editingName, setEditingName] = useState('');
     const [detailAsset, setDetailAsset] = useState<Asset | null>(null);
-    const [regenerateSettings, setRegenerateSettings] = useState<RegenerateSettings | null>(null);
     const [showImportDropdown, setShowImportDropdown] = useState(false);
     const [showGeneratePanel, setShowGeneratePanel] = useState(false);
+    const [generationRecipe, setGenerationRecipe] = useState<GenerationRecipe | null>(null);
     const [isDragOver, setIsDragOver] = useState(false);
     const [activeAssetId, setActiveAssetId] = useState<string | null>(null);
     const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -161,12 +151,22 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         }
     }, [currentProjectId, mode, objectType, objectId, manuscriptId, showAllChapters, fetchStoryObjectAssets, fetchSceneAssets, fetchAssets]);
 
-    // Auto-open generate panel when regenerating (initialGenerationSettings provided)
+    // Auto-open generate panel when an initial recipe is provided (e.g., retry flow)
     useEffect(() => {
-        if (initialGenerationSettings) {
-            setShowGeneratePanel(true);
-        }
-    }, [initialGenerationSettings]);
+        if (!initialGenerationRecipe) return;
+        setGenerationRecipe(initialGenerationRecipe);
+        setShowGeneratePanel(true);
+    }, [initialGenerationRecipe]);
+
+    const closeGeneratePanel = useCallback(() => {
+        // On mobile (especially iOS), leaving a focused textarea can cause scroll to "stick"
+        // after closing a fixed-position overlay.
+        const active = typeof document !== 'undefined' ? document.activeElement : null;
+        if (active instanceof HTMLElement) active.blur();
+
+        setShowGeneratePanel(false);
+        setGenerationRecipe(null);
+    }, []);
 
     // Get linked assets with is_main info (for object mode)
     const linkedAssets = useMemo(() => {
@@ -178,6 +178,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     const displayAssets = useMemo((): DisplayAsset[] => {
         if (mode === 'object') {
             return linkedAssets.map(link => ({
+                kind: 'asset',
                 id: link.asset.id,
                 linkId: link.id,
                 asset: link.asset,
@@ -185,6 +186,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
             }));
         } else if (mode === 'scene') {
             return sceneAssets.map(asset => ({
+                kind: 'asset',
                 id: asset.id,
                 asset: asset,
                 usage_count: asset.usage_count,
@@ -193,19 +195,65 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         } else {
             // Picker mode: show all assets
             return assets.map(asset => ({
+                kind: 'asset',
                 id: asset.id,
                 asset,
             }));
         }
     }, [mode, linkedAssets, sceneAssets, assets]);
 
+    const placeholderItems = useMemo((): DisplayAsset[] => {
+        if (!currentProjectId) return [];
+        if (mode === 'picker') return [];
+        if (mode === 'object' && (!objectType || !objectId)) return [];
+        if (mode === 'scene' && !showAllChapters && !manuscriptId) return [];
+
+        return Object.values(imageTaskSessions)
+            .filter((s): s is NonNullable<typeof s> => !!s)
+            .filter((s) => s.input.projectId === currentProjectId)
+            .filter((s) => s.status === 'running' || s.status === 'error' || s.status === 'cancelled')
+            .filter((s) => {
+                const b = s.input.binding;
+                if (mode === 'object') {
+                    return b.type === 'object' && b.objectType === objectType && b.objectId === objectId;
+                }
+                if (mode === 'scene') {
+                    if (b.type !== 'scene') return false;
+                    if (showAllChapters) return true;
+                    return b.manuscriptId === manuscriptId;
+                }
+                return false;
+            })
+            .sort((a, b) => b.createdAt - a.createdAt)
+            .map((s) => ({
+                kind: 'placeholder' as const,
+                id: `task:${s.id}`,
+                taskId: s.id,
+                status: s.status as 'running' | 'error' | 'cancelled',
+                stage: s.progress?.stage,
+                message:
+                    s.status === 'running'
+                        ? (s.progress?.message ?? 'Working...')
+                        : s.status === 'error'
+                            ? (s.error ?? 'An error occurred')
+                            : 'Cancelled',
+                error: s.status === 'error' ? s.error : undefined,
+                binding: s.input.binding,
+                recipe: s.input.recipe,
+            }));
+    }, [currentProjectId, mode, objectType, objectId, manuscriptId, showAllChapters, imageTaskSessions]);
+
     // Filter by search query
     const filteredAssets = useMemo(() => {
         if (!searchQuery) return displayAssets;
         return displayAssets.filter((item) =>
-            item.asset.name.toLowerCase().includes(searchQuery.toLowerCase())
+            item.kind === 'asset' && item.asset.name.toLowerCase().includes(searchQuery.toLowerCase())
         );
     }, [displayAssets, searchQuery]);
+
+    const combinedItems = useMemo((): DisplayAsset[] => {
+        return [...placeholderItems, ...filteredAssets];
+    }, [placeholderItems, filteredAssets]);
 
     // Dropdown file upload handler
     const handleDropdownFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -404,8 +452,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         if (!currentProjectId) return;
 
         if (mode === 'object' && objectType && objectId) {
-            const isFirstImage = linkedAssets.length === 0;
-            await linkAssetToObject(currentProjectId, objectType, objectId, asset.id, isFirstImage);
+            await linkAssetToObject(currentProjectId, objectType, objectId, asset.id);
             await fetchStoryObjectAssets(currentProjectId, objectType, objectId);
         } else if (mode === 'scene') {
             await fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
@@ -423,10 +470,17 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     };
 
     const handleImageGenerated = async (asset: Asset) => {
-        setRegenerateSettings(null);
-
+        setGenerationRecipe(null);
         try {
-            await linkAndRefreshAsset(asset);
+            if (!currentProjectId) return;
+            if (mode === 'scene') {
+                await fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
+            } else if (mode === 'object' && objectType && objectId) {
+                await fetchStoryObjectAssets(currentProjectId, objectType, objectId);
+            } else {
+                await fetchAssets(currentProjectId);
+            }
+            onAssetChange?.();
         } catch (err) {
             // Error handled in store
         }
@@ -436,6 +490,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     };
 
     const handleAssetClick = (item: DisplayAsset) => {
+        if (item.kind !== 'asset') return;
         if (mode === 'scene' || mode === 'picker') {
             // For scene/picker: select the asset and fix hover state
             setSelectedAssetId(item.id);
@@ -451,29 +506,60 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         setMoreDropdownAssetId(null);
     };
 
-    const handleRegenerateWithSettings = (asset: AssetLike) => {
-        if (!asset.generation_provider) return;
+    const handleRegenerateAsset = useCallback(async (assetId: string) => {
+        setMoreDropdownAssetId(null);
+        if (!currentProjectId) return;
 
-        const settings: RegenerateSettings = {
-            provider: asset.generation_provider,
-            model: asset.generation_model || '',
-            prompt: asset.generation_prompt?.content || undefined,
-            positive_prompt: asset.generation_positive_prompt?.content || undefined,
-            negative_prompt: asset.generation_negative_prompt?.content || undefined,
-            settings: asset.generation_settings as Record<string, unknown> | undefined,
-        };
-
-        if (asset.generation_settings?.size) {
-            settings.size = String(asset.generation_settings.size);
-        } else if (asset.width && asset.height) {
-            settings.size = `${asset.width}x${asset.height}`;
+        // Regeneration still needs a binding (scene -> manuscript, object -> object)
+        if (mode === 'scene' && !manuscriptId) {
+            showError('Regenerate Image', 'No chapter context is selected for scene image generation.');
+            return;
+        }
+        if (mode === 'object' && (!objectType || !objectId)) {
+            showError('Regenerate Image', 'No object is selected for image generation.');
+            return;
         }
 
-        setRegenerateSettings(settings);
-        setDetailAsset(null);
-        setShowImportDropdown(false);
+        try {
+            const fullAsset = await assetService.getAsset(currentProjectId, assetId);
+            const recipe = fromAsset(fullAsset);
+            if (!recipe) {
+                showError('Regenerate Image', 'This image has no saved generation settings.');
+                return;
+            }
+            setGenerationRecipe(recipe);
+            setShowGeneratePanel(true);
+        } catch (err) {
+            showError('Regenerate Image', 'Failed to load generation settings for this image.');
+        }
+    }, [currentProjectId, mode, manuscriptId, objectType, objectId, showError]);
+
+    const handleCancelTask = useCallback((taskId: string) => {
+        ImageTaskRuntime.cancel(taskId);
+    }, []);
+
+    const handleRetryTask = useCallback((_taskId: string, recipe: GenerationRecipe) => {
+        setGenerationRecipe(recipe);
         setShowGeneratePanel(true);
-    };
+
+        // Auto-dismiss the failed/cancelled task being retried to avoid duplicated placeholders.
+        const notifications = useNotificationStore.getState();
+        if (notifications.getNotification(_taskId)) {
+            notifications.remove(_taskId);
+            return;
+        }
+        useImageTaskStore.getState().clearSession(_taskId);
+    }, []);
+
+    const handleDismissTask = useCallback((taskId: string) => {
+        // Remove notification (also clears the session via onDismiss handler)
+        const notifications = useNotificationStore.getState();
+        if (notifications.getNotification(taskId)) {
+            notifications.remove(taskId);
+            return;
+        }
+        useImageTaskStore.getState().clearSession(taskId);
+    }, []);
 
     const formatFileSize = (bytes: number | null): string => {
         if (!bytes) return 'Unknown';
@@ -631,7 +717,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                         )}
 
                         <VirtualizedImageGrid
-                            items={filteredAssets}
+                            items={combinedItems}
                             mode={mode}
                             scrollResetKey={mode === 'scene' ? `${manuscriptId ?? 'all'}:${showAllChapters ? 'all' : 'current'}` : mode}
                             activeAssetId={activeAssetId}
@@ -652,9 +738,13 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                             onOpenDetail={handleOpenDetail}
                             onDeleteAsset={handleDeleteAsset}
                             onToggleMoreDropdown={setMoreDropdownAssetId}
+                            onCancelTask={handleCancelTask}
+                            onRetryTask={handleRetryTask}
+                            onDismissTask={handleDismissTask}
+                            onRegenerateAsset={handleRegenerateAsset}
                         />
 
-                        {filteredAssets.length === 0 && !isLoading && (
+                        {combinedItems.length === 0 && !isLoading && (
                             <div className="empty-state">
                                 {searchQuery
                                     ? 'No images match your search'
@@ -809,14 +899,6 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                             </div>
                         </div>
                         <div className="asset-detail-footer">
-                            {detailAsset.generation_provider && (
-                                <TextButton
-                                    variant="secondary"
-                                    onClick={() => handleRegenerateWithSettings(detailAsset)}
-                                >
-                                    Regenerate
-                                </TextButton>
-                            )}
                             <TextButton variant="secondary" onClick={() => setDetailAsset(null)}>
                                 Close
                             </TextButton>
@@ -827,36 +909,18 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
 
             {/* Generate Panel (shown when Generate with AI is clicked) */}
             {showGeneratePanel && (
-                <div className="generate-panel-overlay" onClick={() => setShowGeneratePanel(false)}>
+                <div
+                    className="generate-panel-overlay"
+                    onClick={closeGeneratePanel}
+                >
                     <div className="generate-panel" onClick={(e) => e.stopPropagation()}>
-                        <IconButton
-                            className="generate-panel-close"
-                            size="xs"
-                            icon={<Close size="sm" />}
-                            variant="ghost"
-                            onClick={() => {
-                                setShowGeneratePanel(false);
-                                setRegenerateSettings(null);
-                            }}
-                        />
                         <ImageGenerationModal
                             onImageGenerated={handleImageGenerated}
-                            onClose={() => {
-                                setShowGeneratePanel(false);
-                                setRegenerateSettings(null);
-                            }}
+                            onClose={closeGeneratePanel}
                             objectType={objectType}
                             objectId={objectId}
                             manuscriptId={manuscriptId}
-                            initialSettings={regenerateSettings || (initialGenerationSettings && initialGenerationSettings.provider && initialGenerationSettings.model ? {
-                                provider: initialGenerationSettings.provider,
-                                model: initialGenerationSettings.model,
-                                prompt: initialGenerationSettings.prompt,
-                                positive_prompt: initialGenerationSettings.positivePrompt,
-                                negative_prompt: initialGenerationSettings.negativePrompt,
-                                size: initialGenerationSettings.size,
-                                settings: initialGenerationSettings.settings,
-                            } : null)}
+                            initialRecipe={generationRecipe}
                             sceneContext={sceneContext}
                             assetType={mode === 'scene' ? 'scene' : 'object'}
                         />

@@ -1,12 +1,12 @@
 /* ========================================
    THINKING DISPLAY
-   Modern, minimal thinking card design
    ======================================== */
 
 .message-with-thinking {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-sm);
+    padding-bottom: var(--spacing-sm);
 }
 
 /* ===== Thinking Card ===== */

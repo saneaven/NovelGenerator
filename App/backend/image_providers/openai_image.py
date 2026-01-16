@@ -78,6 +78,11 @@ class OpenAIImageProvider(BaseImageProvider):
             )
 
         try:
+            # Prefer provider_settings for provider-specific knobs (frontend sends quality/style here)
+            if provider_settings:
+                quality = provider_settings.get("quality", quality)
+                style = provider_settings.get("style", style)
+
             # Parse size for later use
             width, height = 1024, 1024
             if size:

@@ -1,6 +1,6 @@
 /**
  * Custom Image Extension with Overlay
- * Extends TipTap's Image extension with interactive overlay for Replace, Delete, and Regenerate actions
+ * Extends TipTap's Image extension with interactive overlay for Replace and Delete actions
  */
 
 import Image from '@tiptap/extension-image';

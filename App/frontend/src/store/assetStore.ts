@@ -1,14 +1,12 @@
 import { create } from 'zustand';
 import { assetService } from '../api/assetService';
-import type { Asset, StoryObjectAsset, ImageProvider, SceneAsset, ManuscriptAssetUsage } from '../api/assetService';
+import type { Asset, StoryObjectAsset, SceneAsset } from '../api/assetService';
 
 interface AssetStore {
     // State
     assets: Asset[];
     storyObjectAssets: Map<string, StoryObjectAsset[]>;
     sceneAssets: SceneAsset[];
-    manuscriptAssetUsages: Map<string, ManuscriptAssetUsage[]>;  // keyed by manuscript_id
-    imageProviders: ImageProvider[];
     isLoading: boolean;
     error: string | null;
 
@@ -18,17 +16,13 @@ interface AssetStore {
     deleteAsset: (projectId: string, assetId: string) => Promise<void>;
     updateAsset: (projectId: string, assetId: string, name: string) => Promise<void>;
 
-    // Image providers (for checking capabilities)
-    fetchImageProviders: () => Promise<void>;
-
     // Story object assets
     fetchStoryObjectAssets: (projectId: string, objectType: string, objectId: string) => Promise<void>;
     linkAssetToObject: (
         projectId: string,
         objectType: string,
         objectId: string,
-        assetId: string,
-        isMain?: boolean
+        assetId: string
     ) => Promise<void>;
     setMainAsset: (
         projectId: string,
@@ -36,25 +30,13 @@ interface AssetStore {
         objectId: string,
         assetId: string
     ) => Promise<void>;
-    unlinkAssetFromObject: (
-        projectId: string,
-        objectType: string,
-        objectId: string,
-        linkId: string
-    ) => Promise<void>;
 
     // Scene assets
     fetchSceneAssets: (projectId: string, manuscriptId?: string) => Promise<void>;
 
-    // Manuscript asset usages
-    fetchManuscriptAssetUsages: (projectId: string, manuscriptId: string) => Promise<void>;
-    linkAssetToManuscript: (projectId: string, manuscriptId: string, assetId: string) => Promise<void>;
-    unlinkAssetFromManuscript: (projectId: string, manuscriptId: string, assetId: string) => Promise<void>;
-
     // Helpers
     getStoryObjectAssets: (objectType: string, objectId: string) => StoryObjectAsset[];
     getMainAsset: (objectType: string, objectId: string) => Asset | null;
-    getManuscriptAssetUsages: (manuscriptId: string) => ManuscriptAssetUsage[];
     clearError: () => void;
     clearAssets: () => void;
 }
@@ -65,8 +47,6 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
     assets: [],
     storyObjectAssets: new Map(),
     sceneAssets: [],
-    manuscriptAssetUsages: new Map(),
-    imageProviders: [],
     isLoading: false,
     error: null,
 
@@ -135,15 +115,6 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
         }
     },
 
-    fetchImageProviders: async () => {
-        try {
-            const providers = await assetService.listImageProviders();
-            set({ imageProviders: providers });
-        } catch (error) {
-            console.error('Failed to fetch image providers:', error);
-        }
-    },
-
     fetchStoryObjectAssets: async (projectId: string, objectType: string, objectId: string) => {
         // Skip if already cached to avoid redundant network requests
         const key = getObjectKey(objectType, objectId);
@@ -167,22 +138,15 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
         projectId: string,
         objectType: string,
         objectId: string,
-        assetId: string,
-        isMain: boolean = false
+        assetId: string
     ) => {
         try {
-            const link = await assetService.linkAssetToObject(projectId, objectType, objectId, assetId, isMain);
+            const link = await assetService.linkAssetToObject(projectId, objectType, objectId, assetId);
             const key = getObjectKey(objectType, objectId);
             set((state) => {
                 const newMap = new Map(state.storyObjectAssets);
                 const existing = newMap.get(key) || [];
-
-                // If setting as main, update other items
-                const updated = isMain
-                    ? existing.map((item) => ({ ...item, is_main: false }))
-                    : existing;
-
-                newMap.set(key, [...updated, link]);
+                newMap.set(key, [...existing, link]);
                 return { storyObjectAssets: newMap };
             });
         } catch (error) {
@@ -220,29 +184,6 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
         }
     },
 
-    unlinkAssetFromObject: async (
-        projectId: string,
-        objectType: string,
-        objectId: string,
-        linkId: string
-    ) => {
-        try {
-            await assetService.unlinkAssetFromObject(projectId, objectType, objectId, linkId);
-            const key = getObjectKey(objectType, objectId);
-            set((state) => {
-                const newMap = new Map(state.storyObjectAssets);
-                const existing = newMap.get(key) || [];
-                newMap.set(key, existing.filter((item) => item.id !== linkId));
-                return { storyObjectAssets: newMap };
-            });
-        } catch (error) {
-            set({
-                error: error instanceof Error ? error.message : 'Failed to unlink asset',
-            });
-            throw error;
-        }
-    },
-
     getStoryObjectAssets: (objectType: string, objectId: string) => {
         const key = getObjectKey(objectType, objectId);
         return get().storyObjectAssets.get(key) || [];
@@ -269,68 +210,12 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
         }
     },
 
-    // Manuscript asset usages
-    fetchManuscriptAssetUsages: async (projectId: string, manuscriptId: string) => {
-        try {
-            const response = await assetService.getManuscriptAssetUsages(projectId, manuscriptId);
-            set((state) => {
-                const newMap = new Map(state.manuscriptAssetUsages);
-                newMap.set(manuscriptId, response.assets);
-                return { manuscriptAssetUsages: newMap };
-            });
-        } catch (error) {
-            console.error('Failed to fetch manuscript asset usages:', error);
-        }
-    },
-
-    linkAssetToManuscript: async (projectId: string, manuscriptId: string, assetId: string) => {
-        try {
-            const link = await assetService.linkAssetToManuscript(projectId, manuscriptId, assetId);
-            set((state) => {
-                const newMap = new Map(state.manuscriptAssetUsages);
-                const existing = newMap.get(manuscriptId) || [];
-                // Avoid duplicates
-                if (!existing.find(l => l.asset_id === assetId)) {
-                    newMap.set(manuscriptId, [...existing, link]);
-                }
-                return { manuscriptAssetUsages: newMap };
-            });
-        } catch (error) {
-            set({
-                error: error instanceof Error ? error.message : 'Failed to link asset to manuscript',
-            });
-            throw error;
-        }
-    },
-
-    unlinkAssetFromManuscript: async (projectId: string, manuscriptId: string, assetId: string) => {
-        try {
-            await assetService.unlinkAssetFromManuscript(projectId, manuscriptId, assetId);
-            set((state) => {
-                const newMap = new Map(state.manuscriptAssetUsages);
-                const existing = newMap.get(manuscriptId) || [];
-                newMap.set(manuscriptId, existing.filter((item) => item.asset_id !== assetId));
-                return { manuscriptAssetUsages: newMap };
-            });
-        } catch (error) {
-            set({
-                error: error instanceof Error ? error.message : 'Failed to unlink asset from manuscript',
-            });
-            throw error;
-        }
-    },
-
-    getManuscriptAssetUsages: (manuscriptId: string) => {
-        return get().manuscriptAssetUsages.get(manuscriptId) || [];
-    },
-
     clearError: () => set({ error: null }),
 
     clearAssets: () => set({
         assets: [],
         storyObjectAssets: new Map(),
         sceneAssets: [],
-        manuscriptAssetUsages: new Map()
     }),
 }));
 

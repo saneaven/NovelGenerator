@@ -27,6 +27,7 @@ from ..models.db_models import (
 from ..schemas.story_objects import ImagePromptUpdate
 from ..models.translation_models import ObjectTranslation, ObjectVersion
 from ..utils.object_type_aliases import normalize_object_type, externalize_object_type
+from ..services.storage_service import storage_service
 
 LOREBOOK_TYPE = normalize_object_type('lorebook')
 
@@ -1276,7 +1277,40 @@ async def delete_object(
         ).first()
         if not project:
             raise HTTPException(status_code=403, detail="Access denied")
+    elif object_type == 'manuscript':
+        from ..models.db_models import Project
+        project = (
+            db.query(Project)
+            .join(Outline, Outline.project_id == Project.id)
+            .join(Act, Act.outline_id == Outline.id)
+            .join(Chapter, Chapter.act_id == Act.id)
+            .join(Manuscript, Manuscript.chapter_id == Chapter.id)
+            .filter(Manuscript.id == object_id, Project.user_id == current_user.id)
+            .first()
+        )
+        if not project:
+            raise HTTPException(status_code=403, detail="Access denied")
     # Add more cases for other types as needed
+
+    # Delete owned/bound assets before deleting object (so we can delete files deterministically)
+    if object_type in ['basic_info', 'character', 'organization', 'location', LOREBOOK_TYPE]:
+        assets_to_delete = (
+            db.query(Asset)
+            .join(StoryObjectAsset, StoryObjectAsset.asset_id == Asset.id)
+            .filter(
+                StoryObjectAsset.object_type == object_type,
+                StoryObjectAsset.object_id == object_id
+            )
+            .all()
+        )
+        for asset in assets_to_delete:
+            storage_service.delete_asset_files(asset.file_path, asset.thumbnail_path)
+            db.delete(asset)
+    elif object_type == 'manuscript':
+        owned_assets = db.query(Asset).filter(Asset.manuscript_id == object_id).all()
+        for asset in owned_assets:
+            storage_service.delete_asset_files(asset.file_path, asset.thumbnail_path)
+            db.delete(asset)
 
     # Delete all related data (order matters due to foreign keys)
     # 1. Delete translations

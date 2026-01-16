@@ -187,6 +187,7 @@ class UserSettingsResponse(BaseModel):
     patchAutoRetry: bool = True
     llmLoggingEnabled: bool = False
     functionCallHistoryLimit: int = 5
+    thinkingHistoryLimit: int = 5
     displayLanguage: str = "English"
 
     class Config:
@@ -207,4 +208,5 @@ class UserSettingsUpdate(BaseModel):
     patchAutoRetry: Optional[bool] = None
     llmLoggingEnabled: Optional[bool] = None
     functionCallHistoryLimit: Optional[int] = None
+    thinkingHistoryLimit: Optional[int] = None
     displayLanguage: Optional[str] = None

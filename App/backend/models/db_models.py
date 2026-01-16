@@ -1,5 +1,5 @@
 """SQLAlchemy database models for Novel Generator"""
-from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, ForeignKey, Index
+from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from datetime import datetime
@@ -108,6 +108,9 @@ class UserSettings(Base):
 
     # Function call history limit - number of recent assistant messages to include function calls for
     function_call_history_limit = Column(Integer, default=5, nullable=False)
+
+    # Thinking history limit - number of recent assistant messages to include thinking for
+    thinking_history_limit = Column(Integer, default=5, nullable=False)
 
     # Display language for UI
     display_language = Column(String(50), default='English', nullable=False)
@@ -509,7 +512,7 @@ class Asset(Base):
     asset_type = Column(String(20), nullable=True, index=True)
 
     # Manuscript ownership for scene assets (which manuscript this image belongs to)
-    manuscript_id = Column(UUID(as_uuid=True), ForeignKey('manuscripts.id', ondelete='SET NULL'), nullable=True, index=True)
+    manuscript_id = Column(UUID(as_uuid=True), ForeignKey('manuscripts.id', ondelete='CASCADE'), nullable=True, index=True)
 
     # Generation metadata - prompts stored as StyledPrompt JSON structure
     # StyledPrompt: { "prefix": str, "content": str, "postfix": str }
@@ -521,6 +524,7 @@ class Asset(Base):
     generation_provider = Column(String(50), nullable=True)  # 'openai', 'gemini', 'xai', 'novelai'
     generation_model = Column(String(100), nullable=True)
     generation_settings = Column(JSONB, nullable=True)  # Provider-specific settings (sampler, steps, etc.)
+    generation_reference_images = Column(JSONB, nullable=True)  # Reference images used during generation (asset_id + strength)
     generation_reference_objects = Column(JSONB, nullable=True)  # Story objects referenced during generation
 
     # Image dimensions
@@ -561,6 +565,7 @@ class StoryObjectAsset(Base):
 
     __table_args__ = (
         Index('idx_story_object_asset', 'object_type', 'object_id'),
+        UniqueConstraint('asset_id', name='uq_story_object_assets_asset_id'),
     )
 
 

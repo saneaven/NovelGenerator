@@ -130,6 +130,7 @@ async def get_user_settings(
         patchAutoRetry=getattr(settings, 'patch_auto_retry', True),
         llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
         functionCallHistoryLimit=getattr(settings, 'function_call_history_limit', 5),
+        thinkingHistoryLimit=getattr(settings, 'thinking_history_limit', 5),
         displayLanguage=getattr(settings, 'display_language', 'English')
     )
 
@@ -201,6 +202,9 @@ async def update_user_settings(
     if update_data.functionCallHistoryLimit is not None:
         settings.function_call_history_limit = update_data.functionCallHistoryLimit  # type: ignore
 
+    if update_data.thinkingHistoryLimit is not None:
+        settings.thinking_history_limit = update_data.thinkingHistoryLimit  # type: ignore
+
     if update_data.displayLanguage is not None:
         settings.display_language = update_data.displayLanguage  # type: ignore
 
@@ -242,6 +246,7 @@ async def update_user_settings(
         patchAutoRetry=getattr(settings, 'patch_auto_retry', True),
         llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
         functionCallHistoryLimit=getattr(settings, 'function_call_history_limit', 5),
+        thinkingHistoryLimit=getattr(settings, 'thinking_history_limit', 5),
         displayLanguage=getattr(settings, 'display_language', 'English')
     )
 
@@ -308,6 +313,7 @@ async def update_function_config(
         patchAutoRetry=getattr(settings, 'patch_auto_retry', True),
         llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
         functionCallHistoryLimit=getattr(settings, 'function_call_history_limit', 5),
+        thinkingHistoryLimit=getattr(settings, 'thinking_history_limit', 5),
         displayLanguage=getattr(settings, 'display_language', 'English')
     )
 
@@ -366,6 +372,7 @@ async def sync_settings_from_client(
             patch_auto_retry=client_settings.get('patchAutoRetry', True),
             llm_logging_enabled=client_settings.get('llmLoggingEnabled', False),
             function_call_history_limit=client_settings.get('functionCallHistoryLimit', 5),
+            thinking_history_limit=client_settings.get('thinkingHistoryLimit', 5),
             display_language=client_settings.get('displayLanguage', 'English')
         )
         db.add(settings)
@@ -384,6 +391,7 @@ async def sync_settings_from_client(
         settings.patch_auto_retry = client_settings.get('patchAutoRetry', getattr(settings, 'patch_auto_retry', True))  # type: ignore
         settings.llm_logging_enabled = client_settings.get('llmLoggingEnabled', getattr(settings, 'llm_logging_enabled', False))  # type: ignore
         settings.function_call_history_limit = client_settings.get('functionCallHistoryLimit', getattr(settings, 'function_call_history_limit', 5))  # type: ignore
+        settings.thinking_history_limit = client_settings.get('thinkingHistoryLimit', getattr(settings, 'thinking_history_limit', 5))  # type: ignore
         settings.display_language = client_settings.get('displayLanguage', getattr(settings, 'display_language', 'English'))  # type: ignore
 
     db.commit()

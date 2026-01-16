@@ -1,0 +1,59 @@
+/* Profile Panel */
+
+.profile-panel {
+    width: 100%;
+    max-width: 600px;
+}
+
+/* Profile Settings Card */
+.profile-settings-card {
+    margin-bottom: var(--spacing-xl);
+    padding: var(--spacing-lg);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-lg);
+    background-color: var(--color-surface-base);
+}
+
+.profile-settings-card .section-title {
+    margin-bottom: var(--spacing-lg);
+}
+
+/* Action Buttons Row */
+.action-buttons-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: var(--spacing-lg);
+    padding-top: var(--spacing-md);
+    border-top: 1px solid var(--color-border-subtle);
+}
+
+/* Success Message */
+.form-success {
+    font-size: var(--font-size-xs);
+    color: var(--color-success);
+    margin-bottom: var(--spacing-sm);
+}
+
+/* Store-level Error */
+.store-error {
+    margin-top: var(--spacing-lg);
+    padding: var(--spacing-md);
+    border: 1px solid var(--color-error);
+    border-radius: var(--border-radius-md);
+    background-color: var(--color-error-soft);
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+    .profile-settings-card {
+        padding: var(--spacing-md);
+    }
+
+    .action-buttons-row {
+        justify-content: stretch;
+    }
+
+    .action-buttons-row button {
+        width: 100%;
+    }
+}

@@ -7,7 +7,22 @@ from datetime import datetime
 
 from ..database import get_db
 from ..auth import get_current_user
-from ..models.db_models import User, Project, Asset, StoryObjectAsset, ManuscriptImage, Manuscript, ManuscriptAssetUsage, Chapter, Act
+from ..models.db_models import (
+    User,
+    Project,
+    Asset,
+    StoryObjectAsset,
+    ManuscriptImage,
+    Manuscript,
+    ManuscriptAssetUsage,
+    Chapter,
+    Act,
+    BasicInfo,
+    Character,
+    Organization,
+    Location,
+    LorebookEntry,
+)
 from ..schemas.assets import (
     AssetResponse, AssetListResponse, AssetUpdateRequest,
     StoryObjectAssetCreate, StoryObjectAssetResponse, StoryObjectAssetsResponse, SetMainAssetRequest,
@@ -21,11 +36,22 @@ from ..schemas.assets import (
 from ..services.storage_service import storage_service
 from ..image_providers.registry import ImageProviderRegistry
 from ..image_providers.base import ReferenceImageData
+from ..utils.object_type_aliases import normalize_object_type
 
 # Import providers to register them
 from ..image_providers import openai_image, gemini_image, xai_image, novelai_image
 
 router = APIRouter(prefix="/api/v1/assets", tags=["assets"])
+
+
+# Object types allowed for image ownership binding (asset generation -> StoryObjectAsset)
+OBJECT_BINDING_MODELS = {
+    "basic_info": BasicInfo,
+    "character": Character,
+    "organization": Organization,
+    "location": Location,
+    "lorebook_entry": LorebookEntry,
+}
 
 
 def _jsonb_to_styled_prompt(data: Optional[Dict[str, Any]]) -> Optional[StyledPrompt]:
@@ -50,12 +76,14 @@ def _asset_to_response(asset: Asset) -> AssetResponse:
         thumbnail_path=cast(Optional[str], asset.thumbnail_path),
         mime_type=cast(str, asset.mime_type),
         asset_type=cast(Optional[str], asset.asset_type),
+        manuscript_id=str(asset.manuscript_id) if asset.manuscript_id is not None else None,
         generation_prompt=_jsonb_to_styled_prompt(cast(Optional[Dict[str, Any]], asset.generation_prompt)),
         generation_positive_prompt=_jsonb_to_styled_prompt(cast(Optional[Dict[str, Any]], asset.generation_positive_prompt)),
         generation_negative_prompt=_jsonb_to_styled_prompt(cast(Optional[Dict[str, Any]], asset.generation_negative_prompt)),
         generation_provider=cast(Optional[str], asset.generation_provider),
         generation_model=cast(Optional[str], asset.generation_model),
         generation_settings=cast(Optional[Dict[str, Any]], asset.generation_settings),
+        generation_reference_images=cast(Optional[List[Dict[str, Any]]], asset.generation_reference_images),
         generation_reference_objects=cast(Optional[List[Dict[str, Any]]], asset.generation_reference_objects),
         width=cast(Optional[int], asset.width),
         height=cast(Optional[int], asset.height),
@@ -145,6 +173,8 @@ async def generate_image(
     project_id: UUID,
     request: ImageGenerationRequest,
     manuscript_id: Optional[UUID] = Query(None),
+    object_type: Optional[str] = Query(None),
+    object_id: Optional[UUID] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -156,6 +186,27 @@ async def generate_image(
     ).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    # Validate binding: require either manuscript_id (scene) OR (object_type + object_id) (object/cover)
+    normalized_object_type = normalize_object_type(object_type) if object_type else None
+    if manuscript_id and (normalized_object_type or object_id):
+        raise HTTPException(status_code=400, detail="Provide either manuscript_id or object_type/object_id, not both")
+    if (normalized_object_type and not object_id) or (object_id and not normalized_object_type):
+        raise HTTPException(status_code=400, detail="Both object_type and object_id are required for object binding")
+    if not manuscript_id and not (normalized_object_type and object_id):
+        raise HTTPException(status_code=400, detail="Binding required: manuscript_id or object_type/object_id")
+
+    # If object binding, verify object exists and belongs to project
+    if normalized_object_type and object_id:
+        model_class = OBJECT_BINDING_MODELS.get(normalized_object_type)
+        if not model_class:
+            raise HTTPException(status_code=400, detail=f"Unsupported object_type: {normalized_object_type}")
+        obj = db.query(model_class).filter(
+            model_class.id == object_id,
+            model_class.project_id == project_id
+        ).first()
+        if not obj:
+            raise HTTPException(status_code=404, detail="Object not found")
 
     try:
         # Get provider instance
@@ -203,16 +254,21 @@ async def generate_image(
         if request.negative_prompt:
             final_negative_prompt = f"{request.negative_prompt.prefix}{request.negative_prompt.content}{request.negative_prompt.postfix}"
 
+        # Provider-specific knobs are passed via provider_settings (single source of truth)
+        provider_settings: Dict[str, Any] = request.provider_settings or {}
+        quality = provider_settings.get("quality") or "standard"
+        style = provider_settings.get("style") or "natural"
+
         # Generate image
         result = await provider.generate_image(
             prompt=final_prompt,
             model=request.model,
             size=request.size,
-            quality=request.quality,
-            style=request.style,
+            quality=quality,
+            style=style,
             positive_prompt=final_positive_prompt,
             negative_prompt=final_negative_prompt,
-            provider_settings=request.provider_settings,
+            provider_settings=provider_settings or None,
             reference_images=reference_image_data,
         )
 
@@ -242,7 +298,15 @@ async def generate_image(
                 error="No image data returned from provider"
             )
 
-        # Create asset record
+        # Prepare reference images metadata for persistence (regen restoration)
+        reference_images_meta = None
+        if request.reference_images:
+            reference_images_meta = [
+                {"asset_id": ref.asset_id, "strength": ref.strength}
+                for ref in request.reference_images
+            ]
+
+        # Create asset record (and bind atomically if object binding)
         # Store prompts separately based on provider type:
         # - Natural language (OpenAI, Gemini, xAI): generation_prompt only
         # - Tag-based (NovelAI): generation_positive_prompt + generation_negative_prompt only
@@ -269,22 +333,63 @@ async def generate_image(
             generation_negative_prompt=request.negative_prompt.model_dump() if request.negative_prompt else None,
             generation_provider=request.provider,
             generation_model=request.model,
-            generation_settings=request.provider_settings,
+            generation_settings=provider_settings or None,
+            generation_reference_images=reference_images_meta,
             generation_reference_objects=ref_objects_data,  # Story objects used during generation
             width=width or result.width,
             height=height or result.height,
             file_size=file_size
         )
         db.add(asset)
-        db.commit()
+
+        link = None
+        if normalized_object_type and object_id:
+            max_order = db.query(StoryObjectAsset).filter(
+                StoryObjectAsset.object_type == normalized_object_type,
+                StoryObjectAsset.object_id == object_id
+            ).count()
+            link = StoryObjectAsset(
+                id=uuid4(),
+                object_type=normalized_object_type,
+                object_id=object_id,
+                asset_id=asset.id,
+                is_main=False,  # user-driven only
+                display_order=max_order
+            )
+            db.add(link)
+
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            # Prevent orphan files if DB commit fails
+            storage_service.delete_asset_files(file_path, thumb_path)
+            raise
+
         db.refresh(asset)
+        if link is not None:
+            db.refresh(link)
+
+        object_link = None
+        if link is not None:
+            object_link = StoryObjectAssetResponse(
+                id=str(link.id),
+                object_type=link.object_type,
+                object_id=str(link.object_id),
+                asset_id=str(link.asset_id),
+                is_main=link.is_main,
+                display_order=link.display_order,
+                created_at=cast(datetime, link.created_at),
+                asset=_asset_to_response(asset)
+            )
 
         return ImageGenerationResponse(
             success=True,
             asset_id=str(asset.id),
             file_path=f"/storage/assets/{file_path}",
             thumbnail_path=f"/storage/assets/{thumb_path}" if thumb_path else None,
-            revised_prompt=result.revised_prompt
+            revised_prompt=result.revised_prompt,
+            object_link=object_link
         )
 
     except ValueError as e:
@@ -519,6 +624,7 @@ async def get_story_object_assets(
     current_user: User = Depends(get_current_user)
 ):
     """Get all assets linked to a story object"""
+    object_type = normalize_object_type(object_type)
     # Verify project ownership
     project = db.query(Project).filter(
         Project.id == project_id,
@@ -566,6 +672,18 @@ async def link_asset_to_object(
     current_user: User = Depends(get_current_user)
 ):
     """Link an asset to a story object"""
+    object_type = normalize_object_type(object_type)
+    # Verify object exists and belongs to project
+    model_class = OBJECT_BINDING_MODELS.get(object_type)
+    if not model_class:
+        raise HTTPException(status_code=400, detail=f"Unsupported object_type: {object_type}")
+    obj = db.query(model_class).filter(
+        model_class.id == object_id,
+        model_class.project_id == project_id
+    ).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Object not found")
+
     # Verify project ownership and asset exists
     asset = db.query(Asset).join(Project).filter(
         Asset.id == UUID(request.asset_id),
@@ -574,6 +692,24 @@ async def link_asset_to_object(
     ).first()
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
+
+    # Prevent sharing: asset can be linked to at most one object
+    existing_link = db.query(StoryObjectAsset).filter(
+        StoryObjectAsset.asset_id == asset.id
+    ).first()
+    if existing_link:
+        if existing_link.object_type == object_type and existing_link.object_id == object_id:
+            return StoryObjectAssetResponse(
+                id=str(existing_link.id),
+                object_type=existing_link.object_type,
+                object_id=str(existing_link.object_id),
+                asset_id=str(existing_link.asset_id),
+                is_main=existing_link.is_main,
+                display_order=existing_link.display_order,
+                created_at=cast(datetime, existing_link.created_at),
+                asset=_asset_to_response(asset)
+            )
+        raise HTTPException(status_code=409, detail="Asset already linked to another object")
 
     # If setting as main, unset other mains
     if request.is_main:
@@ -623,6 +759,7 @@ async def set_main_asset(
     current_user: User = Depends(get_current_user)
 ):
     """Set the main asset for a story object"""
+    object_type = normalize_object_type(object_type)
     # Verify project ownership
     project = db.query(Project).filter(
         Project.id == project_id,
@@ -662,38 +799,6 @@ async def set_main_asset(
         created_at=link.created_at,
         asset=_asset_to_response(asset)
     )
-
-
-@router.delete("/{project_id}/object/{object_type}/{object_id}/{link_id}")
-async def unlink_asset_from_object(
-    project_id: UUID,
-    object_type: str,
-    object_id: UUID,
-    link_id: UUID,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Remove asset link from a story object"""
-    # Verify project ownership
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.user_id == current_user.id
-    ).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    link = db.query(StoryObjectAsset).filter(
-        StoryObjectAsset.id == link_id,
-        StoryObjectAsset.object_type == object_type,
-        StoryObjectAsset.object_id == object_id
-    ).first()
-    if not link:
-        raise HTTPException(status_code=404, detail="Link not found")
-
-    db.delete(link)
-    db.commit()
-
-    return {"success": True}
 
 
 # ============================================================================

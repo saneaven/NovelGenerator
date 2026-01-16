@@ -5,6 +5,7 @@ import type {
     NaturalImageStyle,
     TagBasedImageStyle,
 } from '../../store/settingsStore';
+import { generateTempId } from '../../utils/tempId';
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
 import './ImageGenPanel.css';
@@ -81,7 +82,7 @@ const NOVELAI_NOISE_SCHEDULES = [
     'polyexponential',
 ];
 
-const generateId = () => crypto.randomUUID();
+const generateId = (): string => generateTempId();
 
 const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
     const currentPromptType = PROVIDER_PROMPT_TYPES[config.provider];

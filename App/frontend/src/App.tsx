@@ -5,13 +5,13 @@ import { useTheme } from './hooks/useTheme';
 import { NotificationModals } from './components/Notification';
 import { registerLLMModals } from './llmTask/notificationHelpers';
 import { registerJourneyModals } from './llmTaskJourney/notificationHelpers';
-import { registerImageModals } from './imageGeneration/notificationHelpers';
+import { registerImageTaskModals } from './imageTask';
 import './App.css';
 
 // Register notification modal renderers at module load (push-based - no subscribers)
 registerLLMModals();
 registerJourneyModals();
-registerImageModals();
+registerImageTaskModals();
 
 function App() {
   const settingsStore = useSettingsStore();
@@ -48,4 +48,3 @@ function App() {
 }
 
 export default App;
-

@@ -4,7 +4,6 @@ import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
 import {
-    useImageGeneration,
     PROVIDER_LABELS,
     MODEL_OPTIONS,
     SIZE_OPTIONS,
@@ -15,17 +14,17 @@ import {
     NOVELAI_REFERENCE_MODES,
     DEFAULT_NOVELAI_SETTINGS,
     PROVIDER_PROMPT_TYPES,
-    listImageProviders,
-    type ImageProviderType,
-    type ImageGenerationRequest,
-    type ReferenceImage,
     type NovelAIReferenceMode,
-} from '../../imageGeneration';
-import type { Asset, ImageProvider } from '../../api/assetService';
+    type ImageProviderType,
+} from '../../imageTask/providerCatalog/providerConfig';
+import { assetService, type Asset, type ImageProvider, type StyledPrompt } from '../../api/assetService';
+import { API_BASE_URL } from '../../api/client';
+import { ImageTaskRuntime, type GenerationRecipe, type ImageTaskBinding } from '../../imageTask';
+import { useImageTaskStore } from '../../imageTask/store';
 import { UnifiedImageModal } from '../AssetManager';
 import UnifiedImagePromptModal, { type PromptResult, type PromptMode } from './UnifiedImagePromptModal';
 import ThinkingDisplay from '../ThinkingDisplay';
-import { Check, AIAssistMini, Close } from '../icons';
+import { AIAssistMini, Close } from '../icons';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
 import './ImageGenerationModal.css';
@@ -34,17 +33,8 @@ import './ImageGenerationModal.css';
 interface ReferenceImageItem {
     assetId: string;
     thumbnailUrl: string;
-}
-
-// Settings passed from asset detail for regeneration
-export interface RegenerateSettings {
-    provider: string;
-    model: string;
-    prompt?: string;
-    positive_prompt?: string;
-    negative_prompt?: string;
-    size?: string;
-    settings?: Record<string, any>;
+    strength: number;
+    missing?: boolean;
 }
 
 interface ImageGenerationModalProps {
@@ -53,7 +43,7 @@ interface ImageGenerationModalProps {
     objectType?: string;
     objectId?: string;
     manuscriptId?: string;  // For scene mode: ownership
-    initialSettings?: RegenerateSettings | null;
+    initialRecipe?: GenerationRecipe | null; // Prefill UI for retry flow
     // Scene context for scene mode AI assist
     sceneContext?: { preContext: string; postContext: string };
     // Asset type for generated images ('object' or 'scene')
@@ -66,7 +56,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     objectType,
     objectId,
     manuscriptId,
-    initialSettings,
+    initialRecipe,
     sceneContext,
     assetType = 'object',
 }) => {
@@ -74,41 +64,10 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const { settings } = useSettingsStore();
     const { objects, getObject } = useUnifiedObjectStore();
 
-    // Use the new image generation hook
-    const { generate, isGenerating, error } = useImageGeneration({
-        taskType: 'object-image',
-        onComplete: (result) => {
-            if (result.asset && onImageGenerated) {
-                // Transform to Asset format for callback
-                const asset: Asset = {
-                    id: result.asset.id,
-                    project_id: result.asset.projectId,
-                    manuscript_id: null,  // Set by backend based on request
-                    name: result.asset.name,
-                    file_path: result.asset.filePath,
-                    thumbnail_path: result.asset.thumbnailPath,
-                    mime_type: result.asset.mimeType,
-                    asset_type: result.asset.assetType,
-                    generation_prompt: result.asset.generationPrompt,
-                    generation_positive_prompt: result.asset.generationPositivePrompt,
-                    generation_negative_prompt: result.asset.generationNegativePrompt,
-                    generation_provider: result.asset.generationProvider,
-                    generation_model: result.asset.generationModel,
-                    generation_settings: result.asset.generationSettings as Record<string, any> | null,
-                    generation_reference_objects: null,
-                    width: result.asset.width,
-                    height: result.asset.height,
-                    file_size: result.asset.fileSize,
-                    created_at: result.asset.createdAt,
-                    updated_at: result.asset.updatedAt,
-                    file_url: result.asset.fileUrl,
-                    thumbnail_url: result.asset.thumbnailUrl,
-                };
-                onImageGenerated(asset);
-            }
-        },
-    });
-
+    const [taskId, setTaskId] = useState<string | null>(null);
+    const session = useImageTaskStore((state) => (taskId ? state.sessions[taskId] : undefined));
+    const isGenerating = session?.status === 'running';
+    const error = session?.status === 'error' ? session.error ?? 'Image generation failed' : null;
     // Get saved prompts from object metadata
     const savedPrompts = useMemo(() => {
         if (!objectId) return null;
@@ -144,7 +103,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const [geminiAspectRatio, setGeminiAspectRatio] = useState(settings.imageGenConfig.geminiSettings.aspect_ratio);
     const [geminiResolution, setGeminiResolution] = useState(settings.imageGenConfig.geminiSettings.image_resolution);
 
-    // Provider-specific settings
+    // Provider-specific settings (serialized into recipe.providerSettings)
     const [openaiQuality, setOpenaiQuality] = useState<'standard' | 'hd'>(settings.imageGenConfig.openaiSettings.quality);
     const [openaiStyle, setOpenaiStyle] = useState<'natural' | 'vivid'>(settings.imageGenConfig.openaiSettings.style);
     const [novelaiSampler, setNovelaiSampler] = useState(settings.imageGenConfig.novelaiSettings.sampler);
@@ -160,6 +119,13 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         settings.imageGenConfig.selectedTagBasedStyleId
     );
 
+    const [customNaturalPrefix, setCustomNaturalPrefix] = useState('');
+    const [customNaturalPostfix, setCustomNaturalPostfix] = useState('');
+    const [customPositivePrefix, setCustomPositivePrefix] = useState('');
+    const [customPositivePostfix, setCustomPositivePostfix] = useState('');
+    const [customNegativePrefix, setCustomNegativePrefix] = useState('');
+    const [customNegativePostfix, setCustomNegativePostfix] = useState('');
+
     // Reference images - available for all providers that support it
     const [referenceImages, setReferenceImages] = useState<ReferenceImageItem[]>([]);
     const [showImagePicker, setShowImagePicker] = useState(false);
@@ -172,12 +138,15 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const [novelaiVibeStrength, setNovelaiVibeStrength] = useState(DEFAULT_NOVELAI_SETTINGS.vibeStrength);
     const [novelaiVibeInfoExtracted, setNovelaiVibeInfoExtracted] = useState(DEFAULT_NOVELAI_SETTINGS.vibeInfoExtracted);
 
+    // Preserve unknown providerSettings for retry/prefill.
+    const [providerSettingsBase, setProviderSettingsBase] = useState<Record<string, any>>({});
+
     const isInitialMount = useRef(true);
     const previousProvider = useRef(provider);
 
     // Load providers to check image input support
     useEffect(() => {
-        listImageProviders().then(setProviders).catch(console.error);
+        assetService.listImageProviders().then(setProviders).catch(console.error);
     }, []);
 
     // Check if current provider supports image input
@@ -203,7 +172,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
             setShowImagePicker(false);
             return;
         }
-        setReferenceImages(prev => [...prev, { assetId, thumbnailUrl }]);
+        setReferenceImages(prev => [...prev, { assetId, thumbnailUrl, strength: 0.7 }]);
         setShowImagePicker(false);
     }, [referenceImages]);
 
@@ -217,60 +186,160 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const naturalStyles = settings.imageGenConfig.naturalStyles || [];
     const tagBasedStyles = settings.imageGenConfig.tagBasedStyles || [];
 
-    // Apply initial settings when regenerating from asset detail
+    // Prefill all settings from an existing recipe (Retry flow)
     useEffect(() => {
-        if (!initialSettings) return;
+        if (!initialRecipe) return;
 
-        if (initialSettings.provider) {
-            setProvider(initialSettings.provider as ImageProviderType);
+        previousProvider.current = initialRecipe.provider as ImageProviderType;
+
+        setProvider(initialRecipe.provider as ImageProviderType);
+        setModel(initialRecipe.model);
+        if ('size' in initialRecipe && initialRecipe.size) setSize(initialRecipe.size);
+
+        const s = (initialRecipe.providerSettings as Record<string, any> | undefined) ?? {};
+        setProviderSettingsBase(s);
+
+        // Provider-specific UI restoration from providerSettings
+        if (s.quality === 'standard' || s.quality === 'hd') setOpenaiQuality(s.quality);
+        if (s.style === 'natural' || s.style === 'vivid') setOpenaiStyle(s.style);
+        if (typeof s.sampler === 'string') setNovelaiSampler(s.sampler);
+        if (typeof s.steps === 'number') setNovelaiSteps(s.steps);
+        if (typeof s.scale === 'number') setNovelaiScale(s.scale);
+        if (typeof s.noise_schedule === 'string') setNovelaiNoiseSchedule(s.noise_schedule);
+        if (typeof s.aspect_ratio === 'string') setGeminiAspectRatio(s.aspect_ratio);
+        if (typeof s.image_resolution === 'string') setGeminiResolution(s.image_resolution);
+        if (s.referenceMode === 'auto' || s.referenceMode === 'i2i' || s.referenceMode === 'vibe') {
+            setNovelaiReferenceMode(s.referenceMode);
         }
-        if (initialSettings.model) {
-            setModel(initialSettings.model);
-        }
-        if (initialSettings.prompt) {
-            setPrompt(initialSettings.prompt);
-        }
-        if (initialSettings.positive_prompt) {
-            setPositivePrompt(initialSettings.positive_prompt);
-        }
-        if (initialSettings.negative_prompt) {
-            setNegativePrompt(initialSettings.negative_prompt);
-        }
-        if (initialSettings.size) {
-            setSize(initialSettings.size);
+        if (typeof s.strength === 'number') setNovelaiStrength(s.strength);
+        if (typeof s.i2iNoise === 'number') setNovelaiI2iNoise(s.i2iNoise);
+        if (typeof s.vibeStrength === 'number') setNovelaiVibeStrength(s.vibeStrength);
+        if (typeof s.vibeInfoExtracted === 'number') setNovelaiVibeInfoExtracted(s.vibeInfoExtracted);
+
+        // Prompts + style selection
+        if (initialRecipe.promptType === 'natural') {
+            setPrompt(initialRecipe.prompt.content ?? '');
+
+            const desiredStyleId =
+                initialRecipe.styleId && naturalStyles.some((style: any) => style.id === initialRecipe.styleId)
+                    ? initialRecipe.styleId
+                    : (naturalStyles.find(
+                        (style: any) =>
+                            (style.prefix || '') === (initialRecipe.prompt.prefix || '') &&
+                            (style.postfix || '') === (initialRecipe.prompt.postfix || '')
+                    )?.id ?? null);
+
+            if (desiredStyleId) {
+                setSelectedNaturalStyleId(desiredStyleId);
+                setCustomNaturalPrefix('');
+                setCustomNaturalPostfix('');
+            } else {
+                setSelectedNaturalStyleId(null);
+                setCustomNaturalPrefix(initialRecipe.prompt.prefix || '');
+                setCustomNaturalPostfix(initialRecipe.prompt.postfix || '');
+            }
+
+            setSelectedTagBasedStyleId(null);
+            setCustomPositivePrefix('');
+            setCustomPositivePostfix('');
+            setCustomNegativePrefix('');
+            setCustomNegativePostfix('');
+        } else {
+            setPositivePrompt(initialRecipe.positive.content ?? '');
+            setNegativePrompt(initialRecipe.negative?.content ?? '');
+            setActivePromptTab('positive');
+
+            const neg = initialRecipe.negative ?? { prefix: '', content: '', postfix: '' };
+
+            const desiredStyleId =
+                initialRecipe.styleId && tagBasedStyles.some((style: any) => style.id === initialRecipe.styleId)
+                    ? initialRecipe.styleId
+                    : (tagBasedStyles.find(
+                        (style: any) =>
+                            (style.positivePrefix || '') === (initialRecipe.positive.prefix || '') &&
+                            (style.positivePostfix || '') === (initialRecipe.positive.postfix || '') &&
+                            (style.negativePrefix || '') === (neg.prefix || '') &&
+                            (style.negativePostfix || '') === (neg.postfix || '')
+                    )?.id ?? null);
+
+            if (desiredStyleId) {
+                setSelectedTagBasedStyleId(desiredStyleId);
+                setCustomPositivePrefix('');
+                setCustomPositivePostfix('');
+                setCustomNegativePrefix('');
+                setCustomNegativePostfix('');
+            } else {
+                setSelectedTagBasedStyleId(null);
+                setCustomPositivePrefix(initialRecipe.positive.prefix || '');
+                setCustomPositivePostfix(initialRecipe.positive.postfix || '');
+                setCustomNegativePrefix(neg.prefix || '');
+                setCustomNegativePostfix(neg.postfix || '');
+            }
+
+            setSelectedNaturalStyleId(null);
+            setCustomNaturalPrefix('');
+            setCustomNaturalPostfix('');
         }
 
-        if (initialSettings.settings) {
-            const s = initialSettings.settings;
-            if (s.quality) setOpenaiQuality(s.quality);
-            if (s.style) setOpenaiStyle(s.style);
-            if (s.sampler) setNovelaiSampler(s.sampler);
-            if (s.steps) setNovelaiSteps(s.steps);
-            if (s.scale) setNovelaiScale(s.scale);
-            if (s.noise_schedule) setNovelaiNoiseSchedule(s.noise_schedule);
-            if (s.aspect_ratio) setGeminiAspectRatio(s.aspect_ratio);
-            if (s.image_resolution) setGeminiResolution(s.image_resolution);
-            if (typeof s.natural_style_id === 'string') setSelectedNaturalStyleId(s.natural_style_id);
-            if (typeof s.tag_based_style_id === 'string') setSelectedTagBasedStyleId(s.tag_based_style_id);
+        // Reference images: resolve thumbs by asset_id
+        const refs = initialRecipe.referenceImages ?? [];
+        if (!currentProjectId || refs.length === 0) {
+            setReferenceImages([]);
+            return;
         }
-    }, [initialSettings]);
+
+        setReferenceImages(
+            refs.map((r) => ({
+                assetId: r.assetId,
+                strength: r.strength,
+                thumbnailUrl: '',
+                missing: true,
+            }))
+        );
+
+        let cancelled = false;
+        void (async () => {
+            const resolved = await Promise.all(
+                refs.map(async (r) => {
+                    try {
+                        const a = await assetService.getAsset(currentProjectId, r.assetId);
+                        const path = a.thumbnail_url || a.file_url || '';
+                        return {
+                            assetId: r.assetId,
+                            strength: r.strength,
+                            thumbnailUrl: path ? `${API_BASE_URL}${path}` : '',
+                            missing: !path,
+                        };
+                    } catch {
+                        return { assetId: r.assetId, strength: r.strength, thumbnailUrl: '', missing: true };
+                    }
+                })
+            );
+            if (cancelled) return;
+            setReferenceImages(resolved);
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [initialRecipe, currentProjectId, naturalStyles, tagBasedStyles]);
 
     // Auto-load saved prompts from object metadata
     useEffect(() => {
-        if (savedPrompts) {
-            const promptType = PROVIDER_PROMPT_TYPES[provider];
-            if (promptType === 'natural' && savedPrompts.natural) {
-                setPrompt(savedPrompts.natural);
-            } else if (promptType === 'tag_based') {
-                if (savedPrompts.positive) {
-                    setPositivePrompt(savedPrompts.positive);
-                }
-                if (savedPrompts.negative) {
-                    setNegativePrompt(savedPrompts.negative);
-                }
+        if (!savedPrompts || initialRecipe) return;
+
+        const promptType = PROVIDER_PROMPT_TYPES[provider];
+        if (promptType === 'natural' && savedPrompts.natural) {
+            setPrompt(savedPrompts.natural);
+        } else if (promptType === 'tag_based') {
+            if (savedPrompts.positive) {
+                setPositivePrompt(savedPrompts.positive);
+            }
+            if (savedPrompts.negative) {
+                setNegativePrompt(savedPrompts.negative);
             }
         }
-    }, [objectId, provider, savedPrompts?.natural, savedPrompts?.positive, savedPrompts?.negative]);
+    }, [objectId, provider, savedPrompts?.natural, savedPrompts?.positive, savedPrompts?.negative, initialRecipe]);
 
     // Reset model/size when provider changes
     useEffect(() => {
@@ -285,6 +354,14 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
             const defaultSize = SIZE_OPTIONS[provider]?.[0] || '1024x1024';
             setModel(defaultModel);
             setSize(defaultSize);
+            setProviderSettingsBase({});
+            setReferenceImages([]);
+            setCustomNaturalPrefix('');
+            setCustomNaturalPostfix('');
+            setCustomPositivePrefix('');
+            setCustomPositivePostfix('');
+            setCustomNegativePrefix('');
+            setCustomNegativePostfix('');
         }
     }, [provider]);
 
@@ -371,13 +448,49 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
         return tagBasedStyles.find((s) => s.id === selectedTagBasedStyleId) || null;
     };
 
-    const handleGenerate = async () => {
-        if (!currentProjectId) return;
+    const binding: ImageTaskBinding | null = useMemo(() => {
+        if (assetType === 'scene') {
+            return manuscriptId ? { type: 'scene', manuscriptId } : null;
+        }
+        return objectType && objectId ? { type: 'object', objectType, objectId } : null;
+    }, [assetType, manuscriptId, objectType, objectId]);
 
-        // Build reference images data
-        const referenceImagesData: ReferenceImage[] = supportsImageInput && referenceImages.length > 0
-            ? referenceImages.map(img => ({ assetId: img.assetId, strength: 0.7 }))
-            : [];
+    const handleGenerate = async () => {
+        if (!binding) {
+            alert(
+                assetType === 'scene'
+                    ? 'Missing manuscriptId for scene image generation.'
+                    : 'Missing object binding (objectType/objectId) for object image generation.'
+            );
+            return;
+        }
+
+        const referenceImagesData =
+            supportsImageInput && referenceImages.length > 0
+                ? referenceImages.map((img) => ({ assetId: img.assetId, strength: img.strength }))
+                : undefined;
+
+        let providerSettings: Record<string, unknown> | undefined =
+            providerSettingsBase && Object.keys(providerSettingsBase).length > 0 ? { ...providerSettingsBase } : undefined;
+
+        if (provider === 'openai') {
+            providerSettings = { ...(providerSettings ?? {}), quality: openaiQuality, style: openaiStyle };
+        } else if (provider === 'gemini') {
+            providerSettings = { ...(providerSettings ?? {}), aspect_ratio: geminiAspectRatio, image_resolution: geminiResolution };
+        } else if (provider === 'novelai') {
+            providerSettings = {
+                ...(providerSettings ?? {}),
+                sampler: novelaiSampler,
+                steps: novelaiSteps,
+                scale: novelaiScale,
+                noise_schedule: novelaiNoiseSchedule,
+                referenceMode: novelaiReferenceMode,
+                strength: novelaiStrength,
+                i2iNoise: novelaiI2iNoise,
+                vibeStrength: novelaiVibeStrength,
+                vibeInfoExtracted: novelaiVibeInfoExtracted,
+            };
+        }
 
         if (isTagBased) {
             if (!positivePrompt.trim()) {
@@ -385,55 +498,77 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 return;
             }
 
-            const request: ImageGenerationRequest = {
-                positivePrompt: positivePrompt.trim(),
-                negativePrompt: negativePrompt.trim() || undefined,
+            const style = getCurrentTagBasedStyle() as any;
+            const positive: StyledPrompt = {
+                prefix: (style?.positivePrefix ?? customPositivePrefix) || '',
+                content: positivePrompt.trim(),
+                postfix: (style?.positivePostfix ?? customPositivePostfix) || '',
+            };
+
+            const negPrefix = (style?.negativePrefix ?? customNegativePrefix) || '';
+            const negPostfix = (style?.negativePostfix ?? customNegativePostfix) || '';
+            const negContent = negativePrompt.trim();
+            const negative: StyledPrompt | undefined =
+                negContent || negPrefix || negPostfix
+                    ? { prefix: negPrefix, content: negContent, postfix: negPostfix }
+                    : undefined;
+
+            const recipe: GenerationRecipe = {
+                promptType: 'tag_based',
                 provider,
                 model,
                 size,
+                positive,
+                negative,
+                providerSettings,
                 styleId: selectedTagBasedStyleId,
-                sampler: novelaiSampler,
-                steps: novelaiSteps,
-                scale: novelaiScale,
-                noiseSchedule: novelaiNoiseSchedule,
-                // Reference images
-                referenceImages: referenceImagesData.length > 0 ? referenceImagesData : undefined,
-                // NovelAI reference settings
-                referenceMode: provider === 'novelai' ? novelaiReferenceMode : undefined,
-                strength: provider === 'novelai' ? novelaiStrength : undefined,
-                i2iNoise: provider === 'novelai' ? novelaiI2iNoise : undefined,
-                vibeStrength: provider === 'novelai' ? novelaiVibeStrength : undefined,
-                vibeInfoExtracted: provider === 'novelai' ? novelaiVibeInfoExtracted : undefined,
-                assetType,
-                manuscriptId,
+                referenceImages: referenceImagesData,
             };
 
-            onClose?.();
-            generate(request);
+                const { taskId: newTaskId } = ImageTaskRuntime.start(
+                    { projectId: currentProjectId, binding, recipe, label: 'Generate image' },
+                    {
+                        onSuccess: (result) => {
+                            onImageGenerated?.(result.asset);
+                        },
+                    }
+                );
+                setTaskId(newTaskId);
+                onClose?.();
         } else {
             if (!prompt.trim()) {
                 alert('Please enter a prompt');
                 return;
             }
 
-            const request: ImageGenerationRequest = {
-                prompt: prompt.trim(),
+            const style = getCurrentNaturalStyle() as any;
+            const promptObj: StyledPrompt = {
+                prefix: (style?.prefix ?? customNaturalPrefix) || '',
+                content: prompt.trim(),
+                postfix: (style?.postfix ?? customNaturalPostfix) || '',
+            };
+
+            const recipe: GenerationRecipe = {
+                promptType: 'natural',
                 provider,
                 model,
                 size: provider === 'gemini' ? undefined : size,
+                prompt: promptObj,
+                providerSettings,
                 styleId: selectedNaturalStyleId,
-                quality: provider === 'openai' ? openaiQuality : undefined,
-                style: provider === 'openai' ? openaiStyle : undefined,
-                aspectRatio: provider === 'gemini' ? geminiAspectRatio : undefined,
-                resolution: provider === 'gemini' ? geminiResolution : undefined,
-                // Reference images
-                referenceImages: referenceImagesData.length > 0 ? referenceImagesData : undefined,
-                assetType,
-                manuscriptId,
+                referenceImages: referenceImagesData,
             };
 
+            const { taskId: newTaskId } = ImageTaskRuntime.start(
+                { projectId: currentProjectId, binding, recipe, label: 'Generate image' },
+                {
+                    onSuccess: (result) => {
+                        onImageGenerated?.(result.asset);
+                    },
+                }
+            );
+            setTaskId(newTaskId);
             onClose?.();
-            generate(request);
         }
     };
 
@@ -466,13 +601,6 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
             </div>
 
             <div className="panel-body">
-                {/* Saved prompt indicator */}
-                {savedPrompts && (savedPrompts.natural || savedPrompts.positive) && (
-                    <div className="saved-prompt-indicator">
-                        Loaded saved prompt from object. Edit below or use as-is.
-                    </div>
-                )}
-
                 {/* Natural Language Prompt Input */}
                 {!isTagBased && (
                     <div className="form-field">
@@ -524,13 +652,13 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                                 className={`prompt-tab ${activePromptTab === 'positive' ? 'active' : ''}`}
                                 onClick={() => setActivePromptTab('positive')}
                             >
-                                Positive {positivePrompt && <Check size="xs" />}
+                                Positive
                             </button>
                             <button
                                 className={`prompt-tab ${activePromptTab === 'negative' ? 'active' : ''}`}
                                 onClick={() => setActivePromptTab('negative')}
                             >
-                                Negative {negativePrompt && <Check size="xs" />}
+                                Negative
                             </button>
                         </div>
                         <div className="prompt-input-wrapper">
@@ -796,7 +924,11 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                             <div className="reference-images-grid">
                                 {referenceImages.map(img => (
                                     <div key={img.assetId} className="reference-image-item">
-                                        <img src={img.thumbnailUrl} alt="Reference" />
+                                        {img.thumbnailUrl && !img.missing ? (
+                                            <img src={img.thumbnailUrl} alt="Reference" />
+                                        ) : (
+                                            <div className="reference-image-missing">Missing</div>
+                                        )}
                                         <IconButton
                                             icon={<Close size="sm" />}
                                             onClick={() => handleRemoveImage(img.assetId)}
@@ -952,20 +1084,20 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 {/* Error Display */}
                 {error && <div className="error-message">{error}</div>}
                 {streamingError && <div className="error-message">{streamingError}</div>}
+            </div>
 
-                {/* Generate Button */}
-                <div className="panel-actions">
-                    <button
-                        className="generate-button"
-                        onClick={handleGenerate}
-                        disabled={
-                            isGenerating ||
-                            (isTagBased ? !positivePrompt.trim() : !prompt.trim())
-                        }
-                    >
-                        {isGenerating ? 'Generating...' : 'Generate Image'}
-                    </button>
-                </div>
+            {/* Footer with Generate Button */}
+            <div className="panel-footer">
+                <button
+                    className="generate-button"
+                    onClick={handleGenerate}
+                    disabled={
+                        isGenerating ||
+                        (isTagBased ? !positivePrompt.trim() : !prompt.trim())
+                    }
+                >
+                    {isGenerating ? 'Generating...' : 'Generate Image'}
+                </button>
             </div>
 
             {/* AI Prompt Builder Modal - supports object, cover_image, and scene contexts */}
@@ -1013,7 +1145,10 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                     preset="assetPicker"
                     isOpen={showImagePicker}
                     onClose={() => setShowImagePicker(false)}
-                    onSelect={(asset: Asset) => handleImageSelected(asset.id, asset.thumbnail_url || asset.file_url || '')}
+                    onSelect={(asset: Asset) => {
+                        const path = asset.thumbnail_url || asset.file_url || '';
+                        handleImageSelected(asset.id, path ? `${API_BASE_URL}${path}` : '');
+                    }}
                     title="Select Reference Image"
                 />
             )}

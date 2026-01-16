@@ -45,6 +45,16 @@ export interface AuthResponse {
   user?: UserResponse; // Optional - may be fetched separately
 }
 
+export interface ProfileUpdate {
+  username?: string;
+  email?: string;
+}
+
+export interface PasswordChange {
+  current_password: string;
+  new_password: string;
+}
+
 // ============================================================================
 // PROJECTS
 // ============================================================================

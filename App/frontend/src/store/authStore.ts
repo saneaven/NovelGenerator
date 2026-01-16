@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { authService, type UserResponse } from '../api';
+import { authService, type UserResponse, type ProfileUpdate } from '../api';
 
 interface AuthStore {
   user: UserResponse | null;
@@ -13,6 +13,8 @@ interface AuthStore {
   logout: () => void;
   checkAuth: () => Promise<void>;
   clearError: () => void;
+  updateProfile: (data: ProfileUpdate) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthStore>()((set) => ({
@@ -101,5 +103,36 @@ export const useAuthStore = create<AuthStore>()((set) => ({
 
   clearError: () => {
     set({ error: null });
+  },
+
+  updateProfile: async (data: ProfileUpdate) => {
+    set({ isLoading: true, error: null });
+    try {
+      const updatedUser = await authService.updateProfile(data);
+      set({
+        user: updatedUser,
+        isLoading: false,
+      });
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to update profile',
+      });
+      throw error;
+    }
+  },
+
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      await authService.changePassword({ current_password: currentPassword, new_password: newPassword });
+      set({ isLoading: false });
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to change password',
+      });
+      throw error;
+    }
   },
 }));

@@ -20,7 +20,6 @@ import { TableHeader } from '@tiptap/extension-table-header';
 import { Markdown } from '@tiptap/markdown';
 import ImageWithOverlay from './extensions/ImageWithOverlay';
 import { IMAGE_OVERLAY_STORAGE_KEY, type ImageOverlayCallbacks } from './extensions/ImageNodeView';
-import type { Asset } from '../../api/assetService';
 import { Image } from '../icons';
 import './RichTextEditor.css';
 
@@ -44,13 +43,11 @@ interface RichTextEditorProps {
   onBrowseAssets?: () => void;
   // Toolbar action props (optional - for integration with NovelEditorPanel)
   toolbarActions?: React.ReactNode;
-  // Image overlay callbacks (for swap/regenerate actions)
-  projectId?: string;
-  // Swap image - opens modal with EMPTY prompts (pick from library or generate new from scratch)
-  onSwapImage?: (currentSrc: string, asset: Asset | null, imageBounds: DOMRect | null) => void;
-  // Regenerate image - opens modal with PRE-FILLED prompts from original generation
-  onRegenerateImage?: (currentSrc: string, asset: Asset | null, imageBounds: DOMRect | null) => void;
-  getAssetByUrl?: (src: string) => Promise<Asset | null>;
+  // Image overlay callbacks (for swap actions)
+  // Change image - opens the asset library modal (user manually selects replacement)
+  onSwapImage?: (currentSrc: string, imageBounds: DOMRect | null) => void;
+  // Regenerate image - opens the asset library + generation panel with original settings prefilled
+  onRegenerateImage?: (currentSrc: string, imageBounds: DOMRect | null) => void;
 }
 
 const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
@@ -60,10 +57,8 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   disabled = false,
   onBrowseAssets,
   toolbarActions,
-  projectId,
   onSwapImage,
   onRegenerateImage,
-  getAssetByUrl,
 }, ref) => {
   // Use ref to hold onChange callback (prevents stale closure in onCreate)
   // See: https://tiptap.dev/docs/editor/api/events
@@ -95,11 +90,9 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
 
   // Memoize image overlay callbacks to prevent unnecessary re-renders
   const imageOverlayCallbacks = useMemo<ImageOverlayCallbacks>(() => ({
-    projectId,
     onSwapImage,
     onRegenerateImage,
-    getAssetByUrl,
-  }), [projectId, onSwapImage, onRegenerateImage, getAssetByUrl]);
+  }), [onSwapImage, onRegenerateImage]);
 
   // Open heading dropdown with position calculation
   const openHeadingDropdown = () => {

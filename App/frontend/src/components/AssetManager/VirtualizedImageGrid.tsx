@@ -1,8 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useMasonry, usePositioner, useResizeObserver, type RenderComponentProps } from 'masonic';
-import { ImageGridItem, calculateItemHeight } from './ImageGridItem';
+import { ImageGridItem, calculateItemHeight, calculatePlaceholderHeight } from './ImageGridItem';
 import type { DisplayAsset, ImageContentMode } from './ImageGridItem';
 import type { Asset, SceneAsset } from '../../api/assetService';
+import type { GenerationRecipe } from '../../imageTask';
 
 type VirtualizedImageGridContextValue = {
     mode: ImageContentMode;
@@ -23,6 +24,10 @@ type VirtualizedImageGridContextValue = {
     onOpenDetail: (asset: Asset | SceneAsset) => void;
     onDeleteAsset: (asset: Asset | SceneAsset) => void;
     onToggleMoreDropdown: (assetId: string | null) => void;
+    onCancelTask?: (taskId: string) => void;
+    onRetryTask?: (taskId: string, recipe: GenerationRecipe) => void;
+    onDismissTask?: (taskId: string) => void;
+    onRegenerateAsset?: (assetId: string) => void;
 };
 
 const VirtualizedImageGridContext = createContext<VirtualizedImageGridContextValue | null>(null);
@@ -39,10 +44,22 @@ const MasonryCard: React.FC<RenderComponentProps<DisplayAsset>> = ({ data, width
     const ctx = useVirtualizedImageGridContext();
     const isActive = ctx.activeAssetId === data.id;
     const isSelected = ctx.selectedAssetId === data.id;
-    const isExcluded = ctx.excludeAssetIds.includes(data.asset.id);
-    const itemHeight = calculateItemHeight(data.asset, width);
+    const isExcluded = data.kind === 'asset' ? ctx.excludeAssetIds.includes(data.asset.id) : false;
+    const itemHeight = data.kind === 'asset'
+        ? calculateItemHeight(data.asset, width)
+        : calculatePlaceholderHeight(data.recipe, width);
 
     const handleItemClick = () => {
+        if (data.kind === 'placeholder') {
+            // Placeholder cards should behave like hover-only on desktop.
+            // On mobile (no hover), one tap shows the actions (active state).
+            const isHoverNone = typeof window !== 'undefined'
+                && typeof window.matchMedia === 'function'
+                && window.matchMedia('(hover: none)').matches;
+            if (!isHoverNone) return;
+            ctx.onSetActiveAssetId(isActive ? null : data.id);
+            return;
+        }
         if (isExcluded) return;
         if (ctx.mode === 'object') {
             ctx.onSetActiveAssetId(data.id);
@@ -71,6 +88,10 @@ const MasonryCard: React.FC<RenderComponentProps<DisplayAsset>> = ({ data, width
             onOpenDetail={ctx.onOpenDetail}
             onDeleteAsset={ctx.onDeleteAsset}
             onToggleMoreDropdown={ctx.onToggleMoreDropdown}
+            onCancelTask={ctx.onCancelTask}
+            onRetryTask={ctx.onRetryTask}
+            onDismissTask={ctx.onDismissTask}
+            onRegenerateAsset={ctx.onRegenerateAsset}
             height={itemHeight}
         />
     );
@@ -106,6 +127,10 @@ interface VirtualizedImageGridProps {
     onOpenDetail: (asset: Asset | SceneAsset) => void;
     onDeleteAsset: (asset: Asset | SceneAsset) => void;
     onToggleMoreDropdown: (assetId: string | null) => void;
+    onCancelTask?: (taskId: string) => void;
+    onRetryTask?: (taskId: string, recipe: GenerationRecipe) => void;
+    onDismissTask?: (taskId: string) => void;
+    onRegenerateAsset?: (assetId: string) => void;
 }
 
 function setRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
@@ -210,6 +235,10 @@ export const VirtualizedImageGrid: React.FC<VirtualizedImageGridProps> = ({
     onOpenDetail,
     onDeleteAsset,
     onToggleMoreDropdown,
+    onCancelTask,
+    onRetryTask,
+    onDismissTask,
+    onRegenerateAsset,
 }) => {
     const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
@@ -256,6 +285,10 @@ export const VirtualizedImageGrid: React.FC<VirtualizedImageGridProps> = ({
         onOpenDetail,
         onDeleteAsset,
         onToggleMoreDropdown,
+        onCancelTask,
+        onRetryTask,
+        onDismissTask,
+        onRegenerateAsset,
     }), [
         mode,
         activeAssetId,
@@ -275,6 +308,10 @@ export const VirtualizedImageGrid: React.FC<VirtualizedImageGridProps> = ({
         onOpenDetail,
         onDeleteAsset,
         onToggleMoreDropdown,
+        onCancelTask,
+        onRetryTask,
+        onDismissTask,
+        onRegenerateAsset,
     ]);
 
     const masonry = useMasonry({

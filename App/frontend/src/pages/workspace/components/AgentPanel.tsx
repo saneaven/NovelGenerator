@@ -656,15 +656,6 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                             key={message.chatMessage.id}
                             className={`agent-message ${message.chatMessage.role}${isEditing ? ' editing' : ''}`}
                         >
-                            {/* Show thinking above the message bubble */}
-                            {message.chatMessage.role === 'assistant' && (
-                                <ThinkingDisplay
-                                    messageId={message.chatMessage.id}
-                                    contentParts={message.chatMessage.contentParts}
-                                    isStreaming={isLoading && message.chatMessage.id === storedMessages[storedMessages.length - 1]?.id}
-                                />
-                            )}
-
                             <div className="message-wrapper">
                                 <div className="message-header">
                                     <span className="message-role">{isUser ? 'You' : 'AI'}</span>
@@ -681,6 +672,14 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                             />
                                         ) : (
                                             <>
+                                                {/* Show thinking above the message bubble */}
+                                                {message.chatMessage.role === 'assistant' && (
+                                                    <ThinkingDisplay
+                                                        messageId={message.chatMessage.id}
+                                                        contentParts={message.chatMessage.contentParts}
+                                                        isStreaming={isLoading && message.chatMessage.id === storedMessages[storedMessages.length - 1]?.id}
+                                                    />
+                                                )}
                                                 {renderMessageContent(message, processingResult)}
                                         {hasStreamingCalls && (
                                             <div className="message-edit-cards">

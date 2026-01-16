@@ -11,7 +11,8 @@ import PromptsTemplatesPanel from './PromptsTemplatesPanel';
 import ThemePanel from './ThemePanel';
 import AdvancedPanel from './AdvancedPanel';
 import ImageGenPanel from './ImageGenPanel';
-import { Settings as SettingsIcon, Lock, Image, Document, Globe, Palette, Wrench, HamburgerMenu } from '../icons';
+import ProfilePanel from './ProfilePanel';
+import { Settings as SettingsIcon, Lock, Image, Document, Globe, Palette, Wrench, HamburgerMenu, People } from '../icons';
 import { TextButton } from '../TextButton';
 import './SettingsModal.css';
 import './_shared-components.css';
@@ -21,13 +22,13 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-type MainTab = 'credentials' | 'general' | 'imageGen' | 'prompts' | 'language' | 'theme' | 'advanced';
+type MainTab = 'profile' | 'credentials' | 'general' | 'imageGen' | 'prompts' | 'language' | 'theme' | 'advanced';
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const settingsStore = useSettingsStore();
   const [localSettings, setLocalSettings] = useState<Settings>(settingsStore.settings);
   const [isSaving, setIsSaving] = useState(false);
-  const [mainTab, setMainTab] = useState<MainTab>('general');
+  const [mainTab, setMainTab] = useState<MainTab>('profile');
   const [activeFunction, setActiveFunction] = useState<AIFunctionType>('agent');
 
   // Mobile sidebar state from store
@@ -103,6 +104,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         <ul className="settings-mobile-sidebar-list">
           <li>
             <button
+              className={`settings-mobile-sidebar-item ${mainTab === 'profile' ? 'active' : ''}`}
+              onClick={() => { setMainTab('profile'); closeSidebar('__global__'); }}
+            >
+              <People size="md" />
+              <span>Profile</span>
+            </button>
+          </li>
+          <li>
+            <button
               className={`settings-mobile-sidebar-item ${mainTab === 'credentials' ? 'active' : ''}`}
               onClick={() => { setMainTab('credentials'); closeSidebar('__global__'); }}
             >
@@ -170,6 +180,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       {/* Main Category Tabs */}
       <div className="main-tabs">
         <button
+          className={`main-tab ${mainTab === 'profile' ? 'active' : ''}`}
+          onClick={() => setMainTab('profile')}
+        >
+          <span className="tab-icon"><People size="sm" /></span>
+          <span className="tab-label">Profile</span>
+        </button>
+        <button
           className={`main-tab ${mainTab === 'credentials' ? 'active' : ''}`}
           onClick={() => setMainTab('credentials')}
         >
@@ -222,6 +239,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
       {/* Panel Content */}
       <div className="settings-panel-content">
+        {mainTab === 'profile' && <ProfilePanel />}
+
         {mainTab === 'credentials' && (
           <CredentialsPanel
             credentials={localSettings.providerCredentials}
@@ -302,6 +321,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             functionCallHistoryLimit={localSettings.functionCallHistoryLimit}
             onFunctionCallHistoryLimitChange={(limit) =>
               setLocalSettings(prev => ({ ...prev, functionCallHistoryLimit: limit }))
+            }
+            thinkingHistoryLimit={localSettings.thinkingHistoryLimit}
+            onThinkingHistoryLimitChange={(limit) =>
+              setLocalSettings(prev => ({ ...prev, thinkingHistoryLimit: limit }))
             }
           />
         )}

@@ -434,6 +434,7 @@ export class LLMTask {
     const messages: ConversationBlock[] = [];
     const { settings } = useSettingsStore.getState();
     const fcLimit = settings.functionCallHistoryLimit;
+    const thinkingLimit = settings.thinkingHistoryLimit;
 
     // 1. System prompt
     messages.push({
@@ -488,7 +489,7 @@ export class LLMTask {
           contentParts: [{ type: 'content', text: rendered }],
         });
       } else if (msg.role === 'assistant') {
-        // For assistant messages, potentially include tool_calls
+        // For assistant messages, potentially include tool_calls and thinking
         assistantCount++;
 
         // Determine if we should include function calls for this message
@@ -496,10 +497,20 @@ export class LLMTask {
         const shouldIncludeFC = fcLimit === -1 ||
           (fcLimit > 0 && assistantCount > totalAssistants - fcLimit);
 
+        // Determine if we should include thinking for this message
+        // thinkingLimit: 0 = none, -1 = all, N = last N assistant messages
+        const shouldIncludeThinking = thinkingLimit === -1 ||
+          (thinkingLimit > 0 && assistantCount > totalAssistants - thinkingLimit);
+
+        // Filter contentParts: remove thinking if not included
+        const filteredContentParts = shouldIncludeThinking
+          ? msg.contentParts
+          : msg.contentParts.filter(part => part.type !== 'thinking');
+
         const block: ConversationBlock = {
           role: msg.role,
-          contentParts: msg.contentParts.length > 0
-            ? msg.contentParts
+          contentParts: filteredContentParts.length > 0
+            ? filteredContentParts
             : [{ type: 'content', text: '' }],
         };
 

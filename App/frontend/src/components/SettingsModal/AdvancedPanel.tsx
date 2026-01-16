@@ -13,6 +13,8 @@ interface AdvancedPanelProps {
     onNativeOutputModeChange: (enabled: boolean) => void;
     functionCallHistoryLimit: number;
     onFunctionCallHistoryLimitChange: (limit: number) => void;
+    thinkingHistoryLimit: number;
+    onThinkingHistoryLimitChange: (limit: number) => void;
 }
 
 const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
@@ -22,6 +24,8 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
     onNativeOutputModeChange,
     functionCallHistoryLimit,
     onFunctionCallHistoryLimitChange,
+    thinkingHistoryLimit,
+    onThinkingHistoryLimitChange,
 }) => {
     const [newErrorCode, setNewErrorCode] = useState('');
 
@@ -231,6 +235,38 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                     </div>
                     <p className="field-hint">
                         Number of recent assistant messages whose function calls will be included
+                        in the conversation history sent to the AI. Set to 0 to disable.
+                    </p>
+                </div>
+            </div>
+
+            {/* Thinking History */}
+            <div className="advanced-settings-card">
+                <h3>Thinking History</h3>
+                <div className="form-field">
+                    <label>Include thinking in agent history</label>
+                    <div className="slider-container">
+                        <input
+                            type="range"
+                            min="0"
+                            max="11"
+                            value={thinkingHistoryLimit === -1 ? 11 : thinkingHistoryLimit}
+                            onChange={(e) => {
+                                const val = parseInt(e.target.value, 10);
+                                onThinkingHistoryLimitChange(val === 11 ? -1 : val);
+                            }}
+                            className="slider"
+                        />
+                        <span className="slider-value">
+                            {thinkingHistoryLimit === -1 ? 'All' : thinkingHistoryLimit}
+                        </span>
+                    </div>
+                    <div className="slider-labels">
+                        <span>0</span>
+                        <span>All</span>
+                    </div>
+                    <p className="field-hint">
+                        Number of recent assistant messages whose thinking content will be included
                         in the conversation history sent to the AI. Set to 0 to disable.
                     </p>
                 </div>

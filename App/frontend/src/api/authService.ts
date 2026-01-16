@@ -3,7 +3,7 @@
  */
 
 import apiClient from './client';
-import type { UserCreate, UserLogin, AuthResponse, UserResponse } from './types';
+import type { UserCreate, UserLogin, AuthResponse, UserResponse, ProfileUpdate, PasswordChange } from './types';
 
 export const authService = {
   /**
@@ -45,6 +45,20 @@ export const authService = {
    */
   isAuthenticated(): boolean {
     return apiClient.getAuthToken() !== null;
+  },
+
+  /**
+   * Update user profile (username and/or email)
+   */
+  async updateProfile(data: ProfileUpdate): Promise<UserResponse> {
+    return apiClient.put<UserResponse>('/api/v1/auth/profile', data);
+  },
+
+  /**
+   * Change user password
+   */
+  async changePassword(data: PasswordChange): Promise<{ message: string }> {
+    return apiClient.put<{ message: string }>('/api/v1/auth/password', data);
   },
 };
 

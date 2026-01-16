@@ -20,6 +20,9 @@ export class ApiError extends Error {
   }
 }
 
+// Optional request options (e.g., AbortSignal for cancellation)
+export type RequestOptions = { signal?: AbortSignal };
+
 class ApiClient {
   private baseURL: string;
   private authToken: string | null = null;
@@ -64,21 +67,23 @@ class ApiClient {
     method: string,
     path: string,
     data?: any,
-    customHeaders?: Record<string, string>
+    customHeaders?: Record<string, string>,
+    requestOptions?: RequestOptions
   ): Promise<T> {
     const url = `${this.baseURL}${path}`;
 
-    const options: RequestInit = {
+    const init: RequestInit = {
       method,
       headers: this.getHeaders(customHeaders),
+      signal: requestOptions?.signal,
     };
 
     if (data && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
-      options.body = JSON.stringify(data);
+      init.body = JSON.stringify(data);
     }
 
     try {
-      const response = await fetch(url, options);
+      const response = await fetch(url, init);
 
       // Handle 204 No Content
       if (response.status === 204) {
@@ -126,27 +131,27 @@ class ApiClient {
     }
   }
 
-  async get<T>(path: string, customHeaders?: Record<string, string>): Promise<T> {
-    return this.request<T>('GET', path, undefined, customHeaders);
+  async get<T>(path: string, customHeaders?: Record<string, string>, requestOptions?: RequestOptions): Promise<T> {
+    return this.request<T>('GET', path, undefined, customHeaders, requestOptions);
   }
 
-  async post<T>(path: string, data?: any, customHeaders?: Record<string, string>): Promise<T> {
-    return this.request<T>('POST', path, data, customHeaders);
+  async post<T>(path: string, data?: any, customHeaders?: Record<string, string>, requestOptions?: RequestOptions): Promise<T> {
+    return this.request<T>('POST', path, data, customHeaders, requestOptions);
   }
 
-  async put<T>(path: string, data?: any, customHeaders?: Record<string, string>): Promise<T> {
-    return this.request<T>('PUT', path, data, customHeaders);
+  async put<T>(path: string, data?: any, customHeaders?: Record<string, string>, requestOptions?: RequestOptions): Promise<T> {
+    return this.request<T>('PUT', path, data, customHeaders, requestOptions);
   }
 
-  async patch<T>(path: string, data?: any, customHeaders?: Record<string, string>): Promise<T> {
-    return this.request<T>('PATCH', path, data, customHeaders);
+  async patch<T>(path: string, data?: any, customHeaders?: Record<string, string>, requestOptions?: RequestOptions): Promise<T> {
+    return this.request<T>('PATCH', path, data, customHeaders, requestOptions);
   }
 
-  async delete<T>(path: string, customHeaders?: Record<string, string>): Promise<T> {
-    return this.request<T>('DELETE', path, undefined, customHeaders);
+  async delete<T>(path: string, customHeaders?: Record<string, string>, requestOptions?: RequestOptions): Promise<T> {
+    return this.request<T>('DELETE', path, undefined, customHeaders, requestOptions);
   }
 
-  async postFormData<T>(path: string, formData: FormData): Promise<T> {
+  async postFormData<T>(path: string, formData: FormData, requestOptions?: RequestOptions): Promise<T> {
     const url = `${this.baseURL}${path}`;
 
     const headers: HeadersInit = {};
@@ -160,6 +165,7 @@ class ApiClient {
         method: 'POST',
         headers,
         body: formData,
+        signal: requestOptions?.signal,
       });
 
       if (response.status === 204) {

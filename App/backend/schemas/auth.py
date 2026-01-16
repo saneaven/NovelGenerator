@@ -38,3 +38,15 @@ class UserResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ProfileUpdate(BaseModel):
+    """Profile update request"""
+    username: Optional[str] = Field(None, min_length=3, max_length=100)
+    email: Optional[EmailStr] = None
+
+
+class PasswordChange(BaseModel):
+    """Password change request"""
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=8, max_length=100)

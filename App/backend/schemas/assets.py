@@ -43,16 +43,9 @@ class ImageGenerationRequest(BaseModel):
     provider: str  # 'openai', 'gemini', 'xai', 'novelai'
     model: str
     size: str = "1024x1024"
-    quality: str = "standard"
-    style: str = "natural"
 
     # Provider-specific settings (e.g., sampler, steps for NovelAI)
     provider_settings: Optional[Dict[str, Any]] = None
-
-    # For prompt enhancement (optional)
-    enhance_prompt: bool = False
-    enhancement_provider: Optional[str] = None
-    enhancement_model: Optional[str] = None
 
     # Reference images for image-to-image generation (OpenAI GPT-Image, Gemini)
     reference_images: Optional[List[ReferenceImage]] = None
@@ -71,6 +64,7 @@ class ImageGenerationResponse(BaseModel):
     file_path: Optional[str] = None
     thumbnail_path: Optional[str] = None
     revised_prompt: Optional[str] = None
+    object_link: Optional["StoryObjectAssetResponse"] = None  # Present when object binding is used
     error: Optional[str] = None
 
 
@@ -128,6 +122,7 @@ class AssetResponse(BaseModel):
     generation_provider: Optional[str] = None
     generation_model: Optional[str] = None
     generation_settings: Optional[Dict[str, Any]] = None  # Provider-specific settings
+    generation_reference_images: Optional[List[ReferenceImage]] = None  # Reference images used during generation
     generation_reference_objects: Optional[List[Dict[str, Any]]] = None  # Story objects referenced
     width: Optional[int] = None
     height: Optional[int] = None

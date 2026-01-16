@@ -180,6 +180,10 @@ export interface Settings {
     // Function call history limit - how many recent assistant messages to include function calls for
     // 0 = none, 1-10 = last N messages, -1 = all
     functionCallHistoryLimit: number;
+
+    // Thinking history limit - how many recent assistant messages to include thinking for
+    // 0 = none, 1-10 = last N messages, -1 = all
+    thinkingHistoryLimit: number;
 }
 
 // Default settings
@@ -320,6 +324,9 @@ const defaultSettings: Settings = {
 
     // Function call history limit - include function calls from last 5 assistant messages by default
     functionCallHistoryLimit: 5,
+
+    // Thinking history limit - include thinking from last 5 assistant messages by default
+    thinkingHistoryLimit: 5,
 };
 
 // Store interface
@@ -447,6 +454,7 @@ const mergeWithDefaults = (stored: any): Settings => {
         nativeOutputMode: stored.nativeOutputMode ?? defaultSettings.nativeOutputMode,
         llmLoggingEnabled: stored.llmLoggingEnabled ?? defaultSettings.llmLoggingEnabled,
         functionCallHistoryLimit: stored.functionCallHistoryLimit ?? defaultSettings.functionCallHistoryLimit,
+        thinkingHistoryLimit: stored.thinkingHistoryLimit ?? defaultSettings.thinkingHistoryLimit,
     };
 };
 

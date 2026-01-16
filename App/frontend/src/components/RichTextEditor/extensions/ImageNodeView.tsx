@@ -1,12 +1,11 @@
 /**
  * ImageNodeView - Custom TipTap NodeView for images with overlay
- * Shows action buttons on hover: Regenerate, Replace, Delete
+ * Shows action buttons on hover: Change, Regenerate, Delete
  */
 
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { NodeViewWrapper } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/core';
-import type { Asset } from '../../../api/assetService';
 import { IconButton } from '../../IconButton';
 import { TextButton } from '../../TextButton';
 import { Shuffle, Trash, Refresh } from '../../icons';
@@ -16,12 +15,10 @@ import './ImageNodeView.css';
 export const IMAGE_OVERLAY_STORAGE_KEY = 'imageOverlayCallbacks';
 
 export interface ImageOverlayCallbacks {
-    projectId?: string;
-    // Swap image - opens modal with EMPTY prompts (pick from library or generate new from scratch)
-    onSwapImage?: (currentSrc: string, asset: Asset | null, imageBounds: DOMRect | null) => void;
-    // Regenerate image - opens modal with PRE-FILLED prompts from original generation
-    onRegenerateImage?: (currentSrc: string, asset: Asset | null, imageBounds: DOMRect | null) => void;
-    getAssetByUrl?: (src: string) => Promise<Asset | null>;
+    // Change image - opens asset library modal (user manually selects replacement)
+    onSwapImage?: (currentSrc: string, imageBounds: DOMRect | null) => void;
+    // Regenerate image - opens generation panel with the original settings prefilled (library-only)
+    onRegenerateImage?: (currentSrc: string, imageBounds: DOMRect | null) => void;
 }
 
 const ImageNodeView: React.FC<NodeViewProps> = ({
@@ -32,8 +29,6 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
 }) => {
     const [showOverlay, setShowOverlay] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-    const [asset, setAsset] = useState<Asset | null>(null);
-    const [isLoadingAsset, setIsLoadingAsset] = useState(false);
     const [isTouchDevice, setIsTouchDevice] = useState(false);
     const imageRef = useRef<HTMLImageElement>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
@@ -49,35 +44,6 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
     // Get callbacks from editor storage
     // Use type assertion - TipTap storage is dynamically typed per extension
     const callbacks = (editor.storage as unknown as Record<string, unknown>)[IMAGE_OVERLAY_STORAGE_KEY] as ImageOverlayCallbacks | undefined;
-
-    // Load asset metadata when image src changes
-    useEffect(() => {
-        const loadAsset = async () => {
-            if (!callbacks?.getAssetByUrl || !src) {
-                setAsset(null);
-                return;
-            }
-
-            setIsLoadingAsset(true);
-            try {
-                const foundAsset = await callbacks.getAssetByUrl(src);
-                setAsset(foundAsset);
-            } catch (error) {
-                console.error('Failed to load asset metadata:', error);
-                setAsset(null);
-            } finally {
-                setIsLoadingAsset(false);
-            }
-        };
-
-        loadAsset();
-    }, [src, callbacks]);
-
-    // Check if image has generation data (can be regenerated)
-    const canRegenerate = asset && (
-        asset.generation_prompt ||
-        asset.generation_positive_prompt
-    );
 
     // Handle hover for desktop
     const handleMouseEnter = useCallback(() => {
@@ -106,18 +72,17 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
         if (!callbacks?.onSwapImage) return;
 
         const bounds = imageRef.current?.getBoundingClientRect() || null;
-        callbacks.onSwapImage(src, asset, bounds);
+        callbacks.onSwapImage(src, bounds);
         setShowOverlay(false);
-    }, [src, asset, callbacks]);
+    }, [src, callbacks]);
 
-    // Handle regenerate image - opens modal with PRE-FILLED prompts
     const handleRegenerateImage = useCallback(() => {
         if (!callbacks?.onRegenerateImage) return;
 
         const bounds = imageRef.current?.getBoundingClientRect() || null;
-        callbacks.onRegenerateImage(src, asset, bounds);
+        callbacks.onRegenerateImage(src, bounds);
         setShowOverlay(false);
-    }, [src, asset, callbacks]);
+    }, [src, callbacks]);
 
     // Handle delete (show confirmation)
     const handleDelete = useCallback(() => {
@@ -172,22 +137,19 @@ const ImageNodeView: React.FC<NodeViewProps> = ({
             {!showDeleteConfirm && (
                 <div className="image-overlay" onClick={(e) => e.stopPropagation()}>
                     <div className="overlay-buttons">
-                        {/* Swap image - always visible, opens modal with empty prompts */}
-                        <IconButton
-                            icon={<Shuffle size="md" />}
-                            onClick={handleSwapImage}
-                            title="Change image"
-                            disabled={isLoadingAsset}
-                            size="sm"
-                        />
-
-                        {/* Regenerate image - only if has generation data */}
-                        {canRegenerate && (
+                        {callbacks?.onSwapImage && (
+                            <IconButton
+                                icon={<Shuffle size="md" />}
+                                onClick={handleSwapImage}
+                                title="Change image"
+                                size="sm"
+                            />
+                        )}
+                        {callbacks?.onRegenerateImage && (
                             <IconButton
                                 icon={<Refresh size="md" />}
                                 onClick={handleRegenerateImage}
                                 title="Regenerate image"
-                                disabled={isLoadingAsset}
                                 size="sm"
                             />
                         )}
