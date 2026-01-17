@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Settings, HamburgerMenu, Save, Check, Bullet } from '../icons';
 import LanguageDropdown from '../ui/LanguageDropdown';
-import { NotificationButton } from '../Notification';
+import { ActivityPanelButton } from '../ActivityPanel';
 import { IconButton } from '../IconButton';
 import { WorkspaceHeaderDropdown } from '../../pages/UnifiedWorkspace';
 import type { SubPageType } from '../../pages/UnifiedWorkspace';
@@ -66,7 +66,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
               onClick={onSettingsClick}
               title="Settings"
             />
-            <NotificationButton position="desktop" />
+            <ActivityPanelButton position="desktop" />
             {availableLanguages.length > 1 && (
               <LanguageDropdown
                 languages={availableLanguages}
@@ -80,13 +80,13 @@ const PageHeader: React.FC<PageHeaderProps> = ({
             )}
           </div>
           <div className="page-header-unified-center">
-            <Link to="/" className="page-header-project-link">{projectName}</Link>
+            <Link to="/dashboard" className="page-header-project-link">{projectName}</Link>
           </div>
           <div className="page-header-controls">
             <WorkspaceHeaderDropdown
               currentSubPage={currentSubPage}
               onSubPageChange={onSubPageChange}
-              onHomeClick={() => navigate('/')}
+              onHomeClick={() => navigate('/dashboard')}
             />
           </div>
         </div>
@@ -99,7 +99,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
           <WorkspaceHeaderDropdown
             currentSubPage={currentSubPage}
             onSubPageChange={onSubPageChange}
-            onHomeClick={() => navigate('/')}
+            onHomeClick={() => navigate('/dashboard')}
             align="left"
           />
 

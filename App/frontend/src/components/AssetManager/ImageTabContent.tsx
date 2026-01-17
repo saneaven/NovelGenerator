@@ -159,11 +159,6 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
     }, [initialGenerationRecipe]);
 
     const closeGeneratePanel = useCallback(() => {
-        // On mobile (especially iOS), leaving a focused textarea can cause scroll to "stick"
-        // after closing a fixed-position overlay.
-        const active = typeof document !== 'undefined' ? document.activeElement : null;
-        if (active instanceof HTMLElement) active.blur();
-
         setShowGeneratePanel(false);
         setGenerationRecipe(null);
     }, []);

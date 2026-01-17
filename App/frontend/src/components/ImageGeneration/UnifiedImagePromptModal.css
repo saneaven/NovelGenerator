@@ -28,17 +28,17 @@
   margin-bottom: 6px;
   font-weight: 500;
   font-size: 0.9rem;
-  color: var(--text-primary);
+  color: var(--color-text-primary);
 }
 
 .unified-image-prompt-modal textarea {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--color-border-default);
   border-radius: 6px;
   font-size: 0.9rem;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
   transition: border-color 0.2s;
   resize: vertical;
   min-height: 60px;
@@ -47,7 +47,7 @@
 
 .unified-image-prompt-modal textarea:focus {
   outline: none;
-  border-color: var(--accent-color);
+  border-color: var(--color-brand-primary);
 }
 
 .unified-image-prompt-modal textarea:disabled {
@@ -61,20 +61,20 @@
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: var(--bg-tertiary);
+  background: var(--color-surface-subtle);
   border-radius: 6px;
   margin-bottom: 16px;
 }
 
 .unified-image-prompt-modal .prompt-mode-indicator .mode-label {
   font-size: 0.85rem;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
 }
 
 .unified-image-prompt-modal .prompt-mode-indicator .mode-value {
   font-size: 0.85rem;
   font-weight: 600;
-  color: var(--accent-color);
+  color: var(--color-brand-primary);
 }
 
 /* Context Indicator (for object and cover_image) */
@@ -83,8 +83,8 @@
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  background: var(--accent-color-light, rgba(59, 130, 246, 0.1));
-  border: 1px solid var(--accent-color, #3b82f6);
+  background: var(--color-info-light);
+  border: 1px solid var(--color-info);
   border-radius: 8px;
   margin-bottom: 16px;
 }
@@ -92,27 +92,27 @@
 .unified-image-prompt-modal .context-indicator .context-type {
   font-size: 0.85rem;
   font-weight: 600;
-  color: var(--accent-color, #3b82f6);
+  color: var(--color-info);
 }
 
 .unified-image-prompt-modal .context-indicator .context-name {
   font-size: 0.9rem;
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--color-text-primary);
 }
 
 .unified-image-prompt-modal .context-indicator.cover-image {
-  background: var(--success-bg, rgba(34, 197, 94, 0.1));
-  border-color: var(--success-color, #22c55e);
+  background: var(--color-success-light);
+  border-color: var(--color-success);
 }
 
 .unified-image-prompt-modal .context-indicator.cover-image .context-type {
-  color: var(--success-color, #22c55e);
+  color: var(--color-success);
 }
 
 /* Scene Context Preview */
 .unified-image-prompt-modal .context-preview {
-  background: var(--bg-tertiary);
+  background: var(--color-surface-subtle);
   border-radius: 8px;
   padding: 12px;
   margin-bottom: 16px;
@@ -122,13 +122,13 @@
   display: block;
   font-size: 0.85rem;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
   margin-bottom: 8px;
 }
 
 .unified-image-prompt-modal .context-preview .context-snippet {
   font-size: 0.8rem;
-  color: var(--text-tertiary);
+  color: var(--color-text-tertiary);
   margin-top: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -143,13 +143,13 @@
 .unified-image-prompt-modal .section-hint {
   display: block;
   font-size: 0.8rem;
-  color: var(--text-tertiary);
+  color: var(--color-text-tertiary);
   margin-bottom: 10px;
 }
 
 .unified-image-prompt-modal .selection-summary {
   font-size: 0.8rem;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
   margin-top: 8px;
   text-align: right;
 }

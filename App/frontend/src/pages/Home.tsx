@@ -86,7 +86,7 @@ const Home: React.FC = () => {
       <div className="home-header">
         <div className="header-top">
           <div>
-            <h1>Novel Generator</h1>
+            <h1>Novel Buds</h1>
             <p>Write creative novels with AI</p>
             {user && <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Welcome, {user.username}!</p>}
           </div>

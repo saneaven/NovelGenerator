@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import App from './App';
+import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Home from './pages/Home';
@@ -52,12 +53,12 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-// Public Route Component (redirect to home if already authenticated)
+// Public Route Component (redirect to dashboard if already authenticated)
 const PublicRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated } = useAuthStore();
 
   if (isAuthenticated) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
@@ -86,6 +87,10 @@ export const router = createBrowserRouter([
       },
       {
         path: '/',
+        element: <Landing />,
+      },
+      {
+        path: 'dashboard',
         element: (
           <ProtectedRoute>
             <Home />

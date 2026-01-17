@@ -3,6 +3,7 @@
  */
 
 export { UnifiedApplicator, createApplicator } from './UnifiedApplicator';
+export { BatchStoreActions } from './BatchStoreActions';
 export type {
   StoreActions,
   ApplicatorConfig,

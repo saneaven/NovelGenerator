@@ -131,6 +131,8 @@ export interface TemplateData {
       genre: string;
     };
   };
+  // User-defined prompt variables
+  variables?: Record<string, string | number | boolean | null>;
 }
 
 /**

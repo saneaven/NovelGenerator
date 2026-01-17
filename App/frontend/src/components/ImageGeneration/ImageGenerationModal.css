@@ -338,11 +338,11 @@
 }
 
 .image-generation-modal .style-preview-box .tag-indicator.positive {
-    color: var(--color-success-base);
+    color: var(--color-success);
 }
 
 .image-generation-modal .style-preview-box .tag-indicator.negative {
-    color: var(--color-danger-base);
+    color: var(--color-feedback-error-base);
 }
 
 .image-generation-modal .style-preview-box .tag-text {

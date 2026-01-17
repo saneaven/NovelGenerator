@@ -181,20 +181,20 @@ export const FunctionCallCardContainer: React.FC<FunctionCallCardContainerProps>
   const itemCount = isStreaming ? streamingProgress.length : cards.length;
 
   return (
-    <div className={`fc-card fc-card--${mode}${isCardCollapsed ? ' fc-card--collapsed' : ''}`}>
+    <div className={`function-call-card function-call-card--${mode}${isCardCollapsed ? ' function-call-card--collapsed' : ''}`}>
       <button
         type="button"
-        className="fc-card__header"
+        className="function-call-card__header"
         onClick={handleToggleCardCollapse}
       >
-        <div className="fc-card__header-left">
-          <div className="fc-card__title">AI Changes</div>
-          <div className="fc-card__count">{itemCount}</div>
+        <div className="function-call-card__header-left">
+          <div className="function-call-card__title">AI Changes</div>
+          <div className="function-call-card__count">{itemCount}</div>
         </div>
-        <div className="fc-card__header-right">
-          <div className={`fc-pill fc-pill--${mode}`}>{modeLabel(mode)}</div>
+        <div className="function-call-card__header-right">
+          <div className={`function-call-pill function-call-pill--${mode}`}>{modeLabel(mode)}</div>
           <svg
-            className={`fc-card__chevron${isCardCollapsed ? '' : ' fc-card__chevron--open'}`}
+            className={`function-call-card__chevron${isCardCollapsed ? '' : ' function-call-card__chevron--open'}`}
             width="16"
             height="16"
             viewBox="0 0 24 24"
@@ -209,7 +209,7 @@ export const FunctionCallCardContainer: React.FC<FunctionCallCardContainerProps>
         </div>
       </button>
 
-      <div className={`fc-card__list${isCardCollapsed ? ' fc-card__list--collapsed' : ''}`}>
+      <div className={`function-call-card__list${isCardCollapsed ? ' function-call-card__list--collapsed' : ''}`}>
         {isStreaming && streamingProgress.map((p: FunctionCallProgress) => {
           const functionName = p.draft.functionName || '';
           const args = (p.preview && typeof p.preview === 'object') ? (p.preview as Record<string, unknown>) : undefined;
@@ -282,16 +282,16 @@ export const FunctionCallCardContainer: React.FC<FunctionCallCardContainerProps>
       </div>
 
       {isPending && !isCardCollapsed && (
-        <div className="fc-card__footer">
-          <div className="fc-card__footer-left">
-            <span className="fc-card__footer-count">{selectedCount} selected</span>
+        <div className="function-call-card__footer">
+          <div className="function-call-card__footer-left">
+            <span className="function-call-card__footer-count">{selectedCount} selected</span>
             {isApplyDisabled && applyDisabledReason && (
-              <span className="fc-card__footer-warning">{applyDisabledReason}</span>
+              <span className="function-call-card__footer-warning">{applyDisabledReason}</span>
             )}
           </div>
           <button
             type="button"
-            className="fc-btn fc-btn--primary"
+            className="function-call-btn function-call-btn--primary"
             onClick={handleConfirm}
             disabled={isConfirming || isApplyDisabled}
           >

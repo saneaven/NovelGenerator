@@ -166,21 +166,10 @@ export const AgentExecutor = {
       result: { agentId: input.agentId, assistantMessageId },
     } as any);
 
-    const initialSession = sessionStore.getSessionById(sessionId);
-    if (initialSession) {
-      // Register notification now that we have sessionId
-      registerSessionNotification(initialSession, {
-        onClick: () => useAgentUIStore.getState().openDetailModal(sessionId),
-        onDismiss: () => sessionStore.clearSession(sessionId),
-      });
-    }
-
     // Notify caller of sessionId
     onSessionCreated?.(sessionId);
 
     void handle.done.then(async (finalSession) => {
-      const currentSession = useLLMSessionStore.getState().getSessionById(sessionId);
-      if (currentSession) updateSessionNotification(sessionId, currentSession);
 
       if (finalSession.status !== 'success') {
         return;
@@ -219,8 +208,6 @@ export const AgentExecutor = {
         });
         // Sync to agentStore
         await syncAgentFunctionCalls(sessionId);
-        const updatedSession = useLLMSessionStore.getState().getSessionById(sessionId);
-        if (updatedSession) updateSessionNotification(sessionId, updatedSession);
       }
     });
 
@@ -363,19 +350,6 @@ async function syncAgentFunctionCalls(sessionId: string): Promise<void> {
 }
 
 /**
- * Stage agent edits with sync
- */
-export async function stageAgentEdits(params: {
-  sessionId: string;
-  projectId: string;
-  language: string;
-  functionCalls: Parameters<typeof stageSessionEdits>[0]['functionCalls'];
-}): Promise<void> {
-  await stageSessionEdits(params);
-  await syncAgentFunctionCalls(params.sessionId);
-}
-
-/**
  * Apply agent edits with sync
  */
 export async function applyAgentEdits(params: {
@@ -387,12 +361,6 @@ export async function applyAgentEdits(params: {
 }): Promise<void> {
   await applySessionEdits(params);
   await syncAgentFunctionCalls(params.sessionId);
-
-  // Update notification with new status
-  const session = useLLMSessionStore.getState().getSessionById(params.sessionId);
-  if (session) {
-    updateSessionNotification(params.sessionId, session);
-  }
 }
 
 /**
@@ -404,10 +372,4 @@ export async function rejectAllAgentEdits(params: {
 }): Promise<void> {
   rejectAllSessionEdits(params);
   await syncAgentFunctionCalls(params.sessionId);
-
-  // Update notification with new status
-  const session = useLLMSessionStore.getState().getSessionById(params.sessionId);
-  if (session) {
-    updateSessionNotification(params.sessionId, session);
-  }
 }

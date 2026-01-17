@@ -32,7 +32,6 @@ export const LLMTaskModals: React.FC = () => {
   const session = useLLMSessionStore((s) =>
     detailSessionId ? s.sessions[detailSessionId] : null
   );
-  const clearSession = useLLMSessionStore((s) => s.clearSession);
   const cancelSession = useLLMSessionStore((s) => s.cancelSession);
   const mainLanguage = useSettingsStore((s) => s.settings.mainLanguage);
 
@@ -114,13 +113,6 @@ export const LLMTaskModals: React.FC = () => {
   ) ?? false;
   const isPending = session?.status === 'pending_confirmation' || isApplying || hasPendingCards;
 
-  const handleDismiss = useCallback(() => {
-    if (detailSessionId) {
-      clearSession(detailSessionId);
-    }
-    closeDetailModal();
-  }, [detailSessionId, clearSession, closeDetailModal]);
-
   const handleRetry = useCallback(() => {
     if (!session) return;
     if (session.kind === 'agent') {
@@ -156,9 +148,6 @@ export const LLMTaskModals: React.FC = () => {
 
   const footer = (
     <div className="llm-task-modal-footer-actions">
-      <TextButton variant="secondary" onClick={handleDismiss}>
-        Dismiss
-      </TextButton>
       {(session.status === 'error' || session.status === 'cancelled') && (
         <TextButton variant="secondary" onClick={handleRetry}>
           Retry

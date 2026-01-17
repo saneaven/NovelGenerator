@@ -38,7 +38,7 @@ export function mapFunctionTypeToSchemaType(
 }
 
 // All valid schema groups
-const SCHEMA_GROUPS = ['config', 'project', 'input', 'agent', 'editAssistant', 'translation', 'imagePrompt'] as const;
+const SCHEMA_GROUPS = ['config', 'project', 'input', 'agent', 'editAssistant', 'translation', 'imagePrompt', 'feedback', 'variables'] as const;
 type SchemaGroup = typeof SCHEMA_GROUPS[number];
 
 /**
@@ -133,6 +133,18 @@ function isVariableDefinedInSchema(
     return { valid: true };
   }
 
+  // Special handling for user-defined variables
+  // Skip field validation since fields are dynamically defined by users
+  if (group === 'variables') {
+    // Must have exactly 2 segments: variables.fieldName
+    // No deep paths allowed for user variables
+    if (variablePath.length > 2) {
+      return { valid: false, reason: 'variables_no_deep_paths' };
+    }
+    // Any field name is valid for user-defined variables
+    return { valid: true };
+  }
+
   const groupSchema = UNIFIED_SCHEMA[group as keyof typeof UNIFIED_SCHEMA];
   if (!groupSchema) {
     return { valid: false, reason: 'group_not_found' };
@@ -191,6 +203,10 @@ export function validateVariablesAgainstSchema(
 
         case 'deep_path_not_found':
           message = `Invalid path: ${ref.fullPath}. Property doesn't exist in the data structure.`;
+          break;
+
+        case 'variables_no_deep_paths':
+          message = `Invalid path: ${ref.fullPath}. User variables only support single-level access (e.g., variables.myVar).`;
           break;
 
         case 'empty':

@@ -21,8 +21,8 @@ import { collapseContentParts } from '../../../agent/utils/contentParts';
 import { Settings, Edit, Trash, Globe, CircularArrow, ChevronUp, ChevronDown } from '../../../components/icons';
 import { useAgentOrchestration } from '../../../agent/hooks';
 import { getBestLanguageData } from '../../../utils/languageData';
-import { AgentExecutor } from '../../../agent';
-import { applyFunctionCallsDirect, applySessionEdits } from '../../../llmTask/functionCalls/functionCallEngine';
+import { AgentExecutor, applyAgentEdits } from '../../../agent';
+import { applyFunctionCallsDirect } from '../../../llmTask/functionCalls/functionCallEngine';
 import { CRUD_OPTIONS } from '../../../functionCall/applicator/types';
 import { buildEditCardsFromFunctionCallMetadata } from '../../../functionCall';
 
@@ -705,7 +705,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                 }
 
                                                                 if (hasSessionCards && agentSession) {
-                                                                    await applySessionEdits({
+                                                                    await applyAgentEdits({
                                                                         sessionId: agentSession.id,
                                                                         projectId,
                                                                         language: mainLanguage,

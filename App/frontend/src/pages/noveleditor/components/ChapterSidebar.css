@@ -393,21 +393,3 @@
 .chapter-sidebar .empty-text {
     margin-left: var(--spacing-sm);
 }
-
-/* Scrollbar styling */
-.chapter-sidebar .timeline-container::-webkit-scrollbar {
-    width: 6px;
-}
-
-.chapter-sidebar .timeline-container::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.chapter-sidebar .timeline-container::-webkit-scrollbar-thumb {
-    background-color: var(--color-border-default);
-    border-radius: var(--border-radius-full);
-}
-
-.chapter-sidebar .timeline-container::-webkit-scrollbar-thumb:hover {
-    background-color: var(--color-text-muted);
-}

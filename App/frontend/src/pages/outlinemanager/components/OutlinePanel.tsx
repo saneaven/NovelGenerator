@@ -5,12 +5,13 @@ import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import AIEditModal from '../../../components/AIEditModal';
+import VersionHistoryModal from '../../../components/VersionHistoryModal';
 import { BaseModal } from '../../../components/BaseModal';
 import OutlineSidebar from './OutlineSidebar';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
-import { Expand, Collapse, Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close, HamburgerMenu, ChevronRight } from '../../../components/icons';
+import { Expand, Collapse, Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close, HamburgerMenu, ChevronRight, Scroll } from '../../../components/icons';
 import { Warning } from '../../../components/icons';
 import type { UnifiedObject, OutlineObject, ActObject, ChapterObject } from '../../../types/unifiedObject';
 import './OutlinePanel.css';
@@ -34,6 +35,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const [editingOutline, setEditingOutline] = useState<string | null>(null);
   const [editOutlineData, setEditOutlineData] = useState<{ name: string; description: string }>({ name: '', description: '' });
   const [showOutlineAIModal, setShowOutlineAIModal] = useState<string | null>(null);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
 
   // Header description expansion and inline editing state
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
@@ -451,6 +453,22 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     }
   };
 
+  // Handle version history
+  const handleShowVersionHistory = () => {
+    if (selectedOutlineId) {
+      setShowVersionHistory(true);
+    }
+  };
+
+  const handleRestoreVersion = async () => {
+    if (!selectedOutlineId) return;
+    try {
+      await store.fetchObject('outline', selectedOutlineId);
+    } catch (error) {
+      console.error('Failed to refresh after restore:', error);
+    }
+  };
+
   // ========================================================================
   // RENDER
   // ========================================================================
@@ -473,13 +491,32 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
           <div className="header-actions">
             {selectedOutlineId && (
-              <TextButton
-                onClick={() => setShowAddActForm(selectedOutlineId)}
-                iconLeft={<Plus size="xs" />}
-                size="sm"
-              >
-                Add Act
-              </TextButton>
+              <>
+                <TextButton
+                  onClick={() => setShowAddActForm(selectedOutlineId)}
+                  iconLeft={<Plus size="xs" />}
+                  size="sm"
+                >
+                  Add Act
+                </TextButton>
+                <DropdownMenu
+                  trigger={
+                    <IconButton
+                      icon={<MoreHorizontal size="sm" />}
+                      title="More actions"
+                      size="sm"
+                      variant="ghost"
+                    />
+                  }
+                  align="right"
+                >
+                  <DropdownItem
+                    icon={<Scroll size="sm" />}
+                    label="Version History"
+                    onClick={handleShowVersionHistory}
+                  />
+                </DropdownMenu>
+              </>
             )}
             <TextButton
               onClick={handleOpenSidebar}
@@ -950,6 +987,17 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
           category="chapter"
           projectId={projectId}
           targetId={showChapterAIModal}
+        />
+      )}
+
+      {/* Outline Version History Modal */}
+      {selectedOutlineId && (
+        <VersionHistoryModal
+          isOpen={showVersionHistory}
+          onClose={() => setShowVersionHistory(false)}
+          objectType="outline"
+          objectId={selectedOutlineId}
+          onRestoreVersion={handleRestoreVersion}
         />
       )}
     </div>

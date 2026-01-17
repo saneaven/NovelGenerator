@@ -1,5 +1,5 @@
 """
-Default prompt content for the Novel Generator application.
+Default prompt content for the Novel Buds application.
 
 This module contains all default prompts that are initialized for new users.
 The structure mirrors the frontend prompts structure defined in:

@@ -31,12 +31,15 @@ from .routes.asset_routes import router as asset_router
 # Fragment management routes
 from .routes.fragment_routes import router as fragment_router
 
+# Variable management routes
+from .routes.variable_routes import router as variable_router
+
 load_dotenv()
 
 app = FastAPI(
-    title="Novel Generator API",
+    title="Novel Buds API",
     version="2.0.0",
-    description="Multi-provider LLM API with Database-backed Story Management for Novel Generator"
+    description="Multi-provider LLM API with Database-backed Story Management for Novel Buds"
 )
 
 # Include all database API routers
@@ -55,6 +58,9 @@ app.include_router(asset_router)
 
 # Include fragment management router
 app.include_router(fragment_router)
+
+# Include variable management router
+app.include_router(variable_router)
 
 # Mount static files for asset storage
 storage_path = Path(__file__).parent / "storage" / "assets"

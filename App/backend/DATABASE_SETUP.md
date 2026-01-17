@@ -1,6 +1,6 @@
 # Database Setup Guide
 
-This guide explains how to set up and manage the PostgreSQL database for the Novel Generator application.
+This guide explains how to set up and manage the PostgreSQL database for the Novel Buds application.
 
 ## Prerequisites
 

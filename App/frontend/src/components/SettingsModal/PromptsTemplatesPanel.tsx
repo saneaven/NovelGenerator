@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import PromptTreeNav from './PromptTreeNav';
 import FragmentTreeNav from './FragmentTreeNav';
+import VariableListNav from './VariableListNav';
+import VariableEditor from './VariableEditor';
+import CreateVariableModal from './CreateVariableModal';
 import TemplateEditor from './TemplateEditor';
 import VersionHistoryModal from '../VersionHistoryModal';
 import { BaseModal } from '../BaseModal';
@@ -15,7 +18,7 @@ import { ChevronLeft, ChevronRight, Document, Copy, Clock, Trash, Edit } from '.
 import './PromptsTemplatesPanel.css';
 import TemplateSyntaxHint from './TemplateSyntaxHint';
 
-type SubTab = 'prompts' | 'fragments';
+type SubTab = 'prompts' | 'fragments' | 'variables';
 
 interface SelectedFragment {
     folderPath: string | null;
@@ -294,8 +297,10 @@ const PromptsTemplatesPanel: React.FC = () => {
     const [subTab, setSubTab] = useState<SubTab>('prompts');
     const [selectedPrompt, setSelectedPrompt] = useState<PromptNode | null>(null);
     const [selectedFragment, setSelectedFragment] = useState<SelectedFragment | null>(null);
+    const [selectedVariableId, setSelectedVariableId] = useState<string | null>(null);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showCreateVariableModal, setShowCreateVariableModal] = useState(false);
     const [createFolderPath, setCreateFolderPath] = useState<string | null>(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
@@ -373,9 +378,29 @@ const PromptsTemplatesPanel: React.FC = () => {
         setSubTab(newTab);
         if (newTab === 'prompts') {
             setSelectedFragment(null);
+            setSelectedVariableId(null);
+        } else if (newTab === 'fragments') {
+            setSelectedPrompt(null);
+            setSelectedVariableId(null);
         } else {
             setSelectedPrompt(null);
+            setSelectedFragment(null);
         }
+    };
+
+    const handleVariableSelect = (id: string) => {
+        setSelectedVariableId(id);
+        if (window.innerWidth <= 768) {
+            setIsSidebarCollapsed(true);
+        }
+    };
+
+    const handleVariableCreated = (id: string) => {
+        setSelectedVariableId(id);
+    };
+
+    const handleVariableDeleted = () => {
+        setSelectedVariableId(null);
     };
 
     const handleRestoreComplete = () => {
@@ -428,7 +453,8 @@ const PromptsTemplatesPanel: React.FC = () => {
     };
 
     const hasSelection = (subTab === 'prompts' && selectedPrompt) ||
-        (subTab === 'fragments' && selectedFragment);
+        (subTab === 'fragments' && selectedFragment) ||
+        (subTab === 'variables');
 
     return (
         <div className="prompts-layout">
@@ -443,7 +469,8 @@ const PromptsTemplatesPanel: React.FC = () => {
                     <main className="panel-split__main">
                         {hasSelection ? (
                             <div className="editor-wrapper">
-                                {/* Header */}
+                                {/* Header - hidden for variables tab as VariableEditor has its own */}
+                                {subTab !== 'variables' && (
                                 <header className="editor-wrapper__header">
                                     <div className="editor-wrapper__title-group">
                                         <div className="editor-wrapper__title-row">
@@ -544,6 +571,7 @@ const PromptsTemplatesPanel: React.FC = () => {
                                         />
                                     </div>
                                 </header>
+                                )}
 
                                 {/* Editor Component */}
                                 <div className="editor-wrapper__body">
@@ -562,6 +590,15 @@ const PromptsTemplatesPanel: React.FC = () => {
                                             onDelete={handleFragmentDeleted}
                                             onSave={handleFragmentSaved}
                                             onStateChange={handleEditorStateChange}
+                                        />
+                                    )}
+                                    {subTab === 'variables' && (
+                                        <VariableEditor
+                                            key={selectedVariableId}
+                                            variableId={selectedVariableId}
+                                            onDelete={handleVariableDeleted}
+                                            isSidebarCollapsed={isSidebarCollapsed}
+                                            onToggleSidebar={toggleSidebar}
                                         />
                                     )}
                                 </div>
@@ -606,22 +643,37 @@ const PromptsTemplatesPanel: React.FC = () => {
                             >
                                 Fragments
                             </button>
+                            <button
+                                className={`sidebar-toggle__btn ${subTab === 'variables' ? 'sidebar-toggle__btn--active' : ''}`}
+                                onClick={() => handleSubTabChange('variables')}
+                            >
+                                Variables
+                            </button>
                         </div>
 
                         {/* Tree Navigation */}
-                        {subTab === 'prompts' ? (
+                        {subTab === 'prompts' && (
                             <PromptTreeNav
                                 tree={PROMPT_TREE}
                                 selectedNodeId={selectedPrompt?.id || null}
                                 onNodeSelect={handlePromptSelect}
                                 onClose={() => setIsSidebarCollapsed(true)}
                             />
-                        ) : (
+                        )}
+                        {subTab === 'fragments' && (
                             <FragmentTreeNav
                                 selectedPath={selectedPath}
                                 onFragmentSelect={handleFragmentSelect}
                                 onCreateFragment={handleCreateFragment}
                                 refreshTrigger={refreshTrigger}
+                                onClose={() => setIsSidebarCollapsed(true)}
+                            />
+                        )}
+                        {subTab === 'variables' && (
+                            <VariableListNav
+                                selectedId={selectedVariableId}
+                                onVariableSelect={handleVariableSelect}
+                                onCreateVariable={() => setShowCreateVariableModal(true)}
                                 onClose={() => setIsSidebarCollapsed(true)}
                             />
                         )}
@@ -646,6 +698,13 @@ const PromptsTemplatesPanel: React.FC = () => {
                     textVersionProps={editorState.versionHistoryProps}
                 />
             )}
+
+            {/* Create variable modal */}
+            <CreateVariableModal
+                isOpen={showCreateVariableModal}
+                onClose={() => setShowCreateVariableModal(false)}
+                onCreate={handleVariableCreated}
+            />
         </div>
     );
 };

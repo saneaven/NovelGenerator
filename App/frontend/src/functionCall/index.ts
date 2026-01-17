@@ -63,7 +63,7 @@ export {
 } from './normalizer';
 
 // Applicator
-export { UnifiedApplicator, createApplicator } from './applicator';
+export { UnifiedApplicator, createApplicator, BatchStoreActions } from './applicator';
 export type {
   StoreActions,
   ApplicatorConfig,

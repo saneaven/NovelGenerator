@@ -1,4 +1,4 @@
-"""SQLAlchemy database models for Novel Generator"""
+"""SQLAlchemy database models for Novel Buds"""
 from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -185,6 +185,52 @@ class PromptFragment(Base):
 
     # Relationships
     user = relationship("User")
+
+
+# ============================================================================
+# PROMPT VARIABLES
+# ============================================================================
+
+class PromptVariable(Base):
+    """User-defined prompt template variables"""
+    __tablename__ = 'prompt_variables'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    # Variable identification
+    name = Column(String(100), nullable=False)  # Variable name (e.g., 'writingStyle', 'isGeminiMode')
+
+    # Variable type: 'string', 'number', 'boolean', 'select'
+    var_type = Column(String(20), nullable=False)
+
+    # Value storage as JSONB: {"value": <actual value>}
+    value = Column(JSONB, nullable=False, server_default='{"value": null}')
+
+    # Select options (only used when var_type='select')
+    select_options = Column(JSONB, nullable=True)  # ["option1", "option2", ...]
+
+    # Number options (only used when var_type='number')
+    # Format: {"min": 0, "max": 100, "step": 1, "input_type": "slider" | "input"}
+    number_options = Column(JSONB, nullable=True)
+
+    # Description for UI display
+    description = Column(Text, nullable=True)
+
+    # Display order
+    display_order = Column(Integer, default=0, nullable=False)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Relationships
+    user = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'name', name='uq_variable_user_name'),
+        Index('idx_variable_user_order', 'user_id', 'display_order'),
+    )
 
 
 # ============================================================================

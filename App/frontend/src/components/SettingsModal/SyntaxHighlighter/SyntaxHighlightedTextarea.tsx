@@ -24,6 +24,9 @@ const SyntaxHighlightedTextarea: React.FC<SyntaxHighlightedTextareaProps> = ({
 {
     const editorRef = useRef<any>(null);
 
+    // Detect mobile devices
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
     // Custom extension for Tab handling (insert 2 spaces)
     const tabExtension = keymap.of([
         {
@@ -68,19 +71,20 @@ const SyntaxHighlightedTextarea: React.FC<SyntaxHighlightedTextareaProps> = ({
                 highlightActiveLine: true,
                 foldGutter: false,
                 dropCursor: true,
-                allowMultipleSelections: true,
                 indentOnInput: true,
                 bracketMatching: true,
                 closeBrackets: false,
                 autocompletion: false,
-                rectangularSelection: true,
-                crosshairCursor: true,
                 highlightSelectionMatches: false,
                 closeBracketsKeymap: false,
                 searchKeymap: false,
                 foldKeymap: false,
                 completionKeymap: false,
                 lintKeymap: false,
+                // Disable desktop-only features on mobile for better touch selection
+                allowMultipleSelections: !isMobile,
+                rectangularSelection: !isMobile,
+                crosshairCursor: !isMobile,
             }}
         />
     );

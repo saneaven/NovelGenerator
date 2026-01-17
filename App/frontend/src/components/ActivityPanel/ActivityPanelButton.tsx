@@ -2,24 +2,26 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useNotificationStore } from '../../store/notificationStore';
 import { Bell } from '../icons';
 import { IconButton } from '../IconButton';
-import NotificationPanel from './NotificationPanel';
-import './Notification.css';
+import ActivityPanelContainer, { type ActivityView } from './ActivityPanelContainer';
+import './ActivityPanel.css';
+import '../Notification/Notification.css';
 
-interface NotificationButtonProps {
+interface ActivityPanelButtonProps {
   position?: 'desktop' | 'mobile';
   className?: string;
 }
 
-const NotificationButton: React.FC<NotificationButtonProps> = ({
+const ActivityPanelButton: React.FC<ActivityPanelButtonProps> = ({
   position = 'desktop',
   className = '',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const [activeView, setActiveView] = useState<ActivityView>('notifications');
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Subscribe to raw state, derive values with useMemo
+  // Subscribe to notification state for indicators
   const notificationsMap = useNotificationStore((state) => state.notifications);
   const markAllAsRead = useNotificationStore((state) => state.markAllAsRead);
 
@@ -44,6 +46,7 @@ const NotificationButton: React.FC<NotificationButtonProps> = ({
       // Opening the panel - mark all as read
       markAllAsRead();
       setIsOpen(true);
+      setActiveView('notifications'); // Reset to notifications on open
     } else {
       // Closing with animation
       setIsClosing(true);
@@ -60,6 +63,10 @@ const NotificationButton: React.FC<NotificationButtonProps> = ({
       setIsOpen(false);
       setIsClosing(false);
     }, 150);
+  }, []);
+
+  const handleViewChange = useCallback((view: ActivityView) => {
+    setActiveView(view);
   }, []);
 
   // Close on click outside
@@ -99,15 +106,16 @@ const NotificationButton: React.FC<NotificationButtonProps> = ({
   }, [isOpen, isClosing, handleClose]);
 
   const buttonSize = position === 'mobile' ? 'sm' : 'md';
+  const isMobile = position === 'mobile';
 
   return (
-    <div className={`notification-button-wrapper notification-button-wrapper--${position} ${className}`}>
+    <div className={`activity-panel-button-wrapper activity-panel-button-wrapper--${position} ${className}`}>
       <IconButton
         ref={buttonRef}
         icon={<Bell size="xl" />}
         onClick={handleToggle}
-        title="Notifications"
-        ariaLabel="Notifications"
+        title="Activity"
+        ariaLabel="Activity panel"
         ariaExpanded={isOpen}
         isActive={isOpen}
         showSpinner={hasRunning}
@@ -118,13 +126,17 @@ const NotificationButton: React.FC<NotificationButtonProps> = ({
       {isOpen && (
         <div
           ref={panelRef}
-          className={`notification-panel-container ${isClosing ? 'notification-panel-container--closing' : ''}`}
+          className={`activity-panel-container ${isClosing ? 'activity-panel-container--closing' : ''}`}
         >
-          <NotificationPanel onClose={handleClose} />
+          <ActivityPanelContainer
+            activeView={activeView}
+            onViewChange={handleViewChange}
+            isMobile={isMobile}
+          />
         </div>
       )}
     </div>
   );
 };
 
-export default NotificationButton;
+export default ActivityPanelButton;

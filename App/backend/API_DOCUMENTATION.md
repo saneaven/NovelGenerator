@@ -1,6 +1,6 @@
-# Novel Generator API Documentation
+# Novel Buds API Documentation
 
-Comprehensive API documentation for the Novel Generator backend service.
+Comprehensive API documentation for the Novel Buds backend service.
 
 ## Base URL
 

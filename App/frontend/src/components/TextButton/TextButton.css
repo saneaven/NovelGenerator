@@ -91,13 +91,11 @@
 .text-button--danger {
   background: var(--color-surface-base);
   color: var(--color-text-secondary);
-  border: 1px solid var(--color-border-default);
+  border: 1px solid var(--color-error);
 }
 
 .text-button--danger:hover:not(:disabled) {
-  background: var(--color-error);
-  color: var(--color-text-inverse);
-  border-color: var(--color-error);
+  background: var(--color-error-light);
 }
 
 .text-button--danger:active:not(:disabled) {

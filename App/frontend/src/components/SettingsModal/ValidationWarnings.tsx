@@ -1,58 +1,83 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { ValidationError } from '../../api/promptService';
-import { Warning } from '../icons';
+import { Warning, ChevronUp } from '../icons';
 
 interface ValidationWarningsProps {
-  errors: ValidationError[];
-  warnings: ValidationError[];
+    errors: ValidationError[];
+    warnings: ValidationError[];
 }
 
+interface CollapsibleSectionProps {
+    type: 'error' | 'warning';
+    title: string;
+    items: ValidationError[];
+    defaultOpen?: boolean;
+}
+
+const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
+    type,
+    title,
+    items,
+    defaultOpen = true
+}) => {
+    const [isOpen, setIsOpen] = useState(defaultOpen);
+
+    if (items.length === 0) return null;
+
+    return (
+        <div className={`validation-${type}s`}>
+            <button
+                type="button"
+                className={`validation-header ${type}`}
+                onClick={() => setIsOpen(!isOpen)}
+                aria-expanded={isOpen}
+            >
+                <span className="icon"><Warning size="sm" /></span>
+                <strong>{title} ({items.length})</strong>
+                <ChevronUp
+                    size="sm"
+                    className={`chevron ${isOpen ? 'open' : ''}`}
+                />
+            </button>
+            <div className={`validation-list-wrapper ${isOpen ? 'open' : ''}`}>
+                <ul className="validation-list">
+                    {items.map((item, idx) => (
+                        <li key={idx} className={`validation-item ${type}`}>
+                            {item.line && item.column && (
+                                <span className="location">
+                                    Line {item.line}, Col {item.column}:
+                                </span>
+                            )}
+                            <span className="message">{item.message}</span>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+        </div>
+    );
+};
+
 const ValidationWarnings: React.FC<ValidationWarningsProps> = ({ errors, warnings }) => {
-  if (errors.length === 0 && warnings.length === 0) {
-    return null;
-  }
+    if (errors.length === 0 && warnings.length === 0) {
+        return null;
+    }
 
-  return (
-    <div className="validation-messages">
-      {errors.length > 0 && (
-        <div className="validation-errors">
-          <div className="validation-header error">
-            <span className="icon"><Warning size="sm" /></span>
-            <strong>Syntax Errors ({errors.length})</strong>
-          </div>
-          <ul className="validation-list">
-            {errors.map((error, idx) => (
-              <li key={idx} className="validation-item error">
-                {error.line && error.column && (
-                  <span className="location">Line {error.line}, Col {error.column}: </span>
-                )}
-                <span className="message">{error.message}</span>
-              </li>
-            ))}
-          </ul>
+    return (
+        <div className="validation-messages">
+            <CollapsibleSection
+                type="error"
+                title="Syntax Errors"
+                items={errors}
+                defaultOpen={false}
+            />
+            <CollapsibleSection
+                type="warning"
+                title="Warnings"
+                items={warnings}
+                defaultOpen={false}
+            />
         </div>
-      )}
-
-      {warnings.length > 0 && (
-        <div className="validation-warnings">
-          <div className="validation-header warning">
-            <span className="icon"><Warning size="sm" /></span>
-            <strong>Warnings ({warnings.length})</strong>
-          </div>
-          <ul className="validation-list">
-            {warnings.map((warning, idx) => (
-              <li key={idx} className="validation-item warning">
-                {warning.line && warning.column && (
-                  <span className="location">Line {warning.line}, Col {warning.column}: </span>
-                )}
-                <span className="message">{warning.message}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
+    );
 };
 
 export default ValidationWarnings;

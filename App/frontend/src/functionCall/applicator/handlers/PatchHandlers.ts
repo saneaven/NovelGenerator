@@ -89,7 +89,7 @@ export async function patchBasicInfo(
   }
 
   await store.updateObject('basic_info', basic.id, {
-    data: { [field]: result.value },
+    data: { ...currentData, [field]: result.value },
     language,
     create_new_version: createNewVersion,
     user_request: userRequest,
@@ -142,7 +142,7 @@ export async function patchStoryObject(
   }
 
   await store.updateObject(objectType, id, {
-    data: { [field]: result.value },
+    data: { ...currentData, [field]: result.value },
     language,
     create_new_version: createNewVersion,
     user_request: userRequest,
@@ -232,7 +232,7 @@ export async function patchOutline(
   }
 
   await store.updateObject('outline', id, {
-    data: { [field]: result.value },
+    data: { ...currentData, [field]: result.value },
     language,
     create_new_version: createNewVersion,
     user_request: userRequest,
@@ -284,7 +284,7 @@ export async function patchOutlineAct(
   }
 
   await store.updateObject('act', id, {
-    data: { [field]: result.value },
+    data: { ...currentData, [field]: result.value },
     language,
     create_new_version: createNewVersion,
     user_request: userRequest,
@@ -345,7 +345,7 @@ export async function patchOutlineChapter(
   }
 
   await store.updateObject('chapter', id, {
-    data: { [field]: result.value },
+    data: { ...currentData, [field]: result.value },
     language,
     create_new_version: createNewVersion,
     user_request: userRequest,

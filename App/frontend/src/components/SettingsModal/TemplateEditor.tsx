@@ -47,11 +47,13 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({
         );
     }
 
+    const hasValidationErrors = validation && !validation.valid;
+
     return (
         <section className="template-editor">
-            <div className="template-editor__content">
+            <div className={`template-editor__content ${hasValidationErrors ? 'template-editor__content--has-validation' : ''}`}>
                 {/* Validation overlay - only when errors */}
-                {validation && !validation.valid && (
+                {hasValidationErrors && (
                     <div className="template-editor__validation-overlay">
                         <ValidationWarnings
                             errors={validation.errors as any}
@@ -67,19 +69,21 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({
                     placeholder={placeholder}
                 />
 
-                {/* Save FAB - always visible */}
-                <button
-                    className={`template-editor__save-fab ${hasChanges ? 'template-editor__save-fab--active' : ''}`}
-                    onClick={handleSave}
-                    disabled={isSaving || !validation?.valid || !hasChanges}
-                    title="Save"
-                >
-                    {isSaving ? (
-                        <span className="template-editor__fab-spinner" />
-                    ) : (
-                        <Save size="md" />
-                    )}
-                </button>
+                {/* Save FAB - hidden when syntax errors */}
+                {validation?.valid && (
+                    <button
+                        className={`template-editor__save-fab ${hasChanges ? 'template-editor__save-fab--active' : ''}`}
+                        onClick={handleSave}
+                        disabled={isSaving || !hasChanges}
+                        title="Save"
+                    >
+                        {isSaving ? (
+                            <span className="template-editor__fab-spinner" />
+                        ) : (
+                            <Save size="md" />
+                        )}
+                    </button>
+                )}
             </div>
         </section>
     );

@@ -1,6 +1,6 @@
-# Mal-Bud : AI Novel Companion
+# Novel Buds : AI Novel Companion
 
-**Mal-Bud** is an advanced AI-powered platform designed to assist authors in creating immersive worlds and writing compelling novels. It seamlessly integrates world-building tools with a powerful novel editor, all enhanced by an intelligent AI assistant that understands your story's context.
+**Novel Buds** is an advanced AI-powered platform designed to assist authors in creating immersive worlds and writing compelling novels. It seamlessly integrates world-building tools with a powerful novel editor, all enhanced by an intelligent AI assistant that understands your story's context.
 
 ## 🌟 Key Features
 
@@ -59,7 +59,7 @@ Tailor the AI to your needs.
 1.  **Clone the repository**
     ```bash
     git clone <repository-url>
-    cd NovelGenerator
+    cd NovelBuds
     ```
 
 2.  **Backend Setup**
@@ -97,7 +97,7 @@ Tailor the AI to your needs.
 ## 📂 Project Structure
 
 ```
-NovelGenerator/
+NovelBuds/
 ├── App/
 │   ├── backend/                  # FastAPI Backend Server
 │   │   ├── alembic/              # Database schema migrations (SQLAlchemy/Alembic)

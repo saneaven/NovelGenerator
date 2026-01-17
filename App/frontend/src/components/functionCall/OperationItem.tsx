@@ -72,7 +72,7 @@ export const OperationItem: React.FC<OperationItemProps> = ({
   rawText,
   errorMessage,
 }) => {
-  const panelId = `fc-op-panel-${id}`;
+  const panelId = `function-call-op-panel-${id}`;
 
   const handleHeaderClick = useCallback(() => {
     onToggle?.();
@@ -88,10 +88,10 @@ export const OperationItem: React.FC<OperationItemProps> = ({
   }, [onToggleSelected]);
 
   return (
-    <div className={`fc-op fc-op--${mode} ${isExpanded ? 'fc-op--expanded' : ''}`}>
+    <div className={`function-call-op function-call-op--${mode} ${isExpanded ? 'function-call-op--expanded' : ''}`}>
       <button
         type="button"
-        className="fc-op__header"
+        className="function-call-op__header"
         onClick={handleHeaderClick}
         aria-expanded={isExpanded}
         aria-controls={panelId}
@@ -99,7 +99,7 @@ export const OperationItem: React.FC<OperationItemProps> = ({
         {showCheckbox && (
           <input
             type="checkbox"
-            className="fc-op__checkbox"
+            className="function-call-op__checkbox"
             checked={isSelected}
             disabled={isCheckboxDisabled}
             onClick={handleCheckboxClick}
@@ -107,23 +107,23 @@ export const OperationItem: React.FC<OperationItemProps> = ({
           />
         )}
 
-        <div className="fc-op__left">
+        <div className="function-call-op__left">
           <ActionBadge action={action} type={type} />
-          <div className="fc-op__label">{label}</div>
+          <div className="function-call-op__label">{label}</div>
         </div>
 
-        <div className="fc-op__right">
+        <div className="function-call-op__right">
           {status && (
-            <span className={`fc-pill fc-pill--${status}`}>
+            <span className={`function-call-pill function-call-pill--${status}`}>
               {statusLabel(status)}
             </span>
           )}
-          <ChevronDown className={`fc-op__chevron ${isExpanded ? 'fc-op__chevron--open' : ''}`} size="sm" />
+          <ChevronDown className={`function-call-op__chevron ${isExpanded ? 'function-call-op__chevron--open' : ''}`} size="sm" />
         </div>
       </button>
 
       {isExpanded && (
-        <div id={panelId} className="fc-op__details" role="region">
+        <div id={panelId} className="function-call-op__details" role="region">
           <OperationDetails data={detailsData} rawText={rawText} errorMessage={errorMessage} />
         </div>
       )}

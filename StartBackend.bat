@@ -1,5 +1,5 @@
 @echo off
-title Novel Generator Backend
+title Novel Buds Backend
 
 call .venv\Scripts\activate
 

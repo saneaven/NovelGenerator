@@ -113,7 +113,7 @@ export const UNIFIED_SCHEMA = {
     functionResults: {
       desc: "Previous function call results",
       example: [{
-        functionCallId: "fc-1",
+        functionCallId: "function-call-1",
         functionName: "update_manuscript",
         success: true,
         status: "accepted",
@@ -197,6 +197,14 @@ export const UNIFIED_SCHEMA = {
       } as { title: string; logline: string; genre: string }
     },
   },
+
+  // User-defined variables (dynamic, fields determined by user configuration)
+  variables: {
+    _dynamic: {
+      desc: "User-defined prompt variables. Fields are dynamically defined by the user.",
+      example: {} as Record<string, string | number | boolean | null>
+    },
+  },
 } as const;
 
 /**
@@ -208,12 +216,12 @@ export type PromptType = 'agent' | 'editAssistant' | 'translation' | 'objectImag
  * Maps which variable groups are available for each prompt type.
  */
 export const PROMPT_TYPE_VARIABLES: Record<PromptType, string[]> = {
-  agent: ['config', 'project', 'input', 'agent'],
-  editAssistant: ['config', 'project', 'input', 'editAssistant'],
-  translation: ['config', 'project', 'input', 'translation'],
-  objectImagePrompt: ['config', 'project', 'input', 'imagePrompt'],
-  sceneImagePrompt: ['config', 'project', 'input', 'imagePrompt'],
-  coverImagePrompt: ['config', 'project', 'input', 'imagePrompt'],
+  agent: ['config', 'project', 'input', 'agent', 'variables'],
+  editAssistant: ['config', 'project', 'input', 'editAssistant', 'variables'],
+  translation: ['config', 'project', 'input', 'translation', 'variables'],
+  objectImagePrompt: ['config', 'project', 'input', 'imagePrompt', 'variables'],
+  sceneImagePrompt: ['config', 'project', 'input', 'imagePrompt', 'variables'],
+  coverImagePrompt: ['config', 'project', 'input', 'imagePrompt', 'variables'],
 };
 
 // Type extraction helpers
@@ -232,6 +240,9 @@ export type EditAssistantModeData = ExtractProps<typeof UNIFIED_SCHEMA['editAssi
 export type TranslationModeData = ExtractProps<typeof UNIFIED_SCHEMA['translation']>;
 export type ImagePromptModeData = ExtractProps<typeof UNIFIED_SCHEMA['imagePrompt']>;
 
+// Variables data type
+export type VariablesData = Record<string, string | number | boolean | null>;
+
 // Full unified data structure (same as TemplateData in types.ts)
 export interface PromptData {
   config: ConfigData;
@@ -241,6 +252,7 @@ export interface PromptData {
   editAssistant?: EditAssistantModeData;
   translation?: TranslationModeData;
   imagePrompt?: ImagePromptModeData;
+  variables?: VariablesData;
 }
 
 /**

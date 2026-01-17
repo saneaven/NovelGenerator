@@ -1,5 +1,5 @@
 @echo off
-title Novel Generator frontend
+title Novel Buds frontend
 
 :: 프로젝트 폴더 경로로 이동합니다. 아래 경로를 수정하세요.
 cd ./App/frontend

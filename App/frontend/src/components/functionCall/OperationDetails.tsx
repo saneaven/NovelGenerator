@@ -73,13 +73,13 @@ export const OperationDetails: React.FC<OperationDetailsProps> = ({ data, rawTex
   }, [data, rawText]);
 
   return (
-    <div className="fc-details">
-      {errorMessage && <div className="fc-details__error">{errorMessage}</div>}
-      <div className="fc-details__panel" ref={panelRef} onScroll={handleScroll}>
+    <div className="function-call-details">
+      {errorMessage && <div className="function-call-details__error">{errorMessage}</div>}
+      <div className="function-call-details__panel" ref={panelRef} onScroll={handleScroll}>
         {fields.map((f) => (
-          <div key={f.key} className="fc-field">
-            <div className="fc-field__label">{f.label}</div>
-            <div className={`fc-field__value ${f.isCode ? 'fc-field__value--code' : ''}`}>
+          <div key={f.key} className="function-call-field">
+            <div className="function-call-field__label">{f.label}</div>
+            <div className={`function-call-field__value ${f.isCode ? 'function-call-field__value--code' : ''}`}>
               {f.text}
             </div>
           </div>

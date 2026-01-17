@@ -45,7 +45,6 @@ function getHandlerOptions(journey: Journey): HandlerOptions {
 export const JourneyDetailModal: React.FC = () => {
   const detailJourneyId = useJourneyStore((s) => s.detailJourneyId);
   const closeDetailModal = useJourneyStore((s) => s.closeDetailModal);
-  const clearJourney = useJourneyStore((s) => s.clearJourney);
   const cancelJourney = useJourneyStore((s) => s.cancelJourney);
   const updateMessage = useJourneyStore((s) => s.updateMessage);
   const deleteMessage = useJourneyStore((s) => s.deleteMessage);
@@ -134,23 +133,6 @@ export const JourneyDetailModal: React.FC = () => {
   ) ?? false;
   const isPending = journey?.status === 'pending_confirmation' || isApplying || hasPendingCards;
 
-  const handleDismiss = useCallback(() => {
-    if (detailJourneyId) {
-      // Clear llmSessionStore sessions if exist
-      const j = useJourneyStore.getState().getJourneyById(detailJourneyId);
-      const sessionIds = new Set<string>();
-      if (j?.activeSessionId) sessionIds.add(j.activeSessionId);
-      for (const id of j?.sessionHistory ?? []) {
-        sessionIds.add(id);
-      }
-      for (const id of sessionIds) {
-        useLLMSessionStore.getState().clearSession(id);
-      }
-      clearJourney(detailJourneyId);
-    }
-    closeDetailModal();
-  }, [detailJourneyId, clearJourney, closeDetailModal]);
-
   const handleCancel = useCallback(() => {
     if (!journey) return;
     cancelJourney(journey.id);
@@ -219,9 +201,6 @@ export const JourneyDetailModal: React.FC = () => {
 
   const footer = (
     <div className="llm-task-modal-footer-actions">
-      <TextButton variant="secondary" onClick={handleDismiss}>
-        Dismiss
-      </TextButton>
       {journey.status === 'running' && (
         <TextButton variant="danger" onClick={handleCancel}>
           Cancel

@@ -92,6 +92,13 @@
     min-height: 0;
 }
 
+/* Virtualized grid scroll container */
+.virtualized-grid-container {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
 .library-subtab .search-bar {
     position: sticky;
     top: 0;
@@ -161,7 +168,7 @@
 }
 
 .image-tab-content .asset-item.placeholder--error {
-    border-color: var(--color-danger, #c0392b);
+    border-color: var(--color-feedback-error-base);
 }
 
 .image-tab-content .asset-item.placeholder--cancelled {

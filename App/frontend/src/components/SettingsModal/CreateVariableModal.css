@@ -1,0 +1,268 @@
+/* Create Variable Modal */
+
+.create-variable-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-md);
+}
+
+/* Field */
+.create-variable-modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.create-variable-modal__label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.create-variable-modal__required {
+  color: var(--color-feedback-error-base);
+}
+
+.create-variable-modal__input,
+.create-variable-modal__textarea {
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-default);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+  transition: border-color var(--transition-fast);
+}
+
+.create-variable-modal__input:focus,
+.create-variable-modal__textarea:focus {
+  outline: none;
+  border-color: var(--color-brand-primary);
+}
+
+.create-variable-modal__textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.create-variable-modal__hint {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* Type Grid */
+.create-variable-modal__type-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-sm);
+}
+
+.create-variable-modal__type-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--color-surface-subtle);
+  border: 2px solid transparent;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+  text-align: left;
+}
+
+.create-variable-modal__type-btn:hover {
+  background-color: var(--color-surface-default);
+}
+
+.create-variable-modal__type-btn.active {
+  border-color: var(--color-brand-primary);
+  background-color: var(--color-brand-primary-soft);
+}
+
+.create-variable-modal__type-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.create-variable-modal__type-btn.active .create-variable-modal__type-label {
+  color: var(--color-brand-primary);
+}
+
+.create-variable-modal__type-desc {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+/* Select Options */
+.create-variable-modal__options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.create-variable-modal__option {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: var(--color-surface-subtle);
+  border-radius: var(--border-radius-sm);
+}
+
+.create-variable-modal__option-text {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+}
+
+.create-variable-modal__option-remove {
+  display: flex;
+  padding: var(--spacing-xs);
+  border: none;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  border-radius: var(--border-radius-sm);
+  transition: color var(--transition-fast);
+}
+
+.create-variable-modal__option-remove:hover {
+  color: var(--color-feedback-error-base);
+}
+
+.create-variable-modal__option-add {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.create-variable-modal__option-input {
+  flex: 1;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-default);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-sm);
+}
+
+.create-variable-modal__option-input:focus {
+  outline: none;
+  border-color: var(--color-brand-primary);
+}
+
+.create-variable-modal__option-add-btn {
+  display: flex;
+  padding: var(--spacing-xs);
+  border: none;
+  background-color: var(--color-brand-primary);
+  color: white;
+  cursor: pointer;
+  border-radius: var(--border-radius-sm);
+  transition: opacity var(--transition-fast);
+}
+
+.create-variable-modal__option-add-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Number Options */
+.create-variable-modal__number-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.create-variable-modal__number-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.create-variable-modal__number-label {
+  min-width: 70px;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.create-variable-modal__number-input {
+  flex: 1;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-default);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-sm);
+}
+
+.create-variable-modal__number-input:focus {
+  outline: none;
+  border-color: var(--color-brand-primary);
+}
+
+.create-variable-modal__number-select {
+  flex: 1;
+}
+
+/* Error */
+.create-variable-modal__error {
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-feedback-error-base);
+  background-color: var(--color-feedback-error-soft);
+  border-radius: var(--border-radius-md);
+}
+
+/* Actions */
+.create-variable-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.create-variable-modal__btn {
+  padding: var(--spacing-sm) var(--spacing-lg);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  border: none;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), opacity var(--transition-fast);
+}
+
+.create-variable-modal__btn--secondary {
+  color: var(--color-text-secondary);
+  background-color: var(--color-surface-subtle);
+}
+
+.create-variable-modal__btn--secondary:hover {
+  background-color: var(--color-surface-default);
+}
+
+.create-variable-modal__btn--primary {
+  color: white;
+  background-color: var(--color-brand-primary);
+}
+
+.create-variable-modal__btn--primary:hover {
+  background-color: var(--color-brand-primary-hover);
+}
+
+.create-variable-modal__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .create-variable-modal__type-grid {
+    grid-template-columns: 1fr;
+  }
+}

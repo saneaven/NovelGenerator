@@ -79,7 +79,7 @@
 }
 
 .notification-ok-btn--success:hover {
-  background: var(--color-success-hover, #059669);
+  background: var(--color-success-750);
 }
 
 .notification-ok-btn--success:focus {
@@ -92,7 +92,7 @@
 }
 
 .notification-ok-btn--error:hover {
-  background: var(--color-error-hover, #b91c1c);
+  background: var(--color-error-750);
 }
 
 .notification-ok-btn--error:focus {
@@ -105,7 +105,7 @@
 }
 
 .notification-ok-btn--info:hover {
-  background: var(--color-info-hover, #2563eb);
+  background: var(--color-info-750);
 }
 
 .notification-ok-btn--info:focus {

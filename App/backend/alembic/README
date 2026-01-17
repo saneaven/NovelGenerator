@@ -1,6 +1,6 @@
 Generic single-database configuration for Alembic migrations.
 
-This directory contains database migration scripts for the Novel Generator application.
+This directory contains database migration scripts for the Novel Buds application.
 
 ## Common Commands
 

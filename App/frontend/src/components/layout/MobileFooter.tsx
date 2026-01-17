@@ -1,6 +1,6 @@
 import React from 'react';
 import { Settings } from '../icons';
-import { NotificationButton } from '../Notification';
+import { ActivityPanelButton } from '../ActivityPanel';
 import { IconButton } from '../IconButton';
 import './MobileFooter.css';
 
@@ -31,7 +31,7 @@ const MobileFooter: React.FC<MobileFooterProps> = ({
         Agent
       </button>
 
-      <NotificationButton position="mobile" className="footer-notification-btn" />
+      <ActivityPanelButton position="mobile" className="footer-notification-btn" />
     </footer>
   );
 };

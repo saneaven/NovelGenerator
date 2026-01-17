@@ -202,24 +202,6 @@
   max-width: 250px;
 }
 
-/* Scrollbar styling */
-.outline-sidebar .outline-list-container::-webkit-scrollbar {
-  width: 6px;
-}
-
-.outline-sidebar .outline-list-container::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.outline-sidebar .outline-list-container::-webkit-scrollbar-thumb {
-  background-color: var(--color-border-default);
-  border-radius: var(--border-radius-full);
-}
-
-.outline-sidebar .outline-list-container::-webkit-scrollbar-thumb:hover {
-  background-color: var(--color-text-muted);
-}
-
 /* Sidebar Add Form */
 .outline-sidebar .sidebar-add-form {
   background-color: var(--color-surface-elevated);

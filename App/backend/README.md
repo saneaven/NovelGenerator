@@ -1,6 +1,6 @@
-# Novel Generator Backend
+# Novel Buds Backend
 
-A comprehensive backend service for the Novel Generator application, featuring:
+A comprehensive backend service for the Novel Buds application, featuring:
 - Multi-provider LLM integration (GitHub Copilot, OpenRouter, Custom endpoints)
 - PostgreSQL database with SQLAlchemy ORM
 - JWT authentication

@@ -69,7 +69,7 @@ def show_tables():
 def main():
     """Main initialization function"""
     print("=" * 60)
-    print("Novel Generator - Database Initialization")
+    print("Novel Buds - Database Initialization")
     print("=" * 60)
 
     # Verify connection first

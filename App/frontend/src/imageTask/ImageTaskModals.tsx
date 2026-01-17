@@ -8,6 +8,7 @@ import { BaseModal } from '../components/BaseModal';
 import NotificationProgressBar from '../components/Notification/NotificationProgressBar';
 import { TextButton } from '../components/TextButton';
 import { UnifiedImageModal } from '../components/AssetManager';
+import { API_BASE_URL } from '../api/client';
 import { useProjectStore } from '../store/projectStore';
 import { useNotificationStore } from '../store/notificationStore';
 import { useImageTaskStore } from './store';
@@ -19,7 +20,6 @@ const STAGES: ImageProgressStage[] = ['preparing', 'generating', 'saving', 'bind
 export const ImageTaskModals: React.FC = () => {
   const detailTaskId = useImageTaskStore((s) => s.detailTaskId);
   const closeDetailModal = useImageTaskStore((s) => s.closeDetailModal);
-  const clearSession = useImageTaskStore((s) => s.clearSession);
 
   const session = useImageTaskStore((s) => (detailTaskId ? s.sessions[detailTaskId] : null));
   const progress = session?.progress;
@@ -38,11 +38,6 @@ export const ImageTaskModals: React.FC = () => {
     const idx = Math.max(0, STAGES.indexOf(progress.stage));
     return { current: idx + 1, total: STAGES.length, label: progress.message };
   }, [session, progress]);
-
-  const handleDismiss = useCallback(() => {
-    if (detailTaskId) clearSession(detailTaskId);
-    closeDetailModal();
-  }, [detailTaskId, clearSession, closeDetailModal]);
 
   const handleRetry = useCallback(() => {
     if (!session) return;
@@ -82,9 +77,6 @@ export const ImageTaskModals: React.FC = () => {
           className="image-task-modal"
           footer={
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <TextButton variant="secondary" onClick={handleDismiss}>
-                Dismiss
-              </TextButton>
               {(session.status === 'error' || session.status === 'cancelled') && (
                 <TextButton variant="secondary" onClick={handleRetry}>
                   Retry
@@ -112,7 +104,7 @@ export const ImageTaskModals: React.FC = () => {
           {session.status === 'success' && session.result?.asset && (
             <div style={{ display: 'grid', gap: 12 }}>
               <img
-                src={session.result.asset.file_url}
+                src={`${API_BASE_URL}${session.result.asset.file_url}`}
                 alt={session.result.asset.name}
                 style={{ width: '100%', maxHeight: 520, objectFit: 'contain', borderRadius: 8 }}
               />

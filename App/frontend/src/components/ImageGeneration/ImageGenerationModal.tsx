@@ -465,6 +465,11 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
             return;
         }
 
+        if (!currentProjectId) {
+            alert('No project selected');
+            return;
+        }
+
         const referenceImagesData =
             supportsImageInput && referenceImages.length > 0
                 ? referenceImages.map((img) => ({ assetId: img.assetId, strength: img.strength }))

@@ -1,19 +1,21 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNotificationStore } from '../../store/notificationStore';
-import NotificationItem from './NotificationItem';
+import NotificationItem from '../Notification/NotificationItem';
 import { useScroll } from 'motion/react';
 
-interface NotificationPanelProps {
-  onClose: () => void;
+interface NotificationsViewProps {
+  isMobile?: boolean;
 }
 
-const NotificationPanel: React.FC<NotificationPanelProps> = () => {
+const NotificationsView: React.FC<NotificationsViewProps> = ({ isMobile: isMobileProp }) => {
   const itemsViewportRef = useRef<HTMLDivElement>(null);
   const itemsContainerRef = useRef<HTMLDivElement>(null);
   const { scrollY } = useScroll({ container: itemsViewportRef });
   const [itemStride, setItemStride] = useState(80);
   const [viewportHeight, setViewportHeight] = useState(320);
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobileDetected, setIsMobileDetected] = useState(false);
+
+  const isMobile = isMobileProp ?? isMobileDetected;
 
   // Stack visualization constants
   const frontCount = 4;
@@ -24,7 +26,6 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
 
   // Subscribe to raw state, derive sorted list with useMemo
   const notificationsMap = useNotificationStore((state) => state.notifications);
-  const removeAll = useNotificationStore((state) => state.removeAll);
   const remove = useNotificationStore((state) => state.remove);
   const invokeHandler = useNotificationStore((state) => state.invokeHandler);
 
@@ -57,14 +58,10 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
     [invokeHandler]
   );
 
-  const handleClearAll = useCallback(() => {
-    removeAll();
-  }, [removeAll]);
-
   // Detect mobile viewport
   useEffect(() => {
     const mediaQuery = window.matchMedia('(max-width: 768px)');
-    const handleChange = () => setIsMobile(mediaQuery.matches);
+    const handleChange = () => setIsMobileDetected(mediaQuery.matches);
     handleChange();
     mediaQuery.addEventListener('change', handleChange);
     return () => {
@@ -129,64 +126,44 @@ const NotificationPanel: React.FC<NotificationPanelProps> = () => {
     viewport.scrollTop = viewport.scrollHeight;
   }, [isMobile, orderedNotifications.length]);
 
-  const headerNode = (
-    <div className="notification-header">
-      <h3 className="notification-header-title">Notifications</h3>
-      {notifications.length > 0 && (
-        <button className="notification-header-clear" onClick={handleClearAll}>
-          Clear All
-        </button>
-      )}
-    </div>
-  );
-
   return (
-    <>
-      {/* Header (top on desktop) */}
-      {!isMobile && headerNode}
-
-      {/* Items viewport */}
-      <div className="notification-items-viewport" ref={itemsViewportRef}>
-        <div
-          className="notification-items-container"
-          ref={itemsContainerRef}
-          style={{
-            paddingTop: isMobile ? stackLift * (depthRange + 2) : undefined,
-            paddingBottom: !isMobile ? stackLift * (depthRange + 2) : undefined,
-          }}
-        >
-          {orderedNotifications.length === 0 ? (
-            <div className="notification-empty">
-              <p>No notifications</p>
-            </div>
-          ) : (
-            orderedNotifications.map((notification, index) => (
-              <NotificationItem
-                key={notification.id}
-                notification={notification}
-                index={index}
-                totalCount={orderedNotifications.length}
-                scrollY={scrollY}
-                itemStride={itemStride}
-                viewportHeight={viewportHeight}
-                frontCount={frontCount}
-                depthRange={depthRange}
-                maxDepthZ={maxDepthZ}
-                stackLift={stackLift}
-                maxBlur={maxBlur}
-                isMobile={isMobile}
-                onDismiss={handleDismiss}
-                onClick={handleClick}
-              />
-            ))
-          )}
-        </div>
+    <div className="notification-items-viewport" ref={itemsViewportRef}>
+      <div
+        className="notification-items-container"
+        ref={itemsContainerRef}
+        style={{
+          paddingTop: isMobile ? stackLift * (depthRange + 2) : undefined,
+          paddingBottom: !isMobile ? stackLift * (depthRange + 2) : undefined,
+        }}
+      >
+        {orderedNotifications.length === 0 ? (
+          <div className="notification-empty">
+            <p>No notifications</p>
+          </div>
+        ) : (
+          orderedNotifications.map((notification, index) => (
+            <NotificationItem
+              key={notification.id}
+              notification={notification}
+              index={index}
+              totalCount={orderedNotifications.length}
+              scrollY={scrollY}
+              itemStride={itemStride}
+              viewportHeight={viewportHeight}
+              frontCount={frontCount}
+              depthRange={depthRange}
+              maxDepthZ={maxDepthZ}
+              stackLift={stackLift}
+              maxBlur={maxBlur}
+              isMobile={isMobile}
+              onDismiss={handleDismiss}
+              onClick={handleClick}
+            />
+          ))
+        )}
       </div>
-
-      {/* Header (bottom on mobile) */}
-      {isMobile && headerNode}
-    </>
+    </div>
   );
 };
 
-export default NotificationPanel;
+export default NotificationsView;

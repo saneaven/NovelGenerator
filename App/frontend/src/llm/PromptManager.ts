@@ -3,6 +3,7 @@ import { STORY_OBJECT_EDIT_FUNCTIONS, MANUSCRIPT_EDIT_FUNCTIONS, getFunctionsFor
 import { renderTemplate, registerFragments, type PromptFragment } from '../templateEngine/engine';
 import { useSettingsStore } from '../store/settingsStore';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
+import { useVariableStore } from '../store/variableStore';
 import { fragmentService } from '../api/fragmentService';
 import type { UnifiedObject } from '../types/unifiedObject';
 import {
@@ -182,6 +183,7 @@ export class PromptManager {
     ]);
 
     const settings = useSettingsStore.getState().settings;
+    const variables = useVariableStore.getState().getVariablesForTemplate();
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
       project: this.buildProjectData(context.projectId, settings.mainLanguage),
@@ -189,6 +191,7 @@ export class PromptManager {
         // userMessage is injected per user block in prepareMessages()
       },
       agent: { mode, contextObjectIds: context.contextObjectIds },
+      variables,
     };
 
     return {
@@ -219,6 +222,7 @@ export class PromptManager {
     ]);
 
     const settings = useSettingsStore.getState().settings;
+    const variables = useVariableStore.getState().getVariablesForTemplate();
     let templateData: TemplateData;
 
     if (mode === 'manuscript') {
@@ -238,6 +242,7 @@ export class PromptManager {
             objectIds: msContext.objectIds,
           },
         },
+        variables,
       };
     } else {
       const soContext = context as EditAssistantStoryObjectPromptContext;
@@ -255,6 +260,7 @@ export class PromptManager {
             editScope: soContext.editScope,
           },
         },
+        variables,
       };
     }
 
@@ -303,6 +309,7 @@ export class PromptManager {
       ]) as [string, string, string | null, string | null, string | null, string | null];
     }
 
+    const variables = useVariableStore.getState().getVariablesForTemplate();
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
       project: this.buildProjectData(context.projectId, context.sourceLanguage),
@@ -316,6 +323,7 @@ export class PromptManager {
         contextObjectIds: context.contextObjectIds,
         currentTranslatedContents: context.currentTranslatedContents,
       },
+      variables,
     };
 
     return {
@@ -342,6 +350,7 @@ export class PromptManager {
       this.getTemplate('translation', 'prefill', 'message'),
     ]);
 
+    const variables = useVariableStore.getState().getVariablesForTemplate();
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
       project: this.buildProjectData(context.projectId, context.sourceLanguage),
@@ -353,6 +362,7 @@ export class PromptManager {
         targetLanguage: context.targetLanguage,
         messages: [{ id: 'source', content: context.sourceContent }],
       },
+      variables,
     };
 
     return {
@@ -380,6 +390,7 @@ export class PromptManager {
     ]);
 
     const settings = useSettingsStore.getState().settings;
+    const variables = useVariableStore.getState().getVariablesForTemplate();
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
       project: this.buildProjectData(context.projectId, settings.mainLanguage),
@@ -394,6 +405,7 @@ export class PromptManager {
         currentPromptPositive: context.currentPromptPositive ?? undefined,
         currentPromptNegative: context.currentPromptNegative ?? undefined,
       },
+      variables,
     };
 
     return {
@@ -424,6 +436,7 @@ export class PromptManager {
     ]);
 
     const settings = useSettingsStore.getState().settings;
+    const variables = useVariableStore.getState().getVariablesForTemplate();
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
       project: this.buildProjectData(context.projectId, settings.mainLanguage),
@@ -436,6 +449,7 @@ export class PromptManager {
         scenePostContext: context.scenePostContext,
         selectedObjectIds: context.selectedObjects.map(o => o.id),
       },
+      variables,
     };
 
     return {
@@ -466,6 +480,7 @@ export class PromptManager {
     ]);
 
     const settings = useSettingsStore.getState().settings;
+    const variables = useVariableStore.getState().getVariablesForTemplate();
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
       project: this.buildProjectData(context.projectId, settings.mainLanguage),
@@ -484,6 +499,7 @@ export class PromptManager {
           genre: context.basicInfo.genre,
         },
       },
+      variables,
     };
 
     return {

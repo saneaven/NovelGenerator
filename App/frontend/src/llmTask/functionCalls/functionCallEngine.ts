@@ -3,6 +3,7 @@ import { useLLMSessionStore } from '../../store/llmSessionStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import {
   UnifiedApplicator,
+  BatchStoreActions,
   createStoreActions,
   buildEditCards,
   applyValidationResults,
@@ -51,6 +52,16 @@ function getFailureTypeFromResult(params: {
   }
 
   return 'execution';
+}
+
+async function yieldToUI(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() => resolve());
+      return;
+    }
+    setTimeout(resolve, 0);
+  });
 }
 
 export async function stageSessionEdits(params: {
@@ -113,10 +124,12 @@ export async function applySessionEdits(params: {
 
   store.updateSession(sessionId, { status: 'applying' });
 
-  const storeActions = createStoreActions(useUnifiedObjectStore.getState());
-  const applicator = new UnifiedApplicator({ store: storeActions });
+  const baseStore = createStoreActions(useUnifiedObjectStore.getState());
+  const batchStore = new BatchStoreActions({ baseStore });
+  const applicator = new UnifiedApplicator({ store: batchStore });
 
   const nextCards: StoredEditCard[] = [];
+  let appliedCount = 0;
 
   for (const card of session.editCards) {
     const normalized: NormalizedFunctionCall = {
@@ -152,6 +165,7 @@ export async function applySessionEdits(params: {
     };
 
     try {
+      batchStore.beginCall(rawFunctionCall.id);
       const result = await applicator.apply(rawFunctionCall, { projectId, language, options });
       if (result.success) {
         nextCards.push({
@@ -188,13 +202,65 @@ export async function applySessionEdits(params: {
           reason: errorMessage,
         },
       });
+    } finally {
+      batchStore.endCall();
+      appliedCount += 1;
+      if (appliedCount % 2 === 0) {
+        await yieldToUI();
+      }
     }
   }
 
-  store.updateSession(sessionId, { editCards: nextCards });
+  await yieldToUI();
 
-  const acceptedCount = nextCards.filter(c => c.functionCall.status === 'accepted').length;
-  const failedCount = nextCards.filter(c => c.functionCall.status === 'failed').length;
+  const flushResults = await batchStore.flush();
+  const finalizedCards =
+    flushResults.size === 0
+      ? nextCards
+      : nextCards.map((card): StoredEditCard => {
+        if (card.functionCall.status !== 'accepted') return card;
+
+        const touched = batchStore.getUpdateKeysForCall(card.functionCall.id);
+        if (touched.size === 0) return card;
+
+        for (const key of touched) {
+          const status = flushResults.get(key);
+          if (!status) {
+            return {
+              ...card,
+              functionCall: {
+                ...card.functionCall,
+                status: 'failed',
+                failureType: 'execution',
+                reason: 'Batched apply failed: missing flush result',
+                result: undefined,
+                acceptedAt: undefined,
+              },
+            };
+          }
+
+          if (!status.success) {
+            return {
+              ...card,
+              functionCall: {
+                ...card.functionCall,
+                status: 'failed',
+                failureType: 'execution',
+                reason: status.reason,
+                result: undefined,
+                acceptedAt: undefined,
+              },
+            };
+          }
+        }
+
+        return card;
+      });
+
+  store.updateSession(sessionId, { editCards: finalizedCards });
+
+  const acceptedCount = finalizedCards.filter(c => c.functionCall.status === 'accepted').length;
+  const failedCount = finalizedCards.filter(c => c.functionCall.status === 'failed').length;
 
   if (acceptedCount === 0 && failedCount === 0) {
     store.updateSession(sessionId, { status: 'cancelled' });
@@ -240,10 +306,12 @@ export async function applyFunctionCallsDirect(params: {
 }): Promise<FunctionCallMetadata[]> {
   const { projectId, language, functionCalls, selections, options } = params;
 
-  const storeActions = createStoreActions(useUnifiedObjectStore.getState());
-  const applicator = new UnifiedApplicator({ store: storeActions });
+  const baseStore = createStoreActions(useUnifiedObjectStore.getState());
+  const batchStore = new BatchStoreActions({ baseStore });
+  const applicator = new UnifiedApplicator({ store: batchStore });
 
   const nextCalls: FunctionCallMetadata[] = [];
+  let appliedCount = 0;
 
   for (const fc of functionCalls) {
     const status = (fc.status ?? 'pending') as FunctionCallStatus;
@@ -276,6 +344,7 @@ export async function applyFunctionCallsDirect(params: {
     };
 
     try {
+      batchStore.beginCall(rawFunctionCall.id);
       const result = await applicator.apply(rawFunctionCall, { projectId, language, options });
       if (result.success) {
         nextCalls.push({
@@ -303,8 +372,51 @@ export async function applyFunctionCallsDirect(params: {
         reason: errorMessage,
         failureType: 'execution',
       });
+    } finally {
+      batchStore.endCall();
+      appliedCount += 1;
+      if (appliedCount % 2 === 0) {
+        await yieldToUI();
+      }
     }
   }
 
-  return nextCalls;
+  await yieldToUI();
+
+  const flushResults = await batchStore.flush();
+  if (flushResults.size === 0) return nextCalls;
+
+  return nextCalls.map((fc) => {
+    if (fc.status !== 'accepted') return fc;
+
+    const touched = batchStore.getUpdateKeysForCall(fc.id);
+    if (touched.size === 0) return fc;
+
+    for (const key of touched) {
+      const status = flushResults.get(key);
+      if (!status) {
+        return {
+          ...fc,
+          status: 'failed',
+          reason: 'Batched apply failed: missing flush result',
+          failureType: 'execution',
+          result: undefined,
+          acceptedAt: undefined,
+        };
+      }
+
+      if (!status.success) {
+        return {
+          ...fc,
+          status: 'failed',
+          reason: status.reason,
+          failureType: 'execution',
+          result: undefined,
+          acceptedAt: undefined,
+        };
+      }
+    }
+
+    return fc;
+  });
 }

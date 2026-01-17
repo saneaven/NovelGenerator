@@ -398,7 +398,7 @@ class NativeFunctionCallsStreamParser:
                     self.buffer = self.buffer[open_idx + len(OPEN_CALL):]
                     self.inside_call = True
                     self.call_buffer = ""
-                    self._active_call_id = f"native-fc-{self.call_index}"
+                    self._active_call_id = f"native-function-call-{self.call_index}"
                     self._active_fn_name = None
                     self._json_extractor = _JSONObjectExtractor()
                     self._args_streamer = _FunctionCallArgsStreamer()
