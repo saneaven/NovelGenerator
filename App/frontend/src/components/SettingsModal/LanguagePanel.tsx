@@ -112,6 +112,7 @@ const LanguagePanel: React.FC<LanguagePanelProps> = ({
                     icon={<Close size="xs" />}
                     onClick={() => handleRemoveLanguage(lang)}
                     size="xs"
+                    variant="ghost"
                     title={`Remove ${lang}`}
                     className="remove-language-btn"
                   />

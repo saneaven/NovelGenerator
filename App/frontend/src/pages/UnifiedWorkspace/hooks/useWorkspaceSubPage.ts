@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-export type SubPageType = 'story-object' | 'outline-manager' | 'novel-editor';
+export type SubPageType = 'story-object' | 'outline-manager' | 'novel-editor' | 'config';
 
 const STORAGE_KEY_PREFIX = 'workspace_last_subpage_';
 const DEFAULT_SUBPAGE: SubPageType = 'story-object';
-const VALID_SUBPAGES: SubPageType[] = ['story-object', 'outline-manager', 'novel-editor'];
+const VALID_SUBPAGES: SubPageType[] = ['story-object', 'outline-manager', 'novel-editor', 'config'];
 
 function isValidSubPage(value: string | undefined): value is SubPageType {
   return value !== undefined && VALID_SUBPAGES.includes(value as SubPageType);

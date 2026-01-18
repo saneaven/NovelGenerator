@@ -18,6 +18,7 @@ import StoryObjectPanel from '../workspace/components/StoryObjectPanel';
 import OutlinePanel from '../outlinemanager/components/OutlinePanel';
 import NovelEditorPanel from '../noveleditor/components/NovelEditorPanel';
 import WorkspaceTabsSidebar from '../workspace/components/WorkspaceTabsSidebar';
+import WorkspaceConfigPanel from './components/WorkspaceConfigPanel';
 import { PageHeader, MobileFooter } from '../../components/layout';
 
 import { useWorkspaceSubPage, type SubPageType } from './hooks/useWorkspaceSubPage';
@@ -47,6 +48,7 @@ const TRANSLATION_TYPES: Record<SubPageType, string[]> = {
   'story-object': ['basic_info', 'character', 'organization', 'location', 'lorebook', 'act', 'chapter'],
   'outline-manager': ['outline', 'act', 'chapter'],
   'novel-editor': ['manuscript'],
+  'config': ['basic_info', 'character', 'organization', 'location', 'lorebook', 'outline', 'act', 'chapter', 'manuscript'],
 };
 
 // Get agent mode from sub-page
@@ -58,6 +60,8 @@ function getAgentMode(subPage: SubPageType): 'storyObject' | 'outlineManager' | 
       return 'outlineManager';
     case 'novel-editor':
       return 'novelEditor';
+    case 'config':
+      return 'storyObject';
   }
 }
 
@@ -70,6 +74,8 @@ function getSidebarType(subPage: SubPageType): string {
       return 'outline';
     case 'novel-editor':
       return 'chapter';
+    case 'config':
+      return 'workspace-tabs';
   }
 }
 
@@ -122,6 +128,18 @@ const UnifiedWorkspace: React.FC = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Sync agent mode when sub-page changes
+  useEffect(() => {
+    if (projectId) {
+      useAgentUIStore.getState().setMode(projectId, getAgentMode(currentSubPage));
+    }
+  }, [projectId, currentSubPage]);
+
+  // Get current agent mode from store (subscribe to changes)
+  const currentAgentMode = useAgentUIStore(
+    (state) => state.modeByProject[projectId ?? ''] ?? getAgentMode(currentSubPage)
+  );
 
   // Settings modal state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -402,6 +420,8 @@ const UnifiedWorkspace: React.FC = () => {
         return 'Outlines';
       case 'novel-editor':
         return selectedChapter?.name || 'No chapter selected';
+      case 'config':
+        return 'Config';
     }
   };
 
@@ -419,7 +439,7 @@ const UnifiedWorkspace: React.FC = () => {
         onTranslateAllClick={() => setShowTranslateModal(true)}
         onSettingsClick={() => setIsSettingsOpen(true)}
         mobileSubtitle={getMobileSubtitle()}
-        showHamburger={true}
+        showHamburger={currentSubPage !== 'config'}
         onHamburgerClick={() => sidebarStore.toggleSidebar(projectId ?? '', getSidebarType(currentSubPage))}
         showSaveIndicator={currentSubPage === 'novel-editor'}
         saveStatus={
@@ -436,7 +456,7 @@ const UnifiedWorkspace: React.FC = () => {
       <div className={`unified-workspace-content ${isAgentVisible ? 'agent-visible' : ''}`}>
         <AgentPanel
           projectId={projectId ?? ''}
-          mode={getAgentMode(currentSubPage)}
+          mode={currentAgentMode}
         />
 
         {currentSubPage === 'story-object' && (
@@ -459,6 +479,12 @@ const UnifiedWorkspace: React.FC = () => {
             hasChapters={hasChapters}
             chaptersInitialized={isOutlineInitialized}
             onSelectChapter={(chapterId) => selectChapter(projectId ?? '', chapterId)}
+          />
+        )}
+
+        {currentSubPage === 'config' && (
+          <WorkspaceConfigPanel
+            projectId={projectId ?? ''}
           />
         )}
       </div>

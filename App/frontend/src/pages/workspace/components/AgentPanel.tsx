@@ -17,8 +17,9 @@ import ThinkingDisplay from '../../../components/ThinkingDisplay';
 import { FunctionCallCard } from '../../../components/functionCall';
 import { TextButton } from '../../../components/TextButton';
 import { IconButton } from '../../../components/IconButton';
+import AgentModeToggle from '../../../components/ui/AgentModeToggle';
 import { collapseContentParts } from '../../../agent/utils/contentParts';
-import { Settings, Edit, Trash, Globe, CircularArrow, ChevronUp, ChevronDown } from '../../../components/icons';
+import { Settings, Edit, Trash, Globe, CircularArrow, ChevronDown } from '../../../components/icons';
 import { useAgentOrchestration } from '../../../agent/hooks';
 import { getBestLanguageData } from '../../../utils/languageData';
 import { AgentExecutor, applyAgentEdits } from '../../../agent';
@@ -32,56 +33,33 @@ interface AgentPanelProps
     mode: 'novelEditor' | 'storyObject' | 'outlineManager';
 }
 
-// Context picker component for selecting which objects to include in agent context
-interface AgentContextPickerProps {
-    projectId: string;
-    language: string;
-    selectedIds: string[];
+interface AgentContextTriggerProps {
+    selectedCount: number;
     totalCount: number;
-    onChange: (ids: string[]) => void;
+    isOpen: boolean;
+    onClick: () => void;
 }
 
-const AgentContextPicker: React.FC<AgentContextPickerProps> = React.memo(({
-    projectId,
-    language,
-    selectedIds,
+const AgentContextTrigger: React.FC<AgentContextTriggerProps> = React.memo(({
+    selectedCount,
     totalCount,
-    onChange
-}) => {
-    const [isCollapsed, setIsCollapsed] = useState(true);
-
-    return (
-        <div className={`agent-controls ${isCollapsed ? 'collapsed' : 'expanded'}`}>
-            <div className="agent-controls-header" onClick={() => setIsCollapsed(!isCollapsed)}>
-                <span className="agent-controls-title">
-                    <Settings size="sm" /> Context ({selectedIds.length}/{totalCount})
-                </span>
-                <button
-                    type="button"
-                    className="agent-controls-toggle"
-                    aria-label={isCollapsed ? "Expand context picker" : "Collapse context picker"}
-                >
-                    {isCollapsed ? <ChevronUp size="xs" /> : <ChevronDown size="xs" />}
-                </button>
-            </div>
-            <div className="agent-controls-content">
-                <div className="agent-controls-content-inner">
-                    <ObjectPicker
-                        mode="all"
-                        selectionMode="multi"
-                        selectedIds={selectedIds}
-                        onChange={(ids) => onChange(ids as string[])}
-                        projectId={projectId}
-                        language={language}
-                        maxHeight="300px"
-                        showSearch={true}
-                        selectAllOnLoad={true}
-                    />
-                </div>
-            </div>
-        </div>
-    );
-});
+    isOpen,
+    onClick
+}) => (
+    <button
+        type="button"
+        className={`agent-context-dropdown-trigger ${isOpen ? 'open' : ''}`}
+        onClick={onClick}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+    >   
+        <span className={`agent-context-dropdown-arrow ${isOpen ? 'open' : ''}`}>
+            <ChevronDown size="xs" />
+        </span>
+        <Settings size="sm" />
+        <span>Context ({selectedCount}/{totalCount})</span>
+    </button>
+));
 
 // Separate component for input form to avoid re-rendering messages on typing
 interface AgentInputFormProps {
@@ -211,6 +189,8 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const isUserNearBottomRef = useRef(true);
     const [showScrollButton, setShowScrollButton] = useState(false);
+    const [isContextDropdownOpen, setIsContextDropdownOpen] = useState(false);
+    const contextDropdownRef = useRef<HTMLDivElement>(null);
     const displayProcessor = useMemo(() => new DefaultDisplayProcessor(), []);
     const { convertToDisplayMessage } = useAgentStore();
 
@@ -296,6 +276,31 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
             setIsOverlayClosing(false);
         }
     }, [projectId, setAgentVisible]);
+
+    // Close context dropdown on click outside or escape key
+    useEffect(() => {
+        if (!isContextDropdownOpen) return;
+
+        const handleClickOutside = (event: MouseEvent) => {
+            if (!contextDropdownRef.current?.contains(event.target as Node)) {
+                setIsContextDropdownOpen(false);
+            }
+        };
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setIsContextDropdownOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleKeyDown);
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [isContextDropdownOpen]);
 
     const currentProject = getCurrentProject();
 
@@ -838,14 +843,32 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                 )}
             </div>
 
-            <div className="agent-input-container">
-                <AgentContextPicker
-                    projectId={projectId}
-                    language={mainLanguage}
-                    selectedIds={selectedContextIds}
-                    totalCount={totalObjectCount}
-                    onChange={onContextIdsChange}
-                />
+            <div className="agent-input-container" ref={contextDropdownRef}>
+                <div className={`agent-context-dropdown-menu ${isContextDropdownOpen ? '' : 'hidden'}`}>
+                    <ObjectPicker
+                        mode="all"
+                        selectionMode="multi"
+                        selectedIds={selectedContextIds}
+                        onChange={(ids) => onContextIdsChange(ids as string[])}
+                        projectId={projectId}
+                        language={mainLanguage}
+                        maxHeight="350px"
+                        showSearch={true}
+                        selectAllOnLoad={true}
+                    />
+                </div>
+                <div className="agent-controls-row">
+                    <AgentModeToggle
+                        currentMode={mode}
+                        onModeChange={(newMode) => useAgentUIStore.getState().setMode(projectId, newMode)}
+                    />
+                    <AgentContextTrigger
+                        selectedCount={selectedContextIds.length}
+                        totalCount={totalObjectCount}
+                        isOpen={isContextDropdownOpen}
+                        onClick={() => setIsContextDropdownOpen(!isContextDropdownOpen)}
+                    />
+                </div>
                 <AgentInputForm
                     projectId={projectId}
                     mainLanguage={mainLanguage}

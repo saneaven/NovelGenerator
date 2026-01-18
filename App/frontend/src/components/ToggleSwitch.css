@@ -1,6 +1,5 @@
 /* ========================================
    TOGGLE SWITCH COMPONENT
-   Modern, Beautiful Toggle Switch Design
    ======================================== */
 
 .toggle-switch {
@@ -8,39 +7,19 @@
   align-items: center;
   cursor: pointer;
   user-select: none;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--transition-base);
   padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--border-radius-lg);
   background: var(--color-surface-base);
   border: 1px solid var(--color-border-default);
-  box-shadow: var(--shadow-xs);
   position: relative;
-  overflow: hidden;
   margin: 0;
-}
-
-/* Animated left border */
-.toggle-switch::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  height: 100%;
-  width: 4px;
-  background: transparent;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Hover state */
 .toggle-switch:hover {
   background: var(--color-surface-elevated);
   border-color: var(--color-border-medium);
-  box-shadow: var(--shadow-sm);
-  transform: translateX(2px);
-}
-
-.toggle-switch:hover::before {
-  background: var(--color-brand-accent-outline);
 }
 
 /* Hide default checkbox */
@@ -71,8 +50,7 @@
 
 .toggle-switch-icon {
   font-size: var(--font-size-base);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  opacity: 0.6;
+  opacity: var(--opacity-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -83,57 +61,42 @@
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-normal);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Toggle track */
 .toggle-switch-track {
   position: relative;
-  width: 3rem;
+  width: 2.75rem;
   height: 1.5rem;
   background: var(--color-surface-disabled);
   border-radius: var(--border-radius-full);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: background var(--transition-base);
   flex-shrink: 0;
 }
 
-/* Toggle thumb (the moving circle) */
+/* Toggle thumb */
 .toggle-switch-thumb {
   position: absolute;
   top: 0.125rem;
   left: 0.125rem;
   width: 1.25rem;
   height: 1.25rem;
-  background: white;
+  background: var(--color-neutral-0);
   border-radius: var(--border-radius-full);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: left var(--transition-base);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Hover effects */
 .toggle-switch:hover .toggle-switch-icon {
   opacity: 1;
-  transform: scale(1.1);
 }
 
 .toggle-switch:hover .toggle-switch-text {
   color: var(--color-text-primary);
 }
 
-.toggle-switch:hover .toggle-switch-thumb {
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.15);
-}
-
 /* Checked state */
-.toggle-switch.checked {
-  border-color: var(--color-brand-accent-outline);
-  background: linear-gradient(135deg, var(--color-surface-elevated) 0%, var(--color-surface-base) 100%);
-}
-
-.toggle-switch.checked::before {
-  background: var(--color-brand-accent);
-}
 
 .toggle-switch.checked .toggle-switch-icon {
   opacity: 1;
@@ -145,34 +108,15 @@
 }
 
 .toggle-switch.checked .toggle-switch-track {
-  background: linear-gradient(135deg, var(--color-brand-accent) 0%, var(--color-brand-accent-hover) 100%);
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4), inset 0 1px 2px rgba(255, 255, 255, 0.2);
+  background: var(--color-brand-primary);
 }
 
 .toggle-switch.checked .toggle-switch-thumb {
   left: calc(100% - 1.375rem);
-  background: white;
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-/* Active state */
-.toggle-switch:active:not(.disabled) {
-  transform: scale(0.98);
-}
-
-.toggle-switch:active:not(.disabled) .toggle-switch-thumb {
-  width: 1.5rem;
-}
-
-.toggle-switch.checked:active:not(.disabled) .toggle-switch-thumb {
-  left: calc(100% - 1.625rem);
 }
 
 /* Focus state */
-.toggle-switch:focus-within {
-  outline: 2px solid var(--color-brand-accent);
-  outline-offset: 2px;
-}
+
 
 /* Disabled state */
 .toggle-switch.disabled {
@@ -183,18 +127,6 @@
 
 /* ===== Mobile Responsive ===== */
 @media (max-width: 768px) {
-  .toggle-switch {
-    padding: var(--spacing-sm) var(--spacing-md);
-  }
-
-  .toggle-switch-icon {
-    font-size: var(--font-size-base);
-  }
-
-  .toggle-switch-text {
-    font-size: var(--font-size-xs);
-  }
-
   .toggle-switch-track {
     width: 2.5rem;
     height: 1.25rem;
@@ -208,52 +140,4 @@
   .toggle-switch.checked .toggle-switch-thumb {
     left: calc(100% - 1.125rem);
   }
-
-  .toggle-switch:active:not(.disabled) .toggle-switch-thumb {
-    width: 1.25rem;
-  }
-
-  .toggle-switch.checked:active:not(.disabled) .toggle-switch-thumb {
-    left: calc(100% - 1.375rem);
-  }
 }
-
-/* ===== Tablet Styles ===== */
-@media (min-width: 769px) and (max-width: 1024px) {
-  .toggle-switch-text {
-    font-size: var(--font-size-sm);
-  }
-}
-
-/* ===== Large Desktop ===== */
-/* @media (min-width: 1440px) {
-  .toggle-switch {
-    padding: var(--spacing-lg) var(--spacing-xl);
-  }
-
-  .toggle-switch-text {
-    font-size: var(--font-size-base);
-  }
-
-  .toggle-switch-track {
-    width: 3.5rem;
-    height: 1.75rem;
-  }
-
-  .toggle-switch-thumb {
-    width: 1.5rem;
-    height: 1.5rem;
-  }
-
-  .toggle-switch.checked .toggle-switch-thumb {
-    left: calc(100% - 1.625rem);
-  }
-
-  .toggle-switch:active:not(.disabled) .toggle-switch-thumb {
-    width: 1.75rem;
-  }
-
-  .toggle-switch.checked:active:not(.disabled) .toggle-switch-thumb {
-    left: calc(100% - 1.875rem);
-  }
-} */

@@ -97,7 +97,7 @@ async function runTask(taskId: string) {
     const assetStore = useAssetStore.getState();
     if (binding.type === 'object') {
       // Best-effort refresh (server is source of truth)
-      await assetStore.fetchStoryObjectAssets(projectId, binding.objectType, binding.objectId);
+      await assetStore.fetchStoryObjectAssets(projectId, binding.objectType, binding.objectId, true);
     } else {
       await assetStore.fetchSceneAssets(projectId, binding.manuscriptId);
     }

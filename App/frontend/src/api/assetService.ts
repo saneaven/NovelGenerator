@@ -95,6 +95,63 @@ export interface SceneAssetsResponse {
     total: number;
 }
 
+// Image cleanup types
+export interface ImageCleanupPolicy {
+    delete_non_main_story_object_images: boolean;
+    delete_unused_manuscript_images: boolean;
+    keep_recent_days: number;
+    treat_reference_images_as_used: boolean;
+}
+
+export interface ImageCleanupPreviewItem {
+    asset_id: string;
+    name: string;
+    asset_type: AssetType;
+    manuscript_id: string | null;
+    created_at: string;
+    file_size: number | null;
+    file_url: string;
+    thumbnail_url: string | null;
+    reasons: string[];
+    referenced_by_count: number;
+}
+
+export interface ImageCleanupPreviewResponse {
+    candidates: ImageCleanupPreviewItem[];
+    total_candidates: number;
+    total_size_bytes: number;
+}
+
+export interface ImageCleanupExecuteRequest {
+    policy: ImageCleanupPolicy;
+    asset_ids: string[];
+}
+
+export interface ImageCleanupExecuteSkipped {
+    asset_id: string;
+    reason: string;
+}
+
+export interface ImageCleanupExecuteError {
+    asset_id: string;
+    error: string;
+}
+
+export interface ImageCleanupExecuteResponse {
+    deleted: string[];
+    skipped: ImageCleanupExecuteSkipped[];
+    errors: ImageCleanupExecuteError[];
+    scrubbed_reference_entries: number;
+}
+
+export interface RebuildManuscriptImagesResponse {
+    manuscripts_processed: number;
+    languages_processed: number;
+    images_deleted: number;
+    images_inserted: number;
+    unresolved_refs: number;
+}
+
 export type PromptType = 'natural' | 'tag_based';
 
 export interface ImageProvider {
@@ -151,7 +208,8 @@ export const assetService = {
         projectId: string,
         file: File,
         name?: string,
-        assetType?: 'scene' | 'object'
+        assetType?: 'scene' | 'object',
+        binding?: { manuscriptId?: string; objectType?: string; objectId?: string }
     ): Promise<Asset> {
         const formData = new FormData();
         formData.append('file', file);
@@ -161,7 +219,19 @@ export const assetService = {
         if (assetType) {
             formData.append('asset_type', assetType);
         }
-        return apiClient.postFormData<Asset>(`/api/v1/assets/${projectId}/upload`, formData);
+
+        const params = new URLSearchParams();
+        if (binding?.manuscriptId) {
+            params.set('manuscript_id', binding.manuscriptId);
+        }
+        if (binding?.objectType) {
+            params.set('object_type', binding.objectType);
+        }
+        if (binding?.objectId) {
+            params.set('object_id', binding.objectId);
+        }
+        const suffix = params.toString() ? `?${params.toString()}` : '';
+        return apiClient.postFormData<Asset>(`/api/v1/assets/${projectId}/upload${suffix}`, formData);
     },
 
     /**
@@ -223,21 +293,6 @@ export const assetService = {
     },
 
     /**
-     * Link an asset to a story object
-     */
-    async linkAssetToObject(
-        projectId: string,
-        objectType: string,
-        objectId: string,
-        assetId: string
-    ): Promise<StoryObjectAsset> {
-        return apiClient.post<StoryObjectAsset>(
-            `/api/v1/assets/${projectId}/object/${objectType}/${objectId}`,
-            { asset_id: assetId }
-        );
-    },
-
-    /**
      * Set main asset for a story object
      */
     async setMainAsset(
@@ -262,6 +317,20 @@ export const assetService = {
             ? `/api/v1/assets/${projectId}/scene?manuscript_id=${manuscriptId}`
             : `/api/v1/assets/${projectId}/scene`;
         return apiClient.get<SceneAssetsResponse>(url);
+    },
+
+    // Image Cleanup
+
+    async previewImageCleanup(projectId: string, policy: ImageCleanupPolicy): Promise<ImageCleanupPreviewResponse> {
+        return apiClient.post<ImageCleanupPreviewResponse>(`/api/v1/assets/${projectId}/cleanup/preview`, policy);
+    },
+
+    async executeImageCleanup(projectId: string, request: ImageCleanupExecuteRequest): Promise<ImageCleanupExecuteResponse> {
+        return apiClient.post<ImageCleanupExecuteResponse>(`/api/v1/assets/${projectId}/cleanup/execute`, request);
+    },
+
+    async rebuildManuscriptImagesIndex(projectId: string): Promise<RebuildManuscriptImagesResponse> {
+        return apiClient.post<RebuildManuscriptImagesResponse>(`/api/v1/assets/${projectId}/cleanup/rebuild-manuscript-images`);
     },
 };
 

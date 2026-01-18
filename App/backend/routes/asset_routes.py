@@ -2,8 +2,9 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any, cast
+from collections import defaultdict
 from uuid import UUID, uuid4
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from ..database import get_db
 from ..auth import get_current_user
@@ -14,26 +15,30 @@ from ..models.db_models import (
     StoryObjectAsset,
     ManuscriptImage,
     Manuscript,
-    ManuscriptAssetUsage,
     Chapter,
     Act,
+    Outline,
     BasicInfo,
     Character,
     Organization,
     Location,
     LorebookEntry,
 )
+from ..models.translation_models import ObjectTranslation
 from ..schemas.assets import (
     AssetResponse, AssetListResponse, AssetUpdateRequest,
-    StoryObjectAssetCreate, StoryObjectAssetResponse, StoryObjectAssetsResponse, SetMainAssetRequest,
+    StoryObjectAssetResponse, StoryObjectAssetsResponse, SetMainAssetRequest,
     ManuscriptImageCreate, ManuscriptImageResponse, ManuscriptImagesResponse, ManuscriptImageUpdateRequest,
     ImageGenerationRequest, ImageGenerationResponse,
     ImageProvidersResponse, ImageProviderInfo, ImageModelsResponse,
-    ManuscriptAssetUsageCreate, ManuscriptAssetUsageResponse, ManuscriptAssetUsagesResponse,
     SceneAssetResponse, SceneAssetsResponse, ManuscriptInfo,
+    ImageCleanupPolicy, ImageCleanupPreviewResponse, ImageCleanupPreviewItem,
+    ImageCleanupExecuteRequest, ImageCleanupExecuteResponse, ImageCleanupExecuteSkipped, ImageCleanupExecuteError,
+    RebuildManuscriptImagesResponse,
     StyledPrompt
 )
 from ..services.storage_service import storage_service
+from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
 from ..image_providers.registry import ImageProviderRegistry
 from ..image_providers.base import ReferenceImageData
 from ..utils.object_type_aliases import normalize_object_type
@@ -196,8 +201,29 @@ async def generate_image(
     if not manuscript_id and not (normalized_object_type and object_id):
         raise HTTPException(status_code=400, detail="Binding required: manuscript_id or object_type/object_id")
 
-    # If object binding, verify object exists and belongs to project
-    if normalized_object_type and object_id:
+    implied_asset_type = "scene" if manuscript_id else "object"
+    if request.asset_type and request.asset_type not in ("scene", "object"):
+        raise HTTPException(status_code=400, detail="Invalid asset_type. Allowed: 'scene', 'object'")
+    if request.asset_type and request.asset_type != implied_asset_type:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid asset_type for binding. Expected '{implied_asset_type}'.",
+        )
+    asset_type = request.asset_type or implied_asset_type
+
+    # Verify binding target exists and belongs to project
+    if manuscript_id:
+        manuscript = (
+            db.query(Manuscript)
+            .join(Chapter, Manuscript.chapter_id == Chapter.id)
+            .join(Act, Chapter.act_id == Act.id)
+            .join(Outline, Act.outline_id == Outline.id)
+            .filter(Manuscript.id == manuscript_id, Outline.project_id == project_id)
+            .first()
+        )
+        if not manuscript:
+            raise HTTPException(status_code=404, detail="Manuscript not found")
+    else:
         model_class = OBJECT_BINDING_MODELS.get(normalized_object_type)
         if not model_class:
             raise HTTPException(status_code=400, detail=f"Unsupported object_type: {normalized_object_type}")
@@ -326,7 +352,7 @@ async def generate_image(
             file_path=file_path,
             thumbnail_path=thumb_path,
             mime_type=mime_type,
-            asset_type=request.asset_type,  # 'scene', 'object', or None - passed from frontend
+            asset_type=asset_type,
             # Store StyledPrompt as JSONB dicts
             generation_prompt=request.prompt.model_dump() if request.prompt else None,
             generation_positive_prompt=request.positive_prompt.model_dump() if request.positive_prompt else None,
@@ -430,28 +456,56 @@ async def list_scene_assets(
         query = query.filter(Asset.manuscript_id == manuscript_id)
     assets = query.order_by(Asset.created_at.desc()).all()
 
+    # Precompute manuscript usage via manuscript_images (distinct per manuscript)
+    usage_by_asset: Dict[UUID, set[UUID]] = defaultdict(set)
+    asset_ids: List[UUID] = [a.id for a in assets]
+    if asset_ids:
+        pairs = (
+            db.query(ManuscriptImage.asset_id, ManuscriptImage.manuscript_id)
+            .filter(ManuscriptImage.asset_id.in_(asset_ids))
+            .distinct()
+            .all()
+        )
+        for asset_id_val, manuscript_id_val in pairs:
+            if asset_id_val and manuscript_id_val:
+                usage_by_asset[asset_id_val].add(manuscript_id_val)
+
+    manuscript_ids: set[UUID] = set()
+    for mids in usage_by_asset.values():
+        manuscript_ids.update(mids)
+
+    manuscript_meta: Dict[UUID, tuple[int, int]] = {}
+    manuscript_info_by_id: Dict[UUID, ManuscriptInfo] = {}
+    if manuscript_ids:
+        meta_rows = (
+            db.query(Manuscript.id, Chapter.order, Act.order)
+            .join(Chapter, Manuscript.chapter_id == Chapter.id)
+            .join(Act, Chapter.act_id == Act.id)
+            .filter(Manuscript.id.in_(list(manuscript_ids)))
+            .all()
+        )
+        for m_id, chapter_order, act_order in meta_rows:
+            act_num = int(act_order) if act_order is not None else 0
+            chapter_num = int(chapter_order) if chapter_order is not None else 0
+            manuscript_meta[m_id] = (act_num, chapter_num)
+            manuscript_info_by_id[m_id] = ManuscriptInfo(
+                id=str(m_id),
+                name=f"Chapter {chapter_num + 1}",
+                act_name=f"Act {act_num + 1}" if act_order is not None else None,
+            )
+
     # Build response with manuscript usage
     responses = []
     for asset in assets:
-        # Get manuscripts using this asset
-        usage_links = db.query(ManuscriptAssetUsage).filter(
-            ManuscriptAssetUsage.asset_id == asset.id
-        ).all()
-
-        used_in_manuscripts = []
-        for link in usage_links:
-            manuscript = db.query(Manuscript).filter(Manuscript.id == link.manuscript_id).first()
-            if manuscript:
-                chapter = db.query(Chapter).filter(Chapter.id == manuscript.chapter_id).first()
-                if chapter:
-                    # Get act info for chapter name context
-                    act = db.query(Act).filter(Act.id == chapter.act_id).first()
-                    used_in_manuscripts.append(ManuscriptInfo(
-                        id=str(manuscript.id),
-                        name=f"Chapter {chapter.order + 1}",  # Fallback name
-                        act_name=f"Act {act.order + 1}" if act else None
-                    ))
-
+        used_ids = usage_by_asset.get(asset.id, set())
+        used_in_manuscripts = [
+            manuscript_info_by_id[m_id]
+            for m_id in sorted(
+                used_ids,
+                key=lambda mid: manuscript_meta.get(mid, (10_000, 10_000)),
+            )
+            if m_id in manuscript_info_by_id
+        ]
         responses.append(_asset_to_scene_response(asset, used_in_manuscripts))
 
     return SceneAssetsResponse(assets=responses, total=len(responses))
@@ -489,6 +543,9 @@ async def upload_asset(
     file: UploadFile = File(...),
     name: Optional[str] = Form(None),
     asset_type: Optional[str] = Form(None),  # 'scene', 'object', or None
+    manuscript_id: Optional[UUID] = Query(None),
+    object_type: Optional[str] = Query(None),
+    object_id: Optional[UUID] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -505,9 +562,47 @@ async def upload_asset(
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail="Invalid file type. Allowed: PNG, JPEG, GIF, WebP")
 
-    # Validate asset_type if provided
-    if asset_type and asset_type not in ('scene', 'object'):
+    # Validate binding: require either manuscript_id (scene) OR (object_type + object_id) (object/cover)
+    normalized_object_type = normalize_object_type(object_type) if object_type else None
+    if manuscript_id and (normalized_object_type or object_id):
+        raise HTTPException(status_code=400, detail="Provide either manuscript_id or object_type/object_id, not both")
+    if (normalized_object_type and not object_id) or (object_id and not normalized_object_type):
+        raise HTTPException(status_code=400, detail="Both object_type and object_id are required for object binding")
+    if not manuscript_id and not (normalized_object_type and object_id):
+        raise HTTPException(status_code=400, detail="Binding required: manuscript_id or object_type/object_id")
+
+    implied_asset_type = "scene" if manuscript_id else "object"
+    if asset_type and asset_type not in ("scene", "object"):
         raise HTTPException(status_code=400, detail="Invalid asset_type. Allowed: 'scene', 'object'")
+    if asset_type and asset_type != implied_asset_type:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid asset_type for binding. Expected '{implied_asset_type}'.",
+        )
+    asset_type = asset_type or implied_asset_type
+
+    # Verify binding target exists and belongs to project
+    if manuscript_id:
+        manuscript = (
+            db.query(Manuscript)
+            .join(Chapter, Manuscript.chapter_id == Chapter.id)
+            .join(Act, Chapter.act_id == Act.id)
+            .join(Outline, Act.outline_id == Outline.id)
+            .filter(Manuscript.id == manuscript_id, Outline.project_id == project_id)
+            .first()
+        )
+        if not manuscript:
+            raise HTTPException(status_code=404, detail="Manuscript not found")
+    else:
+        model_class = OBJECT_BINDING_MODELS.get(cast(str, normalized_object_type))
+        if not model_class:
+            raise HTTPException(status_code=400, detail=f"Unsupported object_type: {normalized_object_type}")
+        obj = db.query(model_class).filter(
+            model_class.id == object_id,
+            model_class.project_id == project_id
+        ).first()
+        if not obj:
+            raise HTTPException(status_code=404, detail="Object not found")
 
     # Read file content
     content = await file.read()
@@ -519,22 +614,46 @@ async def upload_asset(
         project_id=project_id
     )
 
-    # Create asset record
-    asset = Asset(
-        id=uuid4(),
-        project_id=project_id,
-        name=name or file.filename or "Uploaded Image",
-        file_path=file_path,
-        thumbnail_path=thumb_path,
-        mime_type=mime_type,
-        asset_type=asset_type,
-        width=width,
-        height=height,
-        file_size=file_size
-    )
-    db.add(asset)
-    db.commit()
-    db.refresh(asset)
+    try:
+        # Create asset record
+        asset = Asset(
+            id=uuid4(),
+            project_id=project_id,
+            manuscript_id=manuscript_id,
+            name=name or file.filename or "Uploaded Image",
+            file_path=file_path,
+            thumbnail_path=thumb_path,
+            mime_type=mime_type,
+            asset_type=asset_type,
+            width=width,
+            height=height,
+            file_size=file_size
+        )
+        db.add(asset)
+
+        # If object binding, auto-link to story object
+        if normalized_object_type and object_id:
+            max_order = db.query(StoryObjectAsset).filter(
+                StoryObjectAsset.object_type == normalized_object_type,
+                StoryObjectAsset.object_id == object_id
+            ).count()
+            link = StoryObjectAsset(
+                id=uuid4(),
+                object_type=normalized_object_type,
+                object_id=object_id,
+                asset_id=asset.id,
+                is_main=False,  # user-driven only
+                display_order=max_order
+            )
+            db.add(link)
+
+        db.commit()
+        db.refresh(asset)
+    except Exception:
+        db.rollback()
+        # Prevent orphan files if DB commit fails
+        storage_service.delete_asset_files(file_path, thumb_path)
+        raise
 
     return _asset_to_response(asset)
 
@@ -612,6 +731,377 @@ async def delete_asset(
 
 
 # ============================================================================
+# IMAGE CLEANUP
+# ============================================================================
+
+def _build_reference_reverse_index(assets: List[Asset]) -> Dict[UUID, set[UUID]]:
+    """Build reverse index: target_asset_id -> set(of assets that reference it)."""
+    referenced_by: Dict[UUID, set[UUID]] = defaultdict(set)
+    for src in assets:
+        refs = cast(Optional[List[Dict[str, Any]]], src.generation_reference_images)
+        if not isinstance(refs, list):
+            continue
+        for ref in refs:
+            if not isinstance(ref, dict):
+                continue
+            target_id_raw = ref.get("asset_id")
+            if not target_id_raw:
+                continue
+            try:
+                target_id = UUID(str(target_id_raw))
+            except Exception:
+                continue
+            referenced_by[target_id].add(src.id)
+    return referenced_by
+
+
+def _candidate_reasons_for_asset(
+    asset: Asset,
+    policy: ImageCleanupPolicy,
+    used_in_manuscripts: set[UUID],
+    story_non_main_assets: set[UUID],
+) -> List[str]:
+    if asset.id in used_in_manuscripts:
+        return []
+
+    reasons: List[str] = []
+
+    if policy.delete_non_main_story_object_images and asset.asset_type == "object" and asset.id in story_non_main_assets:
+        reasons.append("story_object_non_main")
+
+    if (
+        policy.delete_unused_manuscript_images
+        and asset.asset_type == "scene"
+    ):
+        reasons.append("unused_in_manuscripts")
+
+    # De-dupe while keeping order
+    out: List[str] = []
+    seen: set[str] = set()
+    for r in reasons:
+        if r in seen:
+            continue
+        out.append(r)
+        seen.add(r)
+    return out
+
+
+@router.post("/{project_id}/cleanup/preview", response_model=ImageCleanupPreviewResponse)
+async def preview_image_cleanup(
+    project_id: UUID,
+    policy: ImageCleanupPolicy,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Preview which assets would be deleted under the given cleanup policy."""
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id,
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Clamp keep_recent_days to non-negative
+    keep_recent_days = max(int(policy.keep_recent_days or 0), 0)
+    cutoff = datetime.utcnow() - timedelta(days=keep_recent_days) if keep_recent_days > 0 else None
+
+    assets = db.query(Asset).filter(Asset.project_id == project_id).order_by(Asset.created_at.desc()).all()
+
+    used_in_manuscripts_rows = (
+        db.query(ManuscriptImage.asset_id)
+        .join(Asset, Asset.id == ManuscriptImage.asset_id)
+        .filter(
+            Asset.project_id == project_id,
+            ManuscriptImage.asset_id.isnot(None),
+        )
+        .distinct()
+        .all()
+    )
+    used_in_manuscripts: set[UUID] = {row[0] for row in used_in_manuscripts_rows if row[0]}
+
+    story_non_main_rows = (
+        db.query(StoryObjectAsset.asset_id)
+        .join(Asset, Asset.id == StoryObjectAsset.asset_id)
+        .filter(
+            Asset.project_id == project_id,
+            StoryObjectAsset.is_main == False,
+        )
+        .all()
+    )
+    story_non_main_assets: set[UUID] = {row[0] for row in story_non_main_rows if row[0]}
+
+    referenced_by = _build_reference_reverse_index(assets)
+
+    candidates: List[ImageCleanupPreviewItem] = []
+    total_size = 0
+    for asset in assets:
+        reasons = _candidate_reasons_for_asset(
+            asset=asset,
+            policy=policy,
+            used_in_manuscripts=used_in_manuscripts,
+            story_non_main_assets=story_non_main_assets,
+        )
+        if not reasons:
+            continue
+
+        if cutoff and asset.created_at and asset.created_at >= cutoff:
+            continue
+
+        referenced_by_count = len(referenced_by.get(asset.id, set()))
+        if policy.treat_reference_images_as_used and referenced_by_count > 0:
+            continue
+
+        candidates.append(
+            ImageCleanupPreviewItem(
+                asset_id=str(asset.id),
+                name=cast(str, asset.name),
+                asset_type=cast(Optional[str], asset.asset_type),
+                manuscript_id=str(asset.manuscript_id) if asset.manuscript_id else None,
+                created_at=cast(datetime, asset.created_at),
+                file_size=cast(Optional[int], asset.file_size),
+                file_url=f"/storage/assets/{cast(str, asset.file_path)}",
+                thumbnail_url=f"/storage/assets/{cast(str, asset.thumbnail_path)}" if asset.thumbnail_path else None,
+                reasons=reasons,
+                referenced_by_count=referenced_by_count,
+            )
+        )
+        total_size += int(asset.file_size or 0)
+
+    return ImageCleanupPreviewResponse(
+        candidates=candidates,
+        total_candidates=len(candidates),
+        total_size_bytes=total_size,
+    )
+
+
+@router.post("/{project_id}/cleanup/execute", response_model=ImageCleanupExecuteResponse)
+async def execute_image_cleanup(
+    project_id: UUID,
+    request: ImageCleanupExecuteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete selected assets under the given policy (re-validates eligibility)."""
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id,
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    policy = request.policy
+    keep_recent_days = max(int(policy.keep_recent_days or 0), 0)
+    cutoff = datetime.utcnow() - timedelta(days=keep_recent_days) if keep_recent_days > 0 else None
+
+    valid_ids: List[UUID] = []
+    errors: List[ImageCleanupExecuteError] = []
+    for raw_id in request.asset_ids:
+        try:
+            valid_ids.append(UUID(raw_id))
+        except Exception:
+            errors.append(ImageCleanupExecuteError(asset_id=str(raw_id), error="Invalid UUID"))
+
+    if not valid_ids:
+        return ImageCleanupExecuteResponse(deleted=[], skipped=[], errors=errors, scrubbed_reference_entries=0)
+
+    assets_by_id = {
+        a.id: a
+        for a in db.query(Asset)
+        .filter(Asset.project_id == project_id, Asset.id.in_(valid_ids))
+        .all()
+    }
+
+    skipped: List[ImageCleanupExecuteSkipped] = []
+    for a_id in valid_ids:
+        if a_id not in assets_by_id:
+            skipped.append(ImageCleanupExecuteSkipped(asset_id=str(a_id), reason="Asset not found"))
+
+    # Usage sets (project-wide)
+    used_in_manuscripts_rows = (
+        db.query(ManuscriptImage.asset_id)
+        .join(Asset, Asset.id == ManuscriptImage.asset_id)
+        .filter(Asset.project_id == project_id, ManuscriptImage.asset_id.isnot(None))
+        .distinct()
+        .all()
+    )
+    used_in_manuscripts: set[UUID] = {row[0] for row in used_in_manuscripts_rows if row[0]}
+
+    story_non_main_rows = (
+        db.query(StoryObjectAsset.asset_id)
+        .join(Asset, Asset.id == StoryObjectAsset.asset_id)
+        .filter(
+            Asset.project_id == project_id,
+            StoryObjectAsset.is_main == False,
+        )
+        .all()
+    )
+    story_non_main_assets: set[UUID] = {row[0] for row in story_non_main_rows if row[0]}
+
+    # Reference index (project-wide) for eligibility checks
+    all_assets = db.query(Asset).filter(Asset.project_id == project_id).all()
+    referenced_by = _build_reference_reverse_index(all_assets)
+
+    eligible: List[Asset] = []
+    for asset in assets_by_id.values():
+        reasons = _candidate_reasons_for_asset(
+            asset=asset,
+            policy=policy,
+            used_in_manuscripts=used_in_manuscripts,
+            story_non_main_assets=story_non_main_assets,
+        )
+        if not reasons:
+            skipped.append(ImageCleanupExecuteSkipped(asset_id=str(asset.id), reason="Not eligible by policy"))
+            continue
+
+        if cutoff and asset.created_at and asset.created_at >= cutoff:
+            skipped.append(ImageCleanupExecuteSkipped(asset_id=str(asset.id), reason="Keep recent"))
+            continue
+
+        eligible.append(asset)
+
+    delete_ids: set[UUID] = {a.id for a in eligible}
+    if policy.treat_reference_images_as_used and delete_ids:
+        # Iteratively remove assets referenced by any remaining assets.
+        while True:
+            blocked = {
+                a_id
+                for a_id in delete_ids
+                if len(referenced_by.get(a_id, set()) - delete_ids) > 0
+            }
+            if not blocked:
+                break
+            delete_ids.difference_update(blocked)
+
+        for asset in eligible:
+            if asset.id in delete_ids:
+                continue
+            blocking_count = len(referenced_by.get(asset.id, set()) - delete_ids)
+            skipped.append(
+                ImageCleanupExecuteSkipped(
+                    asset_id=str(asset.id),
+                    reason=f"Referenced by generation_reference_images ({blocking_count})",
+                )
+            )
+
+    to_delete: List[Asset] = [assets_by_id[a_id] for a_id in delete_ids]
+
+    scrubbed_entries = 0
+    deleted: List[str] = []
+
+    # Scrub deleted IDs from other assets' generation_reference_images when allowed.
+    if to_delete and not policy.treat_reference_images_as_used:
+        delete_id_strings = {str(a.id) for a in to_delete}
+        assets_with_refs = (
+            db.query(Asset)
+            .filter(Asset.project_id == project_id, Asset.generation_reference_images.isnot(None))
+            .all()
+        )
+        for src in assets_with_refs:
+            refs = cast(Optional[List[Dict[str, Any]]], src.generation_reference_images)
+            if not isinstance(refs, list):
+                continue
+            new_refs: List[Dict[str, Any]] = []
+            changed = False
+            for ref in refs:
+                if isinstance(ref, dict) and str(ref.get("asset_id")) in delete_id_strings:
+                    scrubbed_entries += 1
+                    changed = True
+                    continue
+                if isinstance(ref, dict):
+                    new_refs.append(ref)
+                else:
+                    # Preserve unknown entries
+                    new_refs.append(cast(Dict[str, Any], ref))
+            if changed:
+                src.generation_reference_images = new_refs
+                src.updated_at = datetime.utcnow()
+
+    # Delete DB rows first (files are best-effort after commit)
+    file_deletions: List[tuple[str, Optional[str]]] = []
+    for asset in to_delete:
+        file_deletions.append((cast(str, asset.file_path), cast(Optional[str], asset.thumbnail_path)))
+        db.delete(asset)
+        deleted.append(str(asset.id))
+
+    db.commit()
+
+    for file_path, thumb_path in file_deletions:
+        storage_service.delete_asset_files(file_path, thumb_path)
+
+    return ImageCleanupExecuteResponse(
+        deleted=deleted,
+        skipped=skipped,
+        errors=errors,
+        scrubbed_reference_entries=scrubbed_entries,
+    )
+
+
+@router.post("/{project_id}/cleanup/rebuild-manuscript-images", response_model=RebuildManuscriptImagesResponse)
+async def rebuild_manuscript_images_index(
+    project_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Rebuild manuscript_images for all manuscripts/languages in a project from saved content."""
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id,
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    manuscripts = (
+        db.query(Manuscript)
+        .join(Chapter, Manuscript.chapter_id == Chapter.id)
+        .join(Act, Chapter.act_id == Act.id)
+        .join(Outline, Act.outline_id == Outline.id)
+        .filter(Outline.project_id == project_id)
+        .all()
+    )
+
+    manuscripts_processed = 0
+    languages_processed = 0
+    images_deleted = 0
+    images_inserted = 0
+    unresolved_refs = 0
+
+    for manuscript in manuscripts:
+        manuscripts_processed += 1
+        translations = db.query(ObjectTranslation).filter(
+            ObjectTranslation.object_type == "manuscript",
+            ObjectTranslation.object_id == manuscript.id,
+        ).all()
+
+        for t in translations:
+            data = cast(Dict[str, Any], t.data or {})
+            content = data.get("content")
+            if not isinstance(content, str):
+                continue
+
+            stats = rebuild_manuscript_images_for_language(
+                db=db,
+                project_id=project_id,
+                manuscript_id=cast(UUID, manuscript.id),
+                language=cast(str, t.language),
+                content=content,
+            )
+            languages_processed += 1
+            images_deleted += int(stats.get("deleted", 0))
+            images_inserted += int(stats.get("inserted", 0))
+            unresolved_refs += int(stats.get("unresolved", 0))
+
+    db.commit()
+
+    return RebuildManuscriptImagesResponse(
+        manuscripts_processed=manuscripts_processed,
+        languages_processed=languages_processed,
+        images_deleted=images_deleted,
+        images_inserted=images_inserted,
+        unresolved_refs=unresolved_refs,
+    )
+
+
+# ============================================================================
 # STORY OBJECT ASSETS
 # ============================================================================
 
@@ -660,93 +1150,6 @@ async def get_story_object_assets(
                 main_asset = response
 
     return StoryObjectAssetsResponse(assets=responses, main_asset=main_asset)
-
-
-@router.post("/{project_id}/object/{object_type}/{object_id}", response_model=StoryObjectAssetResponse)
-async def link_asset_to_object(
-    project_id: UUID,
-    object_type: str,
-    object_id: UUID,
-    request: StoryObjectAssetCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Link an asset to a story object"""
-    object_type = normalize_object_type(object_type)
-    # Verify object exists and belongs to project
-    model_class = OBJECT_BINDING_MODELS.get(object_type)
-    if not model_class:
-        raise HTTPException(status_code=400, detail=f"Unsupported object_type: {object_type}")
-    obj = db.query(model_class).filter(
-        model_class.id == object_id,
-        model_class.project_id == project_id
-    ).first()
-    if not obj:
-        raise HTTPException(status_code=404, detail="Object not found")
-
-    # Verify project ownership and asset exists
-    asset = db.query(Asset).join(Project).filter(
-        Asset.id == UUID(request.asset_id),
-        Asset.project_id == project_id,
-        Project.user_id == current_user.id
-    ).first()
-    if not asset:
-        raise HTTPException(status_code=404, detail="Asset not found")
-
-    # Prevent sharing: asset can be linked to at most one object
-    existing_link = db.query(StoryObjectAsset).filter(
-        StoryObjectAsset.asset_id == asset.id
-    ).first()
-    if existing_link:
-        if existing_link.object_type == object_type and existing_link.object_id == object_id:
-            return StoryObjectAssetResponse(
-                id=str(existing_link.id),
-                object_type=existing_link.object_type,
-                object_id=str(existing_link.object_id),
-                asset_id=str(existing_link.asset_id),
-                is_main=existing_link.is_main,
-                display_order=existing_link.display_order,
-                created_at=cast(datetime, existing_link.created_at),
-                asset=_asset_to_response(asset)
-            )
-        raise HTTPException(status_code=409, detail="Asset already linked to another object")
-
-    # If setting as main, unset other mains
-    if request.is_main:
-        db.query(StoryObjectAsset).filter(
-            StoryObjectAsset.object_type == object_type,
-            StoryObjectAsset.object_id == object_id
-        ).update({"is_main": False})
-
-    # Get max display order
-    max_order = db.query(StoryObjectAsset).filter(
-        StoryObjectAsset.object_type == object_type,
-        StoryObjectAsset.object_id == object_id
-    ).count()
-
-    # Create link
-    link = StoryObjectAsset(
-        id=uuid4(),
-        object_type=object_type,
-        object_id=object_id,
-        asset_id=UUID(request.asset_id),
-        is_main=request.is_main,
-        display_order=max_order
-    )
-    db.add(link)
-    db.commit()
-    db.refresh(link)
-
-    return StoryObjectAssetResponse(
-        id=str(link.id),
-        object_type=link.object_type,
-        object_id=str(link.object_id),
-        asset_id=str(link.asset_id),
-        is_main=link.is_main,
-        display_order=link.display_order,
-        created_at=link.created_at,
-        asset=_asset_to_response(asset)
-    )
 
 
 @router.patch("/{project_id}/object/{object_type}/{object_id}/main", response_model=StoryObjectAssetResponse)
@@ -835,6 +1238,7 @@ async def get_manuscript_images(
         responses.append(ManuscriptImageResponse(
             id=str(img.id),
             manuscript_id=str(img.manuscript_id),
+            language=cast(Optional[str], img.language),
             position=img.position,
             source_type=img.source_type,
             asset_id=str(img.asset_id) if img.asset_id else None,
@@ -890,6 +1294,7 @@ async def add_manuscript_image(
     img = ManuscriptImage(
         id=uuid4(),
         manuscript_id=manuscript_id,
+        language=request.language,
         position=request.position,
         source_type=request.source_type,
         asset_id=UUID(request.asset_id) if request.asset_id else None,
@@ -906,6 +1311,7 @@ async def add_manuscript_image(
     return ManuscriptImageResponse(
         id=str(img.id),
         manuscript_id=str(img.manuscript_id),
+        language=cast(Optional[str], img.language),
         position=img.position,
         source_type=img.source_type,
         asset_id=str(img.asset_id) if img.asset_id else None,
@@ -965,6 +1371,7 @@ async def update_manuscript_image(
     return ManuscriptImageResponse(
         id=str(img.id),
         manuscript_id=str(img.manuscript_id),
+        language=cast(Optional[str], img.language),
         position=img.position,
         source_type=img.source_type,
         asset_id=str(img.asset_id) if img.asset_id else None,
@@ -1007,132 +1414,3 @@ async def delete_manuscript_image(
     db.commit()
 
     return {"success": True}
-
-
-# ============================================================================
-# MANUSCRIPT ASSET USAGE
-# ============================================================================
-
-@router.post("/{project_id}/manuscript/{manuscript_id}/usage", response_model=ManuscriptAssetUsageResponse)
-async def link_asset_to_manuscript(
-    project_id: UUID,
-    manuscript_id: UUID,
-    request: ManuscriptAssetUsageCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Link a scene asset to a manuscript (usage tracking)"""
-    # Verify project ownership
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.user_id == current_user.id
-    ).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    # Verify asset exists and belongs to project
-    asset = db.query(Asset).filter(
-        Asset.id == UUID(request.asset_id),
-        Asset.project_id == project_id
-    ).first()
-    if not asset:
-        raise HTTPException(status_code=404, detail="Asset not found")
-
-    # Check if link already exists
-    existing = db.query(ManuscriptAssetUsage).filter(
-        ManuscriptAssetUsage.manuscript_id == manuscript_id,
-        ManuscriptAssetUsage.asset_id == UUID(request.asset_id)
-    ).first()
-    if existing:
-        # Return existing link instead of error
-        return ManuscriptAssetUsageResponse(
-            id=str(existing.id),
-            manuscript_id=str(existing.manuscript_id),
-            asset_id=str(existing.asset_id),
-            created_at=cast(datetime, existing.created_at),
-            asset=_asset_to_response(asset)
-        )
-
-    # Create link
-    link = ManuscriptAssetUsage(
-        id=uuid4(),
-        manuscript_id=manuscript_id,
-        asset_id=UUID(request.asset_id)
-    )
-    db.add(link)
-    db.commit()
-    db.refresh(link)
-
-    return ManuscriptAssetUsageResponse(
-        id=str(link.id),
-        manuscript_id=str(link.manuscript_id),
-        asset_id=str(link.asset_id),
-        created_at=cast(datetime, link.created_at),
-        asset=_asset_to_response(asset)
-    )
-
-
-@router.delete("/{project_id}/manuscript/{manuscript_id}/usage/{asset_id}")
-async def unlink_asset_from_manuscript(
-    project_id: UUID,
-    manuscript_id: UUID,
-    asset_id: UUID,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Remove asset usage link from a manuscript"""
-    # Verify project ownership
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.user_id == current_user.id
-    ).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    link = db.query(ManuscriptAssetUsage).filter(
-        ManuscriptAssetUsage.manuscript_id == manuscript_id,
-        ManuscriptAssetUsage.asset_id == asset_id
-    ).first()
-    if not link:
-        raise HTTPException(status_code=404, detail="Link not found")
-
-    db.delete(link)
-    db.commit()
-
-    return {"success": True}
-
-
-@router.get("/{project_id}/manuscript/{manuscript_id}/usage", response_model=ManuscriptAssetUsagesResponse)
-async def get_manuscript_asset_usages(
-    project_id: UUID,
-    manuscript_id: UUID,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Get all asset usages for a manuscript"""
-    # Verify project ownership
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.user_id == current_user.id
-    ).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    # Get all linked assets
-    links = db.query(ManuscriptAssetUsage).filter(
-        ManuscriptAssetUsage.manuscript_id == manuscript_id
-    ).order_by(ManuscriptAssetUsage.created_at).all()
-
-    responses = []
-    for link in links:
-        asset = db.query(Asset).filter(Asset.id == link.asset_id).first()
-        if asset:
-            responses.append(ManuscriptAssetUsageResponse(
-                id=str(link.id),
-                manuscript_id=str(link.manuscript_id),
-                asset_id=str(link.asset_id),
-                created_at=cast(datetime, link.created_at),
-                asset=_asset_to_response(asset)
-            ))
-
-    return ManuscriptAssetUsagesResponse(assets=responses)

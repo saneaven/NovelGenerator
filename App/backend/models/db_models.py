@@ -115,11 +115,46 @@ class UserSettings(Base):
     # Display language for UI
     display_language = Column(String(50), default='English', nullable=False)
 
+    # Active prompt preset
+    active_preset_id = Column(UUID(as_uuid=True), ForeignKey('prompt_presets.id', ondelete='SET NULL'), nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
     user = relationship("User", back_populates="settings")
+    active_preset = relationship("PromptPreset", foreign_keys=[active_preset_id])
+
+
+# ============================================================================
+# PROMPT PRESETS
+# ============================================================================
+
+class PromptPreset(Base):
+    """Parent container for grouping prompts, fragments, and variables"""
+    __tablename__ = 'prompt_presets'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    # Preset identification
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Relationships
+    user = relationship("User")
+    prompts = relationship("PromptVersion", back_populates="preset", cascade="all, delete-orphan")
+    fragments = relationship("PromptFragment", back_populates="preset", cascade="all, delete-orphan")
+    variables = relationship("PromptVariable", back_populates="preset", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'name', name='uq_preset_user_name'),
+        Index('idx_preset_user', 'user_id'),
+    )
 
 
 # ============================================================================
@@ -132,11 +167,12 @@ class PromptVersion(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    preset_id = Column(UUID(as_uuid=True), ForeignKey('prompt_presets.id', ondelete='CASCADE'), nullable=False, index=True)
 
     # Prompt identification
     function_type = Column(String(50), nullable=False)  # 'agent', 'translation', 'editAssistant', 'imagePrompt'
     prompt_category = Column(String(50), nullable=False)  # 'systemPrompt', 'prefill', 'userMessageTag'
-    prompt_name = Column(String(50), nullable=True)  # 'workspace', 'novelEditor', etc (nullable for single prompts)
+    prompt_name = Column(String(50), nullable=False)  # 'storyObject', 'novelEditor', etc (required)
 
     # Version data
     content = Column(Text, nullable=False)
@@ -149,6 +185,7 @@ class PromptVersion(Base):
 
     # Relationships
     user = relationship("User")
+    preset = relationship("PromptPreset", back_populates="prompts")
 
 
 # ============================================================================
@@ -161,6 +198,7 @@ class PromptFragment(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    preset_id = Column(UUID(as_uuid=True), ForeignKey('prompt_presets.id', ondelete='CASCADE'), nullable=False, index=True)
 
     # Fragment identification
     folder_path = Column(String(200), nullable=True)  # e.g., 'common', 'thinking/custom', null for root
@@ -183,6 +221,7 @@ class PromptFragment(Base):
 
     # Relationships
     user = relationship("User")
+    preset = relationship("PromptPreset", back_populates="fragments")
 
 
 # ============================================================================
@@ -195,6 +234,7 @@ class PromptVariable(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    preset_id = Column(UUID(as_uuid=True), ForeignKey('prompt_presets.id', ondelete='CASCADE'), nullable=False, index=True)
 
     # Variable identification
     name = Column(String(100), nullable=False)  # Variable name (e.g., 'writingStyle', 'isGeminiMode')
@@ -224,10 +264,11 @@ class PromptVariable(Base):
 
     # Relationships
     user = relationship("User")
+    preset = relationship("PromptPreset", back_populates="variables")
 
     __table_args__ = (
-        UniqueConstraint('user_id', 'name', name='uq_variable_user_name'),
-        Index('idx_variable_user_order', 'user_id', 'display_order'),
+        UniqueConstraint('preset_id', 'name', name='uq_variable_preset_name'),
+        Index('idx_variable_preset_order', 'preset_id', 'display_order'),
     )
 
 
@@ -467,7 +508,6 @@ class Manuscript(Base):
     chapter = relationship("Chapter", back_populates="manuscript")
     versions = relationship("ManuscriptVersion", back_populates="manuscript", cascade="all, delete-orphan")
     owned_assets = relationship("Asset", back_populates="manuscript", foreign_keys="Asset.manuscript_id")
-    asset_usages = relationship("ManuscriptAssetUsage", back_populates="manuscript", cascade="all, delete-orphan")
 
 
 class ManuscriptVersion(Base):
@@ -584,7 +624,6 @@ class Asset(Base):
     story_object_assets = relationship("StoryObjectAsset", back_populates="asset", cascade="all, delete-orphan")
     manuscript_images = relationship("ManuscriptImage", back_populates="asset", cascade="all, delete-orphan")
     manuscript = relationship("Manuscript", back_populates="owned_assets", foreign_keys=[manuscript_id])
-    manuscript_asset_usages = relationship("ManuscriptAssetUsage", back_populates="asset", cascade="all, delete-orphan")
 
 
 class StoryObjectAsset(Base):
@@ -613,31 +652,13 @@ class StoryObjectAsset(Base):
     )
 
 
-class ManuscriptAssetUsage(Base):
-    """Tracks which manuscripts use which scene assets"""
-    __tablename__ = 'manuscript_asset_usages'
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    manuscript_id = Column(UUID(as_uuid=True), ForeignKey('manuscripts.id', ondelete='CASCADE'), nullable=False, index=True)
-    asset_id = Column(UUID(as_uuid=True), ForeignKey('assets.id', ondelete='CASCADE'), nullable=False, index=True)
-
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-
-    # Relationships
-    asset = relationship("Asset", back_populates="manuscript_asset_usages")
-    manuscript = relationship("Manuscript", back_populates="asset_usages")
-
-    __table_args__ = (
-        Index('idx_manuscript_asset_usage', 'manuscript_id', 'asset_id', unique=True),
-    )
-
-
 class ManuscriptImage(Base):
     """Images embedded in manuscript content at specific positions"""
     __tablename__ = 'manuscript_images'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     manuscript_id = Column(UUID(as_uuid=True), ForeignKey('manuscripts.id', ondelete='CASCADE'), nullable=False, index=True)
+    language = Column(String(50), nullable=True)  # Language scope (indexed via composite index migration)
 
     position = Column(Integer, nullable=False)  # Character position in text content
 
@@ -661,3 +682,8 @@ class ManuscriptImage(Base):
 
     # Relationships
     asset = relationship("Asset", back_populates="manuscript_images")
+
+    __table_args__ = (
+        Index("ix_manuscript_images_manuscript_id_language", "manuscript_id", "language"),
+        Index("ix_manuscript_images_asset_id", "asset_id"),
+    )

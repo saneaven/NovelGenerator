@@ -4,6 +4,7 @@ import { validateTemplate } from '../../../templateEngine/engine';
 import { mapFunctionTypeToSchemaType } from '../../../templateEngine/validator';
 import type { FunctionType, PromptCategory } from '../../../types/prompts';
 import { useSettingsStore } from '../../../store/settingsStore';
+import { usePresetStore } from '../../../store/presetStore';
 
 interface UsePromptEditorResult {
     content: string;
@@ -24,7 +25,7 @@ interface UsePromptEditorResult {
 export function usePromptEditor(
     functionType: FunctionType,
     category: PromptCategory,
-    name?: string
+    name: string
 ): UsePromptEditorResult {
     const [content, setContent] = useState('');
     const [originalContent, setOriginalContent] = useState('');
@@ -33,8 +34,9 @@ export function usePromptEditor(
     const [isLoading, setIsLoading] = useState(true);
 
     const { loadPrompt, invalidatePromptCache } = useSettingsStore();
+    const activePresetId = usePresetStore((state) => state.activePresetId);
 
-    // Load prompt on mount or when props change
+    // Load prompt on mount or when props/preset change
     const loadPromptContent = useCallback(async () => {
         setIsLoading(true);
         try {
@@ -46,7 +48,7 @@ export function usePromptEditor(
         } finally {
             setIsLoading(false);
         }
-    }, [functionType, category, name, loadPrompt]);
+    }, [functionType, category, name, loadPrompt, activePresetId]);
 
     useEffect(() => {
         loadPromptContent();
@@ -103,7 +105,6 @@ export function usePromptEditor(
                 functionType,
                 category,
                 content,
-                undefined,
                 name
             );
             invalidatePromptCache(functionType, category, name);

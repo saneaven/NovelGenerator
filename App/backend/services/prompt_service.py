@@ -20,16 +20,18 @@ class PromptService:
     def get_active_prompt(
         db: Session,
         user_id: uuid.UUID,
+        preset_id: uuid.UUID,
         function_type: str,
         prompt_category: str,
-        prompt_name: Optional[str] = None
+        prompt_name: str
     ) -> Optional[PromptContentResponse]:
         """
-        Get the currently active prompt for a user.
+        Get the currently active prompt for a user within a preset.
 
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
             function_type: Function type (chat, translation, etc.)
             prompt_category: Prompt category (systemPrompt, prefill, etc.)
             prompt_name: Optional prompt name (workspace, novelEditor, etc.)
@@ -41,6 +43,7 @@ class PromptService:
         prompt = db.query(PromptVersion).filter(
             and_(
                 PromptVersion.user_id == user_id,
+                PromptVersion.preset_id == preset_id,
                 PromptVersion.function_type == function_type,
                 PromptVersion.prompt_category == prompt_category,
                 PromptVersion.prompt_name == prompt_name,
@@ -61,11 +64,12 @@ class PromptService:
     def save_new_version(
         db: Session,
         user_id: uuid.UUID,
+        preset_id: uuid.UUID,
         function_type: str,
         prompt_category: str,
         content: str,
-        note: Optional[str] = None,
-        prompt_name: Optional[str] = None
+        prompt_name: str,
+        note: Optional[str] = None
     ) -> PromptVersionResponse:
         """
         Save a new version of a prompt and set it as active.
@@ -73,6 +77,7 @@ class PromptService:
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
             function_type: Function type
             prompt_category: Prompt category
             content: Prompt content
@@ -86,6 +91,7 @@ class PromptService:
         max_version = db.query(PromptVersion).filter(
             and_(
                 PromptVersion.user_id == user_id,
+                PromptVersion.preset_id == preset_id,
                 PromptVersion.function_type == function_type,
                 PromptVersion.prompt_category == prompt_category,
                 PromptVersion.prompt_name == prompt_name
@@ -98,6 +104,7 @@ class PromptService:
         new_prompt = PromptVersion(
             id=uuid.uuid4(),
             user_id=user_id,
+            preset_id=preset_id,
             function_type=function_type,
             prompt_category=prompt_category,
             prompt_name=prompt_name,
@@ -125,9 +132,10 @@ class PromptService:
     def get_version_history(
         db: Session,
         user_id: uuid.UUID,
+        preset_id: uuid.UUID,
         function_type: str,
         prompt_category: str,
-        prompt_name: Optional[str] = None
+        prompt_name: str
     ) -> List[VersionHistoryItem]:
         """
         Get version history for a prompt.
@@ -135,6 +143,7 @@ class PromptService:
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
             function_type: Function type
             prompt_category: Prompt category
             prompt_name: Optional prompt name
@@ -145,6 +154,7 @@ class PromptService:
         versions = db.query(PromptVersion).filter(
             and_(
                 PromptVersion.user_id == user_id,
+                PromptVersion.preset_id == preset_id,
                 PromptVersion.function_type == function_type,
                 PromptVersion.prompt_category == prompt_category,
                 PromptVersion.prompt_name == prompt_name
@@ -166,10 +176,11 @@ class PromptService:
     def restore_version(
         db: Session,
         user_id: uuid.UUID,
+        preset_id: uuid.UUID,
         function_type: str,
         prompt_category: str,
         version_number: int,
-        prompt_name: Optional[str] = None
+        prompt_name: str
     ) -> Optional[PromptVersionResponse]:
         """
         Restore a specific version by creating a NEW version with the restored content.
@@ -178,6 +189,7 @@ class PromptService:
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
             function_type: Function type
             prompt_category: Prompt category
             version_number: Version number to restore
@@ -190,6 +202,7 @@ class PromptService:
         version_to_restore = db.query(PromptVersion).filter(
             and_(
                 PromptVersion.user_id == user_id,
+                PromptVersion.preset_id == preset_id,
                 PromptVersion.function_type == function_type,
                 PromptVersion.prompt_category == prompt_category,
                 PromptVersion.prompt_name == prompt_name,
@@ -204,67 +217,13 @@ class PromptService:
         return PromptService.save_new_version(
             db=db,
             user_id=user_id,
+            preset_id=preset_id,
             function_type=function_type,
             prompt_category=prompt_category,
             content=version_to_restore.content,
             note=f"Restored from v{version_to_restore.version_number}",
             prompt_name=prompt_name
         )
-
-    @staticmethod
-    def initialize_default_prompts(
-        db: Session,
-        user_id: uuid.UUID,
-        default_prompts: dict
-    ) -> None:
-        """
-        Initialize default prompts for a new user.
-
-        Args:
-            db: Database session
-            user_id: User ID
-            default_prompts: Dictionary of default prompt contents
-                Format: {function_type: {category: {name?: content}}}
-        """
-        for function_type, categories in default_prompts.items():
-            for category, prompts in categories.items():
-                if isinstance(prompts, dict):
-                    # Multiple prompts (e.g., chat has workspace and novelEditor)
-                    for name, content in prompts.items():
-                        PromptService._create_default_prompt(
-                            db, user_id, function_type, category, content, name
-                        )
-                else:
-                    # Single prompt (e.g., translation has one systemPrompt)
-                    PromptService._create_default_prompt(
-                        db, user_id, function_type, category, prompts, None
-                    )
-
-        db.commit()
-
-    @staticmethod
-    def _create_default_prompt(
-        db: Session,
-        user_id: uuid.UUID,
-        function_type: str,
-        prompt_category: str,
-        content: str,
-        prompt_name: Optional[str] = None
-    ) -> None:
-        """Create a default prompt version (v1)"""
-        default_prompt = PromptVersion(
-            id=uuid.uuid4(),
-            user_id=user_id,
-            function_type=function_type,
-            prompt_category=prompt_category,
-            prompt_name=prompt_name,
-            content=content,
-            version_number=1,
-            is_default=True,
-            note="System default",
-            created_at=datetime.utcnow()
-        )
-        db.add(default_prompt)
 
 
 # Export service instance

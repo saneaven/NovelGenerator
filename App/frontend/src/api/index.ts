@@ -9,3 +9,4 @@ export { projectService } from './projectService';
 export { agentService } from './agentService';
 export { novelService } from './novelService';
 export { assetService } from './assetService';
+export { presetService } from './presetService';

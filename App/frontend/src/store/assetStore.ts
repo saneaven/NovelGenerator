@@ -12,18 +12,18 @@ interface AssetStore {
 
     // Actions
     fetchAssets: (projectId: string) => Promise<void>;
-    uploadAsset: (projectId: string, file: File, name?: string, assetType?: 'scene' | 'object') => Promise<Asset>;
+    uploadAsset: (
+        projectId: string,
+        file: File,
+        name?: string,
+        assetType?: 'scene' | 'object',
+        binding?: { manuscriptId?: string; objectType?: string; objectId?: string }
+    ) => Promise<Asset>;
     deleteAsset: (projectId: string, assetId: string) => Promise<void>;
     updateAsset: (projectId: string, assetId: string, name: string) => Promise<void>;
 
     // Story object assets
-    fetchStoryObjectAssets: (projectId: string, objectType: string, objectId: string) => Promise<void>;
-    linkAssetToObject: (
-        projectId: string,
-        objectType: string,
-        objectId: string,
-        assetId: string
-    ) => Promise<void>;
+    fetchStoryObjectAssets: (projectId: string, objectType: string, objectId: string, force?: boolean) => Promise<void>;
     setMainAsset: (
         projectId: string,
         objectType: string,
@@ -63,10 +63,16 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
         }
     },
 
-    uploadAsset: async (projectId: string, file: File, name?: string, assetType?: 'scene' | 'object') => {
+    uploadAsset: async (
+        projectId: string,
+        file: File,
+        name?: string,
+        assetType?: 'scene' | 'object',
+        binding?: { manuscriptId?: string; objectType?: string; objectId?: string }
+    ) => {
         set({ isLoading: true, error: null });
         try {
-            const newAsset = await assetService.uploadAsset(projectId, file, name, assetType);
+            const newAsset = await assetService.uploadAsset(projectId, file, name, assetType, binding);
             set((state) => ({
                 assets: [newAsset, ...state.assets],
                 isLoading: false,
@@ -115,10 +121,10 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
         }
     },
 
-    fetchStoryObjectAssets: async (projectId: string, objectType: string, objectId: string) => {
-        // Skip if already cached to avoid redundant network requests
+    fetchStoryObjectAssets: async (projectId: string, objectType: string, objectId: string, force = false) => {
+        // Skip if already cached to avoid redundant network requests (unless forced)
         const key = getObjectKey(objectType, objectId);
-        if (get().storyObjectAssets.has(key)) {
+        if (!force && get().storyObjectAssets.has(key)) {
             return;
         }
 
@@ -131,29 +137,6 @@ export const useAssetStore = create<AssetStore>()((set, get) => ({
             });
         } catch (error) {
             console.error('Failed to fetch story object assets:', error);
-        }
-    },
-
-    linkAssetToObject: async (
-        projectId: string,
-        objectType: string,
-        objectId: string,
-        assetId: string
-    ) => {
-        try {
-            const link = await assetService.linkAssetToObject(projectId, objectType, objectId, assetId);
-            const key = getObjectKey(objectType, objectId);
-            set((state) => {
-                const newMap = new Map(state.storyObjectAssets);
-                const existing = newMap.get(key) || [];
-                newMap.set(key, [...existing, link]);
-                return { storyObjectAssets: newMap };
-            });
-        } catch (error) {
-            set({
-                error: error instanceof Error ? error.message : 'Failed to link asset',
-            });
-            throw error;
         }
     },
 

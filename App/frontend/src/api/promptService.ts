@@ -47,10 +47,12 @@ export interface ValidationResult {
 function buildPromptPath(
   functionType: FunctionType,
   category: PromptCategory,
-  name?: string
+  name: string
 ): string {
-  const base = `/api/v1/prompts/${functionType}/${category}`;
-  return name ? `${base}/${name}` : base;
+  if (!name) {
+    throw new Error(`Prompt name is required for ${functionType}/${category}`);
+  }
+  return `/api/v1/prompts/${functionType}/${category}/${name}`;
 }
 
 export const promptService = {
@@ -60,7 +62,7 @@ export const promptService = {
   async getPrompt(
     functionType: FunctionType,
     category: PromptCategory,
-    name?: string
+    name: string
   ): Promise<PromptContent> {
     const path = buildPromptPath(functionType, category, name);
     return await apiClient.get<PromptContent>(path);
@@ -73,8 +75,8 @@ export const promptService = {
     functionType: FunctionType,
     category: PromptCategory,
     content: string,
-    note?: string,
-    name?: string
+    name: string,
+    note?: string
   ): Promise<PromptVersion> {
     const path = buildPromptPath(functionType, category, name);
     return await apiClient.post<PromptVersion>(`${path}/save`, {
@@ -89,7 +91,7 @@ export const promptService = {
   async getVersionHistory(
     functionType: FunctionType,
     category: PromptCategory,
-    name?: string
+    name: string
   ): Promise<VersionHistoryItem[]> {
     const path = buildPromptPath(functionType, category, name);
     return await apiClient.get<VersionHistoryItem[]>(`${path}/versions`);
@@ -102,7 +104,7 @@ export const promptService = {
     functionType: FunctionType,
     category: PromptCategory,
     versionNumber: number,
-    name?: string
+    name: string
   ): Promise<{ new_version: number }> {
     const path = buildPromptPath(functionType, category, name);
     return await apiClient.post<{ new_version: number }>(`${path}/restore`, {

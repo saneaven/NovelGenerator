@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import Optional, List
+import uuid
 
 from ..database import get_db
 from ..auth import get_current_user
@@ -26,6 +27,16 @@ from ..prompts import get_default_fragments
 router = APIRouter(prefix="/api/v1/fragments", tags=["fragments"])
 
 
+def get_active_preset_id(current_user: User) -> uuid.UUID:
+    """Get active preset ID from user settings, raise 400 if not set"""
+    if not current_user.settings or not current_user.settings.active_preset_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No active preset set. Please select or create a preset first."
+        )
+    return current_user.settings.active_preset_id
+
+
 @router.get(
     "",
     response_model=List[FragmentListItem]
@@ -34,8 +45,9 @@ async def list_all_fragments(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get all active fragments for the current user"""
-    return fragment_service.get_all_fragments(db=db, user_id=current_user.id)
+    """Get all active fragments for the current user's active preset"""
+    preset_id = get_active_preset_id(current_user)
+    return fragment_service.get_all_fragments(db=db, user_id=current_user.id, preset_id=preset_id)
 
 
 @router.get(
@@ -47,7 +59,8 @@ async def get_all_fragments_with_content(
     db: Session = Depends(get_db)
 ):
     """Get all active fragments with content for the template engine"""
-    return fragment_service.get_all_fragments_with_content(db=db, user_id=current_user.id)
+    preset_id = get_active_preset_id(current_user)
+    return fragment_service.get_all_fragments_with_content(db=db, user_id=current_user.id, preset_id=preset_id)
 
 
 @router.get(
@@ -59,7 +72,8 @@ async def get_folder_tree(
     db: Session = Depends(get_db)
 ):
     """Get folder tree structure with all fragments"""
-    return fragment_service.get_folder_tree(db=db, user_id=current_user.id)
+    preset_id = get_active_preset_id(current_user)
+    return fragment_service.get_folder_tree(db=db, user_id=current_user.id, preset_id=preset_id)
 
 
 @router.post(
@@ -77,6 +91,7 @@ async def validate_fragment(
     """
     import re
 
+    preset_id = get_active_preset_id(current_user)
     errors = []
     warnings = []
     referenced_fragments = []
@@ -87,7 +102,7 @@ async def validate_fragment(
     referenced_fragments = list(set(matches))
 
     # Check if referenced fragments exist
-    all_fragments = fragment_service.get_all_fragments(db=db, user_id=current_user.id)
+    all_fragments = fragment_service.get_all_fragments(db=db, user_id=current_user.id, preset_id=preset_id)
     fragment_paths = set()
     for f in all_fragments:
         path = f"{f.folder_path}/{f.fragment_name}" if f.folder_path else f.fragment_name
@@ -122,10 +137,12 @@ async def create_fragment(
     db: Session = Depends(get_db)
 ):
     """Create a new fragment"""
+    preset_id = get_active_preset_id(current_user)
     # Check if fragment already exists
     existing = fragment_service.get_active_fragment(
         db=db,
         user_id=current_user.id,
+        preset_id=preset_id,
         folder_path=data.folder_path,
         fragment_name=data.fragment_name
     )
@@ -139,6 +156,7 @@ async def create_fragment(
     return fragment_service.save_new_version(
         db=db,
         user_id=current_user.id,
+        preset_id=preset_id,
         folder_path=data.folder_path,
         fragment_name=data.fragment_name,
         content=data.content,
@@ -161,9 +179,11 @@ async def get_fragment(
     db: Session = Depends(get_db)
 ):
     """Get active fragment content"""
+    preset_id = get_active_preset_id(current_user)
     result = fragment_service.get_active_fragment(
         db=db,
         user_id=current_user.id,
+        preset_id=preset_id,
         folder_path=folder_path,
         fragment_name=fragment_name
     )
@@ -190,9 +210,11 @@ async def save_fragment(
     db: Session = Depends(get_db)
 ):
     """Save new version of a fragment"""
+    preset_id = get_active_preset_id(current_user)
     return fragment_service.save_new_version(
         db=db,
         user_id=current_user.id,
+        preset_id=preset_id,
         folder_path=folder_path,
         fragment_name=fragment_name,
         content=data.content,
@@ -212,9 +234,11 @@ async def get_version_history(
     db: Session = Depends(get_db)
 ):
     """Get version history for a fragment"""
+    preset_id = get_active_preset_id(current_user)
     return fragment_service.get_version_history(
         db=db,
         user_id=current_user.id,
+        preset_id=preset_id,
         folder_path=folder_path,
         fragment_name=fragment_name
     )
@@ -232,9 +256,11 @@ async def restore_version(
     db: Session = Depends(get_db)
 ):
     """Restore a specific version by creating a new version with the restored content"""
+    preset_id = get_active_preset_id(current_user)
     result = fragment_service.restore_version(
         db=db,
         user_id=current_user.id,
+        preset_id=preset_id,
         folder_path=folder_path,
         fragment_name=fragment_name,
         version_number=data.version_number
@@ -264,9 +290,11 @@ async def delete_fragment(
     db: Session = Depends(get_db)
 ):
     """Delete all versions of a fragment"""
+    preset_id = get_active_preset_id(current_user)
     success = fragment_service.delete_fragment(
         db=db,
         user_id=current_user.id,
+        preset_id=preset_id,
         folder_path=folder_path,
         fragment_name=fragment_name
     )
@@ -293,9 +321,11 @@ async def move_fragment(
     db: Session = Depends(get_db)
 ):
     """Move fragment to a different folder"""
+    preset_id = get_active_preset_id(current_user)
     success = fragment_service.move_fragment(
         db=db,
         user_id=current_user.id,
+        preset_id=preset_id,
         folder_path=folder_path,
         fragment_name=fragment_name,
         new_folder_path=data.new_folder_path
@@ -319,9 +349,10 @@ async def initialize_default_fragments(
     db: Session = Depends(get_db)
 ):
     """
-    Initialize default fragments for the current user.
+    Initialize default fragments for the current user's active preset.
     Only adds fragments that don't already exist.
     """
+    preset_id = get_active_preset_id(current_user)
     default_fragments = get_default_fragments()
     added_count = 0
 
@@ -339,6 +370,7 @@ async def initialize_default_fragments(
         existing = fragment_service.get_active_fragment(
             db=db,
             user_id=current_user.id,
+            preset_id=preset_id,
             folder_path=folder_path,
             fragment_name=fragment_name
         )
@@ -347,6 +379,7 @@ async def initialize_default_fragments(
             fragment_service.save_new_version(
                 db=db,
                 user_id=current_user.id,
+                preset_id=preset_id,
                 folder_path=folder_path,
                 fragment_name=fragment_name,
                 content=content,

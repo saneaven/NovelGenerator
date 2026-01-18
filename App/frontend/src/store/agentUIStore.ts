@@ -9,11 +9,16 @@ import { create } from 'zustand';
  * - Loading states
  * - Input text
  * - Message editing state
+ * - Agent mode (storyObject, outlineManager, novelEditor)
  *
  * Note: Agent data (messages, agents) is managed by agentStore.
  * Note: Selected agent ID remains in agentStore for data operations.
  * Note: Sidebar visibility is now managed by sidebarStore.
  */
+
+export type AgentMode = 'storyObject' | 'outlineManager' | 'novelEditor';
+
+const AGENT_MODES: AgentMode[] = ['storyObject', 'outlineManager', 'novelEditor'];
 
 interface EditingState {
   messageId: string | null;
@@ -33,6 +38,9 @@ interface AgentUIState {
 
   // Per-project editing state
   editingByProject: Record<string, EditingState>;
+
+  // Per-project agent mode
+  modeByProject: Record<string, AgentMode>;
 
   // Modal state for agent detail modal
   detailSessionId: string | null;
@@ -60,6 +68,11 @@ interface AgentUIActions {
   getEditing: (projectId: string) => EditingState;
   isEditing: (projectId: string) => boolean;
 
+  // Agent mode
+  setMode: (projectId: string, mode: AgentMode) => void;
+  getMode: (projectId: string, defaultMode?: AgentMode) => AgentMode;
+  cycleMode: (projectId: string) => void;
+
   // Reset
   resetProjectState: (projectId: string) => void;
 
@@ -81,6 +94,7 @@ const initialState: AgentUIState = {
   loadingByProject: {},
   inputByProject: {},
   editingByProject: {},
+  modeByProject: {},
   detailSessionId: null,
 };
 
@@ -189,6 +203,27 @@ export const useAgentUIStore = create<AgentUIStore>()((set, get) => ({
     return get().editingByProject[projectId]?.messageId !== null;
   },
 
+  // Agent mode
+  setMode: (projectId: string, mode: AgentMode) => {
+    set((state) => ({
+      modeByProject: {
+        ...state.modeByProject,
+        [projectId]: mode,
+      },
+    }));
+  },
+
+  getMode: (projectId: string, defaultMode: AgentMode = 'storyObject') => {
+    return get().modeByProject[projectId] ?? defaultMode;
+  },
+
+  cycleMode: (projectId: string) => {
+    const current = get().getMode(projectId);
+    const currentIndex = AGENT_MODES.indexOf(current);
+    const nextIndex = (currentIndex + 1) % AGENT_MODES.length;
+    get().setMode(projectId, AGENT_MODES[nextIndex]);
+  },
+
   // Reset project state
   resetProjectState: (projectId: string) => {
     set((state) => {
@@ -197,6 +232,7 @@ export const useAgentUIStore = create<AgentUIStore>()((set, get) => ({
       delete newState.loadingByProject[projectId];
       delete newState.inputByProject[projectId];
       delete newState.editingByProject[projectId];
+      delete newState.modeByProject[projectId];
       return newState;
     });
   },

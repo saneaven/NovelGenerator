@@ -9,9 +9,6 @@
 /* Import global styles and resets */
 @import './styles/globals.css';
 
-/* Import utilities last for proper specificity */
-@import './styles/utilities.css';
-
 /* Prevent theme flash on initial load */
 html.no-transitions,
 html.no-transitions *,

@@ -33,7 +33,6 @@
 .custom-select-trigger:focus {
   outline: none;
   border-color: var(--color-brand-accent);
-  box-shadow: 0 0 0 3px rgba(var(--color-brand-accent-rgb, 99, 102, 241), 0.15);
 }
 
 .custom-select-trigger.open {
@@ -121,12 +120,12 @@
 }
 
 .custom-select-option.selected {
-  background: rgba(var(--color-brand-accent-rgb, 99, 102, 241), 0.1);
+  background: var(--color-brand-accent-soft);
   color: var(--color-brand-accent);
 }
 
 .custom-select-option.selected:hover {
-  background: rgba(var(--color-brand-accent-rgb, 99, 102, 241), 0.15);
+  background: var(--color-brand-accent-muted);
 }
 
 .custom-select-option.disabled {
@@ -145,5 +144,37 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   color: var(--color-brand-accent);
+}
+
+/* Trigger Label */
+.custom-select-trigger-label {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+  flex-shrink: 0;
+}
+
+/* Option Content (with description) */
+.custom-select-option-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  flex: 1;
+  min-width: 0;
+}
+
+.custom-select-option-description {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Footer */
+.custom-select-footer {
+  border-top: 1px solid var(--color-border-default);
+  padding: var(--spacing-xs);
 }

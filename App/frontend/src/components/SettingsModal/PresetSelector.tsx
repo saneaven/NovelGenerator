@@ -1,0 +1,221 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { usePresetStore } from '../../store/presetStore';
+import { CustomSelect } from '../ui/CustomSelect';
+import type { SelectOption, RenderOptionProps } from '../ui/CustomSelect';
+import { Plus, Copy, Edit, Trash, Check, Download, Upload } from '../icons';
+import PresetImportModal from './PresetImportModal';
+import type { PresetExportData } from '../../types/presets';
+import './PresetSelector.css';
+
+interface PresetSelectorProps {
+  onCreatePreset: () => void;
+  onDuplicatePreset: (presetId: string) => void;
+  onEditPreset: (presetId: string) => void;
+}
+
+const PresetSelector: React.FC<PresetSelectorProps> = ({
+  onCreatePreset,
+  onDuplicatePreset,
+  onEditPreset,
+}) => {
+  const { presets, activePresetId, isLoading, setActivePreset, deletePreset, loadPresets, isInitialized, exportPreset } = usePresetStore();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importData, setImportData] = useState<PresetExportData | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+
+  // Load presets on mount
+  useEffect(() => {
+    if (!isInitialized) {
+      loadPresets();
+    }
+  }, [isInitialized, loadPresets]);
+
+  const handleSelectPreset = async (presetId: string) => {
+    if (presetId !== activePresetId) {
+      await setActivePreset(presetId);
+    }
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent, presetId: string) => {
+    e.stopPropagation();
+    const preset = presets.find(p => p.id === presetId);
+    if (confirm(`Are you sure you want to delete "${preset?.name || 'this preset'}"?`)) {
+      deletePreset(presetId);
+    }
+  };
+
+  const handleDuplicateClick = (e: React.MouseEvent, presetId: string) => {
+    e.stopPropagation();
+    onDuplicatePreset(presetId);
+  };
+
+  const handleEditClick = (e: React.MouseEvent, presetId: string) => {
+    e.stopPropagation();
+    onEditPreset(presetId);
+  };
+
+  const handleExportClick = async (e: React.MouseEvent, presetId: string) => {
+    e.stopPropagation();
+    try {
+      const data = await exportPreset(presetId);
+      const preset = presets.find(p => p.id === presetId);
+      const filename = `${preset?.name.replace(/[^a-z0-9]/gi, '_') || 'preset'}.nbprompt`;
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed:', err);
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text) as PresetExportData;
+
+      // Basic validation
+      if (!data.format_version || !data.preset || !data.prompts) {
+        throw new Error('Invalid preset file format');
+      }
+
+      setImportData(data);
+      setShowImportModal(true);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to read file');
+    }
+
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const options: SelectOption[] = presets.map(p => ({
+    value: p.id,
+    label: p.name,
+    description: p.description || undefined,
+  }));
+
+  const renderPresetOption = ({ option, isSelected, onSelect }: RenderOptionProps) => {
+    const preset = presets.find(p => p.id === option.value);
+    if (!preset) return null;
+
+    return (
+      <div
+        className={`preset-selector__item ${isSelected ? 'preset-selector__item--active' : ''}`}
+        onClick={onSelect}
+      >
+        <div className="preset-selector__item-content">
+          <span className="preset-selector__item-name">{preset.name}</span>
+          {preset.description && (
+            <span className="preset-selector__item-desc">{preset.description}</span>
+          )}
+        </div>
+        <div className="preset-selector__item-actions">
+          {isSelected && (
+            <Check size="xs" className="preset-selector__check" />
+          )}
+          <button
+            className="preset-selector__action"
+            onClick={(e) => handleEditClick(e, preset.id)}
+            title="Edit preset"
+          >
+            <Edit size="xs" />
+          </button>
+          <button
+            className="preset-selector__action"
+            onClick={(e) => handleDuplicateClick(e, preset.id)}
+            title="Duplicate preset"
+          >
+            <Copy size="xs" />
+          </button>
+          <button
+            className="preset-selector__action"
+            onClick={(e) => handleExportClick(e, preset.id)}
+            title="Export preset"
+          >
+            <Download size="xs" />
+          </button>
+          {!isSelected && (
+            <button
+              className="preset-selector__action preset-selector__action--delete"
+              onClick={(e) => handleDeleteClick(e, preset.id)}
+              title="Delete preset"
+            >
+              <Trash size="xs" />
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const footerContent = (
+    <div className="preset-selector__footer">
+      <button
+        className="preset-selector__create"
+        onClick={onCreatePreset}
+      >
+        <Plus size="sm" />
+        <span>Create New Preset</span>
+      </button>
+      <button
+        className="preset-selector__import"
+        onClick={handleImportClick}
+        title="Import preset from file"
+      >
+        <Upload size="sm" />
+      </button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".nbprompt,.json"
+        onChange={handleFileSelect}
+        style={{ display: 'none' }}
+      />
+    </div>
+  );
+
+  return (
+    <div className="preset-selector">
+      <CustomSelect
+        value={activePresetId || ''}
+        onChange={handleSelectPreset}
+        options={options}
+        placeholder="Select preset..."
+        disabled={isLoading}
+        triggerLabel="Preset:"
+        minWidth={280}
+        renderOption={renderPresetOption}
+        footer={footerContent}
+        align="right"
+      />
+      {showImportModal && importData && (
+        <PresetImportModal
+          isOpen={showImportModal}
+          onClose={() => {
+            setShowImportModal(false);
+            setImportData(null);
+          }}
+          importData={importData}
+        />
+      )}
+    </div>
+  );
+};
+
+export default PresetSelector;

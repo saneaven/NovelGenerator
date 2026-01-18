@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../store/projectStore';
+import './Home.css';
 import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { API_BASE_URL } from '../api/client';
@@ -181,6 +182,14 @@ const Home: React.FC = () => {
                 className="project-card"
                 onClick={() => handleOpenProject(project.id)}
               >
+                <IconButton
+                    icon={<Close size="sm" />}
+                    onClick={() => handleDeleteProject(project.id)}
+                    title="Delete project"
+                    size="sm"
+                    variant="danger"
+                    className="project-delete-button"
+                  />
                 {project.cover_image_url && (
                   <div className="project-cover-image">
                     <img src={`${API_BASE_URL}${project.cover_image_url}`} alt="" />
@@ -194,17 +203,7 @@ const Home: React.FC = () => {
                   <p className="project-date">
                     Created: {new Date(project.created_at).toLocaleDateString()}
                   </p>
-                </div>
-                <div onClick={(e) => e.stopPropagation()}>
-                  <IconButton
-                    icon={<Close size="sm" />}
-                    onClick={() => handleDeleteProject(project.id)}
-                    title="Delete project"
-                    size="sm"
-                    variant="danger"
-                    className="project-delete-button"
-                  />
-                </div>
+                </div>                  
               </div>
             ))}
           </div>

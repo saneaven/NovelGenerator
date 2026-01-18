@@ -22,20 +22,25 @@ class VariableService:
     @staticmethod
     def get_all_variables(
         db: Session,
-        user_id: uuid.UUID
+        user_id: uuid.UUID,
+        preset_id: uuid.UUID
     ) -> List[VariableResponse]:
         """
-        Get all variables for a user ordered by display_order.
+        Get all variables for a user's preset ordered by display_order.
 
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
 
         Returns:
             List of VariableResponse
         """
         variables = db.query(PromptVariable).filter(
-            PromptVariable.user_id == user_id
+            and_(
+                PromptVariable.user_id == user_id,
+                PromptVariable.preset_id == preset_id
+            )
         ).order_by(PromptVariable.display_order).all()
 
         return [
@@ -57,7 +62,8 @@ class VariableService:
     @staticmethod
     def get_variables_for_template(
         db: Session,
-        user_id: uuid.UUID
+        user_id: uuid.UUID,
+        preset_id: uuid.UUID
     ) -> Dict[str, Union[str, int, float, bool, None]]:
         """
         Get all variables as a dict for template engine usage.
@@ -65,12 +71,16 @@ class VariableService:
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
 
         Returns:
             Dict of variable name -> value
         """
         variables = db.query(PromptVariable).filter(
-            PromptVariable.user_id == user_id
+            and_(
+                PromptVariable.user_id == user_id,
+                PromptVariable.preset_id == preset_id
+            )
         ).all()
 
         return {
@@ -82,6 +92,7 @@ class VariableService:
     def get_variable_by_id(
         db: Session,
         user_id: uuid.UUID,
+        preset_id: uuid.UUID,
         variable_id: str
     ) -> Optional[VariableResponse]:
         """
@@ -90,6 +101,7 @@ class VariableService:
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
             variable_id: Variable ID (UUID string)
 
         Returns:
@@ -103,6 +115,7 @@ class VariableService:
         variable = db.query(PromptVariable).filter(
             and_(
                 PromptVariable.user_id == user_id,
+                PromptVariable.preset_id == preset_id,
                 PromptVariable.id == var_uuid
             )
         ).first()
@@ -127,6 +140,7 @@ class VariableService:
     def create_variable(
         db: Session,
         user_id: uuid.UUID,
+        preset_id: uuid.UUID,
         data: VariableCreate
     ) -> VariableResponse:
         """
@@ -135,28 +149,33 @@ class VariableService:
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
             data: Variable creation data
 
         Returns:
             Created VariableResponse
 
         Raises:
-            ValueError: If variable name already exists
+            ValueError: If variable name already exists in this preset
         """
-        # Check for existing variable with same name
+        # Check for existing variable with same name in this preset
         existing = db.query(PromptVariable).filter(
             and_(
                 PromptVariable.user_id == user_id,
+                PromptVariable.preset_id == preset_id,
                 PromptVariable.name == data.name
             )
         ).first()
 
         if existing:
-            raise ValueError(f"Variable '{data.name}' already exists")
+            raise ValueError(f"Variable '{data.name}' already exists in this preset")
 
-        # Get max display_order for this user
+        # Get max display_order for this preset
         max_order = db.query(PromptVariable).filter(
-            PromptVariable.user_id == user_id
+            and_(
+                PromptVariable.user_id == user_id,
+                PromptVariable.preset_id == preset_id
+            )
         ).count()
 
         # Determine default value based on type
@@ -174,6 +193,7 @@ class VariableService:
         variable = PromptVariable(
             id=uuid.uuid4(),
             user_id=user_id,
+            preset_id=preset_id,
             name=data.name,
             var_type=data.var_type.value,
             value={'value': default_value},
@@ -204,6 +224,7 @@ class VariableService:
     def update_variable_value_by_id(
         db: Session,
         user_id: uuid.UUID,
+        preset_id: uuid.UUID,
         variable_id: str,
         data: VariableValueUpdate
     ) -> Optional[VariableResponse]:
@@ -213,6 +234,7 @@ class VariableService:
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
             variable_id: Variable ID (UUID string)
             data: Value update data
 
@@ -227,6 +249,7 @@ class VariableService:
         variable = db.query(PromptVariable).filter(
             and_(
                 PromptVariable.user_id == user_id,
+                PromptVariable.preset_id == preset_id,
                 PromptVariable.id == var_uuid
             )
         ).first()
@@ -279,6 +302,7 @@ class VariableService:
     def update_variable_definition_by_id(
         db: Session,
         user_id: uuid.UUID,
+        preset_id: uuid.UUID,
         variable_id: str,
         data: VariableDefinitionUpdate
     ) -> Optional[VariableResponse]:
@@ -288,6 +312,7 @@ class VariableService:
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
             variable_id: Variable ID (UUID string)
             data: Definition update data
 
@@ -302,6 +327,7 @@ class VariableService:
         variable = db.query(PromptVariable).filter(
             and_(
                 PromptVariable.user_id == user_id,
+                PromptVariable.preset_id == preset_id,
                 PromptVariable.id == var_uuid
             )
         ).first()
@@ -309,17 +335,18 @@ class VariableService:
         if not variable:
             return None
 
-        # Check if new name conflicts with existing
+        # Check if new name conflicts with existing in this preset
         if data.name and data.name != variable.name:
             existing = db.query(PromptVariable).filter(
                 and_(
                     PromptVariable.user_id == user_id,
+                    PromptVariable.preset_id == preset_id,
                     PromptVariable.name == data.name
                 )
             ).first()
 
             if existing:
-                raise ValueError(f"Variable '{data.name}' already exists")
+                raise ValueError(f"Variable '{data.name}' already exists in this preset")
 
             variable.name = data.name
 
@@ -376,6 +403,7 @@ class VariableService:
     def delete_variable_by_id(
         db: Session,
         user_id: uuid.UUID,
+        preset_id: uuid.UUID,
         variable_id: str
     ) -> bool:
         """
@@ -384,6 +412,7 @@ class VariableService:
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
             variable_id: Variable ID (UUID string)
 
         Returns:
@@ -397,6 +426,7 @@ class VariableService:
         variable = db.query(PromptVariable).filter(
             and_(
                 PromptVariable.user_id == user_id,
+                PromptVariable.preset_id == preset_id,
                 PromptVariable.id == var_uuid
             )
         ).first()
@@ -413,6 +443,7 @@ class VariableService:
     def reorder_variables(
         db: Session,
         user_id: uuid.UUID,
+        preset_id: uuid.UUID,
         ordered_ids: List[str]
     ) -> bool:
         """
@@ -421,6 +452,7 @@ class VariableService:
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
             ordered_ids: List of variable IDs in desired order
 
         Returns:
@@ -435,6 +467,7 @@ class VariableService:
             variable = db.query(PromptVariable).filter(
                 and_(
                     PromptVariable.user_id == user_id,
+                    PromptVariable.preset_id == preset_id,
                     PromptVariable.id == var_uuid
                 )
             ).first()

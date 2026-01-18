@@ -129,3 +129,17 @@ export interface ChatMessage extends ConversationBlock {
   functionCalls?: FunctionCallMetadata[];
   thinking_details?: ThinkingDetail[];
 }
+
+/**
+ * Create a minimal history with an empty user message.
+ * Use this for modes that don't have chat history but need a user block
+ * to trigger template rendering (e.g., agent translation).
+ */
+export function createEmptyUserHistory(): ChatMessage[] {
+  return [{
+    id: 'empty-user',
+    timestamp: new Date(),
+    role: 'user',
+    contentParts: [{ type: 'content', text: '' }],
+  }];
+}

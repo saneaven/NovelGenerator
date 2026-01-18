@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { fragmentService } from '../../../api/fragmentService';
 import { validateTemplate, validateFragmentReferences } from '../../../templateEngine/engine';
+import { usePresetStore } from '../../../store/presetStore';
 
 interface ValidationResult {
     valid: boolean;
@@ -49,8 +50,9 @@ export function useFragmentEditor(
     const [isSystemDefault, setIsSystemDefault] = useState(false);
 
     const fullPath = folderPath ? `${folderPath}/${fragmentName}` : fragmentName;
+    const activePresetId = usePresetStore((state) => state.activePresetId);
 
-    // Load fragment on mount or when props change
+    // Load fragment on mount or when props/preset change
     const loadFragmentContent = useCallback(async () => {
         setIsLoading(true);
         try {
@@ -65,7 +67,7 @@ export function useFragmentEditor(
         } finally {
             setIsLoading(false);
         }
-    }, [folderPath, fragmentName]);
+    }, [folderPath, fragmentName, activePresetId]);
 
     useEffect(() => {
         loadFragmentContent();

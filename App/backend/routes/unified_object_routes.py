@@ -28,6 +28,7 @@ from ..schemas.story_objects import ImagePromptUpdate
 from ..models.translation_models import ObjectTranslation, ObjectVersion
 from ..utils.object_type_aliases import normalize_object_type, externalize_object_type
 from ..services.storage_service import storage_service
+from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
 
 LOREBOOK_TYPE = normalize_object_type('lorebook')
 
@@ -673,6 +674,23 @@ async def update_object(
         ObjectTranslation.object_id == object_id,
         ObjectTranslation.language != request.language
     ).update({'is_active': False})
+
+    # Rebuild manuscript image index (manual save only)
+    if object_type == "manuscript" and request.create_new_version:
+        content = request.data.get("content")
+        if isinstance(content, str):
+            chapter = getattr(obj, "chapter", None)
+            act = getattr(chapter, "act", None) if chapter else None
+            outline = getattr(act, "outline", None) if act else None
+            project_id = getattr(outline, "project_id", None) if outline else None
+            if project_id:
+                rebuild_manuscript_images_for_language(
+                    db=db,
+                    project_id=project_id,
+                    manuscript_id=object_id,
+                    language=request.language,
+                    content=content,
+                )
 
     db.commit()
 

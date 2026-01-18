@@ -152,11 +152,6 @@ class AssetUpdateRequest(BaseModel):
 # STORY OBJECT ASSETS
 # ============================================================================
 
-class StoryObjectAssetCreate(BaseModel):
-    """Request to link an asset to a story object"""
-    asset_id: str
-    is_main: bool = False
-
 
 class StoryObjectAssetResponse(BaseModel):
     """Response for story object asset link"""
@@ -190,6 +185,7 @@ class SetMainAssetRequest(BaseModel):
 
 class ManuscriptImageCreate(BaseModel):
     """Request to add an image to manuscript"""
+    language: Optional[str] = None
     position: int
     source_type: str  # 'asset' or 'story_object'
     asset_id: Optional[str] = None
@@ -204,6 +200,7 @@ class ManuscriptImageResponse(BaseModel):
     """Response for manuscript image"""
     id: str
     manuscript_id: str
+    language: Optional[str] = None
     position: int
     source_type: str
     asset_id: Optional[str] = None
@@ -234,7 +231,7 @@ class ManuscriptImageUpdateRequest(BaseModel):
 
 
 # ============================================================================
-# MANUSCRIPT ASSET USAGE (Scene Asset Usage Tracking)
+# SCENE ASSETS (Usage is derived from manuscript_images)
 # ============================================================================
 
 class ManuscriptInfo(BaseModel):
@@ -242,28 +239,6 @@ class ManuscriptInfo(BaseModel):
     id: str
     name: str  # Chapter name
     act_name: Optional[str] = None
-
-
-class ManuscriptAssetUsageCreate(BaseModel):
-    """Request to link a scene asset to a manuscript"""
-    asset_id: str
-
-
-class ManuscriptAssetUsageResponse(BaseModel):
-    """Response for manuscript asset usage link"""
-    id: str
-    manuscript_id: str
-    asset_id: str
-    created_at: datetime
-    asset: AssetResponse
-
-    class Config:
-        from_attributes = True
-
-
-class ManuscriptAssetUsagesResponse(BaseModel):
-    """Response for listing manuscript asset usages"""
-    assets: List[ManuscriptAssetUsageResponse]
 
 
 class SceneAssetResponse(BaseModel):
@@ -301,3 +276,67 @@ class SceneAssetsResponse(BaseModel):
     """Response for listing scene assets with usage info"""
     assets: List[SceneAssetResponse]
     total: int
+
+
+# ============================================================================
+# IMAGE CLEANUP
+# ============================================================================
+
+class ImageCleanupPolicy(BaseModel):
+    """Policy for selecting candidate assets for cleanup"""
+    delete_non_main_story_object_images: bool = False
+    delete_unused_manuscript_images: bool = True
+
+    keep_recent_days: int = 7  # 0 disables
+
+    # If true, assets referenced by other assets' generation_reference_images are treated as "used"
+    treat_reference_images_as_used: bool = True
+
+
+class ImageCleanupPreviewItem(BaseModel):
+    asset_id: str
+    name: str
+    asset_type: Optional[str] = None
+    manuscript_id: Optional[str] = None
+    created_at: datetime
+    file_size: Optional[int] = None
+    file_url: str
+    thumbnail_url: Optional[str] = None
+    reasons: List[str] = []
+    referenced_by_count: int = 0
+
+
+class ImageCleanupPreviewResponse(BaseModel):
+    candidates: List[ImageCleanupPreviewItem]
+    total_candidates: int
+    total_size_bytes: int
+
+
+class ImageCleanupExecuteRequest(BaseModel):
+    policy: ImageCleanupPolicy
+    asset_ids: List[str]
+
+
+class ImageCleanupExecuteSkipped(BaseModel):
+    asset_id: str
+    reason: str
+
+
+class ImageCleanupExecuteError(BaseModel):
+    asset_id: str
+    error: str
+
+
+class ImageCleanupExecuteResponse(BaseModel):
+    deleted: List[str]
+    skipped: List[ImageCleanupExecuteSkipped] = []
+    errors: List[ImageCleanupExecuteError] = []
+    scrubbed_reference_entries: int = 0
+
+
+class RebuildManuscriptImagesResponse(BaseModel):
+    manuscripts_processed: int
+    languages_processed: int
+    images_deleted: int
+    images_inserted: int
+    unresolved_refs: int

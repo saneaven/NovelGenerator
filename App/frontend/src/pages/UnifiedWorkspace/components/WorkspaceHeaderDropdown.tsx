@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { DropdownMenu, DropdownItem, DropdownSection } from '../../../components/ui/DropdownMenu';
-import { Workspace, Clipboard, Document, ChevronDown, Home } from '../../../components/icons';
+import { Workspace, Clipboard, Document, Settings, ChevronDown, Home } from '../../../components/icons';
 import type { SubPageType } from '../hooks/useWorkspaceSubPage';
 import './WorkspaceHeaderDropdown.css';
 
@@ -14,6 +14,7 @@ const SUB_PAGES: SubPageConfig[] = [
   { id: 'story-object', label: 'Story Objects', icon: <Workspace size="lg" /> },
   { id: 'outline-manager', label: 'Outline Manager', icon: <Clipboard size="lg" /> },
   { id: 'novel-editor', label: 'Novel Editor', icon: <Document size="lg" /> },
+  { id: 'config', label: 'Config', icon: <Settings size="lg" /> },
 ];
 
 interface WorkspaceHeaderDropdownProps {

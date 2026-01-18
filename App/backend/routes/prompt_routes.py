@@ -1,7 +1,8 @@
 """API routes for prompt management"""
 from fastapi import APIRouter, Depends, HTTPException, status, Path
 from sqlalchemy.orm import Session
-from typing import Optional, List
+from typing import List
+import uuid
 
 from ..database import get_db
 from ..auth import get_current_user
@@ -18,122 +19,17 @@ from ..services.prompt_service import prompt_service
 router = APIRouter(prefix="/api/v1/prompts", tags=["prompts"])
 
 
-# Routes without prompt_name (must come before routes with {prompt_name} to avoid conflicts)
-
-@router.get(
-    "/{function_type}/{prompt_category}",
-    response_model=PromptContentResponse
-)
-async def get_prompt_without_name(
-    function_type: str = Path(..., description="Function type (chat, translation, editAssistant, imagePrompt)"),
-    prompt_category: str = Path(..., description="Prompt category (systemPrompt, userPrompt, prefill, userMessageTag)"),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get active prompt for prompts without a name (e.g., translation/systemPrompt)"""
-
-    result = prompt_service.get_active_prompt(
-        db=db,
-        user_id=current_user.id,
-        function_type=function_type,
-        prompt_category=prompt_category,
-        prompt_name=None
-    )
-
-    if not result:
+def get_active_preset_id(current_user: User) -> uuid.UUID:
+    """Get active preset ID from user settings, raise 400 if not set"""
+    if not current_user.settings or not current_user.settings.active_preset_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Prompt not found: {function_type}/{prompt_category}"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No active preset set. Please select or create a preset first."
         )
-
-    return result
-
-
-@router.post(
-    "/{function_type}/{prompt_category}/save",
-    response_model=PromptVersionResponse
-)
-async def save_prompt_without_name(
-    function_type: str,
-    prompt_category: str,
-    data: PromptVersionCreate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Save new version of a prompt without a name"""
-
-    result = prompt_service.save_new_version(
-        db=db,
-        user_id=current_user.id,
-        function_type=function_type,
-        prompt_category=prompt_category,
-        content=data.content,
-        note=data.note,
-        prompt_name=None
-    )
-
-    return result
+    return current_user.settings.active_preset_id
 
 
-@router.get(
-    "/{function_type}/{prompt_category}/versions",
-    response_model=List[VersionHistoryItem]
-)
-async def get_version_history_without_name(
-    function_type: str,
-    prompt_category: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get version history for a prompt without a name"""
-
-    versions = prompt_service.get_version_history(
-        db=db,
-        user_id=current_user.id,
-        function_type=function_type,
-        prompt_category=prompt_category,
-        prompt_name=None
-    )
-
-    return versions
-
-
-@router.post(
-    "/{function_type}/{prompt_category}/restore",
-    status_code=status.HTTP_200_OK
-)
-async def restore_version_without_name(
-    function_type: str,
-    prompt_category: str,
-    data: PromptRestoreRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Restore a specific version by creating a new version with the restored content"""
-
-    result = prompt_service.restore_version(
-        db=db,
-        user_id=current_user.id,
-        function_type=function_type,
-        prompt_category=prompt_category,
-        version_number=data.version_number,
-        prompt_name=None
-    )
-
-    if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Version {data.version_number} not found"
-        )
-
-    return {
-        "success": True,
-        "restored_from": data.version_number,
-        "new_version": result.version_number
-    }
-
-
-# Routes with prompt_name (must come after literal path segments like /save, /versions, /restore)
+# All prompt routes require an explicit prompt_name.
 
 @router.get(
     "/{function_type}/{prompt_category}/{prompt_name}",
@@ -147,10 +43,12 @@ async def get_prompt_with_name(
     db: Session = Depends(get_db)
 ):
     """Get active prompt for prompts with a name (e.g., chat/systemPrompt/workspace)"""
+    preset_id = get_active_preset_id(current_user)
 
     result = prompt_service.get_active_prompt(
         db=db,
         user_id=current_user.id,
+        preset_id=preset_id,
         function_type=function_type,
         prompt_category=prompt_category,
         prompt_name=prompt_name
@@ -178,10 +76,12 @@ async def save_prompt_with_name(
     db: Session = Depends(get_db)
 ):
     """Save new version of a prompt with a name"""
+    preset_id = get_active_preset_id(current_user)
 
     result = prompt_service.save_new_version(
         db=db,
         user_id=current_user.id,
+        preset_id=preset_id,
         function_type=function_type,
         prompt_category=prompt_category,
         content=data.content,
@@ -204,10 +104,12 @@ async def get_version_history_with_name(
     db: Session = Depends(get_db)
 ):
     """Get version history for a prompt with a name"""
+    preset_id = get_active_preset_id(current_user)
 
     versions = prompt_service.get_version_history(
         db=db,
         user_id=current_user.id,
+        preset_id=preset_id,
         function_type=function_type,
         prompt_category=prompt_category,
         prompt_name=prompt_name
@@ -229,10 +131,12 @@ async def restore_version_with_name(
     db: Session = Depends(get_db)
 ):
     """Restore a specific version by creating a new version with the restored content"""
+    preset_id = get_active_preset_id(current_user)
 
     result = prompt_service.restore_version(
         db=db,
         user_id=current_user.id,
+        preset_id=preset_id,
         function_type=function_type,
         prompt_category=prompt_category,
         version_number=data.version_number,

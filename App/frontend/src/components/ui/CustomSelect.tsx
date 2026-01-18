@@ -6,7 +6,14 @@ import './CustomSelect.css';
 export interface SelectOption {
   value: string;
   label: string;
+  description?: string;
   disabled?: boolean;
+}
+
+export interface RenderOptionProps {
+  option: SelectOption;
+  isSelected: boolean;
+  onSelect: () => void;
 }
 
 interface CustomSelectProps {
@@ -16,6 +23,16 @@ interface CustomSelectProps {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  /** Label prefix shown in trigger (e.g., "Preset:") */
+  triggerLabel?: string;
+  /** Minimum width for dropdown menu */
+  minWidth?: number;
+  /** Custom render function for options */
+  renderOption?: (props: RenderOptionProps) => React.ReactNode;
+  /** Footer content rendered below options */
+  footer?: React.ReactNode;
+  /** Dropdown alignment relative to trigger */
+  align?: 'left' | 'right';
 }
 
 export const CustomSelect: React.FC<CustomSelectProps> = ({
@@ -25,6 +42,11 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   placeholder = 'Select...',
   disabled = false,
   className = '',
+  triggerLabel,
+  minWidth,
+  renderOption,
+  footer,
+  align = 'left',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0, width: 0 });
@@ -44,15 +66,19 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
 
       const shouldFlipUp = spaceBelow < menuHeight && spaceAbove > menuHeight;
 
+      const menuWidth = minWidth ? Math.max(rect.width, minWidth) : rect.width;
+      const leftPosition = align === 'right'
+        ? rect.right + window.scrollX - menuWidth
+        : rect.left + window.scrollX;
       setMenuPosition({
         top: shouldFlipUp
           ? rect.top + window.scrollY - menuHeight - 4
           : rect.bottom + window.scrollY + 4,
-        left: rect.left + window.scrollX,
-        width: rect.width,
+        left: leftPosition,
+        width: menuWidth,
       });
     }
-  }, [isOpen, options.length]);
+  }, [isOpen, options.length, minWidth, align]);
 
   // Close on click outside
   useEffect(() => {
@@ -117,6 +143,9 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
         aria-expanded={isOpen}
         aria-haspopup="listbox"
       >
+        {triggerLabel && (
+          <span className="custom-select-trigger-label">{triggerLabel}</span>
+        )}
         <span className="custom-select-value">
           {selectedOption?.label || placeholder}
         </span>
@@ -138,25 +167,51 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
           role="listbox"
         >
           <div className="custom-select-menu-inner">
-            {options.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={`custom-select-option ${option.value === value ? 'selected' : ''} ${option.disabled ? 'disabled' : ''}`}
-                onClick={() => !option.disabled && handleSelect(option.value)}
-                role="option"
-                aria-selected={option.value === value}
-                disabled={option.disabled}
-              >
-                <span className="custom-select-option-text">{option.label}</span>
-                {option.value === value && (
-                  <span className="custom-select-check">
-                    <Check size="sm" />
-                  </span>
-                )}
-              </button>
-            ))}
+            {options.map((option) => {
+              const isSelected = option.value === value;
+
+              if (renderOption) {
+                return (
+                  <div key={option.value} role="option" aria-selected={isSelected}>
+                    {renderOption({
+                      option,
+                      isSelected,
+                      onSelect: () => !option.disabled && handleSelect(option.value),
+                    })}
+                  </div>
+                );
+              }
+
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`custom-select-option ${isSelected ? 'selected' : ''} ${option.disabled ? 'disabled' : ''}`}
+                  onClick={() => !option.disabled && handleSelect(option.value)}
+                  role="option"
+                  aria-selected={isSelected}
+                  disabled={option.disabled}
+                >
+                  <div className="custom-select-option-content">
+                    <span className="custom-select-option-text">{option.label}</span>
+                    {option.description && (
+                      <span className="custom-select-option-description">{option.description}</span>
+                    )}
+                  </div>
+                  {isSelected && (
+                    <span className="custom-select-check">
+                      <Check size="sm" />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
+          {footer && (
+            <div className="custom-select-footer">
+              {footer}
+            </div>
+          )}
         </div>,
         document.body
       )}

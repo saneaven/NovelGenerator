@@ -76,7 +76,7 @@ export class PromptManager {
   private static async getTemplate(
     functionType: 'agent' | 'translation' | 'editAssistant' | 'imagePrompt',
     category: 'systemPrompt' | 'prefill' | 'userPrompt' | 'initialUserPrompt' | 'firstUserPrompt' | 'lastUserPrompt',
-    name?: string
+    name: string
   ): Promise<string | null> {
     const store = useSettingsStore.getState();
 
@@ -93,7 +93,7 @@ export class PromptManager {
         return null;
       }
       console.error('Failed to load prompt:', error);
-      throw new Error(`No prompt template found for ${functionType}/${category}/${name || 'default'}`);
+      throw new Error(`No prompt template found for ${functionType}/${category}/${name}`);
     }
   }
 
@@ -289,25 +289,14 @@ export class PromptManager {
     let lastTemplate: string | null;
     let prefillTemplate: string | null;
 
-    try {
-      [systemTemplate, userTemplate, initialTemplate, firstTemplate, lastTemplate, prefillTemplate] = await Promise.all([
-        this.getTemplate('translation', 'systemPrompt', 'object'),
-        this.getTemplate('translation', 'userPrompt', 'object'),
-        this.getTemplate('translation', 'initialUserPrompt', 'object'),
-        this.getTemplate('translation', 'firstUserPrompt', 'object'),
-        this.getTemplate('translation', 'lastUserPrompt', 'object'),
-        this.getTemplate('translation', 'prefill', 'object'),
-      ]) as [string, string, string | null, string | null, string | null, string | null];
-    } catch {
-      [systemTemplate, userTemplate, initialTemplate, firstTemplate, lastTemplate, prefillTemplate] = await Promise.all([
-        this.getTemplate('translation', 'systemPrompt'),
-        this.getTemplate('translation', 'userPrompt'),
-        this.getTemplate('translation', 'initialUserPrompt'),
-        this.getTemplate('translation', 'firstUserPrompt'),
-        this.getTemplate('translation', 'lastUserPrompt'),
-        this.getTemplate('translation', 'prefill'),
-      ]) as [string, string, string | null, string | null, string | null, string | null];
-    }
+    [systemTemplate, userTemplate, initialTemplate, firstTemplate, lastTemplate, prefillTemplate] = await Promise.all([
+      this.getTemplate('translation', 'systemPrompt', 'object'),
+      this.getTemplate('translation', 'userPrompt', 'object'),
+      this.getTemplate('translation', 'initialUserPrompt', 'object'),
+      this.getTemplate('translation', 'firstUserPrompt', 'object'),
+      this.getTemplate('translation', 'lastUserPrompt', 'object'),
+      this.getTemplate('translation', 'prefill', 'object'),
+    ]) as [string, string, string | null, string | null, string | null, string | null];
 
     const variables = useVariableStore.getState().getVariablesForTemplate();
     const templateData: TemplateData = {

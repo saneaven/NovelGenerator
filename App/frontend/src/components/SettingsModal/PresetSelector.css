@@ -1,0 +1,153 @@
+/* PresetSelector - Uses CustomSelect, only custom option styles needed */
+
+.preset-selector {
+  position: relative;
+}
+
+/* Custom Option Items */
+.preset-selector__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-sm) var(--spacing-md);
+  cursor: pointer;
+  border-radius: var(--border-radius-md);
+  transition: background-color var(--transition-fast);
+}
+
+.preset-selector__item:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.preset-selector__item--active {
+  background-color: var(--color-brand-accent-soft);
+}
+
+.preset-selector__item--active:hover {
+  background-color: var(--color-brand-accent-muted);
+}
+
+.preset-selector__item-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  flex: 1;
+  min-width: 0;
+}
+
+.preset-selector__item-name {
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preset-selector__item-desc {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preset-selector__item-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-left: var(--spacing-sm);
+}
+
+.preset-selector__check {
+  color: var(--color-brand-accent);
+  margin-right: var(--spacing-xs);
+}
+
+.preset-selector__action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+  opacity: 0;
+}
+
+.preset-selector__item:hover .preset-selector__action {
+  opacity: 1;
+}
+
+.preset-selector__action:hover {
+  background-color: var(--color-surface-subtle);
+  color: var(--color-text-primary);
+}
+
+.preset-selector__action--delete:hover {
+  background-color: var(--color-feedback-error-soft);
+  color: var(--color-error);
+}
+
+/* Footer Create Button */
+.preset-selector__create {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: transparent;
+  border: 1px dashed var(--color-border-default);
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.preset-selector__create:hover {
+  border-color: var(--color-brand-accent);
+  color: var(--color-brand-accent);
+  background-color: var(--color-brand-accent-soft);
+}
+
+/* Footer with import button */
+.preset-selector__footer {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.preset-selector__import {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: 1px dashed var(--color-border-default);
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.preset-selector__import:hover {
+  border-color: var(--color-brand-accent);
+  color: var(--color-brand-accent);
+  background-color: var(--color-brand-accent-soft);
+}
+
+/* Preview stats in import modal */
+.preset-import-preview {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--color-surface-subtle);
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}

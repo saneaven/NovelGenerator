@@ -13,7 +13,7 @@ import { useAgentUIStore } from '../store/agentUIStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useLLMSessionStore } from '../store/llmSessionStore';
 import { startLLMSession } from '../llmSession';
-import { LLMTaskMode, type AgentWorkspacePromptContext, type AgentTranslationPromptContext } from '../llm';
+import { LLMTaskMode, type AgentWorkspacePromptContext, type AgentTranslationPromptContext, createEmptyUserHistory } from '../llm';
 import type { OutputMode } from '../llm/types';
 import type { ContentPart } from '../llm/requestTypes';
 import { getFunctionsForSet } from '../functionCall';
@@ -254,6 +254,7 @@ export const AgentExecutor = {
       thinkingMode: translationConfig.advanced.thinkingMode as any,
       thinkingConfig: translationConfig.advanced.thinkingConfig,
       retryConfig: settingsStore.settings.retryConfig,
+      history: createEmptyUserHistory(),
     });
 
     const sessionId = handle.sessionId;

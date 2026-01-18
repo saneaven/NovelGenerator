@@ -34,6 +34,9 @@ from .routes.fragment_routes import router as fragment_router
 # Variable management routes
 from .routes.variable_routes import router as variable_router
 
+# Preset management routes
+from .routes.preset_routes import router as preset_router
+
 load_dotenv()
 
 app = FastAPI(
@@ -61,6 +64,9 @@ app.include_router(fragment_router)
 
 # Include variable management router
 app.include_router(variable_router)
+
+# Include preset management router
+app.include_router(preset_router)
 
 # Mount static files for asset storage
 storage_path = Path(__file__).parent / "storage" / "assets"

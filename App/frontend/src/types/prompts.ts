@@ -7,7 +7,7 @@ export type PromptCategory = 'systemPrompt' | 'userPrompt' | 'initialUserPrompt'
 export function getPromptKey(
   functionType: FunctionType,
   category: PromptCategory,
-  name?: string
+  name: string
 ): string {
-  return name ? `${functionType}:${category}:${name}` : `${functionType}:${category}`;
+  return `${functionType}:${category}:${name}`;
 }

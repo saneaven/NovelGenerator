@@ -1,0 +1,53 @@
+/* ========================================
+   AGENT MODE TOGGLE
+   Cycle button for switching agent modes
+   ======================================== */
+
+.agent-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-md);
+  background: var(--color-surface-base);
+  border: 1px solid transparent;
+  border-radius: var(--border-radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  user-select: none;
+  width: fit-content;
+}
+
+.agent-mode-toggle:hover {
+  background: var(--color-surface-subtle);
+  border-color: var(--color-border-default);
+}
+
+.agent-mode-toggle:active {
+  transform: scale(0.98);
+}
+
+.agent-mode-toggle-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-brand-accent);
+}
+
+.agent-mode-toggle-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ===== Mobile Responsive ===== */
+@media (max-width: 768px) {
+  .agent-mode-toggle {
+    padding: var(--spacing-xs) var(--spacing-sm);
+  }
+
+  .agent-mode-toggle-label {
+    font-size: var(--font-size-xs);
+  }
+}

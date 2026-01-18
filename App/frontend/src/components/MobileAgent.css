@@ -28,7 +28,7 @@
     .agent-panel.hidden {
         transition: transform var(--transition-get-out);
         transform: translateY(100%);
-        display: flex; /* Override utilities.css .hidden { display: none } */
+        display: flex;
     }
 
     /* ===== Agent Overlay ===== */

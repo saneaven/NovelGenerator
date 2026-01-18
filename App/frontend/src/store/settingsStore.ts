@@ -378,8 +378,8 @@ interface SettingsStore {
     setLLMLoggingEnabled: (enabled: boolean) => void;
 
     // Prompt methods
-    loadPrompt: (functionType: FunctionType, category: PromptCategory, name?: string) => Promise<string>;
-    getPromptFromCache: (functionType: FunctionType, category: PromptCategory, name?: string) => string | null;
+    loadPrompt: (functionType: FunctionType, category: PromptCategory, name: string) => Promise<string>;
+    getPromptFromCache: (functionType: FunctionType, category: PromptCategory, name: string) => string | null;
     invalidatePromptCache: (functionType?: FunctionType, category?: PromptCategory, name?: string) => void;
 
     // Other methods
@@ -727,7 +727,7 @@ export const useSettingsStore = create<SettingsStore>()(
             },
 
             // Prompt methods
-            loadPrompt: async (functionType, category, name?) => {
+            loadPrompt: async (functionType, category, name) => {
                 const key = getPromptKey(functionType, category, name);
 
                 try {
@@ -746,7 +746,7 @@ export const useSettingsStore = create<SettingsStore>()(
                 }
             },
 
-            getPromptFromCache: (functionType, category, name?) => {
+            getPromptFromCache: (functionType, category, name) => {
                 const key = getPromptKey(functionType, category, name);
                 return get().promptCache.get(key) || null;
             },
@@ -758,7 +758,11 @@ export const useSettingsStore = create<SettingsStore>()(
                     return;
                 }
 
-                const key = getPromptKey(functionType, category!, name);
+                if (!category || !name) {
+                    throw new Error('invalidatePromptCache requires functionType, category, and name (or no args to clear all)');
+                }
+
+                const key = getPromptKey(functionType, category, name);
                 const cache = get().promptCache;
                 cache.delete(key);
                 set({ promptCache: new Map(cache) });

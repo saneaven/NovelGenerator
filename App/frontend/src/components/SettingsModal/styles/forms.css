@@ -399,4 +399,32 @@ input[type="range"]:disabled,
 .form-error {
     font-size: var(--font-size-xs);
     color: var(--color-error);
+    margin-top: var(--spacing-sm);
+}
+
+.form-hint {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-tertiary);
+    margin-top: var(--spacing-xs);
+}
+
+.form-checkbox {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+    cursor: pointer;
+}
+
+.form-checkbox input[type="checkbox"] {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+    accent-color: var(--color-brand-primary);
+    cursor: pointer;
+}
+
+.form-checkbox span {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-primary);
 }

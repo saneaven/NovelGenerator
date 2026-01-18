@@ -25,15 +25,17 @@ class FragmentService:
     def get_active_fragment(
         db: Session,
         user_id: uuid.UUID,
+        preset_id: uuid.UUID,
         folder_path: Optional[str],
         fragment_name: str
     ) -> Optional[FragmentContentResponse]:
         """
-        Get the currently active fragment for a user.
+        Get the currently active fragment for a user within a preset.
 
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
             folder_path: Folder path (None for root)
             fragment_name: Fragment name
 
@@ -44,6 +46,7 @@ class FragmentService:
         fragment = db.query(PromptFragment).filter(
             and_(
                 PromptFragment.user_id == user_id,
+                PromptFragment.preset_id == preset_id,
                 PromptFragment.folder_path == folder_path,
                 PromptFragment.fragment_name == fragment_name,
             )
@@ -65,7 +68,7 @@ class FragmentService:
         )
 
     @staticmethod
-    def _get_latest_fragments_query(db: Session, user_id: uuid.UUID):
+    def _get_latest_fragments_query(db: Session, user_id: uuid.UUID, preset_id: uuid.UUID):
         """
         Helper to get query for latest version of each fragment.
         Uses subquery to find MAX(version_number) for each (folder_path, fragment_name).
@@ -79,7 +82,10 @@ class FragmentService:
             PromptFragment.fragment_name,
             func.max(PromptFragment.version_number).label('max_version')
         ).filter(
-            PromptFragment.user_id == user_id
+            and_(
+                PromptFragment.user_id == user_id,
+                PromptFragment.preset_id == preset_id
+            )
         ).group_by(
             PromptFragment.folder_path,
             PromptFragment.fragment_name
@@ -94,24 +100,31 @@ class FragmentService:
                 PromptFragment.fragment_name == subq.c.fragment_name,
                 PromptFragment.version_number == subq.c.max_version
             )
-        ).filter(PromptFragment.user_id == user_id)
+        ).filter(
+            and_(
+                PromptFragment.user_id == user_id,
+                PromptFragment.preset_id == preset_id
+            )
+        )
 
     @staticmethod
     def get_all_fragments(
         db: Session,
-        user_id: uuid.UUID
+        user_id: uuid.UUID,
+        preset_id: uuid.UUID
     ) -> List[FragmentListItem]:
         """
-        Get all fragments for a user (latest version of each).
+        Get all fragments for a user within a preset (latest version of each).
 
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
 
         Returns:
             List of FragmentListItem
         """
-        fragments = FragmentService._get_latest_fragments_query(db, user_id).order_by(
+        fragments = FragmentService._get_latest_fragments_query(db, user_id, preset_id).order_by(
             PromptFragment.folder_path, PromptFragment.fragment_name
         ).all()
 
@@ -131,7 +144,8 @@ class FragmentService:
     @staticmethod
     def get_all_fragments_with_content(
         db: Session,
-        user_id: uuid.UUID
+        user_id: uuid.UUID,
+        preset_id: uuid.UUID
     ) -> List[FragmentWithContent]:
         """
         Get all fragments with content for the template engine (latest version of each).
@@ -139,11 +153,12 @@ class FragmentService:
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
 
         Returns:
             List of FragmentWithContent with full content
         """
-        fragments = FragmentService._get_latest_fragments_query(db, user_id).order_by(
+        fragments = FragmentService._get_latest_fragments_query(db, user_id, preset_id).order_by(
             PromptFragment.folder_path, PromptFragment.fragment_name
         ).all()
 
@@ -162,7 +177,8 @@ class FragmentService:
     @staticmethod
     def get_folder_tree(
         db: Session,
-        user_id: uuid.UUID
+        user_id: uuid.UUID,
+        preset_id: uuid.UUID
     ) -> FragmentTreeResponse:
         """
         Get folder tree structure with all fragments organized hierarchically.
@@ -170,11 +186,12 @@ class FragmentService:
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
 
         Returns:
             FragmentTreeResponse with root fragments and folder tree
         """
-        fragments = FragmentService.get_all_fragments(db, user_id)
+        fragments = FragmentService.get_all_fragments(db, user_id, preset_id)
 
         # Separate root fragments from folder-organized ones
         root_fragments = []
@@ -241,6 +258,7 @@ class FragmentService:
     def save_new_version(
         db: Session,
         user_id: uuid.UUID,
+        preset_id: uuid.UUID,
         folder_path: Optional[str],
         fragment_name: str,
         content: str,
@@ -254,6 +272,7 @@ class FragmentService:
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
             folder_path: Folder path (None for root)
             fragment_name: Fragment name
             content: Fragment content
@@ -267,6 +286,7 @@ class FragmentService:
         max_version = db.query(PromptFragment).filter(
             and_(
                 PromptFragment.user_id == user_id,
+                PromptFragment.preset_id == preset_id,
                 PromptFragment.folder_path == folder_path,
                 PromptFragment.fragment_name == fragment_name
             )
@@ -283,6 +303,7 @@ class FragmentService:
         new_fragment = PromptFragment(
             id=uuid.uuid4(),
             user_id=user_id,
+            preset_id=preset_id,
             folder_path=folder_path,
             fragment_name=fragment_name,
             content=content,
@@ -315,6 +336,7 @@ class FragmentService:
     def get_version_history(
         db: Session,
         user_id: uuid.UUID,
+        preset_id: uuid.UUID,
         folder_path: Optional[str],
         fragment_name: str
     ) -> List[FragmentVersionHistoryItem]:
@@ -324,6 +346,7 @@ class FragmentService:
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
             folder_path: Folder path (None for root)
             fragment_name: Fragment name
 
@@ -333,6 +356,7 @@ class FragmentService:
         versions = db.query(PromptFragment).filter(
             and_(
                 PromptFragment.user_id == user_id,
+                PromptFragment.preset_id == preset_id,
                 PromptFragment.folder_path == folder_path,
                 PromptFragment.fragment_name == fragment_name
             )
@@ -353,6 +377,7 @@ class FragmentService:
     def restore_version(
         db: Session,
         user_id: uuid.UUID,
+        preset_id: uuid.UUID,
         folder_path: Optional[str],
         fragment_name: str,
         version_number: int
@@ -364,6 +389,7 @@ class FragmentService:
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
             folder_path: Folder path (None for root)
             fragment_name: Fragment name
             version_number: Version number to restore
@@ -375,6 +401,7 @@ class FragmentService:
         version_to_restore = db.query(PromptFragment).filter(
             and_(
                 PromptFragment.user_id == user_id,
+                PromptFragment.preset_id == preset_id,
                 PromptFragment.folder_path == folder_path,
                 PromptFragment.fragment_name == fragment_name,
                 PromptFragment.version_number == version_number
@@ -388,6 +415,7 @@ class FragmentService:
         return FragmentService.save_new_version(
             db=db,
             user_id=user_id,
+            preset_id=preset_id,
             folder_path=folder_path,
             fragment_name=fragment_name,
             content=version_to_restore.content,
@@ -399,6 +427,7 @@ class FragmentService:
     def delete_fragment(
         db: Session,
         user_id: uuid.UUID,
+        preset_id: uuid.UUID,
         folder_path: Optional[str],
         fragment_name: str
     ) -> bool:
@@ -408,6 +437,7 @@ class FragmentService:
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
             folder_path: Folder path (None for root)
             fragment_name: Fragment name
 
@@ -417,6 +447,7 @@ class FragmentService:
         deleted_count = db.query(PromptFragment).filter(
             and_(
                 PromptFragment.user_id == user_id,
+                PromptFragment.preset_id == preset_id,
                 PromptFragment.folder_path == folder_path,
                 PromptFragment.fragment_name == fragment_name
             )
@@ -429,6 +460,7 @@ class FragmentService:
     def move_fragment(
         db: Session,
         user_id: uuid.UUID,
+        preset_id: uuid.UUID,
         folder_path: Optional[str],
         fragment_name: str,
         new_folder_path: Optional[str]
@@ -439,6 +471,7 @@ class FragmentService:
         Args:
             db: Database session
             user_id: User ID
+            preset_id: Preset ID
             folder_path: Current folder path
             fragment_name: Fragment name
             new_folder_path: New folder path
@@ -450,6 +483,7 @@ class FragmentService:
         existing = db.query(PromptFragment).filter(
             and_(
                 PromptFragment.user_id == user_id,
+                PromptFragment.preset_id == preset_id,
                 PromptFragment.folder_path == new_folder_path,
                 PromptFragment.fragment_name == fragment_name,
             )
@@ -462,6 +496,7 @@ class FragmentService:
         updated_count = db.query(PromptFragment).filter(
             and_(
                 PromptFragment.user_id == user_id,
+                PromptFragment.preset_id == preset_id,
                 PromptFragment.folder_path == folder_path,
                 PromptFragment.fragment_name == fragment_name
             )
@@ -469,50 +504,6 @@ class FragmentService:
 
         db.commit()
         return updated_count > 0
-
-    @staticmethod
-    def initialize_default_fragments(
-        db: Session,
-        user_id: uuid.UUID,
-        default_fragments: Dict[str, str]
-    ) -> None:
-        """
-        Initialize default fragments for a new user.
-
-        Args:
-            db: Database session
-            user_id: User ID
-            default_fragments: Dictionary of path -> content
-                Format: {'common/customThinkingInstruction': content, ...}
-        """
-        now = datetime.utcnow()
-
-        for path, content in default_fragments.items():
-            # Parse path into folder_path and fragment_name
-            if '/' in path:
-                parts = path.rsplit('/', 1)
-                folder_path = parts[0]
-                fragment_name = parts[1]
-            else:
-                folder_path = None
-                fragment_name = path
-
-            fragment = PromptFragment(
-                id=uuid.uuid4(),
-                user_id=user_id,
-                folder_path=folder_path,
-                fragment_name=fragment_name,
-                content=content,
-                description=None,
-                is_system_default=True,
-                version_number=1,
-                note="System default",
-                created_at=now,
-                updated_at=now
-            )
-            db.add(fragment)
-
-        db.commit()
 
 
 # Export service instance

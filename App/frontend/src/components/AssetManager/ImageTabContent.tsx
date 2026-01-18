@@ -106,7 +106,6 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         updateAsset,
         deleteAsset,
         setMainAsset,
-        linkAssetToObject,
         clearError,
     } = useAssetStore();
 
@@ -257,10 +256,25 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
 
         // Determine asset type based on mode
         const assetType = mode === 'scene' ? 'scene' : (mode === 'object' ? 'object' : undefined);
+        const binding =
+            mode === 'scene'
+                ? (manuscriptId ? { manuscriptId } : null)
+                : (mode === 'object'
+                    ? ((objectType && objectId) ? { objectType, objectId } : null)
+                    : null);
+
+        if (mode === 'scene' && !manuscriptId) {
+            showError('Import Image', 'Select a chapter first (scene assets must be linked to a manuscript).');
+            return;
+        }
+        if (mode === 'object' && (!objectType || !objectId)) {
+            showError('Import Image', 'No object is selected (object assets must be linked to a story object).');
+            return;
+        }
 
         for (const file of Array.from(files)) {
             try {
-                const newAsset = await uploadAsset(currentProjectId, file, file.name, assetType);
+                const newAsset = await uploadAsset(currentProjectId, file, file.name, assetType, binding ?? undefined);
                 setSuccessModalAsset(newAsset);
                 setAssetName(file.name.replace(/\.[^/.]+$/, ''));
                 setShowImportDropdown(false);
@@ -286,14 +300,30 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
             if (file.type.startsWith('image/')) {
                 // Determine asset type based on mode
                 const assetType = mode === 'scene' ? 'scene' : (mode === 'object' ? 'object' : undefined);
-                uploadAsset(currentProjectId, file, file.name, assetType).then((newAsset) => {
+                const binding =
+                    mode === 'scene'
+                        ? (manuscriptId ? { manuscriptId } : null)
+                        : (mode === 'object'
+                            ? ((objectType && objectId) ? { objectType, objectId } : null)
+                            : null);
+
+                if (mode === 'scene' && !manuscriptId) {
+                    showError('Import Image', 'Select a chapter first (scene assets must be linked to a manuscript).');
+                    return;
+                }
+                if (mode === 'object' && (!objectType || !objectId)) {
+                    showError('Import Image', 'No object is selected (object assets must be linked to a story object).');
+                    return;
+                }
+
+                uploadAsset(currentProjectId, file, file.name, assetType, binding ?? undefined).then((newAsset) => {
                     setSuccessModalAsset(newAsset);
                     setAssetName(file.name.replace(/\.[^/.]+$/, ''));
                     setShowImportDropdown(false);
                 });
             }
         }
-    }, [currentProjectId, uploadAsset, mode]);
+    }, [currentProjectId, uploadAsset, mode, manuscriptId, objectType, objectId, showError]);
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -403,7 +433,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                 if (mode === 'scene') {
                     await fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
                 } else if (mode === 'object' && objectType && objectId) {
-                    await fetchStoryObjectAssets(currentProjectId, objectType, objectId);
+                    await fetchStoryObjectAssets(currentProjectId, objectType, objectId, true);
                 } else {
                     await fetchAssets(currentProjectId);
                 }
@@ -432,7 +462,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
             if (mode === 'scene') {
                 await fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
             } else if (mode === 'object' && objectType && objectId) {
-                await fetchStoryObjectAssets(currentProjectId, objectType, objectId);
+                await fetchStoryObjectAssets(currentProjectId, objectType, objectId, true);
             } else {
                 await fetchAssets(currentProjectId);
             }
@@ -442,13 +472,12 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
         setEditingAssetId(null);
     };
 
-    // Common helper for linking asset and refreshing
-    const linkAndRefreshAsset = async (asset: Asset) => {
+    // Refresh after import (upload is already bound server-side)
+    const refreshAfterImport = async (asset: Asset) => {
         if (!currentProjectId) return;
 
         if (mode === 'object' && objectType && objectId) {
-            await linkAssetToObject(currentProjectId, objectType, objectId, asset.id);
-            await fetchStoryObjectAssets(currentProjectId, objectType, objectId);
+            await fetchStoryObjectAssets(currentProjectId, objectType, objectId, true);
         } else if (mode === 'scene') {
             await fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
         } else {
@@ -471,7 +500,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
             if (mode === 'scene') {
                 await fetchSceneAssets(currentProjectId, showAllChapters ? undefined : manuscriptId);
             } else if (mode === 'object' && objectType && objectId) {
-                await fetchStoryObjectAssets(currentProjectId, objectType, objectId);
+                await fetchStoryObjectAssets(currentProjectId, objectType, objectId, true);
             } else {
                 await fetchAssets(currentProjectId);
             }
@@ -594,7 +623,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                 await updateAsset(currentProjectId, successModalAsset.id, assetName.trim());
             }
 
-            await linkAndRefreshAsset(successModalAsset);
+            await refreshAfterImport(successModalAsset);
             setSuccessModalAsset(null);
         } catch (err) {
             // Error handled in store
@@ -791,7 +820,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                                 Cancel
                             </TextButton>
                             <TextButton variant="primary" onClick={handleSuccessModalSave}>
-                                Save & Link
+                                Save
                             </TextButton>
                         </div>
                     </div>

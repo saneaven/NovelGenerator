@@ -6,9 +6,12 @@ import VariableEditor from './VariableEditor';
 import CreateVariableModal from './CreateVariableModal';
 import TemplateEditor from './TemplateEditor';
 import VersionHistoryModal from '../VersionHistoryModal';
+import PresetSelector from './PresetSelector';
+import PresetModal from './PresetModal';
 import { BaseModal } from '../BaseModal';
 import { usePromptEditor } from './hooks/usePromptEditor';
 import { useFragmentEditor } from './hooks/useFragmentEditor';
+import { usePresetStore } from '../../store/presetStore';
 import { fragmentService } from '../../api/fragmentService';
 import { PromptManager } from '../../llm/PromptManager';
 import { PROMPT_TREE, getFirstPromptNode, type PromptNode } from './promptTree';
@@ -17,6 +20,7 @@ import { TextButton } from '../TextButton';
 import { ChevronLeft, ChevronRight, Document, Copy, Clock, Trash, Edit } from '../icons';
 import './PromptsTemplatesPanel.css';
 import TemplateSyntaxHint from './TemplateSyntaxHint';
+import type { PresetListItem } from '../../types/presets';
 
 type SubTab = 'prompts' | 'fragments' | 'variables';
 
@@ -183,7 +187,7 @@ const PromptEditorWrapper: React.FC<{
     const editor = usePromptEditor(
         node.functionType!,
         node.category!,
-        node.name
+        node.name!
     );
 
     // Track previous primitive values to avoid infinite loops
@@ -314,6 +318,12 @@ const PromptsTemplatesPanel: React.FC = () => {
     const [isEditingDescription, setIsEditingDescription] = useState(false);
     const [editedDescription, setEditedDescription] = useState('');
 
+    // Preset modal state
+    const [showPresetModal, setShowPresetModal] = useState(false);
+    const [presetModalMode, setPresetModalMode] = useState<'create' | 'duplicate' | 'edit'>('create');
+    const [presetModalSource, setPresetModalSource] = useState<PresetListItem | null>(null);
+    const { getPresetById } = usePresetStore();
+
     // Memoize state change handler to prevent infinite loops
     const handleEditorStateChange = useCallback((state: EditorState) => {
         setEditorState(state);
@@ -422,6 +432,31 @@ const PromptsTemplatesPanel: React.FC = () => {
         setIsEditingDescription(false);
     };
 
+    // Preset handlers
+    const handleCreatePreset = () => {
+        setPresetModalMode('create');
+        setPresetModalSource(null);
+        setShowPresetModal(true);
+    };
+
+    const handleDuplicatePreset = (presetId: string) => {
+        const preset = getPresetById(presetId);
+        if (preset) {
+            setPresetModalMode('duplicate');
+            setPresetModalSource(preset);
+            setShowPresetModal(true);
+        }
+    };
+
+    const handleEditPreset = (presetId: string) => {
+        const preset = getPresetById(presetId);
+        if (preset) {
+            setPresetModalMode('edit');
+            setPresetModalSource(preset);
+            setShowPresetModal(true);
+        }
+    };
+
     const selectedPath = selectedFragment
         ? (selectedFragment.folderPath
             ? `${selectedFragment.folderPath}/${selectedFragment.fragmentName}`
@@ -467,168 +502,184 @@ const PromptsTemplatesPanel: React.FC = () => {
 
                     {/* Main Content Area */}
                     <main className="panel-split__main">
-                        {hasSelection ? (
-                            <div className="editor-wrapper">
-                                {/* Header - hidden for variables tab as VariableEditor has its own */}
-                                {subTab !== 'variables' && (
-                                <header className="editor-wrapper__header">
-                                    <div className="editor-wrapper__title-group">
-                                        <div className="editor-wrapper__title-row">
-                                            <h3 className="editor-wrapper__title">{getEditorTitle()}</h3>
-                                            {subTab === 'fragments' && selectedPath && (
-                                                <IconButton
-                                                    icon={<Copy size="sm" />}
-                                                    onClick={handleCopyFragmentPath}
-                                                    title="Copy path for use in templates"
-                                                    size="xs"
-                                                    className="editor-wrapper__copy-btn"
+                        <div className="editor-wrapper">
+                            {/* Header - always visible for prompts/fragments tabs, hidden for variables tab as VariableEditor has its own */}
+                            {subTab !== 'variables' && (
+                            <header className="editor-wrapper__header">
+                                {/* Title group - only shown when something is selected */}
+                                {hasSelection && (
+                                <div className="editor-wrapper__title-group">
+                                    <div className="editor-wrapper__title-row">
+                                        <h3 className="editor-wrapper__title">{getEditorTitle()}</h3>
+                                        {subTab === 'fragments' && selectedPath && (
+                                            <IconButton
+                                                icon={<Copy size="sm" />}
+                                                onClick={handleCopyFragmentPath}
+                                                title="Copy path for use in templates"
+                                                size="xs"
+                                                className="editor-wrapper__copy-btn"
+                                            />
+                                        )}
+                                    </div>
+
+                                    {/* Description - inline editable for fragments */}
+                                    {subTab === 'fragments' && editorState ? (
+                                        <div className="editor-wrapper__description editor-wrapper__description--editable">
+                                            {isEditingDescription ? (
+                                                <input
+                                                    type="text"
+                                                    value={editedDescription}
+                                                    onChange={(e) => setEditedDescription(e.target.value)}
+                                                    onBlur={handleSaveDescription}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') handleSaveDescription();
+                                                        if (e.key === 'Escape') handleCancelEditDescription();
+                                                    }}
+                                                    placeholder="Add description..."
+                                                    className="editor-wrapper__description-input"
+                                                    autoFocus
                                                 />
+                                            ) : (
+                                                <>
+                                                    <span className="editor-wrapper__description-text">
+                                                        {editorState.description || 'No description'}
+                                                    </span>
+                                                    <button
+                                                        className="editor-wrapper__description-edit"
+                                                        onClick={handleStartEditDescription}
+                                                        title="Edit description"
+                                                    >
+                                                        <Edit size="xs" />
+                                                    </button>
+                                                </>
                                             )}
                                         </div>
-
-                                        {/* Description - inline editable for fragments */}
-                                        {subTab === 'fragments' && editorState ? (
-                                            <div className="editor-wrapper__description editor-wrapper__description--editable">
-                                                {isEditingDescription ? (
-                                                    <input
-                                                        type="text"
-                                                        value={editedDescription}
-                                                        onChange={(e) => setEditedDescription(e.target.value)}
-                                                        onBlur={handleSaveDescription}
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === 'Enter') handleSaveDescription();
-                                                            if (e.key === 'Escape') handleCancelEditDescription();
-                                                        }}
-                                                        placeholder="Add description..."
-                                                        className="editor-wrapper__description-input"
-                                                        autoFocus
-                                                    />
-                                                ) : (
-                                                    <>
-                                                        <span className="editor-wrapper__description-text">
-                                                            {editorState.description || 'No description'}
-                                                        </span>
-                                                        <button
-                                                            className="editor-wrapper__description-edit"
-                                                            onClick={handleStartEditDescription}
-                                                            title="Edit description"
-                                                        >
-                                                            <Edit size="xs" />
-                                                        </button>
-                                                    </>
-                                                )}
-                                            </div>
-                                        ) : (
-                                            getEditorDescription() && (
-                                                <p className="editor-wrapper__description">
-                                                    {getEditorDescription()}
-                                                </p>
-                                            )
-                                        )}
-
-                                        {/* Meta info */}
-                                        {editorState && (
-                                            <div className="editor-wrapper__meta">
-                                                <span>{editorState.content.length} chars</span>
-                                                {editorState.hasChanges && (
-                                                    <span className="editor-wrapper__unsaved"> • Unsaved changes</span>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="editor-wrapper__actions">
-                                        <TemplateSyntaxHint selectedNode={subTab === 'prompts' ? selectedPrompt : null} />
-
-                                        {/* History button */}
-                                        {editorState?.versionHistoryProps && (
-                                            <IconButton
-                                                icon={<Clock size="sm" />}
-                                                onClick={() => setShowVersionHistory(true)}
-                                                title="Version history"
-                                                size="sm"
-                                                disabled={editorState.isSaving || editorState.isDeleting}
-                                            />
-                                        )}
-
-                                        {/* Delete button (fragments only) */}
-                                        {subTab === 'fragments' && editorState?.onDelete && (
-                                            <IconButton
-                                                icon={<Trash size="sm" />}
-                                                onClick={editorState.onDelete}
-                                                title="Delete fragment"
-                                                size="sm"
-                                                disabled={editorState.isDeleting || editorState.isSaving}
-                                                className="editor-wrapper__delete-btn"
-                                            />
-                                        )}
-
-                                        <IconButton
-                                            icon={isSidebarCollapsed ? <ChevronLeft size="sm" /> : <ChevronRight size="sm" />}
-                                            onClick={toggleSidebar}
-                                            title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                                            size="sm"
-                                        />
-                                    </div>
-                                </header>
-                                )}
-
-                                {/* Editor Component */}
-                                <div className="editor-wrapper__body">
-                                    {subTab === 'prompts' && selectedPrompt && (
-                                        <PromptEditorWrapper
-                                            key={`${selectedPrompt.functionType}-${selectedPrompt.category}-${selectedPrompt.name || ''}`}
-                                            node={selectedPrompt}
-                                            onStateChange={handleEditorStateChange}
-                                        />
+                                    ) : (
+                                        getEditorDescription() && (
+                                            <p className="editor-wrapper__description">
+                                                {getEditorDescription()}
+                                            </p>
+                                        )
                                     )}
-                                    {subTab === 'fragments' && selectedFragment && (
-                                        <FragmentEditorWrapper
-                                            key={selectedPath}
-                                            folderPath={selectedFragment.folderPath}
-                                            fragmentName={selectedFragment.fragmentName}
-                                            onDelete={handleFragmentDeleted}
-                                            onSave={handleFragmentSaved}
-                                            onStateChange={handleEditorStateChange}
-                                        />
-                                    )}
-                                    {subTab === 'variables' && (
-                                        <VariableEditor
-                                            key={selectedVariableId}
-                                            variableId={selectedVariableId}
-                                            onDelete={handleVariableDeleted}
-                                            isSidebarCollapsed={isSidebarCollapsed}
-                                            onToggleSidebar={toggleSidebar}
-                                        />
+
+                                    {/* Meta info */}
+                                    {editorState && (
+                                        <div className="editor-wrapper__meta">
+                                            <span>{editorState.content.length} chars</span>
+                                            {editorState.hasChanges && (
+                                                <span className="editor-wrapper__unsaved"> • Unsaved changes</span>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
-                            </div>
-                        ) : (
-                            <div className="empty-state">
-                                <div className="empty-state__icon"><Document size="4xl" /></div>
-                                <h3 className="empty-state__title">
-                                    {subTab === 'prompts' ? 'Select a prompt to edit' : 'Select a fragment to edit'}
-                                </h3>
-                                <p className="empty-state__text">
-                                    {subTab === 'prompts'
-                                        ? 'Choose a prompt from the sidebar to view and edit its content'
-                                        : 'Choose a fragment from the sidebar or create a new one'}
-                                </p>
-                                {subTab === 'fragments' && (
-                                    <TextButton
-                                        variant="primary"
-                                        size="md"
-                                        onClick={() => handleCreateFragment(null)}
-                                    >
-                                        Create New Fragment
-                                    </TextButton>
+                                )}
+
+                                <div className="editor-wrapper__actions">
+                                    {/* These buttons only show when something is selected */}
+                                    {hasSelection && (
+                                        <>
+                                            <TemplateSyntaxHint selectedNode={subTab === 'prompts' ? selectedPrompt : null} />
+
+                                            {/* History button */}
+                                            {editorState?.versionHistoryProps && (
+                                                <IconButton
+                                                    icon={<Clock size="sm" />}
+                                                    onClick={() => setShowVersionHistory(true)}
+                                                    title="Version history"
+                                                    size="sm"
+                                                    disabled={editorState.isSaving || editorState.isDeleting}
+                                                />
+                                            )}
+
+                                            {/* Delete button (fragments only) */}
+                                            {subTab === 'fragments' && editorState?.onDelete && (
+                                                <IconButton
+                                                    icon={<Trash size="sm" />}
+                                                    onClick={editorState.onDelete}
+                                                    title="Delete fragment"
+                                                    size="sm"
+                                                    disabled={editorState.isDeleting || editorState.isSaving}
+                                                    className="editor-wrapper__delete-btn"
+                                                />
+                                            )}
+                                        </>
+                                    )}
+
+                                    {/* Sidebar toggle - ALWAYS visible */}
+                                    <IconButton
+                                        icon={isSidebarCollapsed ? <ChevronLeft size="sm" /> : <ChevronRight size="sm" />}
+                                        onClick={toggleSidebar}
+                                        title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                                        size="sm"
+                                    />
+                                </div>
+                            </header>
+                            )}
+
+                            {/* Editor Component or Empty State */}
+                            <div className="editor-wrapper__body">
+                                {subTab === 'prompts' && selectedPrompt && (
+                                    <PromptEditorWrapper
+                                        key={`${selectedPrompt.functionType}-${selectedPrompt.category}-${selectedPrompt.name || ''}`}
+                                        node={selectedPrompt}
+                                        onStateChange={handleEditorStateChange}
+                                    />
+                                )}
+                                {subTab === 'fragments' && selectedFragment && (
+                                    <FragmentEditorWrapper
+                                        key={selectedPath}
+                                        folderPath={selectedFragment.folderPath}
+                                        fragmentName={selectedFragment.fragmentName}
+                                        onDelete={handleFragmentDeleted}
+                                        onSave={handleFragmentSaved}
+                                        onStateChange={handleEditorStateChange}
+                                    />
+                                )}
+                                {subTab === 'variables' && (
+                                    <VariableEditor
+                                        key={selectedVariableId}
+                                        variableId={selectedVariableId}
+                                        onDelete={handleVariableDeleted}
+                                        isSidebarCollapsed={isSidebarCollapsed}
+                                        onToggleSidebar={toggleSidebar}
+                                    />
+                                )}
+                                {/* Empty state for prompts/fragments when nothing is selected */}
+                                {!hasSelection && (
+                                    <div className="empty-state">
+                                        <div className="empty-state__icon"><Document size="4xl" /></div>
+                                        <h3 className="empty-state__title">
+                                            {subTab === 'prompts' ? 'Select a prompt to edit' : 'Select a fragment to edit'}
+                                        </h3>
+                                        <p className="empty-state__text">
+                                            {subTab === 'prompts'
+                                                ? 'Choose a prompt from the sidebar to view and edit its content'
+                                                : 'Choose a fragment from the sidebar or create a new one'}
+                                        </p>
+                                        {subTab === 'fragments' && (
+                                            <TextButton
+                                                variant="primary"
+                                                size="md"
+                                                onClick={() => handleCreateFragment(null)}
+                                            >
+                                                Create New Fragment
+                                            </TextButton>
+                                        )}
+                                    </div>
                                 )}
                             </div>
-                        )}
+                        </div>
                     </main>
 
                     {/* Sidebar */}
                     <aside className="panel-split__sidebar">
+                        {/* Preset Selector */}
+                        <PresetSelector
+                            onCreatePreset={handleCreatePreset}
+                            onDuplicatePreset={handleDuplicatePreset}
+                            onEditPreset={handleEditPreset}
+                        />
+
                         {/* Toggle at top of sidebar */}
                         <div className="sidebar-toggle">
                             <button
@@ -704,6 +755,14 @@ const PromptsTemplatesPanel: React.FC = () => {
                 isOpen={showCreateVariableModal}
                 onClose={() => setShowCreateVariableModal(false)}
                 onCreate={handleVariableCreated}
+            />
+
+            {/* Preset modal */}
+            <PresetModal
+                isOpen={showPresetModal}
+                onClose={() => setShowPresetModal(false)}
+                mode={presetModalMode}
+                sourcePreset={presetModalSource}
             />
         </div>
     );

@@ -19,10 +19,12 @@ export const templateEditorTheme = EditorView.theme({
     backgroundColor: 'var(--color-surface-base)',
     color: 'var(--color-text-primary)',
     border: '1px solid var(--color-border-default)',
-    borderRadius: 'var(--border-radius-md)',
+    borderRadius: 'var(--border-radius-xl)',
+    overflow: 'hidden',
     position: 'relative',
     width: '100%',
     height: '100%',
+    boxShadow: 'var(--shadow-inner-lg)',
   },
 
   '&.cm-focused': {

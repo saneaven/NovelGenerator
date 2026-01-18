@@ -40,6 +40,7 @@ export {
   type FunctionCallOperationPreview,
   type FunctionCallProgress,
   type ChatMessage,
+  createEmptyUserHistory,
 } from './requestTypes';
 
 // Re-export LLM service functions (moved from llm_request/)
