@@ -123,7 +123,10 @@ export function usePromptEditor(
     const versionHistoryProps = {
         title: "Prompt Version History",
         loadVersions: () => promptService.getVersionHistory(functionType, category, name),
-        restoreVersion: (vn: number) => promptService.restoreVersion(functionType, category, vn, name),
+        restoreVersion: async (vn: number) => {
+            await promptService.restoreVersion(functionType, category, vn, name);
+            await loadPromptContent();  // Reload to get the new version
+        },
     };
 
     return {

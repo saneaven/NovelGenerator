@@ -109,9 +109,9 @@ async def restore_version_without_name(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Restore a specific version for a prompt without a name"""
+    """Restore a specific version by creating a new version with the restored content"""
 
-    success = prompt_service.restore_version(
+    result = prompt_service.restore_version(
         db=db,
         user_id=current_user.id,
         function_type=function_type,
@@ -120,13 +120,17 @@ async def restore_version_without_name(
         prompt_name=None
     )
 
-    if not success:
+    if not result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Version {data.version_number} not found"
         )
 
-    return {"success": True, "restored_version": data.version_number}
+    return {
+        "success": True,
+        "restored_from": data.version_number,
+        "new_version": result.version_number
+    }
 
 
 # Routes with prompt_name (must come after literal path segments like /save, /versions, /restore)
@@ -224,9 +228,9 @@ async def restore_version_with_name(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Restore a specific version for a prompt with a name"""
+    """Restore a specific version by creating a new version with the restored content"""
 
-    success = prompt_service.restore_version(
+    result = prompt_service.restore_version(
         db=db,
         user_id=current_user.id,
         function_type=function_type,
@@ -235,10 +239,14 @@ async def restore_version_with_name(
         prompt_name=prompt_name
     )
 
-    if not success:
+    if not result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Version {data.version_number} not found"
         )
 
-    return {"success": True, "restored_version": data.version_number}
+    return {
+        "success": True,
+        "restored_from": data.version_number,
+        "new_version": result.version_number
+    }

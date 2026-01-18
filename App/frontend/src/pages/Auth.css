@@ -11,70 +11,11 @@
     align-items: center;
     justify-content: center;
     padding: var(--spacing-2xl);
+    background: var(--color-surface-base);
     overflow: hidden;
     box-sizing: border-box;
 }
 
-/* ===== Animated Background ===== */
-.auth-background {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    background: linear-gradient(135deg, var(--color-surface-inverse) 0%, var(--color-surface-inverse-elevated) 100%);
-    overflow: hidden;
-}
-
-.auth-shape {
-    position: absolute;
-    border-radius: var(--border-radius-full);
-    filter: blur(80px);
-    opacity: 0.3;
-    animation: float 20s infinite ease-in-out;
-}
-
-.auth-shape.shape-1 {
-    width: 500px;
-    height: 500px;
-    background: var(--gradient-accent);
-    top: -250px;
-    left: -250px;
-    animation-delay: 0s;
-}
-
-.auth-shape.shape-2 {
-    width: 400px;
-    height: 400px;
-    background: var(--gradient-accent);
-    bottom: -200px;
-    right: -200px;
-    animation-delay: -7s;
-}
-
-.auth-shape.shape-3 {
-    width: 300px;
-    height: 300px;
-    background: var(--gradient-secondary);
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    animation-delay: -14s;
-}
-
-@keyframes float {
-
-    0%,
-    100% {
-        transform: translate(0, 0) scale(1);
-    }
-
-    33% {
-        transform: translate(30px, -50px) scale(1.1);
-    }
-
-    66% {
-        transform: translate(-20px, 20px) scale(0.9);
-    }
-}
 
 /* ===== Auth Card ===== */
 .auth-card {
@@ -84,26 +25,12 @@
     max-width: 440px;
     max-height: 100%;
     background: var(--color-surface-elevated);
-    backdrop-filter: blur(20px);
     border-radius: var(--border-radius-2xl);
     padding: var(--spacing-3xl);
     box-shadow: var(--shadow-2xl);
     border: 1px solid var(--color-border-subtle);
-    animation: slideUp 0.6s ease-out;
     overflow-y: auto;
     box-sizing: border-box;
-}
-
-@keyframes slideUp {
-    from {
-        opacity: 0;
-        transform: translateY(30px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
 }
 
 /* ===== Auth Header ===== */
@@ -121,7 +48,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    animation: pulse 2s ease-in-out infinite;
 }
 
 .auth-icon svg {
@@ -130,28 +56,10 @@
     color: var(--color-text-inverse);
 }
 
-@keyframes pulse {
-
-    0%,
-    100% {
-        transform: scale(1);
-        box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.7);
-    }
-
-    50% {
-        transform: scale(1.05);
-        box-shadow: 0 0 20px 10px rgba(139, 92, 246, 0);
-    }
-}
-
 .auth-header h1 {
     font-size: var(--font-size-4xl);
     margin: 0 0 var(--spacing-sm);
     color: var(--color-text-primary);
-    background: linear-gradient(135deg, var(--color-text-primary) 0%, var(--color-text-secondary) 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
 }
 
 .auth-header p {
@@ -277,35 +185,15 @@
     align-items: center;
     justify-content: center;
     gap: var(--spacing-sm);
-    transition: all var(--transition-base);
-    position: relative;
-    overflow: hidden;
-}
-
-.auth-submit::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, transparent 100%);
-    opacity: 0;
-    transition: opacity var(--transition-base);
-}
-
-.auth-submit:hover:not(:disabled)::before {
-    opacity: 1;
+    transition: opacity var(--transition-fast);
 }
 
 .auth-submit:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(139, 92, 246, 0.4);
-}
-
-.auth-submit:active:not(:disabled) {
-    transform: translateY(0);
+    opacity: var(--opacity-hover);
 }
 
 .auth-submit:disabled {
-    opacity: 0.7;
+    opacity: var(--opacity-disabled);
     cursor: not-allowed;
 }
 
@@ -430,20 +318,5 @@
     .auth-icon svg {
         width: 28px;
         height: 28px;
-    }
-
-    .auth-shape.shape-1 {
-        width: 300px;
-        height: 300px;
-    }
-
-    .auth-shape.shape-2 {
-        width: 250px;
-        height: 250px;
-    }
-
-    .auth-shape.shape-3 {
-        width: 200px;
-        height: 200px;
     }
 }

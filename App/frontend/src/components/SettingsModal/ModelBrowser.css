@@ -247,10 +247,12 @@
    ======================================== */
 
 .model-card {
-    background-color: var(--color-surface-base);
+    background-color: var(--color-surface-elevated);
     border-radius: var(--border-radius-md);
     box-shadow: var(--shadow-md);
     padding: var(--spacing-md);
+    border: 1px solid;
+    border-color: var(--color-border-subtle);
     transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
@@ -260,8 +262,9 @@
 }
 
 .model-card--selected {
-    border-color: var(--color-brand-primary-soft);
-    background-color: var(--color-brand-primary-soft);
+    border: 1.5px solid;
+    border-color: var(--color-brand-primary-border);
+    background-color: var(--color-surface-elevated);
 }
 
 .model-card--selected:hover {

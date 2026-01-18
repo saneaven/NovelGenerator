@@ -184,7 +184,10 @@ export function useFragmentEditor(
     const versionHistoryProps = {
         title: "Fragment Version History",
         loadVersions: () => fragmentService.getVersionHistory(folderPath, fragmentName),
-        restoreVersion: (vn: number) => fragmentService.restoreVersion(folderPath, fragmentName, vn),
+        restoreVersion: async (vn: number) => {
+            await fragmentService.restoreVersion(folderPath, fragmentName, vn);
+            await loadFragmentContent();  // Reload to get the new version
+        },
     };
 
     return {

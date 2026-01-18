@@ -13,7 +13,6 @@ export interface TextVersionHistoryItem {
   version_number: number;
   created_at: string;
   note: string | null;
-  is_active: boolean;
   is_system_default: boolean;
   preview: string;
 }
@@ -67,11 +66,8 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
         } else if (mode === 'text' && textVersionProps) {
           const history = await textVersionProps.loadVersions();
           setTextVersions(history);
-          // Auto-select active version
-          const active = history.find(v => v.is_active);
-          if (active) {
-            setSelectedVersion(active.version_number);
-          } else if (history.length > 0) {
+          // Auto-select the latest version (first in the list, which is sorted descending)
+          if (history.length > 0) {
             setSelectedVersion(history[0].version_number);
           }
         }
@@ -129,7 +125,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
 
   // Text mode restore
   const handleRestoreTextVersion = async (versionNumber: number) => {
-    if (!confirm(`Are you sure you want to restore version ${versionNumber}? This will set it as the active version.`)) {
+    if (!confirm(`Are you sure you want to restore version ${versionNumber}? This will create a new version with the restored content.`)) {
       return;
     }
 
@@ -244,10 +240,10 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
         <aside className="history-list">
           <h4 className="history-list__title">Versions ({textVersions.length})</h4>
           <div className="history-list__items">
-            {textVersions.map((version) => (
+            {textVersions.map((version, index) => (
               <div
                 key={version.version_number}
-                className={`history-item ${version.is_active ? 'history-item--active' : ''} ${
+                className={`history-item ${index === 0 ? 'history-item--active' : ''} ${
                   selectedVersion === version.version_number ? 'history-item--selected' : ''
                 }`}
                 onClick={() => setSelectedVersion(version.version_number)}
@@ -255,7 +251,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                 <div className="history-item__header">
                   <span className="history-item__number">v{version.version_number}</span>
                   <div className="history-item__badges">
-                    {version.is_active && <span className="badge badge--active">Active</span>}
+                    {index === 0 && <span className="badge badge--active">Active</span>}
                     {version.is_system_default && <span className="badge badge--default">Default</span>}
                   </div>
                 </div>
@@ -277,7 +273,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                   <h4>Version {selectedVersionData.version_number}</h4>
                   <span className="history-preview__date">{formatDate(selectedVersionData.created_at)}</span>
                 </div>
-                {!selectedVersionData.is_active && (
+                {selectedVersion !== textVersions[0]?.version_number && (
                   <TextButton
                     variant="primary"
                     size="sm"

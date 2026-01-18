@@ -141,7 +141,6 @@ class PromptVersion(Base):
     # Version data
     content = Column(Text, nullable=False)
     version_number = Column(Integer, nullable=False)
-    is_active = Column(Boolean, default=False, nullable=False)
     is_default = Column(Boolean, default=False, nullable=False)
 
     # Metadata
@@ -176,7 +175,6 @@ class PromptFragment(Base):
 
     # Version control (same pattern as PromptVersion)
     version_number = Column(Integer, nullable=False)
-    is_active = Column(Boolean, default=False, nullable=False)
     note = Column(Text, nullable=True)
 
     # Timestamps

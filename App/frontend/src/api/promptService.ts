@@ -15,7 +15,6 @@ export interface PromptVersion {
   id: string;
   version_number: number;
   content: string;
-  is_active: boolean;
   is_system_default: boolean;
   created_at: string;
   note?: string;
@@ -25,7 +24,6 @@ export interface VersionHistoryItem {
   version_number: number;
   created_at: string;
   note: string | null;
-  is_active: boolean;
   is_system_default: boolean;
   preview: string;
 }
@@ -98,16 +96,16 @@ export const promptService = {
   },
 
   /**
-   * Restore a specific version
+   * Restore a specific version by creating a new version with the restored content
    */
   async restoreVersion(
     functionType: FunctionType,
     category: PromptCategory,
     versionNumber: number,
     name?: string
-  ): Promise<void> {
+  ): Promise<{ new_version: number }> {
     const path = buildPromptPath(functionType, category, name);
-    await apiClient.post(`${path}/restore`, {
+    return await apiClient.post<{ new_version: number }>(`${path}/restore`, {
       version_number: versionNumber,
     });
   },

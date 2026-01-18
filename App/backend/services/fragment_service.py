@@ -40,14 +40,14 @@ class FragmentService:
         Returns:
             FragmentContentResponse or None if not found
         """
+        # Get the latest version (highest version_number is always active)
         fragment = db.query(PromptFragment).filter(
             and_(
                 PromptFragment.user_id == user_id,
                 PromptFragment.folder_path == folder_path,
                 PromptFragment.fragment_name == fragment_name,
-                PromptFragment.is_active == True
             )
-        ).first()
+        ).order_by(desc(PromptFragment.version_number)).first()
 
         if not fragment:
             return None
@@ -65,12 +65,44 @@ class FragmentService:
         )
 
     @staticmethod
+    def _get_latest_fragments_query(db: Session, user_id: uuid.UUID):
+        """
+        Helper to get query for latest version of each fragment.
+        Uses subquery to find MAX(version_number) for each (folder_path, fragment_name).
+        """
+        from sqlalchemy import func
+        from sqlalchemy.sql.functions import coalesce
+
+        # Subquery to get max version for each fragment
+        subq = db.query(
+            PromptFragment.folder_path,
+            PromptFragment.fragment_name,
+            func.max(PromptFragment.version_number).label('max_version')
+        ).filter(
+            PromptFragment.user_id == user_id
+        ).group_by(
+            PromptFragment.folder_path,
+            PromptFragment.fragment_name
+        ).subquery()
+
+        # Join with subquery to get only latest versions
+        # Use coalesce to handle NULL folder_path
+        return db.query(PromptFragment).join(
+            subq,
+            and_(
+                coalesce(PromptFragment.folder_path, '') == coalesce(subq.c.folder_path, ''),
+                PromptFragment.fragment_name == subq.c.fragment_name,
+                PromptFragment.version_number == subq.c.max_version
+            )
+        ).filter(PromptFragment.user_id == user_id)
+
+    @staticmethod
     def get_all_fragments(
         db: Session,
         user_id: uuid.UUID
     ) -> List[FragmentListItem]:
         """
-        Get all active fragments for a user.
+        Get all fragments for a user (latest version of each).
 
         Args:
             db: Database session
@@ -79,12 +111,9 @@ class FragmentService:
         Returns:
             List of FragmentListItem
         """
-        fragments = db.query(PromptFragment).filter(
-            and_(
-                PromptFragment.user_id == user_id,
-                PromptFragment.is_active == True
-            )
-        ).order_by(PromptFragment.folder_path, PromptFragment.fragment_name).all()
+        fragments = FragmentService._get_latest_fragments_query(db, user_id).order_by(
+            PromptFragment.folder_path, PromptFragment.fragment_name
+        ).all()
 
         return [
             FragmentListItem(
@@ -105,7 +134,7 @@ class FragmentService:
         user_id: uuid.UUID
     ) -> List[FragmentWithContent]:
         """
-        Get all active fragments with content for the template engine.
+        Get all fragments with content for the template engine (latest version of each).
 
         Args:
             db: Database session
@@ -114,12 +143,9 @@ class FragmentService:
         Returns:
             List of FragmentWithContent with full content
         """
-        fragments = db.query(PromptFragment).filter(
-            and_(
-                PromptFragment.user_id == user_id,
-                PromptFragment.is_active == True
-            )
-        ).order_by(PromptFragment.folder_path, PromptFragment.fragment_name).all()
+        fragments = FragmentService._get_latest_fragments_query(db, user_id).order_by(
+            PromptFragment.folder_path, PromptFragment.fragment_name
+        ).all()
 
         return [
             FragmentWithContent(
@@ -252,16 +278,7 @@ class FragmentService:
         if description is None and max_version:
             description = max_version.description
 
-        # Deactivate all existing versions for this fragment
-        db.query(PromptFragment).filter(
-            and_(
-                PromptFragment.user_id == user_id,
-                PromptFragment.folder_path == folder_path,
-                PromptFragment.fragment_name == fragment_name
-            )
-        ).update({'is_active': False})
-
-        # Create new version
+        # Create new version (highest version_number is always active, no need for is_active flag)
         now = datetime.utcnow()
         new_fragment = PromptFragment(
             id=uuid.uuid4(),
@@ -272,7 +289,6 @@ class FragmentService:
             description=description,
             is_system_default=False,
             version_number=new_version_number,
-            is_active=True,
             note=note,
             created_at=now,
             updated_at=now
@@ -289,7 +305,6 @@ class FragmentService:
             content=new_fragment.content,
             description=new_fragment.description,
             version_number=new_fragment.version_number,
-            is_active=new_fragment.is_active,
             is_system_default=new_fragment.is_system_default,
             created_at=new_fragment.created_at,
             updated_at=new_fragment.updated_at,
@@ -328,7 +343,6 @@ class FragmentService:
                 version_number=v.version_number,
                 created_at=v.created_at,
                 note=v.note,
-                is_active=v.is_active,
                 is_system_default=v.is_system_default,
                 preview=v.content[:200] + ('...' if len(v.content) > 200 else '')
             )
@@ -342,9 +356,10 @@ class FragmentService:
         folder_path: Optional[str],
         fragment_name: str,
         version_number: int
-    ) -> bool:
+    ) -> Optional[FragmentVersionResponse]:
         """
-        Restore a specific version by setting it as active.
+        Restore a specific version by creating a NEW version with the restored content.
+        This follows the fork pattern - the restored content becomes the latest version.
 
         Args:
             db: Database session
@@ -354,7 +369,7 @@ class FragmentService:
             version_number: Version number to restore
 
         Returns:
-            True if version was found and restored, False otherwise
+            FragmentVersionResponse with new version details, or None if source version not found
         """
         # Find the version to restore
         version_to_restore = db.query(PromptFragment).filter(
@@ -367,22 +382,18 @@ class FragmentService:
         ).first()
 
         if not version_to_restore:
-            return False
+            return None
 
-        # Deactivate all versions
-        db.query(PromptFragment).filter(
-            and_(
-                PromptFragment.user_id == user_id,
-                PromptFragment.folder_path == folder_path,
-                PromptFragment.fragment_name == fragment_name
-            )
-        ).update({'is_active': False})
-
-        # Activate the target version
-        version_to_restore.is_active = True
-
-        db.commit()
-        return True
+        # Create a new version with the restored content (fork pattern)
+        return FragmentService.save_new_version(
+            db=db,
+            user_id=user_id,
+            folder_path=folder_path,
+            fragment_name=fragment_name,
+            content=version_to_restore.content,
+            description=version_to_restore.description,
+            note=f"Restored from v{version_to_restore.version_number}"
+        )
 
     @staticmethod
     def delete_fragment(
@@ -435,13 +446,12 @@ class FragmentService:
         Returns:
             True if fragment was moved, False if not found or conflict
         """
-        # Check if target already exists
+        # Check if target already exists (any version)
         existing = db.query(PromptFragment).filter(
             and_(
                 PromptFragment.user_id == user_id,
                 PromptFragment.folder_path == new_folder_path,
                 PromptFragment.fragment_name == fragment_name,
-                PromptFragment.is_active == True
             )
         ).first()
 
@@ -496,7 +506,6 @@ class FragmentService:
                 description=None,
                 is_system_default=True,
                 version_number=1,
-                is_active=True,
                 note="System default",
                 created_at=now,
                 updated_at=now

@@ -56,7 +56,6 @@ class FragmentVersionResponse(BaseModel):
     content: str
     description: Optional[str]
     version_number: int
-    is_active: bool
     is_system_default: bool
     created_at: datetime
     updated_at: datetime
@@ -71,7 +70,6 @@ class FragmentVersionHistoryItem(BaseModel):
     version_number: int
     created_at: datetime
     note: Optional[str]
-    is_active: bool
     is_system_default: bool
     preview: str  # First 200 characters
 

@@ -108,19 +108,19 @@ export const fragmentService = {
   },
 
   /**
-   * Restore a specific version
+   * Restore a specific version by creating a new version with the restored content
    */
   async restoreVersion(
     folderPath: string | null,
     fragmentName: string,
     versionNumber: number
-  ): Promise<void> {
+  ): Promise<{ new_version: number }> {
     const params = new URLSearchParams();
     if (folderPath !== null) {
       params.append('folder_path', folderPath);
     }
     params.append('fragment_name', fragmentName);
-    await apiClient.post(`${BASE_PATH}/restore?${params.toString()}`, {
+    return await apiClient.post<{ new_version: number }>(`${BASE_PATH}/restore?${params.toString()}`, {
       version_number: versionNumber,
     });
   },

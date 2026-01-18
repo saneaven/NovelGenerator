@@ -38,12 +38,6 @@ const Login: React.FC = () => {
 
   return (
     <div className="auth-container">
-      <div className="auth-background">
-        <div className="auth-shape shape-1"></div>
-        <div className="auth-shape shape-2"></div>
-        <div className="auth-shape shape-3"></div>
-      </div>
-
       <div className="auth-card">
         <div className="auth-header">
           <div className="auth-icon">

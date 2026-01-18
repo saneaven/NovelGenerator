@@ -27,7 +27,6 @@ export interface FragmentVersion {
   content: string;
   description: string | null;
   version_number: number;
-  is_active: boolean;
   is_system_default: boolean;
   created_at: string;
   updated_at: string;
@@ -41,7 +40,6 @@ export interface FragmentVersionHistoryItem {
   version_number: number;
   created_at: string;
   note: string | null;
-  is_active: boolean;
   is_system_default: boolean;
   preview: string;
 }

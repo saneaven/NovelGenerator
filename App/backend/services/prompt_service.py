@@ -37,15 +37,15 @@ class PromptService:
         Returns:
             PromptContentResponse or None if not found
         """
+        # Get the latest version (highest version_number is always active)
         prompt = db.query(PromptVersion).filter(
             and_(
                 PromptVersion.user_id == user_id,
                 PromptVersion.function_type == function_type,
                 PromptVersion.prompt_category == prompt_category,
                 PromptVersion.prompt_name == prompt_name,
-                PromptVersion.is_active == True
             )
-        ).first()
+        ).order_by(desc(PromptVersion.version_number)).first()
 
         if not prompt:
             return None
@@ -94,17 +94,7 @@ class PromptService:
 
         new_version_number = (max_version.version_number + 1) if max_version else 1
 
-        # Deactivate all existing versions for this prompt
-        db.query(PromptVersion).filter(
-            and_(
-                PromptVersion.user_id == user_id,
-                PromptVersion.function_type == function_type,
-                PromptVersion.prompt_category == prompt_category,
-                PromptVersion.prompt_name == prompt_name
-            )
-        ).update({'is_active': False})
-
-        # Create new version
+        # Create new version (highest version_number is always active, no need for is_active flag)
         new_prompt = PromptVersion(
             id=uuid.uuid4(),
             user_id=user_id,
@@ -113,7 +103,6 @@ class PromptService:
             prompt_name=prompt_name,
             content=content,
             version_number=new_version_number,
-            is_active=True,
             is_default=False,
             note=note,
             created_at=datetime.utcnow()
@@ -127,7 +116,6 @@ class PromptService:
             id=str(new_prompt.id),
             version_number=new_prompt.version_number,
             content=new_prompt.content,
-            is_active=new_prompt.is_active,
             is_system_default=new_prompt.is_default,
             created_at=new_prompt.created_at,
             note=new_prompt.note
@@ -168,7 +156,6 @@ class PromptService:
                 version_number=v.version_number,
                 created_at=v.created_at,
                 note=v.note,
-                is_active=v.is_active,
                 is_system_default=v.is_default,
                 preview=v.content[:200] + ('...' if len(v.content) > 200 else '')
             )
@@ -183,9 +170,10 @@ class PromptService:
         prompt_category: str,
         version_number: int,
         prompt_name: Optional[str] = None
-    ) -> bool:
+    ) -> Optional[PromptVersionResponse]:
         """
-        Restore a specific version by setting it as active.
+        Restore a specific version by creating a NEW version with the restored content.
+        This follows the fork pattern - the restored content becomes the latest version.
 
         Args:
             db: Database session
@@ -196,7 +184,7 @@ class PromptService:
             prompt_name: Optional prompt name
 
         Returns:
-            True if version was found and restored, False otherwise
+            PromptVersionResponse with new version details, or None if source version not found
         """
         # Find the version to restore
         version_to_restore = db.query(PromptVersion).filter(
@@ -210,23 +198,18 @@ class PromptService:
         ).first()
 
         if not version_to_restore:
-            return False
+            return None
 
-        # Deactivate all versions
-        db.query(PromptVersion).filter(
-            and_(
-                PromptVersion.user_id == user_id,
-                PromptVersion.function_type == function_type,
-                PromptVersion.prompt_category == prompt_category,
-                PromptVersion.prompt_name == prompt_name
-            )
-        ).update({'is_active': False})
-
-        # Activate the target version
-        version_to_restore.is_active = True
-
-        db.commit()
-        return True
+        # Create a new version with the restored content (fork pattern)
+        return PromptService.save_new_version(
+            db=db,
+            user_id=user_id,
+            function_type=function_type,
+            prompt_category=prompt_category,
+            content=version_to_restore.content,
+            note=f"Restored from v{version_to_restore.version_number}",
+            prompt_name=prompt_name
+        )
 
     @staticmethod
     def initialize_default_prompts(
@@ -277,7 +260,6 @@ class PromptService:
             prompt_name=prompt_name,
             content=content,
             version_number=1,
-            is_active=True,
             is_default=True,
             note="System default",
             created_at=datetime.utcnow()

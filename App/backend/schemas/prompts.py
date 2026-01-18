@@ -34,7 +34,6 @@ class PromptVersionResponse(BaseModel):
     id: str
     version_number: int
     content: str
-    is_active: bool
     is_system_default: bool
     created_at: datetime
     note: Optional[str]
@@ -48,7 +47,6 @@ class VersionHistoryItem(BaseModel):
     version_number: int
     created_at: datetime
     note: Optional[str]
-    is_active: bool
     is_system_default: bool
     preview: str  # First 200 characters
 
