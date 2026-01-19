@@ -10,6 +10,7 @@
     border: none;
     border-radius: 0;
     overflow: hidden;
+    min-height: 0;
 }
 
 .rich-text-editor.disabled {
@@ -30,7 +31,8 @@
 .editor-format-toolbar {
     display: flex;
     align-items: center;
-    gap: var(--spacing-xs);
+    justify-content: space-between;
+    gap: var(--spacing-sm);
     padding: var(--spacing-sm) var(--spacing-lg);
     background: var(--color-surface-elevated);
     border-bottom: 1px solid var(--color-border-default);
@@ -83,6 +85,12 @@
 
 .format-btn.image-btn {
     font-size: var(--font-size-base);
+}
+
+/* SVG icons in format buttons */
+.format-btn svg {
+    display: block;
+    flex-shrink: 0;
 }
 
 .toolbar-divider {
@@ -170,8 +178,20 @@
 }
 
 .heading-dropdown-trigger .dropdown-arrow {
-    font-size: 10px;
     opacity: 0.6;
+    flex-shrink: 0;
+}
+
+/* Heading level badge */
+.heading-level-badge {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-bold);
+    min-width: 10px;
+    text-align: center;
+}
+
+.heading-level-badge:empty {
+    display: none;
 }
 
 .heading-dropdown-menu {
@@ -219,6 +239,19 @@
 
 .table-dropdown {
     position: relative;
+}
+
+.table-dropdown-trigger {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    width: auto;
+    padding: 0 var(--spacing-sm);
+}
+
+.table-dropdown-trigger .dropdown-arrow {
+    opacity: 0.6;
+    flex-shrink: 0;
 }
 
 .table-dropdown-menu {
@@ -280,6 +313,72 @@
     background: var(--color-brand-hover);
 }
 
+/* Table dimensions - alternative layout */
+.table-dimensions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+}
+
+.table-dimensions input {
+    width: 60px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--border-radius-sm);
+    background: var(--color-surface-base);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    text-align: center;
+}
+
+.table-dimensions input:focus {
+    outline: none;
+    border-color: var(--color-brand-primary);
+}
+
+/* Table action buttons */
+.table-action-btn {
+    display: block;
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: none;
+    border-radius: var(--border-radius-sm);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    text-align: left;
+    transition: all var(--transition-base);
+    margin-top: var(--spacing-xs);
+}
+
+.table-action-btn:first-of-type {
+    background: var(--color-brand-primary);
+    color: var(--color-text-inverse);
+    margin-top: var(--spacing-sm);
+}
+
+.table-action-btn:first-of-type:hover {
+    background: var(--color-brand-primary-hover);
+}
+
+.table-action-btn:not(:first-of-type):hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text-primary);
+}
+
+.table-action-btn.danger {
+    color: var(--color-error);
+}
+
+.table-action-btn.danger:hover {
+    background: var(--color-error-light);
+}
+
 /* ===== Editor Content ===== */
 
 .editor-content-wrapper {
@@ -290,13 +389,13 @@
 }
 
 .tiptap-editor-content {
-    min-height: 100%;
     outline: none;
     font-family: var(--font-family-serif, Georgia, 'Times New Roman', serif);
     font-size: var(--font-size-lg);
     line-height: 1.8;
     color: var(--color-text-primary);
     background: var(--color-surface-base);
+    min-height: 100%;
 }
 
 .tiptap-editor-content p {
@@ -384,6 +483,46 @@
     color: var(--color-text-secondary);
 }
 
+/* Lists */
+.tiptap-editor-content ul,
+.tiptap-editor-content ol {
+    margin: var(--spacing-md) 0;
+    padding-left: var(--spacing-xl);
+}
+
+.tiptap-editor-content ul {
+    list-style-type: disc;
+}
+
+.tiptap-editor-content ol {
+    list-style-type: decimal;
+}
+
+.tiptap-editor-content li {
+    margin: var(--spacing-xs) 0;
+    padding-left: var(--spacing-xs);
+}
+
+.tiptap-editor-content li p {
+    margin: 0;
+}
+
+/* Nested lists */
+.tiptap-editor-content ul ul,
+.tiptap-editor-content ol ol,
+.tiptap-editor-content ul ol,
+.tiptap-editor-content ol ul {
+    margin: var(--spacing-xs) 0;
+}
+
+.tiptap-editor-content ul ul {
+    list-style-type: circle;
+}
+
+.tiptap-editor-content ul ul ul {
+    list-style-type: square;
+}
+
 /* Horizontal Rule */
 .tiptap-editor-content hr {
     border: none;
@@ -435,7 +574,6 @@
 
 /* ProseMirror specific */
 .ProseMirror {
-    min-height: 100%;
     outline: none;
 }
 

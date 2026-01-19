@@ -6,6 +6,7 @@ import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useVariableStore } from '../store/variableStore';
 import { fragmentService } from '../api/fragmentService';
 import type { UnifiedObject } from '../types/unifiedObject';
+import { docToPlainText, docWordCount, normalizeDoc } from '../editor/manuscript/doc';
 import {
   LLMTaskMode,
   type LLMTaskModeType,
@@ -698,12 +699,15 @@ export class PromptManager {
       const chapterId = ms.metadata?.chapter_id || '';
       const chapter = chapters.find(ch => ch.id === chapterId);
       const chapterData = chapter ? this.getObjectDataForLanguage(chapter, language) : {};
+      const doc = normalizeDoc((data as any).doc);
+      const content = docToPlainText(doc);
+      const wordCount = typeof (data as any).wordCount === 'number' ? (data as any).wordCount : docWordCount(doc);
       return {
         id: ms.id,
         chapterId,
         chapterName: chapterData.name || '',
-        content: data.content || '',
-        wordCount: (data.content || '').length,
+        content,
+        wordCount,
       };
     });
 
@@ -850,12 +854,14 @@ export class PromptManager {
         const chapterId = ms.metadata?.chapter_id || '';
         const chapter = chapters.find(ch => ch.id === chapterId);
         const chapterData = chapter?.data[lang] || {};
+        const doc = normalizeDoc((data as any).doc);
+        const content = docToPlainText(doc);
         return {
           id: ms.id,
           chapterId,
           chapterName: chapterData.name || '',
-          content: data.content || '',
-          wordCount: (data.content || '').length,
+          content,
+          wordCount: typeof (data as any).wordCount === 'number' ? (data as any).wordCount : docWordCount(doc),
         };
       });
 

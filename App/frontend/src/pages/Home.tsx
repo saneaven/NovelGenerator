@@ -161,7 +161,7 @@ const Home: React.FC = () => {
                   <div className="project-card-overlay">
                     <IconButton
                       icon={<Close size="sm" />}
-                      onClick={(e) => handleDeleteProject(e, project.id)}
+                      onClick={(e) => { void handleDeleteProject(e, project.id); }}
                       title="Delete project"
                       size="sm"
                       variant="danger"

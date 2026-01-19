@@ -3,7 +3,7 @@ import './IconButton.css';
 
 export interface IconButtonProps {
   icon: React.ReactNode;
-  onClick?: () => void;
+  onClick?: React.MouseEventHandler<HTMLButtonElement>;
   title?: string;
   ariaLabel?: string;
   ariaExpanded?: boolean;

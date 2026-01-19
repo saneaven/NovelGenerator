@@ -264,21 +264,6 @@ pre {
   color: var(--color-text-primary);
 }
 
-/* ===== Focus Styles ===== */
-:focus {
-  outline: none;
-}
-
-:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
-}
-
-/* Remove focus outline for mouse users */
-:focus:not(:focus-visible) {
-  outline: none;
-}
-
 /* ===== Accessibility ===== */
 
 /* Screen reader only content */

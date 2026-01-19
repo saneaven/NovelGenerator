@@ -11,6 +11,8 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import type { ObjectType } from '../types/unifiedObject';
 import type { JourneySpec, EditingTargets } from './types';
+import { docToPlainText, docWordCount, normalizeDoc } from '../editor/manuscript/doc';
+import { markdownToDoc } from '../editor/manuscript/convert';
 
 // =====================================================================
 // Input Types
@@ -221,7 +223,8 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
       const chapterName = (chapterData as any)?.name ?? '';
 
       const manuscriptData = manuscriptObj.data[mainLanguage] || Object.values(manuscriptObj.data)[0] || {};
-      const currentContent = (manuscriptData as any)?.content ?? '';
+      const currentDoc = normalizeDoc((manuscriptData as any)?.doc);
+      const currentContent = docToPlainText(currentDoc);
 
       const promptContext: EditAssistantManuscriptPromptContext = {
         projectId: input.projectId,
@@ -286,10 +289,12 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
       if (!manuscriptObj) {
         throw new Error(`Manuscript not found for chapter ${targets.targetId}`);
       }
-      const currentData = manuscriptObj.data[targets.language] || {};
+
+      const nextDoc = markdownToDoc(text ?? '');
+      const wordCount = docWordCount(nextDoc);
       await unifiedStore.updateObject('manuscript', manuscriptObj.id, {
         language: targets.language,
-        data: { ...currentData, content: text },
+        data: { doc: nextDoc, wordCount },
         user_request: input.userRequest ?? '',
       });
       return;
@@ -385,9 +390,11 @@ const translateObjectsSpec: JourneySpec<TranslateObjectsInput> = {
     const currentData = obj.data[lang] || {};
 
     if (obj.type === 'manuscript') {
+      const nextDoc = markdownToDoc(text ?? '');
+      const wordCount = docWordCount(nextDoc);
       await unifiedStore.updateObject('manuscript', targetId, {
         language: lang,
-        data: { ...currentData, content: text },
+        data: { doc: nextDoc, wordCount },
         create_new_version: false,
       });
     } else {

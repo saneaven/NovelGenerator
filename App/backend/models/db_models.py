@@ -506,28 +506,7 @@ class Manuscript(Base):
 
     # Relationships
     chapter = relationship("Chapter", back_populates="manuscript")
-    versions = relationship("ManuscriptVersion", back_populates="manuscript", cascade="all, delete-orphan")
     owned_assets = relationship("Asset", back_populates="manuscript", foreign_keys="Asset.manuscript_id")
-
-
-class ManuscriptVersion(Base):
-    """Version history for manuscript content with multilingual support"""
-    __tablename__ = 'manuscript_versions'
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    manuscript_id = Column(UUID(as_uuid=True), ForeignKey('manuscripts.id', ondelete='CASCADE'), nullable=False, index=True)
-
-    user_request = Column(Text)
-    is_active = Column(Boolean, default=False, nullable=False)
-
-    # Multilingual content stored as JSONB
-    # Format: { "English": { "content": "...", "wordCount": 1234 }, "Korean": {...} }
-    data = Column(JSONB, nullable=False)
-
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
-
-    # Relationships
-    manuscript = relationship("Manuscript", back_populates="versions")
 
 
 # ============================================================================
@@ -660,7 +639,7 @@ class ManuscriptImage(Base):
     manuscript_id = Column(UUID(as_uuid=True), ForeignKey('manuscripts.id', ondelete='CASCADE'), nullable=False, index=True)
     language = Column(String(50), nullable=True)  # Language scope (indexed via composite index migration)
 
-    position = Column(Integer, nullable=False)  # Character position in text content
+    position = Column(Integer, nullable=False)  # Document-order index (0..n-1) within manuscript for a language
 
     # Image source - either direct asset or story object reference
     source_type = Column(String(20), nullable=False)  # 'asset' or 'story_object'

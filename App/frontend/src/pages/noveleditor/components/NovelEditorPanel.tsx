@@ -35,14 +35,15 @@ import AIEditModal from '../../../components/AIEditModal';
 import TranslationModal from '../../../components/TranslationModal';
 import VersionHistoryModal from '../../../components/VersionHistoryModal';
 import { UnifiedImageModal } from '../../../components/AssetManager';
-import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
 import { assetService, type Asset } from '../../../api/assetService';
 import type { ManuscriptObject } from '../../../types/unifiedObject';
-import { getAssetUrl } from '../../../utils/assetUrl';
+import type { TipTapDoc } from '../../../types/tiptap';
+import { emptyDoc, normalizeDoc, docWordCount } from '../../../editor/manuscript/doc';
 import type { GenerationRecipe } from '../../../imageTask';
 import { fromAsset } from '../../../imageTask/recipe/fromAsset';
 import ChapterSidebar from './ChapterSidebar';
+import ManuscriptEditor, { type ManuscriptEditorRef } from './ManuscriptEditor';
 import { Save, Check, Bullet, Warning, HamburgerMenu, AIAssist, Refresh, Globe, Lightbulb, MoreHorizontal, Clock } from '../../../components/icons';
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
@@ -118,7 +119,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const [regenerateRecipe, setRegenerateRecipe] = useState<GenerationRecipe | null>(null);
 
   // Editor state
-  const [content, setContent] = useState('');
+  const [doc, setDoc] = useState<TipTapDoc>(emptyDoc());
   const isSaving = useNovelEditorStore((state) => state.isSavingByProject[projectId] ?? false);
   const setIsSaving = (saving: boolean) => setIsSavingAction(projectId, saving);
   const [savingType, setSavingType] = useState<'auto' | 'manual' | null>(null);
@@ -126,7 +127,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   // Refs
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const editorRef = useRef<RichTextEditorRef>(null);
+  const editorRef = useRef<ManuscriptEditorRef>(null);
 
   const aiEditSession = useLLMSessionStore((state) =>
     aiEditSessionId ? state.sessions[aiEditSessionId] : undefined
@@ -185,17 +186,24 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   // Helper to get manuscript data for a language
   const getManuscriptData = useCallback((lang: string) => {
-    if (!manuscript) return { content: '', wordCount: 0 };
+    if (!manuscript) return { doc: emptyDoc(), wordCount: 0 };
     const data = manuscript.data[lang];
     if (data) {
-      return data;
+      const doc = normalizeDoc((data as any).doc);
+      const wordCount = typeof (data as any).wordCount === 'number' ? (data as any).wordCount : docWordCount(doc);
+      return { doc, wordCount };
     }
     // Fallback to first available
     if (manuscriptLanguages.length > 0) {
       const fallbackData = manuscript.data[manuscriptLanguages[0]];
-      return fallbackData || { content: '', wordCount: 0 };
+      if (fallbackData) {
+        const doc = normalizeDoc((fallbackData as any).doc);
+        const wordCount = typeof (fallbackData as any).wordCount === 'number' ? (fallbackData as any).wordCount : docWordCount(doc);
+        return { doc, wordCount };
+      }
+      return { doc: emptyDoc(), wordCount: 0 };
     }
-    return { content: '', wordCount: 0 };
+    return { doc: emptyDoc(), wordCount: 0 };
   }, [manuscript, manuscriptLanguages]);
 
 
@@ -211,8 +219,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   // Computed values
   const wordCount = useMemo(() => {
-    return content.trim().split(/\s+/).filter(Boolean).length;
-  }, [content]);
+    return docWordCount(doc);
+  }, [doc]);
 
   // Use editorRef.hasChanges() which handles TipTap normalization internally
   const hasUnsavedChanges = editorRef.current?.hasChanges() ?? false;
@@ -228,9 +236,9 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   // Compute initial content INLINE during render (not in an effect!)
   // This ensures the value is ready BEFORE the editor mounts with a new key
-  const initialContent = useMemo(() => {
-    if (!manuscript?.data || editorKey === 'loading') return '';
-    return getManuscriptData(effectiveLanguage).content;
+  const initialDoc = useMemo(() => {
+    if (!manuscript?.data || editorKey === 'loading') return emptyDoc();
+    return getManuscriptData(effectiveLanguage).doc;
   }, [manuscript?.data, editorKey, effectiveLanguage, getManuscriptData]);
 
   // ============================================================================
@@ -280,7 +288,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
           'manuscript',
           projectId,
           {
-            content: '',
+            doc: emptyDoc(),
             wordCount: 0,
           },
           primaryLanguage,
@@ -357,12 +365,14 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
     if (cached) {
       try {
-        const { content: cachedContent, savedAt } = JSON.parse(cached);
+        const { doc: cachedDoc, savedAt } = JSON.parse(cached);
         const serverUpdatedAt = new Date(manuscript.version?.created_at || 0).getTime();
 
         // Only restore if cache is newer than server data
         if (savedAt > serverUpdatedAt) {
-          setContent(cachedContent);
+          const nextDoc = normalizeDoc(cachedDoc);
+          setDoc(nextDoc);
+          editorRef.current?.setDoc(nextDoc);
           // Note: Editor baseline is set from server content on mount,
           // so hasChanges() will correctly return true for cached changes
         }
@@ -402,14 +412,14 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     const cacheKey = getCacheKey(manuscriptId, effectiveLanguage);
     try {
       localStorage.setItem(cacheKey, JSON.stringify({
-        content,
+        doc,
         wordCount,
         savedAt: Date.now(),
       }));
     } catch (err) {
       console.error('localStorage save failed:', err);
     }
-  }, [manuscriptId, content, wordCount, hasUnsavedChanges, effectiveLanguage]);
+  }, [manuscriptId, doc, wordCount, hasUnsavedChanges, effectiveLanguage]);
 
   /**
    * Manual save: Creates version snapshot
@@ -425,7 +435,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       try {
         await updateObject('manuscript', manuscriptId, {
           data: {
-            content,
+            doc,
             wordCount,
           },
           language: effectiveLanguage,
@@ -447,17 +457,16 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         setSavingType(null);
       }
     },
-    [manuscript, manuscriptId, content, wordCount, effectiveLanguage, showError]
+    [manuscript, manuscriptId, doc, wordCount, effectiveLanguage, showError]
   );
 
   // ============================================================================
   // EVENT HANDLERS
   // ============================================================================
 
-  const handleContentChange = useCallback(
-    (newContent: string) => {
-      // Update content state (RichTextEditor handles baseline tracking internally)
-      setContent(newContent);
+  const handleDocChange = useCallback(
+    (newDoc: TipTapDoc) => {
+      setDoc(normalizeDoc(newDoc));
 
       // Clear existing auto-save timeout
       if (autoSaveTimeoutRef.current) {
@@ -476,12 +485,12 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   // Handle image selection from AssetManagerModal
   const handleImageSelect = useCallback((asset: Asset) => {
-    const newSrc = getAssetUrl(asset, 'original') || '';
+    const newSrc = asset.file_url;
 
     // If we're replacing an existing image
     if (replaceImageSrc && editorRef.current) {
       // Use the editor's updateImageSrc method to replace the image
-      const updated = editorRef.current.updateImageSrc(replaceImageSrc, newSrc, asset.name);
+      const updated = editorRef.current.updateImageSrc(replaceImageSrc, newSrc, asset.name, asset.id);
 
       if (!updated) {
         console.warn('Failed to find and update image:', { from: replaceImageSrc, to: newSrc });
@@ -495,7 +504,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
     // Normal insert at cursor
     if (editorRef.current) {
-      editorRef.current.insertImage(newSrc, asset.name);
+      editorRef.current.insertImage(newSrc, asset.name, asset.id);
     }
     setRegenerateRecipe(null);
     setShowImageModal(false);
@@ -711,11 +720,11 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
           {/* Editor */}
           <div className={`editor-content ${isMissingTranslation ? 'disabled' : ''}`}>
-            <RichTextEditor
+            <ManuscriptEditor
               key={editorKey}
               ref={editorRef}
-              initialContent={isMissingTranslation ? '' : initialContent}
-              onChange={handleContentChange}
+              initialDoc={isMissingTranslation ? emptyDoc() : initialDoc}
+              onChange={handleDocChange}
               placeholder="Start writing your chapter..."
               disabled={isSaving || isMissingTranslation}
               onBrowseAssets={handleBrowseAssets}

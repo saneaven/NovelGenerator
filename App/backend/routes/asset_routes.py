@@ -1042,7 +1042,7 @@ async def rebuild_manuscript_images_index(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Rebuild manuscript_images for all manuscripts/languages in a project from saved content."""
+    """Rebuild manuscript_images for all manuscripts/languages in a project from saved doc(JSON)."""
     project = db.query(Project).filter(
         Project.id == project_id,
         Project.user_id == current_user.id,
@@ -1074,8 +1074,8 @@ async def rebuild_manuscript_images_index(
 
         for t in translations:
             data = cast(Dict[str, Any], t.data or {})
-            content = data.get("content")
-            if not isinstance(content, str):
+            doc = data.get("doc")
+            if not isinstance(doc, dict):
                 continue
 
             stats = rebuild_manuscript_images_for_language(
@@ -1083,7 +1083,7 @@ async def rebuild_manuscript_images_index(
                 project_id=project_id,
                 manuscript_id=cast(UUID, manuscript.id),
                 language=cast(str, t.language),
-                content=content,
+                doc=doc,
             )
             languages_processed += 1
             images_deleted += int(stats.get("deleted", 0))

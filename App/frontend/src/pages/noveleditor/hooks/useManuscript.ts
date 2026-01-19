@@ -2,6 +2,8 @@ import { useCallback, useMemo } from 'react';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import type { ManuscriptObject } from '../../../types/unifiedObject';
+import type { TipTapDoc } from '../../../types/tiptap';
+import { emptyDoc, normalizeDoc, docWordCount } from '../../../editor/manuscript/doc';
 
 /**
  * Custom hook for manuscript operations in the novel editor.
@@ -17,19 +19,20 @@ export function useManuscript(projectId: string | undefined, chapterId: string |
     return store.getManuscriptByChapterId(chapterId) as ManuscriptObject | null;
   }, [chapterId, store]);
 
-  // Get manuscript content
-  const content = useMemo(() => {
-    return manuscript?.data?.content || '';
-  }, [manuscript]);
+  const { doc, wordCount } = useMemo(() => {
+    if (!manuscript) return { doc: emptyDoc(), wordCount: 0 };
+    const preferredLang = settings.mainLanguage;
+    const dataForLang = manuscript.data?.[preferredLang] ?? manuscript.data?.[Object.keys(manuscript.data ?? {})[0] ?? ''];
+    const nextDoc = normalizeDoc((dataForLang as any)?.doc);
+    const nextWordCount = typeof (dataForLang as any)?.wordCount === 'number'
+      ? (dataForLang as any).wordCount
+      : docWordCount(nextDoc);
+    return { doc: nextDoc, wordCount: nextWordCount };
+  }, [manuscript, settings.mainLanguage]);
 
-  // Get word count
-  const wordCount = useMemo(() => {
-    return manuscript?.data?.wordCount || 0;
-  }, [manuscript]);
-
-  // Update manuscript content
+  // Update manuscript doc
   const updateContent = useCallback(async (
-    newContent: string,
+    newDoc: TipTapDoc,
     options?: {
       createNewVersion?: boolean;
       userRequest?: string;
@@ -37,12 +40,13 @@ export function useManuscript(projectId: string | undefined, chapterId: string |
   ) => {
     if (!manuscript || !projectId) return { success: false, error: 'No manuscript or project' };
 
-    const calculatedWordCount = newContent.trim().split(/\s+/).filter(Boolean).length;
+    const normalized = normalizeDoc(newDoc);
+    const calculatedWordCount = docWordCount(normalized);
 
     try {
       await store.updateObject('manuscript', manuscript.id, {
         data: {
-          content: newContent,
+          doc: normalized,
           wordCount: calculatedWordCount,
         },
         language: settings.mainLanguage,
@@ -65,7 +69,7 @@ export function useManuscript(projectId: string | undefined, chapterId: string |
         'manuscript',
         projectId,
         {
-          content: '',
+          doc: emptyDoc(),
           wordCount: 0,
         },
         settings.mainLanguage,
@@ -97,7 +101,7 @@ export function useManuscript(projectId: string | undefined, chapterId: string |
   return {
     // Data
     manuscript,
-    content,
+    doc,
     wordCount,
 
     // Actions

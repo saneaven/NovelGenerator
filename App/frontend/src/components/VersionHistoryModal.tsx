@@ -4,6 +4,7 @@ import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
 import type { ObjectType } from '../types/unifiedObject';
+import { docToPlainText, normalizeDoc } from '../editor/manuscript/doc';
 import { Scroll, Loading, Mailbox, Check, Globe, Clock, SpeechBubble, DocumentAlt } from './icons';
 import { TextButton } from './TextButton';
 import './VersionHistoryModal.css';
@@ -195,14 +196,19 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       );
     }
 
-    if (type === 'manuscript' && data.content !== undefined) {
+    if (type === 'manuscript') {
+      const rawDoc = (data as any).doc;
+      const preview = typeof rawDoc === 'object' && rawDoc
+        ? docToPlainText(normalizeDoc(rawDoc))
+        : '';
+
       return (
         <div className="version-data-formatted">
           <div className="data-field">
             <label>Content:</label>
             <span className="content-preview">
-              {data.content.substring(0, 200)}
-              {data.content.length > 200 ? '...' : ''}
+              {preview.substring(0, 200)}
+              {preview.length > 200 ? '...' : ''}
             </span>
           </div>
         </div>

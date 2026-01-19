@@ -620,6 +620,14 @@ async def update_object(
     # Verify object exists
     obj = get_object_or_404(db, object_type, object_id)
 
+    # Manuscript data validation (doc-only)
+    if object_type == "manuscript":
+        doc = request.data.get("doc")
+        if not isinstance(doc, dict):
+            raise HTTPException(status_code=422, detail="Manuscript updates require data.doc (TipTap JSON)")
+        if "content" in request.data:
+            raise HTTPException(status_code=422, detail="Manuscript updates do not accept data.content (use data.doc)")
+
     # Get the latest version
     latest_version = get_latest_version(db, object_type, object_id)
 
@@ -672,8 +680,8 @@ async def update_object(
 
     # Rebuild manuscript image index (manual save only)
     if object_type == "manuscript" and request.create_new_version:
-        content = request.data.get("content")
-        if isinstance(content, str):
+        doc = request.data.get("doc")
+        if isinstance(doc, dict):
             chapter = getattr(obj, "chapter", None)
             act = getattr(chapter, "act", None) if chapter else None
             outline = getattr(act, "outline", None) if act else None
@@ -684,7 +692,7 @@ async def update_object(
                     project_id=project_id,
                     manuscript_id=object_id,
                     language=request.language,
-                    content=content,
+                    doc=doc,
                 )
 
     db.commit()
@@ -852,6 +860,15 @@ async def restore_version(
 
     if not version_to_restore:
         raise HTTPException(status_code=404, detail="Version not found")
+
+    # Manuscripts are doc-only (TipTap JSON)
+    if object_type == "manuscript":
+        restored_data_check = version_to_restore.data or {}
+        if not isinstance(restored_data_check, dict):
+            raise HTTPException(status_code=400, detail="Invalid manuscript version data")
+        for _lang, lang_data in restored_data_check.items():
+            if not isinstance(lang_data, dict) or not isinstance(lang_data.get("doc"), dict):
+                raise HTTPException(status_code=400, detail="Cannot restore manuscript version (missing doc)")
 
     # Get current latest version to determine next version number
     latest_version = get_latest_version(db, object_type, object_id)
@@ -1055,6 +1072,14 @@ async def create_object(
     """
     object_type = normalize_object_type(object_type)
 
+    # Manuscript data validation (doc-only)
+    if object_type == "manuscript":
+        doc = request.data.get("doc")
+        if not isinstance(doc, dict):
+            raise HTTPException(status_code=422, detail="Manuscript translations require data.doc (TipTap JSON)")
+        if "content" in request.data:
+            raise HTTPException(status_code=422, detail="Manuscript translations do not accept data.content (use data.doc)")
+
     # Block basic_info and guidelines creation - they are auto-created with the project
     if object_type == 'basic_info':
         raise HTTPException(
@@ -1066,6 +1091,14 @@ async def create_object(
             status_code=400,
             detail="Guidelines is automatically created when a project is created. Use update endpoint instead."
         )
+
+    # Manuscript data validation (doc-only)
+    if object_type == "manuscript":
+        doc = request.data.get("doc")
+        if not isinstance(doc, dict):
+            raise HTTPException(status_code=422, detail="Manuscript creation requires data.doc (TipTap JSON)")
+        if "content" in request.data:
+            raise HTTPException(status_code=422, detail="Manuscript creation does not accept data.content (use data.doc)")
 
     # Get model class
     model_class = get_object_model_class(object_type)
@@ -1347,24 +1380,6 @@ async def delete_object(
         "success": True,
         "message": f"{object_type.replace('_', ' ').title()} deleted successfully"
     }
-
-
-# ============================================================================
-# MANUSCRIPT SPECIFIC ENDPOINT (for in-place updates during typing)
-# ============================================================================
-
-@router.patch("/objects/manuscript/{object_id}/content")
-async def update_manuscript_inplace(
-    object_id: UUID,
-    request: UpdateObjectRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Special endpoint for manuscript in-place updates.
-    Used during continuous typing in novel editor to avoid version spam.
-    """
-    return await update_object('manuscript', object_id, request, db, current_user)
 
 
 # ============================================================================

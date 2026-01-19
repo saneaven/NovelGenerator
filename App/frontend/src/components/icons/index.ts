@@ -24,3 +24,6 @@ export * from './misc';
 
 // Speech icons
 export * from './speech';
+
+// Formatting icons
+export * from './formatting';

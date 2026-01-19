@@ -16,6 +16,8 @@ import { getObjectData, ALL_OBJECT_TYPE_MAP } from '../../types';
 import type { HandlerContext } from '../types';
 import type { ObjectType, UnifiedObject } from '../../../types/unifiedObject';
 import { applySingleReplacement } from '../../../utils/patchUtils';
+import { docToMarkdown, markdownToDoc } from '../../../editor/manuscript/convert';
+import { docWordCount, normalizeDoc } from '../../../editor/manuscript/doc';
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -173,17 +175,19 @@ export async function patchManuscript(
 
   const manuscript = await ensureObject(store, 'manuscript', id);
   const currentData = getObjectData(manuscript, language);
-  const currentContent = (currentData.content as string) ?? '';
+  const currentDoc = normalizeDoc((currentData as any).doc);
+  const currentMarkdown = docToMarkdown(currentDoc);
 
-  const result = applySingleReplacement(currentContent, oldText, newText);
+  const result = applySingleReplacement(currentMarkdown, oldText, newText);
   if (!result.success) {
     return error(result.error ?? 'Patch failed', manuscript.id, 'manuscript');
   }
 
-  const wordCount = result.value.trim().split(/\s+/).filter(Boolean).length;
+  const nextDoc = markdownToDoc(result.value);
+  const wordCount = docWordCount(nextDoc);
 
   await store.updateObject('manuscript', manuscript.id, {
-    data: { content: result.value, wordCount },
+    data: { doc: nextDoc, wordCount },
     language,
     create_new_version: createNewVersion,
     user_request: userRequest,

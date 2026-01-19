@@ -13,6 +13,7 @@ import type {
   ManuscriptData,
   VersionHistoryEntry,
 } from '../types/unifiedObject';
+import { docWordCount, normalizeDoc } from '../editor/manuscript/doc';
 
 // Response type for manuscript operations
 export interface ManuscriptWithVersions {
@@ -63,17 +64,15 @@ export const novelService = {
     chapterId: string,
     data: ManuscriptCreate
   ): Promise<ManuscriptWithVersions> {
-    const wordCount = data.content
-      .trim()
-      .split(/\s+/)
-      .filter((word) => word.length > 0).length;
+    const doc = normalizeDoc(data.doc);
+    const wordCount = docWordCount(doc);
 
     const object = await unifiedObjectService.createObject<ManuscriptData>(
       'manuscript',
       projectId,
       {
         data: {
-          content: data.content,
+          doc,
           wordCount,
         },
         language: data.language || 'en',
@@ -126,17 +125,15 @@ export const novelService = {
       throw new Error(`No manuscript found for chapter ${chapterId}`);
     }
 
-    const wordCount = data.content
-      .trim()
-      .split(/\s+/)
-      .filter((word) => word.length > 0).length;
+    const doc = normalizeDoc(data.doc);
+    const wordCount = docWordCount(doc);
 
     const object = await unifiedObjectService.updateObject<ManuscriptData>(
       'manuscript',
       manuscriptId,
       {
         data: {
-          content: data.content,
+          doc,
           wordCount,
         },
         language: data.language || 'en',

@@ -12,6 +12,8 @@ import type { ApplicationResult } from '../../types';
 import { getObjectData, ALL_OBJECT_TYPE_MAP } from '../../types';
 import type { HandlerContext } from '../types';
 import type { ObjectType, UnifiedObject } from '../../../types/unifiedObject';
+import { markdownToDoc } from '../../../editor/manuscript/convert';
+import { docWordCount } from '../../../editor/manuscript/doc';
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -146,6 +148,9 @@ export async function replaceManuscript(
   const { store, projectId, language } = context;
   const { createNewVersion = true, userRequest = 'AI Edit' } = context.options;
 
+  const nextDoc = markdownToDoc(content);
+  const wordCount = docWordCount(nextDoc);
+
   // Get manuscript by ID
   let manuscript = store.getObject(id) ?? null;
 
@@ -154,17 +159,16 @@ export async function replaceManuscript(
     manuscript = await store.createObject(
       'manuscript',
       projectId,
-      { content: '', wordCount: 0 },
+      { doc: nextDoc, wordCount },
       language,
       { chapter_id: id },
       userRequest
     );
+    return ok('Updated manuscript', { id: manuscript.id });
   }
 
-  const wordCount = content.trim().split(/\s+/).filter(Boolean).length;
-
   await store.updateObject('manuscript', manuscript.id, {
-    data: { content, wordCount },
+    data: { doc: nextDoc, wordCount },
     language,
     create_new_version: createNewVersion,
     user_request: userRequest,

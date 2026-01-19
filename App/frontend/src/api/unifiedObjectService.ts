@@ -287,27 +287,6 @@ export const unifiedObjectService = {
 };
 
 // ============================================================================
-// MANUSCRIPT SPECIFIC
-// ============================================================================
-
-export const manuscriptService = {
-  /**
-   * Update manuscript in-place (for continuous typing in editor)
-   * @param id Manuscript ID
-   * @param request Update request
-   */
-  async updateInPlace(
-    id: string,
-    request: UpdateObjectRequest
-  ): Promise<UnifiedObject> {
-    return apiClient.patch<UnifiedObject>(
-      `/api/v1/objects/manuscript/${id}/content`,
-      request
-    );
-  },
-};
-
-// ============================================================================
 // TRANSLATION MANAGEMENT
 // ============================================================================
 

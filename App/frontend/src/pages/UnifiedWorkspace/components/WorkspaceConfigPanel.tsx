@@ -159,7 +159,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
   );
 
   const handleRebuildIndex = useCallback(async () => {
-    if (!window.confirm('Rebuild manuscript image index from last saved content?')) return;
+    if (!window.confirm('Rebuild manuscript image index from last saved doc?')) return;
     setIsRebuilding(true);
     setLastExecute(null);
     try {

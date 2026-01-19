@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import re
-from urllib.parse import unquote
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import or_
@@ -10,29 +9,50 @@ from sqlalchemy.orm import Session
 from ..models.db_models import Asset, ManuscriptImage
 
 
-_STORAGE_PATH_PATTERN = re.compile(r"(?i)/storage/assets/([^\\s\\)\\\"\\'>]+)")
-
-
-def extract_storage_paths_with_positions(content: str) -> list[tuple[str, int]]:
+def extract_asset_ids_with_positions(doc: Any) -> list[tuple[UUID, int, int | None]]:
     """
-    Extract referenced storage-relative paths from manuscript content.
+    Extract referenced Asset IDs from TipTap JSON doc.
 
-    Examples matched:
-      - /storage/assets/originals/xxx.png
-      - http://host:port/storage/assets/originals/xxx.png
+    Only images with an explicit asset ID are considered "used".
+    External images (no asset id) are intentionally ignored.
 
     Returns:
-      - [(relative_path, position_in_content), ...]
-        relative_path matches Asset.file_path / Asset.thumbnail_path (e.g. originals/..., thumbnails/...)
+      - [(asset_id, position_index, width), ...]
+        position_index is the 0-based order of appearance in the document.
     """
-    if not content:
+    if not isinstance(doc, dict):
         return []
 
-    out: list[tuple[str, int]] = []
-    for m in _STORAGE_PATH_PATTERN.finditer(content):
-        raw = m.group(1)
-        raw = raw.split("?")[0].split("#")[0]
-        out.append((unquote(raw), int(m.start())))
+    out: list[tuple[UUID, int, int | None]] = []
+
+    def walk(node: Any) -> None:
+        if not isinstance(node, dict):
+            return
+
+        if node.get("type") == "image":
+            attrs = node.get("attrs")
+            if not isinstance(attrs, dict):
+                return
+
+            raw_asset_id = attrs.get("data-asset-id") or attrs.get("assetId")
+            if not raw_asset_id:
+                return
+            try:
+                asset_id = UUID(str(raw_asset_id))
+            except Exception:
+                return
+
+            raw_width = attrs.get("width")
+            width = int(raw_width) if isinstance(raw_width, int) else None
+            out.append((asset_id, len(out), width))
+            return
+
+        children = node.get("content")
+        if isinstance(children, list):
+            for child in children:
+                walk(child)
+
+    walk(doc)
     return out
 
 
@@ -41,17 +61,17 @@ def rebuild_manuscript_images_for_language(
     project_id: UUID,
     manuscript_id: UUID,
     language: str,
-    content: str,
+    doc: Any,
 ) -> dict:
     """
-    Rebuild the `manuscript_images` index for (manuscript_id, language) from the given content.
+    Rebuild the `manuscript_images` index for (manuscript_id, language) from the given doc.
 
     Notes:
     - Intended to run on manual-save (create_new_version=true).
-    - Only indexes images that resolve to a project-owned Asset (via file_path or thumbnail_path).
-    - Best-effort ordering: uses the match's character offset in the content as `position`.
+    - Only indexes images that resolve to a project-owned Asset (via asset id).
+    - Ordering: uses appearance order in the document as `position` (0-based index).
     """
-    refs = extract_storage_paths_with_positions(content)
+    refs = extract_asset_ids_with_positions(doc)
     if not refs:
         deleted = (
             db.query(ManuscriptImage)
@@ -63,23 +83,12 @@ def rebuild_manuscript_images_for_language(
         )
         return {"deleted": int(deleted), "inserted": 0, "unresolved": 0}
 
-    paths: set[str] = {p for p, _pos in refs}
-
-    asset_rows = (
-        db.query(Asset.id, Asset.file_path, Asset.thumbnail_path)
-        .filter(
-            Asset.project_id == project_id,
-            or_(Asset.file_path.in_(list(paths)), Asset.thumbnail_path.in_(list(paths))),
-        )
-        .all()
-    )
-
-    path_to_asset_id: dict[str, UUID] = {}
-    for asset_id, file_path, thumb_path in asset_rows:
-        if file_path:
-            path_to_asset_id[str(file_path)] = asset_id
-        if thumb_path:
-            path_to_asset_id[str(thumb_path)] = asset_id
+    asset_ids: set[UUID] = {asset_id for asset_id, _pos, _w in refs}
+    owned_asset_ids: set[UUID] = {
+        row[0]
+        for row in db.query(Asset.id).filter(Asset.project_id == project_id, Asset.id.in_(list(asset_ids))).all()
+        if row and row[0]
+    }
 
     deleted = (
         db.query(ManuscriptImage)
@@ -92,9 +101,8 @@ def rebuild_manuscript_images_for_language(
 
     inserted = 0
     unresolved = 0
-    for path, pos in refs:
-        asset_id = path_to_asset_id.get(path)
-        if not asset_id:
+    for asset_id, pos, width in refs:
+        if asset_id not in owned_asset_ids:
             unresolved += 1
             continue
 
@@ -106,7 +114,7 @@ def rebuild_manuscript_images_for_language(
                 position=pos,
                 source_type="asset",
                 asset_id=asset_id,
-                display_width=400,
+                display_width=int(width or 400),
             )
         )
         inserted += 1

@@ -12,6 +12,8 @@ import { validResult, invalidResult } from './types';
 import { STORY_OBJECT_TYPE_MAP, ALL_OBJECT_TYPE_MAP, type StoryObjectSubtype } from '../types';
 import { applySingleReplacement } from '../../utils/patchUtils';
 import { getObjectData } from '../types';
+import { docToMarkdown } from '../../editor/manuscript/convert';
+import { normalizeDoc } from '../../editor/manuscript/doc';
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -238,8 +240,9 @@ export const validatePatchApplicable: Validator = async (args, functionName, con
 
   // For manuscript patches (no field property), validate against content
   if (functionName.includes('manuscript')) {
-    const content = (currentData.content as string) ?? '';
-    const result = applySingleReplacement(content, oldText, newText);
+    const currentDoc = normalizeDoc((currentData as any).doc);
+    const markdown = docToMarkdown(currentDoc);
+    const result = applySingleReplacement(markdown, oldText, newText);
     if (!result.success) {
       return invalidResult(`Patch validation failed: ${result.error}`);
     }

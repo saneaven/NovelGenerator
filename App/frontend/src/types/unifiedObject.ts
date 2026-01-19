@@ -7,6 +7,8 @@
  * - Version history in object_versions (source of truth)
  */
 
+import type { TipTapDoc } from './tiptap';
+
 // ============================================================================
 // CORE TYPES
 // ============================================================================
@@ -136,7 +138,7 @@ export interface ChapterData {
 }
 
 export interface ManuscriptData {
-  content: string;
+  doc: TipTapDoc;
   wordCount: number;
 }
 

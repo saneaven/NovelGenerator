@@ -2,6 +2,8 @@
  * TypeScript types for API requests and responses
  */
 
+import type { TipTapDoc } from '../types/tiptap';
+
 // ============================================================================
 // BASE TYPES
 // ============================================================================
@@ -180,13 +182,13 @@ export interface ChapterResponse extends BaseMetadata {
 // ============================================================================
 
 export interface ManuscriptCreate {
-  content: string;
+  doc: TipTapDoc;
   language?: string;
   userRequest?: string;
 }
 
 export interface ManuscriptUpdate {
-  content: string;
+  doc: TipTapDoc;
   language?: string;
   userRequest?: string;
   create_new_version?: boolean;  // If false, updates existing active version instead of creating new one
@@ -197,7 +199,7 @@ export interface ManuscriptVersionResponse {
   manuscript_id: string;
   userRequest: string;
   is_active: boolean;  // Use snake_case to match backend
-  data: LanguageData<{ content: string; wordCount: number }>;
+  data: LanguageData<{ doc: TipTapDoc; wordCount: number }>;
   timestamp: string;
 }
 
