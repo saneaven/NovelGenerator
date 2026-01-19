@@ -12,8 +12,8 @@ from ..schemas.projects import ProjectCreate, ProjectUpdate, ProjectResponse, Pr
 from ..auth import get_current_user
 
 
-def _get_cover_image_url(db: Session, project: Project) -> str | None:
-    """Extract cover image URL from project's basic_info using StoryObjectAsset"""
+def _get_cover_asset(db: Session, project: Project) -> dict | None:
+    """Extract cover asset from project's basic_info using StoryObjectAsset"""
     if project.basic_info:
         main_link = db.query(StoryObjectAsset).filter(
             StoryObjectAsset.object_type == 'basic_info',
@@ -23,13 +23,28 @@ def _get_cover_image_url(db: Session, project: Project) -> str | None:
         if main_link:
             asset = db.query(Asset).filter(Asset.id == main_link.asset_id).first()
             if asset:
-                path = asset.thumbnail_path or asset.file_path
-                return f"/storage/assets/{path}"
+                return {
+                    "id": str(asset.id),
+                    "project_id": str(asset.project_id),
+                    "name": asset.name,
+                    "file_path": asset.file_path,
+                    "thumbnail_path": asset.thumbnail_path,
+                    "mime_type": asset.mime_type,
+                    "asset_type": asset.asset_type,
+                    "manuscript_id": str(asset.manuscript_id) if asset.manuscript_id is not None else None,
+                    "width": asset.width,
+                    "height": asset.height,
+                    "file_size": asset.file_size,
+                    "created_at": asset.created_at,
+                    "updated_at": asset.updated_at,
+                    "file_url": f"/storage/assets/{asset.file_path}",
+                    "thumbnail_url": f"/storage/assets/{asset.thumbnail_path}" if asset.thumbnail_path is not None else None,
+                }
     return None
 
 
 def _project_to_response(db: Session, project: Project) -> dict:
-    """Convert project to response dict with cover_image_url"""
+    """Convert project to response dict with cover_asset"""
     return {
         "id": project.id,
         "user_id": project.user_id,
@@ -37,7 +52,7 @@ def _project_to_response(db: Session, project: Project) -> dict:
         "description": project.description,
         "created_at": project.created_at,
         "updated_at": project.updated_at,
-        "cover_image_url": _get_cover_image_url(db, project)
+        "cover_asset": _get_cover_asset(db, project)
     }
 
 router = APIRouter(prefix="/api/v1/projects", tags=["Projects"])
@@ -159,9 +174,9 @@ async def list_projects(
     List all projects for the current user
 
     Returns paginated list of projects owned by the authenticated user.
-    Includes cover_image_url from BasicInfo if available.
+    Includes cover_asset from BasicInfo if available.
     """
-    # Eager load basic_info (cover image is fetched via StoryObjectAsset in _get_cover_image_url)
+    # Eager load basic_info (cover asset is fetched via StoryObjectAsset in _get_cover_asset)
     projects = db.query(Project).options(
         joinedload(Project.basic_info)
     ).filter(
@@ -170,7 +185,7 @@ async def list_projects(
 
     total = db.query(Project).filter(Project.user_id == current_user.id).count()
 
-    # Convert to response format with cover_image_url
+    # Convert to response format with cover_asset
     project_responses = [_project_to_response(db, p) for p in projects]
 
     return {"projects": project_responses, "total": total}
@@ -186,7 +201,7 @@ async def get_project(
     Get a specific project by ID
 
     Returns project details if the user owns it.
-    Includes cover_image_url from BasicInfo if available.
+    Includes cover_asset from BasicInfo if available.
     """
     project = db.query(Project).options(
         joinedload(Project.basic_info)

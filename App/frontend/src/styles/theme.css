@@ -175,6 +175,7 @@
     --color-text-inverse: var(--color-neutral-0);
     --color-text-link: var(--color-info-500);
     --color-text-link-hover: var(--color-info-750);
+    --color-text-overlay: var(--color-neutral-100);
 
     /* ===== Border Colors ===== */
     --color-border-subtle: var(--color-neutral-100);
@@ -515,6 +516,7 @@
     --color-text-inverse: var(--color-neutral-100);
     --color-text-link: var(--color-info);
     --color-text-link-hover: var(--color-info-light);
+    --color-text-overlay: var(--color-neutral-900);
 
     /* ===== Border Colors - Subtle on Dark ===== */
     --color-border-subtle: var(--color-neutral-300);

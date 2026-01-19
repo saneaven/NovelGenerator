@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { projectService } from '../api';
+import type { Asset } from '../api/assetService';
 
 export interface Project {
   id: string;
@@ -8,7 +9,7 @@ export interface Project {
   user_id: string;
   created_at: string;
   updated_at: string;
-  cover_image_url?: string;  // From BasicInfo's cover image
+  cover_asset?: Asset | null;  // From BasicInfo's cover image
 }
 
 interface ProjectStore {

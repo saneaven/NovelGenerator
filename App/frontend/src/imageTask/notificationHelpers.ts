@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { API_BASE_URL } from '../api/client';
+import { getAssetUrl } from '../utils/assetUrl';
 import { useNotificationStore } from '../store/notificationStore';
 import type { NotificationHandlers, NotificationStatus } from '../store/notificationStore/types';
 import type { ImageProgressStage, ImageTaskSession, ImageTaskStatus } from './types';
@@ -44,8 +44,9 @@ function getMessage(session: ImageTaskSession): string {
 
 export function registerImageTaskNotification(session: ImageTaskSession, handlers: NotificationHandlers): void {
   const existing = useNotificationStore.getState().getNotification(session.id);
-  const thumb = session.status === 'success' ? session.result?.asset.thumbnail_url : undefined;
-  const thumbnailUrl = thumb ? `${API_BASE_URL}${thumb}` : undefined;
+  const thumbnailUrl = session.status === 'success'
+    ? getAssetUrl(session.result?.asset, 'thumbnail') ?? undefined
+    : undefined;
 
   useNotificationStore.getState().register(
     {
@@ -67,8 +68,9 @@ export function registerImageTaskNotification(session: ImageTaskSession, handler
 }
 
 export function updateImageTaskNotification(session: ImageTaskSession): void {
-  const thumb = session.status === 'success' ? session.result?.asset.thumbnail_url : undefined;
-  const thumbnailUrl = thumb ? `${API_BASE_URL}${thumb}` : undefined;
+  const thumbnailUrl = session.status === 'success'
+    ? getAssetUrl(session.result?.asset, 'thumbnail') ?? undefined
+    : undefined;
 
   useNotificationStore.getState().update(session.id, {
     message: getMessage(session),

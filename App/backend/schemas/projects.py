@@ -4,6 +4,8 @@ from datetime import datetime
 from uuid import UUID
 from typing import Optional
 
+from .assets import AssetResponse
+
 
 class ProjectCreate(BaseModel):
     """Create project request"""
@@ -26,7 +28,7 @@ class ProjectResponse(BaseModel):
     description: Optional[str]
     created_at: datetime
     updated_at: datetime
-    cover_image_url: Optional[str] = None  # From BasicInfo's cover image
+    cover_asset: Optional[AssetResponse] = None  # From BasicInfo's cover image
 
     class Config:
         from_attributes = True

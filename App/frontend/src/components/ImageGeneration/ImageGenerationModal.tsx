@@ -18,7 +18,7 @@ import {
     type ImageProviderType,
 } from '../../imageTask/providerCatalog/providerConfig';
 import { assetService, type Asset, type ImageProvider, type StyledPrompt } from '../../api/assetService';
-import { API_BASE_URL } from '../../api/client';
+import { getAssetUrl } from '../../utils/assetUrl';
 import { ImageTaskRuntime, type GenerationRecipe, type ImageTaskBinding } from '../../imageTask';
 import { useImageTaskStore } from '../../imageTask/store';
 import { UnifiedImageModal } from '../AssetManager';
@@ -303,12 +303,12 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 refs.map(async (r) => {
                     try {
                         const a = await assetService.getAsset(currentProjectId, r.assetId);
-                        const path = a.thumbnail_url || a.file_url || '';
+                        const url = getAssetUrl(a, 'thumbnail');
                         return {
                             assetId: r.assetId,
                             strength: r.strength,
-                            thumbnailUrl: path ? `${API_BASE_URL}${path}` : '',
-                            missing: !path,
+                            thumbnailUrl: url || '',
+                            missing: !url,
                         };
                     } catch {
                         return { assetId: r.assetId, strength: r.strength, thumbnailUrl: '', missing: true };
@@ -1151,8 +1151,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                     isOpen={showImagePicker}
                     onClose={() => setShowImagePicker(false)}
                     onSelect={(asset: Asset) => {
-                        const path = asset.thumbnail_url || asset.file_url || '';
-                        handleImageSelected(asset.id, path ? `${API_BASE_URL}${path}` : '');
+                        handleImageSelected(asset.id, getAssetUrl(asset, 'thumbnail') || '');
                     }}
                     title="Select Reference Image"
                 />

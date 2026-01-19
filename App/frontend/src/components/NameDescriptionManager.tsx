@@ -50,7 +50,7 @@ import { useFitText } from '../hooks/useFitText';
 import { useGridColumnCount } from '../hooks/useGridColumnCount';
 import type { UnifiedObject, ObjectType } from '../types/unifiedObject';
 import type { Asset } from '../api/assetService';
-import { API_BASE_URL } from '../api/client';
+import { getAssetUrl } from '../utils/assetUrl';
 import { renderMarkdown } from '../utils/markdown';
 
 interface NameDescriptionData {
@@ -749,7 +749,7 @@ const ItemDisplay = React.memo<ItemDisplayProps>(({
       {mainAsset && (
         <div className="story-object-card__image-container">
           <img
-            src={`${API_BASE_URL}${mainAsset.file_url}`}
+            src={getAssetUrl(mainAsset, 'original') || ''}
             alt={itemData.name}
             className="story-object-card__image"
             loading="lazy"

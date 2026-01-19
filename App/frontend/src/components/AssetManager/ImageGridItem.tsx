@@ -1,7 +1,7 @@
 import { memo, type RefObject } from 'react';
 import { IconButton } from '../IconButton';
 import { Star, Edit, MoreHorizontal, Trash, Info, Close, Refresh } from '../icons';
-import { API_BASE_URL } from '../../api/client';
+import { getAssetUrl } from '../../utils/assetUrl';
 import type { Asset, SceneAsset } from '../../api/assetService';
 import type { GenerationRecipe, ImageProgressStage, ImageTaskBinding, ImageTaskStatus } from '../../imageTask';
 
@@ -182,7 +182,7 @@ export const ImageGridItem = memo<ImageGridItemProps>(({
 
             <div className="asset-thumbnail">
                 <img
-                    src={`${API_BASE_URL}${item.asset.thumbnail_url || item.asset.file_url}`}
+                    src={getAssetUrl(item.asset, 'original') || ''}
                     alt={item.asset.name}
                     loading="lazy"
                 />

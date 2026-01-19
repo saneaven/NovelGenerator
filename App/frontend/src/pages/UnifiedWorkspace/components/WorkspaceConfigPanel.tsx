@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ToggleSwitch from '../../../components/ToggleSwitch';
 import TextButton from '../../../components/TextButton/TextButton';
-import { API_BASE_URL } from '../../../api/client';
+import { getAssetUrl } from '../../../utils/assetUrl';
 import {
   assetService,
   type ImageCleanupExecuteResponse,
@@ -322,7 +322,6 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
           <ul className="workspace-config-candidate-list">
             {candidates.map((c) => {
               const checked = selectedIds.has(c.asset_id);
-              const thumb = c.thumbnail_url || c.file_url;
               return (
                 <li key={c.asset_id} className="workspace-config-candidate-item">
                   <input
@@ -332,7 +331,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
                   />
                   <img
                     className="workspace-config-thumb"
-                    src={`${API_BASE_URL}${thumb}`}
+                    src={getAssetUrl(c, 'thumbnail') || ''}
                     alt={c.name}
                     loading="lazy"
                   />

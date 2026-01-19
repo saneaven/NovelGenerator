@@ -4,10 +4,10 @@ import { useProjectStore } from '../store/projectStore';
 import './Home.css';
 import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { API_BASE_URL } from '../api/client';
+import { getAssetUrl } from '../utils/assetUrl';
 import SettingsModal from '../components/SettingsModal/SettingsModal';
 import { IconButton } from '../components/IconButton';
-import { Settings, Logout, Close } from '../components/icons';
+import { Settings, Logout, Close, Plus } from '../components/icons';
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
@@ -62,7 +62,8 @@ const Home: React.FC = () => {
     navigate(`/project/${projectId}`);
   };
 
-  const handleDeleteProject = async (projectId: string) => {
+  const handleDeleteProject = async (e: React.MouseEvent, projectId: string) => {
+    e.stopPropagation();
     if (confirm('Are you sure you want to delete this project?')) {
       try {
         await deleteProject(projectId);
@@ -74,66 +75,134 @@ const Home: React.FC = () => {
 
   if (isLoading && projects.length === 0) {
     return (
-      <div className="home-container">
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
-          <p>Loading projects...</p>
+      <div className="home-layout loading">
+        <div className="loading-spinner">
+          <div className="spinner-ring"></div>
+          <p>Loading your library...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="home-container">
-      <div className="home-header">
-        <div className="header-top">
-          <div>
+    <div className="home-layout">
+      <header className="home-header">
+        <div className="header-content">
+          <div className="user-controls">
+            <div className="icon-actions">
+              <IconButton
+                icon={<Settings size="lg" />}
+                onClick={() => setIsSettingsModalOpen(true)}
+                title="Settings"
+                size="md"
+              />
+              <IconButton
+                icon={<Logout size="lg" />}
+                onClick={handleLogout}
+                title="Logout"
+                size="md"
+              />
+            </div>
+          </div>
+          <div className="brand-area">
             <h1>Novel Buds</h1>
-            <p>Write creative novels with AI</p>
-            {user && <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Welcome, {user.username}!</p>}
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <IconButton
-              icon={<Settings size="lg" />}
-              onClick={() => setIsSettingsModalOpen(true)}
-              title="Settings"
-              size="md"
-            />
-            <IconButton
-              icon={<Logout size="lg" />}
-              onClick={handleLogout}
-              title="Logout"
-              size="md"
-            />
+            {user && <span className="user-greeting">Hello, <b>{user.username}</b></span>}
           </div>
         </div>
-      </div>
+      </header>
 
-      {error && (
-        <div style={{
-          padding: '1rem',
-          background: 'rgba(239, 68, 68, 0.1)',
-          border: '1px solid rgba(239, 68, 68, 0.3)',
-          borderRadius: '8px',
-          color: '#fca5a5',
-          marginBottom: '1rem'
-        }}>
-          {error}
+      <main className="home-main">
+        {error && (
+          <div className="error-banner">
+            {error}
+          </div>
+        )}
+
+        <div className="controls-bar">
+          <h2 className="section-title">Library</h2>
+          <button 
+            className="btn-create-project" 
+            onClick={() => setShowCreateForm(true)}
+          >
+            <Plus size="md" />
+            <span>New Project</span>
+          </button>
         </div>
-      )}
 
-      <div className="actions">
-        <button 
-          className="create-button" 
-          onClick={() => setShowCreateForm(true)}
-        >
-          Create New Project
-        </button>
-      </div>
+        <div className="projects-grid">
+          {projects.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-state-content">
+                <h3>Your library is empty</h3>
+                <p>Start your first novel journey today.</p>
+                <button 
+                  className="btn-text-action"
+                  onClick={() => setShowCreateForm(true)}
+                >
+                  Create Project
+                </button>
+              </div>
+            </div>
+          ) : (
+            projects.map((project) => (
+              <article
+                key={project.id}
+                className="project-card"
+                onClick={() => handleOpenProject(project.id)}
+              >
+                <div className="project-card-image-wrapper">
+                  {project.cover_asset ? (
+                    <img src={getAssetUrl(project.cover_asset, 'original') || ''} alt={project.name} loading="lazy" />
+                  ) : (
+                    <div className="placeholder-cover" style={{ backgroundColor: 'var(--color-surface-muted)' }}>
+                      <span className="project-initial">{project.name.charAt(0)}</span>
+                    </div>
+                  )}
+                  <div className="project-card-overlay">
+                    <IconButton
+                      icon={<Close size="sm" />}
+                      onClick={(e) => handleDeleteProject(e, project.id)}
+                      title="Delete project"
+                      size="sm"
+                      variant="danger"
+                      className="btn-delete-project"
+                    />
+                  </div>
+                </div>
+                
+                <div className="project-card-content">
+                  <h3 className="project-title">{project.name}</h3>
+                  <div className="project-meta">
+                    <span className="project-date">
+                      {new Date(project.created_at).toLocaleDateString(undefined, { 
+                        year: 'numeric', 
+                        month: 'short', 
+                        day: 'numeric' 
+                      })}
+                    </span>
+                  </div>
+                  {project.description && (
+                    <p className="project-description">{project.description}</p>
+                  )}
+                </div>                  
+              </article>
+            ))
+          )}
+        </div>
+      </main>
 
       {showCreateForm && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <h2>Create New Project</h2>
+        <div className="modal-backdrop">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h2>Create New Project</h2>
+              <IconButton 
+                icon={<Close size="md" />} 
+                onClick={() => setShowCreateForm(false)} 
+                variant="ghost"
+                title="Close"
+              />
+            </div>
             <form onSubmit={handleCreateProject}>
               <div className="form-group">
                 <label htmlFor="projectName">Project Name</label>
@@ -142,73 +211,31 @@ const Home: React.FC = () => {
                   type="text"
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
-                  placeholder="Enter project name"
+                  placeholder="The next bestseller..."
                   required
+                  autoFocus
                 />
               </div>
               <div className="form-group">
-                <label htmlFor="projectDescription">Description (Optional)</label>
+                <label htmlFor="projectDescription">Description <span className="optional">(Optional)</span></label>
                 <textarea
                   id="projectDescription"
                   value={projectDescription}
                   onChange={(e) => setProjectDescription(e.target.value)}
-                  placeholder="A brief description of the project"
+                  placeholder="What is this story about?"
                   rows={3}
                 />
               </div>
-              <div className="form-actions">
-                <button type="button" onClick={() => setShowCreateForm(false)}>
+              <div className="modal-actions">
+                <button type="button" className="btn-cancel" onClick={() => setShowCreateForm(false)}>
                   Cancel
                 </button>
-                <button type="submit">Create</button>
+                <button type="submit" className="btn-submit">Create Project</button>
               </div>
             </form>
           </div>
         </div>
       )}
-
-      <div className="projects-section">
-        <h2>My Projects</h2>
-        {projects.length === 0 ? (
-          <div className="empty-state">
-            <p>No projects yet.</p>
-            <p>Create a new project to get started!</p>
-          </div>
-        ) : (
-          <div className="projects-grid">
-            {projects.map((project) => (
-              <div
-                key={project.id}
-                className="project-card"
-                onClick={() => handleOpenProject(project.id)}
-              >
-                <IconButton
-                    icon={<Close size="sm" />}
-                    onClick={() => handleDeleteProject(project.id)}
-                    title="Delete project"
-                    size="sm"
-                    variant="danger"
-                    className="project-delete-button"
-                  />
-                {project.cover_image_url && (
-                  <div className="project-cover-image">
-                    <img src={`${API_BASE_URL}${project.cover_image_url}`} alt="" />
-                  </div>
-                )}
-                <div className="project-info">
-                  <h3>{project.name}</h3>
-                  {project.description && (
-                    <p className="project-description">{project.description}</p>
-                  )}
-                  <p className="project-date">
-                    Created: {new Date(project.created_at).toLocaleDateString()}
-                  </p>
-                </div>                  
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
       {/* Settings Modal */}
       <SettingsModal

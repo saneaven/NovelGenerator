@@ -8,7 +8,7 @@ import { TextButton } from './TextButton';
 import ImageTabContent from './AssetManager/ImageTabContent';
 import { RichTextEditor, type RichTextEditorRef } from './RichTextEditor';
 import type { Asset } from '../api/assetService';
-import { API_BASE_URL } from '../api/client';
+import { getAssetUrl } from '../utils/assetUrl';
 import './StoryObjectCardExpanded.css';
 
 type TabType = 'edit' | 'image';
@@ -259,7 +259,7 @@ const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
             {hasImage && mainAsset && (
                 <div className="expanded-image-section">
                     <img
-                        src={`${API_BASE_URL}${mainAsset.file_url}`}
+                        src={getAssetUrl(mainAsset, 'original') || ''}
                         alt={itemData.name}
                         className="expanded-image"
                     />

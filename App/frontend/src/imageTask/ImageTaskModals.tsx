@@ -8,7 +8,7 @@ import { BaseModal } from '../components/BaseModal';
 import NotificationProgressBar from '../components/Notification/NotificationProgressBar';
 import { TextButton } from '../components/TextButton';
 import { UnifiedImageModal } from '../components/AssetManager';
-import { API_BASE_URL } from '../api/client';
+import { getAssetUrl } from '../utils/assetUrl';
 import { useProjectStore } from '../store/projectStore';
 import { useNotificationStore } from '../store/notificationStore';
 import { useImageTaskStore } from './store';
@@ -104,7 +104,7 @@ export const ImageTaskModals: React.FC = () => {
           {session.status === 'success' && session.result?.asset && (
             <div style={{ display: 'grid', gap: 12 }}>
               <img
-                src={`${API_BASE_URL}${session.result.asset.file_url}`}
+                src={getAssetUrl(session.result.asset, 'original') || ''}
                 alt={session.result.asset.name}
                 style={{ width: '100%', maxHeight: 520, objectFit: 'contain', borderRadius: 8 }}
               />

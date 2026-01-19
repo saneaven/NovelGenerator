@@ -8,7 +8,7 @@ import ImagePromptManager from './ImagePromptManager';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
 import { assetService, formatStyledPrompt, type Asset } from '../../api/assetService';
-import { API_BASE_URL } from '../../api/client';
+import { getAssetUrl } from '../../utils/assetUrl';
 import { Folder, AIAssistMini, Close } from '../icons';
 import { VirtualizedImageGrid } from './VirtualizedImageGrid';
 import ToggleSwitch from '../ToggleSwitch';
@@ -801,7 +801,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                         <div className="success-modal-body">
                             <div className="success-image-preview">
                                 <img
-                                    src={`${API_BASE_URL}${successModalAsset.thumbnail_url || successModalAsset.file_url}`}
+                                    src={getAssetUrl(successModalAsset, 'thumbnail') || ''}
                                     alt="Preview"
                                 />
                             </div>
@@ -838,7 +838,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                         <div className="asset-detail-body">
                             <div className="asset-detail-image">
                                 <img
-                                    src={`${API_BASE_URL}${detailAsset.file_url}`}
+                                    src={getAssetUrl(detailAsset, 'original') || ''}
                                     alt={detailAsset.name}
                                 />
                             </div>

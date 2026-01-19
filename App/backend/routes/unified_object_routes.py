@@ -156,9 +156,8 @@ def get_object_metadata(obj: Any, object_type: str, db: Optional[Session] = None
     # Add parent ID based on object type
     if object_type == 'basic_info':
         metadata['project_id'] = str(obj.project_id)
-        # Cover image from main StoryObjectAsset
+        # Cover image ID from main StoryObjectAsset (URL resolved at runtime by frontend)
         metadata['cover_image_id'] = None
-        metadata['cover_image_url'] = None
         if db:
             main_link = db.query(StoryObjectAsset).filter(
                 StoryObjectAsset.object_type == 'basic_info',
@@ -166,11 +165,7 @@ def get_object_metadata(obj: Any, object_type: str, db: Optional[Session] = None
                 StoryObjectAsset.is_main == True
             ).first()
             if main_link:
-                asset = db.query(Asset).filter(Asset.id == main_link.asset_id).first()
-                if asset:
-                    metadata['cover_image_id'] = str(asset.id)
-                    path = asset.thumbnail_path or asset.file_path
-                    metadata['cover_image_url'] = f"/storage/assets/{path}"
+                metadata['cover_image_id'] = str(main_link.asset_id)
         # Image prompt fields for cover image generation
         metadata['image_prompt'] = getattr(obj, 'image_prompt', None)
         metadata['image_prompt_positive'] = getattr(obj, 'image_prompt_positive', None)

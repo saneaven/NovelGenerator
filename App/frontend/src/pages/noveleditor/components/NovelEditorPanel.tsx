@@ -39,7 +39,7 @@ import { RichTextEditor, type RichTextEditorRef } from '../../../components/Rich
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
 import { assetService, type Asset } from '../../../api/assetService';
 import type { ManuscriptObject } from '../../../types/unifiedObject';
-import { API_BASE_URL } from '../../../api/client';
+import { getAssetUrl } from '../../../utils/assetUrl';
 import type { GenerationRecipe } from '../../../imageTask';
 import { fromAsset } from '../../../imageTask/recipe/fromAsset';
 import ChapterSidebar from './ChapterSidebar';
@@ -476,7 +476,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   // Handle image selection from AssetManagerModal
   const handleImageSelect = useCallback((asset: Asset) => {
-    const newSrc = `${API_BASE_URL}${asset.file_url}`;
+    const newSrc = getAssetUrl(asset, 'original') || '';
 
     // If we're replacing an existing image
     if (replaceImageSrc && editorRef.current) {

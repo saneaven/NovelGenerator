@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BaseModal } from '../BaseModal';
 import { assetService, type Asset } from '../../api/assetService';
-import { API_BASE_URL } from '../../api/client';
+import { getAssetUrl } from '../../utils/assetUrl';
 import { useProjectStore } from '../../store/projectStore';
 import { TextButton } from '../TextButton';
 import './ImagePreviewModal.css';
@@ -68,7 +68,7 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
                 )}
                 {!isLoading && !error && asset && (
                     <img
-                        src={`${API_BASE_URL}${asset.file_url}`}
+                        src={getAssetUrl(asset, 'original') || ''}
                         alt={asset.name}
                         className="image-preview-image"
                     />

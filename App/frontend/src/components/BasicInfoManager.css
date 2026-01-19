@@ -26,8 +26,8 @@
 }
 
 .basic-info-manager .basic-info-card.is-editing {
-    border-color: var(--color-primary-300);
-    box-shadow: 0 0 0 1px var(--color-primary-200), var(--shadow-lg);
+    border-color: var(--color-brand-primary-border);
+    box-shadow: 0 0 0 1px var(--color-brand-primary-tint), var(--shadow-lg);
 }
 
 /* =========================================
@@ -35,7 +35,7 @@
    ========================================= */
 
 .basic-info-manager .basic-info-media {
-  background-color: var(--color-neutral-100);
+  background-color: var(--color-surface-elevated);
   position: relative;
   display: flex;
   align-items: center;
@@ -68,11 +68,12 @@
     position: absolute;
     inset: 0;
     background-color: var(--overlay-dark-medium);
+    backdrop-filter: blur(4px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    color: var(--color-text-inverse);
+    color: var(--color-text-overlay);
     opacity: 0;
     transition: opacity var(--transition-base);
     cursor: pointer;
@@ -103,7 +104,7 @@
 }
 
 .basic-info-manager .media-placeholder:hover {
-    background-color: var(--color-neutral-200);
+    background-color: var(--color-surface-overlay);
     color: var(--color-text-secondary);
 }
 
@@ -142,7 +143,7 @@
 }
 
 .basic-info-manager .genre-badge {
-    background-color: var(--color-neutral-100);
+    background-color: var(--color-surface-elevated);
     color: var(--color-text-secondary);
     padding: var(--spacing-xs) var(--spacing-md);
     border-radius: var(--border-radius-full);
@@ -160,7 +161,7 @@
     padding: var(--spacing-xs) var(--spacing-sm);
     border-radius: var(--border-radius-md);
     font-size: var(--font-size-xs);
-    background-color: var(--color-neutral-100);
+    background-color: var(--color-surface-elevated);
     color: var(--color-text-muted);
 }
 
@@ -196,7 +197,7 @@
 
 .basic-info-manager .title-input:focus {
     outline: none;
-    border-color: var(--color-primary-500);
+    border-color: var(--color-border-focus);
 }
 
 .basic-info-manager .genre-input {
@@ -211,7 +212,7 @@
 
 .basic-info-manager .genre-input:focus {
     outline: none;
-    border-color: var(--color-primary-500);
+    border-color: var(--color-border-focus);
 }
 
 /* Body Content */
@@ -256,13 +257,13 @@
     line-height: var(--line-height-relaxed);
     color: var(--color-text-primary);
     resize: vertical;
-    min-height: 9.375rem; /* 150px */
+    min-height: 10rem;
     transition: border-color var(--transition-base), box-shadow var(--transition-base);
 }
 
 .basic-info-manager .logline-input:focus {
     outline: none;
-    border-color: var(--color-primary-500);
+    border-color: var(--color-border-focus);
     box-shadow: 0 0 0 2px var(--color-brand-primary-soft);
     background-color: var(--color-surface-base);
 }

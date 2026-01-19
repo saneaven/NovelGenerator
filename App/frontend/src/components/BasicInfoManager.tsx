@@ -11,7 +11,8 @@ import './BasicInfoManager.css';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useErrorStore } from '../store/errorStore';
-import { API_BASE_URL } from '../api/client';
+import { useAssetStore } from '../store/assetStore';
+import { getAssetUrl } from '../utils/assetUrl';
 import AIEditModal from './AIEditModal';
 import VersionHistoryModal from './VersionHistoryModal';
 import TranslationModal from './TranslationModal';
@@ -175,7 +176,17 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
     }
   };
 
-  const coverImageUrl = basicInfo?.metadata?.cover_image_url;
+  // Get cover image from asset store using the cover_image_id
+  const { fetchStoryObjectAssets, getMainAsset } = useAssetStore();
+  const coverAsset = basicInfoId ? getMainAsset('basic_info', basicInfoId) : null;
+  const coverImageUrl = getAssetUrl(coverAsset, 'original');
+
+  // Fetch assets when basicInfoId is available
+  useEffect(() => {
+    if (projectId && basicInfoId) {
+      fetchStoryObjectAssets(projectId, 'basic_info', basicInfoId);
+    }
+  }, [projectId, basicInfoId, fetchStoryObjectAssets]);
 
   if (!projectId) return <div className="error-container">Project ID not found.</div>;
   if (loading && !basicInfo) return <div className="basic-info-skeleton"><div className="spinner" /></div>;
@@ -274,7 +285,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
         <div className="basic-info-media">
           {coverImageUrl ? (
             <div className="media-preview">
-              <img src={`${API_BASE_URL}${coverImageUrl}`} alt="Book Cover" className="book-cover-img" />
+              <img src={coverImageUrl || ''} alt="Book Cover" className="book-cover-img" />
               <button className="media-edit-overlay" onClick={() => setShowAssetPicker(true)}>
                 <Image size="md" />
                 <span>Change Cover</span>
