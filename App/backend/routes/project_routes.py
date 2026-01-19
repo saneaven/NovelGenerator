@@ -7,7 +7,7 @@ from datetime import datetime
 
 from ..database import get_db
 from ..models.db_models import User, Project, StoryObjectAsset, Asset, BasicInfo, Guidelines
-from ..models.translation_models import ObjectVersion, ObjectTranslation
+from ..models.translation_models import ObjectVersion
 from ..schemas.projects import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse
 from ..auth import get_current_user
 
@@ -68,7 +68,7 @@ async def create_project(
     Create a new project
 
     Creates a new story project for the authenticated user.
-    Also creates an empty BasicInfo with ObjectVersion and ObjectTranslation.
+    Also creates an empty BasicInfo with initial ObjectVersion.
     """
     project_id = uuid.uuid4()
     basic_info_id = uuid.uuid4()
@@ -108,18 +108,6 @@ async def create_project(
     )
     db.add(version)
 
-    # Create ObjectTranslation cache for main language
-    translation = ObjectTranslation(
-        id=uuid.uuid4(),
-        object_type='basic_info',
-        object_id=basic_info_id,
-        language=project_data.main_language,
-        data=empty_data,
-        is_active=True,
-        created_at=now,
-        updated_at=now
-    )
-    db.add(translation)
 
     # Create empty Guidelines
     guidelines = Guidelines(
@@ -144,18 +132,6 @@ async def create_project(
     )
     db.add(guidelines_version)
 
-    # Create ObjectTranslation cache for Guidelines
-    guidelines_translation = ObjectTranslation(
-        id=uuid.uuid4(),
-        object_type='guidelines',
-        object_id=guidelines_id,
-        language=project_data.main_language,
-        data=guidelines_data,
-        is_active=True,
-        created_at=now,
-        updated_at=now
-    )
-    db.add(guidelines_translation)
 
     db.commit()
     db.refresh(new_project)

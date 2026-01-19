@@ -17,7 +17,7 @@ from uuid import UUID
 from ..database import get_db
 from ..auth import get_current_user
 from ..models.db_models import User
-from ..models.translation_models import ObjectTranslation, ObjectVersion
+from ..models.translation_models import ObjectVersion
 from ..utils.object_type_aliases import normalize_object_type, externalize_object_type
 
 LOREBOOK_TYPE = normalize_object_type('lorebook')
@@ -122,18 +122,19 @@ async def get_project_translation_status(
         objects = query.all()
 
         for obj in objects:
-            # Get available languages for this object
-            translations = db.query(ObjectTranslation).filter(
-                ObjectTranslation.object_type == object_type,
-                ObjectTranslation.object_id == obj.id
-            ).all()
+            latest_version = db.query(ObjectVersion).filter(
+                ObjectVersion.object_type == object_type,
+                ObjectVersion.object_id == obj.id
+            ).order_by(ObjectVersion.version_number.desc()).first()
 
-            available_languages = [t.language for t in translations]
+            version_data = latest_version.data if latest_version else {}
+            available_languages = list(version_data.keys()) if isinstance(version_data, dict) else []
 
-            # Determine missing languages
+            # Determine missing languages / coverage (only against requested targets)
             if target_languages:
                 missing_languages = [lang for lang in target_languages if lang not in available_languages]
-                coverage = (len(available_languages) / len(target_languages)) * 100 if target_languages else 0
+                present_count = sum(1 for lang in target_languages if lang in available_languages)
+                coverage = (present_count / len(target_languages)) * 100 if target_languages else 0
             else:
                 missing_languages = []
                 coverage = 100.0 if available_languages else 0.0
@@ -206,19 +207,21 @@ async def get_language_coverage(
 
     total_objects = len(object_ids)
 
-    # Count translations per language
-    language_counts = {}
+    # Count available languages per object (based on latest ObjectVersion only)
+    language_counts: Dict[str, int] = {}
 
     for object_id, object_type in object_ids:
-        translations = db.query(ObjectTranslation).filter(
-            ObjectTranslation.object_type == object_type,
-            ObjectTranslation.object_id == UUID(object_id)
-        ).all()
+        latest_version = db.query(ObjectVersion).filter(
+            ObjectVersion.object_type == object_type,
+            ObjectVersion.object_id == UUID(object_id)
+        ).order_by(ObjectVersion.version_number.desc()).first()
 
-        for translation in translations:
-            if translation.language not in language_counts:
-                language_counts[translation.language] = 0
-            language_counts[translation.language] += 1
+        version_data = latest_version.data if latest_version else {}
+        if not isinstance(version_data, dict):
+            continue
+
+        for lang in version_data.keys():
+            language_counts[lang] = language_counts.get(lang, 0) + 1
 
     # Build response
     coverage = [
@@ -263,27 +266,23 @@ async def batch_delete_translations(
         try:
             object_id = UUID(object_id_str)
 
-            # Delete translation
-            deleted = db.query(ObjectTranslation).filter(
-                ObjectTranslation.object_type == object_type,
-                ObjectTranslation.object_id == object_id,
-                ObjectTranslation.language == language
-            ).delete()
-
-            deleted_count += deleted
-
-            # Also need to remove from latest version data
+            # Remove from latest version data only
             latest_version = db.query(ObjectVersion).filter(
                 ObjectVersion.object_type == object_type,
                 ObjectVersion.object_id == object_id
             ).order_by(ObjectVersion.version_number.desc()).first()
 
-            if latest_version:
-                version_data = latest_version.data or {}
-                if language in version_data:
-                    version_data = dict(version_data)
-                    del version_data[language]
-                    latest_version.data = version_data
+            if not latest_version:
+                continue
+
+            version_data = latest_version.data or {}
+            if not isinstance(version_data, dict) or language not in version_data:
+                continue
+
+            next_data = dict(version_data)
+            del next_data[language]
+            latest_version.data = next_data
+            deleted_count += 1
 
         except Exception as e:
             print(f"Error deleting translation for {object_id_str}: {e}")
@@ -310,7 +309,6 @@ async def add_translations(
     """
     from ..routes.unified_object_routes import (
         create_or_update_version,
-        update_translation_cache,
         get_object_or_404,
         get_object
     )
@@ -338,16 +336,6 @@ async def add_translations(
                 user_id=current_user.id,
                 create_new=False,
                 target_version_number=translation_data.target_version_number
-            )
-
-            # Update translation cache (don't set as active - keep current active language)
-            update_translation_cache(
-                db=db,
-                object_type=object_type,
-                object_id=object_id,
-                language=translation_data.language,
-                data=translation_data.data,
-                is_active=False
             )
 
             # Track for returning after commit
@@ -391,25 +379,18 @@ async def get_object_languages(
     """
     object_type = normalize_object_type(object_type)
 
-    translations = db.query(ObjectTranslation).filter(
-        ObjectTranslation.object_type == object_type,
-        ObjectTranslation.object_id == object_id
-    ).all()
+    latest_version = db.query(ObjectVersion).filter(
+        ObjectVersion.object_type == object_type,
+        ObjectVersion.object_id == object_id
+    ).order_by(ObjectVersion.version_number.desc()).first()
 
-    active_translation = next((t for t in translations if t.is_active), None)
+    version_data = latest_version.data if latest_version else {}
+    languages = sorted(list(version_data.keys())) if isinstance(version_data, dict) else []
 
     return {
         "object_id": str(object_id),
         "object_type": externalize_object_type(object_type),
-        "languages": [
-            {
-                "language": t.language,
-                "is_active": t.is_active,
-                "updated_at": t.updated_at.isoformat() if t.updated_at else None
-            }
-            for t in translations
-        ],
-        "active_language": active_translation.language if active_translation else None
+        "languages": languages,
     }
 
 
@@ -427,40 +408,30 @@ async def delete_translation(
     """
     object_type = normalize_object_type(object_type)
 
-    # Count existing translations
-    translation_count = db.query(ObjectTranslation).filter(
-        ObjectTranslation.object_type == object_type,
-        ObjectTranslation.object_id == object_id
-    ).count()
-
-    if translation_count <= 1:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot delete the only translation. Object must have at least one language."
-        )
-
-    # Delete translation
-    deleted = db.query(ObjectTranslation).filter(
-        ObjectTranslation.object_type == object_type,
-        ObjectTranslation.object_id == object_id,
-        ObjectTranslation.language == language
-    ).delete()
-
-    if deleted == 0:
-        raise HTTPException(status_code=404, detail=f"Translation not found for language: {language}")
-
-    # Remove from latest version data
     latest_version = db.query(ObjectVersion).filter(
         ObjectVersion.object_type == object_type,
         ObjectVersion.object_id == object_id
     ).order_by(ObjectVersion.version_number.desc()).first()
 
-    if latest_version:
-        version_data = latest_version.data or {}
-        if language in version_data:
-            version_data = dict(version_data)
-            del version_data[language]
-            latest_version.data = version_data
+    if not latest_version:
+        raise HTTPException(status_code=404, detail="Object not found")
+
+    version_data = latest_version.data or {}
+    if not isinstance(version_data, dict) or not version_data:
+        raise HTTPException(status_code=404, detail="No translations available for this object")
+
+    if len(version_data) <= 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete the only translation. Object must have at least one language."
+        )
+
+    if language not in version_data:
+        raise HTTPException(status_code=404, detail=f"Translation not found for language: {language}")
+
+    next_data = dict(version_data)
+    del next_data[language]
+    latest_version.data = next_data
 
     db.commit()
 

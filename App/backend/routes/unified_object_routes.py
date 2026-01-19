@@ -2,10 +2,9 @@
 Unified CRUD Routes for New Translation System
 
 All story objects use the same pattern:
-- GET: Returns object with data in requested language from object_translations
-- PUT: Updates object, creates new version, updates translation cache
+- GET: Returns object with data from latest object_versions
+- PUT: Updates object, creates new version (or updates latest when create_new_version=false)
 - POST /translations: Adds new language translation
-- PATCH /active-language: Switches displayed language without creating version
 - GET /versions: Returns version history
 - PATCH /versions/{version_id}/activate: Reverts to previous version
 """
@@ -25,7 +24,7 @@ from ..models.db_models import (
     Act, Chapter, Manuscript, Outline, Asset, StoryObjectAsset
 )
 from ..schemas.story_objects import ImagePromptUpdate
-from ..models.translation_models import ObjectTranslation, ObjectVersion
+from ..models.translation_models import ObjectVersion
 from ..utils.object_type_aliases import normalize_object_type, externalize_object_type
 from ..services.storage_service import storage_service
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
@@ -67,11 +66,6 @@ class AddTranslationRequest(BaseModel):
     language: str
     data: Dict[str, Any]
     user_request: Optional[str] = "Translation"
-
-
-class SwitchLanguageRequest(BaseModel):
-    """Request to switch active language"""
-    language: str
 
 
 class CreateObjectRequest(BaseModel):
@@ -253,35 +247,6 @@ def get_latest_version_info(db: Session, object_type: str, object_id: UUID) -> O
     }
 
 
-def get_available_languages(db: Session, object_type: str, object_id: UUID) -> Dict[str, Any]:
-    """Get language information for an object"""
-    translations = db.query(ObjectTranslation).filter(
-        ObjectTranslation.object_type == object_type,
-        ObjectTranslation.object_id == object_id
-    ).all()
-
-    available = [t.language for t in translations]
-    active_translation = next((t for t in translations if t.is_active), None)
-    active_lang = active_translation.language if active_translation else (available[0] if available else None)
-
-    return {
-        'available': available,
-        'active': active_lang,
-        'default': available[0] if available else None  # First available is considered default
-    }
-
-
-def get_translation_data(db: Session, object_type: str, object_id: UUID, language: str) -> Optional[Dict[str, Any]]:
-    """Get translation data for specific language"""
-    translation = db.query(ObjectTranslation).filter(
-        ObjectTranslation.object_type == object_type,
-        ObjectTranslation.object_id == object_id,
-        ObjectTranslation.language == language
-    ).first()
-
-    return translation.data if translation else None
-
-
 def create_or_update_version(
     db: Session,
     object_type: str,
@@ -355,41 +320,6 @@ def create_or_update_version(
         version_to_update.data = version_data
         db.flush()
         return version_to_update
-
-
-def update_translation_cache(
-    db: Session,
-    object_type: str,
-    object_id: UUID,
-    language: str,
-    data: Dict[str, Any],
-    is_active: bool = False
-):
-    """Update or create translation cache entry"""
-    translation = db.query(ObjectTranslation).filter(
-        ObjectTranslation.object_type == object_type,
-        ObjectTranslation.object_id == object_id,
-        ObjectTranslation.language == language
-    ).first()
-
-    if translation:
-        # Update existing
-        translation.data = data
-        translation.is_active = is_active
-        translation.updated_at = datetime.utcnow()
-    else:
-        # Create new
-        translation = ObjectTranslation(
-            id=uuid4(),
-            object_type=object_type,
-            object_id=object_id,
-            language=language,
-            data=data,
-            is_active=is_active,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
-        )
-        db.add(translation)
 
 
 # ============================================================================
@@ -610,7 +540,7 @@ async def update_object(
 ):
     """
     Update object in specified language.
-    Creates new version and updates translation cache.
+    Creates new version (or updates latest when create_new_version=false).
 
     Edit Restriction: If creating a new version, the language being edited
     must exist in the latest version. Otherwise, return 400 error.
@@ -661,23 +591,6 @@ async def update_object(
         create_new=request.create_new_version
     )
 
-    # Update translation cache for this language only
-    update_translation_cache(
-        db=db,
-        object_type=object_type,
-        object_id=object_id,
-        language=request.language,
-        data=request.data,
-        is_active=True  # Mark as active when updated
-    )
-
-    # Deactivate other languages (but DO NOT delete them - they stay at their old versions)
-    db.query(ObjectTranslation).filter(
-        ObjectTranslation.object_type == object_type,
-        ObjectTranslation.object_id == object_id,
-        ObjectTranslation.language != request.language
-    ).update({'is_active': False})
-
     # Rebuild manuscript image index (manual save only)
     if object_type == "manuscript" and request.create_new_version:
         doc = request.data.get("doc")
@@ -720,15 +633,14 @@ async def add_translation(
     # Verify object exists
     obj = get_object_or_404(db, object_type, object_id)
 
-    # Check if translation already exists
-    existing = db.query(ObjectTranslation).filter(
-        ObjectTranslation.object_type == object_type,
-        ObjectTranslation.object_id == object_id,
-        ObjectTranslation.language == request.language
-    ).first()
+    # Check if translation already exists in the latest version
+    latest_version = get_latest_version(db, object_type, object_id)
+    if not latest_version:
+        raise HTTPException(status_code=500, detail="No version found for this object")
 
-    if existing:
-        raise HTTPException(status_code=400, detail=f"Translation for {request.language} already exists")
+    version_data = latest_version.data or {}
+    if request.language in version_data:
+        raise HTTPException(status_code=400, detail=f"Translation for {request.language} already exists in latest version")
 
     # Create or update version with new language
     version = create_or_update_version(
@@ -742,61 +654,9 @@ async def add_translation(
         create_new=False
     )
 
-    # Update translation cache (don't set as active - keep current active language)
-    update_translation_cache(
-        db=db,
-        object_type=object_type,
-        object_id=object_id,
-        language=request.language,
-        data=request.data,
-        is_active=False
-    )
-
     db.commit()
 
     return {"message": f"Translation added for {request.language}", "version_id": str(version.id)}
-
-
-@router.patch("/objects/{object_type}/{object_id}/active-language")
-async def switch_active_language(
-    object_type: str,
-    object_id: UUID,
-    request: SwitchLanguageRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Switch active language WITHOUT creating a new version.
-    Just updates is_active flag in translation cache.
-    """
-    object_type = normalize_object_type(object_type)
-
-    # Verify object exists
-    obj = get_object_or_404(db, object_type, object_id)
-
-    # Verify translation exists for requested language
-    translation = db.query(ObjectTranslation).filter(
-        ObjectTranslation.object_type == object_type,
-        ObjectTranslation.object_id == object_id,
-        ObjectTranslation.language == request.language
-    ).first()
-
-    if not translation:
-        raise HTTPException(status_code=404, detail=f"No translation found for language: {request.language}")
-
-    # Deactivate all languages
-    db.query(ObjectTranslation).filter(
-        ObjectTranslation.object_type == object_type,
-        ObjectTranslation.object_id == object_id
-    ).update({'is_active': False})
-
-    # Activate requested language
-    translation.is_active = True
-    translation.updated_at = datetime.utcnow()
-
-    db.commit()
-
-    return {"message": f"Active language switched to {request.language}"}
 
 
 @router.get("/objects/{object_type}/{object_id}/versions", response_model=List[VersionResponse])
@@ -887,30 +747,6 @@ async def restore_version(
     )
     db.add(new_version)
     db.flush()
-
-    # Rebuild translation cache from restored version data
-    # First, delete all existing translations
-    db.query(ObjectTranslation).filter(
-        ObjectTranslation.object_type == object_type,
-        ObjectTranslation.object_id == object_id
-    ).delete()
-
-    # Create translation entries for each language in the restored version
-    restored_data = version_to_restore.data or {}
-    if isinstance(restored_data, dict):
-        first_language = None
-        for language, language_data in restored_data.items():
-            if not first_language:
-                first_language = language
-
-            update_translation_cache(
-                db=db,
-                object_type=object_type,
-                object_id=object_id,
-                language=language,
-                data=language_data,
-                is_active=(language == first_language)  # First language is active
-            )
 
     db.commit()
 
@@ -1266,19 +1102,6 @@ async def create_object(
     )
     db.add(version)
 
-    # Create translation cache
-    translation = ObjectTranslation(
-        id=uuid4(),
-        object_type=object_type,
-        object_id=object_id,
-        language=request.language,
-        data=request.data,
-        is_active=True,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow()
-    )
-    db.add(translation)
-
     db.commit()
     db.refresh(core_obj)
 
@@ -1359,19 +1182,13 @@ async def delete_object(
             db.delete(asset)
 
     # Delete all related data (order matters due to foreign keys)
-    # 1. Delete translations
-    db.query(ObjectTranslation).filter(
-        ObjectTranslation.object_type == object_type,
-        ObjectTranslation.object_id == object_id
-    ).delete()
-
-    # 2. Delete versions
+    # 1. Delete versions
     db.query(ObjectVersion).filter(
         ObjectVersion.object_type == object_type,
         ObjectVersion.object_id == object_id
     ).delete()
 
-    # 3. Delete core object
+    # 2. Delete core object
     db.delete(obj)
 
     db.commit()

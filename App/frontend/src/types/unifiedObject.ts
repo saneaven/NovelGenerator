@@ -3,8 +3,7 @@
  *
  * All story objects follow the same pattern:
  * - Structure only in core tables
- * - Content in object_translations (fast access)
- * - Version history in object_versions (source of truth)
+ * - Content in object_versions (source of truth)
  */
 
 import type { TipTapDoc } from './tiptap';
@@ -186,10 +185,6 @@ export interface CreateObjectRequest<TData = Record<string, any>> {
   metadata?: Record<string, any>;
 }
 
-export interface SwitchLanguageRequest {
-  language: string;
-}
-
 // ============================================================================
 // TRANSLATION STATUS
 // ============================================================================
@@ -221,16 +216,3 @@ export interface ProjectLanguageCoverage {
 // ============================================================================
 // HELPER TYPES
 // ============================================================================
-
-export interface LanguageDetails {
-  language: string;
-  is_active: boolean;
-  updated_at: string;
-}
-
-export interface ObjectLanguagesResponse {
-  object_id: string;
-  object_type: ObjectType;
-  languages: LanguageDetails[];
-  active_language: string | null;
-}

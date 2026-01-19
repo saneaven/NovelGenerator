@@ -5,7 +5,6 @@
  * - GET /api/v1/objects/{type}/{id}?language={lang}
  * - PUT /api/v1/objects/{type}/{id}
  * - POST /api/v1/objects/{type}/{id}/translations
- * - PATCH /api/v1/objects/{type}/{id}/active-language
  * - GET /api/v1/objects/{type}/{id}/versions
  * - PATCH /api/v1/objects/{type}/{id}/versions/{version_id}/activate
  */
@@ -16,11 +15,9 @@ import type {
   ObjectType,
   UpdateObjectRequest,
   AddTranslationRequest,
-  SwitchLanguageRequest,
   VersionHistoryEntry,
   ProjectTranslationStatus,
   ProjectLanguageCoverage,
-  ObjectLanguagesResponse,
   CreateObjectRequest
 } from '../types/unifiedObject';
 
@@ -106,23 +103,6 @@ export const unifiedObjectService = {
   },
 
   /**
-   * Switch active language WITHOUT creating new version
-   * @param type Object type
-   * @param id Object ID
-   * @param request Language switch request
-   */
-  async switchActiveLanguage(
-    type: ObjectType,
-    id: string,
-    request: SwitchLanguageRequest
-  ): Promise<{ message: string }> {
-    return apiClient.patch<{ message: string }>(
-      `/api/v1/objects/${type}/${id}/active-language`,
-      request
-    );
-  },
-
-  /**
    * Get version history for an object
    * @param type Object type
    * @param id Object ID
@@ -146,15 +126,6 @@ export const unifiedObjectService = {
     return apiClient.patch<{ message: string; version_id: string }>(
       `/api/v1/objects/${type}/${id}/versions/${versionId}/activate`
     );
-  },
-
-  /**
-   * Get list of available languages for an object
-   * @param type Object type
-   * @param id Object ID
-   */
-  async getObjectLanguages(type: ObjectType, id: string): Promise<ObjectLanguagesResponse> {
-    return apiClient.get<ObjectLanguagesResponse>(`/api/v1/objects/${type}/${id}/languages`);
   },
 
   /**

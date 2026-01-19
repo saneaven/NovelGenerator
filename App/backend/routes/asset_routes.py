@@ -24,7 +24,7 @@ from ..models.db_models import (
     Location,
     LorebookEntry,
 )
-from ..models.translation_models import ObjectTranslation
+from ..models.translation_models import ObjectVersion
 from ..schemas.assets import (
     AssetResponse, AssetListResponse, AssetUpdateRequest,
     StoryObjectAssetResponse, StoryObjectAssetsResponse, SetMainAssetRequest,
@@ -1067,14 +1067,19 @@ async def rebuild_manuscript_images_index(
 
     for manuscript in manuscripts:
         manuscripts_processed += 1
-        translations = db.query(ObjectTranslation).filter(
-            ObjectTranslation.object_type == "manuscript",
-            ObjectTranslation.object_id == manuscript.id,
-        ).all()
+        latest_version = db.query(ObjectVersion).filter(
+            ObjectVersion.object_type == "manuscript",
+            ObjectVersion.object_id == manuscript.id,
+        ).order_by(ObjectVersion.version_number.desc()).first()
 
-        for t in translations:
-            data = cast(Dict[str, Any], t.data or {})
-            doc = data.get("doc")
+        version_data = latest_version.data if latest_version else {}
+        if not isinstance(version_data, dict):
+            continue
+
+        for lang, lang_data in version_data.items():
+            if not isinstance(lang_data, dict):
+                continue
+            doc = lang_data.get("doc")
             if not isinstance(doc, dict):
                 continue
 
@@ -1082,7 +1087,7 @@ async def rebuild_manuscript_images_index(
                 db=db,
                 project_id=project_id,
                 manuscript_id=cast(UUID, manuscript.id),
-                language=cast(str, t.language),
+                language=cast(str, lang),
                 doc=doc,
             )
             languages_processed += 1

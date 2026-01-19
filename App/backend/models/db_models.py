@@ -307,7 +307,7 @@ class Project(Base):
 # ============================================================================
 
 class BasicInfo(Base):
-    """Basic story information - structure only (content in object_translations)"""
+    """Basic story information - structure only (content in object_versions)"""
     __tablename__ = 'basic_info'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -330,7 +330,7 @@ class BasicInfo(Base):
 # ============================================================================
 
 class Guidelines(Base):
-    """Project guidelines - structure only (content in object_translations)"""
+    """Project guidelines - structure only (content in object_versions)"""
     __tablename__ = 'guidelines'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -348,7 +348,7 @@ class Guidelines(Base):
 # ============================================================================
 
 class Character(Base):
-    """Character entities - structure only (content in object_translations)"""
+    """Character entities - structure only (content in object_versions)"""
     __tablename__ = 'characters'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -370,7 +370,7 @@ class Character(Base):
 
 
 class Organization(Base):
-    """Organization entities - structure only (content in object_translations)"""
+    """Organization entities - structure only (content in object_versions)"""
     __tablename__ = 'organizations'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -392,7 +392,7 @@ class Organization(Base):
 
 
 class Location(Base):
-    """Location entities - structure only (content in object_translations)"""
+    """Location entities - structure only (content in object_versions)"""
     __tablename__ = 'locations'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -414,7 +414,7 @@ class Location(Base):
 
 
 class LorebookEntry(Base):
-    """Lorebook entries - structure only (content in object_translations)"""
+    """Lorebook entries - structure only (content in object_versions)"""
     __tablename__ = 'lorebook_entries'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -440,7 +440,7 @@ class LorebookEntry(Base):
 # ============================================================================
 
 class Outline(Base):
-    """Story outline - structure only (content in object_translations)"""
+    """Story outline - structure only (content in object_versions)"""
     __tablename__ = 'outlines'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -457,7 +457,7 @@ class Outline(Base):
 
 
 class Act(Base):
-    """Acts within an outline - structure only (content in object_translations)"""
+    """Acts within an outline - structure only (content in object_versions)"""
     __tablename__ = 'acts'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -474,7 +474,7 @@ class Act(Base):
 
 
 class Chapter(Base):
-    """Chapters within an act - structure only (content in object_translations)"""
+    """Chapters within an act - structure only (content in object_versions)"""
     __tablename__ = 'chapters'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -495,7 +495,7 @@ class Chapter(Base):
 # ============================================================================
 
 class Manuscript(Base):
-    """Manuscript content for each chapter - structure only (content in object_translations)"""
+    """Manuscript content for each chapter - structure only (content in object_versions)"""
     __tablename__ = 'manuscripts'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
