@@ -94,7 +94,7 @@ export const UNIFIED_SCHEMA = {
           manuscripts: [{ id: "ms-1", chapterId: "ch-1", chapterName: "1장", content: "...", wordCount: 100 }],
         }
       } as Record<string, {
-        basicInfo: { id: string; title: string; logline: string; genre: string } | null;
+        basicInfo: { id: string; title: string; logline: string; genre: string };
         objects: Array<{ type: "character" | "location" | "organization" | "lorebook"; id: string; name: string; description: string; imagePrompt?: string; imagePromptPositive?: string; imagePromptNegative?: string }>;
         outline: { acts: Array<{ id: string; name: string; description: string; chapters: Array<{ id: string; name: string; description: string }> }> } | null;
         manuscripts: Array<{ id: string; chapterId: string; chapterName: string; content: string; wordCount: number }>;

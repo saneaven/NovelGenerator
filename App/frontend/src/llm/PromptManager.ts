@@ -40,6 +40,17 @@ export class PromptManager {
   }
 
   /**
+   * Ensure basic project data is available in the unified store before rendering prompts.
+   * BasicInfo is required for all prompts and is guaranteed to exist per project.
+   */
+  private static async ensureBasicInfoLoaded(projectId: string | undefined): Promise<void> {
+    if (!projectId) {
+      throw new Error('projectId is required for prompt rendering.');
+    }
+    await useUnifiedObjectStore.getState().listObjects('basic_info', projectId);
+  }
+
+  /**
    * Ensure fragments are loaded and registered before rendering templates
    */
   private static async ensureFragmentsLoaded(): Promise<void> {
@@ -107,6 +118,7 @@ export class PromptManager {
   ): Promise<PromptBundle> {
     // Ensure fragments are loaded before rendering any templates
     await this.ensureFragmentsLoaded();
+    await this.ensureBasicInfoLoaded(context.projectId);
 
     switch (mode) {
       case LLMTaskMode.AGENT_STORYOBJECT:
@@ -581,15 +593,19 @@ export class PromptManager {
     lorebook.sort(sortByOrder);
 
     // Build basic info
-    const basicInfo = basicInfoList.length > 0 ? (() => {
-      const data = this.getObjectDataForLanguage(basicInfoList[0], language);
+    if (basicInfoList.length !== 1) {
+      throw new Error(`Expected exactly 1 basic_info for project ${projectId}, found ${basicInfoList.length}.`);
+    }
+    const basicInfoObj = basicInfoList[0];
+    const basicInfo = (() => {
+      const data = this.getObjectDataForLanguage(basicInfoObj, language);
       return {
-        id: basicInfoList[0].id,
+        id: basicInfoObj.id,
         title: data.title || '',
         logline: data.logline || '',
         genre: data.genre || '',
       };
-    })() : null;
+    })();
 
     // Build objects array (characters, organizations, locations, lorebook combined with type field)
     const objects: TemplateData['project']['objects'] = [
@@ -722,15 +738,15 @@ export class PromptManager {
 
     // Build data for ALL languages (including main)
     allLanguages.forEach(lang => {
-      const langBasicInfo = basicInfoList.length > 0 ? (() => {
-        const data = this.getObjectDataForLanguage(basicInfoList[0], lang);
+      const langBasicInfo = (() => {
+        const data = this.getObjectDataForLanguage(basicInfoObj, lang);
         return {
-          id: basicInfoList[0].id,
+          id: basicInfoObj.id,
           title: data.title || '',
           logline: data.logline || '',
           genre: data.genre || '',
         };
-      })() : null;
+      })();
 
       const langObjects = [
         ...characters.map(ch => {

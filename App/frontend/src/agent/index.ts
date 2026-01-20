@@ -7,6 +7,7 @@ export {
   type AgentExecutorResult,
   type AgentTranslationInput,
   type AgentTranslationResult,
-  applyAgentEdits,
+  executeAgentFunctionCalls,
+  applyAgentEdits, // deprecated, use executeAgentFunctionCalls
   rejectAllAgentEdits,
 } from './AgentExecutor';

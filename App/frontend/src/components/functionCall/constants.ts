@@ -5,6 +5,7 @@ export const ACTION_LABELS: Record<string, string> = {
   replace: 'Replace',
   patch: 'Patch',
   set: 'Set',
+  read: 'Read',
 };
 
 export const TYPE_LABELS: Record<string, string> = {

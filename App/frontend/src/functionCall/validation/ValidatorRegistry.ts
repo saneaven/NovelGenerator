@@ -115,6 +115,13 @@ export const FUNCTION_VALIDATORS: Record<string, Validator[]> = {
     validateObjectExists,
     validatePatchApplicable,
   ],
+
+  // -------------------------------------------------------------------------
+  // Read Operations
+  // -------------------------------------------------------------------------
+  read_story_object: [validateTypeMapping, validateRequiredId, validateObjectExists],
+  read_outline: [validateRequiredId, validateObjectExists],
+  read_manuscript: [validateRequiredId, validateObjectExists],
 };
 
 /**

@@ -12,7 +12,7 @@ import type {
   UseObjectPickerDataOptions,
   UseObjectPickerDataResult,
 } from './types';
-import { CATEGORY_CONFIG } from './types';
+import { OBJECT_TYPE_CONFIG } from '../../types/objectTypeConfig';
 
 /**
  * Helper to get data for a specific language from an object.
@@ -34,7 +34,7 @@ function getObjectDataForLanguage(obj: UnifiedObject, language: string): Record<
  */
 function getTypesForMode(mode: ObjectPickerMode, excludeTypes: ObjectType[]): ObjectType[] {
   // Story objects includes outline hierarchy (outline > act > chapter)
-  const storyObjectTypes: ObjectType[] = ['basic_info', 'character', 'organization', 'location', 'lorebook', 'outline', 'act', 'chapter'];
+  const storyObjectTypes: ObjectType[] = ['character', 'organization', 'location', 'lorebook', 'outline', 'act', 'chapter'];
 
   // Chapter hierarchy types for manuscript mode display
   const chapterHierarchyTypes: ObjectType[] = ['outline', 'act', 'chapter', 'manuscript'];
@@ -87,7 +87,7 @@ function buildGroups(
   // Group story objects by type
   if (mode === 'story-objects' || mode === 'all') {
     // Flat groups for basic story objects
-    const flatStoryTypes: ObjectType[] = ['basic_info', 'character', 'organization', 'location', 'lorebook'];
+    const flatStoryTypes: ObjectType[] = ['character', 'organization', 'location', 'lorebook'];
 
     flatStoryTypes.forEach(type => {
       const typeObjects = objects.filter(obj => obj.type === type);
@@ -95,7 +95,7 @@ function buildGroups(
         availableTypes.push(type);
         groups.push({
           id: `group-${type}`,
-          label: CATEGORY_CONFIG[type]?.label || type,
+          label: OBJECT_TYPE_CONFIG[type]?.label || type,
           type,
           items: typeObjects
             .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0))
@@ -167,7 +167,7 @@ function buildGroups(
         availableTypes.push('outline', 'act', 'chapter');
         groups.push({
           id: 'group-outline',
-          label: CATEGORY_CONFIG['outline']?.label || 'Outline',
+          label: OBJECT_TYPE_CONFIG['outline']?.label || 'Outline',
           type: 'outline' as ObjectType,
           items: [],
           childGroups: outlineChildGroups,
@@ -253,7 +253,7 @@ function buildGroups(
       if (hasManuscripts) {
         groups.push({
           id: 'group-manuscripts',
-          label: CATEGORY_CONFIG['manuscript']?.label || 'Manuscripts',
+          label: OBJECT_TYPE_CONFIG['manuscript']?.label || 'Manuscripts',
           type: 'manuscript',
           items: [],
           childGroups: outlineGroups,
@@ -265,8 +265,8 @@ function buildGroups(
 
   // Sort groups by config order
   groups.sort((a, b) => {
-    const orderA = CATEGORY_CONFIG[a.type]?.order ?? 999;
-    const orderB = CATEGORY_CONFIG[b.type]?.order ?? 999;
+    const orderA = OBJECT_TYPE_CONFIG[a.type as ObjectType]?.order ?? 999;
+    const orderB = OBJECT_TYPE_CONFIG[b.type as ObjectType]?.order ?? 999;
     return orderA - orderB;
   });
 

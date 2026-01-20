@@ -448,12 +448,6 @@
 }
 
 /* States */
-.image-tab-content .loading {
-    text-align: center;
-    padding: var(--spacing-xl);
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-sm);
-}
 
 .image-tab-content .error-banner {
     display: flex;

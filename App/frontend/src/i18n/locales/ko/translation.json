@@ -615,7 +615,8 @@
     "noObjectsAvailable": "사용 가능한 객체가 없습니다",
     "searchPlaceholder": "객체 검색...",
     "allTypes": "전체 유형",
-    "clearSearch": "검색 지우기"
+    "clearSearch": "검색 지우기",
+    "selectAll": "전체 선택"
   },
   "richTextEditor": {
     "loading": "에디터 로딩 중...",

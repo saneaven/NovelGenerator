@@ -46,10 +46,10 @@ const tabLabelKeys: Record<string, string> = {
 
 // Translation types per sub-page
 const TRANSLATION_TYPES: Record<SubPageType, string[]> = {
-  'story-object': ['basic_info', 'character', 'organization', 'location', 'lorebook', 'act', 'chapter'],
+  'story-object': ['character', 'organization', 'location', 'lorebook', 'act', 'chapter'],
   'outline-manager': ['outline', 'act', 'chapter'],
   'novel-editor': ['manuscript'],
-  'config': ['basic_info', 'character', 'organization', 'location', 'lorebook', 'outline', 'act', 'chapter', 'manuscript'],
+  'config': ['character', 'organization', 'location', 'lorebook', 'outline', 'act', 'chapter', 'manuscript'],
 };
 
 // Get agent mode from sub-page

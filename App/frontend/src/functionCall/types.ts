@@ -12,7 +12,7 @@ import type { ObjectType, UnifiedObject } from '../types/unifiedObject';
 // ============================================================================
 
 /** Categories of function operations */
-export type FunctionCategory = 'crud' | 'replace' | 'patch' | 'translation';
+export type FunctionCategory = 'crud' | 'replace' | 'patch' | 'translation' | 'read';
 
 /** Target types for function operations */
 export type TargetType = 'basic_info' | 'story_object' | 'outline' | 'chapter' | 'manuscript';

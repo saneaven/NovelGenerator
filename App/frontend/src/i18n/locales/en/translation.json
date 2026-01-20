@@ -628,7 +628,8 @@
     "noObjectsAvailable": "No objects available",
     "searchPlaceholder": "Search objects...",
     "allTypes": "All Types",
-    "clearSearch": "Clear search"
+    "clearSearch": "Clear search",
+    "selectAll": "Select All"
   },
   "richTextEditor": {
     "loading": "Loading editor...",

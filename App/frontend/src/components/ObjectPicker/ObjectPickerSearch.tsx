@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ObjectType } from '../../types/unifiedObject';
 import type { ObjectPickerSearchProps } from './types';
-import { CATEGORY_CONFIG } from './types';
+import { OBJECT_TYPE_CONFIG } from '../../types/objectTypeConfig';
 import CustomSelect from '../ui/CustomSelect';
 
 const ObjectPickerSearch: React.FC<ObjectPickerSearchProps> = ({
@@ -53,7 +53,7 @@ const ObjectPickerSearch: React.FC<ObjectPickerSearchProps> = ({
       { value: '', label: t('objectPicker.allTypes') },
       ...availableTypes.map(type => ({
         value: type,
-        label: CATEGORY_CONFIG[type]?.label || type,
+        label: OBJECT_TYPE_CONFIG[type]?.label || type,
       })),
     ];
   }, [availableTypes, t]);

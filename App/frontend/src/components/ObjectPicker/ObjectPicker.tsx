@@ -15,7 +15,7 @@ import ObjectPickerSearch from './ObjectPickerSearch';
 import ObjectPickerGroup from './ObjectPickerGroup';
 import ObjectPickerPreview from './ObjectPickerPreview';
 import { useObjectPickerData } from './useObjectPickerData';
-import type { ObjectPickerProps, ObjectPickerItem as PickerItem, ObjectPickerGroup as Group } from './types';
+import type { ObjectPickerProps, ObjectPickerItem as PickerItem, ObjectPickerGroup as Group, SelectionState } from './types';
 import './ObjectPicker.css';
 
 /**
@@ -167,6 +167,7 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
   className = '',
   emptyMessage,
   showSearch = true,
+  showSelectAll = false,
 }) => {
   const { t } = useTranslation();
   // Internal state
@@ -213,6 +214,31 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
   const preSelectedIdSet = useMemo(() => new Set(preSelectedIds), [preSelectedIds]);
   const highlightIdSet = useMemo(() => new Set(highlightIds), [highlightIds]);
   const excludedIdSet = useMemo(() => new Set(excludedIds), [excludedIds]);
+
+  // Calculate global selection state for select all toggle
+  const globalSelectionState = useMemo((): SelectionState => {
+    const allIds = getAllItemIds(groups).filter(
+      id => !excludedIdSet.has(id) && !preSelectedIdSet.has(id)
+    );
+    if (allIds.length === 0) return 'unchecked';
+    const selectedCount = allIds.filter(id => selectedIdSet.has(id)).length;
+    if (selectedCount === 0) return 'unchecked';
+    if (selectedCount === allIds.length) return 'checked';
+    return 'indeterminate';
+  }, [groups, selectedIdSet, excludedIdSet, preSelectedIdSet]);
+
+  // Handle select/deselect all toggle
+  const handleSelectAllToggle = useCallback(() => {
+    if (disabled || selectionMode !== 'multi') return;
+    const allIds = getAllItemIds(groups).filter(
+      id => !excludedIdSet.has(id) && !preSelectedIdSet.has(id)
+    );
+    if (globalSelectionState === 'checked') {
+      onChange([]);  // Deselect all
+    } else {
+      onChange(allIds);  // Select all
+    }
+  }, [groups, globalSelectionState, onChange, disabled, selectionMode, excludedIdSet, preSelectedIdSet]);
 
   // Select all items on load if selectAllOnLoad is true (only on first load)
   useEffect(() => {
@@ -319,6 +345,22 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
             onTypeFilterChange={setTypeFilter}
             availableTypes={availableTypes}
           />
+        )}
+
+        {/* Select All Header */}
+        {showSelectAll && selectionMode === 'multi' && (
+          <div className="object-picker-select-all-header">
+            <label className="object-picker-select-all-label">
+              <input
+                type="checkbox"
+                checked={globalSelectionState === 'checked'}
+                ref={(el) => { if (el) el.indeterminate = globalSelectionState === 'indeterminate'; }}
+                onChange={handleSelectAllToggle}
+                disabled={disabled}
+              />
+              <span>{t('objectPicker.selectAll')}</span>
+            </label>
+          </div>
         )}
 
         {/* Groups List */}

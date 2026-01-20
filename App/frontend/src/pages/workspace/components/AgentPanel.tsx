@@ -311,6 +311,8 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     const [applyingMessageEdits, setApplyingMessageEdits] = useState<Record<string, boolean>>({});
     // Mobile agent overlay closing animation state
     const [isOverlayClosing, setIsOverlayClosing] = useState(false);
+    // Mobile touch state for showing message actions
+    const [touchedMessageId, setTouchedMessageId] = useState<string | null>(null);
 
     const handleCloseAgent = useCallback(() => {
         setIsOverlayClosing(true);
@@ -348,6 +350,20 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
             document.removeEventListener('keydown', handleKeyDown);
         };
     }, [isContextDropdownOpen]);
+
+    // Close message actions on outside click (mobile)
+    useEffect(() => {
+        if (!touchedMessageId) return;
+
+        const handleOutsideClick = (e: MouseEvent) => {
+            if (!(e.target as Element).closest('.agent-message')) {
+                setTouchedMessageId(null);
+            }
+        };
+
+        document.addEventListener('click', handleOutsideClick);
+        return () => document.removeEventListener('click', handleOutsideClick);
+    }, [touchedMessageId]);
 
     const currentProject = getCurrentProject();
 
@@ -668,8 +684,10 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                     </div>
                 )}
 
-                {displayMessages.map((message) =>
+                {displayMessages.map((message, index) =>
                 {
+                    const previousMessage = index > 0 ? displayMessages[index - 1] : null;
+                    const isSameRoleAsPrevious = previousMessage?.chatMessage.role === message.chatMessage.role;
                     const isUser = message.chatMessage.role === 'user';
                     const isEditing = editingMessageId === message.chatMessage.id;
                     const processingResult = displayProcessor.process(message.chatMessage as any, { projectId, mode } as any);
@@ -706,13 +724,16 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                     return (
                         <div
                             key={message.chatMessage.id}
-                            className={`agent-message ${message.chatMessage.role}${isEditing ? ' editing' : ''}`}
+                            className={`agent-message ${message.chatMessage.role}${isEditing ? ' editing' : ''}${isSameRoleAsPrevious ? ' same-role-as-previous' : ''}${touchedMessageId === message.chatMessage.id ? ' touched' : ''}`}
+                            onClick={() => setTouchedMessageId(message.chatMessage.id)}
                         >
                             <div className="message-wrapper">
-                                <div className="message-header">
-                                    <span className="message-role">{isUser ? t('agent.you') : t('agent.ai')}</span>
-                                    <span className="message-time">{formatTimestamp(message.chatMessage.timestamp)}</span>
-                                </div>
+                                {!isSameRoleAsPrevious && (
+                                    <div className="message-header">
+                                        <span className="message-role">{isUser ? t('agent.you') : t('agent.ai')}</span>
+                                        <span className="message-time">{formatTimestamp(message.chatMessage.timestamp)}</span>
+                                    </div>
+                                )}
 
                                         {isEditing ? (
                                             <MessageEditForm
@@ -948,7 +969,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                         language={mainLanguage}
                         maxHeight="350px"
                         showSearch={true}
-                        selectAllOnLoad={true}
+                        showSelectAll={true}
                     />
                 </div>
                 <div className="agent-controls-row">

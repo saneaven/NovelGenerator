@@ -2,13 +2,6 @@
    THINKING DISPLAY
    ======================================== */
 
-.message-with-thinking {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-sm);
-    padding-bottom: 0;
-}
-
 /* ===== Thinking Card ===== */
 .thinking-card {
     border: 1px solid var(--color-border-subtle);

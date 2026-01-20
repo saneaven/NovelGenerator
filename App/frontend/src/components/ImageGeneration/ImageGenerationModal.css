@@ -50,7 +50,7 @@
 .image-generation-modal .form-field {
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-xs);
+    gap: 0;
 }
 
 .image-generation-modal .form-field label {
@@ -59,6 +59,7 @@
     color: var(--color-text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    margin-bottom: var(--spacing-xs);
 }
 
 .image-generation-modal .form-row {
@@ -68,6 +69,11 @@
 
 .image-generation-modal .form-row .form-field {
     flex: 1;
+}
+
+
+.image-generation-modal .thinking-card {
+    margin-bottom: var(--spacing-sm);
 }
 
 .image-generation-modal .prompt-input-wrapper {
@@ -221,7 +227,7 @@
 .image-generation-modal .prompt-tabs {
     display: flex;
     gap: 0;
-    margin-bottom: var(--spacing-xs);
+    margin-bottom: 0;
 }
 
 .image-generation-modal .prompt-tab {
@@ -264,7 +270,6 @@
 .image-generation-modal .prompt-tabs + .prompt-input-wrapper .prompt-input {
     border-top-left-radius: 0;
     border-top-right-radius: 0;
-    margin-top: -1px;
 }
 
 /* ========================================

@@ -7,7 +7,8 @@ import { useSettingsStore } from '../../store/settingsStore';
 import type { UnifiedObject, ObjectType } from '../../types/unifiedObject';
 import { JourneyRuntime } from '../../llmTaskJourney';
 import { Globe, Swap, Document } from '../icons';
-import { ObjectPicker, CATEGORY_CONFIG as PICKER_CATEGORY_CONFIG } from '../ObjectPicker';
+import { ObjectPicker } from '../ObjectPicker';
+import { OBJECT_TYPE_CONFIG } from '../../types/objectTypeConfig';
 import CollapsibleSection from '../ui/CollapsibleSection';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
@@ -22,11 +23,7 @@ interface TranslationModalProps {
   defaultTargetLanguage?: string;
   defaultUserInput?: string;
   preSelectedObjectIds?: string[];  // If provided, skip tree selector and show only these objects
-  defaultSelectedContextIds?: string[];  // For retry: pre-select context objects
 }
-
-// Category display names and order (use from ObjectPicker)
-const CATEGORY_CONFIG = PICKER_CATEGORY_CONFIG;
 
 interface StoryObjectToTranslate {
   objectType: ObjectType;
@@ -44,7 +41,6 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   defaultTargetLanguage,
   defaultUserInput,
   preSelectedObjectIds,
-  defaultSelectedContextIds,
 }) => {
   const [sourceLanguage, setSourceLanguage] = useState<string>(defaultSourceLanguage || '');
   const [targetLanguage, setTargetLanguage] = useState<string>(defaultTargetLanguage || '');
@@ -55,9 +51,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   const [isObjectsCollapsed, setIsObjectsCollapsed] = useState(false);
 
   // Context selection for target language reference
-  const [selectedContextIds, setSelectedContextIds] = useState<Set<string>>(
-    () => new Set(defaultSelectedContextIds)
-  );
+  const [selectedContextIds, setSelectedContextIds] = useState<Set<string>>(() => new Set());
   const [isContextCollapsed, setIsContextCollapsed] = useState(true);
 
   // Raw output mode
@@ -156,6 +150,10 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       if (!Object.keys(obj.data || {}).includes(sourceLanguage)) return; // Skip if no source language data
 
       const objType = obj.type;
+
+      // basic_info is always included in prompts and is not selectable via ObjectPicker.
+      // Still allow re-translation when explicitly pre-selected.
+      if (!preSelectedSet && objType === 'basic_info') return;
 
       // If allowedObjectTypes is specified, only include those types
       if (allowedObjectTypes && !allowedObjectTypes.includes(objType)) return;
@@ -260,14 +258,14 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
     if (!isOpen) {
       setUserInput(defaultUserInput || '');
       setSelectedIds(preSelectedObjectIds ? new Set(preSelectedObjectIds) : new Set());
-      setSelectedContextIds(new Set(defaultSelectedContextIds));
+      setSelectedContextIds(new Set());
       hasInitializedSelectionRef.current = false;
       // Reset languages so they re-initialize from props on next open
       setSourceLanguage(defaultSourceLanguage || '');
       setTargetLanguage(defaultTargetLanguage || '');
       setRawMode(false);
     }
-  }, [isOpen, defaultSourceLanguage, defaultTargetLanguage, defaultUserInput, preSelectedObjectIds, defaultSelectedContextIds]);
+  }, [isOpen, defaultSourceLanguage, defaultTargetLanguage, defaultUserInput, preSelectedObjectIds]);
 
   const handleStart = () => {
     if (objectsToTranslate.length === 0) {
@@ -365,7 +363,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
             <div className="preselected-objects">
               {availableObjects.map(obj => (
                 <div key={obj.objectId} className="preselected-object-item">
-                  <span className="object-type-badge">{CATEGORY_CONFIG[obj.objectType]?.label || obj.objectType}</span>
+                  <span className="object-type-badge">{OBJECT_TYPE_CONFIG[obj.objectType]?.label || obj.objectType}</span>
                   <span className="object-name">{obj.label}</span>
                 </div>
               ))}
@@ -461,7 +459,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
               showSearch={false}
               maxHeight="200px"
               emptyMessage="No translated objects available"
-              selectAllOnLoad={!defaultSelectedContextIds?.length}
+              selectAllOnLoad={true}
             />
           </CollapsibleSection>
         )}

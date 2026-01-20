@@ -354,18 +354,34 @@ async function syncAgentFunctionCalls(sessionId: string): Promise<void> {
 }
 
 /**
- * Apply agent edits with sync
+ * Execute confirmed agent function calls with sync.
+ * After read operations are confirmed, tool_results will be included in the next LLM call.
  */
-export async function applyAgentEdits(params: {
+export async function executeAgentFunctionCalls(params: {
   sessionId: string;
   projectId: string;
   language: string;
   selections: Record<string, boolean>;
   options: HandlerOptions;
-}): Promise<void> {
+}): Promise<{ hasAcceptedReads: boolean }> {
   await applySessionEdits(params);
   await syncAgentFunctionCalls(params.sessionId);
+
+  // Check if we have accepted read operations that need continuation
+  const session = useLLMSessionStore.getState().getSessionById(params.sessionId);
+  if (!session?.editCards) return { hasAcceptedReads: false };
+
+  const { isReadFunction } = await import('../functionCall/schemas/schemaRegistry');
+  const hasAcceptedReads = session.editCards.some(
+    c => c.functionCall.status === 'accepted' && isReadFunction(c.functionCall.functionName)
+  );
+
+  // Return whether continuation is needed - caller handles the continuation
+  return { hasAcceptedReads };
 }
+
+/** @deprecated Use executeAgentFunctionCalls instead */
+export const applyAgentEdits = executeAgentFunctionCalls;
 
 /**
  * Reject all agent edits with sync

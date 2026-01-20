@@ -3,16 +3,11 @@
 {{!-- This fragment expects objectIds to be passed as the first positional parameter --}}
 {{!-- Usage: {{prompt "common/projectContext/filtered" someContext.objectIds}} --}}
 
-{{#if project.basicInfo}}
-{{#if (hasItems (filterByIds (array project.basicInfo) params.[0]))}}
 ### Basic Information
 
 - **Title**: {{ project.basicInfo.title }}
 - **Logline**: {{ project.basicInfo.logline }}
 - **Genre**: {{ project.basicInfo.genre }}
-
-{{/if}}
-{{/if}}
 
 {{#if (hasItems params.[0])}}
 {{#with (filterByIds project.objects params.[0]) as |selectedObjects|}}

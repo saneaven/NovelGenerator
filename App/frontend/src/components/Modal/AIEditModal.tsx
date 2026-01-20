@@ -20,7 +20,6 @@ interface AIEditModalProps {
   targetId?: string;
   onTaskStarted?: (sessionId: string) => void;
   defaultUserRequest?: string;
-  defaultSelectedContextIds?: string[];
 }
 
 const getCategoryDisplayName = (cat: string): string => {
@@ -46,13 +45,10 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   targetId,
   onTaskStarted,
   defaultUserRequest,
-  defaultSelectedContextIds,
 }) => {
   // Form state
   const [userRequest, setUserRequest] = useState(defaultUserRequest ?? '');
-  const [selectedContextIds, setSelectedContextIds] = useState<string[]>(
-    defaultSelectedContextIds ?? []
-  );
+  const [selectedContextIds, setSelectedContextIds] = useState<string[]>([]);
   const [pickerLoading, setPickerLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rawMode, setRawMode] = useState(false);
@@ -92,12 +88,12 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   useEffect(() => {
     if (!isOpen) {
       setUserRequest(defaultUserRequest ?? '');
-      setSelectedContextIds(defaultSelectedContextIds ?? []);
+      setSelectedContextIds([]);
       setPickerLoading(true);
       setError(null);
       setRawMode(false);
     }
-  }, [isOpen, defaultUserRequest, defaultSelectedContextIds]);
+  }, [isOpen, defaultUserRequest]);
 
   // Simple handler for context selection
   const handleContextChange = useCallback((ids: string[] | string) => {
@@ -196,7 +192,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
               maxHeight="300px"
               emptyMessage="No context objects available"
               onLoadComplete={handlePickerLoadComplete}
-              selectAllOnLoad={!defaultSelectedContextIds?.length}
+              selectAllOnLoad={true}
             />
           </div>
           <p className="context-help">

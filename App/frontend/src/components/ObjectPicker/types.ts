@@ -24,7 +24,7 @@ export type NovelStructureType = 'act' | 'chapter';
 export type ChapterHierarchyType = 'outline' | 'manuscript';
 
 /** Story object types (includes novel structure) */
-export type StoryObjectType = 'basic_info' | 'character' | 'organization' | 'location' | 'lorebook' | NovelStructureType;
+export type StoryObjectType = 'character' | 'organization' | 'location' | 'lorebook' | NovelStructureType;
 
 // ============================================================================
 // DATA STRUCTURES
@@ -81,6 +81,7 @@ export interface ObjectPickerProps {
   // Callbacks
   onLoadComplete?: () => void;
   selectAllOnLoad?: boolean;     // If true, select all items when loading completes
+  showSelectAll?: boolean;       // If true, show select all toggle header
 
   // Customization
   maxHeight?: string | number;
@@ -159,16 +160,3 @@ export interface UseObjectPickerDataResult {
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-
-/** Category display names and order */
-export const CATEGORY_CONFIG: Record<string, { label: string; order: number }> = {
-  basic_info: { label: 'Basic Info', order: 0 },
-  character: { label: 'Characters', order: 1 },
-  organization: { label: 'Organizations', order: 2 },
-  location: { label: 'Locations', order: 3 },
-  lorebook: { label: 'Lorebook', order: 4 },
-  outline: { label: 'Outline', order: 5 },
-  act: { label: 'Acts', order: 6 },
-  chapter: { label: 'Chapters', order: 7 },
-  manuscript: { label: 'Manuscripts', order: 8 },
-};

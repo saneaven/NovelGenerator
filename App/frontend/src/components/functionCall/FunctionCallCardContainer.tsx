@@ -16,6 +16,7 @@ function getAction(functionName: string): string | undefined {
   if (functionName.startsWith('replace_')) return 'replace';
   if (functionName.startsWith('patch_')) return 'patch';
   if (functionName.startsWith('set_')) return 'set';
+  if (functionName.startsWith('read_')) return 'read';
   return undefined;
 }
 

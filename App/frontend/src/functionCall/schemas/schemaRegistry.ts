@@ -432,6 +432,74 @@ const PATCH_MANUSCRIPT: FunctionSchema = {
 };
 
 // ============================================================================
+// READ FUNCTIONS
+// ============================================================================
+
+const READ_STORY_OBJECT: FunctionSchema = {
+  name: 'read_story_object',
+  description: 'Read full content of a story object (character, location, organization, lorebook, basic_info, or guidelines).',
+  category: 'read',
+  target: 'story_object',
+  idParam: 'id',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: idProperty,
+      type: {
+        type: 'string',
+        enum: ['character', 'location', 'organization', 'lorebook', 'basic_info', 'guidelines'],
+        description: 'Type of story object to read',
+      },
+    },
+    required: ['id', 'type'],
+  },
+};
+
+const READ_OUTLINE: FunctionSchema = {
+  name: 'read_outline',
+  description: 'Read full content of an outline item (outline, act, or chapter).',
+  category: 'read',
+  target: 'outline',
+  idParam: 'id',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: idProperty,
+      type: {
+        type: 'string',
+        enum: ['outline', 'act', 'chapter'],
+        description: 'Type of outline item to read',
+      },
+    },
+    required: ['id', 'type'],
+  },
+};
+
+const READ_MANUSCRIPT: FunctionSchema = {
+  name: 'read_manuscript',
+  description: 'Read manuscript content. Use offset to read a specific portion.',
+  category: 'read',
+  target: 'manuscript',
+  idParam: 'id',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: idProperty,
+      offset: {
+        type: 'object',
+        description: 'Optional range to read. If omitted, reads entire manuscript.',
+        properties: {
+          from: { type: 'integer', description: 'Start character position (0-indexed)' },
+          to: { type: 'integer', description: 'End character position (exclusive)' },
+        },
+        required: ['from', 'to'],
+      },
+    },
+    required: ['id'],
+  },
+};
+
+// ============================================================================
 // SCHEMA REGISTRY CLASS
 // ============================================================================
 
@@ -474,6 +542,11 @@ class SchemaRegistryClass {
     this.register(PATCH_OUTLINE);
     this.register(PATCH_OUTLINE_ACT);
     this.register(PATCH_OUTLINE_CHAPTER);
+
+    // Read
+    this.register(READ_STORY_OBJECT);
+    this.register(READ_OUTLINE);
+    this.register(READ_MANUSCRIPT);
   }
 
   register(schema: FunctionSchema): void {
@@ -594,6 +667,18 @@ export function isPatchFunction(name: string): boolean {
   return PATCH_FUNCTION_NAMES.has(name);
 }
 
+/** All function names that perform read operations */
+export const READ_FUNCTION_NAMES = new Set([
+  'read_story_object',
+  'read_outline',
+  'read_manuscript',
+]);
+
+/** Check if a function name is a read function */
+export function isReadFunction(name: string): boolean {
+  return READ_FUNCTION_NAMES.has(name);
+}
+
 // ============================================================================
 // FUNCTION GROUPS FOR LLM (for backward compatibility with PromptManager)
 // ============================================================================
@@ -638,7 +723,7 @@ export const OUTLINE_EDIT_FUNCTIONS = [
 // AGENT FUNCTIONS - Full set for Agent mode
 // ============================================================================
 
-/** All functions available to Agent mode (CRUD + Replace + Patch, no Translation) */
+/** All functions available to Agent mode (CRUD + Replace + Patch + Read, no Translation) */
 export const AGENT_FUNCTIONS = [
   // CRUD - Story Objects
   CREATE_STORY_OBJECT,
@@ -664,6 +749,10 @@ export const AGENT_FUNCTIONS = [
   PATCH_OUTLINE,
   PATCH_OUTLINE_ACT,
   PATCH_OUTLINE_CHAPTER,
+  // Read
+  READ_STORY_OBJECT,
+  READ_OUTLINE,
+  READ_MANUSCRIPT,
 ].map(s => ({ name: s.name, description: s.description, parameters: s.parameters }));
 
 /** All agent function names for validation */
@@ -686,6 +775,7 @@ const FUNCTION_SET_SCHEMAS: Record<FunctionSetName, FunctionSchema[]> = {
     REPLACE_OUTLINE, REPLACE_OUTLINE_ACT, REPLACE_OUTLINE_CHAPTER,
     PATCH_BASIC_INFO, PATCH_STORY_OBJECT, PATCH_MANUSCRIPT,
     PATCH_OUTLINE, PATCH_OUTLINE_ACT, PATCH_OUTLINE_CHAPTER,
+    READ_STORY_OBJECT, READ_OUTLINE, READ_MANUSCRIPT,
   ],
   manuscript: [REPLACE_MANUSCRIPT, PATCH_MANUSCRIPT],
   storyObject: [

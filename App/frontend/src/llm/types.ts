@@ -46,7 +46,7 @@ export interface TemplateData {
     isRawOutputMode: boolean;
   };
   project: {
-    basicInfo: { id: string; title: string; logline: string; genre: string } | null;
+    basicInfo: { id: string; title: string; logline: string; genre: string };
     objects: Array<{ type: string; id: string; name: string; description: string; imagePrompt?: string; imagePromptPositive?: string; imagePromptNegative?: string }>;
     outline: {
       outlines: Array<{

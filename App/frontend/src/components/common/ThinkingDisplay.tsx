@@ -52,7 +52,7 @@ const ThinkingDisplay: React.FC<ThinkingDisplayProps> = ({
   };
 
   return (
-    <div className="message-with-thinking">
+    <>
       {thinkingParts.map((part, index) => {
         const key = getStableKey(index);
         const isExpanded = expandedStates[key] ?? false;
@@ -84,7 +84,7 @@ const ThinkingDisplay: React.FC<ThinkingDisplayProps> = ({
           </div>
         );
       })}
-    </div>
+    </>
   );
 };
 

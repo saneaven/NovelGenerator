@@ -28,6 +28,24 @@ export function resolveObjectType(
 ): ObjectType | null {
   const type = args.type as string | undefined;
 
+  // Read functions - resolve from args.type
+  if (functionName === 'read_story_object' && type) {
+    // read_story_object can read basic_info and guidelines too
+    if (type === 'basic_info') return 'basic_info';
+    if (type === 'guidelines') return 'guidelines';
+    return STORY_OBJECT_TYPE_MAP[type as StoryObjectSubtype] ?? null;
+  }
+  if (functionName === 'read_outline' && type) {
+    // type is 'outline' | 'act' | 'chapter'
+    if (type === 'outline' || type === 'act' || type === 'chapter') {
+      return type as ObjectType;
+    }
+    return null;
+  }
+  if (functionName === 'read_manuscript') {
+    return 'manuscript';
+  }
+
   // Story object functions
   if (functionName.includes('story_object') && type) {
     return STORY_OBJECT_TYPE_MAP[type as StoryObjectSubtype] ?? null;

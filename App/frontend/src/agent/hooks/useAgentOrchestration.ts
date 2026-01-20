@@ -43,34 +43,15 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
   // Context ID management (auto-select newly created objects)
   // ============================================================================
 
-  const [selectedContextIds, setSelectedContextIds] = useState<string[]>(() => {
-    if (!projectId) return [];
-    return Object.keys(unifiedStore.objects)
-      .filter(id => unifiedStore.objects[id].metadata?.project_id === projectId);
-  });
-
-  const prevObjectIdsRef = useRef<Set<string>>(new Set(selectedContextIds));
-
-  useEffect(() => {
-    if (!projectId) return;
-
-    const currentIds = new Set(
-      Object.keys(unifiedStore.objects)
-        .filter(id => unifiedStore.objects[id].metadata?.project_id === projectId)
-    );
-
-    const newIds = [...currentIds].filter(id => !prevObjectIdsRef.current.has(id));
-    if (newIds.length > 0) {
-      setSelectedContextIds(prev => [...new Set([...prev, ...newIds])]);
-    }
-
-    prevObjectIdsRef.current = currentIds;
-  }, [unifiedStore.objects, projectId]);
+  const [selectedContextIds, setSelectedContextIds] = useState<string[]>([]);
 
   const totalObjectCount = useMemo(() => {
     if (!projectId) return 0;
     return Object.keys(unifiedStore.objects)
-      .filter(id => unifiedStore.objects[id].metadata?.project_id === projectId)
+      .filter(id => {
+        const obj = unifiedStore.objects[id];
+        return obj.metadata?.project_id === projectId && obj.type !== 'basic_info';
+      })
       .length;
   }, [unifiedStore.objects, projectId]);
 

@@ -275,6 +275,32 @@ const FUNCTION_META: Record<string, FunctionMeta> = {
     description: 'Translate agent message',
     summary: () => 'message content',
   },
+
+  // Read Operations
+  read_story_object: {
+    editType: 'init',
+    title: 'Read Object',
+    description: 'Read story object content',
+    summary: (args) => `${args.type}: ${args.id}`,
+  },
+  read_outline: {
+    editType: 'init',
+    title: 'Read Outline Item',
+    description: 'Read outline/act/chapter content',
+    summary: (args) => `${args.type}: ${args.id}`,
+  },
+  read_manuscript: {
+    editType: 'init',
+    title: 'Read Manuscript',
+    description: 'Read manuscript content',
+    summary: (args) => {
+      const offset = args.offset as { from?: number; to?: number } | undefined;
+      if (offset) {
+        return `id: ${args.id} (${offset.from}-${offset.to})`;
+      }
+      return `id: ${args.id}`;
+    },
+  },
 };
 
 // ============================================================================

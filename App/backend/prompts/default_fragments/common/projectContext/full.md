@@ -1,12 +1,10 @@
 ## Project Context
 
-{{#if project.basicInfo}}
 ### Basic Information
 
 - **Title**: {{ project.basicInfo.title }}
 - **Logline**: {{ project.basicInfo.logline }}
 - **Genre**: {{ project.basicInfo.genre }}
-{{/if}}
 
 {{#if (hasItems (filterByType project.objects "character"))}}
 ### Characters
