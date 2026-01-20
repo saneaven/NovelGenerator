@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ProviderType, ProviderPreference, ProviderCredentials } from '../../store/settingsStore';
 import { fetchModels, fetchModelEndpoints } from '../../llm/llmService';
 import { TextButton } from '../TextButton';
@@ -11,7 +12,6 @@ interface ModelBrowserProps {
   currentModel: string;
   providerPreference?: ProviderPreference;
   credentials: ProviderCredentials;
-  serverVaultEnabled?: boolean;
   onSelectModel: (modelId: string) => void;
   onUpdateProviderPreference: (pref?: ProviderPreference) => void;
   autoExpand?: boolean;
@@ -237,11 +237,11 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
   currentModel,
   providerPreference,
   credentials,
-  serverVaultEnabled = false,
   onSelectModel,
   onUpdateProviderPreference,
   autoExpand = false,
 }) => {
+  const { t } = useTranslation();
   const [modelsData, setModelsData] = useState<any>(null);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
@@ -270,7 +270,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
       const config: any = {};
       const providerCreds = credentials[provider];
 
-      if (!serverVaultEnabled && 'apiKey' in providerCreds && providerCreds.apiKey) {
+      if ('apiKey' in providerCreds && providerCreds.apiKey) {
         config.apiKey = providerCreds.apiKey;
       }
       if ('baseUrl' in providerCreds && providerCreds.baseUrl) {
@@ -338,7 +338,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
     }
 
     const apiKey = credentials.openrouter.apiKey;
-    if (!serverVaultEnabled && !apiKey) {
+    if (!apiKey) {
       console.error('OpenRouter API key not configured');
       return;
     }
@@ -346,7 +346,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
     setLoadingEndpoints(prev => ({ ...prev, [modelId]: true }));
 
     try {
-      const data = await fetchModelEndpoints(canonicalSlug, serverVaultEnabled ? undefined : apiKey);
+      const data = await fetchModelEndpoints(canonicalSlug, apiKey);
       setModelEndpoints(prev => ({ ...prev, [modelId]: data }));
     } catch (error) {
       console.error('Failed to fetch model endpoints:', error);
@@ -539,9 +539,9 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
               onSelectModel(model.id);
             }}
             className={`model-card__select-btn ${isSelected ? 'model-card__select-btn--selected' : ''}`}
-            title={isSelected ? 'Currently selected' : 'Use this model'}
+            title={isSelected ? t('settings.modelBrowser.currentlySelected') : t('settings.modelBrowser.useThisModel')}
           >
-            {isSelected ? 'Selected' : 'Use'}
+            {isSelected ? t('settings.modelBrowser.selected') : t('settings.modelBrowser.use')}
           </button>
         </div>
 
@@ -570,7 +570,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
                 size="sm"
                 onClick={() => toggleSectionExpansion(`${model.id}-description`)}
               >
-                {isDescExpanded ? 'Show less' : 'Show more'}
+                {isDescExpanded ? t('common.showLess') : t('common.showMore')}
               </TextButton>
             )}
           </div>
@@ -585,7 +585,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
                 onClick={() => toggleSectionExpansion(`${model.id}-architecture`)}
                 className={`model-card__action-btn ${expandedSections.has(`${model.id}-architecture`) ? 'model-card__action-btn--active' : ''}`}
               >
-                Architecture
+                {t('settings.modelBrowser.architecture')}
               </button>
             )}
             {detailsConfig.showPricing && model.pricing && (
@@ -594,7 +594,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
                 onClick={() => toggleSectionExpansion(`${model.id}-pricing`)}
                 className={`model-card__action-btn ${expandedSections.has(`${model.id}-pricing`) ? 'model-card__action-btn--active' : ''}`}
               >
-                Pricing Details
+                {t('settings.modelBrowser.pricingDetails')}
               </button>
             )}
             {detailsConfig.showEndpoints && model.canonical_slug && (
@@ -603,7 +603,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
                 onClick={() => handleProviderToggle(model.id, model.canonical_slug)}
                 className={`model-card__action-btn ${expandedSections.has(`${model.id}-provider`) ? 'model-card__action-btn--active' : ''}`}
               >
-                Providers
+                {t('settings.modelBrowser.providers')}
               </button>
             )}
           </div>
@@ -612,23 +612,23 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
         {/* Expanded sections */}
         {expandedSections.has(`${model.id}-architecture`) && model.architecture && (
           <div className="model-card__details">
-            <h5>Architecture</h5>
+            <h5>{t('settings.modelBrowser.architecture')}</h5>
             <ul>
-              <li>Input: {model.architecture.input_modalities?.join(', ')}</li>
-              <li>Output: {model.architecture.output_modalities?.join(', ')}</li>
-              <li>Tokenizer: {model.architecture.tokenizer}</li>
-              {model.architecture.instruct_type && <li>Instruct: {model.architecture.instruct_type}</li>}
+              <li>{t('settings.modelBrowser.input')}: {model.architecture.input_modalities?.join(', ')}</li>
+              <li>{t('settings.modelBrowser.output')}: {model.architecture.output_modalities?.join(', ')}</li>
+              <li>{t('settings.modelBrowser.tokenizer')}: {model.architecture.tokenizer}</li>
+              {model.architecture.instruct_type && <li>{t('settings.modelBrowser.instruct')}: {model.architecture.instruct_type}</li>}
             </ul>
           </div>
         )}
 
         {expandedSections.has(`${model.id}-pricing`) && model.pricing && (
           <div className="model-card__details">
-            <h5>Pricing (per 1M tokens)</h5>
+            <h5>{t('settings.modelBrowser.pricingPer1M')}</h5>
             <ul>
-              <li>Prompt: ${(parseFloat(model.pricing.prompt) * 1000000).toFixed(2)}</li>
-              <li>Completion: ${(parseFloat(model.pricing.completion) * 1000000).toFixed(2)}</li>
-              {parseFloat(model.pricing.image) > 0 && <li>Image: ${(parseFloat(model.pricing.image) * 1000000).toFixed(2)}</li>}
+              <li>{t('settings.modelBrowser.prompt')}: ${(parseFloat(model.pricing.prompt) * 1000000).toFixed(2)}</li>
+              <li>{t('settings.modelBrowser.completion')}: ${(parseFloat(model.pricing.completion) * 1000000).toFixed(2)}</li>
+              {parseFloat(model.pricing.image) > 0 && <li>{t('settings.modelBrowser.image')}: ${(parseFloat(model.pricing.image) * 1000000).toFixed(2)}</li>}
             </ul>
           </div>
         )}
@@ -636,31 +636,31 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
         {expandedSections.has(`${model.id}-provider`) && (
           <div className="model-card__details">
             <div className="model-card__details-header">
-              <h5>Available Providers</h5>
+              <h5>{t('settings.modelBrowser.availableProviders')}</h5>
               {providerPreference && (
                 <TextButton
                   variant="ghost"
                   size="sm"
                   onClick={clearProviderPreference}
                 >
-                  Clear Filters
+                  {t('settings.modelBrowser.clearFilters')}
                 </TextButton>
               )}
             </div>
             {loadingEndpoints[model.id] ? (
-              <p className="model-card__loading">Loading providers...</p>
+              <p className="model-card__loading">{t('settings.modelBrowser.loadingProviders')}</p>
             ) : modelEndpoints[model.id]?.data?.endpoints ? (
               <>
                 {providerPreference && (providerPreference.only || providerPreference.ignore) && (
                   <div className="model-card__filters">
                     {providerPreference.only && (
                       <span className="model-card__filter model-card__filter--only">
-                        Only: {providerPreference.only.join(', ')}
+                        {t('settings.modelBrowser.only')}: {providerPreference.only.join(', ')}
                       </span>
                     )}
                     {providerPreference.ignore && (
                       <span className="model-card__filter model-card__filter--ignore">
-                        Ignore: {providerPreference.ignore.join(', ')}
+                        {t('settings.modelBrowser.ignore')}: {providerPreference.ignore.join(', ')}
                       </span>
                     )}
                   </div>
@@ -702,14 +702,14 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
                             onClick={() => toggleProviderOnly(model.id, endpoint.provider_name)}
                             className={`model-card__endpoint-btn ${isInOnly ? 'model-card__endpoint-btn--active' : ''}`}
                           >
-                            {isInOnly ? <><Check size="xs" /> Only</> : 'Only'}
+                            {isInOnly ? <><Check size="xs" /> {t('settings.modelBrowser.only')}</> : t('settings.modelBrowser.only')}
                           </button>
                           <button
                             type="button"
                             onClick={() => toggleProviderIgnore(model.id, endpoint.provider_name)}
                             className={`model-card__endpoint-btn model-card__endpoint-btn--ignore ${isInIgnore ? 'model-card__endpoint-btn--active' : ''}`}
                           >
-                            {isInIgnore ? <><Check size="xs" /> Ignore</> : 'Ignore'}
+                            {isInIgnore ? <><Check size="xs" /> {t('settings.modelBrowser.ignore')}</> : t('settings.modelBrowser.ignore')}
                           </button>
                         </div>
                       </div>
@@ -718,7 +718,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
                 </div>
               </>
             ) : (
-              <p className="model-card__error">Failed to load providers</p>
+              <p className="model-card__error">{t('settings.modelBrowser.failedToLoadProviders')}</p>
             )}
           </div>
         )}
@@ -753,7 +753,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
         >
           <span className="model-tree__toggle">{isExpanded ? <Collapse size="xs" /> : <Expand size="xs" />}</span>
           <span className="model-tree__label">{node.label}</span>
-          <span className="model-tree__count">{modelCount} models</span>
+          <span className="model-tree__count">{t('settings.modelBrowser.modelCount', { count: modelCount })}</span>
         </div>
         {isExpanded && node.children && (
           <div className="model-tree__children">
@@ -766,15 +766,15 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
 
   const renderModelList = () => {
     if (loadingModels) {
-      return <div className="model-browser__loading">Loading models...</div>;
+      return <div className="model-browser__loading">{t('settings.modelBrowser.loadingModels')}</div>;
     }
 
     if (modelsError) {
       return (
         <div className="model-browser__error">
-          <p>Error: {modelsError}</p>
+          <p>{t('common.error')}: {modelsError}</p>
           <TextButton variant="secondary" size="sm" type="button" onClick={loadModels}>
-            Retry
+            {t('common.retry')}
           </TextButton>
         </div>
       );
@@ -782,9 +782,9 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
 
     if (!modelsData?.data || processedModels.length === 0) {
       if (searchQuery) {
-        return <div className="model-browser__empty">No models found matching "{searchQuery}"</div>;
+        return <div className="model-browser__empty">{t('settings.modelBrowser.noModelsFound', { query: searchQuery })}</div>;
       }
-      return <div className="model-browser__empty">No models available</div>;
+      return <div className="model-browser__empty">{t('settings.modelBrowser.noModelsAvailable')}</div>;
     }
 
     // Tree display (OpenRouter, Gemini)
@@ -813,7 +813,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
           <div className="model-browser__toolbar">
             <input
               type="text"
-              placeholder="Search models..."
+              placeholder={t('settings.modelBrowser.searchModels')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="model-browser__search"
@@ -822,11 +822,11 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
               value={sortOption}
               onChange={(value) => setSortOption(value as SortOption)}
               options={[
-                { value: 'name-asc', label: 'Name (A-Z)' },
-                { value: 'name-desc', label: 'Name (Z-A)' },
+                { value: 'name-asc', label: t('settings.modelBrowser.sortNameAsc') },
+                { value: 'name-desc', label: t('settings.modelBrowser.sortNameDesc') },
                 ...(provider === 'openrouter' ? [
-                  { value: 'price-asc', label: 'Price (Low-High)' },
-                  { value: 'price-desc', label: 'Price (High-Low)' },
+                  { value: 'price-asc', label: t('settings.modelBrowser.sortPriceAsc') },
+                  { value: 'price-desc', label: t('settings.modelBrowser.sortPriceDesc') },
                 ] : []),
               ]}
             />

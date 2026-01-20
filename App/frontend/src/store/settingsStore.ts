@@ -12,6 +12,14 @@ export type ImageProviderType = 'openai' | 'gemini' | 'xai' | 'novelai';
 export type PromptType = 'natural' | 'tag_based';
 export type ThemeMode = 'light' | 'dark' | 'system';
 
+// Supported UI languages for interface localization
+export const SUPPORTED_UI_LANGUAGES = [
+    { code: 'en', name: 'English' },
+    { code: 'ko', name: '한국어' },
+] as const;
+
+export type UILanguageCode = typeof SUPPORTED_UI_LANGUAGES[number]['code'];
+
 // Generic provider config (for API requests)
 export interface ProviderConfig {
     apiKey?: string;
@@ -161,6 +169,7 @@ export interface Settings {
     subLanguages: string[];
     defaultSubLanguage: string | null;
     displayLanguage: string; // Currently active display language (defaults to mainLanguage)
+    uiLanguage: UILanguageCode; // UI localization language (i18next)
 
     // Theme settings
     theme: ThemeMode;
@@ -276,6 +285,7 @@ const defaultSettings: Settings = {
     subLanguages: [],
     defaultSubLanguage: null,
     displayLanguage: 'English', // Defaults to mainLanguage
+    uiLanguage: 'en', // UI localization language
 
     // Default to system theme preference
     theme: 'system',
@@ -333,6 +343,7 @@ interface SettingsStore {
     setSubLanguages: (languages: string[]) => void;
     setDefaultSubLanguage: (language: string | null) => void;
     setDisplayLanguage: (language: string) => void;
+    setUiLanguage: (language: UILanguageCode) => void;
     addSubLanguage: (language: string) => void;
     removeSubLanguage: (language: string) => void;
 
@@ -410,6 +421,7 @@ const mergeWithDefaults = (stored: any): Settings => {
         subLanguages: stored.subLanguages ?? defaultSettings.subLanguages,
         defaultSubLanguage: stored.defaultSubLanguage ?? defaultSettings.defaultSubLanguage,
         displayLanguage: stored.displayLanguage ?? stored.mainLanguage ?? defaultSettings.mainLanguage,
+        uiLanguage: stored.uiLanguage ?? defaultSettings.uiLanguage,
         theme: stored.theme ?? defaultSettings.theme,
         retryConfig: {
             ...defaultSettings.retryConfig,
@@ -602,6 +614,12 @@ export const useSettingsStore = create<SettingsStore>()(
             setDisplayLanguage: (language: string) => {
                 set((state) => ({
                     settings: { ...state.settings, displayLanguage: language },
+                }));
+            },
+
+            setUiLanguage: (language: UILanguageCode) => {
+                set((state) => ({
+                    settings: { ...state.settings, uiLanguage: language },
                 }));
             },
 

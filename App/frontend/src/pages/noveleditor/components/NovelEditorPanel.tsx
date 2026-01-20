@@ -25,15 +25,16 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import { useLLMSessionStore } from '../../../store/llmSessionStore';
-import AIEditModal from '../../../components/AIEditModal';
-import TranslationModal from '../../../components/TranslationModal';
-import VersionHistoryModal from '../../../components/VersionHistoryModal';
+import AIEditModal from '../../../components/Modal/AIEditModal';
+import TranslationModal from '../../../components/Modal/TranslationModal';
+import VersionHistoryModal from '../../../components/Modal/VersionHistoryModal';
 import { UnifiedImageModal } from '../../../components/AssetManager';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
 import { assetService, type Asset } from '../../../api/assetService';
@@ -81,6 +82,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   chaptersInitialized,
   onSelectChapter,
 }) => {
+  const { t } = useTranslation();
+
   // Granular selectors to avoid unnecessary re-renders (Zustand best practice)
   const storeObjects = useUnifiedObjectStore((state) => state.objects);
   const storeLoading = useUnifiedObjectStore((state) => state.loading);
@@ -574,15 +577,15 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   if (!selectedChapterId) {
     const isChapterMissing = chaptersInitialized && !hasChapters;
     const heading = isChapterMissing
-      ? 'No Chapters Available'
+      ? t('novelEditor.emptyState.noChapters')
       : chaptersInitialized
-        ? 'Loading chapter...'
-        : 'Loading chapters...';
+        ? t('novelEditor.emptyState.loadingChapter')
+        : t('novelEditor.emptyState.loadingChapters');
     const description = isChapterMissing
-      ? 'Create chapters in the Workspace to start writing.'
+      ? t('novelEditor.emptyState.createChaptersHint')
       : chaptersInitialized
-        ? 'Opening the first available chapter. Please wait.'
-        : 'Loading your outline so we can open the first chapter.';
+        ? t('novelEditor.emptyState.openingChapter')
+        : t('novelEditor.emptyState.loadingOutline');
 
     return (
       <div className="novel-editor-panel empty-state">
@@ -597,7 +600,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   if (isResolvingContentId) {
     return (
       <div className="novel-editor-panel loading">
-        <Loading size="lg" text="Loading chapter content..." />
+        <Loading size="lg" text={t('novelEditor.loading.chapterContent')} />
       </div>
     );
   }
@@ -605,7 +608,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   if (contentIdError) {
     return (
       <div className="novel-editor-panel error">
-        <h3>Chapter Content Error</h3>
+        <h3>{t('novelEditor.error.chapterContentError')}</h3>
         <p>{contentIdError}</p>
       </div>
     );
@@ -615,7 +618,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     return (
       <div className="novel-editor-panel loading">
         <Loading size="lg" />
-        <p>Loading manuscript...</p>
+        <p>{t('novelEditor.loading.manuscript')}</p>
         <p style={{ fontSize: '0.875rem', color: 'var(--color-text-tertiary)', marginTop: '0.5rem' }}>
           Manuscript ID: {manuscriptId}
         </p>
@@ -628,7 +631,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
               }
             }}
           >
-            Retry
+            {t('novelEditor.error.retry')}
           </TextButton>
         </div>
       </div>
@@ -638,13 +641,13 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   if (error) {
     return (
       <div className="novel-editor-panel error">
-        <h3>Error Loading Chapter</h3>
+        <h3>{t('novelEditor.error.errorLoading')}</h3>
         <p>{error}</p>
         <TextButton
           variant="secondary"
           onClick={() => manuscriptId && fetchObject('manuscript', manuscriptId)}
         >
-          Retry
+          {t('novelEditor.error.retry')}
         </TextButton>
       </div>
     );
@@ -654,8 +657,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     return (
       <div className="novel-editor-panel empty-state">
         <div className="empty-state-content">
-          <h2>Manuscript Not Found</h2>
-          <p>This chapter doesn't have manuscript content yet.</p>
+          <h2>{t('novelEditor.emptyState.manuscriptNotFound')}</h2>
+          <p>{t('novelEditor.emptyState.noManuscriptContent')}</p>
         </div>
       </div>
     );
@@ -681,13 +684,13 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                   {/* Desktop: Status Info - Save status + Word count (stacked vertically) */}
                   <div className="editor-status-info">
                     <div className="save-status">
-                      {isSaving && savingType === 'auto' && <span className="saving-indicator"><Save size="xs" /> Auto-saving...</span>}
-                      {isSaving && savingType === 'manual' && <span className="saving-indicator"><Save size="xs" /> Saving...</span>}
-                      {!isSaving && hasUnsavedChanges && <span className="unsaved-indicator"><Bullet size="xs" /> Unsaved</span>}
-                      {!isSaving && !hasUnsavedChanges && <span className="saved-indicator"><Check size="xs" /> Saved</span>}
+                      {isSaving && savingType === 'auto' && <span className="saving-indicator"><Save size="xs" /> {t('novelEditor.saveStatus.autoSaving')}</span>}
+                      {isSaving && savingType === 'manual' && <span className="saving-indicator"><Save size="xs" /> {t('novelEditor.saveStatus.saving')}</span>}
+                      {!isSaving && hasUnsavedChanges && <span className="unsaved-indicator"><Bullet size="xs" /> {t('novelEditor.saveStatus.unsaved')}</span>}
+                      {!isSaving && !hasUnsavedChanges && <span className="saved-indicator"><Check size="xs" /> {t('novelEditor.saveStatus.saved')}</span>}
                     </div>
                     <div className="word-count">
-                      <span>{wordCount.toLocaleString()} words</span>
+                      <span>{t('novelEditor.wordCount', { count: wordCount })}</span>
                     </div>
                   </div>
 
@@ -702,7 +705,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                   <IconButton
                     icon={<HamburgerMenu size="md" />}
                     onClick={() => toggleSidebar(projectId, 'chapter')}
-                    title="Toggle chapter list"
+                    title={t('novelEditor.sidebar.title')}
                     size="sm"
                     className="sidebar-toggle-btn"
                   />
@@ -738,11 +741,11 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                     size="sm"
                     onClick={() => setIsAIEditModalOpen(true)}
                     disabled={isSaving || !selectedChapter}
-                    title="AI Edit Chapter"
+                    title={t('novelEditor.toolbar.aiEditChapter')}
                     iconLeft={<AIAssist size="sm" />}
                     className="desktop-only"
                   >
-                    AI Edit
+                    {t('novelEditor.toolbar.aiEdit')}
                   </TextButton>
 
                   {/* Manual Save Button */}
@@ -751,11 +754,11 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                     size="sm"
                     onClick={() => handleManualSave('Manual Save')}
                     disabled={isSaving || !hasUnsavedChanges}
-                    title="Create version snapshot (Ctrl+S)"
+                    title={t('novelEditor.toolbar.saveSnapshot')}
                     iconLeft={<Save size="sm" />}
                     className="desktop-only"
                   >
-                    Save
+                    {t('novelEditor.toolbar.save')}
                   </TextButton>
 
                   {/* More Actions Dropdown - contains mobile-hidden actions */}
@@ -764,7 +767,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                       <IconButton
                         icon={<MoreHorizontal size="sm" />}
                         disabled={isSaving}
-                        title="More actions"
+                        title={t('novelEditor.toolbar.moreActions')}
                         size="sm"
                       />
                     }
@@ -772,7 +775,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                     {/* AI Edit - accessible via dropdown on mobile */}
                     <DropdownItem
                       icon={<AIAssist size="sm" />}
-                      label="AI Edit"
+                      label={t('novelEditor.toolbar.aiEdit')}
                       onClick={() => setIsAIEditModalOpen(true)}
                       disabled={isSaving || !selectedChapter}
                       className="mobile-only-item"
@@ -780,7 +783,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                     {/* Save - accessible via dropdown on mobile */}
                     <DropdownItem
                       icon={<Save size="sm" />}
-                      label="Save"
+                      label={t('novelEditor.toolbar.save')}
                       onClick={() => handleManualSave('Manual Save')}
                       disabled={isSaving || !hasUnsavedChanges}
                       className="mobile-only-item"
@@ -790,14 +793,14 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                       manuscriptLanguages.includes(globalDisplayLanguage) ? (
                         <DropdownItem
                           icon={<Refresh size="sm" />}
-                          label="Retranslate"
+                          label={t('novelEditor.toolbar.retranslate')}
                           onClick={() => setShowRetranslateModal(true)}
                           disabled={isSaving}
                         />
                       ) : (
                         <DropdownItem
                           icon={<Globe size="sm" />}
-                          label="Translate"
+                          label={t('novelEditor.toolbar.translate')}
                           onClick={() => setShowRetranslateModal(true)}
                           disabled={isSaving || !manuscript}
                         />
@@ -806,7 +809,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
                     {/* Versions */}
                     <DropdownItem
                       icon={<Clock size="sm" />}
-                      label="Versions"
+                      label={t('novelEditor.toolbar.versions')}
                       onClick={() => setShowVersionsModal(true)}
                       disabled={isSaving || !selectedChapter || !manuscriptId}
                     />
@@ -818,15 +821,15 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
             {isMissingTranslation && (
               <div className="missing-translation-overlay">
                 <div className="overlay-content">
-                  <h3>No content in {globalDisplayLanguage}</h3>
-                  <p>This chapter doesn't have content in {globalDisplayLanguage} yet.</p>
+                  <h3>{t('novelEditor.overlay.noContentIn', { language: globalDisplayLanguage })}</h3>
+                  <p>{t('novelEditor.overlay.noContentYet', { language: globalDisplayLanguage })}</p>
                   <div className="overlay-actions">
                     {availableSourceLanguages.length > 0 && (
                       <TextButton
                         variant="primary"
                         onClick={() => setShowRetranslateModal(true)}
                       >
-                        Translate from {availableSourceLanguages[0]}
+                        {t('novelEditor.overlay.translateFrom', { language: availableSourceLanguages[0] })}
                       </TextButton>
                     )}
                   </div>
@@ -838,12 +841,12 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
           {/* Footer */}
           <div className="editor-footer">
             <div className="editor-footer-info">
-              <span>Language: {effectiveLanguage}</span>
+              <span>{t('novelEditor.footer.language')}: {effectiveLanguage}</span>
               <span>•</span>
-              <span>Version: {manuscript.version.number}</span>
+              <span>{t('novelEditor.footer.version')}: {manuscript.version.number}</span>
             </div>
             <div className="editor-footer-notice">
-              <Lightbulb size="sm" /> Auto-cached locally • Click Save to create version
+              <Lightbulb size="sm" /> {t('novelEditor.footer.autoCachedLocally')}
             </div>
           </div>
         </div>
@@ -920,10 +923,10 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         initialGenerationRecipe={regenerateRecipe}
         title={
           regenerateRecipe
-            ? 'Regenerate Image'
+            ? t('novelEditor.modal.regenerateImage')
             : replaceImageSrc
-              ? 'Change Image'
-              : 'Insert Image'
+              ? t('novelEditor.modal.changeImage')
+              : t('novelEditor.modal.insertImage')
         }
       />
     </>

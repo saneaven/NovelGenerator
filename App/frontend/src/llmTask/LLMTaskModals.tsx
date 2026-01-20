@@ -8,7 +8,7 @@ import { BaseModal } from '../components/BaseModal';
 import { useLLMSessionStore } from '../store/llmSessionStore';
 import { useAgentUIStore } from '../store/agentUIStore';
 import { useSettingsStore } from '../store/settingsStore';
-import ThinkingDisplay from '../components/ThinkingDisplay';
+import ThinkingDisplay from '../components/common/ThinkingDisplay';
 import NotificationProgressBar from '../components/Notification/NotificationProgressBar';
 import { Close } from '../components/icons';
 import { TextButton } from '../components/TextButton';

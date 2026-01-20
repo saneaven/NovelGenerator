@@ -1,4 +1,5 @@
 import React, { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ChevronDown } from '../icons';
 import { ActionBadge } from './ActionBadge';
 import { OperationDetails } from './OperationDetails';
@@ -9,28 +10,16 @@ type CallStatus = 'validating' | 'pending' | 'failed' | 'accepted' | 'rejected';
 
 type StatusVariant = StreamingStatus | CallStatus;
 
-function statusLabel(variant: StatusVariant): string {
-  switch (variant) {
-    case 'collecting':
-      return 'Streaming';
-    case 'validating':
-      return 'Validating';
-    case 'ready':
-      return 'Ready';
-    case 'error':
-      return 'Error';
-    case 'pending':
-      return 'Pending';
-    case 'accepted':
-      return 'Applied';
-    case 'rejected':
-      return 'Skipped';
-    case 'failed':
-      return 'Failed';
-    default:
-      return variant;
-  }
-}
+const STATUS_LABEL_KEYS: Record<StatusVariant, string> = {
+  collecting: 'operationStatus.streaming',
+  validating: 'operationStatus.validating',
+  ready: 'operationStatus.ready',
+  error: 'operationStatus.error',
+  pending: 'operationStatus.pending',
+  accepted: 'operationStatus.applied',
+  rejected: 'operationStatus.skipped',
+  failed: 'operationStatus.failed',
+};
 
 export interface OperationItemProps {
   mode: CardMode;
@@ -72,7 +61,13 @@ export const OperationItem: React.FC<OperationItemProps> = ({
   rawText,
   errorMessage,
 }) => {
+  const { t } = useTranslation();
   const panelId = `function-call-op-panel-${id}`;
+
+  const getStatusLabel = (variant: StatusVariant): string => {
+    const key = STATUS_LABEL_KEYS[variant];
+    return key ? t(key) : variant;
+  };
 
   const handleHeaderClick = useCallback(() => {
     onToggle?.();
@@ -115,7 +110,7 @@ export const OperationItem: React.FC<OperationItemProps> = ({
         <div className="function-call-op__right">
           {status && (
             <span className={`function-call-pill function-call-pill--${status}`}>
-              {statusLabel(status)}
+              {getStatusLabel(status)}
             </span>
           )}
           <ChevronDown className={`function-call-op__chevron ${isExpanded ? 'function-call-op__chevron--open' : ''}`} size="sm" />

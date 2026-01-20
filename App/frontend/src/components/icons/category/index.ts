@@ -1,5 +1,6 @@
 export { Settings } from './Settings';
 export { Chat } from './Chat';
+export {Configs } from './Configs';
 export { Document } from './Document';
 export { Palette } from './Palette';
 export { Image } from './Image';

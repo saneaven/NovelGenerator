@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ObjectType } from '../../types/unifiedObject';
 import ObjectPickerSearch from './ObjectPickerSearch';
 import ObjectPickerGroup from './ObjectPickerGroup';
@@ -164,9 +165,10 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
   selectAllOnLoad = false,
   maxHeight = '400px',
   className = '',
-  emptyMessage = 'No objects available',
+  emptyMessage,
   showSearch = true,
 }) => {
+  const { t } = useTranslation();
   // Internal state
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<ObjectType | null>(null);
@@ -326,10 +328,10 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
           role="listbox"
           aria-multiselectable={selectionMode === 'multi'}
         >
-          {loading && <div className="object-picker-loading">Loading...</div>}
+          {loading && <div className="object-picker-loading">{t('objectPicker.loading')}</div>}
           {error && <div className="object-picker-error">{error}</div>}
           {!loading && !error && filteredGroups.length === 0 && (
-            <div className="object-picker-empty">{emptyMessage}</div>
+            <div className="object-picker-empty">{emptyMessage || t('objectPicker.noObjectsAvailable')}</div>
           )}
           {!loading && filteredGroups.map(group => (
             <ObjectPickerGroup

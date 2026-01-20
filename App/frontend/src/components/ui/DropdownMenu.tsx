@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import ReactDOM from 'react-dom';
 import './DropdownMenu.css';
 
@@ -16,6 +16,7 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
   onOpenChange,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isMeasured, setIsMeasured] = useState(false);
 
   useEffect(() => {
     onOpenChange?.(isOpen);
@@ -24,12 +25,27 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
   const triggerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Calculate position when opening
+  // Reset measured state when menu closes
+  useEffect(() => {
+    if (!isOpen) {
+      setIsMeasured(false);
+    }
+  }, [isOpen]);
+
+  // Measure menu after render and trigger position recalculation
+  useLayoutEffect(() => {
+    if (isOpen && menuRef.current && !isMeasured) {
+      setIsMeasured(true);
+    }
+  }, [isOpen, isMeasured]);
+
+  // Calculate position when opening or after measurement
   useEffect(() => {
     if (isOpen && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
-      const menuWidth = 160; // Approximate menu width
-      const menuHeight = 200; // Approximate menu height
+      // Use actual menu dimensions if measured, otherwise use fallback
+      const menuWidth = menuRef.current?.offsetWidth || 160;
+      const menuHeight = menuRef.current?.offsetHeight || 200;
       const viewportHeight = window.innerHeight;
       const spaceBelow = viewportHeight - rect.bottom;
       const spaceAbove = rect.top;
@@ -46,7 +62,7 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
           : rect.left + window.scrollX,
       });
     }
-  }, [isOpen, align]);
+  }, [isOpen, align, isMeasured]);
 
   // Close on click outside
   useEffect(() => {
@@ -108,6 +124,7 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
             position: 'absolute',
             top: menuPosition.top,
             left: menuPosition.left,
+            opacity: isMeasured ? 1 : 0,
           }}
         >
           {React.Children.map(children, (child) => {

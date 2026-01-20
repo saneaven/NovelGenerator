@@ -119,7 +119,8 @@ async def get_user_settings(
         llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
         functionCallHistoryLimit=getattr(settings, 'function_call_history_limit', 5),
         thinkingHistoryLimit=getattr(settings, 'thinking_history_limit', 5),
-        displayLanguage=getattr(settings, 'display_language', 'English')
+        displayLanguage=getattr(settings, 'display_language', 'English'),
+        uiLanguage=getattr(settings, 'ui_language', 'en')
     )
 
 
@@ -193,6 +194,9 @@ async def update_user_settings(
     if update_data.displayLanguage is not None:
         settings.display_language = update_data.displayLanguage  # type: ignore
 
+    if update_data.uiLanguage is not None:
+        settings.ui_language = update_data.uiLanguage  # type: ignore
+
     db.commit()
     db.refresh(settings)
 
@@ -231,7 +235,8 @@ async def update_user_settings(
         llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
         functionCallHistoryLimit=getattr(settings, 'function_call_history_limit', 5),
         thinkingHistoryLimit=getattr(settings, 'thinking_history_limit', 5),
-        displayLanguage=getattr(settings, 'display_language', 'English')
+        displayLanguage=getattr(settings, 'display_language', 'English'),
+        uiLanguage=getattr(settings, 'ui_language', 'en')
     )
 
 
@@ -297,7 +302,8 @@ async def update_function_config(
         llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
         functionCallHistoryLimit=getattr(settings, 'function_call_history_limit', 5),
         thinkingHistoryLimit=getattr(settings, 'thinking_history_limit', 5),
-        displayLanguage=getattr(settings, 'display_language', 'English')
+        displayLanguage=getattr(settings, 'display_language', 'English'),
+        uiLanguage=getattr(settings, 'ui_language', 'en')
     )
 
 
@@ -355,7 +361,8 @@ async def sync_settings_from_client(
             llm_logging_enabled=client_settings.get('llmLoggingEnabled', False),
             function_call_history_limit=client_settings.get('functionCallHistoryLimit', 5),
             thinking_history_limit=client_settings.get('thinkingHistoryLimit', 5),
-            display_language=client_settings.get('displayLanguage', 'English')
+            display_language=client_settings.get('displayLanguage', 'English'),
+            ui_language=client_settings.get('uiLanguage', 'en')
         )
         db.add(settings)
     else:
@@ -373,6 +380,7 @@ async def sync_settings_from_client(
         settings.function_call_history_limit = client_settings.get('functionCallHistoryLimit', getattr(settings, 'function_call_history_limit', 5))  # type: ignore
         settings.thinking_history_limit = client_settings.get('thinkingHistoryLimit', getattr(settings, 'thinking_history_limit', 5))  # type: ignore
         settings.display_language = client_settings.get('displayLanguage', getattr(settings, 'display_language', 'English'))  # type: ignore
+        settings.ui_language = client_settings.get('uiLanguage', getattr(settings, 'ui_language', 'en'))  # type: ignore
 
     db.commit()
     db.refresh(settings)

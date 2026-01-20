@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNotificationStore } from '../../store/notificationStore';
 import { Bell, Sliders } from '../icons';
 import NotificationsView from './NotificationsView';
@@ -17,6 +18,7 @@ const ActivityPanelContainer: React.FC<ActivityPanelContainerProps> = ({
   onViewChange,
   isMobile = false,
 }) => {
+  const { t } = useTranslation();
   const removeAll = useNotificationStore((state) => state.removeAll);
   const notificationsMap = useNotificationStore((state) => state.notifications);
 
@@ -28,7 +30,7 @@ const ActivityPanelContainer: React.FC<ActivityPanelContainerProps> = ({
     removeAll();
   };
 
-  const title = activeView === 'notifications' ? 'Notifications' : 'Variables';
+  const title = activeView === 'notifications' ? t('activity.notifications') : t('activity.variables');
 
   return (
     <>
@@ -36,7 +38,7 @@ const ActivityPanelContainer: React.FC<ActivityPanelContainerProps> = ({
       <div className="activity-panel-header">
         {activeView === 'notifications' && hasNotifications && (
           <button className="activity-panel-clear" onClick={handleClearAll}>
-            Clear All
+            {t('activity.clearAll')}
           </button>
         )}
 
@@ -46,8 +48,8 @@ const ActivityPanelContainer: React.FC<ActivityPanelContainerProps> = ({
           <button
             className="activity-panel-tab"
             onClick={() => onViewChange('variables')}
-            title="Switch to Variables"
-            aria-label="Switch to variables"
+            title={t('activity.switchToVariables')}
+            aria-label={t('activity.switchToVariables')}
           >
             <Sliders size="sm" />
           </button>
@@ -55,8 +57,8 @@ const ActivityPanelContainer: React.FC<ActivityPanelContainerProps> = ({
           <button
             className="activity-panel-tab"
             onClick={() => onViewChange('notifications')}
-            title="Switch to Notifications"
-            aria-label="Switch to notifications"
+            title={t('activity.switchToNotifications')}
+            aria-label={t('activity.switchToNotifications')}
           >
             <Bell size="sm" />
           </button>

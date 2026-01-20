@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useCallback, useImperativeHandle, forwardRef, useRef, useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { useEditor, EditorContent } from '@tiptap/react';
 
@@ -60,6 +61,7 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
   onSwapImage,
   onRegenerateImage,
 }, ref) => {
+  const { t } = useTranslation();
   const onChangeRef = useRef(onChange);
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -219,7 +221,7 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
   }), [editor, insertImage, updateImageSrc, getTextAroundCursor]);
 
   if (!editor) {
-    return <div className="rich-text-editor loading">Loading editor...</div>;
+    return <div className="rich-text-editor loading">{t('novelEditor.loading.editor')}</div>;
   }
 
   // === Dropdown helpers (copied from RichTextEditor) ===
@@ -257,7 +259,7 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
               onClick={() => headingDropdownOpen ? setHeadingDropdownOpen(false) : openHeadingDropdown()}
               className={`format-btn heading-dropdown-trigger ${editor.isActive('heading') ? 'active' : ''}`}
               disabled={disabled}
-              title="Heading"
+              title={t('manuscriptEditor.toolbar.heading')}
             >
               {editor.isActive('heading', { level: 1 }) ? 'H1' :
                editor.isActive('heading', { level: 2 }) ? 'H2' :
@@ -284,7 +286,7 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
                 }}
               >
                 <span className="heading-label">¶</span>
-                <span>Paragraph</span>
+                <span>{t('manuscriptEditor.headingDropdown.paragraph')}</span>
               </button>
               {([1, 2, 3, 4, 5, 6] as const).map((level) => (
                 <button
@@ -297,7 +299,7 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
                   }}
                 >
                   <span className="heading-label">H{level}</span>
-                  <span>Heading {level}</span>
+                  <span>{t('manuscriptEditor.headingDropdown.heading', { level })}</span>
                 </button>
               ))}
             </div>,
@@ -309,7 +311,7 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
             onClick={() => editor.chain().focus().toggleBold().run()}
             className={`format-btn ${editor.isActive('bold') ? 'active' : ''}`}
             disabled={disabled}
-            title="Bold"
+            title={t('manuscriptEditor.toolbar.bold')}
           >
             <strong>B</strong>
           </button>
@@ -319,7 +321,7 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
             onClick={() => editor.chain().focus().toggleItalic().run()}
             className={`format-btn ${editor.isActive('italic') ? 'active' : ''}`}
             disabled={disabled}
-            title="Italic"
+            title={t('manuscriptEditor.toolbar.italic')}
           >
             <em>I</em>
           </button>
@@ -329,7 +331,7 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
             onClick={() => editor.chain().focus().toggleStrike().run()}
             className={`format-btn ${editor.isActive('strike') ? 'active' : ''}`}
             disabled={disabled}
-            title="Strikethrough"
+            title={t('manuscriptEditor.toolbar.strikethrough')}
           >
             <s>S</s>
           </button>
@@ -339,7 +341,7 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
             onClick={() => editor.chain().focus().toggleBulletList().run()}
             className={`format-btn ${editor.isActive('bulletList') ? 'active' : ''}`}
             disabled={disabled}
-            title="Bullet List"
+            title={t('manuscriptEditor.toolbar.bulletList')}
           >
             <BulletList size="md" />
           </button>
@@ -349,7 +351,7 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
             onClick={() => editor.chain().focus().toggleOrderedList().run()}
             className={`format-btn ${editor.isActive('orderedList') ? 'active' : ''}`}
             disabled={disabled}
-            title="Numbered List"
+            title={t('manuscriptEditor.toolbar.numberedList')}
           >
             <OrderedList size="md" />
           </button>
@@ -359,7 +361,7 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
             onClick={() => editor.chain().focus().toggleBlockquote().run()}
             className={`format-btn ${editor.isActive('blockquote') ? 'active' : ''}`}
             disabled={disabled}
-            title="Quote"
+            title={t('manuscriptEditor.toolbar.quote')}
           >
             <Quote size="md" />
           </button>
@@ -369,7 +371,7 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
             onClick={() => editor.chain().focus().toggleCodeBlock().run()}
             className={`format-btn ${editor.isActive('codeBlock') ? 'active' : ''}`}
             disabled={disabled}
-            title="Code Block"
+            title={t('manuscriptEditor.toolbar.codeBlock')}
           >
             <CodeBlock size="md" />
           </button>
@@ -381,7 +383,7 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
               onClick={() => tableDropdownOpen ? setTableDropdownOpen(false) : openTableDropdown()}
               className={`format-btn table-dropdown-trigger ${editor.isActive('table') ? 'active' : ''}`}
               disabled={disabled}
-              title="Table"
+              title={t('manuscriptEditor.toolbar.table')}
             >
               <TableIcon size="md" />
               <ChevronDown size="xs" className="dropdown-arrow" />
@@ -395,7 +397,7 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
               style={{ position: 'fixed', top: tableDropdownPos.top, left: tableDropdownPos.left }}
             >
               <div className="table-dimensions">
-                <label>Rows</label>
+                <label>{t('manuscriptEditor.tableDropdown.rows')}</label>
                 <input
                   type="number"
                   min={1}
@@ -405,7 +407,7 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
                 />
               </div>
               <div className="table-dimensions">
-                <label>Cols</label>
+                <label>{t('manuscriptEditor.tableDropdown.cols')}</label>
                 <input
                   type="number"
                   min={1}
@@ -422,18 +424,18 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
                   setTableDropdownOpen(false);
                 }}
               >
-                Insert Table
+                {t('manuscriptEditor.tableDropdown.insertTable')}
               </button>
               {editor.isActive('table') && (
                 <>
                   <button type="button" className="table-action-btn" onClick={() => editor.chain().focus().addRowAfter().run()}>
-                    Add Row
+                    {t('manuscriptEditor.tableDropdown.addRow')}
                   </button>
                   <button type="button" className="table-action-btn" onClick={() => editor.chain().focus().addColumnAfter().run()}>
-                    Add Column
+                    {t('manuscriptEditor.tableDropdown.addColumn')}
                   </button>
                   <button type="button" className="table-action-btn danger" onClick={() => editor.chain().focus().deleteTable().run()}>
-                    Delete Table
+                    {t('manuscriptEditor.tableDropdown.deleteTable')}
                   </button>
                 </>
               )}
@@ -447,7 +449,7 @@ const ManuscriptEditor = forwardRef<ManuscriptEditorRef, ManuscriptEditorProps>(
               onClick={onBrowseAssets}
               className="format-btn"
               disabled={disabled}
-              title="Insert Image"
+              title={t('manuscriptEditor.toolbar.insertImage')}
             >
               <Image size="sm" />
             </button>

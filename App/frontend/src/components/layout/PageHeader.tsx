@@ -87,6 +87,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
               currentSubPage={currentSubPage}
               onSubPageChange={onSubPageChange}
               onHomeClick={() => navigate('/dashboard')}
+              align="right"
             />
           </div>
         </div>

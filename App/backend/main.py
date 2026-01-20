@@ -17,15 +17,13 @@ from .providers.xai_provider import XAIProvider
 from .auth import get_current_user
 from .database import get_db
 from .models.db_models import User
-from .services.credential_resolver import CredentialVaultError, resolve_provider_config
 
 # Import database API routes
 from .routes.auth_routes import router as auth_router
 from .routes.project_routes import router as project_router
 from .routes.agent_routes import router as agent_router
 from .routes.settings_routes import router as settings_router
-from .routes.credentials_routes import router as credentials_router
-from .routes.openrouter_proxy_routes import router as openrouter_proxy_router
+from .routes.credentials_backup_routes import router as credentials_backup_router
 from .routes.prompt_routes import router as prompt_router
 
 # New unified translation system routes
@@ -57,8 +55,7 @@ app.include_router(auth_router)
 app.include_router(project_router)
 app.include_router(agent_router)
 app.include_router(settings_router)
-app.include_router(credentials_router)
-app.include_router(openrouter_proxy_router)
+app.include_router(credentials_backup_router)
 app.include_router(prompt_router)
 
 # Include new unified translation system routers
@@ -138,16 +135,9 @@ async def get_models(
 ):
     """Get available models for a specific provider"""
     try:
-        resolved_config = resolve_provider_config(
-            provider=provider,
-            request_config=config.model_dump(),
-            current_user=current_user,
-            db=db,
-        )
-
         provider_instance = ProviderRegistry.get_provider(
             provider,
-            resolved_config
+            config.model_dump()
         )
 
         # All providers now require API key for model listing
@@ -162,17 +152,6 @@ async def get_models(
 
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except CredentialVaultError as e:
-        msg = str(e)
-        if "cannot be decrypted" in msg:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Stored credentials cannot be decrypted with the current server key. Delete and re-save credentials.",
-            )
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Credential vault is not configured on the server.",
-        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -193,16 +172,9 @@ async def stream_chat(
                 detail="native_function_call requires functions to be omitted",
             )
 
-        resolved_config = resolve_provider_config(
-            provider=provider,
-            request_config=request.config.model_dump(),
-            current_user=current_user,
-            db=db,
-        )
-
         provider_instance = ProviderRegistry.get_provider(
             provider,
-            resolved_config
+            request.config.model_dump()
         )
 
         if not provider_instance.validate_config():
@@ -284,17 +256,6 @@ async def stream_chat(
 
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except CredentialVaultError as e:
-        msg = str(e)
-        if "cannot be decrypted" in msg:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Stored credentials cannot be decrypted with the current server key. Delete and re-save credentials.",
-            )
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Credential vault is not configured on the server.",
-        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

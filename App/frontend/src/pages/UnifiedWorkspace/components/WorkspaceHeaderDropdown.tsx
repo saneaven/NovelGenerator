@@ -1,20 +1,21 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DropdownMenu, DropdownItem, DropdownSection } from '../../../components/ui/DropdownMenu';
-import { Workspace, Clipboard, Document, Settings, ChevronDown, Home } from '../../../components/icons';
+import { Workspace, Clipboard, Document, Configs, ChevronDown, Home } from '../../../components/icons';
 import type { SubPageType } from '../hooks/useWorkspaceSubPage';
 import './WorkspaceHeaderDropdown.css';
 
 interface SubPageConfig {
   id: SubPageType;
-  label: string;
+  labelKey: string;
   icon: React.ReactNode;
 }
 
 const SUB_PAGES: SubPageConfig[] = [
-  { id: 'story-object', label: 'Story Objects', icon: <Workspace size="lg" /> },
-  { id: 'outline-manager', label: 'Outline Manager', icon: <Clipboard size="lg" /> },
-  { id: 'novel-editor', label: 'Novel Editor', icon: <Document size="lg" /> },
-  { id: 'config', label: 'Config', icon: <Settings size="lg" /> },
+  { id: 'story-object', labelKey: 'unifiedWorkspace.subPages.storyObjects', icon: <Workspace size="lg" /> },
+  { id: 'outline-manager', labelKey: 'unifiedWorkspace.subPages.outlineManager', icon: <Clipboard size="lg" /> },
+  { id: 'novel-editor', labelKey: 'unifiedWorkspace.subPages.novelEditor', icon: <Document size="lg" /> },
+  { id: 'config', labelKey: 'unifiedWorkspace.subPages.config', icon: <Configs size="lg" /> },
 ];
 
 interface WorkspaceHeaderDropdownProps {
@@ -30,6 +31,7 @@ export const WorkspaceHeaderDropdown: React.FC<WorkspaceHeaderDropdownProps> = (
   onHomeClick,
   align = 'right',
 }) => {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const currentPage = SUB_PAGES.find((p) => p.id === currentSubPage) ?? SUB_PAGES[0];
 
@@ -38,7 +40,7 @@ export const WorkspaceHeaderDropdown: React.FC<WorkspaceHeaderDropdownProps> = (
       trigger={
         <button className={`workspace-page-selector${isOpen ? ' open' : ''}`}>
           <span className="workspace-page-selector-icon">{currentPage.icon}</span>
-          <span className="workspace-page-selector-label">{currentPage.label}</span>
+          <span className="workspace-page-selector-label">{t(currentPage.labelKey)}</span>
           <ChevronDown size="md" className={`workspace-page-selector-chevron${isOpen ? ' open' : ''}`} />
         </button>
       }
@@ -50,7 +52,7 @@ export const WorkspaceHeaderDropdown: React.FC<WorkspaceHeaderDropdownProps> = (
           <DropdownItem
             key={page.id}
             icon={page.icon}
-            label={page.label}
+            label={t(page.labelKey)}
             onClick={() => onSubPageChange(page.id)}
             className={`workspace-dropdown-item${currentSubPage === page.id ? ' active' : ''}`}
           />
@@ -59,7 +61,7 @@ export const WorkspaceHeaderDropdown: React.FC<WorkspaceHeaderDropdownProps> = (
       <DropdownSection>
         <DropdownItem
           icon={<Home size="md" />}
-          label="Home"
+          label={t('unifiedWorkspace.home')}
           onClick={onHomeClick}
           className="workspace-dropdown-item"
         />

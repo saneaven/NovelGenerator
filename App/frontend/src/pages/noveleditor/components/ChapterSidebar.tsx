@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import { useSettingsStore } from '../../../store/settingsStore';
@@ -23,6 +24,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
   onSelectChapter,
   displayLanguage,
 }) => {
+  const { t } = useTranslation();
   const store = useUnifiedObjectStore();
   const closeSidebar = useSidebarStore((state) => state.closeSidebar);
   const mainLanguage = useSettingsStore((state) => state.settings.mainLanguage);
@@ -128,8 +130,8 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
 
   // Get selected outline name
   const selectedOutlineName = selectedOutline
-    ? getLocalizedData(selectedOutline, { name: 'Untitled Outline' }).name || 'Untitled Outline'
-    : 'Timeline';
+    ? getLocalizedData(selectedOutline, { name: t('chapterSidebar.untitledOutline') }).name || t('chapterSidebar.untitledOutline')
+    : t('chapterSidebar.timeline');
 
   const headerContent = (
     <div className="chapter-sidebar-header">
@@ -139,7 +141,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
             <div className="header-title-group clickable">
               <h3 className="header-title">{selectedOutlineName}</h3>
               <span className="header-subtitle">
-                Story Outline
+                {t('chapterSidebar.storyOutline')}
                 <ChevronDown size="xs" className="header-chevron" />
               </span>
             </div>
@@ -147,12 +149,12 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
           align="left"
         >
           {outlines.map((outline) => {
-            const outlineData = getLocalizedData(outline, { name: 'Untitled Outline' });
+            const outlineData = getLocalizedData(outline, { name: t('chapterSidebar.untitledOutline') });
             const isSelected = outline.id === selectedOutlineId;
             return (
               <DropdownItem
                 key={outline.id}
-                label={outlineData.name || 'Untitled Outline'}
+                label={outlineData.name || t('chapterSidebar.untitledOutline')}
                 onClick={() => selectOutline(projectId, outline.id)}
                 className={isSelected ? 'is-selected' : ''}
               />
@@ -162,13 +164,13 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
       ) : (
         <div className="header-title-group">
           <h3 className="header-title">{selectedOutlineName}</h3>
-          <span className="header-subtitle">Story Outline</span>
+          <span className="header-subtitle">{t('chapterSidebar.storyOutline')}</span>
         </div>
       )}
       <IconButton
         icon={<Close size="sm" />}
         onClick={handleClose}
-        title="Close sidebar"
+        title={t('chapterSidebar.closeSidebar')}
         className="close-button"
         size="sm"
         variant="ghost"
@@ -191,13 +193,13 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
           <div className="empty-state">
             <div className="empty-content">
               <span className="empty-icon">📝</span>
-              <h4>No Content Yet</h4>
-              <p>Create your first Act and Chapter to get started.</p>
+              <h4>{t('chapterSidebar.emptyState.noContentYet')}</h4>
+              <p>{t('chapterSidebar.emptyState.createFirstAct')}</p>
             </div>
           </div>
         ) : (
           acts.map((act, actIndex) => {
-            const actData = getLocalizedData(act, { name: 'Untitled Act', description: '' });
+            const actData = getLocalizedData(act, { name: t('chapterSidebar.untitledAct'), description: '' });
             const actChapters = chaptersByAct[act.id] || [];
             const isCollapsed = collapsedActs.has(act.id);
 
@@ -207,12 +209,12 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
               .reduce((sum, prevAct) => sum + (chaptersByAct[prevAct.id]?.length || 0), 0);
 
             return (
-              <div 
-                key={act.id} 
+              <div
+                key={act.id}
                 className={`act-group ${isCollapsed ? 'is-collapsed' : ''}`}
                 style={{ '--anim-index': actIndex } as React.CSSProperties}
               >
-                <div 
+                <div
                   className="act-header"
                   onClick={() => toggleAct(act.id)}
                 >
@@ -220,9 +222,9 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
                     <span className="node-inner"></span>
                   </div>
                   <div className="act-header-content">
-                    <span className="act-overline">ACT {actIndex + 1}</span>
+                    <span className="act-overline">{t('chapterSidebar.act')} {actIndex + 1}</span>
                     <div className="act-title-row">
-                      <h4 className="act-title">{actData.name || 'Untitled Act'}</h4>
+                      <h4 className="act-title">{actData.name || t('chapterSidebar.untitledAct')}</h4>
                       <div className="act-toggle-icon">
                         <span className="toggle-chevron"></span>
                       </div>
@@ -234,7 +236,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
                   <div className="chapter-group" key={`${act.id}-${expandCount[act.id] || 0}`}>
                     {actChapters.length > 0 ? (
                       actChapters.map((chapter, chapIndex) => {
-                        const chapData = getLocalizedData(chapter, { name: 'Untitled Chapter', description: '' });
+                        const chapData = getLocalizedData(chapter, { name: t('chapterSidebar.untitledChapter'), description: '' });
                         const manuscript = store.getManuscriptByChapterId(chapter.id) as ManuscriptObject | null;
                         const manuData = manuscript ? getLocalizedData(manuscript, { wordCount: 0 }) : { wordCount: 0 };
                         const isSelected = selectedChapterId === chapter.id;
@@ -255,11 +257,11 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
                                 <span className="word-count">{manuData.wordCount || 0}w</span>
                               </div>
                               <div className="chapter-card-main">
-                                <span className="chapter-name">{chapData.name || 'Untitled'}</span>
+                                <span className="chapter-name">{chapData.name || t('chapterSidebar.untitled')}</span>
                               </div>
                               <div className="chapter-card-description-wrapper">
                                 <div className="chapter-card-description">
-                                  {chapData.description || "No description available."}
+                                  {chapData.description || t('chapterSidebar.noDescription')}
                                 </div>
                               </div>
                             </button>
@@ -269,7 +271,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
                     ) : (
                       <div className="chapter-empty-placeholder">
                         <div className="timeline-node chapter-node empty"></div>
-                        <span className="empty-text">No chapters</span>
+                        <span className="empty-text">{t('chapterSidebar.noChapters')}</span>
                       </div>
                     )}
                   </div>

@@ -3,7 +3,7 @@ import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
 import UnifiedImagePromptModal, { type PromptMode } from '../ImageGeneration/UnifiedImagePromptModal';
-import ThinkingDisplay from '../ThinkingDisplay';
+import ThinkingDisplay from '../common/ThinkingDisplay';
 import type { ObjectType } from '../../types/unifiedObject';
 import { TextButton } from '../TextButton';
 import './ImagePromptManager.css';

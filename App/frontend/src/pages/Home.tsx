@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../store/projectStore';
 import './Home.css';
 import { useAuthStore } from '../store/authStore';
@@ -11,6 +12,7 @@ import { Settings, Logout, Close, Plus, Upload } from '../components/icons';
 import { Loading } from '../components/common/Loading';
 
 const Home: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { projects, createProject, importProject, deleteProject, setCurrentProject, fetchProjects, isLoading, error } =
     useProjectStore();
@@ -55,7 +57,7 @@ const Home: React.FC = () => {
   };
 
   const handleLogout = () => {
-    if (confirm('Are you sure you want to logout?')) {
+    if (confirm(t('home.confirmLogout'))) {
       logout();
       navigate('/login');
     }
@@ -68,7 +70,7 @@ const Home: React.FC = () => {
 
   const handleDeleteProject = async (e: React.MouseEvent, projectId: string) => {
     e.stopPropagation();
-    if (confirm('Are you sure you want to delete this project?')) {
+    if (confirm(t('home.confirmDelete'))) {
       try {
         await deleteProject(projectId);
       } catch (err) {
@@ -87,7 +89,7 @@ const Home: React.FC = () => {
     if (!file) return;
 
     if (file.name && !file.name.toLowerCase().endsWith('.nbproj')) {
-      alert('Please select a .nbproj file.');
+      alert(t('home.selectNbprojFile'));
       return;
     }
 
@@ -106,7 +108,7 @@ const Home: React.FC = () => {
   if (isLoading && projects.length === 0) {
     return (
       <div className="home-layout loading">
-        <Loading fullPage text="Loading your library..." />
+        <Loading fullPage text={t('home.loadingLibrary')} />
       </div>
     );
   }
@@ -120,20 +122,20 @@ const Home: React.FC = () => {
               <IconButton
                 icon={<Settings size="lg" />}
                 onClick={() => setIsSettingsModalOpen(true)}
-                title="Settings"
+                title={t('common.settings')}
                 size="md"
               />
               <IconButton
                 icon={<Logout size="lg" />}
                 onClick={handleLogout}
-                title="Logout"
+                title={t('common.logout')}
                 size="md"
               />
             </div>
           </div>
           <div className="brand-area">
-            <h1>Novel Buds</h1>
-            {user && <span className="user-greeting">Hello, <b>{user.username}</b></span>}
+            <h1>{t('landing.title')}</h1>
+            {user && <span className="user-greeting">{t('home.hello', { username: user.username })}</span>}
           </div>
         </div>
       </header>
@@ -146,7 +148,7 @@ const Home: React.FC = () => {
         )}
 
         <div className="controls-bar">
-          <h2 className="section-title">Library</h2>
+          <h2 className="section-title">{t('home.library')}</h2>
           <div className="controls-actions">
             <input
               ref={importInputRef}
@@ -161,14 +163,14 @@ const Home: React.FC = () => {
               className="btn-import-project"
               onClick={handleImportClick}
               disabled={isImporting || isLoading}
-              title="Import a .nbproj archive"
+              title={t('home.importProject')}
             >
               <Upload size="md" />
-              <span>{isImporting ? 'Importing...' : 'Import Project'}</span>
+              <span>{isImporting ? t('home.importing') : t('home.importProject')}</span>
             </button>
             <button className="btn-create-project" onClick={() => setShowCreateForm(true)} disabled={isLoading}>
               <Plus size="md" />
-              <span>New Project</span>
+              <span>{t('home.newProject')}</span>
             </button>
           </div>
         </div>
@@ -177,13 +179,13 @@ const Home: React.FC = () => {
           {projects.length === 0 ? (
             <div className="empty-state">
               <div className="empty-state-content">
-                <h3>Your library is empty</h3>
-                <p>Start your first novel journey today.</p>
-                <button 
+                <h3>{t('home.emptyLibrary')}</h3>
+                <p>{t('home.startFirstNovel')}</p>
+                <button
                   className="btn-text-action"
                   onClick={() => setShowCreateForm(true)}
                 >
-                  Create Project
+                  {t('home.createProject')}
                 </button>
               </div>
             </div>
@@ -206,7 +208,7 @@ const Home: React.FC = () => {
                     <IconButton
                       icon={<Close size="sm" />}
                       onClick={(e) => { void handleDeleteProject(e, project.id); }}
-                      title="Delete project"
+                      title={t('home.deleteProject')}
                       size="sm"
                       variant="danger"
                       className="btn-delete-project"
@@ -239,42 +241,42 @@ const Home: React.FC = () => {
         <div className="modal-backdrop">
           <div className="modal-content">
             <div className="modal-header">
-              <h2>Create New Project</h2>
-              <IconButton 
-                icon={<Close size="md" />} 
-                onClick={() => setShowCreateForm(false)} 
+              <h2>{t('home.createNewProject')}</h2>
+              <IconButton
+                icon={<Close size="md" />}
+                onClick={() => setShowCreateForm(false)}
                 variant="ghost"
-                title="Close"
+                title={t('common.close')}
               />
             </div>
             <form onSubmit={handleCreateProject}>
               <div className="form-group">
-                <label htmlFor="projectName">Project Name</label>
+                <label htmlFor="projectName">{t('home.projectName')}</label>
                 <input
                   id="projectName"
                   type="text"
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
-                  placeholder="The next bestseller..."
+                  placeholder={t('home.projectNamePlaceholder')}
                   required
                   autoFocus
                 />
               </div>
               <div className="form-group">
-                <label htmlFor="projectDescription">Description <span className="optional">(Optional)</span></label>
+                <label htmlFor="projectDescription">{t('home.description')} <span className="optional">({t('common.optional')})</span></label>
                 <textarea
                   id="projectDescription"
                   value={projectDescription}
                   onChange={(e) => setProjectDescription(e.target.value)}
-                  placeholder="What is this story about?"
+                  placeholder={t('home.descriptionPlaceholder')}
                   rows={3}
                 />
               </div>
               <div className="modal-actions">
                 <button type="button" className="btn-cancel" onClick={() => setShowCreateForm(false)}>
-                  Cancel
+                  {t('common.cancel')}
                 </button>
-                <button type="submit" className="btn-submit">Create Project</button>
+                <button type="submit" className="btn-submit">{t('home.createProject')}</button>
               </div>
             </form>
           </div>

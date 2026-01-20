@@ -1,0 +1,928 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "delete": "Delete",
+    "create": "Create",
+    "edit": "Edit",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "confirm": "Confirm",
+    "yes": "Yes",
+    "no": "No",
+    "optional": "Optional",
+    "settings": "Settings",
+    "logout": "Logout",
+    "add": "Add",
+    "browse": "Browse",
+    "hide": "Hide",
+    "retry": "Retry",
+    "showLess": "Show less",
+    "showMore": "Show more",
+    "import": "Import",
+    "none": "None",
+    "note": "Note",
+    "auto": "Auto",
+    "low": "Low",
+    "high": "High"
+  },
+  "landing": {
+    "title": "Novel Buds",
+    "tagline": "Write creative novels with AI assistance",
+    "signIn": "Sign In",
+    "createAccount": "Create Account"
+  },
+  "auth": {
+    "welcomeBack": "Welcome Back",
+    "signInSubtitle": "Sign in to continue your creative journey",
+    "createAccountTitle": "Create Account",
+    "createAccountSubtitle": "Start your creative writing journey today",
+    "username": "Username",
+    "password": "Password",
+    "confirmPassword": "Confirm Password",
+    "email": "Email",
+    "enterUsername": "Enter your username",
+    "enterPassword": "Enter your password",
+    "chooseUsername": "Choose a username",
+    "createSecurePassword": "Create a secure password",
+    "confirmYourPassword": "Confirm your password",
+    "emailPlaceholder": "your.email@example.com",
+    "signingIn": "Signing in...",
+    "creatingAccount": "Creating account...",
+    "dontHaveAccount": "Don't have an account?",
+    "alreadyHaveAccount": "Already have an account?",
+    "hidePassword": "Hide password",
+    "showPassword": "Show password",
+    "usernameHint": "3-20 characters, letters, numbers, and underscores only",
+    "passwordHint": "At least 6 characters",
+    "validation": {
+      "emailRequired": "Email is required",
+      "emailInvalid": "Invalid email format",
+      "usernameRequired": "Username is required",
+      "usernameMinLength": "Username must be at least 3 characters",
+      "usernameMaxLength": "Username must be less than 20 characters",
+      "usernameFormat": "Username can only contain letters, numbers, and underscores",
+      "passwordRequired": "Password is required",
+      "passwordMinLength": "Password must be at least 6 characters",
+      "passwordsNotMatch": "Passwords do not match"
+    }
+  },
+  "home": {
+    "hello": "Hello, {{username}}",
+    "library": "Library",
+    "newProject": "New Project",
+    "importProject": "Import Project",
+    "importing": "Importing...",
+    "emptyLibrary": "Your library is empty",
+    "startFirstNovel": "Start your first novel journey today.",
+    "createProject": "Create Project",
+    "loadingLibrary": "Loading your library...",
+    "deleteProject": "Delete project",
+    "createNewProject": "Create New Project",
+    "projectName": "Project Name",
+    "projectNamePlaceholder": "The next bestseller...",
+    "description": "Description",
+    "descriptionPlaceholder": "What is this story about?",
+    "confirmLogout": "Are you sure you want to logout?",
+    "confirmDelete": "Are you sure you want to delete this project?",
+    "selectNbprojFile": "Please select a .nbproj file."
+  },
+  "settings": {
+    "title": "Settings",
+    "saveSettings": "Save Settings",
+    "saving": "Saving...",
+    "saveError": "Failed to save settings to server. Changes are saved locally.",
+    "openNavigation": "Open navigation menu",
+    "tabs": {
+      "profile": "Profile",
+      "language": "Language",
+      "general": "General",
+      "credentials": "Credentials",
+      "theme": "Theme",
+      "imageGen": "Image Generation",
+      "advanced": "Advanced",
+      "prompts": "Prompts & Templates"
+    },
+    "language": {
+      "title": "Language Settings",
+      "description": "Set your preferred languages for the application interface and content generation.",
+      "uiLanguage": "UI Language",
+      "uiLanguageHint": "Changes the application interface language",
+      "mainLanguage": "Main Language",
+      "mainLanguageHint": "Primary language for the application and AI responses",
+      "mainLanguagePlaceholder": "English",
+      "subLanguages": "Sub Languages",
+      "subLanguagesHint": "Additional languages for translation features. Click the radio button to set the default for quick-translate.",
+      "addLanguagePlaceholder": "e.g., Korean, Japanese, Spanish",
+      "removeLanguage": "Remove {{language}}",
+      "setAsDefault": "Set as default translation language",
+      "languageSupport": "Language Support",
+      "languageSupportInfo": {
+        "mainLanguage": "Main language affects AI model responses and system prompts",
+        "subLanguages": "Sub languages are used for translation features",
+        "defaultSub": "The default sub language (marked with radio) is used for quick-translate in agent",
+        "multilingual": "You can add multiple sub languages for multilingual projects"
+      }
+    },
+    "profile": {
+      "title": "Profile Settings",
+      "description": "Manage your account information and security settings.",
+      "profileInformation": "Profile Information",
+      "username": "Username",
+      "enterUsername": "Enter username",
+      "usernameHint": "Minimum 3 characters",
+      "email": "Email",
+      "enterEmail": "Enter email",
+      "usernameRequired": "Username is required",
+      "usernameMinLength": "Username must be at least 3 characters",
+      "emailRequired": "Email is required",
+      "noChanges": "No changes to save",
+      "profileUpdated": "Profile updated successfully",
+      "updateFailed": "Failed to update profile",
+      "updating": "Updating...",
+      "updateProfile": "Update Profile",
+      "changePassword": "Change Password",
+      "currentPassword": "Current Password",
+      "enterCurrentPassword": "Enter current password",
+      "newPassword": "New Password",
+      "enterNewPassword": "Enter new password",
+      "newPasswordHint": "Minimum 8 characters",
+      "confirmNewPassword": "Confirm New Password",
+      "confirmNewPasswordPlaceholder": "Confirm new password",
+      "currentPasswordRequired": "Current password is required",
+      "newPasswordRequired": "New password is required",
+      "newPasswordMinLength": "New password must be at least 8 characters",
+      "passwordsNotMatch": "Passwords do not match",
+      "passwordChanged": "Password changed successfully",
+      "passwordChangeFailed": "Failed to change password",
+      "changingPassword": "Changing...",
+      "passwordChangeBackupWarning": "Changing your password will delete your server backup of API keys.",
+      "passwordChangeBackupConfirm": "Changing your password will delete your server backup of API keys. Continue?"
+    },
+    "theme": {
+      "title": "Theme Settings",
+      "description": "Choose your preferred color scheme for the application interface. Dark mode can reduce eye strain in low-light environments.",
+      "themePreference": "Theme Preference",
+      "light": "Light",
+      "lightDescription": "Bright and clean interface",
+      "dark": "Dark",
+      "darkDescription": "Easy on the eyes in low light",
+      "system": "System",
+      "systemDescription": "Match your OS preference",
+      "aboutThemes": "About Themes",
+      "lightInfo": "Traditional bright interface, great for well-lit environments",
+      "darkInfo": "Reduces eye strain and saves battery on OLED screens",
+      "systemInfo": "Automatically switches based on your operating system settings",
+      "instantChange": "Theme changes apply immediately without reloading the page"
+    },
+    "credentials": {
+      "description": "Configure API keys and endpoints. These credentials are shared across all AI functions.",
+      "apiKey": "API Key",
+      "accessToken": "Access Token",
+      "baseUrl": "Base URL",
+      "apiKeyOptional": "API Key (Optional)",
+      "getApiKeyFrom": "Get your API key from",
+      "openai": {
+        "title": "OpenAI",
+        "placeholder": "sk-...",
+        "hint": "Get your API key from"
+      },
+      "gemini": {
+        "title": "Gemini",
+        "placeholder": "AIz...",
+        "hint": "Get your API key from"
+      },
+      "claude": {
+        "title": "Claude (Anthropic)",
+        "placeholder": "sk-ant-...",
+        "hint": "Get your API key from"
+      },
+      "openrouter": {
+        "title": "OpenRouter",
+        "placeholder": "sk-or-v1-...",
+        "hint": "Get your API key from"
+      },
+      "xai": {
+        "title": "xAI (Grok)",
+        "placeholder": "xai-...",
+        "hint": "Get your API key from"
+      },
+      "novelai": {
+        "title": "NovelAI",
+        "placeholder": "eyJ...",
+        "hint": "Your NovelAI JWT access token. Get it from your browser's developer tools while logged in to NovelAI (look for 'auth_token' in local storage)."
+      },
+      "custom": {
+        "title": "Custom Endpoint",
+        "baseUrlPlaceholder": "https://api.openai.com/v1",
+        "baseUrlHint": "OpenAI-compatible API endpoint",
+        "apiKeyPlaceholder": "sk-...",
+        "apiKeyHint": "Required if your endpoint requires authentication"
+      }
+    },
+    "general": {
+      "description": "Configure AI model settings for each function.",
+      "configuration": "Configuration",
+      "functions": {
+        "agent": {
+          "label": "Agent",
+          "description": "General conversation and assistance for story planning and brainstorming"
+        },
+        "translation": {
+          "label": "Translation",
+          "description": "Accurate language translation with context preservation"
+        },
+        "editAssistant": {
+          "label": "Edit Assistant",
+          "description": "Editing and refinement of story objects and manuscript content"
+        },
+        "imagePrompt": {
+          "label": "Image Prompt",
+          "description": "AI-assisted generation of detailed image prompts from story context"
+        }
+      }
+    },
+    "advanced": {
+      "description": "Configure error handling behavior for API requests. When enabled, failed requests will be automatically retried based on the settings below.",
+      "errorRetry": {
+        "title": "Error Retry Configuration",
+        "enableAutoRetry": "Enable automatic retry on errors",
+        "maxRetries": "Maximum Retries",
+        "retryDelay": "Retry Delay",
+        "retryDelayHint": "Time to wait between retry attempts (100-30000ms)",
+        "retryableErrorCodes": "Retryable Error Codes",
+        "noErrorCodes": "No error codes configured",
+        "enterCode": "Enter code",
+        "remove": "Remove"
+      },
+      "commonErrorCodes": {
+        "title": "Common Error Codes",
+        "429": "Rate Limit - Too many requests",
+        "500": "Internal Server Error",
+        "502": "Bad Gateway",
+        "503": "Service Unavailable",
+        "504": "Gateway Timeout"
+      },
+      "serverVault": {
+        "title": "Server Credentials Backup",
+        "backupTitle": "Server Credentials Backup",
+        "backupHint": "Back up API keys to the server as an end-to-end encrypted blob (the server cannot decrypt). Restore requires your account password.",
+        "refreshStatus": "Refresh status",
+        "refreshBackupStatus": "Refresh status",
+        "statusHasBackup": "Backup found on server",
+        "statusNoBackup": "No backup on server",
+        "backupActionTitle": "Back up to server",
+        "backupActionDescription": "Enter your account password to encrypt and upload your current API keys.",
+        "backupActionConfirm": "Back up",
+        "restoreActionTitle": "Restore from server",
+        "restoreActionDescription": "Enter your account password to download and decrypt the backup into this browser.",
+        "restoreActionConfirm": "Restore",
+        "deleteActionTitle": "Delete server backup",
+        "deleteActionDescription": "Enter your account password to delete the server backup.",
+        "deleteActionConfirm": "Delete backup"
+      },
+      "nativeOutput": {
+        "title": "Native Output Mode",
+        "enableNative": "Enable native output mode",
+        "hint": "When enabled, edit/translation tasks emit <function_calls> blocks (converted server-side into normal function calls). Image prompt tasks always output raw text."
+      },
+      "functionCallHistory": {
+        "title": "Function Call History",
+        "label": "Include function calls in agent history",
+        "hint": "Number of recent assistant messages whose function calls will be included in the conversation history sent to the AI. Set to 0 to disable.",
+        "all": "All"
+      },
+      "thinkingHistory": {
+        "title": "Thinking History",
+        "label": "Include thinking in agent history",
+        "hint": "Number of recent assistant messages whose thinking content will be included in the conversation history sent to the AI. Set to 0 to disable.",
+        "all": "All"
+      },
+      "llmLogging": {
+        "title": "LLM Request Logging",
+        "description": "Debug LLM requests and responses. Logs are stored in memory and cleared on page refresh."
+      }
+    },
+    "imageGen": {
+      "title": "Image Generation Defaults",
+      "description": "Configure default settings for AI image generation. These can be overridden when generating images.",
+      "provider": "Provider",
+      "providerHint": "Choose the AI provider for image generation",
+      "model": "Model",
+      "modelHint": "Select the image generation model",
+      "size": "Size",
+      "sizeHint": "Default image dimensions",
+      "aspectRatio": "Aspect Ratio",
+      "aspectRatioHint": "Image aspect ratio",
+      "resolution": "Resolution",
+      "resolutionHint": "Image resolution",
+      "openaiSettings": {
+        "title": "OpenAI Settings",
+        "description": "Configure OpenAI-specific image generation options.",
+        "quality": "Quality",
+        "qualityHint": "Image quality level",
+        "standard": "Standard",
+        "hd": "HD",
+        "style": "Style",
+        "styleHint": "Image style preference",
+        "natural": "Natural",
+        "vivid": "Vivid"
+      },
+      "novelaiSettings": {
+        "title": "NovelAI Settings",
+        "description": "Configure NovelAI-specific image generation options.",
+        "sampler": "Sampler",
+        "samplerHint": "Sampling algorithm",
+        "steps": "Steps",
+        "stepsHint": "Number of sampling steps (1-50)",
+        "cfgScale": "CFG Scale",
+        "cfgScaleHint": "Prompt guidance strength (1-20)",
+        "noiseSchedule": "Noise Schedule",
+        "noiseScheduleHint": "Noise scheduling method"
+      },
+      "naturalStyles": {
+        "title": "Custom Styles (Natural Language)",
+        "description": "Create custom styles with prefix and postfix text that wrap around your prompts.",
+        "defaultStyle": "Default Style",
+        "defaultStyleHint": "Style to apply by default when generating images",
+        "none": "None",
+        "addNew": "+ Add New Style",
+        "styleName": "Style Name",
+        "prefix": "Prefix",
+        "prefixPlaceholder": "Text prepended to prompt...",
+        "postfix": "Postfix",
+        "postfixPlaceholder": "Text appended to prompt...",
+        "preview": "Preview:",
+        "deleteStyle": "Delete style"
+      },
+      "tagBasedStyles": {
+        "title": "Custom Styles (Tag-Based)",
+        "description": "Create custom styles with prefix and postfix for both positive and negative prompts.",
+        "positivePrompt": "Positive Prompt",
+        "negativePrompt": "Negative Prompt"
+      },
+      "note": "Note: Make sure you have configured the API key for the selected provider in the Credentials tab."
+    },
+    "functionConfig": {
+      "basicSettings": "Basic Settings",
+      "provider": "Provider",
+      "providerDescriptions": {
+        "openai": "Direct OpenAI API access (GPT-4o, o1, etc.)",
+        "gemini": "Google Gemini with thought summaries",
+        "claude": "Anthropic Claude with extended thinking",
+        "openrouter": "Access to 100+ AI models via OpenRouter",
+        "xai": "xAI Grok models for text generation",
+        "custom": "Use your own OpenAI-compatible endpoint"
+      },
+      "apiFormat": "API Format",
+      "apiFormatHint": "Select the API format - uses native SDK for each provider",
+      "aiModel": "AI Model",
+      "browse": "Browse",
+      "hide": "Hide",
+      "modelPlaceholder": "e.g., gpt-4o, anthropic/claude-3.5-sonnet",
+      "modelHint": "Model identifier for this function",
+      "temperature": "Temperature",
+      "temperatureLabels": {
+        "precise": "Precise (0.0)",
+        "balanced": "Balanced (1.0)",
+        "creative": "Creative (2.0)"
+      },
+      "temperatureHint": "Lower values produce more focused and deterministic outputs. Higher values increase creativity and randomness.",
+      "temperatureGpt5Hint": "Temperature is not supported for GPT-5 models. Use Reasoning Effort instead.",
+      "advancedSettings": "Advanced Settings",
+      "enablePrefill": "Enable Assistant Prefill",
+      "prefillDisabled": "OpenAI does not support assistant prefill",
+      "prefillHint": "Pre-fill the assistant's response to guide output format",
+      "thinkingMode": "Thinking Mode",
+      "thinkingModes": {
+        "off": "Off",
+        "offDescription": "No thinking shown",
+        "offGeminiDisabled": "Gemini does not support disabling thinking",
+        "model": "Model Thinking",
+        "modelDescription": "Use model's native thinking tokens (if the model supports it)",
+        "custom": "Custom Thinking",
+        "customDescription": "Prompt-based Chain-of-Thought with <thinking> tags"
+      },
+      "thinkingConfig": {
+        "title": "Thinking Configuration",
+        "effortLevel": "Effort Level",
+        "reasoningEffort": "Reasoning Effort (GPT-5)",
+        "effortOptions": {
+          "none": "None - No reasoning (fastest)",
+          "minimal": "Minimal - Very light reasoning",
+          "low": "Low - Quick reasoning",
+          "lowPercent": "Low (~20% of max tokens)",
+          "medium": "Medium - Balanced",
+          "mediumPercent": "Medium (~50% of max tokens)",
+          "high": "High - Deep reasoning",
+          "highPercent": "High (~80% of max tokens)",
+          "xhigh": "Extra High - Maximum reasoning"
+        },
+        "effortHint": "Controls how much reasoning GPT-5 performs before responding",
+        "effortHintGeneric": "Controls how much thinking the model performs internally",
+        "verbosity": "Output Verbosity (GPT-5)",
+        "verbosityOptions": {
+          "low": "Low - Concise output",
+          "medium": "Medium - Standard",
+          "high": "High - Detailed output"
+        },
+        "verbosityHint": "Controls the length and detail of the model's output",
+        "maxThinkingTokens": "Max Thinking Tokens (optional)",
+        "maxThinkingTokensPlaceholder": "Auto (based on effort)",
+        "maxThinkingTokensHint": "Directly specify thinking token budget. Leave empty to use effort-based allocation.",
+        "claudeBudgetTokens": "Claude Thinking Budget (tokens)",
+        "claudeBudgetTokensPlaceholder": "Auto",
+        "claudeBudgetTokensHint": "Leave blank to use the model default budget.",
+        "thinkingBudget": "Thinking Budget (tokens)",
+        "thinkingBudgetHint": "Minimum 1024 tokens. Leave blank for model default.",
+        "thinkingLevel": "Thinking Level",
+        "thinkingLevelHint": "Controls thinking depth for Gemini-compatible endpoints",
+        "thinkingLevelGemini3": "Thinking Level (Gemini 3)",
+        "thinkingLevelGemini3Hint": "Controls depth of reasoning for Gemini 3 models.",
+        "thinkingBudget25": "Thinking Budget (tokens) for 2.5",
+        "thinkingBudget25Placeholder": "Set 0 to disable",
+        "thinkingBudget25Hint": "Set 0 to effectively disable thinking where supported."
+      }
+    },
+    "llmLog": {
+      "enableLogging": "Enable LLM Request Logging",
+      "clearLogs": "Clear Logs",
+      "loggingDisabled": "Logging is disabled. Enable it to capture LLM requests and responses.",
+      "noLogs": "No logs captured yet.",
+      "showingEntries": "Showing {{count}} of max 50 entries. Logs are stored in memory and cleared on page refresh.",
+      "request": "Request",
+      "provider": "Provider:",
+      "model": "Model:",
+      "temperature": "Temperature:",
+      "thinkingMode": "Thinking Mode:",
+      "functions": "Functions:",
+      "defined": "defined",
+      "messages": "Messages ({{count}})",
+      "response": "Response",
+      "contentParts": "Content Parts",
+      "functionCalls": "Function Calls ({{count}})",
+      "thinkingDetails": "Thinking Details",
+      "error": "Error"
+    },
+    "modelBrowser": {
+      "searchPlaceholder": "Search models...",
+      "sortNameAsc": "Name (A-Z)",
+      "sortNameDesc": "Name (Z-A)",
+      "sortPriceAsc": "Price (Low-High)",
+      "sortPriceDesc": "Price (High-Low)",
+      "loadingModels": "Loading models...",
+      "retry": "Retry",
+      "noModelsFound": "No models found matching \"{{query}}\"",
+      "noModelsAvailable": "No models available",
+      "models": "models",
+      "currentlySelected": "Currently selected",
+      "useThisModel": "Use this model",
+      "selected": "Selected",
+      "use": "Use",
+      "showMore": "Show more",
+      "showLess": "Show less",
+      "architecture": "Architecture",
+      "pricingDetails": "Pricing Details",
+      "providers": "Providers",
+      "input": "Input",
+      "output": "Output",
+      "tokenizer": "Tokenizer",
+      "instruct": "Instruct",
+      "pricingPerMillion": "Pricing (per 1M tokens)",
+      "prompt": "Prompt",
+      "completion": "Completion",
+      "image": "Image",
+      "availableProviders": "Available Providers",
+      "clearFilters": "Clear Filters",
+      "loadingProviders": "Loading providers...",
+      "only": "Only",
+      "ignore": "Ignore",
+      "failedToLoadProviders": "Failed to load providers",
+      "context": "Context",
+      "oSeries": "O-Series"
+    },
+    "presetSelector": {
+      "selectPlaceholder": "Select preset...",
+      "presetLabel": "Preset:",
+      "editPreset": "Edit preset",
+      "duplicatePreset": "Duplicate preset",
+      "exportPreset": "Export preset",
+      "deletePreset": "Delete preset",
+      "createNew": "Create New Preset",
+      "importFromFile": "Import preset from file",
+      "deleteConfirm": "Are you sure you want to delete \"{{name}}\"?",
+      "thisPreset": "this preset",
+      "invalidFileFormat": "Invalid preset file format",
+      "failedToReadFile": "Failed to read file"
+    },
+    "presetImport": {
+      "title": "Import Preset",
+      "presetName": "Preset Name *",
+      "presetNamePlaceholder": "Enter preset name",
+      "description": "Description (optional)",
+      "descriptionPlaceholder": "Brief description of this preset",
+      "contents": "Contents: {{prompts}} prompts, {{fragments}} fragments, {{variables}} variables",
+      "import": "Import",
+      "nameRequired": "Preset name is required",
+      "duplicateName": "A preset with this name already exists",
+      "importFailed": "Failed to import preset"
+    },
+    "promptEditor": {
+      "prompts": "Prompts",
+      "fragments": "Fragments",
+      "variables": "Variables",
+      "selectPromptToEdit": "Select a prompt to edit",
+      "selectFragmentToEdit": "Select a fragment to edit",
+      "choosePromptHint": "Choose a prompt from the sidebar to view and edit its content",
+      "chooseFragmentHint": "Choose a fragment from the sidebar or create a new one",
+      "createNewFragment": "Create New Fragment",
+      "copyPathForTemplates": "Copy path for use in templates",
+      "addDescription": "Add description...",
+      "noDescription": "No description",
+      "editDescription": "Edit description",
+      "chars": "{{count}} chars",
+      "unsavedChanges": "Unsaved changes",
+      "versionHistory": "Version history",
+      "deleteFragment": "Delete fragment",
+      "expandSidebar": "Expand sidebar",
+      "collapseSidebar": "Collapse sidebar",
+      "enterPromptTemplate": "Enter prompt template...",
+      "enterFragmentTemplate": "Enter fragment template...",
+      "createFragment": {
+        "title": "Create New Fragment",
+        "folderPath": "Folder Path (optional)",
+        "folderPathPlaceholder": "e.g., common/context",
+        "folderPathHint": "Use forward slashes to create nested folders",
+        "fragmentName": "Fragment Name *",
+        "fragmentNamePlaceholder": "e.g., customThinkingInstruction",
+        "description": "Description (optional)",
+        "descriptionPlaceholder": "Brief description of this fragment",
+        "initialContent": "Initial Content (optional)",
+        "initialContentPlaceholder": "{{! Your fragment content here }}",
+        "nameRequired": "Fragment name is required",
+        "invalidName": "Fragment name can only contain letters, numbers, dashes, and underscores",
+        "duplicateName": "A fragment with this name already exists in this folder",
+        "createFailed": "Failed to create fragment. Please try again."
+      },
+      "createVariable": {
+        "title": "Create Variable",
+        "name": "Name",
+        "namePlaceholder": "e.g., writingStyle, isGeminiMode",
+        "nameHint": "Use in prompts: {{variables.{{name}}}}",
+        "type": "Type",
+        "typeText": "Text",
+        "typeTextDesc": "A text value (e.g., \"formal\", \"casual\")",
+        "typeNumber": "Number",
+        "typeNumberDesc": "A numeric value (e.g., 5, 100)",
+        "typeToggle": "Toggle",
+        "typeToggleDesc": "A true/false value",
+        "typeDropdown": "Dropdown",
+        "typeDropdownDesc": "Choose from predefined options",
+        "description": "Description (optional)",
+        "descriptionPlaceholder": "Describe what this variable is for...",
+        "options": "Options",
+        "addOption": "Add option...",
+        "optionsHint": "Add at least 2 options. Press Enter or click + to add.",
+        "numberOptions": "Number Options (optional)",
+        "min": "Min",
+        "max": "Max",
+        "step": "Step",
+        "noLimit": "No limit",
+        "displayAs": "Display as",
+        "inputField": "Input Field",
+        "slider": "Slider",
+        "sliderRequiresMinMax": "Slider requires both min and max values",
+        "defaultValue": "Default Value (optional)",
+        "select": "Select...",
+        "enterDefaultValue": "Enter default value...",
+        "nameRequired": "Variable name is required",
+        "invalidName": "Name must start with a letter and contain only letters, numbers, and underscores",
+        "dropdownMinOptions": "Dropdown type requires at least 2 options",
+        "minLessThanMax": "Min must be less than max",
+        "sliderMinMaxRequired": "Slider requires both min and max values",
+        "invalidNumber": "Invalid number for default value",
+        "duplicateName": "A variable with this name already exists",
+        "createFailed": "Failed to create variable",
+        "creating": "Creating...",
+        "createVariable": "Create Variable"
+      },
+      "treeNav": {
+        "closeSidebar": "Close sidebar"
+      }
+    }
+  },
+  "workspace": {
+    "tabs": {
+      "basicInfo": "Basic Info",
+      "characters": "Characters",
+      "organizations": "Organizations",
+      "locations": "Locations",
+      "lorebook": "Lorebook",
+      "outline": "Outline"
+    }
+  },
+  "objectPicker": {
+    "loading": "Loading...",
+    "noObjectsAvailable": "No objects available",
+    "searchPlaceholder": "Search objects...",
+    "allTypes": "All Types",
+    "clearSearch": "Clear search"
+  },
+  "richTextEditor": {
+    "loading": "Loading editor...",
+    "paragraph": "Paragraph",
+    "heading": "Heading",
+    "headingLevel": "Heading {{level}}",
+    "bold": "Bold (Ctrl+B)",
+    "italic": "Italic (Ctrl+I)",
+    "strikethrough": "Strikethrough",
+    "quote": "Quote",
+    "horizontalRule": "Horizontal rule",
+    "insertTable": "Insert table",
+    "rows": "Rows",
+    "cols": "Cols",
+    "insertTableBtn": "Insert Table",
+    "insertImage": "Insert image"
+  },
+  "customSelect": {
+    "placeholder": "Select..."
+  },
+  "languageDropdown": {
+    "selectLanguage": "Select language",
+    "translate": "Translate ({{count}})",
+    "translateObjects": "Translate {{count}} objects"
+  },
+  "agentModeToggle": {
+    "storyObjects": "Story Objects",
+    "outline": "Outline",
+    "editor": "Editor",
+    "currentMode": "Current mode: {{mode}}. Click to switch."
+  },
+  "activity": {
+    "notifications": "Notifications",
+    "variables": "Variables",
+    "noNotifications": "No notifications",
+    "clearAll": "Clear All",
+    "switchToVariables": "Switch to Variables",
+    "switchToNotifications": "Switch to Notifications"
+  },
+  "mobileFooter": {
+    "settings": "Settings",
+    "agent": "Agent"
+  },
+  "assetManager": {
+    "manageImages": "Manage Images",
+    "sceneAssetLibrary": "Scene Asset Library",
+    "selectImage": "Select Image",
+    "selectReferenceImage": "Select Reference Image",
+    "images": "Images",
+    "select": "Select",
+    "cancel": "Cancel",
+    "close": "Close"
+  },
+  "operationStatus": {
+    "streaming": "Streaming",
+    "validating": "Validating",
+    "ready": "Ready",
+    "error": "Error",
+    "pending": "Pending",
+    "applied": "Applied",
+    "skipped": "Skipped",
+    "failed": "Failed"
+  },
+  "storyObjectPanel": {
+    "title": "Story Objects",
+    "scrollTabsLeft": "Scroll tabs left",
+    "scrollTabsRight": "Scroll tabs right",
+    "tabs": {
+      "basicInfo": "Basic Info",
+      "guidelines": "Guidelines",
+      "characters": "Characters",
+      "organizations": "Organizations",
+      "locations": "Locations",
+      "lorebook": "Lorebook"
+    },
+    "categories": {
+      "character": {
+        "title": "Characters",
+        "singular": "Character",
+        "plural": "Characters"
+      },
+      "organization": {
+        "title": "Organizations",
+        "singular": "Organization",
+        "plural": "Organizations"
+      },
+      "location": {
+        "title": "Locations",
+        "singular": "Location",
+        "plural": "Locations"
+      },
+      "lorebook": {
+        "title": "Lorebook",
+        "singular": "Entry",
+        "plural": "Entries"
+      }
+    }
+  },
+  "agent": {
+    "context": "Context",
+    "enterMessage": "Enter a message...",
+    "stop": "Stop",
+    "send": "Send",
+    "editContent": "Edit content",
+    "save": "Save",
+    "cancel": "Cancel",
+    "viewAgentList": "View agent list",
+    "agents": "Agents",
+    "aiAgent": "AI Agent",
+    "close": "Close",
+    "welcomeMessage": "Hello! I am here to help with your novel writing.",
+    "projectHelp": "What can I help you with for the \"{{projectName}}\" project?",
+    "usingLanguage": "Using {{language}}",
+    "you": "You",
+    "ai": "AI",
+    "edit": "Edit",
+    "delete": "Delete",
+    "scrollToBottom": "Scroll to bottom",
+    "switchToLanguage": "Switch to {{language}}",
+    "translateTo": "Translate to {{language}}",
+    "refreshTranslation": "Refresh {{language}}"
+  },
+  "unifiedWorkspace": {
+    "loadingProject": "Loading project...",
+    "projectNotFound": "Project Not Found",
+    "goBackHome": "Go back to Home",
+    "mobileSubtitle": {
+      "outlines": "Outlines",
+      "noChapterSelected": "No chapter selected",
+      "config": "Config"
+    },
+    "subPages": {
+      "storyObjects": "Story Objects",
+      "outlineManager": "Outline Manager",
+      "novelEditor": "Novel Editor",
+      "config": "Config"
+    },
+    "home": "Home"
+  },
+  "workspaceConfig": {
+    "title": "Config",
+    "imageCleanupHint": "Image cleanup uses the last manual-save state. Autosaved (local) edits are not reflected until you save.",
+    "projectExport": {
+      "title": "Project Export (.nbproj)",
+      "hint": "Exports include the latest server-saved state. Thumbnails are regenerated on import to save space.",
+      "includeImages": "Include original images",
+      "imageScope": "Image Scope",
+      "imageScopeHint": "Manual selection starts from the used set (manuscripts + story objects) and can be adjusted.",
+      "usedOnly": "Used only",
+      "allImages": "All images",
+      "manualSelection": "Manual selection",
+      "includeNonMain": "Include non-main story object images",
+      "includeReferenceImages": "Include generation reference images (recursive)",
+      "preview": "Preview",
+      "download": "Download .nbproj",
+      "exportStarted": "Export started. Check your downloads.",
+      "selectAtLeastOne": "Select at least one image, or disable \"Include images\".",
+      "objects": "Objects",
+      "assets": "Assets",
+      "selectedImages": "Selected images",
+      "size": "Size",
+      "selectUsed": "Select Used",
+      "selectAll": "Select All",
+      "selectNone": "Select None",
+      "noPreview": "No preview. Click Preview to see what will be exported.",
+      "imagesExcluded": "Images are excluded. Download will export data only.",
+      "noAssetsFound": "No assets found for this selection.",
+      "used": "used",
+      "uncategorized": "uncategorized"
+    },
+    "imageCleanup": {
+      "title": "Image Cleanup Policy",
+      "keepRecentDays": "Keep Recent (days)",
+      "days": "days",
+      "keepRecentHint": "Assets created within this window are excluded (0 disables).",
+      "deleteUnusedScene": "Delete unused scene assets (not referenced in manuscripts)",
+      "deleteNonMain": "Delete non-main story object images (if not used in manuscripts)",
+      "treatReferenceAsUsed": "Treat generation reference images as used (block deletion)",
+      "referenceWarning": "If disabled, deleting an asset will remove its ID from other assets' generation reference images.",
+      "preview": "Preview",
+      "rebuildIndex": "Rebuild Manuscript Index",
+      "rebuildConfirm": "Rebuild manuscript image index from last saved doc?",
+      "candidates": "Candidates",
+      "totalSize": "Total size",
+      "selected": "Selected",
+      "deleteSelected": "Delete Selected",
+      "deleted": "Deleted",
+      "scrubbedRefs": "Scrubbed refs",
+      "skipped": "Skipped",
+      "errors": "Errors",
+      "noCandidates": "No candidates. Click Preview to refresh.",
+      "deleteConfirm": "Delete {{count}} asset(s)?",
+      "deleteConfirmScrub": "Delete {{count}} asset(s) and scrub generation reference-image links?"
+    }
+  },
+  "novelEditor": {
+    "emptyState": {
+      "noChapters": "No Chapters Available",
+      "loadingChapter": "Loading chapter...",
+      "loadingChapters": "Loading chapters...",
+      "createChaptersHint": "Create chapters in the Workspace to start writing.",
+      "openingChapter": "Opening the first available chapter. Please wait.",
+      "loadingOutline": "Loading your outline so we can open the first chapter.",
+      "manuscriptNotFound": "Manuscript Not Found",
+      "noManuscriptContent": "This chapter doesn't have manuscript content yet."
+    },
+    "loading": {
+      "chapterContent": "Loading chapter content...",
+      "manuscript": "Loading manuscript...",
+      "editor": "Loading editor..."
+    },
+    "error": {
+      "chapterContentError": "Chapter Content Error",
+      "errorLoading": "Error Loading Chapter",
+      "retry": "Retry"
+    },
+    "saveStatus": {
+      "autoSaving": "Auto-saving...",
+      "saving": "Saving...",
+      "unsaved": "Unsaved",
+      "saved": "Saved"
+    },
+    "wordCount": "{{count}} words",
+    "toolbar": {
+      "aiEdit": "AI Edit",
+      "aiEditChapter": "AI Edit Chapter",
+      "save": "Save",
+      "saveSnapshot": "Create version snapshot (Ctrl+S)",
+      "moreActions": "More actions",
+      "retranslate": "Retranslate",
+      "translate": "Translate",
+      "versions": "Versions"
+    },
+    "overlay": {
+      "noContentIn": "No content in {{language}}",
+      "noContentYet": "This chapter doesn't have content in {{language}} yet.",
+      "translateFrom": "Translate from {{language}}"
+    },
+    "footer": {
+      "language": "Language",
+      "version": "Version",
+      "autoCachedLocally": "Auto-cached locally • Click Save to create version"
+    },
+    "modal": {
+      "regenerateImage": "Regenerate Image",
+      "changeImage": "Change Image",
+      "insertImage": "Insert Image"
+    },
+    "sidebar": {
+      "title": "Toggle chapter list",
+      "showDescription": "Show description",
+      "hideDescription": "Hide description"
+    }
+  },
+  "chapterSidebar": {
+    "storyOutline": "Story Outline",
+    "untitledOutline": "Untitled Outline",
+    "timeline": "Timeline",
+    "closeSidebar": "Close sidebar",
+    "emptyState": {
+      "noContentYet": "No Content Yet",
+      "createFirstAct": "Create your first Act and Chapter to get started."
+    },
+    "act": "ACT",
+    "untitledAct": "Untitled Act",
+    "untitledChapter": "Untitled Chapter",
+    "untitled": "Untitled",
+    "noChapters": "No chapters",
+    "noDescription": "No description available."
+  },
+  "manuscriptEditor": {
+    "toolbar": {
+      "heading": "Heading",
+      "bold": "Bold",
+      "italic": "Italic",
+      "strikethrough": "Strikethrough",
+      "bulletList": "Bullet List",
+      "numberedList": "Numbered List",
+      "quote": "Quote",
+      "codeBlock": "Code Block",
+      "table": "Table",
+      "insertImage": "Insert Image"
+    },
+    "headingDropdown": {
+      "paragraph": "Paragraph",
+      "heading": "Heading {{level}}"
+    },
+    "tableDropdown": {
+      "rows": "Rows",
+      "cols": "Cols",
+      "insertTable": "Insert Table",
+      "addRow": "Add Row",
+      "addColumn": "Add Column",
+      "deleteTable": "Delete Table"
+    }
+  }
+}

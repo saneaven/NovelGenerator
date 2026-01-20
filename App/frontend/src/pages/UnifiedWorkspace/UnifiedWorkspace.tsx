@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router-dom';
 import { useAgentStore } from '../../store/agentStore';
 import { useAgentUIStore } from '../../store/agentUIStore';
@@ -10,9 +11,9 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { useErrorStore } from '../../store/errorStore';
 import type { StoryObjects } from '../../types/storyObject';
 
-import ErrorModal from '../../components/ErrorModal';
+import ErrorModal from '../../components/Modal/ErrorModal';
 import SettingsModal from '../../components/SettingsModal/SettingsModal';
-import TranslationModal from '../../components/TranslationModal';
+import TranslationModal from '../../components/Modal/TranslationModal';
 import AgentPanel from '../workspace/components/AgentPanel';
 import StoryObjectPanel from '../workspace/components/StoryObjectPanel';
 import OutlinePanel from '../outlinemanager/components/OutlinePanel';
@@ -31,16 +32,16 @@ import '../workspace/styles/AgentMessages.css';
 import '../workspace/styles/MessageEdit.css';
 import '../workspace/styles/AgentInput.css';
 import '../workspace/styles/MessageEditCards.css';
-import '../../components/MobileAgent.css';
+import '../../components/Agent/MobileAgent.css';
 
-// Tab labels for mobile subtitle (story-object mode)
-const tabLabels: Record<string, string> = {
-  basicInfo: 'Basic Info',
-  characters: 'Characters',
-  organizations: 'Organizations',
-  locations: 'Locations',
-  lorebook: 'Lorebook',
-  outline: 'Outline',
+// Tab label keys for mobile subtitle (story-object mode) - will be localized in component
+const tabLabelKeys: Record<string, string> = {
+  basicInfo: 'storyObjectPanel.tabs.basicInfo',
+  characters: 'storyObjectPanel.tabs.characters',
+  organizations: 'storyObjectPanel.tabs.organizations',
+  locations: 'storyObjectPanel.tabs.locations',
+  lorebook: 'storyObjectPanel.tabs.lorebook',
+  guidelines: 'storyObjectPanel.tabs.guidelines',
 };
 
 // Translation types per sub-page
@@ -80,6 +81,7 @@ function getSidebarType(subPage: SubPageType): string {
 }
 
 const UnifiedWorkspace: React.FC = () => {
+  const { t } = useTranslation();
   const { projectId, subPage: urlSubPage } = useParams<{ projectId: string; subPage?: string }>();
   const { currentSubPage, navigateToSubPage } = useWorkspaceSubPage(projectId, urlSubPage);
 
@@ -398,7 +400,7 @@ const UnifiedWorkspace: React.FC = () => {
   if (projectsLoading && !currentProject) {
     return (
       <div className="error-container">
-        <p>Loading project...</p>
+        <p>{t('unifiedWorkspace.loadingProject')}</p>
       </div>
     );
   }
@@ -406,8 +408,8 @@ const UnifiedWorkspace: React.FC = () => {
   if (!currentProject) {
     return (
       <div className="error-container">
-        <h2>Project Not Found</h2>
-        <Link to="/">Go back to Home</Link>
+        <h2>{t('unifiedWorkspace.projectNotFound')}</h2>
+        <Link to="/">{t('unifiedWorkspace.goBackHome')}</Link>
       </div>
     );
   }
@@ -416,13 +418,13 @@ const UnifiedWorkspace: React.FC = () => {
   const getMobileSubtitle = () => {
     switch (currentSubPage) {
       case 'story-object':
-        return tabLabels[activeStoryObjectTab];
+        return tabLabelKeys[activeStoryObjectTab] ? t(tabLabelKeys[activeStoryObjectTab]) : activeStoryObjectTab;
       case 'outline-manager':
-        return 'Outlines';
+        return t('unifiedWorkspace.mobileSubtitle.outlines');
       case 'novel-editor':
-        return selectedChapter?.name || 'No chapter selected';
+        return selectedChapter?.name || t('unifiedWorkspace.mobileSubtitle.noChapterSelected');
       case 'config':
-        return 'Config';
+        return t('unifiedWorkspace.mobileSubtitle.config');
     }
   };
 

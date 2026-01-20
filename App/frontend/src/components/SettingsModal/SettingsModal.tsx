@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { BaseModal } from '../BaseModal';
 import { BaseSidebar } from '../BaseSidebar';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -8,7 +9,7 @@ import type { ProviderCredentials, Settings, AIFunctionType } from '../../store/
 import CredentialsPanel from './CredentialsPanel';
 import GeneralPanel from './GeneralPanel';
 import LanguagePanel from './LanguagePanel';
-import PromptsTemplatesPanel from './PromptsTemplatesPanel';
+import PromptsTemplatesPanel from './PromptEditor/PromptsTemplatesPanel';
 import ThemePanel from './ThemePanel';
 import AdvancedPanel from './AdvancedPanel';
 import ImageGenPanel from './ImageGenPanel';
@@ -26,11 +27,11 @@ interface SettingsModalProps {
 type MainTab = 'profile' | 'credentials' | 'general' | 'imageGen' | 'prompts' | 'language' | 'theme' | 'advanced';
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
+  const { t } = useTranslation();
   const settingsStore = useSettingsStore();
   const credentialsStore = useCredentialsStore();
   const [localSettings, setLocalSettings] = useState<Settings>(settingsStore.settings);
   const [localCredentials, setLocalCredentials] = useState<ProviderCredentials>(credentialsStore.credentials);
-  const [localServerVaultEnabled, setLocalServerVaultEnabled] = useState<boolean>(credentialsStore.serverVaultEnabled);
   const [isSaving, setIsSaving] = useState(false);
   const [mainTab, setMainTab] = useState<MainTab>('profile');
   const [activeFunction, setActiveFunction] = useState<AIFunctionType>('agent');
@@ -43,8 +44,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     if (isOpen) {
       setLocalSettings(settingsStore.settings);
       setLocalCredentials(credentialsStore.credentials);
-      setLocalServerVaultEnabled(credentialsStore.serverVaultEnabled);
-      credentialsStore.fetchServerStatus().catch(() => {
+      credentialsStore.fetchBackupStatus().catch(() => {
         // Ignore - status is best-effort
       });
     }
@@ -57,18 +57,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       await settingsStore.saveToServer();
 
       credentialsStore.setCredentials(localCredentials);
-      credentialsStore.setServerVaultEnabled(localServerVaultEnabled);
-
-      if (localServerVaultEnabled) {
-        await credentialsStore.pushToServerIfEnabled();
-      } else {
-        // Turning off server vault implies no server-side storage.
-        await credentialsStore.deleteServerCredentials();
-      }
       onClose();
     } catch (error) {
       console.error('Failed to save settings:', error);
-      alert('Failed to save settings to server. Changes are saved locally.');
+      alert(t('settings.saveError'));
     } finally {
       setIsSaving(false);
     }
@@ -77,7 +69,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const handleCancel = () => {
     setLocalSettings(settingsStore.settings);
     setLocalCredentials(credentialsStore.credentials);
-    setLocalServerVaultEnabled(credentialsStore.serverVaultEnabled);
     onClose();
   };
 
@@ -91,10 +82,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       footer={
         <>
           <TextButton variant="secondary" onClick={handleCancel} disabled={isSaving}>
-            Cancel
+            {t('common.cancel')}
           </TextButton>
           <TextButton variant="primary" onClick={handleSave} disabled={isSaving} loading={isSaving}>
-            {isSaving ? 'Saving...' : 'Save Settings'}
+            {isSaving ? t('settings.saving') : t('settings.saveSettings')}
           </TextButton>
         </>
       }
@@ -104,11 +95,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         <button
           className="settings-hamburger-btn"
           onClick={() => openSidebar('__global__', 'settings-nav')}
-          aria-label="Open navigation menu"
+          aria-label={t('settings.openNavigation')}
         >
           <HamburgerMenu size="md" />
         </button>
-        <h2><SettingsIcon size="xl" /> Settings</h2>
+        <h2><SettingsIcon size="xl" /> {t('settings.title')}</h2>
         <button className="close-button" onClick={handleCancel}>
           ×
         </button>
@@ -119,7 +110,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         id="settings-nav"
         position="left"
         className="settings-mobile-sidebar"
-        header={<h3 className="settings-mobile-sidebar-title">Settings</h3>}
+        header={<h3 className="settings-mobile-sidebar-title">{t('settings.title')}</h3>}
         onClose={() => closeSidebar('__global__')}
       >
         <ul className="settings-mobile-sidebar-list">
@@ -129,7 +120,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               onClick={() => { setMainTab('profile'); closeSidebar('__global__'); }}
             >
               <People size="md" />
-              <span>Profile</span>
+              <span>{t('settings.tabs.profile')}</span>
             </button>
           </li>
           <li>
@@ -138,7 +129,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               onClick={() => { setMainTab('credentials'); closeSidebar('__global__'); }}
             >
               <Lock size="md" />
-              <span>Credentials</span>
+              <span>{t('settings.tabs.credentials')}</span>
             </button>
           </li>
           <li>
@@ -147,7 +138,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               onClick={() => { setMainTab('general'); closeSidebar('__global__'); }}
             >
               <SettingsIcon size="md" />
-              <span>General</span>
+              <span>{t('settings.tabs.general')}</span>
             </button>
           </li>
           <li>
@@ -156,7 +147,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               onClick={() => { setMainTab('imageGen'); closeSidebar('__global__'); }}
             >
               <Image size="md" />
-              <span>Image Gen</span>
+              <span>{t('settings.tabs.imageGen')}</span>
             </button>
           </li>
           <li>
@@ -165,7 +156,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               onClick={() => { setMainTab('prompts'); closeSidebar('__global__'); }}
             >
               <Document size="md" />
-              <span>Prompts & Templates</span>
+              <span>{t('settings.tabs.prompts')}</span>
             </button>
           </li>
           <li>
@@ -174,7 +165,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               onClick={() => { setMainTab('language'); closeSidebar('__global__'); }}
             >
               <Globe size="md" />
-              <span>Language</span>
+              <span>{t('settings.tabs.language')}</span>
             </button>
           </li>
           <li>
@@ -183,7 +174,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               onClick={() => { setMainTab('theme'); closeSidebar('__global__'); }}
             >
               <Palette size="md" />
-              <span>Theme</span>
+              <span>{t('settings.tabs.theme')}</span>
             </button>
           </li>
           <li>
@@ -192,7 +183,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               onClick={() => { setMainTab('advanced'); closeSidebar('__global__'); }}
             >
               <Wrench size="md" />
-              <span>Advanced</span>
+              <span>{t('settings.tabs.advanced')}</span>
             </button>
           </li>
         </ul>
@@ -205,56 +196,56 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           onClick={() => setMainTab('profile')}
         >
           <span className="tab-icon"><People size="sm" /></span>
-          <span className="tab-label">Profile</span>
+          <span className="tab-label">{t('settings.tabs.profile')}</span>
         </button>
         <button
           className={`main-tab ${mainTab === 'credentials' ? 'active' : ''}`}
           onClick={() => setMainTab('credentials')}
         >
           <span className="tab-icon"><Lock size="sm" /></span>
-          <span className="tab-label">Credentials</span>
+          <span className="tab-label">{t('settings.tabs.credentials')}</span>
         </button>
         <button
           className={`main-tab ${mainTab === 'general' ? 'active' : ''}`}
           onClick={() => setMainTab('general')}
         >
           <span className="tab-icon"><SettingsIcon size="sm" /></span>
-          <span className="tab-label">General</span>
+          <span className="tab-label">{t('settings.tabs.general')}</span>
         </button>
         <button
           className={`main-tab ${mainTab === 'imageGen' ? 'active' : ''}`}
           onClick={() => setMainTab('imageGen')}
         >
           <span className="tab-icon"><Image size="sm" /></span>
-          <span className="tab-label">Image Gen</span>
+          <span className="tab-label">{t('settings.tabs.imageGen')}</span>
         </button>
         <button
           className={`main-tab ${mainTab === 'prompts' ? 'active' : ''}`}
           onClick={() => setMainTab('prompts')}
         >
           <span className="tab-icon"><Document size="sm" /></span>
-          <span className="tab-label">Prompts & Templates</span>
+          <span className="tab-label">{t('settings.tabs.prompts')}</span>
         </button>
         <button
           className={`main-tab ${mainTab === 'language' ? 'active' : ''}`}
           onClick={() => setMainTab('language')}
         >
           <span className="tab-icon"><Globe size="sm" /></span>
-          <span className="tab-label">Language</span>
+          <span className="tab-label">{t('settings.tabs.language')}</span>
         </button>
         <button
           className={`main-tab ${mainTab === 'theme' ? 'active' : ''}`}
           onClick={() => setMainTab('theme')}
         >
           <span className="tab-icon"><Palette size="sm" /></span>
-          <span className="tab-label">Theme</span>
+          <span className="tab-label">{t('settings.tabs.theme')}</span>
         </button>
         <button
           className={`main-tab ${mainTab === 'advanced' ? 'active' : ''}`}
           onClick={() => setMainTab('advanced')}
         >
           <span className="tab-icon"><Wrench size="sm" /></span>
-          <span className="tab-label">Advanced</span>
+          <span className="tab-label">{t('settings.tabs.advanced')}</span>
         </button>
       </div>
 
@@ -273,7 +264,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           <GeneralPanel
             functionConfigs={localSettings.functionConfigs}
             credentials={localCredentials}
-            serverVaultEnabled={localServerVaultEnabled}
             activeFunction={activeFunction}
             onFunctionChange={setActiveFunction}
             onConfigChange={(functionType, config) =>
@@ -302,6 +292,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             mainLanguage={localSettings.mainLanguage}
             subLanguages={localSettings.subLanguages}
             defaultSubLanguage={localSettings.defaultSubLanguage}
+            uiLanguage={localSettings.uiLanguage}
             onMainLanguageChange={(language) =>
               setLocalSettings(prev => ({ ...prev, mainLanguage: language }))
             }
@@ -310,6 +301,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             }
             onDefaultSubLanguageChange={(language) =>
               setLocalSettings(prev => ({ ...prev, defaultSubLanguage: language }))
+            }
+            onUiLanguageChange={(language) =>
+              setLocalSettings(prev => ({ ...prev, uiLanguage: language }))
             }
           />
         )}
@@ -334,12 +328,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             onRetryConfigChange={(config) =>
               setLocalSettings(prev => ({ ...prev, retryConfig: config }))
             }
-            serverVaultEnabled={localServerVaultEnabled}
-            onServerVaultEnabledChange={setLocalServerVaultEnabled}
-            vaultStatus={credentialsStore.serverStatus}
-            vaultSyncing={credentialsStore.isSyncing}
-            onVaultRefresh={() => credentialsStore.fetchServerStatus()}
-            onVaultDelete={() => credentialsStore.deleteServerCredentials()}
+            backupStatus={credentialsStore.backupStatus}
+            backupSyncing={credentialsStore.isSyncing}
+            onBackupRefresh={() => credentialsStore.fetchBackupStatus()}
+            onBackupUpload={async (password) => {
+              await credentialsStore.backupToServer(password, localCredentials);
+            }}
+            onBackupRestore={async (password) => {
+              const creds = await credentialsStore.restoreFromServer(password);
+              setLocalCredentials(creds);
+            }}
+            onBackupDelete={async (password) => {
+              await credentialsStore.deleteServerBackup(password);
+            }}
             nativeOutputMode={localSettings.nativeOutputMode}
             onNativeOutputModeChange={(enabled) =>
               setLocalSettings(prev => ({ ...prev, nativeOutputMode: enabled }))

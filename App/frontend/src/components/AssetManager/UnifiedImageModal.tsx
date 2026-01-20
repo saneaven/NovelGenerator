@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { BaseModal } from '../BaseModal';
 import ImageTabContent, { type ImageContentMode } from './ImageTabContent';
 import { TextButton } from '../TextButton';
@@ -48,30 +49,30 @@ interface UnifiedImageModalProps {
     initialGenerationRecipe?: GenerationRecipe | null;
 }
 
-// Preset configurations
+// Preset configurations - title keys are i18n keys
 const PRESET_CONFIGS: Record<ModalPreset, {
     mode: ImageContentMode;
-    title: string;
+    titleKey: string;
     size: 'small' | 'medium' | 'large';
 }> = {
     objectManager: {
         mode: 'object',
-        title: 'Manage Images',
+        titleKey: 'assetManager.manageImages',
         size: 'large',
     },
     sceneManager: {
         mode: 'scene',
-        title: 'Scene Asset Library',
+        titleKey: 'assetManager.sceneAssetLibrary',
         size: 'large',
     },
     assetPicker: {
         mode: 'picker',
-        title: 'Select Image',
+        titleKey: 'assetManager.selectImage',
         size: 'large',
     },
     referencePicker: {
         mode: 'picker',
-        title: 'Select Reference Image',
+        titleKey: 'assetManager.selectReferenceImage',
         size: 'large',
     },
 };
@@ -94,10 +95,12 @@ const UnifiedImageModal: React.FC<UnifiedImageModalProps> = ({
     onImageGenerated,
     initialGenerationRecipe,
 }) => {
+    const { t } = useTranslation();
+
     // Get config from preset or use direct props
     const presetConfig = preset ? PRESET_CONFIGS[preset] : null;
     const mode = modeProp ?? presetConfig?.mode ?? 'object';
-    const title = titleProp ?? presetConfig?.title ?? 'Images';
+    const title = titleProp ?? (presetConfig?.titleKey ? t(presetConfig.titleKey) : t('assetManager.images'));
     const size = sizeProp ?? presetConfig?.size ?? 'large';
 
     // Track selected asset for footer button
@@ -132,11 +135,11 @@ const UnifiedImageModal: React.FC<UnifiedImageModalProps> = ({
                             onClick={handleConfirmSelect}
                             disabled={!selectedAsset}
                         >
-                            Select
+                            {t('assetManager.select')}
                         </TextButton>
                     )}
                     <TextButton variant="secondary" onClick={onClose}>
-                        {onSelect ? 'Cancel' : 'Close'}
+                        {onSelect ? t('assetManager.cancel') : t('assetManager.close')}
                     </TextButton>
                 </div>
             }

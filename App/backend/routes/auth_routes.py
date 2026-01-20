@@ -5,7 +5,7 @@ from datetime import datetime
 import uuid
 
 from ..database import get_db
-from ..models.db_models import User, UserSettings
+from ..models.db_models import User, UserCredentials, UserSettings
 from ..schemas.auth import UserRegister, UserLogin, Token, UserResponse, ProfileUpdate, PasswordChange
 from ..auth import (
     get_password_hash,
@@ -207,6 +207,12 @@ async def change_password(
     # Update password
     current_user.password_hash = get_password_hash(password_data.new_password)
     current_user.updated_at = datetime.utcnow()
+
+    # Password change invalidates E2E backup (derived from the old password).
+    row = db.query(UserCredentials).filter(UserCredentials.user_id == current_user.id).first()
+    if row:
+        db.delete(row)
+
     db.commit()
 
     return {"message": "Password changed successfully"}

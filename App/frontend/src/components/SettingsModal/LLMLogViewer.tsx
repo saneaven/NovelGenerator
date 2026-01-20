@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLLMLogStore, type LLMLogStatus } from '../../store/llmLogStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { TextButton } from '../TextButton';
@@ -6,6 +7,7 @@ import { Check, Warning, Loading, Clock, Trash, Document } from '../icons';
 import './LLMLogViewer.css';
 
 const LLMLogViewer: React.FC = () => {
+    const { t } = useTranslation();
     const { logs, clearLogs } = useLLMLogStore();
     const llmLoggingEnabled = useSettingsStore((state) => state.settings.llmLoggingEnabled);
     const setLLMLoggingEnabled = useSettingsStore((state) => state.setLLMLoggingEnabled);
@@ -62,7 +64,7 @@ const LLMLogViewer: React.FC = () => {
                             className="toggle-input"
                         />
                         <span className="toggle-switch"></span>
-                        <span className="toggle-text">Enable LLM Request Logging</span>
+                        <span className="toggle-text">{t('settings.llmLog.enableLogging')}</span>
                     </label>
                 </div>
                 <TextButton
@@ -72,13 +74,13 @@ const LLMLogViewer: React.FC = () => {
                     disabled={logs.length === 0}
                     iconLeft={<Trash size="sm" />}
                 >
-                    Clear Logs
+                    {t('settings.llmLog.clearLogs')}
                 </TextButton>
             </div>
 
             {!llmLoggingEnabled && (
                 <div className="log-disabled-notice">
-                    Logging is disabled. Enable it to capture LLM requests and responses.
+                    {t('settings.llmLog.disabledNotice')}
                 </div>
             )}
 
@@ -86,7 +88,7 @@ const LLMLogViewer: React.FC = () => {
             {logs.length === 0 ? (
                 <div className="empty-logs">
                     <Document size="3xl" />
-                    <p>No logs captured yet.</p>
+                    <p>{t('settings.llmLog.noLogs')}</p>
                 </div>
             ) : (
                 <>
@@ -124,33 +126,33 @@ const LLMLogViewer: React.FC = () => {
                                     <div className="log-entry-details">
                                         {/* Request Section */}
                                         <div className="log-section">
-                                            <h4>Request</h4>
+                                            <h4>{t('settings.llmLog.request')}</h4>
                                             <div className="log-params">
                                                 <div className="param">
-                                                    <label>Provider:</label>
+                                                    <label>{t('settings.llmLog.provider')}:</label>
                                                     <span>{log.request.provider}</span>
                                                 </div>
                                                 <div className="param">
-                                                    <label>Model:</label>
+                                                    <label>{t('settings.llmLog.model')}:</label>
                                                     <span>{log.request.model}</span>
                                                 </div>
                                                 <div className="param">
-                                                    <label>Temperature:</label>
+                                                    <label>{t('settings.llmLog.temperature')}:</label>
                                                     <span>{log.request.temperature}</span>
                                                 </div>
                                                 <div className="param">
-                                                    <label>Thinking Mode:</label>
+                                                    <label>{t('settings.llmLog.thinkingMode')}:</label>
                                                     <span>{log.request.thinkingMode}</span>
                                                 </div>
                                                 {log.request.functions && (
                                                     <div className="param">
-                                                        <label>Functions:</label>
-                                                        <span>{log.request.functions.length} defined</span>
+                                                        <label>{t('settings.llmLog.functions')}:</label>
+                                                        <span>{t('settings.llmLog.functionsDefined', { count: log.request.functions.length })}</span>
                                                     </div>
                                                 )}
                                             </div>
                                             <div className="log-messages">
-                                                <h5>Messages ({log.request.messages.length})</h5>
+                                                <h5>{t('settings.llmLog.messages', { count: log.request.messages.length })}</h5>
                                                 <pre className="log-json">
                                                     {JSON.stringify(log.request.messages, null, 2)}
                                                 </pre>
@@ -160,16 +162,16 @@ const LLMLogViewer: React.FC = () => {
                                         {/* Response Section */}
                                         {log.response && (
                                             <div className="log-section">
-                                                <h4>Response</h4>
+                                                <h4>{t('settings.llmLog.response')}</h4>
                                                 <div className="log-content">
-                                                    <h5>Content Parts</h5>
+                                                    <h5>{t('settings.llmLog.contentParts')}</h5>
                                                     <pre className="log-json">
                                                         {JSON.stringify(log.response.contentParts, null, 2)}
                                                     </pre>
                                                 </div>
                                                 {log.response.functionCalls.length > 0 && (
                                                     <div className="log-function-calls">
-                                                        <h5>Function Calls ({log.response.functionCalls.length})</h5>
+                                                        <h5>{t('settings.llmLog.functionCalls', { count: log.response.functionCalls.length })}</h5>
                                                         <pre className="log-json">
                                                             {JSON.stringify(log.response.functionCalls, null, 2)}
                                                         </pre>
@@ -177,7 +179,7 @@ const LLMLogViewer: React.FC = () => {
                                                 )}
                                                 {log.response.thinkingDetails && log.response.thinkingDetails.length > 0 && (
                                                     <div className="log-thinking">
-                                                        <h5>Thinking Details</h5>
+                                                        <h5>{t('settings.llmLog.thinkingDetails')}</h5>
                                                         <pre className="log-json">
                                                             {JSON.stringify(log.response.thinkingDetails, null, 2)}
                                                         </pre>
@@ -189,7 +191,7 @@ const LLMLogViewer: React.FC = () => {
                                         {/* Error Section */}
                                         {log.error && (
                                             <div className="log-section error">
-                                                <h4>Error</h4>
+                                                <h4>{t('common.error')}</h4>
                                                 <pre className="log-error">{log.error}</pre>
                                             </div>
                                         )}
@@ -200,7 +202,7 @@ const LLMLogViewer: React.FC = () => {
                     </div>
 
                     <div className="log-info">
-                        Showing {logs.length} of max 50 entries. Logs are stored in memory and cleared on page refresh.
+                        {t('settings.llmLog.logInfo', { count: logs.length })}
                     </div>
                 </>
             )}

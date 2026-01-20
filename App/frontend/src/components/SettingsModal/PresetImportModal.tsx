@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { BaseModal } from '../BaseModal';
 import { TextButton } from '../TextButton';
 import { usePresetStore } from '../../store/presetStore';
@@ -15,8 +16,9 @@ const PresetImportModal: React.FC<PresetImportModalProps> = ({
   onClose,
   importData,
 }) => {
+  const { t } = useTranslation();
   const { importPreset, setActivePreset, presets } = usePresetStore();
-  const [name, setName] = useState(importData.preset.name || 'Imported Preset');
+  const [name, setName] = useState(importData.preset.name || '');
   const [description, setDescription] = useState(importData.preset.description || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -53,12 +55,12 @@ const PresetImportModal: React.FC<PresetImportModalProps> = ({
 
   const handleSubmit = async () => {
     if (!name.trim()) {
-      setError('Preset name is required');
+      setError(t('settings.presetImport.nameRequired'));
       return;
     }
 
     if (isDuplicateName) {
-      setError('A preset with this name already exists');
+      setError(t('settings.presetImport.duplicateName'));
       return;
     }
 
@@ -77,9 +79,9 @@ const PresetImportModal: React.FC<PresetImportModalProps> = ({
       onClose();
     } catch (err: any) {
       if (err.message?.includes('409') || err.message?.includes('already exists')) {
-        setError('A preset with this name already exists');
+        setError(t('settings.presetImport.duplicateName'));
       } else {
-        setError(err.message || 'Failed to import preset');
+        setError(err.message || t('settings.presetImport.importFailed'));
       }
     } finally {
       setIsSubmitting(false);
@@ -90,13 +92,13 @@ const PresetImportModal: React.FC<PresetImportModalProps> = ({
     <BaseModal
       isOpen={isOpen}
       onClose={onClose}
-      title="Import Preset"
+      title={t('settings.presetImport.title')}
       size="small"
       zIndexLayer={1}
       footer={
         <>
           <TextButton variant="secondary" onClick={onClose}>
-            Cancel
+            {t('common.cancel')}
           </TextButton>
           <TextButton
             variant="primary"
@@ -104,39 +106,39 @@ const PresetImportModal: React.FC<PresetImportModalProps> = ({
             disabled={isSubmitting || !name.trim() || isDuplicateName}
             loading={isSubmitting}
           >
-            Import
+            {t('common.import')}
           </TextButton>
         </>
       }
     >
       <div className="form-group">
-        <label className="form-label" htmlFor="import-preset-name">Preset Name *</label>
+        <label className="form-label" htmlFor="import-preset-name">{t('settings.presetImport.presetName')} *</label>
         <input
           id="import-preset-name"
           className="form-input"
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Enter preset name"
+          placeholder={t('settings.presetImport.namePlaceholder')}
           autoFocus
         />
       </div>
 
       <div className="form-group">
-        <label className="form-label" htmlFor="import-preset-description">Description (optional)</label>
+        <label className="form-label" htmlFor="import-preset-description">{t('settings.presetImport.description')}</label>
         <input
           id="import-preset-description"
           className="form-input"
           type="text"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Brief description of this preset"
+          placeholder={t('settings.presetImport.descriptionPlaceholder')}
         />
       </div>
 
       <div className="form-group">
         <div className="preset-import-preview">
-          Contents: {stats.prompts} prompts, {stats.fragments} fragments, {stats.variables} variables
+          {t('settings.presetImport.contents', { prompts: stats.prompts, fragments: stats.fragments, variables: stats.variables })}
         </div>
       </div>
 

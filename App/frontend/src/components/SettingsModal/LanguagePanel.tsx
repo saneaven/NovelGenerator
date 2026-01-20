@@ -1,26 +1,33 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';
 import { Close } from '../icons';
+import { SUPPORTED_UI_LANGUAGES, type UILanguageCode } from '../../store/settingsStore';
 import './LanguagePanel.css';
 
 interface LanguagePanelProps {
   mainLanguage: string;
   subLanguages: string[];
   defaultSubLanguage: string | null;
+  uiLanguage: UILanguageCode;
   onMainLanguageChange: (language: string) => void;
   onSubLanguagesChange: (languages: string[]) => void;
   onDefaultSubLanguageChange: (language: string | null) => void;
+  onUiLanguageChange: (language: UILanguageCode) => void;
 }
 
 const LanguagePanel: React.FC<LanguagePanelProps> = ({
   mainLanguage,
   subLanguages = [],
   defaultSubLanguage,
+  uiLanguage,
   onMainLanguageChange,
   onSubLanguagesChange,
   onDefaultSubLanguageChange,
+  onUiLanguageChange,
 }) => {
+  const { t } = useTranslation();
   const [newLanguage, setNewLanguage] = useState('');
 
   // Ensure subLanguages is always an array (defensive guard for stale storage data)
@@ -73,26 +80,42 @@ const LanguagePanel: React.FC<LanguagePanelProps> = ({
   return (
     <div className="language-panel">
       <div className="panel-description">
-        <p>Set your preferred languages for the application interface and content generation.</p>
+        <p>{t('settings.language.description')}</p>
       </div>
 
       <div className="language-settings-card">
         <div className="form-field">
-          <label>Main Language</label>
+          <label>{t('settings.language.uiLanguage')}</label>
+          <select
+            value={uiLanguage}
+            onChange={(e) => onUiLanguageChange(e.target.value as UILanguageCode)}
+            className="language-select"
+          >
+            {SUPPORTED_UI_LANGUAGES.map((lang) => (
+              <option key={lang.code} value={lang.code}>
+                {lang.name}
+              </option>
+            ))}
+          </select>
+          <p className="field-hint">{t('settings.language.uiLanguageHint')}</p>
+        </div>
+
+        <div className="form-field">
+          <label>{t('settings.language.mainLanguage')}</label>
           <input
             type="text"
             value={mainLanguage}
             onChange={(e) => onMainLanguageChange(e.target.value)}
-            placeholder="English"
+            placeholder={t('settings.language.mainLanguagePlaceholder')}
             className="language-input"
           />
-          <p className="field-hint">Primary language for the application and AI responses</p>
+          <p className="field-hint">{t('settings.language.mainLanguageHint')}</p>
         </div>
 
         <div className="form-field">
-          <label>Sub Languages</label>
+          <label>{t('settings.language.subLanguages')}</label>
           <p className="field-hint" style={{ marginBottom: '8px' }}>
-            Additional languages for translation features. Click the radio button to set the default for quick-translate.
+            {t('settings.language.subLanguagesHint')}
           </p>
 
           {safeSubLanguages.length > 0 && (
@@ -104,7 +127,7 @@ const LanguagePanel: React.FC<LanguagePanelProps> = ({
                     name="defaultSubLanguage"
                     checked={defaultSubLanguage === lang}
                     onChange={() => handleSetDefault(lang)}
-                    title="Set as default translation language"
+                    title={t('settings.language.setAsDefault')}
                     className="default-radio"
                   />
                   <span className="language-name">{lang}</span>
@@ -113,7 +136,7 @@ const LanguagePanel: React.FC<LanguagePanelProps> = ({
                     onClick={() => handleRemoveLanguage(lang)}
                     size="xs"
                     variant="ghost"
-                    title={`Remove ${lang}`}
+                    title={t('settings.language.removeLanguage', { language: lang })}
                     className="remove-language-btn"
                   />
                 </div>
@@ -127,7 +150,7 @@ const LanguagePanel: React.FC<LanguagePanelProps> = ({
               value={newLanguage}
               onChange={(e) => setNewLanguage(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="e.g., Korean, Japanese, Spanish"
+              placeholder={t('settings.language.addLanguagePlaceholder')}
               className="language-input add-language-input"
             />
             <TextButton
@@ -137,19 +160,19 @@ const LanguagePanel: React.FC<LanguagePanelProps> = ({
               onClick={handleAddLanguage}
               disabled={!newLanguage.trim()}
             >
-              + Add
+              + {t('common.add')}
             </TextButton>
           </div>
         </div>
       </div>
 
       <div className="language-info-box">
-        <h4>Language Support</h4>
+        <h4>{t('settings.language.languageSupport')}</h4>
         <ul>
-          <li>Main language affects AI model responses and system prompts</li>
-          <li>Sub languages are used for translation features</li>
-          <li>The default sub language (marked with radio) is used for quick-translate in agent</li>
-          <li>You can add multiple sub languages for multilingual projects</li>
+          <li>{t('settings.language.languageSupportInfo.mainLanguage')}</li>
+          <li>{t('settings.language.languageSupportInfo.subLanguages')}</li>
+          <li>{t('settings.language.languageSupportInfo.defaultSub')}</li>
+          <li>{t('settings.language.languageSupportInfo.multilingual')}</li>
         </ul>
       </div>
     </div>

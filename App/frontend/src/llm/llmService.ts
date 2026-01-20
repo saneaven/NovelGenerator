@@ -416,18 +416,17 @@ export async function fetchModelEndpoints(
     apiKey?: string
 ): Promise<any>
 {
-    // If apiKey is provided, use direct OpenRouter call (non-vault mode).
-    // If not, use backend proxy which resolves the key from the encrypted vault.
-    const useProxy = !apiKey;
-    const endpoint = useProxy
-        ? `${API_BASE}/openrouter/models/${canonicalSlug}/endpoints`
-        : `https://openrouter.ai/api/v1/models/${canonicalSlug}/endpoints`;
+    if (!apiKey) {
+        throw new Error('OpenRouter API key is not configured');
+    }
+
+    const endpoint = `https://openrouter.ai/api/v1/models/${canonicalSlug}/endpoints`;
 
     const response = await fetch(endpoint, {
         method: "GET",
         headers: {
             "Content-Type": "application/json",
-            ...(useProxy ? getAuthHeaders() : { "Authorization": `Bearer ${apiKey}` }),
+            "Authorization": `Bearer ${apiKey}`,
         }
     });
 

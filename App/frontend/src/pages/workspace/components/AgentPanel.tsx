@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { useAgentStore, type StoredAgentMessage } from '../../../store/agentStore';
@@ -10,10 +11,10 @@ import { useErrorStore } from '../../../store/errorStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useLLMSessionStore } from '../../../store/llmSessionStore';
 import ObjectPicker from '../../../components/ObjectPicker/ObjectPicker';
-import AgentSidebar from '../../../components/AgentSidebar';
+import AgentSidebar from '../../../components/Agent/AgentSidebar';
 import { DefaultDisplayProcessor } from '../../../agent/processors/DisplayProcessor';
 import type { ChatMessage } from '../../../llm/requestTypes';
-import ThinkingDisplay from '../../../components/ThinkingDisplay';
+import ThinkingDisplay from '../../../components/common/ThinkingDisplay';
 import { FunctionCallCard } from '../../../components/functionCall';
 import { TextButton } from '../../../components/TextButton';
 import { IconButton } from '../../../components/IconButton';
@@ -45,31 +46,34 @@ const AgentContextTrigger: React.FC<AgentContextTriggerProps> = React.memo(({
     totalCount,
     isOpen,
     onClick
-}) => (
-    <button
-        type="button"
-        className={`agent-context-dropdown-trigger ${isOpen ? 'open' : ''}`}
-        onClick={onClick}
-        aria-expanded={isOpen}
-        aria-haspopup="listbox"
-    >   
-        <span className={`agent-context-dropdown-arrow ${isOpen ? 'open' : ''}`}>
-            <ChevronDown size="xs" />
-        </span>
-        <Settings size="sm" />
-        <span>Context ({selectedCount}/{totalCount})</span>
-    </button>
-));
+}) => {
+    const { t } = useTranslation();
+    return (
+        <button
+            type="button"
+            className={`agent-context-dropdown-trigger ${isOpen ? 'open' : ''}`}
+            onClick={onClick}
+            aria-expanded={isOpen}
+            aria-haspopup="listbox"
+        >
+            <span className={`agent-context-dropdown-arrow ${isOpen ? 'open' : ''}`}>
+                <ChevronDown size="xs" />
+            </span>
+            <Settings size="sm" />
+            <span>{t('agent.context')} ({selectedCount}/{totalCount})</span>
+        </button>
+    );
+});
 
 // Separate component for input form to avoid re-rendering messages on typing
 interface AgentInputFormProps {
     projectId: string;
-    mainLanguage: string;
     onSubmit: (e: React.FormEvent, input: string) => Promise<void>;
     onStop: () => void;
 }
 
-const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({ projectId, mainLanguage, onSubmit, onStop }) => {
+const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({ projectId, onSubmit, onStop }) => {
+    const { t } = useTranslation();
     const input = useAgentUIStore((state) => state.inputByProject[projectId] ?? '');
     const isLoading = useAgentUIStore((state) => state.loadingByProject[projectId] ?? false);
     const setInput = useAgentUIStore((state) => state.setInput);
@@ -91,7 +95,7 @@ const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({ projectId, m
                 <textarea
                     value={input}
                     onChange={(e) => setInput(projectId, e.target.value)}
-                    placeholder={`Enter a message in ${mainLanguage}...`}
+                    placeholder={t('agent.enterMessage')}
                     rows={1}
                     className="agent-input"
                     disabled={isLoading}
@@ -103,7 +107,7 @@ const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({ projectId, m
                         icon={<Stop size="md" />}
                         onClick={onStop}
                         variant="danger"
-                        title="Stop"
+                        title={t('agent.stop')}
                         className="agent-submit-btn"
                     />
                 ) : (
@@ -112,7 +116,7 @@ const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({ projectId, m
                         type="submit"
                         icon={<Send size="md" />}
                         variant="primary"
-                        title="Send"
+                        title={t('agent.send')}
                         className="agent-submit-btn"
                     />
                 )}
@@ -137,6 +141,7 @@ const MessageEditForm: React.FC<MessageEditFormProps> = React.memo(({
     onSaveEdit,
     onCancelEdit
 }) => {
+    const { t } = useTranslation();
     const editingContent = useAgentUIStore((state) => state.editingByProject[projectId]?.content ?? '');
 
     return (
@@ -145,7 +150,7 @@ const MessageEditForm: React.FC<MessageEditFormProps> = React.memo(({
                 ref={editTextareaRef}
                 value={editingContent}
                 onChange={onEditContentChange}
-                placeholder="Edit content"
+                placeholder={t('agent.editContent')}
             />
             <div className="edit-actions">
                 <TextButton
@@ -153,9 +158,9 @@ const MessageEditForm: React.FC<MessageEditFormProps> = React.memo(({
                     size="sm"
                     onClick={onSaveEdit}
                 >
-                    Save
+                    {t('agent.save')}
                 </TextButton>
-                <TextButton variant="secondary" size="sm" onClick={onCancelEdit}>Cancel</TextButton>
+                <TextButton variant="secondary" size="sm" onClick={onCancelEdit}>{t('agent.cancel')}</TextButton>
             </div>
         </div>
     );
@@ -177,6 +182,8 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     mode,
 }) =>
 {
+    const { t } = useTranslation();
+
     // Agent orchestration - all agent logic is handled internally
     const {
         agentHandlers,
@@ -599,7 +606,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
             <div className="message-content">
                 {!message.hasRequestedLanguage && (
                     <div className="language-fallback-badge">
-                        Using {message.fallbackLanguage || message.displayLanguage}
+                        {t('agent.usingLanguage', { language: message.fallbackLanguage || message.displayLanguage })}
                     </div>
                 )}
                 {processed.displayContent}
@@ -632,11 +639,11 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                         variant="secondary"
                         size="sm"
                         onClick={() => useSidebarStore.getState().toggleSidebar(projectId, 'agent')}
-                        title="View agent list"
+                        title={t('agent.viewAgentList')}
                     >
-                        Agents
+                        {t('agent.agents')}
                     </TextButton>
-                    <h2>{selectedAgent?.name || 'AI Agent'}</h2>
+                    <h2>{selectedAgent?.name || t('agent.aiAgent')}</h2>
                 </div>
                 <TextButton
                     variant="secondary"
@@ -644,18 +651,18 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                     className="mobile-only"
                     onClick={() => setAgentVisible(projectId, false)}
                 >
-                    Close
+                    {t('agent.close')}
                 </TextButton>
             </div>
 
             <div className="agent-messages" ref={scrollContainerRef}>
                 {displayMessages.length === 0 && (
                     <div className="welcome-message">
-                        <div className="ai-avatar">AI</div>
+                        <div className="ai-avatar">{t('agent.ai')}</div>
                         <div className="message-content">
-                            <p>Hello! I am here to help with your novel writing.</p>
+                            <p>{t('agent.welcomeMessage')}</p>
                             {currentProject && (
-                                <p>{`What can I help you with for the "${currentProject.name}" project?`}</p>
+                                <p>{t('agent.projectHelp', { projectName: currentProject.name })}</p>
                             )}
                         </div>
                     </div>
@@ -673,8 +680,8 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                     const { content: primaryPlainContent } = collapseContentParts(primaryMessage.contentParts);
                     const translationAvailable = defaultSubLanguage ? Boolean(message.storedMessage.data[defaultSubLanguage]) : false;
                     const translateButtonLabel = translationAvailable
-                        ? `Refresh ${translationTargetLabel}`
-                        : `Translate to ${translationTargetLabel}`;
+                        ? t('agent.refreshTranslation', { language: translationTargetLabel })
+                        : t('agent.translateTo', { language: translationTargetLabel });
                     const translateDisabled = !translationEnabled || isTranslating;
                     const agentSession = agentSessionByMessageId[message.chatMessage.id];
                     const hasStreamingCalls = Boolean(
@@ -703,7 +710,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                         >
                             <div className="message-wrapper">
                                 <div className="message-header">
-                                    <span className="message-role">{isUser ? 'You' : 'AI'}</span>
+                                    <span className="message-role">{isUser ? t('agent.you') : t('agent.ai')}</span>
                                     <span className="message-time">{formatTimestamp(message.chatMessage.timestamp)}</span>
                                 </div>
 
@@ -850,35 +857,33 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                             <div className="action-buttons">
                                                 {/* Per-message language toggle - only show when translation exists */}
                                                 {translationAvailable && (
-                                                    <TextButton
-                                                        variant="secondary"
-                                                        size="sm"
+                                                    <IconButton
+                                                        icon={<Globe size="xs" />}
+                                                        variant="ghost"
+                                                        size="xs"
+                                                        isActive={messageLanguageView[message.storedMessage.id] === 'secondary'}
                                                         onClick={() => setMessageLanguageView(prev => ({
                                                             ...prev,
                                                             [message.storedMessage.id]: prev[message.storedMessage.id] === 'secondary' ? 'primary' : 'secondary'
                                                         }))}
                                                         title={messageLanguageView[message.storedMessage.id] === 'secondary'
-                                                            ? `Switch to ${mainLanguage}`
-                                                            : `Switch to ${defaultSubLanguage}`
+                                                            ? t('agent.switchToLanguage', { language: mainLanguage })
+                                                            : t('agent.switchToLanguage', { language: defaultSubLanguage })
                                                         }
-                                                    >
-                                                        {messageLanguageView[message.storedMessage.id] === 'secondary'
-                                                            ? defaultSubLanguage?.slice(0, 2).toUpperCase()
-                                                            : mainLanguage?.slice(0, 2).toUpperCase()
-                                                        }
-                                                    </TextButton>
+                                                    />
                                                 )}
                                                 {translationEnabled && (
                                                     <IconButton
-                                                        icon={isTranslating ? <CircularArrow size="sm" /> : translationAvailable ? <CircularArrow size="sm" /> : <Globe size="sm" />}
+                                                        icon={isTranslating ? <CircularArrow size="xs" /> : translationAvailable ? <CircularArrow size="xs" /> : <Globe size="xs" />}
                                                         onClick={() => translateMessage(message.storedMessage)}
                                                         disabled={translateDisabled}
                                                         title={translateButtonLabel}
-                                                        size="sm"
+                                                        variant="ghost"
+                                                        size="xs"
                                                     />
                                                 )}
                                                 <IconButton
-                                                    icon={<Edit size="sm" />}
+                                                    icon={<Edit size="xs" />}
                                                     onClick={() => {
                                                         // Switch to primary view for this message when editing
                                                         setMessageLanguageView(prev => ({
@@ -888,16 +893,18 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                         onEditMessage(message.chatMessage.id, primaryPlainContent, mainLanguage);
                                                     }}
                                                     disabled={isTranslating || !primaryPlainContent.trim()}
-                                                    title="Edit"
-                                                    size="sm"
+                                                    title={t('agent.edit')}
+                                                    variant="ghost"
+                                                    size="xs"
                                                 />
                                                 <IconButton
-                                                    icon={<Trash size="sm" />}
+                                                    icon={<Trash size="xs" />}
                                                     onClick={() => onDeleteMessage(message.chatMessage.id)}
                                                     disabled={isTranslating}
-                                                    title="Delete"
-                                                    size="sm"
-                                                    variant="danger"
+                                                    title={t('agent.delete')}
+                                                    variant="ghost"
+                                                    size="xs"
+                                                    className="icon-button--ghost-danger"
                                                 />
                                             </div>
                                         </div>
@@ -924,7 +931,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                 setShowScrollButton(false);
                             }
                         }}
-                        title="Scroll to bottom"
+                        title={t('agent.scrollToBottom')}
                         variant="primary"
                     />
                 )}
@@ -958,7 +965,6 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                 </div>
                 <AgentInputForm
                     projectId={projectId}
-                    mainLanguage={mainLanguage}
                     onSubmit={onSubmit}
                     onStop={onStop}
                 />

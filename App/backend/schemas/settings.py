@@ -188,6 +188,7 @@ class UserSettingsResponse(BaseModel):
     functionCallHistoryLimit: int = 5
     thinkingHistoryLimit: int = 5
     displayLanguage: str = "English"
+    uiLanguage: str = "en"
 
     class Config:
         from_attributes = True
@@ -208,3 +209,4 @@ class UserSettingsUpdate(BaseModel):
     functionCallHistoryLimit: Optional[int] = None
     thinkingHistoryLimit: Optional[int] = None
     displayLanguage: Optional[str] = None
+    uiLanguage: Optional[str] = None

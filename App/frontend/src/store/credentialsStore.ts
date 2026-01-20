@@ -1,23 +1,26 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ProviderConfig, ProviderCredentials, ProviderType } from './settingsStore';
-import { credentialsService, type CredentialVaultStatusResponse } from '../api/credentialsService';
+import {
+  credentialsBackupService,
+  type CredentialBackupStatusResponse,
+} from '../api/credentialsBackupService';
+import { decryptCredentialsFromBackup, encryptCredentialsForBackup } from '../security/credentialsBackupCrypto';
 
 export interface CredentialsStore {
   credentials: ProviderCredentials;
-  serverVaultEnabled: boolean;
-  serverStatus: CredentialVaultStatusResponse | null;
+  backupStatus: CredentialBackupStatusResponse | null;
   isSyncing: boolean;
 
   setCredentials: (credentials: ProviderCredentials) => void;
-  setServerVaultEnabled: (enabled: boolean) => void;
 
   getProviderConfig: (provider: ProviderType) => ProviderConfig;
   getProviderConfigForBackend: (provider: ProviderType) => ProviderConfig;
 
-  fetchServerStatus: () => Promise<void>;
-  pushToServerIfEnabled: () => Promise<void>;
-  deleteServerCredentials: () => Promise<void>;
+  fetchBackupStatus: () => Promise<void>;
+  backupToServer: (password: string, credentials?: ProviderCredentials) => Promise<void>;
+  restoreFromServer: (password: string) => Promise<ProviderCredentials>;
+  deleteServerBackup: (password: string) => Promise<void>;
 }
 
 const defaultCredentials: ProviderCredentials = {
@@ -34,12 +37,10 @@ export const useCredentialsStore = create<CredentialsStore>()(
   persist(
     (set, get) => ({
       credentials: defaultCredentials,
-      serverVaultEnabled: false,
-      serverStatus: null,
+      backupStatus: null,
       isSyncing: false,
 
       setCredentials: (credentials) => set({ credentials }),
-      setServerVaultEnabled: (enabled) => set({ serverVaultEnabled: enabled }),
 
       getProviderConfig: (provider) => {
         const creds = get().credentials;
@@ -53,38 +54,48 @@ export const useCredentialsStore = create<CredentialsStore>()(
       },
 
       getProviderConfigForBackend: (provider) => {
-        const cfg = get().getProviderConfig(provider);
-        if (!get().serverVaultEnabled) return cfg;
-        // Vault mode: omit apiKey to let backend resolve from encrypted storage.
-        return { ...cfg, apiKey: undefined };
+        return get().getProviderConfig(provider);
       },
 
-      fetchServerStatus: async () => {
+      fetchBackupStatus: async () => {
         set({ isSyncing: true });
         try {
-          const status = await credentialsService.getStatus();
-          set({ serverStatus: status });
+          const status = await credentialsBackupService.getStatus();
+          set({ backupStatus: status });
         } finally {
           set({ isSyncing: false });
         }
       },
 
-      pushToServerIfEnabled: async () => {
-        if (!get().serverVaultEnabled) return;
+      backupToServer: async (password: string, credentials?: ProviderCredentials) => {
         set({ isSyncing: true });
         try {
-          const status = await credentialsService.upsert(get().credentials);
-          set({ serverStatus: status });
+          const creds = credentials ?? get().credentials;
+          const blob = await encryptCredentialsForBackup(creds, password);
+          const status = await credentialsBackupService.upload(password, blob);
+          set({ backupStatus: status });
         } finally {
           set({ isSyncing: false });
         }
       },
 
-      deleteServerCredentials: async () => {
+      restoreFromServer: async (password: string) => {
         set({ isSyncing: true });
         try {
-          const status = await credentialsService.delete();
-          set({ serverStatus: status });
+          const res = await credentialsBackupService.download(password);
+          const creds = await decryptCredentialsFromBackup(res.blob, password);
+          set({ credentials: creds, backupStatus: { hasBackup: true, updatedAt: res.updatedAt } });
+          return creds;
+        } finally {
+          set({ isSyncing: false });
+        }
+      },
+
+      deleteServerBackup: async (password: string) => {
+        set({ isSyncing: true });
+        try {
+          const status = await credentialsBackupService.delete(password);
+          set({ backupStatus: status });
         } finally {
           set({ isSyncing: false });
         }
@@ -116,11 +127,9 @@ export const useCredentialsStore = create<CredentialsStore>()(
             ...defaultCredentials,
             ...(persistedState?.credentials || {}),
           },
-          serverVaultEnabled: persistedState?.serverVaultEnabled ?? false,
-          serverStatus: persistedState?.serverStatus ?? null,
+          backupStatus: persistedState?.backupStatus ?? null,
         };
       },
     }
   )
 );
-

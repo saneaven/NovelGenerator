@@ -112,8 +112,11 @@ class UserSettings(Base):
     # Thinking history limit - number of recent assistant messages to include thinking for
     thinking_history_limit = Column(Integer, default=5, nullable=False)
 
-    # Display language for UI
+    # Display language for UI (content display language)
     display_language = Column(String(50), default='English', nullable=False)
+
+    # UI Language for interface localization (i18next)
+    ui_language = Column(String(10), default='en', nullable=False)
 
     # Active prompt preset
     active_preset_id = Column(UUID(as_uuid=True), ForeignKey('prompt_presets.id', ondelete='SET NULL'), nullable=True)
@@ -131,14 +134,17 @@ class UserSettings(Base):
 # ============================================================================
 
 class UserCredentials(Base):
-    """Encrypted credentials (API keys) stored server-side (never returned in plaintext)"""
+    """E2E-encrypted credentials backup blob stored server-side.
+
+    The server stores an opaque encrypted blob and never decrypts it.
+    """
     __tablename__ = "user_credentials"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
 
-    # Encrypted blob (Fernet token) containing ProviderCredentials JSON
-    provider_credentials_enc = Column(Text, nullable=False)
+    # Opaque encrypted blob (JSON string) produced client-side (E2E)
+    credentials_blob = Column(Text, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

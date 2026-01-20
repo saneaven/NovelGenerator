@@ -10,6 +10,7 @@
 
 import { useEffect, useCallback, useImperativeHandle, forwardRef, useRef, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -60,6 +61,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   onSwapImage,
   onRegenerateImage,
 }, ref) => {
+  const { t } = useTranslation();
   // Use ref to hold onChange callback (prevents stale closure in onCreate)
   // See: https://tiptap.dev/docs/editor/api/events
   const onChangeRef = useRef(onChange);
@@ -299,7 +301,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   }), [editor, insertImage, updateImageSrc, getTextAroundCursor]);
 
   if (!editor) {
-    return <div className="rich-text-editor loading">Loading editor...</div>;
+    return <div className="rich-text-editor loading">{t('richTextEditor.loading')}</div>;
   }
 
   return (
@@ -318,7 +320,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
               editor.isActive('heading') ? 'active' : ''
             }`}
             disabled={disabled}
-            title="Heading"
+            title={t('richTextEditor.heading')}
           >
             {editor.isActive('heading', { level: 1 }) ? 'H1' :
              editor.isActive('heading', { level: 2 }) ? 'H2' :
@@ -348,7 +350,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
               }}
             >
               <span className="heading-label">¶</span>
-              <span>Paragraph</span>
+              <span>{t('richTextEditor.paragraph')}</span>
             </button>
             {([1, 2, 3, 4, 5, 6] as const).map((level) => (
               <button
@@ -361,7 +363,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
                 }}
               >
                 <span className="heading-label">H{level}</span>
-                <span>Heading {level}</span>
+                <span>{t('richTextEditor.headingLevel', { level })}</span>
               </button>
             ))}
           </div>,
@@ -375,7 +377,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
           onClick={() => editor.chain().focus().toggleBold().run()}
           className={`format-btn ${editor.isActive('bold') ? 'active' : ''}`}
           disabled={disabled}
-          title="Bold (Ctrl+B)"
+          title={t('richTextEditor.bold')}
         >
           <strong>B</strong>
         </button>
@@ -384,7 +386,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
           onClick={() => editor.chain().focus().toggleItalic().run()}
           className={`format-btn ${editor.isActive('italic') ? 'active' : ''}`}
           disabled={disabled}
-          title="Italic (Ctrl+I)"
+          title={t('richTextEditor.italic')}
         >
           <em>I</em>
         </button>
@@ -393,7 +395,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
           onClick={() => editor.chain().focus().toggleStrike().run()}
           className={`format-btn ${editor.isActive('strike') ? 'active' : ''}`}
           disabled={disabled}
-          title="Strikethrough"
+          title={t('richTextEditor.strikethrough')}
         >
           <s>S</s>
         </button>
@@ -405,7 +407,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
           className={`format-btn ${editor.isActive('blockquote') ? 'active' : ''}`}
           disabled={disabled}
-          title="Quote"
+          title={t('richTextEditor.quote')}
         >
           "
         </button>
@@ -414,7 +416,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
           onClick={() => editor.chain().focus().setHorizontalRule().run()}
           className="format-btn"
           disabled={disabled}
-          title="Horizontal rule"
+          title={t('richTextEditor.horizontalRule')}
         >
           —
         </button>
@@ -426,7 +428,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
             onClick={() => tableDropdownOpen ? setTableDropdownOpen(false) : openTableDropdown()}
             className={`format-btn ${editor.isActive('table') ? 'active' : ''}`}
             disabled={disabled}
-            title="Insert table"
+            title={t('richTextEditor.insertTable')}
           >
             ⊞
           </button>
@@ -443,7 +445,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
           >
             <div className="table-size-inputs">
               <label>
-                <span>Rows</span>
+                <span>{t('richTextEditor.rows')}</span>
                 <input
                   type="number"
                   min={1}
@@ -453,7 +455,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
                 />
               </label>
               <label>
-                <span>Cols</span>
+                <span>{t('richTextEditor.cols')}</span>
                 <input
                   type="number"
                   min={1}
@@ -471,7 +473,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
                 setTableDropdownOpen(false);
               }}
             >
-              Insert Table
+              {t('richTextEditor.insertTableBtn')}
             </button>
           </div>,
           document.body
@@ -486,7 +488,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
             onClick={onBrowseAssets}
             className="format-btn image-btn"
             disabled={disabled}
-            title="Insert image"
+            title={t('richTextEditor.insertImage')}
           >
             <Image size="md" />
           </button>

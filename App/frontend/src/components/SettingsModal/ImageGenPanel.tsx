@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type {
     ImageGenConfig,
     ImageProviderType,
@@ -85,6 +86,7 @@ const NOVELAI_NOISE_SCHEDULES = [
 const generateId = (): string => generateTempId();
 
 const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
+    const { t } = useTranslation();
     const currentPromptType = PROVIDER_PROMPT_TYPES[config.provider];
     const isTagBased = currentPromptType === 'tag_based';
     const isNovelAI = config.provider === 'novelai';
@@ -173,9 +175,9 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
     return (
         <div className="image-gen-panel">
             <div className="panel-header">
-                <h3>Image Generation Defaults</h3>
+                <h3>{t('settings.imageGen.title')}</h3>
                 <p className="panel-description">
-                    Configure default settings for AI image generation. These can be overridden when generating images.
+                    {t('settings.imageGen.description')}
                 </p>
             </div>
 
@@ -183,8 +185,8 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                 {/* Provider Selection */}
                 <div className="setting-item">
                     <label className="setting-label">
-                        <span className="label-text">Provider</span>
-                        <span className="label-hint">Choose the AI provider for image generation</span>
+                        <span className="label-text">{t('settings.imageGen.provider')}</span>
+                        <span className="label-hint">{t('settings.imageGen.providerHint')}</span>
                     </label>
                     <CustomSelect
                         value={config.provider}
@@ -199,8 +201,8 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                 {/* Model Selection */}
                 <div className="setting-item">
                     <label className="setting-label">
-                        <span className="label-text">Model</span>
-                        <span className="label-hint">Select the image generation model</span>
+                        <span className="label-text">{t('settings.imageGen.model')}</span>
+                        <span className="label-hint">{t('settings.imageGen.modelHint')}</span>
                     </label>
                     <CustomSelect
                         value={config.model}
@@ -217,8 +219,8 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                     <>
                         <div className="setting-item">
                             <label className="setting-label">
-                                <span className="label-text">Aspect Ratio</span>
-                                <span className="label-hint">Image aspect ratio</span>
+                                <span className="label-text">{t('settings.imageGen.aspectRatio')}</span>
+                                <span className="label-hint">{t('settings.imageGen.aspectRatioHint')}</span>
                             </label>
                             <CustomSelect
                                 value={config.geminiSettings.aspect_ratio}
@@ -237,8 +239,8 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                         </div>
                         <div className="setting-item">
                             <label className="setting-label">
-                                <span className="label-text">Resolution</span>
-                                <span className="label-hint">Image resolution</span>
+                                <span className="label-text">{t('settings.imageGen.resolution')}</span>
+                                <span className="label-hint">{t('settings.imageGen.resolutionHint')}</span>
                             </label>
                             <CustomSelect
                                 value={config.geminiSettings.image_resolution}
@@ -259,8 +261,8 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                 ) : (
                     <div className="setting-item">
                         <label className="setting-label">
-                            <span className="label-text">Size</span>
-                            <span className="label-hint">Default image dimensions</span>
+                            <span className="label-text">{t('settings.imageGen.size')}</span>
+                            <span className="label-hint">{t('settings.imageGen.sizeHint')}</span>
                         </label>
                         <CustomSelect
                             value={config.size}
@@ -278,16 +280,16 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
             {isOpenAI && (
                 <div className="provider-settings-section">
                     <div className="section-header">
-                        <h4>OpenAI Settings</h4>
+                        <h4>{t('settings.imageGen.openai.title')}</h4>
                         <p className="section-description">
-                            Configure OpenAI-specific image generation options.
+                            {t('settings.imageGen.openai.description')}
                         </p>
                     </div>
                     <div className="settings-grid">
                         <div className="setting-item">
                             <label className="setting-label">
-                                <span className="label-text">Quality</span>
-                                <span className="label-hint">Image quality level</span>
+                                <span className="label-text">{t('settings.imageGen.openai.quality')}</span>
+                                <span className="label-hint">{t('settings.imageGen.openai.qualityHint')}</span>
                             </label>
                             <CustomSelect
                                 value={config.openaiSettings.quality}
@@ -299,15 +301,15 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                                     },
                                 })}
                                 options={[
-                                    { value: 'standard', label: 'Standard' },
-                                    { value: 'hd', label: 'HD' },
+                                    { value: 'standard', label: t('settings.imageGen.openai.qualityStandard') },
+                                    { value: 'hd', label: t('settings.imageGen.openai.qualityHd') },
                                 ]}
                             />
                         </div>
                         <div className="setting-item">
                             <label className="setting-label">
-                                <span className="label-text">Style</span>
-                                <span className="label-hint">Image style preference</span>
+                                <span className="label-text">{t('settings.imageGen.openai.style')}</span>
+                                <span className="label-hint">{t('settings.imageGen.openai.styleHint')}</span>
                             </label>
                             <CustomSelect
                                 value={config.openaiSettings.style}
@@ -319,8 +321,8 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                                     },
                                 })}
                                 options={[
-                                    { value: 'natural', label: 'Natural' },
-                                    { value: 'vivid', label: 'Vivid' },
+                                    { value: 'natural', label: t('settings.imageGen.openai.styleNatural') },
+                                    { value: 'vivid', label: t('settings.imageGen.openai.styleVivid') },
                                 ]}
                             />
                         </div>
@@ -332,16 +334,16 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
             {isNovelAI && (
                 <div className="provider-settings-section">
                     <div className="section-header">
-                        <h4>NovelAI Settings</h4>
+                        <h4>{t('settings.imageGen.novelai.title')}</h4>
                         <p className="section-description">
-                            Configure NovelAI-specific image generation options.
+                            {t('settings.imageGen.novelai.description')}
                         </p>
                     </div>
                     <div className="settings-grid novelai-settings">
                         <div className="setting-item">
                             <label className="setting-label">
-                                <span className="label-text">Sampler</span>
-                                <span className="label-hint">Sampling algorithm</span>
+                                <span className="label-text">{t('settings.imageGen.novelai.sampler')}</span>
+                                <span className="label-hint">{t('settings.imageGen.novelai.samplerHint')}</span>
                             </label>
                             <CustomSelect
                                 value={config.novelaiSettings.sampler}
@@ -360,8 +362,8 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                         </div>
                         <div className="setting-item">
                             <label className="setting-label">
-                                <span className="label-text">Steps</span>
-                                <span className="label-hint">Number of sampling steps (1-50)</span>
+                                <span className="label-text">{t('settings.imageGen.novelai.steps')}</span>
+                                <span className="label-hint">{t('settings.imageGen.novelai.stepsHint')}</span>
                             </label>
                             <input
                                 type="number"
@@ -380,8 +382,8 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                         </div>
                         <div className="setting-item">
                             <label className="setting-label">
-                                <span className="label-text">CFG Scale</span>
-                                <span className="label-hint">Prompt guidance strength (1-20)</span>
+                                <span className="label-text">{t('settings.imageGen.novelai.cfgScale')}</span>
+                                <span className="label-hint">{t('settings.imageGen.novelai.cfgScaleHint')}</span>
                             </label>
                             <input
                                 type="number"
@@ -401,8 +403,8 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                         </div>
                         <div className="setting-item">
                             <label className="setting-label">
-                                <span className="label-text">Noise Schedule</span>
-                                <span className="label-hint">Noise scheduling method</span>
+                                <span className="label-text">{t('settings.imageGen.novelai.noiseSchedule')}</span>
+                                <span className="label-hint">{t('settings.imageGen.novelai.noiseScheduleHint')}</span>
                             </label>
                             <CustomSelect
                                 value={config.novelaiSettings.noise_schedule}
@@ -427,22 +429,22 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
             {!isTagBased && (
                 <div className="custom-styles-section">
                     <div className="section-header">
-                        <h4>Custom Styles (Natural Language)</h4>
+                        <h4>{t('settings.imageGen.customStyles.naturalTitle')}</h4>
                         <p className="section-description">
-                            Create custom styles with prefix and postfix text that wrap around your prompts.
+                            {t('settings.imageGen.customStyles.naturalDescription')}
                         </p>
                     </div>
 
                     <div className="setting-item">
                         <label className="setting-label">
-                            <span className="label-text">Default Style</span>
-                            <span className="label-hint">Style to apply by default when generating images</span>
+                            <span className="label-text">{t('settings.imageGen.customStyles.defaultStyle')}</span>
+                            <span className="label-hint">{t('settings.imageGen.customStyles.defaultStyleHint')}</span>
                         </label>
                         <CustomSelect
                             value={config.selectedNaturalStyleId || ''}
                             onChange={(value) => onChange({ ...config, selectedNaturalStyleId: value || null })}
                             options={[
-                                { value: '', label: 'None' },
+                                { value: '', label: t('common.none') },
                                 ...config.naturalStyles.map((s) => ({
                                     value: s.id,
                                     label: s.name,
@@ -452,7 +454,7 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                     </div>
 
                     <TextButton variant="secondary" size="sm" onClick={handleAddNaturalStyle}>
-                        + Add New Style
+                        + {t('settings.imageGen.customStyles.addNewStyle')}
                     </TextButton>
 
                     {config.naturalStyles.length > 0 && (
@@ -465,41 +467,41 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                                             value={style.name}
                                             onChange={(e) => handleUpdateNaturalStyle(style.id, { name: e.target.value })}
                                             className="style-name-input"
-                                            placeholder="Style Name"
+                                            placeholder={t('settings.imageGen.customStyles.styleName')}
                                         />
                                         <button
                                             className="delete-style-button"
                                             onClick={() => handleDeleteNaturalStyle(style.id)}
-                                            title="Delete style"
+                                            title={t('settings.imageGen.customStyles.deleteStyle')}
                                         >
                                             &times;
                                         </button>
                                     </div>
                                     <div className="style-fields">
                                         <div className="style-field">
-                                            <label>Prefix</label>
+                                            <label>{t('settings.imageGen.customStyles.prefix')}</label>
                                             <input
                                                 type="text"
                                                 value={style.prefix}
                                                 onChange={(e) => handleUpdateNaturalStyle(style.id, { prefix: e.target.value })}
-                                                placeholder="Text prepended to prompt..."
+                                                placeholder={t('settings.imageGen.customStyles.prefixPlaceholder')}
                                             />
                                         </div>
                                         <div className="style-field">
-                                            <label>Postfix</label>
+                                            <label>{t('settings.imageGen.customStyles.postfix')}</label>
                                             <input
                                                 type="text"
                                                 value={style.postfix}
                                                 onChange={(e) => handleUpdateNaturalStyle(style.id, { postfix: e.target.value })}
-                                                placeholder="Text appended to prompt..."
+                                                placeholder={t('settings.imageGen.customStyles.postfixPlaceholder')}
                                             />
                                         </div>
                                     </div>
                                     {(style.prefix || style.postfix) && (
                                         <div className="style-preview">
-                                            <span className="preview-label">Preview:</span>
+                                            <span className="preview-label">{t('settings.imageGen.customStyles.preview')}:</span>
                                             <span className="preview-text">
-                                                {style.prefix}<em>[your prompt]</em>{style.postfix}
+                                                {style.prefix}<em>{t('settings.imageGen.customStyles.yourPrompt')}</em>{style.postfix}
                                             </span>
                                         </div>
                                     )}
@@ -514,22 +516,22 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
             {isTagBased && (
                 <div className="custom-styles-section">
                     <div className="section-header">
-                        <h4>Custom Styles (Tag-Based)</h4>
+                        <h4>{t('settings.imageGen.customStyles.tagBasedTitle')}</h4>
                         <p className="section-description">
-                            Create custom styles with prefix and postfix for both positive and negative prompts.
+                            {t('settings.imageGen.customStyles.tagBasedDescription')}
                         </p>
                     </div>
 
                     <div className="setting-item">
                         <label className="setting-label">
-                            <span className="label-text">Default Style</span>
-                            <span className="label-hint">Style to apply by default when generating images</span>
+                            <span className="label-text">{t('settings.imageGen.customStyles.defaultStyle')}</span>
+                            <span className="label-hint">{t('settings.imageGen.customStyles.defaultStyleHint')}</span>
                         </label>
                         <CustomSelect
                             value={config.selectedTagBasedStyleId || ''}
                             onChange={(value) => onChange({ ...config, selectedTagBasedStyleId: value || null })}
                             options={[
-                                { value: '', label: 'None' },
+                                { value: '', label: t('common.none') },
                                 ...config.tagBasedStyles.map((s) => ({
                                     value: s.id,
                                     label: s.name,
@@ -539,7 +541,7 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                     </div>
 
                     <TextButton variant="secondary" size="sm" onClick={handleAddTagBasedStyle}>
-                        + Add New Style
+                        + {t('settings.imageGen.customStyles.addNewStyle')}
                     </TextButton>
 
                     {config.tagBasedStyles.length > 0 && (
@@ -552,59 +554,59 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                                             value={style.name}
                                             onChange={(e) => handleUpdateTagBasedStyle(style.id, { name: e.target.value })}
                                             className="style-name-input"
-                                            placeholder="Style Name"
+                                            placeholder={t('settings.imageGen.customStyles.styleName')}
                                         />
                                         <button
                                             className="delete-style-button"
                                             onClick={() => handleDeleteTagBasedStyle(style.id)}
-                                            title="Delete style"
+                                            title={t('settings.imageGen.customStyles.deleteStyle')}
                                         >
                                             &times;
                                         </button>
                                     </div>
                                     <div className="style-fields tag-based-fields">
                                         <div className="style-field-group">
-                                            <label className="field-group-label">Positive Prompt</label>
+                                            <label className="field-group-label">{t('settings.imageGen.customStyles.positivePrompt')}</label>
                                             <div className="field-row">
                                                 <div className="style-field">
-                                                    <label>Prefix</label>
+                                                    <label>{t('settings.imageGen.customStyles.prefix')}</label>
                                                     <input
                                                         type="text"
                                                         value={style.positivePrefix}
                                                         onChange={(e) => handleUpdateTagBasedStyle(style.id, { positivePrefix: e.target.value })}
-                                                        placeholder="masterpiece, best quality, "
+                                                        placeholder={t('settings.imageGen.customStyles.positivePrefixPlaceholder')}
                                                     />
                                                 </div>
                                                 <div className="style-field">
-                                                    <label>Postfix</label>
+                                                    <label>{t('settings.imageGen.customStyles.postfix')}</label>
                                                     <input
                                                         type="text"
                                                         value={style.positivePostfix}
                                                         onChange={(e) => handleUpdateTagBasedStyle(style.id, { positivePostfix: e.target.value })}
-                                                        placeholder=", detailed eyes"
+                                                        placeholder={t('settings.imageGen.customStyles.positivePostfixPlaceholder')}
                                                     />
                                                 </div>
                                             </div>
                                         </div>
                                         <div className="style-field-group">
-                                            <label className="field-group-label">Negative Prompt</label>
+                                            <label className="field-group-label">{t('settings.imageGen.customStyles.negativePrompt')}</label>
                                             <div className="field-row">
                                                 <div className="style-field">
-                                                    <label>Prefix</label>
+                                                    <label>{t('settings.imageGen.customStyles.prefix')}</label>
                                                     <input
                                                         type="text"
                                                         value={style.negativePrefix}
                                                         onChange={(e) => handleUpdateTagBasedStyle(style.id, { negativePrefix: e.target.value })}
-                                                        placeholder="lowres, "
+                                                        placeholder={t('settings.imageGen.customStyles.negativePrefixPlaceholder')}
                                                     />
                                                 </div>
                                                 <div className="style-field">
-                                                    <label>Postfix</label>
+                                                    <label>{t('settings.imageGen.customStyles.postfix')}</label>
                                                     <input
                                                         type="text"
                                                         value={style.negativePostfix}
                                                         onChange={(e) => handleUpdateTagBasedStyle(style.id, { negativePostfix: e.target.value })}
-                                                        placeholder=", bad anatomy"
+                                                        placeholder={t('settings.imageGen.customStyles.negativePostfixPlaceholder')}
                                                     />
                                                 </div>
                                             </div>
@@ -615,13 +617,13 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                                             <div className="preview-row">
                                                 <span className="preview-label positive">+</span>
                                                 <span className="preview-text">
-                                                    {style.positivePrefix}<em>[prompt]</em>{style.positivePostfix}
+                                                    {style.positivePrefix}<em>{t('settings.imageGen.customStyles.prompt')}</em>{style.positivePostfix}
                                                 </span>
                                             </div>
                                             <div className="preview-row">
                                                 <span className="preview-label negative">−</span>
                                                 <span className="preview-text">
-                                                    {style.negativePrefix}<em>[prompt]</em>{style.negativePostfix}
+                                                    {style.negativePrefix}<em>{t('settings.imageGen.customStyles.prompt')}</em>{style.negativePostfix}
                                                 </span>
                                             </div>
                                         </div>
@@ -634,7 +636,7 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
             )}
 
             <div className="panel-note">
-                <strong>Note:</strong> Make sure you have configured the API key for the selected provider in the Credentials tab.
+                <strong>{t('common.note')}:</strong> {t('settings.imageGen.apiKeyNote')}
             </div>
         </div>
     );

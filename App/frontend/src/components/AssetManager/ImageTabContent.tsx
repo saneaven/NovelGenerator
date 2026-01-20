@@ -11,7 +11,7 @@ import { assetService, formatStyledPrompt, type Asset } from '../../api/assetSer
 import { getAssetUrl } from '../../utils/assetUrl';
 import { Folder, AIAssistMini, Close } from '../icons';
 import { VirtualizedImageGrid } from './VirtualizedImageGrid';
-import ToggleSwitch from '../ToggleSwitch';
+import ToggleSwitch from '../common/ToggleSwitch';
 import type { DisplayAsset } from './ImageGridItem';
 import { ImageTaskRuntime, type GenerationRecipe } from '../../imageTask';
 import { useImageTaskStore } from '../../imageTask/store';

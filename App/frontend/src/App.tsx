@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from './store/settingsStore';
 import { useTheme } from './hooks/useTheme';
 import { NotificationModals } from './components/Notification';
@@ -15,9 +16,18 @@ registerImageTaskModals();
 
 function App() {
   const settingsStore = useSettingsStore();
+  const uiLanguage = useSettingsStore((state) => state.settings.uiLanguage);
+  const { i18n } = useTranslation();
 
   // Initialize theme system
   useTheme();
+
+  // Sync i18n language with settings
+  useEffect(() => {
+    if (uiLanguage && i18n.language !== uiLanguage) {
+      i18n.changeLanguage(uiLanguage);
+    }
+  }, [uiLanguage, i18n]);
 
   useEffect(() => {
     // Prevent theme flash on initial load

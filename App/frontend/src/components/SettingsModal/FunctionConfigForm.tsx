@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type {
   FunctionAIConfig,
   ProviderType,
@@ -16,7 +17,6 @@ interface FunctionConfigFormProps {
   functionType: AIFunctionType;
   config: FunctionAIConfig;
   credentials: ProviderCredentials;
-  serverVaultEnabled: boolean;
   onChange: (config: FunctionAIConfig) => void;
 }
 
@@ -24,9 +24,9 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
   functionType,
   config,
   credentials,
-  serverVaultEnabled,
   onChange,
 }) => {
+  const { t } = useTranslation();
   const [showModelBrowser, setShowModelBrowser] = useState(false);
 
   // Detect if model is GPT-5 family (gpt-5, gpt-5-mini, gpt-5.1, etc.)
@@ -115,10 +115,10 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
     <div className="function-config-form">
       {/* Basic Settings */}
       <div className="config-section">
-        <h4 className="section-title">Basic Settings</h4>
+        <h4 className="section-title">{t('settings.functionConfig.basicSettings')}</h4>
 
         <div className="form-field">
-          <label>Provider</label>
+          <label>{t('settings.functionConfig.provider')}</label>
           <CustomSelect
             value={config.provider}
             onChange={(value) => handleProviderChange(value as ProviderType)}
@@ -128,23 +128,23 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
               { value: 'claude', label: 'Claude' },
               { value: 'openrouter', label: 'OpenRouter' },
               { value: 'xai', label: 'xAI (Grok)' },
-              { value: 'custom', label: 'Custom Endpoint' },
+              { value: 'custom', label: t('settings.functionConfig.customEndpoint') },
             ]}
           />
           <p className="field-hint">
-            {config.provider === 'openai' && 'Direct OpenAI API access (GPT-4o, o1, etc.)'}
-            {config.provider === 'gemini' && 'Google Gemini with thought summaries'}
-            {config.provider === 'claude' && 'Anthropic Claude with extended thinking'}
-            {config.provider === 'openrouter' && 'Access to 100+ AI models via OpenRouter'}
-            {config.provider === 'xai' && 'xAI Grok models for text generation'}
-            {config.provider === 'custom' && 'Use your own OpenAI-compatible endpoint'}
+            {config.provider === 'openai' && t('settings.functionConfig.providerHints.openai')}
+            {config.provider === 'gemini' && t('settings.functionConfig.providerHints.gemini')}
+            {config.provider === 'claude' && t('settings.functionConfig.providerHints.claude')}
+            {config.provider === 'openrouter' && t('settings.functionConfig.providerHints.openrouter')}
+            {config.provider === 'xai' && t('settings.functionConfig.providerHints.xai')}
+            {config.provider === 'custom' && t('settings.functionConfig.providerHints.custom')}
           </p>
         </div>
 
         {/* Custom endpoint - API format selector (always visible for custom provider) */}
         {config.provider === 'custom' && (
           <div className="form-field">
-            <label>API Format</label>
+            <label>{t('settings.functionConfig.apiFormat')}</label>
             <CustomSelect
               value={config.advanced.customApiFormat || 'openai'}
               onChange={(value) => handleCustomApiFormatChange(value as CustomApiFormat)}
@@ -156,19 +156,19 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
               ]}
             />
             <p className="field-hint">
-              Select the API format - uses native SDK for each provider
+              {t('settings.functionConfig.apiFormatHint')}
             </p>
           </div>
         )}
 
         <div className="form-field">
-          <label>AI Model</label>
+          <label>{t('settings.functionConfig.aiModel')}</label>
           <div className="model-input-row">
             <input
               type="text"
               value={config.model}
               onChange={(e) => handleModelChange(e.target.value)}
-              placeholder="e.g., gpt-4o, anthropic/claude-3.5-sonnet"
+              placeholder={t('settings.functionConfig.modelPlaceholder')}
               className="config-input"
             />
             <TextButton
@@ -176,13 +176,13 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
               size="sm"
               type="button"
               onClick={() => setShowModelBrowser(!showModelBrowser)}
-              title="Browse available models"
+              title={t('settings.functionConfig.browseModels')}
             >
-              {showModelBrowser ? 'Hide' : 'Browse'}
+              {showModelBrowser ? t('common.hide') : t('common.browse')}
             </TextButton>
           </div>
           <p className="field-hint">
-            Model identifier for this function
+            {t('settings.functionConfig.modelHint')}
           </p>
           {/* Model Browser */}
           {showModelBrowser && (
@@ -193,7 +193,6 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
               currentModel={config.model}
               providerPreference={config.providerPreference}
               credentials={credentials}
-              serverVaultEnabled={serverVaultEnabled}
               onSelectModel={handleModelChange}
               onUpdateProviderPreference={(pref) =>
                 onChange({ ...config, providerPreference: pref })
@@ -204,7 +203,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
 
         <div className={`form-field ${isGpt5 ? 'disabled' : ''}`}>
           <label>
-            Temperature: <span className="temperature-value">{config.temperature.toFixed(1)}</span>
+            {t('settings.functionConfig.temperature')}: <span className="temperature-value">{config.temperature.toFixed(1)}</span>
           </label>
           <input
             type="range"
@@ -217,14 +216,14 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
             disabled={isGpt5}
           />
           <div className="temperature-labels">
-            <small>Precise (0.0)</small>
-            <small>Balanced (1.0)</small>
-            <small>Creative (2.0)</small>
+            <small>{t('settings.functionConfig.temperaturePrecise')}</small>
+            <small>{t('settings.functionConfig.temperatureBalanced')}</small>
+            <small>{t('settings.functionConfig.temperatureCreative')}</small>
           </div>
           <p className="field-hint">
             {isGpt5
-              ? 'Temperature is not supported for GPT-5 models. Use Reasoning Effort instead.'
-              : 'Lower values produce more focused and deterministic outputs. Higher values increase creativity and randomness.'}
+              ? t('settings.functionConfig.temperatureGpt5Hint')
+              : t('settings.functionConfig.temperatureHint')}
           </p>
         </div>
       </div>
@@ -232,7 +231,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
       {/* Advanced Settings */}
       <div className="config-section advanced-section">
         <span className="advanced-warning-icon"><Warning size="xl" /></span>
-        <h4 className="section-title"><Advenced size="lg" />Advanced Settings</h4>
+        <h4 className="section-title"><Advenced size="lg" />{t('settings.functionConfig.advancedSettings')}</h4>
 
         <div className="advanced-options">
           <div className={`checkbox-field ${config.provider === 'openai' ? 'disabled' : ''}`}>
@@ -244,18 +243,18 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                 disabled={config.provider === 'openai'}
               />
               <div className="checkbox-content">
-                <span className="checkbox-title">Enable Assistant Prefill</span>
+                <span className="checkbox-title">{t('settings.functionConfig.enablePrefill')}</span>
                 <span className="checkbox-description">
                   {config.provider === 'openai'
-                    ? 'OpenAI does not support assistant prefill'
-                    : 'Pre-fill the assistant\'s response to guide output format'}
+                    ? t('settings.functionConfig.prefillNotSupported')
+                    : t('settings.functionConfig.prefillDescription')}
                 </span>
               </div>
             </label>
           </div>
 
           <div className="thinking-mode-field">
-            <label className="field-label">Thinking Mode</label>
+            <label className="field-label">{t('settings.functionConfig.thinkingMode')}</label>
             <div className="radio-group">
               <label className={`radio-option ${config.provider === 'gemini' ? 'disabled' : ''}`}>
                 <input
@@ -267,11 +266,11 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                   disabled={config.provider === 'gemini'}
                 />
                 <div className="radio-content">
-                  <span className="radio-title">Off</span>
+                  <span className="radio-title">{t('settings.functionConfig.thinkingOff')}</span>
                   <span className="radio-description">
                     {config.provider === 'gemini'
-                      ? 'Gemini does not support disabling thinking'
-                      : 'No thinking shown'}
+                      ? t('settings.functionConfig.geminiThinkingNotSupported')
+                      : t('settings.functionConfig.thinkingOffDescription')}
                   </span>
                 </div>
               </label>
@@ -285,9 +284,9 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                   onChange={() => handleThinkingModeChange('model')}
                 />
                 <div className="radio-content">
-                  <span className="radio-title">Model Thinking</span>
+                  <span className="radio-title">{t('settings.functionConfig.modelThinking')}</span>
                   <span className="radio-description">
-                    Use model's native thinking tokens (if the model supports it)
+                    {t('settings.functionConfig.modelThinkingDescription')}
                   </span>
                 </div>
               </label>
@@ -301,9 +300,9 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                   onChange={() => handleThinkingModeChange('custom')}
                 />
                 <div className="radio-content">
-                  <span className="radio-title">Custom Thinking</span>
+                  <span className="radio-title">{t('settings.functionConfig.customThinking')}</span>
                   <span className="radio-description">
-                    Prompt-based Chain-of-Thought with &lt;thinking&gt; tags
+                    {t('settings.functionConfig.customThinkingDescription')}
                   </span>
                 </div>
               </label>
@@ -312,47 +311,47 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
             {/* Thinking Config (only shown for model mode) */}
             {config.advanced.thinkingMode === 'model' && (
               <div className="thinking-config">
-                <h5 className="subsection-title"><Settings size="sm" />Thinking Configuration</h5>
+                <h5 className="subsection-title"><Settings size="sm" />{t('settings.functionConfig.thinkingConfiguration')}</h5>
 
                 {/* Generic settings for OpenRouter/OpenAI (not custom) */}
                 {(config.provider === 'openrouter' || config.provider === 'openai' || config.provider === 'xai') && (
                   <>
                     <div className="form-field">
-                      <label>{isGpt5 ? 'Reasoning Effort (GPT-5)' : 'Effort Level'}</label>
+                      <label>{isGpt5 ? t('settings.functionConfig.reasoningEffortGpt5') : t('settings.functionConfig.effortLevel')}</label>
                       <CustomSelect
                         value={config.advanced.thinkingConfig?.effort || 'medium'}
                         onChange={(value) => handleThinkingConfigChange('effort', value)}
                         options={[
-                          ...(isGpt5 ? [{ value: 'none', label: 'None - No reasoning (fastest)' }] : []),
-                          ...(isGpt52Plus ? [{ value: 'minimal', label: 'Minimal - Very light reasoning' }] : []),
-                          { value: 'low', label: isGpt5 ? 'Low - Quick reasoning' : 'Low (~20% of max tokens)' },
-                          { value: 'medium', label: isGpt5 ? 'Medium - Balanced' : 'Medium (~50% of max tokens)' },
-                          { value: 'high', label: isGpt5 ? 'High - Deep reasoning' : 'High (~80% of max tokens)' },
-                          ...(isGpt52Plus ? [{ value: 'xhigh', label: 'Extra High - Maximum reasoning' }] : []),
+                          ...(isGpt5 ? [{ value: 'none', label: t('settings.functionConfig.effortNone') }] : []),
+                          ...(isGpt52Plus ? [{ value: 'minimal', label: t('settings.functionConfig.effortMinimal') }] : []),
+                          { value: 'low', label: isGpt5 ? t('settings.functionConfig.effortLowGpt5') : t('settings.functionConfig.effortLow') },
+                          { value: 'medium', label: isGpt5 ? t('settings.functionConfig.effortMediumGpt5') : t('settings.functionConfig.effortMedium') },
+                          { value: 'high', label: isGpt5 ? t('settings.functionConfig.effortHighGpt5') : t('settings.functionConfig.effortHigh') },
+                          ...(isGpt52Plus ? [{ value: 'xhigh', label: t('settings.functionConfig.effortXHigh') }] : []),
                         ]}
                       />
                       <p className="field-hint">
                         {isGpt5
-                          ? 'Controls how much reasoning GPT-5 performs before responding'
-                          : 'Controls how much thinking the model performs internally'}
+                          ? t('settings.functionConfig.effortHintGpt5')
+                          : t('settings.functionConfig.effortHint')}
                       </p>
                     </div>
 
                     {/* Verbosity dropdown - GPT-5 only */}
                     {isGpt5 && (
                       <div className="form-field">
-                        <label>Output Verbosity (GPT-5)</label>
+                        <label>{t('settings.functionConfig.verbosityGpt5')}</label>
                         <CustomSelect
                           value={config.advanced.thinkingConfig?.verbosity || 'medium'}
                           onChange={(value) => handleThinkingConfigChange('verbosity', value)}
                           options={[
-                            { value: 'low', label: 'Low - Concise output' },
-                            { value: 'medium', label: 'Medium - Standard' },
-                            { value: 'high', label: 'High - Detailed output' },
+                            { value: 'low', label: t('settings.functionConfig.verbosityLow') },
+                            { value: 'medium', label: t('settings.functionConfig.verbosityMedium') },
+                            { value: 'high', label: t('settings.functionConfig.verbosityHigh') },
                           ]}
                         />
                         <p className="field-hint">
-                          Controls the length and detail of the model's output
+                          {t('settings.functionConfig.verbosityHint')}
                         </p>
                       </div>
                     )}
@@ -360,7 +359,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                     {/* Max tokens - not for GPT-5 (uses max_output_tokens automatically) */}
                     {!isGpt5 && (
                       <div className="form-field">
-                        <label>Max Thinking Tokens (optional)</label>
+                        <label>{t('settings.functionConfig.maxThinkingTokens')}</label>
                         <input
                           type="number"
                           min="1024"
@@ -372,11 +371,11 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                               e.target.value ? parseInt(e.target.value) : undefined
                             )
                           }
-                          placeholder="Auto (based on effort)"
+                          placeholder={t('settings.functionConfig.autoBasedOnEffort')}
                           className="config-input"
                         />
                         <p className="field-hint">
-                          Directly specify thinking token budget. Leave empty to use effort-based allocation.
+                          {t('settings.functionConfig.maxThinkingTokensHint')}
                         </p>
                       </div>
                     )}
@@ -390,33 +389,33 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                     {config.advanced.customApiFormat === 'openai' && (
                       <>
                         <div className="form-field">
-                          <label>Reasoning Effort</label>
+                          <label>{t('settings.functionConfig.reasoningEffort')}</label>
                           <CustomSelect
                             value={config.advanced.thinkingConfig?.effort || 'medium'}
                             onChange={(value) => handleThinkingConfigChange('effort', value)}
                             options={[
-                              { value: 'none', label: 'None - No reasoning (fastest)' },
-                              { value: 'minimal', label: 'Minimal - Very light reasoning' },
-                              { value: 'low', label: 'Low - Quick reasoning' },
-                              { value: 'medium', label: 'Medium - Balanced' },
-                              { value: 'high', label: 'High - Deep reasoning' },
-                              { value: 'xhigh', label: 'Extra High - Maximum reasoning' },
+                              { value: 'none', label: t('settings.functionConfig.effortNone') },
+                              { value: 'minimal', label: t('settings.functionConfig.effortMinimal') },
+                              { value: 'low', label: t('settings.functionConfig.effortLowGpt5') },
+                              { value: 'medium', label: t('settings.functionConfig.effortMediumGpt5') },
+                              { value: 'high', label: t('settings.functionConfig.effortHighGpt5') },
+                              { value: 'xhigh', label: t('settings.functionConfig.effortXHigh') },
                             ]}
                           />
-                          <p className="field-hint">Controls reasoning depth (summary is auto-enabled)</p>
+                          <p className="field-hint">{t('settings.functionConfig.reasoningEffortHint')}</p>
                         </div>
                         <div className="form-field">
-                          <label>Output Verbosity</label>
+                          <label>{t('settings.functionConfig.outputVerbosity')}</label>
                           <CustomSelect
                             value={config.advanced.thinkingConfig?.verbosity || 'medium'}
                             onChange={(value) => handleThinkingConfigChange('verbosity', value)}
                             options={[
-                              { value: 'low', label: 'Low - Concise output' },
-                              { value: 'medium', label: 'Medium - Standard' },
-                              { value: 'high', label: 'High - Detailed output' },
+                              { value: 'low', label: t('settings.functionConfig.verbosityLow') },
+                              { value: 'medium', label: t('settings.functionConfig.verbosityMedium') },
+                              { value: 'high', label: t('settings.functionConfig.verbosityHigh') },
                             ]}
                           />
-                          <p className="field-hint">Controls the length and detail of the output</p>
+                          <p className="field-hint">{t('settings.functionConfig.verbosityHint')}</p>
                         </div>
                       </>
                     )}
@@ -424,7 +423,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                     {/* Claude format options */}
                     {config.advanced.customApiFormat === 'claude' && (
                       <div className="form-field">
-                        <label>Thinking Budget (tokens)</label>
+                        <label>{t('settings.functionConfig.thinkingBudget')}</label>
                         <input
                           type="number"
                           min="1024"
@@ -435,28 +434,28 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                               e.target.value ? parseInt(e.target.value) : undefined
                             )
                           }
-                          placeholder="e.g., 10000"
+                          placeholder={t('settings.functionConfig.thinkingBudgetPlaceholder')}
                           className="config-input"
                         />
-                        <p className="field-hint">Minimum 1024 tokens. Leave blank for model default.</p>
+                        <p className="field-hint">{t('settings.functionConfig.thinkingBudgetHint')}</p>
                       </div>
                     )}
 
                     {/* Gemini format options */}
                     {config.advanced.customApiFormat === 'gemini' && (
                       <div className="form-field">
-                        <label>Thinking Level</label>
+                        <label>{t('settings.functionConfig.thinkingLevel')}</label>
                         <CustomSelect
                           value={config.advanced.thinkingConfig?.geminiThinkingLevel || 'high'}
                           onChange={(value) => handleThinkingConfigChange('geminiThinkingLevel', value)}
                           options={[
-                            { value: 'minimal', label: 'Minimal - Lowest latency' },
-                            { value: 'low', label: 'Low - Quick thinking' },
-                            { value: 'medium', label: 'Medium - Balanced' },
-                            { value: 'high', label: 'High - Deep thinking' },
+                            { value: 'minimal', label: t('settings.functionConfig.thinkingLevelMinimal') },
+                            { value: 'low', label: t('settings.functionConfig.thinkingLevelLow') },
+                            { value: 'medium', label: t('settings.functionConfig.thinkingLevelMedium') },
+                            { value: 'high', label: t('settings.functionConfig.thinkingLevelHigh') },
                           ]}
                         />
-                        <p className="field-hint">Controls thinking depth for Gemini-compatible endpoints</p>
+                        <p className="field-hint">{t('settings.functionConfig.thinkingLevelHint')}</p>
                       </div>
                     )}
 
@@ -464,20 +463,20 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                     {config.advanced.customApiFormat === 'openrouter' && (
                       <>
                         <div className="form-field">
-                          <label>Effort Level</label>
+                          <label>{t('settings.functionConfig.effortLevel')}</label>
                           <CustomSelect
                             value={config.advanced.thinkingConfig?.effort || 'medium'}
                             onChange={(value) => handleThinkingConfigChange('effort', value)}
                             options={[
-                              { value: 'low', label: 'Low (~20% of max tokens)' },
-                              { value: 'medium', label: 'Medium (~50% of max tokens)' },
-                              { value: 'high', label: 'High (~80% of max tokens)' },
+                              { value: 'low', label: t('settings.functionConfig.effortLow') },
+                              { value: 'medium', label: t('settings.functionConfig.effortMedium') },
+                              { value: 'high', label: t('settings.functionConfig.effortHigh') },
                             ]}
                           />
-                          <p className="field-hint">Controls how much thinking the model performs</p>
+                          <p className="field-hint">{t('settings.functionConfig.effortHint')}</p>
                         </div>
                         <div className="form-field">
-                          <label>Max Thinking Tokens (optional)</label>
+                          <label>{t('settings.functionConfig.maxThinkingTokens')}</label>
                           <input
                             type="number"
                             min="1024"
@@ -489,10 +488,10 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                                 e.target.value ? parseInt(e.target.value) : undefined
                               )
                             }
-                            placeholder="Auto (based on effort)"
+                            placeholder={t('settings.functionConfig.autoBasedOnEffort')}
                             className="config-input"
                           />
-                          <p className="field-hint">Directly specify thinking token budget</p>
+                          <p className="field-hint">{t('settings.functionConfig.maxThinkingTokensHintShort')}</p>
                         </div>
                       </>
                     )}
@@ -502,7 +501,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                 {/* Claude-specific */}
                 {config.provider === 'claude' && (
                   <div className="form-field">
-                    <label>Claude Thinking Budget (tokens)</label>
+                    <label>{t('settings.functionConfig.claudeThinkingBudget')}</label>
                     <input
                       type="number"
                       min="256"
@@ -513,10 +512,10 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                           e.target.value ? parseInt(e.target.value) : undefined
                         )
                       }
-                      placeholder="Auto"
+                      placeholder={t('common.auto')}
                       className="config-input"
                     />
-                    <p className="field-hint">Leave blank to use the model default budget.</p>
+                    <p className="field-hint">{t('settings.functionConfig.claudeThinkingBudgetHint')}</p>
                   </div>
                 )}
 
@@ -525,7 +524,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                   <>
                     {config.model.toLowerCase().includes('gemini-3') && (
                       <div className="form-field">
-                        <label>Thinking Level (Gemini 3)</label>
+                        <label>{t('settings.functionConfig.gemini3ThinkingLevel')}</label>
                         {/*
                           Gemini 3 supports only 'low' | 'high'. Default to 'high' if legacy value exists.
                         */}
@@ -549,17 +548,17 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                             )
                           }
                           options={[
-                            { value: 'low', label: 'Low' },
-                            { value: 'high', label: 'High' },
+                            { value: 'low', label: t('common.low') },
+                            { value: 'high', label: t('common.high') },
                           ]}
                         />
-                        <p className="field-hint">Controls depth of reasoning for Gemini 3 models.</p>
+                        <p className="field-hint">{t('settings.functionConfig.gemini3ThinkingLevelHint')}</p>
                       </div>
                     )}
 
                     {config.model.toLowerCase().includes('2.5') && (
                       <div className="form-field">
-                        <label>Thinking Budget (tokens) for 2.5</label>
+                        <label>{t('settings.functionConfig.gemini25ThinkingBudget')}</label>
                         <input
                           type="number"
                           min="0"
@@ -570,10 +569,10 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
                               e.target.value === '' ? undefined : parseInt(e.target.value)
                             )
                           }
-                          placeholder="Set 0 to disable"
+                          placeholder={t('settings.functionConfig.gemini25ThinkingBudgetPlaceholder')}
                           className="config-input"
                         />
-                        <p className="field-hint">Set 0 to effectively disable thinking where supported.</p>
+                        <p className="field-hint">{t('settings.functionConfig.gemini25ThinkingBudgetHint')}</p>
                       </div>
                     )}
                   </>

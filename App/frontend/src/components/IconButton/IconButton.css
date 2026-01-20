@@ -94,6 +94,12 @@
   background: var(--color-surface-active);
 }
 
+/* Ghost button with danger hover */
+.icon-button--ghost.icon-button--ghost-danger:hover:not(:disabled) {
+  background: var(--color-error);
+  color: var(--color-text-inverse);
+}
+
 /* ===== Danger Variant ===== */
 .icon-button--danger {
   background: var(--color-surface-base);

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { usePresetStore } from '../../store/presetStore';
 import { CustomSelect } from '../ui/CustomSelect';
 import type { SelectOption, RenderOptionProps } from '../ui/CustomSelect';
@@ -18,6 +19,7 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
   onDuplicatePreset,
   onEditPreset,
 }) => {
+  const { t } = useTranslation();
   const { presets, activePresetId, isLoading, setActivePreset, deletePreset, loadPresets, isInitialized, exportPreset } = usePresetStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importData, setImportData] = useState<PresetExportData | null>(null);
@@ -39,7 +41,7 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
   const handleDeleteClick = (e: React.MouseEvent, presetId: string) => {
     e.stopPropagation();
     const preset = presets.find(p => p.id === presetId);
-    if (confirm(`Are you sure you want to delete "${preset?.name || 'this preset'}"?`)) {
+    if (confirm(t('settings.presetSelector.deleteConfirm', { name: preset?.name || t('settings.presetSelector.thisPreset') }))) {
       deletePreset(presetId);
     }
   };
@@ -132,21 +134,21 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
           <button
             className="preset-selector__action"
             onClick={(e) => handleEditClick(e, preset.id)}
-            title="Edit preset"
+            title={t('settings.presetSelector.editPreset')}
           >
             <Edit size="xs" />
           </button>
           <button
             className="preset-selector__action"
             onClick={(e) => handleDuplicateClick(e, preset.id)}
-            title="Duplicate preset"
+            title={t('settings.presetSelector.duplicatePreset')}
           >
             <Copy size="xs" />
           </button>
           <button
             className="preset-selector__action"
             onClick={(e) => handleExportClick(e, preset.id)}
-            title="Export preset"
+            title={t('settings.presetSelector.exportPreset')}
           >
             <Download size="xs" />
           </button>
@@ -154,7 +156,7 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
             <button
               className="preset-selector__action preset-selector__action--delete"
               onClick={(e) => handleDeleteClick(e, preset.id)}
-              title="Delete preset"
+              title={t('settings.presetSelector.deletePreset')}
             >
               <Trash size="xs" />
             </button>
@@ -171,12 +173,12 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
         onClick={onCreatePreset}
       >
         <Plus size="sm" />
-        <span>Create New Preset</span>
+        <span>{t('settings.presetSelector.createNew')}</span>
       </button>
       <button
         className="preset-selector__import"
         onClick={handleImportClick}
-        title="Import preset from file"
+        title={t('settings.presetSelector.importFromFile')}
       >
         <Upload size="sm" />
       </button>
@@ -196,9 +198,9 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
         value={activePresetId || ''}
         onChange={handleSelectPreset}
         options={options}
-        placeholder="Select preset..."
+        placeholder={t('settings.presetSelector.selectPlaceholder')}
         disabled={isLoading}
-        triggerLabel="Preset:"
+        triggerLabel={t('settings.presetSelector.presetLabel')}
         minWidth={280}
         renderOption={renderPresetOption}
         footer={footerContent}

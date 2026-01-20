@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { authService, type UserResponse, type ProfileUpdate } from '../api';
+import { useCredentialsStore } from './credentialsStore';
 
 interface AuthStore {
   user: UserResponse | null;
@@ -35,6 +36,9 @@ export const useAuthStore = create<AuthStore>()((set) => ({
         isAuthenticated: true,
         isLoading: false,
       });
+      useCredentialsStore.getState().fetchBackupStatus().catch(() => {
+        // Best-effort
+      });
     } catch (error) {
       set({
         isLoading: false,
@@ -55,6 +59,9 @@ export const useAuthStore = create<AuthStore>()((set) => ({
         user,
         isAuthenticated: true,
         isLoading: false,
+      });
+      useCredentialsStore.getState().fetchBackupStatus().catch(() => {
+        // Best-effort
       });
     } catch (error) {
       set({
@@ -88,6 +95,9 @@ export const useAuthStore = create<AuthStore>()((set) => ({
         user,
         isAuthenticated: true,
         isLoading: false,
+      });
+      useCredentialsStore.getState().fetchBackupStatus().catch(() => {
+        // Best-effort
       });
     } catch (error) {
       // Token is invalid

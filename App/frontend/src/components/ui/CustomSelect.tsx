@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { ChevronDown, Check } from '../icons';
 import './CustomSelect.css';
 
@@ -39,7 +40,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   value,
   onChange,
   options,
-  placeholder = 'Select...',
+  placeholder,
   disabled = false,
   className = '',
   triggerLabel,
@@ -48,6 +49,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   footer,
   align = 'left',
 }) => {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0, width: 0 });
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -147,7 +149,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
           <span className="custom-select-trigger-label">{triggerLabel}</span>
         )}
         <span className="custom-select-value">
-          {selectedOption?.label || placeholder}
+          {selectedOption?.label || placeholder || t('customSelect.placeholder')}
         </span>
         <span className={`custom-select-arrow ${isOpen ? 'open' : ''}`}>
           <ChevronDown size="sm" />

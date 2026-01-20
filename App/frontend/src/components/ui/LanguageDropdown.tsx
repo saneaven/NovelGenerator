@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Check, ChevronDown, Globe } from '../icons';
 import { TextButton } from '../TextButton';
 import './LanguageDropdown.css';
@@ -18,11 +19,12 @@ const LanguageDropdown: React.FC<LanguageDropdownProps> = ({
   languages,
   value,
   onChange,
-  title = 'Select language',
+  title,
   showTranslateAll = false,
   translateCount = 0,
   onTranslateAllClick,
 }) => {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -58,7 +60,7 @@ const LanguageDropdown: React.FC<LanguageDropdownProps> = ({
   };
 
   return (
-    <div className="language-dropdown" ref={dropdownRef} title={title}>
+    <div className="language-dropdown" ref={dropdownRef} title={title || t('languageDropdown.selectLanguage')}>
       <button
         className={`language-dropdown-trigger ${isOpen ? 'open' : ''}`}
         onClick={() => setIsOpen(!isOpen)}
@@ -106,11 +108,11 @@ const LanguageDropdown: React.FC<LanguageDropdownProps> = ({
                 onTranslateAllClick?.();
                 setIsOpen(false);
               }}
-              title={`Translate ${translateCount} objects`}
+              title={t('languageDropdown.translateObjects', { count: translateCount })}
               iconLeft={<Globe size="sm" />}
               fullWidth
             >
-              Translate ({translateCount})
+              {t('languageDropdown.translate', { count: translateCount })}
             </TextButton>
           </div>
         )}

@@ -1,6 +1,7 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ProviderCredentials } from '../../store/settingsStore';
-import { Settings, Shuffle } from '../icons';
+import { OpenAI, Gemini, Claude, OpenRouter, XAI, NovelAI, CustomProvider } from '../icons';
 import './CredentialsPanel.css';
 
 interface CredentialsPanelProps {
@@ -12,21 +13,23 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
   credentials,
   onChange,
 }) => {
+  const { t } = useTranslation();
+
   return (
     <div className="credentials-panel">
       <div className="panel-description">
-        <p>Configure API keys and endpoints. These credentials are shared across all AI functions.</p>
+        <p>{t('settings.credentials.description')}</p>
       </div>
 
       {/* OpenAI */}
       <div className="credential-card">
         <div className="credential-header">
-          <div className="credential-icon">◯</div>
-          <h3>OpenAI</h3>
+          <div className="credential-icon"><OpenAI size="md" /></div>
+          <h3>{t('settings.credentials.openai.title')}</h3>
         </div>
         <div className="credential-body">
           <div className="form-field">
-            <label>API Key</label>
+            <label>{t('settings.credentials.apiKey')}</label>
             <input
               type="password"
               value={credentials.openai?.apiKey || ''}
@@ -36,11 +39,11 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
                   openai: { apiKey: e.target.value },
                 })
               }
-              placeholder="sk-..."
+              placeholder={t('settings.credentials.openai.placeholder')}
               className="credential-input"
             />
             <p className="field-hint">
-              Get your API key from{' '}
+              {t('settings.credentials.getApiKeyFrom')}{' '}
               <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">
                 platform.openai.com/api-keys
               </a>
@@ -52,12 +55,12 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
       {/* Gemini */}
       <div className="credential-card">
         <div className="credential-header">
-          <div className="credential-icon">✦</div>
-          <h3>Gemini</h3>
+          <div className="credential-icon"><Gemini size="md" /></div>
+          <h3>{t('settings.credentials.gemini.title')}</h3>
         </div>
         <div className="credential-body">
           <div className="form-field">
-            <label>API Key</label>
+            <label>{t('settings.credentials.apiKey')}</label>
             <input
               type="password"
               value={credentials.gemini.apiKey}
@@ -67,11 +70,11 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
                   gemini: { apiKey: e.target.value },
                 })
               }
-              placeholder="AIz..."
+              placeholder={t('settings.credentials.gemini.placeholder')}
               className="credential-input"
             />
             <p className="field-hint">
-              Get your API key from{' '}
+              {t('settings.credentials.getApiKeyFrom')}{' '}
               <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">
                 aistudio.google.com/apikey
               </a>
@@ -83,12 +86,12 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
       {/* Claude */}
       <div className="credential-card">
         <div className="credential-header">
-          <div className="credential-icon">◎</div>
-          <h3>Claude (Anthropic)</h3>
+          <div className="credential-icon"><Claude size="md" /></div>
+          <h3>{t('settings.credentials.claude.title')}</h3>
         </div>
         <div className="credential-body">
           <div className="form-field">
-            <label>API Key</label>
+            <label>{t('settings.credentials.apiKey')}</label>
             <input
               type="password"
               value={credentials.claude.apiKey}
@@ -98,11 +101,11 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
                   claude: { apiKey: e.target.value },
                 })
               }
-              placeholder="sk-ant-..."
+              placeholder={t('settings.credentials.claude.placeholder')}
               className="credential-input"
             />
             <p className="field-hint">
-              Get your API key from{' '}
+              {t('settings.credentials.getApiKeyFrom')}{' '}
               <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">
                 console.anthropic.com
               </a>
@@ -114,12 +117,12 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
       {/* OpenRouter */}
       <div className="credential-card">
         <div className="credential-header">
-          <div className="credential-icon"><Shuffle size="md" /></div>
-          <h3>OpenRouter</h3>
+          <div className="credential-icon"><OpenRouter size="md" /></div>
+          <h3>{t('settings.credentials.openrouter.title')}</h3>
         </div>
         <div className="credential-body">
           <div className="form-field">
-            <label>API Key</label>
+            <label>{t('settings.credentials.apiKey')}</label>
             <input
               type="password"
               value={credentials.openrouter.apiKey}
@@ -129,11 +132,11 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
                   openrouter: { apiKey: e.target.value },
                 })
               }
-              placeholder="sk-or-v1-..."
+              placeholder={t('settings.credentials.openrouter.placeholder')}
               className="credential-input"
             />
             <p className="field-hint">
-              Get your API key from{' '}
+              {t('settings.credentials.getApiKeyFrom')}{' '}
               <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">
                 openrouter.ai/keys
               </a>
@@ -145,12 +148,12 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
       {/* xAI (Grok) */}
       <div className="credential-card">
         <div className="credential-header">
-          <div className="credential-icon">𝕏</div>
-          <h3>xAI (Grok)</h3>
+          <div className="credential-icon"><XAI size="md" /></div>
+          <h3>{t('settings.credentials.xai.title')}</h3>
         </div>
         <div className="credential-body">
           <div className="form-field">
-            <label>API Key</label>
+            <label>{t('settings.credentials.apiKey')}</label>
             <input
               type="password"
               value={credentials.xai?.apiKey || ''}
@@ -160,11 +163,11 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
                   xai: { apiKey: e.target.value },
                 })
               }
-              placeholder="xai-..."
+              placeholder={t('settings.credentials.xai.placeholder')}
               className="credential-input"
             />
             <p className="field-hint">
-              Get your API key from{' '}
+              {t('settings.credentials.getApiKeyFrom')}{' '}
               <a href="https://console.x.ai/" target="_blank" rel="noopener noreferrer">
                 console.x.ai
               </a>
@@ -176,12 +179,12 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
       {/* NovelAI */}
       <div className="credential-card">
         <div className="credential-header">
-          <div className="credential-icon">N</div>
-          <h3>NovelAI</h3>
+          <div className="credential-icon"><NovelAI size="md" /></div>
+          <h3>{t('settings.credentials.novelai.title')}</h3>
         </div>
         <div className="credential-body">
           <div className="form-field">
-            <label>Access Token</label>
+            <label>{t('settings.credentials.accessToken')}</label>
             <input
               type="password"
               value={credentials.novelai?.apiKey || ''}
@@ -191,13 +194,10 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
                   novelai: { apiKey: e.target.value },
                 })
               }
-              placeholder="eyJ..."
+              placeholder={t('settings.credentials.novelai.placeholder')}
               className="credential-input"
             />
-            <p className="field-hint">
-              Your NovelAI JWT access token. Get it from your browser's developer tools
-              while logged in to NovelAI (look for 'auth_token' in local storage).
-            </p>
+            <p className="field-hint">{t('settings.credentials.novelai.hint')}</p>
           </div>
         </div>
       </div>
@@ -205,12 +205,12 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
       {/* Custom Endpoint */}
       <div className="credential-card">
         <div className="credential-header">
-          <div className="credential-icon"><Settings size="md" /></div>
-          <h3>Custom Endpoint</h3>
+          <div className="credential-icon"><CustomProvider size="md" /></div>
+          <h3>{t('settings.credentials.custom.title')}</h3>
         </div>
         <div className="credential-body">
           <div className="form-field">
-            <label>Base URL</label>
+            <label>{t('settings.credentials.baseUrl')}</label>
             <input
               type="url"
               value={credentials.custom.baseUrl}
@@ -223,13 +223,13 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
                   },
                 })
               }
-              placeholder="https://api.openai.com/v1"
+              placeholder={t('settings.credentials.custom.baseUrlPlaceholder')}
               className="credential-input"
             />
-            <p className="field-hint">OpenAI-compatible API endpoint</p>
+            <p className="field-hint">{t('settings.credentials.custom.baseUrlHint')}</p>
           </div>
           <div className="form-field">
-            <label>API Key (Optional)</label>
+            <label>{t('settings.credentials.apiKeyOptional')}</label>
             <input
               type="password"
               value={credentials.custom.apiKey || ''}
@@ -242,10 +242,10 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
                   },
                 })
               }
-              placeholder="sk-..."
+              placeholder={t('settings.credentials.custom.apiKeyPlaceholder')}
               className="credential-input"
             />
-            <p className="field-hint">Required if your endpoint requires authentication</p>
+            <p className="field-hint">{t('settings.credentials.custom.apiKeyHint')}</p>
           </div>
         </div>
       </div>

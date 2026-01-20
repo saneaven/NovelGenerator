@@ -1,9 +1,10 @@
 import React, { useRef, useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import './StoryObjectPanel.css';
-import '../../../components/ManagerCommon.css';
-import BasicInfoManager from '../../../components/BasicInfoManager';
-import GuidelinesManager from '../../../components/GuidelinesManager';
-import NameDescriptionManager from '../../../components/NameDescriptionManager';
+import '../../../components/StoryObjectManager/ManagerCommon.css';
+import BasicInfoManager from '../../../components/StoryObjectManager/BasicInfoManager';
+import GuidelinesManager from '../../../components/StoryObjectManager/GuidelinesManager';
+import NameDescriptionManager from '../../../components/StoryObjectManager/NameDescriptionManager';
 import { Clipboard, People, Organization, Map, Books, ChevronLeft, ChevronRight, Document } from '../../../components/icons';
 import type { StoryObjectTabType } from '../../../types/storyObject';
 import { useStoryObjectTab } from '../hooks/useStoryObjectTab';
@@ -15,18 +16,19 @@ interface StoryObjectPanelProps {
 const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
   globalDisplayLanguage,
 }) => {
+  const { t } = useTranslation();
   const { activeTab: activeStoryObjectTab, setActiveTab: setActiveStoryObjectTab } = useStoryObjectTab();
   const tabsRef = useRef<HTMLDivElement>(null);
   const [showLeftButton, setShowLeftButton] = useState(false);
   const [showRightButton, setShowRightButton] = useState(false);
 
   const storyObjectTabs: { id: StoryObjectTabType; label: string; icon: React.ReactNode }[] = [
-    { id: 'basicInfo', label: 'Basic Info', icon: <Clipboard size="sm" /> },
-    { id: 'guidelines', label: 'Guidelines', icon: <Document size="sm" /> },
-    { id: 'characters', label: 'Characters', icon: <People size="sm" /> },
-    { id: 'organizations', label: 'Organizations', icon: <Organization size="sm" /> },
-    { id: 'locations', label: 'Locations', icon: <Map size="sm" /> },
-    { id: 'lorebook', label: 'Lorebook', icon: <Books size="sm" /> },
+    { id: 'basicInfo', label: t('storyObjectPanel.tabs.basicInfo'), icon: <Clipboard size="sm" /> },
+    { id: 'guidelines', label: t('storyObjectPanel.tabs.guidelines'), icon: <Document size="sm" /> },
+    { id: 'characters', label: t('storyObjectPanel.tabs.characters'), icon: <People size="sm" /> },
+    { id: 'organizations', label: t('storyObjectPanel.tabs.organizations'), icon: <Organization size="sm" /> },
+    { id: 'locations', label: t('storyObjectPanel.tabs.locations'), icon: <Map size="sm" /> },
+    { id: 'lorebook', label: t('storyObjectPanel.tabs.lorebook'), icon: <Books size="sm" /> },
   ];
 
   // Check scroll position to show/hide navigation buttons
@@ -86,9 +88,9 @@ const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
         return (
           <NameDescriptionManager
             category="character"
-            title="Characters"
-            singularName="Character"
-            pluralName="Characters"
+            title={t('storyObjectPanel.categories.character.title')}
+            singularName={t('storyObjectPanel.categories.character.singular')}
+            pluralName={t('storyObjectPanel.categories.character.plural')}
             globalDisplayLanguage={globalDisplayLanguage}
           />
         );
@@ -96,9 +98,9 @@ const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
         return (
           <NameDescriptionManager
             category="organization"
-            title="Organizations"
-            singularName="Organization"
-            pluralName="Organizations"
+            title={t('storyObjectPanel.categories.organization.title')}
+            singularName={t('storyObjectPanel.categories.organization.singular')}
+            pluralName={t('storyObjectPanel.categories.organization.plural')}
             globalDisplayLanguage={globalDisplayLanguage}
           />
         );
@@ -106,9 +108,9 @@ const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
         return (
           <NameDescriptionManager
             category="location"
-            title="Locations"
-            singularName="Location"
-            pluralName="Locations"
+            title={t('storyObjectPanel.categories.location.title')}
+            singularName={t('storyObjectPanel.categories.location.singular')}
+            pluralName={t('storyObjectPanel.categories.location.plural')}
             globalDisplayLanguage={globalDisplayLanguage}
           />
         );
@@ -116,9 +118,9 @@ const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
         return (
           <NameDescriptionManager
             category="lorebook"
-            title="Lorebook"
-            singularName="Entry"
-            pluralName="Entries"
+            title={t('storyObjectPanel.categories.lorebook.title')}
+            singularName={t('storyObjectPanel.categories.lorebook.singular')}
+            pluralName={t('storyObjectPanel.categories.lorebook.plural')}
             globalDisplayLanguage={globalDisplayLanguage}
           />
         );
@@ -130,14 +132,14 @@ const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
   return (
     <div className="story-object-panel">
       <div className="story-object-header">
-        <h2><Clipboard size="2xl" /> Story Objects</h2>
+        <h2><Clipboard size="2xl" /> {t('storyObjectPanel.title')}</h2>
       </div>
 
       <div className="story-object-tabs-container">
         <button
           className={`story-object-tab-nav-button left ${showLeftButton ? 'visible' : ''}`}
           onClick={() => scroll('left')}
-          aria-label="Scroll tabs left"
+          aria-label={t('storyObjectPanel.scrollTabsLeft')}
         >
           <ChevronLeft size="sm" />
         </button>
@@ -162,7 +164,7 @@ const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
         <button
           className={`story-object-tab-nav-button right ${showRightButton ? 'visible' : ''}`}
           onClick={() => scroll('right')}
-          aria-label="Scroll tabs right"
+          aria-label={t('storyObjectPanel.scrollTabsRight')}
         >
           <ChevronRight size="sm" />
         </button>

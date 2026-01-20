@@ -9,7 +9,7 @@ import { BaseModal } from '../components/BaseModal';
 import { useJourneyStore, type Journey } from '../store/journeyStore';
 import { useLLMSessionStore } from '../store/llmSessionStore';
 import { useSettingsStore } from '../store/settingsStore';
-import ThinkingDisplay from '../components/ThinkingDisplay';
+import ThinkingDisplay from '../components/common/ThinkingDisplay';
 import NotificationProgressBar from '../components/Notification/NotificationProgressBar';
 import { Close, Edit, Trash } from '../components/icons';
 import { TextButton } from '../components/TextButton';

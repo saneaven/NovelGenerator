@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { AIFunctionType, FunctionAIConfig, ProviderCredentials } from '../../store/settingsStore';
 import FunctionConfigForm from './FunctionConfigForm';
 import { SpeechBubble, Globe, Edit, Palette } from '../icons';
@@ -12,42 +13,35 @@ interface GeneralPanelProps {
     imagePrompt: FunctionAIConfig;
   };
   credentials: ProviderCredentials;
-  serverVaultEnabled: boolean;
   activeFunction: AIFunctionType;
   onFunctionChange: (functionType: AIFunctionType) => void;
   onConfigChange: (functionType: AIFunctionType, config: FunctionAIConfig) => void;
 }
 
-const FUNCTION_LABELS: Record<AIFunctionType, { icon: React.ReactNode; label: string }> = {
-  agent: { icon: <SpeechBubble size="sm" />, label: 'Agent' },
-  translation: { icon: <Globe size="sm" />, label: 'Translation' },
-  editAssistant: { icon: <Edit size="sm" />, label: 'Edit Assistant' },
-  imagePrompt: { icon: <Palette size="sm" />, label: 'Image Prompt' },
-};
-
-const FUNCTION_DESCRIPTIONS: Record<AIFunctionType, string> = {
-  agent: 'General conversation and assistance for story planning and brainstorming',
-  translation: 'Accurate language translation with context preservation',
-  editAssistant: 'Editing and refinement of story objects and manuscript content',
-  imagePrompt: 'AI-assisted generation of detailed image prompts from story context',
+const FUNCTION_ICONS: Record<AIFunctionType, React.ReactNode> = {
+  agent: <SpeechBubble size="sm" />,
+  translation: <Globe size="sm" />,
+  editAssistant: <Edit size="sm" />,
+  imagePrompt: <Palette size="sm" />,
 };
 
 const GeneralPanel: React.FC<GeneralPanelProps> = ({
   functionConfigs,
   credentials,
-  serverVaultEnabled,
   activeFunction,
   onFunctionChange,
   onConfigChange,
 }) => {
+  const { t } = useTranslation();
   const currentConfig = functionConfigs[activeFunction];
+
+  const functionTypes: AIFunctionType[] = ['agent', 'translation', 'editAssistant', 'imagePrompt'];
 
   return (
     <div className="general-panel">
       {/* Function Selection Tabs */}
       <div className="function-selector">
-        {(Object.keys(FUNCTION_LABELS) as AIFunctionType[]).map((funcType) => {
-          const { icon, label } = FUNCTION_LABELS[funcType];
+        {functionTypes.map((funcType) => {
           const isActive = funcType === activeFunction;
 
           return (
@@ -56,8 +50,8 @@ const GeneralPanel: React.FC<GeneralPanelProps> = ({
               className={`function-tab ${isActive ? 'active' : ''}`}
               onClick={() => onFunctionChange(funcType)}
             >
-              <span className="tab-icon">{icon}</span>
-              <span className="tab-label">{label}</span>
+              <span className="tab-icon">{FUNCTION_ICONS[funcType]}</span>
+              <span className="tab-label">{t(`settings.general.functions.${funcType}.label`)}</span>
             </button>
           );
         })}
@@ -66,10 +60,10 @@ const GeneralPanel: React.FC<GeneralPanelProps> = ({
       {/* Function Description */}
       <div className="function-description">
         <div className="description-header">
-          <span className="description-icon">{FUNCTION_LABELS[activeFunction].icon}</span>
-          <h3>{FUNCTION_LABELS[activeFunction].label} Configuration</h3>
+          <span className="description-icon">{FUNCTION_ICONS[activeFunction]}</span>
+          <h3>{t(`settings.general.functions.${activeFunction}.label`)} {t('settings.general.configuration')}</h3>
         </div>
-        <p>{FUNCTION_DESCRIPTIONS[activeFunction]}</p>
+        <p>{t(`settings.general.functions.${activeFunction}.description`)}</p>
       </div>
 
       {/* Configuration Form */}
@@ -77,7 +71,6 @@ const GeneralPanel: React.FC<GeneralPanelProps> = ({
         functionType={activeFunction}
         config={currentConfig}
         credentials={credentials}
-        serverVaultEnabled={serverVaultEnabled}
         onChange={(config) => onConfigChange(activeFunction, config)}
       />
     </div>

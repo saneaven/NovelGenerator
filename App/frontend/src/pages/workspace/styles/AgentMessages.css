@@ -92,7 +92,7 @@
 .agent-message .message-wrapper {
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-sm);
+    gap: var(--spacing-md);
 }
 
 /* ===== Message Header ===== */
@@ -184,7 +184,6 @@
     border-left: 3px solid var(--color-secondary-subtle);
     border-radius: var(--border-radius-md);
     padding: var(--spacing-lg) var(--spacing-xl);
-    margin: var(--spacing-sm) 0;
     width: 100%;
     color: var(--color-text-primary);
     line-height: var(--line-height-relaxed);
@@ -208,19 +207,12 @@
 
 /* ===== Message Actions ===== */
 .agent-message .message-actions {
-    opacity: 0;
-    transition: opacity var(--transition-base);
     padding: 0 var(--spacing-sm);
-    margin-top: var(--spacing-xs);
-}
-
-.agent-message:hover .message-actions {
-    opacity: 1;
 }
 
 .action-buttons {
     display: flex;
-    gap: var(--spacing-sm);
+    gap: var(--spacing-xs);
     align-items: center;
     flex-wrap: wrap;
 }
@@ -467,29 +459,7 @@
     }
 }
 
-/* ===== Large Desktop ===== */
-/* @media (min-width: 1440px) {
-    .agent-messages {
-        padding: var(--spacing-2xl);
-        gap: var(--spacing-2xl);
-    }
 
-    .welcome-message {
-        padding: var(--spacing-2xl) var(--spacing-3xl);
-    }
-
-    .welcome-message .ai-avatar {
-        width: 4rem;
-        height: 4rem;
-        font-size: var(--font-size-2xl);
-    }
-
-    .agent-message.user .message-content,
-    .agent-message.assistant .message-content {
-        padding: var(--spacing-xl) var(--spacing-2xl);
-        font-size: var(--font-size-lg);
-    }
-} */
 
 /* ===== Animations ===== */
 @keyframes fadeIn {

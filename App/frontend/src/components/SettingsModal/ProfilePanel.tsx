@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../store/authStore';
 import { People, Lock } from '../icons';
 import { TextButton } from '../TextButton';
 import './ProfilePanel.css';
 
 const ProfilePanel: React.FC = () => {
+  const { t } = useTranslation();
   const { user, isLoading, error, updateProfile, changePassword, clearError } = useAuthStore();
 
   // Profile form state
@@ -39,21 +41,21 @@ const ProfilePanel: React.FC = () => {
 
     // Validation
     if (!username.trim()) {
-      setProfileError('Username is required');
+      setProfileError(t('settings.profile.usernameRequired'));
       return;
     }
     if (username.trim().length < 3) {
-      setProfileError('Username must be at least 3 characters');
+      setProfileError(t('settings.profile.usernameMinLength'));
       return;
     }
     if (!email.trim()) {
-      setProfileError('Email is required');
+      setProfileError(t('settings.profile.emailRequired'));
       return;
     }
 
     // Check if anything changed
     if (username === user?.username && email === user?.email) {
-      setProfileError('No changes to save');
+      setProfileError(t('settings.profile.noChanges'));
       return;
     }
 
@@ -62,9 +64,9 @@ const ProfilePanel: React.FC = () => {
         username: username !== user?.username ? username : undefined,
         email: email !== user?.email ? email : undefined,
       });
-      setProfileSuccess('Profile updated successfully');
+      setProfileSuccess(t('settings.profile.profileUpdated'));
     } catch (err) {
-      setProfileError(err instanceof Error ? err.message : 'Failed to update profile');
+      setProfileError(err instanceof Error ? err.message : t('settings.profile.updateFailed'));
     }
   };
 
@@ -74,65 +76,69 @@ const ProfilePanel: React.FC = () => {
 
     // Validation
     if (!currentPassword) {
-      setPasswordError('Current password is required');
+      setPasswordError(t('settings.profile.currentPasswordRequired'));
       return;
     }
     if (!newPassword) {
-      setPasswordError('New password is required');
+      setPasswordError(t('settings.profile.newPasswordRequired'));
       return;
     }
     if (newPassword.length < 8) {
-      setPasswordError('New password must be at least 8 characters');
+      setPasswordError(t('settings.profile.newPasswordMinLength'));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setPasswordError('Passwords do not match');
+      setPasswordError(t('settings.profile.passwordsNotMatch'));
+      return;
+    }
+
+    if (!window.confirm(t('settings.profile.passwordChangeBackupConfirm'))) {
       return;
     }
 
     try {
       await changePassword(currentPassword, newPassword);
-      setPasswordSuccess('Password changed successfully');
+      setPasswordSuccess(t('settings.profile.passwordChanged'));
       // Clear password fields
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err) {
-      setPasswordError(err instanceof Error ? err.message : 'Failed to change password');
+      setPasswordError(err instanceof Error ? err.message : t('settings.profile.passwordChangeFailed'));
     }
   };
 
   return (
     <div className="profile-panel">
       <div className="panel-description">
-        <p>Manage your account information and security settings.</p>
+        <p>{t('settings.profile.description')}</p>
       </div>
 
       {/* Profile Information Card */}
       <div className="profile-settings-card">
         <h3 className="section-title">
-          <People size="md" /> Profile Information
+          <People size="md" /> {t('settings.profile.profileInformation')}
         </h3>
 
         <div className="form-field">
-          <label>Username</label>
+          <label>{t('settings.profile.username')}</label>
           <input
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            placeholder="Enter username"
+            placeholder={t('settings.profile.enterUsername')}
             disabled={isLoading}
           />
-          <span className="field-hint">Minimum 3 characters</span>
+          <span className="field-hint">{t('settings.profile.usernameHint')}</span>
         </div>
 
         <div className="form-field">
-          <label>Email</label>
+          <label>{t('settings.profile.email')}</label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="Enter email"
+            placeholder={t('settings.profile.enterEmail')}
             disabled={isLoading}
           />
         </div>
@@ -146,7 +152,7 @@ const ProfilePanel: React.FC = () => {
             onClick={handleUpdateProfile}
             disabled={isLoading}
           >
-            {isLoading ? 'Updating...' : 'Update Profile'}
+            {isLoading ? t('settings.profile.updating') : t('settings.profile.updateProfile')}
           </TextButton>
         </div>
       </div>
@@ -154,42 +160,44 @@ const ProfilePanel: React.FC = () => {
       {/* Password Change Card */}
       <div className="profile-settings-card">
         <h3 className="section-title">
-          <Lock size="md" /> Change Password
+          <Lock size="md" /> {t('settings.profile.changePassword')}
         </h3>
 
         <div className="form-field">
-          <label>Current Password</label>
+          <label>{t('settings.profile.currentPassword')}</label>
           <input
             type="password"
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
-            placeholder="Enter current password"
+            placeholder={t('settings.profile.enterCurrentPassword')}
             disabled={isLoading}
           />
         </div>
 
         <div className="form-field">
-          <label>New Password</label>
+          <label>{t('settings.profile.newPassword')}</label>
           <input
             type="password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="Enter new password"
+            placeholder={t('settings.profile.enterNewPassword')}
             disabled={isLoading}
           />
-          <span className="field-hint">Minimum 8 characters</span>
+          <span className="field-hint">{t('settings.profile.newPasswordHint')}</span>
         </div>
 
         <div className="form-field">
-          <label>Confirm New Password</label>
+          <label>{t('settings.profile.confirmNewPassword')}</label>
           <input
             type="password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="Confirm new password"
+            placeholder={t('settings.profile.confirmNewPasswordPlaceholder')}
             disabled={isLoading}
           />
         </div>
+
+        <p className="field-hint">{t('settings.profile.passwordChangeBackupWarning')}</p>
 
         {passwordError && <div className="form-error">{passwordError}</div>}
         {passwordSuccess && <div className="form-success">{passwordSuccess}</div>}
@@ -200,7 +208,7 @@ const ProfilePanel: React.FC = () => {
             onClick={handleChangePassword}
             disabled={isLoading}
           >
-            {isLoading ? 'Changing...' : 'Change Password'}
+            {isLoading ? t('settings.profile.changingPassword') : t('settings.profile.changePassword')}
           </TextButton>
         </div>
       </div>

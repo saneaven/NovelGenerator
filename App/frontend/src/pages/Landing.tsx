@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../store/authStore';
 import { Loading } from '../components/common/Loading';
 import './Landing.css';
 
 const Landing: React.FC = () => {
+  const { t } = useTranslation();
   const { isAuthenticated, checkAuth } = useAuthStore();
   const [isChecking, setIsChecking] = useState(true);
 
@@ -31,14 +33,14 @@ const Landing: React.FC = () => {
   return (
     <div className="landing-container">
       <div className="landing-content">
-        <h1 className="landing-title">Novel Buds</h1>
-        <p className="landing-tagline">Write creative novels with AI assistance</p>
+        <h1 className="landing-title">{t('landing.title')}</h1>
+        <p className="landing-tagline">{t('landing.tagline')}</p>
         <div className="landing-cta">
           <Link to="/login" className="landing-btn landing-btn-primary">
-            Sign In
+            {t('landing.signIn')}
           </Link>
           <Link to="/register" className="landing-btn landing-btn-secondary">
-            Create Account
+            {t('landing.createAccount')}
           </Link>
         </div>
       </div>

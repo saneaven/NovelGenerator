@@ -3,6 +3,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ObjectType } from '../../types/unifiedObject';
 import type { ObjectPickerSearchProps } from './types';
 import { CATEGORY_CONFIG } from './types';
@@ -14,8 +15,9 @@ const ObjectPickerSearch: React.FC<ObjectPickerSearchProps> = ({
   typeFilter,
   onTypeFilterChange,
   availableTypes = [],
-  placeholder = 'Search objects...',
+  placeholder,
 }) => {
+  const { t } = useTranslation();
   // Debounced search
   const [localValue, setLocalValue] = useState(value);
 
@@ -48,13 +50,13 @@ const ObjectPickerSearch: React.FC<ObjectPickerSearchProps> = ({
 
   const typeOptions = useMemo(() => {
     return [
-      { value: '', label: 'All Types' },
+      { value: '', label: t('objectPicker.allTypes') },
       ...availableTypes.map(type => ({
         value: type,
         label: CATEGORY_CONFIG[type]?.label || type,
       })),
     ];
-  }, [availableTypes]);
+  }, [availableTypes, t]);
 
   return (
     <div className="object-picker-search">
@@ -64,14 +66,14 @@ const ObjectPickerSearch: React.FC<ObjectPickerSearchProps> = ({
           className="object-picker-search-input"
           value={localValue}
           onChange={handleInputChange}
-          placeholder={placeholder}
+          placeholder={placeholder || t('objectPicker.searchPlaceholder')}
         />
         {localValue && (
           <button
             type="button"
             className="object-picker-search-clear"
             onClick={handleClear}
-            aria-label="Clear search"
+            aria-label={t('objectPicker.clearSearch')}
           >
             ×
           </button>

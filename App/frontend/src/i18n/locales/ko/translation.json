@@ -1,0 +1,915 @@
+{
+  "common": {
+    "save": "저장",
+    "cancel": "취소",
+    "close": "닫기",
+    "delete": "삭제",
+    "create": "생성",
+    "edit": "편집",
+    "loading": "로딩 중...",
+    "error": "오류",
+    "success": "성공",
+    "confirm": "확인",
+    "yes": "예",
+    "no": "아니오",
+    "optional": "선택사항",
+    "settings": "설정",
+    "logout": "로그아웃",
+    "add": "추가",
+    "browse": "찾아보기",
+    "hide": "숨기기",
+    "retry": "재시도",
+    "showLess": "접기",
+    "showMore": "더 보기",
+    "import": "가져오기",
+    "none": "없음",
+    "note": "참고",
+    "auto": "자동",
+    "low": "낮음",
+    "high": "높음"
+  },
+  "landing": {
+    "title": "Novel Buds",
+    "tagline": "AI와 함께 창작 소설을 작성하세요",
+    "signIn": "로그인",
+    "createAccount": "계정 만들기"
+  },
+  "auth": {
+    "welcomeBack": "다시 오신 것을 환영합니다",
+    "signInSubtitle": "창작 여정을 계속하려면 로그인하세요",
+    "createAccountTitle": "계정 만들기",
+    "createAccountSubtitle": "오늘 창작 여정을 시작하세요",
+    "username": "사용자명",
+    "password": "비밀번호",
+    "confirmPassword": "비밀번호 확인",
+    "email": "이메일",
+    "enterUsername": "사용자명을 입력하세요",
+    "enterPassword": "비밀번호를 입력하세요",
+    "chooseUsername": "사용자명을 선택하세요",
+    "createSecurePassword": "안전한 비밀번호를 만드세요",
+    "confirmYourPassword": "비밀번호를 확인하세요",
+    "emailPlaceholder": "your.email@example.com",
+    "signingIn": "로그인 중...",
+    "creatingAccount": "계정 생성 중...",
+    "dontHaveAccount": "계정이 없으신가요?",
+    "alreadyHaveAccount": "이미 계정이 있으신가요?",
+    "hidePassword": "비밀번호 숨기기",
+    "showPassword": "비밀번호 표시",
+    "usernameHint": "3-20자, 영문, 숫자, 밑줄만 사용 가능",
+    "passwordHint": "최소 6자 이상",
+    "validation": {
+      "emailRequired": "이메일을 입력해주세요",
+      "emailInvalid": "올바른 이메일 형식이 아닙니다",
+      "usernameRequired": "사용자명을 입력해주세요",
+      "usernameMinLength": "사용자명은 최소 3자 이상이어야 합니다",
+      "usernameMaxLength": "사용자명은 20자 미만이어야 합니다",
+      "usernameFormat": "사용자명은 영문, 숫자, 밑줄만 사용할 수 있습니다",
+      "passwordRequired": "비밀번호를 입력해주세요",
+      "passwordMinLength": "비밀번호는 최소 6자 이상이어야 합니다",
+      "passwordsNotMatch": "비밀번호가 일치하지 않습니다"
+    }
+  },
+  "home": {
+    "hello": "안녕하세요, {{username}}",
+    "library": "라이브러리",
+    "newProject": "새 프로젝트",
+    "importProject": "프로젝트 가져오기",
+    "importing": "가져오는 중...",
+    "emptyLibrary": "라이브러리가 비어 있습니다",
+    "startFirstNovel": "오늘 첫 소설 여정을 시작하세요.",
+    "createProject": "프로젝트 생성",
+    "loadingLibrary": "라이브러리를 불러오는 중...",
+    "deleteProject": "프로젝트 삭제",
+    "createNewProject": "새 프로젝트 만들기",
+    "projectName": "프로젝트 이름",
+    "projectNamePlaceholder": "다음 베스트셀러...",
+    "description": "설명",
+    "descriptionPlaceholder": "이 이야기는 무엇에 관한 것인가요?",
+    "confirmLogout": "정말 로그아웃하시겠습니까?",
+    "confirmDelete": "이 프로젝트를 삭제하시겠습니까?",
+    "selectNbprojFile": ".nbproj 파일을 선택해주세요."
+  },
+  "settings": {
+    "title": "설정",
+    "saveSettings": "설정 저장",
+    "saving": "저장 중...",
+    "saveError": "서버에 설정을 저장하지 못했습니다. 변경 사항은 로컬에 저장되었습니다.",
+    "openNavigation": "탐색 메뉴 열기",
+    "tabs": {
+      "profile": "프로필",
+      "language": "언어",
+      "general": "일반",
+      "credentials": "자격 증명",
+      "theme": "테마",
+      "imageGen": "이미지 생성",
+      "advanced": "고급",
+      "prompts": "프롬프트 & 템플릿"
+    },
+    "language": {
+      "title": "언어 설정",
+      "description": "애플리케이션 인터페이스 및 콘텐츠 생성을 위한 기본 언어를 설정합니다.",
+      "uiLanguage": "UI 언어",
+      "uiLanguageHint": "애플리케이션 인터페이스 언어를 변경합니다",
+      "mainLanguage": "주 언어",
+      "mainLanguageHint": "애플리케이션 및 AI 응답의 기본 언어",
+      "mainLanguagePlaceholder": "English",
+      "subLanguages": "보조 언어",
+      "subLanguagesHint": "번역 기능을 위한 추가 언어입니다. 라디오 버튼을 클릭하여 빠른 번역 기본값을 설정하세요.",
+      "addLanguagePlaceholder": "예: Korean, Japanese, Spanish",
+      "removeLanguage": "{{language}} 제거",
+      "setAsDefault": "기본 번역 언어로 설정",
+      "languageSupport": "언어 지원",
+      "languageSupportInfo": {
+        "mainLanguage": "주 언어는 AI 모델 응답 및 시스템 프롬프트에 영향을 줍니다",
+        "subLanguages": "보조 언어는 번역 기능에 사용됩니다",
+        "defaultSub": "기본 보조 언어(라디오로 표시)는 에이전트의 빠른 번역에 사용됩니다",
+        "multilingual": "다국어 프로젝트를 위해 여러 보조 언어를 추가할 수 있습니다"
+      }
+    },
+    "profile": {
+      "title": "프로필 설정",
+      "description": "계정 정보 및 보안 설정을 관리합니다.",
+      "profileInformation": "프로필 정보",
+      "username": "사용자명",
+      "enterUsername": "사용자명 입력",
+      "usernameHint": "최소 3자 이상",
+      "email": "이메일",
+      "enterEmail": "이메일 입력",
+      "usernameRequired": "사용자명을 입력해주세요",
+      "usernameMinLength": "사용자명은 최소 3자 이상이어야 합니다",
+      "emailRequired": "이메일을 입력해주세요",
+      "noChanges": "변경 사항이 없습니다",
+      "profileUpdated": "프로필이 성공적으로 업데이트되었습니다",
+      "updateFailed": "프로필 업데이트에 실패했습니다",
+      "updating": "업데이트 중...",
+      "updateProfile": "프로필 업데이트",
+      "changePassword": "비밀번호 변경",
+      "currentPassword": "현재 비밀번호",
+      "enterCurrentPassword": "현재 비밀번호 입력",
+      "newPassword": "새 비밀번호",
+      "enterNewPassword": "새 비밀번호 입력",
+      "newPasswordHint": "최소 8자 이상",
+      "confirmNewPassword": "새 비밀번호 확인",
+      "confirmNewPasswordPlaceholder": "새 비밀번호 확인",
+      "currentPasswordRequired": "현재 비밀번호를 입력해주세요",
+      "newPasswordRequired": "새 비밀번호를 입력해주세요",
+      "newPasswordMinLength": "새 비밀번호는 최소 8자 이상이어야 합니다",
+      "passwordsNotMatch": "비밀번호가 일치하지 않습니다",
+      "passwordChanged": "비밀번호가 성공적으로 변경되었습니다",
+      "passwordChangeFailed": "비밀번호 변경에 실패했습니다",
+      "changingPassword": "변경 중..."
+    },
+    "theme": {
+      "title": "테마 설정",
+      "description": "애플리케이션 인터페이스의 색상 테마를 선택합니다. 다크 모드는 어두운 환경에서 눈의 피로를 줄여줍니다.",
+      "themePreference": "테마 설정",
+      "light": "라이트",
+      "lightDescription": "밝고 깔끔한 인터페이스",
+      "dark": "다크",
+      "darkDescription": "어두운 환경에서 눈이 편안합니다",
+      "system": "시스템",
+      "systemDescription": "OS 설정에 맞춤",
+      "aboutThemes": "테마 정보",
+      "lightInfo": "밝은 환경에 적합한 전통적인 밝은 인터페이스",
+      "darkInfo": "눈의 피로를 줄이고 OLED 화면에서 배터리를 절약합니다",
+      "systemInfo": "운영 체제 설정에 따라 자동으로 전환됩니다",
+      "instantChange": "테마 변경은 페이지 새로고침 없이 즉시 적용됩니다"
+    },
+    "credentials": {
+      "description": "API 키와 엔드포인트를 설정합니다. 이 자격 증명은 모든 AI 기능에서 공유됩니다.",
+      "apiKey": "API 키",
+      "accessToken": "액세스 토큰",
+      "baseUrl": "기본 URL",
+      "apiKeyOptional": "API 키 (선택사항)",
+      "getApiKeyFrom": "API 키 받기",
+      "openai": {
+        "title": "OpenAI",
+        "placeholder": "sk-...",
+        "hint": "API 키 받기"
+      },
+      "gemini": {
+        "title": "Gemini",
+        "placeholder": "AIz...",
+        "hint": "API 키 받기"
+      },
+      "claude": {
+        "title": "Claude (Anthropic)",
+        "placeholder": "sk-ant-...",
+        "hint": "API 키 받기"
+      },
+      "openrouter": {
+        "title": "OpenRouter",
+        "placeholder": "sk-or-v1-...",
+        "hint": "API 키 받기"
+      },
+      "xai": {
+        "title": "xAI (Grok)",
+        "placeholder": "xai-...",
+        "hint": "API 키 받기"
+      },
+      "novelai": {
+        "title": "NovelAI",
+        "placeholder": "eyJ...",
+        "hint": "NovelAI JWT 액세스 토큰입니다. NovelAI에 로그인한 상태에서 브라우저 개발자 도구에서 가져올 수 있습니다 (로컬 스토리지에서 'auth_token' 찾기)."
+      },
+      "custom": {
+        "title": "사용자 정의 엔드포인트",
+        "baseUrlPlaceholder": "https://api.openai.com/v1",
+        "baseUrlHint": "OpenAI 호환 API 엔드포인트",
+        "apiKeyPlaceholder": "sk-...",
+        "apiKeyHint": "엔드포인트에 인증이 필요한 경우 필수"
+      }
+    },
+    "general": {
+      "description": "각 기능에 대한 AI 모델 설정을 구성합니다.",
+      "configuration": "설정",
+      "functions": {
+        "agent": {
+          "label": "에이전트",
+          "description": "스토리 기획 및 브레인스토밍을 위한 일반 대화 및 지원"
+        },
+        "translation": {
+          "label": "번역",
+          "description": "문맥을 유지하는 정확한 언어 번역"
+        },
+        "editAssistant": {
+          "label": "편집 도우미",
+          "description": "스토리 객체 및 원고 콘텐츠의 편집 및 다듬기"
+        },
+        "imagePrompt": {
+          "label": "이미지 프롬프트",
+          "description": "스토리 컨텍스트에서 상세한 이미지 프롬프트를 AI로 생성"
+        }
+      }
+    },
+    "advanced": {
+      "description": "API 요청에 대한 오류 처리 동작을 구성합니다. 활성화하면 실패한 요청이 아래 설정에 따라 자동으로 재시도됩니다.",
+      "errorRetry": {
+        "title": "오류 재시도 설정",
+        "enableAutoRetry": "오류 시 자동 재시도 활성화",
+        "maxRetries": "최대 재시도 횟수",
+        "retryDelay": "재시도 지연",
+        "retryDelayHint": "재시도 사이의 대기 시간 (100-30000ms)",
+        "retryableErrorCodes": "재시도 가능한 오류 코드",
+        "noErrorCodes": "설정된 오류 코드 없음",
+        "enterCode": "코드 입력",
+        "remove": "제거"
+      },
+      "commonErrorCodes": {
+        "title": "일반적인 오류 코드",
+        "429": "속도 제한 - 요청이 너무 많음",
+        "500": "내부 서버 오류",
+        "502": "잘못된 게이트웨이",
+        "503": "서비스 사용 불가",
+        "504": "게이트웨이 시간 초과"
+      },
+      "serverVault": {
+        "title": "서버 자격 증명 저장소",
+        "enableVault": "서버에 API 키 암호화 저장",
+        "vaultHint": "활성화하면 API 키가 서버에 암호화되어 저장되고 요청에서 api_key가 생략됩니다.",
+        "refreshStatus": "상태 새로고침",
+        "deleteKeys": "서버 저장 키 삭제",
+        "vaultConfigured": "저장소 설정됨"
+      },
+      "nativeOutput": {
+        "title": "네이티브 출력 모드",
+        "enableNative": "네이티브 출력 모드 활성화",
+        "hint": "활성화하면 편집/번역 작업이 <function_calls> 블록을 출력합니다 (서버 측에서 일반 함수 호출로 변환). 이미지 프롬프트 작업은 항상 원시 텍스트를 출력합니다."
+      },
+      "functionCallHistory": {
+        "title": "함수 호출 기록",
+        "label": "에이전트 기록에 함수 호출 포함",
+        "hint": "AI에 전송되는 대화 기록에 함수 호출이 포함될 최근 어시스턴트 메시지 수입니다. 비활성화하려면 0으로 설정하세요.",
+        "all": "전체"
+      },
+      "thinkingHistory": {
+        "title": "사고 기록",
+        "label": "에이전트 기록에 사고 포함",
+        "hint": "AI에 전송되는 대화 기록에 사고 내용이 포함될 최근 어시스턴트 메시지 수입니다. 비활성화하려면 0으로 설정하세요.",
+        "all": "전체"
+      },
+      "llmLogging": {
+        "title": "LLM 요청 로깅",
+        "description": "LLM 요청 및 응답을 디버그합니다. 로그는 메모리에 저장되며 페이지 새로고침 시 삭제됩니다."
+      }
+    },
+    "imageGen": {
+      "title": "이미지 생성 기본값",
+      "description": "AI 이미지 생성을 위한 기본 설정을 구성합니다. 이미지 생성 시 재정의할 수 있습니다.",
+      "provider": "제공자",
+      "providerHint": "이미지 생성을 위한 AI 제공자 선택",
+      "model": "모델",
+      "modelHint": "이미지 생성 모델 선택",
+      "size": "크기",
+      "sizeHint": "기본 이미지 크기",
+      "aspectRatio": "화면 비율",
+      "aspectRatioHint": "이미지 화면 비율",
+      "resolution": "해상도",
+      "resolutionHint": "이미지 해상도",
+      "openaiSettings": {
+        "title": "OpenAI 설정",
+        "description": "OpenAI 전용 이미지 생성 옵션을 구성합니다.",
+        "quality": "품질",
+        "qualityHint": "이미지 품질 수준",
+        "standard": "표준",
+        "hd": "HD",
+        "style": "스타일",
+        "styleHint": "이미지 스타일 선호",
+        "natural": "자연스러운",
+        "vivid": "생생한"
+      },
+      "novelaiSettings": {
+        "title": "NovelAI 설정",
+        "description": "NovelAI 전용 이미지 생성 옵션을 구성합니다.",
+        "sampler": "샘플러",
+        "samplerHint": "샘플링 알고리즘",
+        "steps": "스텝",
+        "stepsHint": "샘플링 스텝 수 (1-50)",
+        "cfgScale": "CFG 스케일",
+        "cfgScaleHint": "프롬프트 안내 강도 (1-20)",
+        "noiseSchedule": "노이즈 스케줄",
+        "noiseScheduleHint": "노이즈 스케줄링 방식"
+      },
+      "naturalStyles": {
+        "title": "사용자 정의 스타일 (자연어)",
+        "description": "프롬프트를 감싸는 접두사 및 접미사 텍스트로 사용자 정의 스타일을 만듭니다.",
+        "defaultStyle": "기본 스타일",
+        "defaultStyleHint": "이미지 생성 시 기본으로 적용할 스타일",
+        "none": "없음",
+        "addNew": "+ 새 스타일 추가",
+        "styleName": "스타일 이름",
+        "prefix": "접두사",
+        "prefixPlaceholder": "프롬프트 앞에 추가할 텍스트...",
+        "postfix": "접미사",
+        "postfixPlaceholder": "프롬프트 뒤에 추가할 텍스트...",
+        "preview": "미리보기:",
+        "deleteStyle": "스타일 삭제"
+      },
+      "tagBasedStyles": {
+        "title": "사용자 정의 스타일 (태그 기반)",
+        "description": "긍정 및 부정 프롬프트 모두에 접두사와 접미사를 사용하여 사용자 정의 스타일을 만듭니다.",
+        "positivePrompt": "긍정 프롬프트",
+        "negativePrompt": "부정 프롬프트"
+      },
+      "note": "참고: 선택한 제공자의 API 키가 자격 증명 탭에서 설정되어 있는지 확인하세요."
+    },
+    "functionConfig": {
+      "basicSettings": "기본 설정",
+      "provider": "제공자",
+      "providerDescriptions": {
+        "openai": "직접 OpenAI API 접근 (GPT-4o, o1 등)",
+        "gemini": "사고 요약이 있는 Google Gemini",
+        "claude": "확장 사고가 있는 Anthropic Claude",
+        "openrouter": "OpenRouter를 통해 100개 이상의 AI 모델에 접근",
+        "xai": "텍스트 생성을 위한 xAI Grok 모델",
+        "custom": "자체 OpenAI 호환 엔드포인트 사용"
+      },
+      "apiFormat": "API 형식",
+      "apiFormatHint": "API 형식 선택 - 각 제공자별 네이티브 SDK 사용",
+      "aiModel": "AI 모델",
+      "browse": "찾아보기",
+      "hide": "숨기기",
+      "modelPlaceholder": "예: gpt-4o, anthropic/claude-3.5-sonnet",
+      "modelHint": "이 기능에 대한 모델 식별자",
+      "temperature": "온도",
+      "temperatureLabels": {
+        "precise": "정확 (0.0)",
+        "balanced": "균형 (1.0)",
+        "creative": "창의 (2.0)"
+      },
+      "temperatureHint": "낮은 값은 더 집중되고 결정적인 출력을 생성합니다. 높은 값은 창의성과 무작위성을 증가시킵니다.",
+      "temperatureGpt5Hint": "GPT-5 모델에서는 온도가 지원되지 않습니다. 대신 추론 노력을 사용하세요.",
+      "advancedSettings": "고급 설정",
+      "enablePrefill": "어시스턴트 프리필 활성화",
+      "prefillDisabled": "OpenAI는 어시스턴트 프리필을 지원하지 않습니다",
+      "prefillHint": "출력 형식을 안내하기 위해 어시스턴트의 응답을 미리 채웁니다",
+      "thinkingMode": "사고 모드",
+      "thinkingModes": {
+        "off": "끄기",
+        "offDescription": "사고 표시 안 함",
+        "offGeminiDisabled": "Gemini는 사고 비활성화를 지원하지 않습니다",
+        "model": "모델 사고",
+        "modelDescription": "모델의 네이티브 사고 토큰 사용 (모델이 지원하는 경우)",
+        "custom": "사용자 정의 사고",
+        "customDescription": "<thinking> 태그를 사용한 프롬프트 기반 사고 연쇄"
+      },
+      "thinkingConfig": {
+        "title": "사고 구성",
+        "effortLevel": "노력 수준",
+        "reasoningEffort": "추론 노력 (GPT-5)",
+        "effortOptions": {
+          "none": "없음 - 추론 없음 (가장 빠름)",
+          "minimal": "최소 - 매우 가벼운 추론",
+          "low": "낮음 - 빠른 추론",
+          "lowPercent": "낮음 (최대 토큰의 ~20%)",
+          "medium": "중간 - 균형",
+          "mediumPercent": "중간 (최대 토큰의 ~50%)",
+          "high": "높음 - 깊은 추론",
+          "highPercent": "높음 (최대 토큰의 ~80%)",
+          "xhigh": "매우 높음 - 최대 추론"
+        },
+        "effortHint": "GPT-5가 응답하기 전에 수행하는 추론의 양을 제어합니다",
+        "effortHintGeneric": "모델이 내부적으로 수행하는 사고의 양을 제어합니다",
+        "verbosity": "출력 상세도 (GPT-5)",
+        "verbosityOptions": {
+          "low": "낮음 - 간결한 출력",
+          "medium": "중간 - 표준",
+          "high": "높음 - 상세한 출력"
+        },
+        "verbosityHint": "모델 출력의 길이와 세부 사항을 제어합니다",
+        "maxThinkingTokens": "최대 사고 토큰 (선택사항)",
+        "maxThinkingTokensPlaceholder": "자동 (노력 기반)",
+        "maxThinkingTokensHint": "사고 토큰 예산을 직접 지정합니다. 노력 기반 할당을 사용하려면 비워두세요.",
+        "claudeBudgetTokens": "Claude 사고 예산 (토큰)",
+        "claudeBudgetTokensPlaceholder": "자동",
+        "claudeBudgetTokensHint": "모델 기본 예산을 사용하려면 비워두세요.",
+        "thinkingBudget": "사고 예산 (토큰)",
+        "thinkingBudgetHint": "최소 1024 토큰. 모델 기본값은 비워두세요.",
+        "thinkingLevel": "사고 수준",
+        "thinkingLevelHint": "Gemini 호환 엔드포인트의 사고 깊이를 제어합니다",
+        "thinkingLevelGemini3": "사고 수준 (Gemini 3)",
+        "thinkingLevelGemini3Hint": "Gemini 3 모델의 추론 깊이를 제어합니다.",
+        "thinkingBudget25": "사고 예산 (토큰) 2.5용",
+        "thinkingBudget25Placeholder": "비활성화하려면 0으로 설정",
+        "thinkingBudget25Hint": "지원되는 경우 사고를 효과적으로 비활성화하려면 0으로 설정하세요."
+      }
+    },
+    "llmLog": {
+      "enableLogging": "LLM 요청 로깅 활성화",
+      "clearLogs": "로그 지우기",
+      "loggingDisabled": "로깅이 비활성화되어 있습니다. LLM 요청 및 응답을 캡처하려면 활성화하세요.",
+      "noLogs": "아직 캡처된 로그가 없습니다.",
+      "showingEntries": "최대 50개 항목 중 {{count}}개 표시. 로그는 메모리에 저장되며 페이지 새로고침 시 삭제됩니다.",
+      "request": "요청",
+      "provider": "제공자:",
+      "model": "모델:",
+      "temperature": "온도:",
+      "thinkingMode": "사고 모드:",
+      "functions": "함수:",
+      "defined": "정의됨",
+      "messages": "메시지 ({{count}})",
+      "response": "응답",
+      "contentParts": "콘텐츠 파트",
+      "functionCalls": "함수 호출 ({{count}})",
+      "thinkingDetails": "사고 세부 사항",
+      "error": "오류"
+    },
+    "modelBrowser": {
+      "searchPlaceholder": "모델 검색...",
+      "sortNameAsc": "이름 (A-Z)",
+      "sortNameDesc": "이름 (Z-A)",
+      "sortPriceAsc": "가격 (낮음-높음)",
+      "sortPriceDesc": "가격 (높음-낮음)",
+      "loadingModels": "모델 로딩 중...",
+      "retry": "재시도",
+      "noModelsFound": "\"{{query}}\"와 일치하는 모델을 찾을 수 없습니다",
+      "noModelsAvailable": "사용 가능한 모델 없음",
+      "models": "모델",
+      "currentlySelected": "현재 선택됨",
+      "useThisModel": "이 모델 사용",
+      "selected": "선택됨",
+      "use": "사용",
+      "showMore": "더 보기",
+      "showLess": "접기",
+      "architecture": "아키텍처",
+      "pricingDetails": "가격 세부 정보",
+      "providers": "제공자",
+      "input": "입력",
+      "output": "출력",
+      "tokenizer": "토크나이저",
+      "instruct": "인스트럭트",
+      "pricingPerMillion": "가격 (1M 토큰당)",
+      "prompt": "프롬프트",
+      "completion": "완료",
+      "image": "이미지",
+      "availableProviders": "사용 가능한 제공자",
+      "clearFilters": "필터 지우기",
+      "loadingProviders": "제공자 로딩 중...",
+      "only": "전용",
+      "ignore": "무시",
+      "failedToLoadProviders": "제공자 로드 실패",
+      "context": "컨텍스트",
+      "oSeries": "O-시리즈"
+    },
+    "presetSelector": {
+      "selectPreset": "프리셋 선택...",
+      "presetLabel": "프리셋:",
+      "editPreset": "프리셋 편집",
+      "duplicatePreset": "프리셋 복제",
+      "exportPreset": "프리셋 내보내기",
+      "deletePreset": "프리셋 삭제",
+      "createNewPreset": "새 프리셋 만들기",
+      "importPreset": "파일에서 프리셋 가져오기",
+      "confirmDelete": "\"{{name}}\"을(를) 삭제하시겠습니까?",
+      "invalidFileFormat": "잘못된 프리셋 파일 형식",
+      "failedToReadFile": "파일 읽기 실패"
+    },
+    "presetImport": {
+      "title": "프리셋 가져오기",
+      "presetName": "프리셋 이름 *",
+      "presetNamePlaceholder": "프리셋 이름 입력",
+      "description": "설명 (선택사항)",
+      "descriptionPlaceholder": "이 프리셋에 대한 간략한 설명",
+      "contents": "내용: {{prompts}}개 프롬프트, {{fragments}}개 프래그먼트, {{variables}}개 변수",
+      "import": "가져오기",
+      "nameRequired": "프리셋 이름은 필수입니다",
+      "duplicateName": "이 이름의 프리셋이 이미 존재합니다",
+      "importFailed": "프리셋 가져오기 실패"
+    },
+    "promptEditor": {
+      "prompts": "프롬프트",
+      "fragments": "프래그먼트",
+      "variables": "변수",
+      "selectPromptToEdit": "편집할 프롬프트를 선택하세요",
+      "selectFragmentToEdit": "편집할 프래그먼트를 선택하세요",
+      "choosePromptHint": "사이드바에서 프롬프트를 선택하여 내용을 보고 편집하세요",
+      "chooseFragmentHint": "사이드바에서 프래그먼트를 선택하거나 새로 만드세요",
+      "createNewFragment": "새 프래그먼트 만들기",
+      "copyPathForTemplates": "템플릿에서 사용할 경로 복사",
+      "addDescription": "설명 추가...",
+      "noDescription": "설명 없음",
+      "editDescription": "설명 편집",
+      "chars": "{{count}}자",
+      "unsavedChanges": "저장되지 않은 변경사항",
+      "versionHistory": "버전 기록",
+      "deleteFragment": "프래그먼트 삭제",
+      "expandSidebar": "사이드바 펼치기",
+      "collapseSidebar": "사이드바 접기",
+      "enterPromptTemplate": "프롬프트 템플릿 입력...",
+      "enterFragmentTemplate": "프래그먼트 템플릿 입력...",
+      "createFragment": {
+        "title": "새 프래그먼트 만들기",
+        "folderPath": "폴더 경로 (선택사항)",
+        "folderPathPlaceholder": "예: common/context",
+        "folderPathHint": "슬래시를 사용하여 중첩 폴더를 만드세요",
+        "fragmentName": "프래그먼트 이름 *",
+        "fragmentNamePlaceholder": "예: customThinkingInstruction",
+        "description": "설명 (선택사항)",
+        "descriptionPlaceholder": "이 프래그먼트에 대한 간략한 설명",
+        "initialContent": "초기 내용 (선택사항)",
+        "initialContentPlaceholder": "{{! 프래그먼트 내용을 여기에 }}",
+        "nameRequired": "프래그먼트 이름은 필수입니다",
+        "invalidName": "프래그먼트 이름은 영문, 숫자, 대시, 밑줄만 사용할 수 있습니다",
+        "duplicateName": "이 폴더에 동일한 이름의 프래그먼트가 이미 존재합니다",
+        "createFailed": "프래그먼트 생성에 실패했습니다. 다시 시도해주세요."
+      },
+      "createVariable": {
+        "title": "변수 만들기",
+        "name": "이름",
+        "namePlaceholder": "예: writingStyle, isGeminiMode",
+        "nameHint": "프롬프트에서 사용: {{variables.{{name}}}}",
+        "type": "유형",
+        "typeText": "텍스트",
+        "typeTextDesc": "텍스트 값 (예: \"formal\", \"casual\")",
+        "typeNumber": "숫자",
+        "typeNumberDesc": "숫자 값 (예: 5, 100)",
+        "typeToggle": "토글",
+        "typeToggleDesc": "참/거짓 값",
+        "typeDropdown": "드롭다운",
+        "typeDropdownDesc": "미리 정의된 옵션 중에서 선택",
+        "description": "설명 (선택사항)",
+        "descriptionPlaceholder": "이 변수의 용도를 설명하세요...",
+        "options": "옵션",
+        "addOption": "옵션 추가...",
+        "optionsHint": "최소 2개 옵션을 추가하세요. Enter 또는 +를 클릭하여 추가합니다.",
+        "numberOptions": "숫자 옵션 (선택사항)",
+        "min": "최소",
+        "max": "최대",
+        "step": "단계",
+        "noLimit": "제한 없음",
+        "displayAs": "표시 형식",
+        "inputField": "입력 필드",
+        "slider": "슬라이더",
+        "sliderRequiresMinMax": "슬라이더는 최소값과 최대값이 모두 필요합니다",
+        "defaultValue": "기본값 (선택사항)",
+        "select": "선택...",
+        "enterDefaultValue": "기본값 입력...",
+        "nameRequired": "변수 이름은 필수입니다",
+        "invalidName": "이름은 영문자로 시작하고 영문, 숫자, 밑줄만 포함해야 합니다",
+        "dropdownMinOptions": "드롭다운 유형은 최소 2개 옵션이 필요합니다",
+        "minLessThanMax": "최소값은 최대값보다 작아야 합니다",
+        "sliderMinMaxRequired": "슬라이더는 최소값과 최대값이 모두 필요합니다",
+        "invalidNumber": "기본값에 유효하지 않은 숫자입니다",
+        "duplicateName": "이 이름의 변수가 이미 존재합니다",
+        "createFailed": "변수 생성 실패",
+        "creating": "생성 중...",
+        "createVariable": "변수 만들기"
+      },
+      "treeNav": {
+        "closeSidebar": "사이드바 닫기"
+      }
+    }
+  },
+  "workspace": {
+    "tabs": {
+      "basicInfo": "기본 정보",
+      "characters": "캐릭터",
+      "organizations": "조직",
+      "locations": "장소",
+      "lorebook": "로어북",
+      "outline": "개요"
+    }
+  },
+  "objectPicker": {
+    "loading": "로딩 중...",
+    "noObjectsAvailable": "사용 가능한 객체가 없습니다",
+    "searchPlaceholder": "객체 검색...",
+    "allTypes": "전체 유형",
+    "clearSearch": "검색 지우기"
+  },
+  "richTextEditor": {
+    "loading": "에디터 로딩 중...",
+    "paragraph": "본문",
+    "heading": "제목",
+    "headingLevel": "제목 {{level}}",
+    "bold": "굵게 (Ctrl+B)",
+    "italic": "기울임 (Ctrl+I)",
+    "strikethrough": "취소선",
+    "quote": "인용",
+    "horizontalRule": "구분선",
+    "insertTable": "표 삽입",
+    "rows": "행",
+    "cols": "열",
+    "insertTableBtn": "표 삽입",
+    "insertImage": "이미지 삽입"
+  },
+  "customSelect": {
+    "placeholder": "선택..."
+  },
+  "languageDropdown": {
+    "selectLanguage": "언어 선택",
+    "translate": "번역 ({{count}})",
+    "translateObjects": "{{count}}개 객체 번역"
+  },
+  "agentModeToggle": {
+    "storyObjects": "스토리 객체",
+    "outline": "개요",
+    "editor": "에디터",
+    "currentMode": "현재 모드: {{mode}}. 클릭하여 전환."
+  },
+  "activity": {
+    "notifications": "알림",
+    "variables": "변수",
+    "noNotifications": "알림 없음",
+    "clearAll": "모두 지우기",
+    "switchToVariables": "변수로 전환",
+    "switchToNotifications": "알림으로 전환"
+  },
+  "mobileFooter": {
+    "settings": "설정",
+    "agent": "에이전트"
+  },
+  "assetManager": {
+    "manageImages": "이미지 관리",
+    "sceneAssetLibrary": "장면 에셋 라이브러리",
+    "selectImage": "이미지 선택",
+    "selectReferenceImage": "참조 이미지 선택",
+    "images": "이미지",
+    "select": "선택",
+    "cancel": "취소",
+    "close": "닫기"
+  },
+  "operationStatus": {
+    "streaming": "스트리밍",
+    "validating": "검증 중",
+    "ready": "준비됨",
+    "error": "오류",
+    "pending": "대기 중",
+    "applied": "적용됨",
+    "skipped": "건너뜀",
+    "failed": "실패"
+  },
+  "storyObjectPanel": {
+    "title": "스토리 객체",
+    "scrollTabsLeft": "탭 왼쪽으로 스크롤",
+    "scrollTabsRight": "탭 오른쪽으로 스크롤",
+    "tabs": {
+      "basicInfo": "기본 정보",
+      "guidelines": "가이드라인",
+      "characters": "캐릭터",
+      "organizations": "조직",
+      "locations": "장소",
+      "lorebook": "로어북"
+    },
+    "categories": {
+      "character": {
+        "title": "캐릭터",
+        "singular": "캐릭터",
+        "plural": "캐릭터"
+      },
+      "organization": {
+        "title": "조직",
+        "singular": "조직",
+        "plural": "조직"
+      },
+      "location": {
+        "title": "장소",
+        "singular": "장소",
+        "plural": "장소"
+      },
+      "lorebook": {
+        "title": "로어북",
+        "singular": "항목",
+        "plural": "항목"
+      }
+    }
+  },
+  "agent": {
+    "context": "컨텍스트",
+    "enterMessage": "메시지를 입력하세요...",
+    "stop": "중지",
+    "send": "전송",
+    "editContent": "내용 편집",
+    "save": "저장",
+    "cancel": "취소",
+    "viewAgentList": "에이전트 목록 보기",
+    "agents": "에이전트",
+    "aiAgent": "AI 에이전트",
+    "close": "닫기",
+    "welcomeMessage": "안녕하세요! 소설 작성을 도와드리겠습니다.",
+    "projectHelp": "\"{{projectName}}\" 프로젝트에 대해 무엇을 도와드릴까요?",
+    "usingLanguage": "{{language}} 사용 중",
+    "you": "나",
+    "ai": "AI",
+    "edit": "편집",
+    "delete": "삭제",
+    "scrollToBottom": "맨 아래로 스크롤",
+    "switchToLanguage": "{{language}}(으)로 전환",
+    "translateTo": "{{language}}(으)로 번역",
+    "refreshTranslation": "{{language}} 번역 새로고침"
+  },
+  "unifiedWorkspace": {
+    "loadingProject": "프로젝트 로딩 중...",
+    "projectNotFound": "프로젝트를 찾을 수 없음",
+    "goBackHome": "홈으로 돌아가기",
+    "mobileSubtitle": {
+      "outlines": "개요",
+      "noChapterSelected": "선택된 챕터 없음",
+      "config": "설정"
+    },
+    "subPages": {
+      "storyObjects": "스토리 객체",
+      "outlineManager": "개요 관리자",
+      "novelEditor": "소설 에디터",
+      "config": "설정"
+    },
+    "home": "홈"
+  },
+  "workspaceConfig": {
+    "title": "설정",
+    "imageCleanupHint": "이미지 정리는 마지막 수동 저장 상태를 사용합니다. 자동 저장된 (로컬) 편집은 저장할 때까지 반영되지 않습니다.",
+    "projectExport": {
+      "title": "프로젝트 내보내기 (.nbproj)",
+      "hint": "내보내기에는 최신 서버 저장 상태가 포함됩니다. 공간 절약을 위해 가져오기 시 썸네일이 재생성됩니다.",
+      "includeImages": "원본 이미지 포함",
+      "imageScope": "이미지 범위",
+      "imageScopeHint": "수동 선택은 사용된 세트(원고 + 스토리 객체)에서 시작하며 조정할 수 있습니다.",
+      "usedOnly": "사용된 것만",
+      "allImages": "모든 이미지",
+      "manualSelection": "수동 선택",
+      "includeNonMain": "비주요 스토리 객체 이미지 포함",
+      "includeReferenceImages": "생성 참조 이미지 포함 (재귀적)",
+      "preview": "미리보기",
+      "download": ".nbproj 다운로드",
+      "exportStarted": "내보내기가 시작되었습니다. 다운로드를 확인하세요.",
+      "selectAtLeastOne": "최소 하나의 이미지를 선택하거나 \"이미지 포함\"을 비활성화하세요.",
+      "objects": "객체",
+      "assets": "에셋",
+      "selectedImages": "선택된 이미지",
+      "size": "크기",
+      "selectUsed": "사용된 것 선택",
+      "selectAll": "전체 선택",
+      "selectNone": "선택 해제",
+      "noPreview": "미리보기 없음. 미리보기를 클릭하여 내보낼 항목을 확인하세요.",
+      "imagesExcluded": "이미지가 제외됩니다. 다운로드는 데이터만 내보냅니다.",
+      "noAssetsFound": "이 선택에 대한 에셋을 찾을 수 없습니다.",
+      "used": "사용됨",
+      "uncategorized": "미분류"
+    },
+    "imageCleanup": {
+      "title": "이미지 정리 정책",
+      "keepRecentDays": "최근 유지 (일)",
+      "days": "일",
+      "keepRecentHint": "이 기간 내에 생성된 에셋은 제외됩니다 (0은 비활성화).",
+      "deleteUnusedScene": "사용되지 않는 장면 에셋 삭제 (원고에서 참조되지 않음)",
+      "deleteNonMain": "비주요 스토리 객체 이미지 삭제 (원고에서 사용되지 않는 경우)",
+      "treatReferenceAsUsed": "생성 참조 이미지를 사용된 것으로 처리 (삭제 차단)",
+      "referenceWarning": "비활성화하면 에셋을 삭제할 때 다른 에셋의 생성 참조 이미지에서 해당 ID가 제거됩니다.",
+      "preview": "미리보기",
+      "rebuildIndex": "원고 인덱스 재구축",
+      "rebuildConfirm": "마지막 저장된 문서에서 원고 이미지 인덱스를 재구축하시겠습니까?",
+      "candidates": "후보",
+      "totalSize": "총 크기",
+      "selected": "선택됨",
+      "deleteSelected": "선택 항목 삭제",
+      "deleted": "삭제됨",
+      "scrubbedRefs": "정리된 참조",
+      "skipped": "건너뜀",
+      "errors": "오류",
+      "noCandidates": "후보 없음. 미리보기를 클릭하여 새로고침하세요.",
+      "deleteConfirm": "{{count}}개 에셋을 삭제하시겠습니까?",
+      "deleteConfirmScrub": "{{count}}개 에셋을 삭제하고 생성 참조 이미지 링크를 정리하시겠습니까?"
+    }
+  },
+  "novelEditor": {
+    "emptyState": {
+      "noChapters": "챕터 없음",
+      "loadingChapter": "챕터 로딩 중...",
+      "loadingChapters": "챕터 로딩 중...",
+      "createChaptersHint": "작업 공간에서 챕터를 만들어 작성을 시작하세요.",
+      "openingChapter": "첫 번째 챕터를 여는 중입니다. 잠시 기다려주세요.",
+      "loadingOutline": "첫 번째 챕터를 열기 위해 개요를 로딩 중입니다.",
+      "manuscriptNotFound": "원고를 찾을 수 없음",
+      "noManuscriptContent": "이 챕터에는 아직 원고 내용이 없습니다."
+    },
+    "loading": {
+      "chapterContent": "챕터 내용 로딩 중...",
+      "manuscript": "원고 로딩 중...",
+      "editor": "에디터 로딩 중..."
+    },
+    "error": {
+      "chapterContentError": "챕터 내용 오류",
+      "errorLoading": "챕터 로딩 오류",
+      "retry": "다시 시도"
+    },
+    "saveStatus": {
+      "autoSaving": "자동 저장 중...",
+      "saving": "저장 중...",
+      "unsaved": "저장되지 않음",
+      "saved": "저장됨"
+    },
+    "wordCount": "{{count}} 단어",
+    "toolbar": {
+      "aiEdit": "AI 편집",
+      "aiEditChapter": "AI 챕터 편집",
+      "save": "저장",
+      "saveSnapshot": "버전 스냅샷 생성 (Ctrl+S)",
+      "moreActions": "더 많은 작업",
+      "retranslate": "재번역",
+      "translate": "번역",
+      "versions": "버전"
+    },
+    "overlay": {
+      "noContentIn": "{{language}}에 내용 없음",
+      "noContentYet": "이 챕터에는 아직 {{language}} 내용이 없습니다.",
+      "translateFrom": "{{language}}에서 번역"
+    },
+    "footer": {
+      "language": "언어",
+      "version": "버전",
+      "autoCachedLocally": "로컬에 자동 캐시됨 • 저장을 클릭하여 버전 생성"
+    },
+    "modal": {
+      "regenerateImage": "이미지 재생성",
+      "changeImage": "이미지 변경",
+      "insertImage": "이미지 삽입"
+    },
+    "sidebar": {
+      "title": "챕터 목록 토글",
+      "showDescription": "설명 보기",
+      "hideDescription": "설명 숨기기"
+    }
+  },
+  "chapterSidebar": {
+    "storyOutline": "스토리 개요",
+    "untitledOutline": "제목 없는 개요",
+    "timeline": "타임라인",
+    "closeSidebar": "사이드바 닫기",
+    "emptyState": {
+      "noContentYet": "아직 내용 없음",
+      "createFirstAct": "첫 번째 막과 챕터를 만들어 시작하세요."
+    },
+    "act": "막",
+    "untitledAct": "제목 없는 막",
+    "untitledChapter": "제목 없는 챕터",
+    "untitled": "제목 없음",
+    "noChapters": "챕터 없음",
+    "noDescription": "설명이 없습니다."
+  },
+  "manuscriptEditor": {
+    "toolbar": {
+      "heading": "제목",
+      "bold": "굵게",
+      "italic": "기울임",
+      "strikethrough": "취소선",
+      "bulletList": "글머리 목록",
+      "numberedList": "번호 목록",
+      "quote": "인용",
+      "codeBlock": "코드 블록",
+      "table": "표",
+      "insertImage": "이미지 삽입"
+    },
+    "headingDropdown": {
+      "paragraph": "단락",
+      "heading": "제목 {{level}}"
+    },
+    "tableDropdown": {
+      "rows": "행",
+      "cols": "열",
+      "insertTable": "표 삽입",
+      "addRow": "행 추가",
+      "addColumn": "열 추가",
+      "deleteTable": "표 삭제"
+    }
+  }
+}

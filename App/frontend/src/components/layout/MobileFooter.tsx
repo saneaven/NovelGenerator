@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Settings } from '../icons';
 import { ActivityPanelButton } from '../ActivityPanel';
 import { IconButton } from '../IconButton';
@@ -15,12 +16,13 @@ const MobileFooter: React.FC<MobileFooterProps> = ({
   onAgentToggle,
   onSettingsClick,
 }) => {
+  const { t } = useTranslation();
   return (
     <footer className="mobile-footer">
       <IconButton
         icon={<Settings size="xl" />}
         onClick={onSettingsClick}
-        title="Settings"
+        title={t('mobileFooter.settings')}
         size="sm"
       />
 
@@ -28,7 +30,7 @@ const MobileFooter: React.FC<MobileFooterProps> = ({
         className={`footer-agent-toggle-btn ${isAgentVisible ? 'active' : ''}`}
         onClick={onAgentToggle}
       >
-        Agent
+        {t('mobileFooter.agent')}
       </button>
 
       <ActivityPanelButton position="mobile" className="footer-notification-btn" />

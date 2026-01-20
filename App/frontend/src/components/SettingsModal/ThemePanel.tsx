@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ThemeMode } from '../../store/settingsStore';
 import { Sun, Moon, Computer, Lightbulb, Check } from '../icons';
 import './ThemePanel.css';
@@ -9,18 +10,17 @@ interface ThemePanelProps {
 }
 
 const ThemePanel: React.FC<ThemePanelProps> = ({ theme, onThemeChange }) => {
+  const { t } = useTranslation();
+
   return (
     <div className="theme-panel">
       <div className="panel-description">
-        <p>
-          Choose your preferred color scheme for the application interface. Dark mode can reduce eye strain
-          in low-light environments.
-        </p>
+        <p>{t('settings.theme.description')}</p>
       </div>
 
       <div className="theme-settings-card">
         <div className="form-field">
-          <label>Theme Preference</label>
+          <label>{t('settings.theme.themePreference')}</label>
 
           <div className="theme-options">
             {/* Light Mode Option */}
@@ -31,8 +31,8 @@ const ThemePanel: React.FC<ThemePanelProps> = ({ theme, onThemeChange }) => {
             >
               <div className="theme-option-icon"><Sun size="xl" /></div>
               <div className="theme-option-content">
-                <div className="theme-option-title">Light</div>
-                <div className="theme-option-description">Bright and clean interface</div>
+                <div className="theme-option-title">{t('settings.theme.light')}</div>
+                <div className="theme-option-description">{t('settings.theme.lightDescription')}</div>
               </div>
               {theme === 'light' && <div className="theme-option-check"><Check size="md" /></div>}
             </button>
@@ -45,8 +45,8 @@ const ThemePanel: React.FC<ThemePanelProps> = ({ theme, onThemeChange }) => {
             >
               <div className="theme-option-icon"><Moon size="xl" /></div>
               <div className="theme-option-content">
-                <div className="theme-option-title">Dark</div>
-                <div className="theme-option-description">Easy on the eyes in low light</div>
+                <div className="theme-option-title">{t('settings.theme.dark')}</div>
+                <div className="theme-option-description">{t('settings.theme.darkDescription')}</div>
               </div>
               {theme === 'dark' && <div className="theme-option-check"><Check size="md" /></div>}
             </button>
@@ -59,8 +59,8 @@ const ThemePanel: React.FC<ThemePanelProps> = ({ theme, onThemeChange }) => {
             >
               <div className="theme-option-icon"><Computer size="xl" /></div>
               <div className="theme-option-content">
-                <div className="theme-option-title">System</div>
-                <div className="theme-option-description">Match your OS preference</div>
+                <div className="theme-option-title">{t('settings.theme.system')}</div>
+                <div className="theme-option-description">{t('settings.theme.systemDescription')}</div>
               </div>
               {theme === 'system' && <div className="theme-option-check"><Check size="md" /></div>}
             </button>
@@ -69,18 +69,18 @@ const ThemePanel: React.FC<ThemePanelProps> = ({ theme, onThemeChange }) => {
       </div>
 
       <div className="theme-info-box">
-        <h4><Lightbulb size="md" /> About Themes</h4>
+        <h4><Lightbulb size="md" /> {t('settings.theme.aboutThemes')}</h4>
         <ul>
           <li>
-            <strong>Light:</strong> Traditional bright interface, great for well-lit environments
+            <strong>{t('settings.theme.light')}:</strong> {t('settings.theme.lightInfo')}
           </li>
           <li>
-            <strong>Dark:</strong> Reduces eye strain and saves battery on OLED screens
+            <strong>{t('settings.theme.dark')}:</strong> {t('settings.theme.darkInfo')}
           </li>
           <li>
-            <strong>System:</strong> Automatically switches based on your operating system settings
+            <strong>{t('settings.theme.system')}:</strong> {t('settings.theme.systemInfo')}
           </li>
-          <li>Theme changes apply immediately without reloading the page</li>
+          <li>{t('settings.theme.instantChange')}</li>
         </ul>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import ToggleSwitch from '../../../components/ToggleSwitch';
+import { useTranslation } from 'react-i18next';
+import ToggleSwitch from '../../../components/common/ToggleSwitch';
 import TextButton from '../../../components/TextButton/TextButton';
 import { getAssetUrl } from '../../../utils/assetUrl';
 import {
@@ -75,6 +76,7 @@ function formatBytes(bytes: number): string {
 }
 
 const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }) => {
+  const { t } = useTranslation();
   const { showError } = useErrorStore();
 
   const [policy, setPolicy] = useState<ImageCleanupPolicy>(() => loadPolicy(projectId));
@@ -179,8 +181,8 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
       if (!assetIds.length) return;
 
       const confirmText = policy.treat_reference_images_as_used
-        ? `Delete ${assetIds.length} asset(s)?`
-        : `Delete ${assetIds.length} asset(s) and scrub generation reference-image links?`;
+        ? t('workspaceConfig.imageCleanup.deleteConfirm', { count: assetIds.length })
+        : t('workspaceConfig.imageCleanup.deleteConfirmScrub', { count: assetIds.length });
 
       if (!window.confirm(confirmText)) return;
 
@@ -200,11 +202,11 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
         setIsExecuting(false);
       }
     },
-    [projectId, policy, showError, handlePreview]
+    [projectId, policy, showError, handlePreview, t]
   );
 
   const handleRebuildIndex = useCallback(async () => {
-    if (!window.confirm('Rebuild manuscript image index from last saved doc?')) return;
+    if (!window.confirm(t('workspaceConfig.imageCleanup.rebuildConfirm'))) return;
     setIsRebuilding(true);
     setLastExecute(null);
     try {
@@ -218,7 +220,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
     } finally {
       setIsRebuilding(false);
     }
-  }, [projectId, showError]);
+  }, [projectId, showError, t]);
 
   const exportAssets = exportPreview?.assets ?? [];
   const isExportManual = exportOptions.include_images && exportOptions.image_scope === 'manual';
@@ -315,7 +317,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
       }
 
       if (exportOptions.include_images && exportOptions.image_scope === 'manual' && selected.size === 0) {
-        showError('Project Export', 'Select at least one image, or disable "Include images".');
+        showError('Project Export', t('workspaceConfig.projectExport.selectAtLeastOne'));
         return;
       }
 
@@ -324,28 +326,28 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
         asset_ids: exportOptions.image_scope === 'manual' ? Array.from(selected) : undefined,
       });
 
-      setLastExportSummary('Export started. Check your downloads.');
+      setLastExportSummary(t('workspaceConfig.projectExport.exportStarted'));
     } catch (err: any) {
       console.error('Export failed:', err);
       showError('Project Export', 'Failed to export project.');
     } finally {
       setIsExporting(false);
     }
-  }, [exportPreview, exportSelectedIds, exportOptions, projectId, showError]);
+  }, [exportPreview, exportSelectedIds, exportOptions, projectId, showError, t]);
 
   return (
     <div className="workspace-config-panel">
       <div className="workspace-config-card">
-        <h2>Config</h2>
+        <h2>{t('workspaceConfig.title')}</h2>
         <p className="workspace-config-hint">
-          Image cleanup uses the last manual-save state. Autosaved (local) edits are not reflected until you save.
+          {t('workspaceConfig.imageCleanupHint')}
         </p>
       </div>
 
       <div className="workspace-config-card">
-        <h3>Project Export (.nbproj)</h3>
+        <h3>{t('workspaceConfig.projectExport.title')}</h3>
         <p className="workspace-config-hint">
-          Exports include the latest server-saved state. Thumbnails are regenerated on import to save space.
+          {t('workspaceConfig.projectExport.hint')}
         </p>
 
         <div className="workspace-config-form">
@@ -353,13 +355,13 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
             <ToggleSwitch
               checked={exportOptions.include_images}
               onChange={(checked) => setExportOptions((prev) => ({ ...prev, include_images: checked }))}
-              label="Include original images"
+              label={t('workspaceConfig.projectExport.includeImages')}
               icon={<Download size="sm" />}
             />
           </div>
 
           <div className="workspace-config-field">
-            <label>Image Scope</label>
+            <label>{t('workspaceConfig.projectExport.imageScope')}</label>
             <select
               className="workspace-config-select"
               value={exportOptions.image_scope}
@@ -371,12 +373,12 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
               }
               disabled={!exportOptions.include_images}
             >
-              <option value="used_only">Used only</option>
-              <option value="all">All images</option>
-              <option value="manual">Manual selection</option>
+              <option value="used_only">{t('workspaceConfig.projectExport.usedOnly')}</option>
+              <option value="all">{t('workspaceConfig.projectExport.allImages')}</option>
+              <option value="manual">{t('workspaceConfig.projectExport.manualSelection')}</option>
             </select>
             <p className="workspace-config-hint">
-              Manual selection starts from the used set (manuscripts + story objects) and can be adjusted.
+              {t('workspaceConfig.projectExport.imageScopeHint')}
             </p>
           </div>
 
@@ -386,7 +388,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
               onChange={(checked) =>
                 setExportOptions((prev) => ({ ...prev, include_non_main_story_object_images: checked }))
               }
-              label="Include non-main story object images"
+              label={t('workspaceConfig.projectExport.includeNonMain')}
               icon={<List size="sm" />}
               disabled={!exportOptions.include_images}
             />
@@ -398,7 +400,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
               onChange={(checked) =>
                 setExportOptions((prev) => ({ ...prev, treat_generation_reference_images_as_used: checked }))
               }
-              label="Include generation reference images (recursive)"
+              label={t('workspaceConfig.projectExport.includeReferenceImages')}
               icon={<List size="sm" />}
               disabled={!exportOptions.include_images}
             />
@@ -413,7 +415,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
             iconLeft={<List size="xs" />}
             loading={isExportPreviewing}
           >
-            Preview
+            {t('workspaceConfig.projectExport.preview')}
           </TextButton>
           <TextButton
             onClick={handleExportDownload}
@@ -422,7 +424,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
             iconLeft={<Download size="xs" />}
             loading={isExporting}
           >
-            Download .nbproj
+            {t('workspaceConfig.projectExport.download')}
           </TextButton>
         </div>
 
@@ -431,10 +433,10 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
         {exportPreview && exportSummary && (
           <div className="workspace-config-preview-summary workspace-config-preview-summary--stack">
             <div>
-              Objects: <strong>{exportSummary.objects}</strong> | Assets: <strong>{exportSummary.assets_total}</strong>
+              {t('workspaceConfig.projectExport.objects')}: <strong>{exportSummary.objects}</strong> | {t('workspaceConfig.projectExport.assets')}: <strong>{exportSummary.assets_total}</strong>
             </div>
             <div>
-              Selected images: <strong>{exportSummary.assets_selected}</strong> | Size:{' '}
+              {t('workspaceConfig.projectExport.selectedImages')}: <strong>{exportSummary.assets_selected}</strong> | {t('workspaceConfig.projectExport.size')}:{' '}
               <strong>{formatBytes(exportSummary.images_selected_bytes)}</strong>
             </div>
           </div>
@@ -443,23 +445,23 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
         {exportOptions.include_images && exportPreview && isExportManual && (
           <div className="workspace-config-actions">
             <TextButton onClick={() => handleExportSelectUsed(exportAssets)} size="sm" variant="secondary">
-              Select Used
+              {t('workspaceConfig.projectExport.selectUsed')}
             </TextButton>
             <TextButton onClick={() => handleExportSelectAll(exportAssets)} size="sm" variant="secondary">
-              Select All
+              {t('workspaceConfig.projectExport.selectAll')}
             </TextButton>
             <TextButton onClick={handleExportSelectNone} size="sm" variant="secondary">
-              Select None
+              {t('workspaceConfig.projectExport.selectNone')}
             </TextButton>
           </div>
         )}
 
         {!exportPreview ? (
-          <div className="workspace-config-empty">No preview. Click Preview to see what will be exported.</div>
+          <div className="workspace-config-empty">{t('workspaceConfig.projectExport.noPreview')}</div>
         ) : !exportOptions.include_images ? (
-          <div className="workspace-config-empty">Images are excluded. Download will export data only.</div>
+          <div className="workspace-config-empty">{t('workspaceConfig.projectExport.imagesExcluded')}</div>
         ) : exportAssets.length === 0 ? (
-          <div className="workspace-config-empty">No assets found for this selection.</div>
+          <div className="workspace-config-empty">{t('workspaceConfig.projectExport.noAssetsFound')}</div>
         ) : (
           <ul className="workspace-config-candidate-list">
             {exportAssets.map((a) => {
@@ -482,9 +484,9 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
                   <div className="workspace-config-candidate-meta">
                     <div className="workspace-config-candidate-title">{a.name}</div>
                     <div className="workspace-config-candidate-sub">
-                      {a.asset_type ?? 'uncategorized'}
+                      {a.asset_type ?? t('workspaceConfig.projectExport.uncategorized')}
                       {a.file_size != null && <> | {formatBytes(a.file_size)}</>}
-                      {a.used && <> | used</>}
+                      {a.used && <> | {t('workspaceConfig.projectExport.used')}</>}
                       {a.reasons.length > 0 && <> | {a.reasons.join(', ')}</>}
                     </div>
                   </div>
@@ -496,11 +498,11 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
       </div>
 
       <div className="workspace-config-card">
-        <h3>Image Cleanup Policy</h3>
+        <h3>{t('workspaceConfig.imageCleanup.title')}</h3>
 
         <div className="workspace-config-form">
           <div className="workspace-config-field">
-            <label>Keep Recent (days)</label>
+            <label>{t('workspaceConfig.imageCleanup.keepRecentDays')}</label>
             <div className="workspace-config-input-with-suffix">
               <input
                 type="number"
@@ -515,16 +517,16 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
                 }
                 className="workspace-config-number-input"
               />
-              <span className="workspace-config-suffix">days</span>
+              <span className="workspace-config-suffix">{t('workspaceConfig.imageCleanup.days')}</span>
             </div>
-            <p className="workspace-config-hint">Assets created within this window are excluded (0 disables).</p>
+            <p className="workspace-config-hint">{t('workspaceConfig.imageCleanup.keepRecentHint')}</p>
           </div>
 
           <div className="workspace-config-field">
             <ToggleSwitch
               checked={policy.delete_unused_manuscript_images}
               onChange={(checked) => setPolicy((prev) => ({ ...prev, delete_unused_manuscript_images: checked }))}
-              label="Delete unused scene assets (not referenced in manuscripts)"
+              label={t('workspaceConfig.imageCleanup.deleteUnusedScene')}
               icon={<Trash size="sm" />}
             />
           </div>
@@ -535,7 +537,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
               onChange={(checked) =>
                 setPolicy((prev) => ({ ...prev, delete_non_main_story_object_images: checked }))
               }
-              label="Delete non-main story object images (if not used in manuscripts)"
+              label={t('workspaceConfig.imageCleanup.deleteNonMain')}
               icon={<Trash size="sm" />}
             />
           </div>
@@ -544,12 +546,12 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
             <ToggleSwitch
               checked={policy.treat_reference_images_as_used}
               onChange={(checked) => setPolicy((prev) => ({ ...prev, treat_reference_images_as_used: checked }))}
-              label="Treat generation reference images as used (block deletion)"
+              label={t('workspaceConfig.imageCleanup.treatReferenceAsUsed')}
               icon={<List size="sm" />}
             />
             {!policy.treat_reference_images_as_used && (
               <p className="workspace-config-warning">
-                If disabled, deleting an asset will remove its ID from other assets&apos; generation reference images.
+                {t('workspaceConfig.imageCleanup.referenceWarning')}
               </p>
             )}
           </div>
@@ -563,7 +565,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
             iconLeft={<List size="xs" />}
             loading={isPreviewing}
           >
-            Preview
+            {t('workspaceConfig.imageCleanup.preview')}
           </TextButton>
           <TextButton
             onClick={handleRebuildIndex}
@@ -572,7 +574,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
             iconLeft={<Refresh size="xs" />}
             loading={isRebuilding}
           >
-            Rebuild Manuscript Index
+            {t('workspaceConfig.imageCleanup.rebuildIndex')}
           </TextButton>
         </div>
 
@@ -580,29 +582,29 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
       </div>
 
       <div className="workspace-config-card">
-        <h3>Preview</h3>
+        <h3>{t('workspaceConfig.imageCleanup.preview')}</h3>
 
         <div className="workspace-config-preview-summary">
           <div>
-            Candidates: <strong>{preview?.total_candidates ?? 0}</strong>
+            {t('workspaceConfig.imageCleanup.candidates')}: <strong>{preview?.total_candidates ?? 0}</strong>
             {preview && (
               <>
                 {' '}
-                • Total size: <strong>{formatBytes(preview.total_size_bytes)}</strong>
+                • {t('workspaceConfig.imageCleanup.totalSize')}: <strong>{formatBytes(preview.total_size_bytes)}</strong>
               </>
             )}
           </div>
           <div>
-            Selected: <strong>{totalSelected}</strong> • Size: <strong>{formatBytes(selectedTotalBytes)}</strong>
+            {t('workspaceConfig.imageCleanup.selected')}: <strong>{totalSelected}</strong> • {t('workspaceConfig.projectExport.size')}: <strong>{formatBytes(selectedTotalBytes)}</strong>
           </div>
         </div>
 
         <div className="workspace-config-actions">
           <TextButton onClick={handleSelectAll} size="sm" variant="secondary" disabled={!candidates.length}>
-            Select All
+            {t('workspaceConfig.projectExport.selectAll')}
           </TextButton>
           <TextButton onClick={handleSelectNone} size="sm" variant="secondary" disabled={!candidates.length}>
-            Select None
+            {t('workspaceConfig.projectExport.selectNone')}
           </TextButton>
           <TextButton
             onClick={() => handleExecute(Array.from(selectedIds))}
@@ -612,23 +614,23 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
             disabled={!anySelected || isExecuting}
             loading={isExecuting}
           >
-            Delete Selected
+            {t('workspaceConfig.imageCleanup.deleteSelected')}
           </TextButton>
         </div>
 
         {lastExecute && (
           <div className="workspace-config-result">
-            Deleted: {lastExecute.deleted.length}
+            {t('workspaceConfig.imageCleanup.deleted')}: {lastExecute.deleted.length}
             {lastExecute.scrubbed_reference_entries > 0 && (
-              <> • Scrubbed refs: {lastExecute.scrubbed_reference_entries}</>
+              <> • {t('workspaceConfig.imageCleanup.scrubbedRefs')}: {lastExecute.scrubbed_reference_entries}</>
             )}
-            {lastExecute.skipped.length > 0 && <> • Skipped: {lastExecute.skipped.length}</>}
-            {lastExecute.errors.length > 0 && <> • Errors: {lastExecute.errors.length}</>}
+            {lastExecute.skipped.length > 0 && <> • {t('workspaceConfig.imageCleanup.skipped')}: {lastExecute.skipped.length}</>}
+            {lastExecute.errors.length > 0 && <> • {t('workspaceConfig.imageCleanup.errors')}: {lastExecute.errors.length}</>}
           </div>
         )}
 
         {candidates.length === 0 ? (
-          <div className="workspace-config-empty">No candidates. Click Preview to refresh.</div>
+          <div className="workspace-config-empty">{t('workspaceConfig.imageCleanup.noCandidates')}</div>
         ) : (
           <ul className="workspace-config-candidate-list">
             {candidates.map((c) => {

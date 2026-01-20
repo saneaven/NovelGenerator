@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNotificationStore } from '../../store/notificationStore';
 import NotificationItem from '../Notification/NotificationItem';
 import { useScroll } from 'motion/react';
@@ -8,6 +9,7 @@ interface NotificationsViewProps {
 }
 
 const NotificationsView: React.FC<NotificationsViewProps> = ({ isMobile: isMobileProp }) => {
+  const { t } = useTranslation();
   const itemsViewportRef = useRef<HTMLDivElement>(null);
   const itemsContainerRef = useRef<HTMLDivElement>(null);
   const { scrollY } = useScroll({ container: itemsViewportRef });
@@ -138,7 +140,7 @@ const NotificationsView: React.FC<NotificationsViewProps> = ({ isMobile: isMobil
       >
         {orderedNotifications.length === 0 ? (
           <div className="notification-empty">
-            <p>No notifications</p>
+            <p>{t('activity.noNotifications')}</p>
           </div>
         ) : (
           orderedNotifications.map((notification, index) => (

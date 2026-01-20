@@ -23,7 +23,7 @@ import { ImageTaskRuntime, type GenerationRecipe, type ImageTaskBinding } from '
 import { useImageTaskStore } from '../../imageTask/store';
 import { UnifiedImageModal } from '../AssetManager';
 import UnifiedImagePromptModal, { type PromptResult, type PromptMode } from './UnifiedImagePromptModal';
-import ThinkingDisplay from '../ThinkingDisplay';
+import ThinkingDisplay from '../common/ThinkingDisplay';
 import { AIAssistMini, Close } from '../icons';
 import { TextButton } from '../TextButton';
 import { IconButton } from '../IconButton';

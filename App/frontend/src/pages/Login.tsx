@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../store/authStore';
 import { Loading } from '../components/common/Loading';
 import './Auth.css';
 
 const Login: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { login, isLoading, error, isAuthenticated, clearError } = useAuthStore();
 
@@ -48,8 +50,8 @@ const Login: React.FC = () => {
               <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <h1>Welcome Back</h1>
-          <p>Sign in to continue your creative journey</p>
+          <h1>{t('auth.welcomeBack')}</h1>
+          <p>{t('auth.signInSubtitle')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="auth-form">
@@ -65,7 +67,7 @@ const Login: React.FC = () => {
           )}
 
           <div className="auth-form-group">
-            <label htmlFor="username">Username</label>
+            <label htmlFor="username">{t('auth.username')}</label>
             <div className="input-wrapper">
               <svg className="input-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -79,7 +81,7 @@ const Login: React.FC = () => {
                   setUsername(e.target.value);
                   clearError();
                 }}
-                placeholder="Enter your username"
+                placeholder={t('auth.enterUsername')}
                 required
                 autoComplete="username"
                 disabled={isLoading}
@@ -88,7 +90,7 @@ const Login: React.FC = () => {
           </div>
 
           <div className="auth-form-group">
-            <label htmlFor="password">Password</label>
+            <label htmlFor="password">{t('auth.password')}</label>
             <div className="input-wrapper">
               <svg className="input-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -102,7 +104,7 @@ const Login: React.FC = () => {
                   setPassword(e.target.value);
                   clearError();
                 }}
-                placeholder="Enter your password"
+                placeholder={t('auth.enterPassword')}
                 required
                 autoComplete="current-password"
                 disabled={isLoading}
@@ -112,7 +114,7 @@ const Login: React.FC = () => {
                 className="password-toggle"
                 onClick={() => setShowPassword(!showPassword)}
                 disabled={isLoading}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
               >
                 {showPassword ? (
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -133,11 +135,11 @@ const Login: React.FC = () => {
             {isLoading ? (
               <>
                 <Loading size="xs" />
-                Signing in...
+                {t('auth.signingIn')}
               </>
             ) : (
               <>
-                <span>Sign In</span>
+                <span>{t('landing.signIn')}</span>
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
@@ -147,9 +149,9 @@ const Login: React.FC = () => {
         </form>
 
         <div className="auth-footer">
-          <p>Don't have an account?</p>
+          <p>{t('auth.dontHaveAccount')}</p>
           <Link to="/register" className="auth-link">
-            Create Account
+            {t('landing.createAccount')}
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>

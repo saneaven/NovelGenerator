@@ -27,3 +27,6 @@ export * from './speech';
 
 // Formatting icons
 export * from './formatting';
+
+// Provider icons
+export * from './provider';

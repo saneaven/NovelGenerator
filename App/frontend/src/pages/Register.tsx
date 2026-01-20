@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../store/authStore';
 import { Loading } from '../components/common/Loading';
 import './Auth.css';
 
 const Register: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { register, isLoading, error, isAuthenticated, clearError } = useAuthStore();
 
@@ -32,32 +34,32 @@ const Register: React.FC = () => {
     // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email.trim()) {
-      errors.push('Email is required');
+      errors.push(t('auth.validation.emailRequired'));
     } else if (!emailRegex.test(email)) {
-      errors.push('Invalid email format');
+      errors.push(t('auth.validation.emailInvalid'));
     }
 
     // Username validation
     if (!username.trim()) {
-      errors.push('Username is required');
+      errors.push(t('auth.validation.usernameRequired'));
     } else if (username.length < 3) {
-      errors.push('Username must be at least 3 characters');
+      errors.push(t('auth.validation.usernameMinLength'));
     } else if (username.length > 20) {
-      errors.push('Username must be less than 20 characters');
+      errors.push(t('auth.validation.usernameMaxLength'));
     } else if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-      errors.push('Username can only contain letters, numbers, and underscores');
+      errors.push(t('auth.validation.usernameFormat'));
     }
 
     // Password validation
     if (!password) {
-      errors.push('Password is required');
+      errors.push(t('auth.validation.passwordRequired'));
     } else if (password.length < 6) {
-      errors.push('Password must be at least 6 characters');
+      errors.push(t('auth.validation.passwordMinLength'));
     }
 
     // Confirm password validation
     if (password !== confirmPassword) {
-      errors.push('Passwords do not match');
+      errors.push(t('auth.validation.passwordsNotMatch'));
     }
 
     setValidationErrors(errors);
@@ -99,8 +101,8 @@ const Register: React.FC = () => {
               <path d="M20 8V14M17 11H23" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <h1>Create Account</h1>
-          <p>Start your creative writing journey today</p>
+          <h1>{t('auth.createAccountTitle')}</h1>
+          <p>{t('auth.createAccountSubtitle')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="auth-form">
@@ -120,7 +122,7 @@ const Register: React.FC = () => {
           )}
 
           <div className="auth-form-group">
-            <label htmlFor="email">Email</label>
+            <label htmlFor="email">{t('auth.email')}</label>
             <div className="input-wrapper">
               <svg className="input-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M4 4H20C21.1 4 22 4.9 22 6V18C22 19.1 21.1 20 20 20H4C2.9 20 2 19.1 2 18V6C2 4.9 2.9 4 4 4Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -134,7 +136,7 @@ const Register: React.FC = () => {
                   setEmail(e.target.value);
                   handleInputChange();
                 }}
-                placeholder="your.email@example.com"
+                placeholder={t('auth.emailPlaceholder')}
                 required
                 autoComplete="email"
                 disabled={isLoading}
@@ -143,7 +145,7 @@ const Register: React.FC = () => {
           </div>
 
           <div className="auth-form-group">
-            <label htmlFor="username">Username</label>
+            <label htmlFor="username">{t('auth.username')}</label>
             <div className="input-wrapper">
               <svg className="input-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -157,17 +159,17 @@ const Register: React.FC = () => {
                   setUsername(e.target.value);
                   handleInputChange();
                 }}
-                placeholder="Choose a username"
+                placeholder={t('auth.chooseUsername')}
                 required
                 autoComplete="username"
                 disabled={isLoading}
               />
             </div>
-            <small className="input-hint">3-20 characters, letters, numbers, and underscores only</small>
+            <small className="input-hint">{t('auth.usernameHint')}</small>
           </div>
 
           <div className="auth-form-group">
-            <label htmlFor="password">Password</label>
+            <label htmlFor="password">{t('auth.password')}</label>
             <div className="input-wrapper">
               <svg className="input-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -181,7 +183,7 @@ const Register: React.FC = () => {
                   setPassword(e.target.value);
                   handleInputChange();
                 }}
-                placeholder="Create a secure password"
+                placeholder={t('auth.createSecurePassword')}
                 required
                 autoComplete="new-password"
                 disabled={isLoading}
@@ -191,7 +193,7 @@ const Register: React.FC = () => {
                 className="password-toggle"
                 onClick={() => setShowPassword(!showPassword)}
                 disabled={isLoading}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
               >
                 {showPassword ? (
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -206,11 +208,11 @@ const Register: React.FC = () => {
                 )}
               </button>
             </div>
-            <small className="input-hint">At least 6 characters</small>
+            <small className="input-hint">{t('auth.passwordHint')}</small>
           </div>
 
           <div className="auth-form-group">
-            <label htmlFor="confirmPassword">Confirm Password</label>
+            <label htmlFor="confirmPassword">{t('auth.confirmPassword')}</label>
             <div className="input-wrapper">
               <svg className="input-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M9 11V6C9 4.67392 9.52678 3.40215 10.4645 2.46447C11.4021 1.52678 12.6739 1 14 1C15.3261 1 16.5979 1.52678 17.5355 2.46447C18.4732 3.40215 19 4.67392 19 6V11M5 11H23L21 23H7L5 11Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -223,7 +225,7 @@ const Register: React.FC = () => {
                   setConfirmPassword(e.target.value);
                   handleInputChange();
                 }}
-                placeholder="Confirm your password"
+                placeholder={t('auth.confirmYourPassword')}
                 required
                 autoComplete="new-password"
                 disabled={isLoading}
@@ -235,11 +237,11 @@ const Register: React.FC = () => {
             {isLoading ? (
               <>
                 <Loading size="xs" />
-                Creating account...
+                {t('auth.creatingAccount')}
               </>
             ) : (
               <>
-                <span>Create Account</span>
+                <span>{t('landing.createAccount')}</span>
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
@@ -249,9 +251,9 @@ const Register: React.FC = () => {
         </form>
 
         <div className="auth-footer">
-          <p>Already have an account?</p>
+          <p>{t('auth.alreadyHaveAccount')}</p>
           <Link to="/login" className="auth-link">
-            Sign In
+            {t('landing.signIn')}
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
