@@ -3,7 +3,6 @@ import type { Settings } from '../store/settingsStore';
 
 export interface SettingsSyncResponse {
     functionConfigs: Settings['functionConfigs'];
-    providerCredentials: Settings['providerCredentials'];
     mainLanguage: string;
     subLanguages: string[];
     defaultSubLanguage: string | null;

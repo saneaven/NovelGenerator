@@ -73,22 +73,6 @@
 /* ===== Streaming Indicator ===== */
 .streaming-indicator {
     margin-left: auto;
-    width: 6px;
-    height: 6px;
-    background: var(--color-text-brand);
-    border-radius: var(--border-radius-full);
-    animation: pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse {
-    0%, 100% {
-        opacity: 0.4;
-        transform: scale(0.9);
-    }
-    50% {
-        opacity: 1;
-        transform: scale(1);
-    }
 }
 
 /* ===== Content Area ===== */

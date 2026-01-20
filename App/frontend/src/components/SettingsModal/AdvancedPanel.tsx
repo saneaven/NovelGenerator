@@ -3,12 +3,19 @@ import type { RetryConfig } from '../../store/settingsStore';
 import LLMLogViewer from './LLMLogViewer';
 import ToggleSwitch from '../ToggleSwitch';
 import { TextButton } from '../TextButton';
-import { Refresh, Document } from '../icons';
+import { Refresh, Document, Lock } from '../icons';
+import type { CredentialVaultStatusResponse } from '../../api/credentialsService';
 import './AdvancedPanel.css';
 
 interface AdvancedPanelProps {
     retryConfig: RetryConfig;
     onRetryConfigChange: (config: RetryConfig) => void;
+    serverVaultEnabled: boolean;
+    onServerVaultEnabledChange: (enabled: boolean) => void;
+    vaultStatus: CredentialVaultStatusResponse | null;
+    vaultSyncing: boolean;
+    onVaultRefresh: () => void;
+    onVaultDelete: () => void;
     nativeOutputMode: boolean;
     onNativeOutputModeChange: (enabled: boolean) => void;
     functionCallHistoryLimit: number;
@@ -20,6 +27,12 @@ interface AdvancedPanelProps {
 const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
     retryConfig,
     onRetryConfigChange,
+    serverVaultEnabled,
+    onServerVaultEnabledChange,
+    vaultStatus,
+    vaultSyncing,
+    onVaultRefresh,
+    onVaultDelete,
     nativeOutputMode,
     onNativeOutputModeChange,
     functionCallHistoryLimit,
@@ -189,6 +202,50 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                     <li><strong>503:</strong> Service Unavailable</li>
                     <li><strong>504:</strong> Gateway Timeout</li>
                 </ul>
+            </div>
+
+            {/* Server Credential Vault */}
+            <div className="advanced-settings-card">
+                <h3>Server Credential Vault</h3>
+                <div className="form-field">
+                    <ToggleSwitch
+                        checked={serverVaultEnabled}
+                        onChange={onServerVaultEnabledChange}
+                        label="Encrypt and store API keys on server"
+                        icon={<Lock size="sm" />}
+                    />
+                    <p className="field-hint">
+                        When enabled, API keys are stored encrypted on the server and requests omit <code>api_key</code>.
+                    </p>
+                </div>
+
+                <div className="form-field">
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <TextButton
+                            variant="secondary"
+                            size="sm"
+                            type="button"
+                            onClick={onVaultRefresh}
+                            disabled={vaultSyncing}
+                        >
+                            Refresh status
+                        </TextButton>
+                        <TextButton
+                            variant="secondary"
+                            size="sm"
+                            type="button"
+                            onClick={onVaultDelete}
+                            disabled={vaultSyncing}
+                        >
+                            Delete server-stored keys
+                        </TextButton>
+                    </div>
+                    {vaultStatus && (
+                        <p className="field-hint" style={{ marginTop: 8 }}>
+                            Vault configured: <strong>{vaultStatus.vaultConfigured ? 'Yes' : 'No'}</strong>
+                        </p>
+                    )}
+                </div>
             </div>
 
             {/* Native Output Mode */}

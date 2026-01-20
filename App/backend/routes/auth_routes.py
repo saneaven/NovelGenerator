@@ -60,19 +60,9 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     default_settings = UserSettings(
         id=uuid.uuid4(),
         user_id=new_user.id,
-        active_provider='openrouter',
-        ai_model='gpt-5-mini',
-        providers_config={
-            'openrouter': {'apiKey': ''},
-            'custom': {'baseUrl': '', 'apiKey': ''},
-            'claude': {'apiKey': ''},
-            'gemini': {'apiKey': '', 'baseUrl': None},
-            'openai': {'apiKey': ''}
-        },
-        provider_preferences={},
         main_language='English',
         sub_languages=[],
-        default_sub_language=None
+        default_sub_language=None,
     )
 
     db.add(default_settings)

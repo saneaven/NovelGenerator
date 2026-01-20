@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { BaseModal } from '../BaseModal';
 import { BaseSidebar } from '../BaseSidebar';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useCredentialsStore } from '../../store/credentialsStore';
 import { useSidebarStore } from '../../store/sidebarStore';
-import type { Settings, AIFunctionType } from '../../store/settingsStore';
+import type { ProviderCredentials, Settings, AIFunctionType } from '../../store/settingsStore';
 import CredentialsPanel from './CredentialsPanel';
 import GeneralPanel from './GeneralPanel';
 import LanguagePanel from './LanguagePanel';
@@ -26,7 +27,10 @@ type MainTab = 'profile' | 'credentials' | 'general' | 'imageGen' | 'prompts' | 
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const settingsStore = useSettingsStore();
+  const credentialsStore = useCredentialsStore();
   const [localSettings, setLocalSettings] = useState<Settings>(settingsStore.settings);
+  const [localCredentials, setLocalCredentials] = useState<ProviderCredentials>(credentialsStore.credentials);
+  const [localServerVaultEnabled, setLocalServerVaultEnabled] = useState<boolean>(credentialsStore.serverVaultEnabled);
   const [isSaving, setIsSaving] = useState(false);
   const [mainTab, setMainTab] = useState<MainTab>('profile');
   const [activeFunction, setActiveFunction] = useState<AIFunctionType>('agent');
@@ -38,6 +42,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   useEffect(() => {
     if (isOpen) {
       setLocalSettings(settingsStore.settings);
+      setLocalCredentials(credentialsStore.credentials);
+      setLocalServerVaultEnabled(credentialsStore.serverVaultEnabled);
+      credentialsStore.fetchServerStatus().catch(() => {
+        // Ignore - status is best-effort
+      });
     }
   }, [isOpen, settingsStore.settings]);
 
@@ -46,6 +55,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     try {
       settingsStore.updateSettings(localSettings);
       await settingsStore.saveToServer();
+
+      credentialsStore.setCredentials(localCredentials);
+      credentialsStore.setServerVaultEnabled(localServerVaultEnabled);
+
+      if (localServerVaultEnabled) {
+        await credentialsStore.pushToServerIfEnabled();
+      } else {
+        // Turning off server vault implies no server-side storage.
+        await credentialsStore.deleteServerCredentials();
+      }
       onClose();
     } catch (error) {
       console.error('Failed to save settings:', error);
@@ -57,6 +76,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
   const handleCancel = () => {
     setLocalSettings(settingsStore.settings);
+    setLocalCredentials(credentialsStore.credentials);
+    setLocalServerVaultEnabled(credentialsStore.serverVaultEnabled);
     onClose();
   };
 
@@ -243,17 +264,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
         {mainTab === 'credentials' && (
           <CredentialsPanel
-            credentials={localSettings.providerCredentials}
-            onChange={(credentials) =>
-              setLocalSettings({ ...localSettings, providerCredentials: credentials })
-            }
+            credentials={localCredentials}
+            onChange={setLocalCredentials}
           />
         )}
 
         {mainTab === 'general' && (
           <GeneralPanel
             functionConfigs={localSettings.functionConfigs}
-            credentials={localSettings.providerCredentials}
+            credentials={localCredentials}
+            serverVaultEnabled={localServerVaultEnabled}
             activeFunction={activeFunction}
             onFunctionChange={setActiveFunction}
             onConfigChange={(functionType, config) =>
@@ -314,6 +334,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             onRetryConfigChange={(config) =>
               setLocalSettings(prev => ({ ...prev, retryConfig: config }))
             }
+            serverVaultEnabled={localServerVaultEnabled}
+            onServerVaultEnabledChange={setLocalServerVaultEnabled}
+            vaultStatus={credentialsStore.serverStatus}
+            vaultSyncing={credentialsStore.isSyncing}
+            onVaultRefresh={() => credentialsStore.fetchServerStatus()}
+            onVaultDelete={() => credentialsStore.deleteServerCredentials()}
             nativeOutputMode={localSettings.nativeOutputMode}
             onNativeOutputModeChange={(enabled) =>
               setLocalSettings(prev => ({ ...prev, nativeOutputMode: enabled }))

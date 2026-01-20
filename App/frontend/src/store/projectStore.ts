@@ -21,6 +21,7 @@ interface ProjectStore {
   // Actions
   fetchProjects: () => Promise<void>;
   createProject: (name: string, description: string, mainLanguage: string) => Promise<Project>;
+  importProject: (file: File) => Promise<Project>;
   deleteProject: (id: string) => Promise<void>;
   updateProject: (id: string, updates: { name?: string; description?: string }) => Promise<void>;
   setCurrentProject: (id: string | null) => void;
@@ -61,6 +62,24 @@ export const useProjectStore = create<ProjectStore>()((set, get) => ({
       set({
         isLoading: false,
         error: error instanceof Error ? error.message : 'Failed to create project',
+      });
+      throw error;
+    }
+  },
+
+  importProject: async (file: File) => {
+    set({ isLoading: true, error: null });
+    try {
+      const importedProject = await projectService.importProject(file);
+      set((state) => ({
+        projects: [...state.projects, importedProject],
+        isLoading: false,
+      }));
+      return importedProject;
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to import project',
       });
       throw error;
     }

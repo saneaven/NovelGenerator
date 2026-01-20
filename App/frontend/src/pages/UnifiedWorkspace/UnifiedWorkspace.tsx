@@ -106,9 +106,10 @@ const UnifiedWorkspace: React.FC = () => {
   // Error handling
   const { currentError, showError, hideError } = useErrorStore();
 
-  // UI stores
-  const agentUI = useAgentUIStore();
-  const isAgentVisibleState = agentUI.agentVisibleByProject[projectId ?? ''] ?? false;
+  // UI stores - use selector to avoid re-renders when other agentUIStore properties change
+  const isAgentVisibleState = useAgentUIStore(
+    (state) => state.agentVisibleByProject[projectId ?? ''] ?? false
+  );
   const sidebarStore = useSidebarStore();
 
   // Desktop/mobile detection
@@ -500,9 +501,9 @@ const UnifiedWorkspace: React.FC = () => {
         isAgentVisible={isAgentVisible}
         onAgentToggle={() => {
           if (isAgentVisible) {
-            agentUI.setAgentVisible(projectId ?? '', false);
+            useAgentUIStore.getState().setAgentVisible(projectId ?? '', false);
           } else {
-            agentUI.toggleAgentVisible(projectId ?? '');
+            useAgentUIStore.getState().toggleAgentVisible(projectId ?? '');
           }
           sidebarStore.closeSidebar(projectId ?? '');
         }}

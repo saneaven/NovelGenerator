@@ -148,9 +148,6 @@ export interface ImageGenConfig {
 
 // Main settings interface
 export interface Settings {
-    // Shared provider credentials
-    providerCredentials: ProviderCredentials;
-
     // Per-function complete configurations
     functionConfigs: {
         [K in AIFunctionType]: FunctionAIConfig;
@@ -188,31 +185,6 @@ export interface Settings {
 
 // Default settings
 const defaultSettings: Settings = {
-    providerCredentials: {
-        openai: {
-            apiKey: '',
-        },
-        gemini: {
-            apiKey: '',
-        },
-        claude: {
-            apiKey: '',
-        },
-        openrouter: {
-            apiKey: '',
-        },
-        custom: {
-            baseUrl: '',
-            apiKey: '',
-        },
-        xai: {
-            apiKey: '',
-        },
-        novelai: {
-            apiKey: '',
-        },
-    },
-
     functionConfigs: {
         // Agent: Fast and cheap for conversation
         agent: {
@@ -342,9 +314,6 @@ interface SettingsStore {
     loadFromServer: () => Promise<void>;
     saveToServer: () => Promise<void>;
 
-    // Provider credentials setters
-    setProviderCredential: (provider: ProviderType, credentials: any) => void;
-
     // Function config setters
     setFunctionConfig: (functionType: AIFunctionType, config: FunctionAIConfig) => void;
     setFunctionProvider: (functionType: AIFunctionType, provider: ProviderType) => void;
@@ -355,7 +324,6 @@ interface SettingsStore {
 
     // Getters
     getFunctionConfig: (functionType: AIFunctionType) => FunctionAIConfig;
-    getProviderConfig: (provider: ProviderType) => any;
 
     // Image generation config setters
     setImageGenConfig: (config: Partial<ImageGenConfig>) => void;
@@ -413,10 +381,6 @@ const mergeWithDefaults = (stored: any): Settings => {
     }
 
     return {
-        providerCredentials: {
-            ...defaultSettings.providerCredentials,
-            ...stored.providerCredentials,
-        },
         functionConfigs: {
             ...defaultSettings.functionConfigs,
             ...migratedFunctionConfigs,
@@ -491,19 +455,6 @@ export const useSettingsStore = create<SettingsStore>()(
                     console.error('Failed to save settings to server:', error);
                     throw error;
                 }
-            },
-
-            // Provider credentials
-            setProviderCredential: (provider, credentials) => {
-                set((state) => ({
-                    settings: {
-                        ...state.settings,
-                        providerCredentials: {
-                            ...state.settings.providerCredentials,
-                            [provider]: credentials,
-                        },
-                    },
-                }));
             },
 
             // Function configuration
@@ -604,10 +555,6 @@ export const useSettingsStore = create<SettingsStore>()(
             // Getters
             getFunctionConfig: (functionType) => {
                 return get().settings.functionConfigs[functionType];
-            },
-
-            getProviderConfig: (provider) => {
-                return get().settings.providerCredentials[provider];
             },
 
             // Image generation config

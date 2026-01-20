@@ -12,10 +12,6 @@
     justify-content: center;
 }
 
-.loading-indicator {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-tertiary);
-}
 
 /* Content Area - relative for positioning */
 .template-editor__content {
@@ -81,20 +77,6 @@
     cursor: not-allowed;
 }
 
-.template-editor__fab-spinner {
-    width: 20px;
-    height: 20px;
-    border: 2px solid currentColor;
-    border-top-color: transparent;
-    border-radius: var(--border-radius-full);
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    to {
-        transform: rotate(360deg);
-    }
-}
 
 /* Responsive */
 @media (max-width: 768px) {

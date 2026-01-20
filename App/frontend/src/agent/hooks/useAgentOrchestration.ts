@@ -211,6 +211,29 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     }
   }, [projectId, getSelectedAgentId, deleteMessage]);
 
+  const triggerAutoContinue = useCallback(async () => {
+    if (!projectId) return;
+    if (useAgentUIStore.getState().isLoading(projectId)) return;
+
+    const agentId = getSelectedAgentId(projectId);
+    if (!agentId) return;
+
+    useAgentUIStore.getState().setLoading(projectId, true);
+
+    // Empty userInput - tool results are already in the message history
+    void AgentExecutor.start(
+      {
+        projectId,
+        agentId,
+        mode,
+        userInput: '',
+        outputLanguage: mainLanguage,
+        contextObjectIds: selectedContextIds,
+      },
+      (sessionId) => setActiveSessionId(sessionId)
+    );
+  }, [projectId, getSelectedAgentId, mode, mainLanguage, selectedContextIds]);
+
   const agentHandlers: AgentHandlersReturn = {
     editTextareaRef,
     handleSelectAgent,
@@ -221,6 +244,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     handleSaveEdit,
     handleCancelEdit,
     handleDeleteMessage,
+    triggerAutoContinue,
   };
 
   return {

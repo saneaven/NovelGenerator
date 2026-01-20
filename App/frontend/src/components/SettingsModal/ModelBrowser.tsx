@@ -11,6 +11,7 @@ interface ModelBrowserProps {
   currentModel: string;
   providerPreference?: ProviderPreference;
   credentials: ProviderCredentials;
+  serverVaultEnabled?: boolean;
   onSelectModel: (modelId: string) => void;
   onUpdateProviderPreference: (pref?: ProviderPreference) => void;
   autoExpand?: boolean;
@@ -236,6 +237,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
   currentModel,
   providerPreference,
   credentials,
+  serverVaultEnabled = false,
   onSelectModel,
   onUpdateProviderPreference,
   autoExpand = false,
@@ -268,7 +270,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
       const config: any = {};
       const providerCreds = credentials[provider];
 
-      if ('apiKey' in providerCreds && providerCreds.apiKey) {
+      if (!serverVaultEnabled && 'apiKey' in providerCreds && providerCreds.apiKey) {
         config.apiKey = providerCreds.apiKey;
       }
       if ('baseUrl' in providerCreds && providerCreds.baseUrl) {
@@ -336,7 +338,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
     }
 
     const apiKey = credentials.openrouter.apiKey;
-    if (!apiKey) {
+    if (!serverVaultEnabled && !apiKey) {
       console.error('OpenRouter API key not configured');
       return;
     }
@@ -344,7 +346,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
     setLoadingEndpoints(prev => ({ ...prev, [modelId]: true }));
 
     try {
-      const data = await fetchModelEndpoints(canonicalSlug, apiKey);
+      const data = await fetchModelEndpoints(canonicalSlug, serverVaultEnabled ? undefined : apiKey);
       setModelEndpoints(prev => ({ ...prev, [modelId]: data }));
     } catch (error) {
       console.error('Failed to fetch model endpoints:', error);

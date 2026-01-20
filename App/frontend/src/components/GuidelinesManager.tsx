@@ -18,6 +18,7 @@ import { DropdownMenu, DropdownItem } from './ui/DropdownMenu';
 import { IconButton } from './IconButton';
 import { TextButton } from './TextButton';
 import { Edit, Refresh, Books, AIAssist, Warning, MoreHorizontal, Save, Close } from './icons';
+import { Loading } from './common/Loading';
 import type { GuidelinesObject, GuidelinesData } from '../types/unifiedObject';
 
 interface GuidelinesManagerProps {
@@ -171,10 +172,10 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
   };
 
   if (!projectId) return <div className="error-container">Project ID not found.</div>;
-  if (loading && !guidelines) return <div className="guidelines-skeleton"><div className="spinner" /></div>;
+  if (loading && !guidelines) return <Loading size="lg" fullPage />;
   if (error) return <div className="error-container"><p>{error}</p><button onClick={() => guidelinesId && fetchObject('guidelines', guidelinesId)}>Retry</button></div>;
   if (initializationError && !guidelines) return <div className="error-container"><p>{initializationError}</p><button onClick={initializeGuidelines} disabled={initializing}>Retry</button></div>;
-  if (initializing && !guidelines) return <div className="guidelines-skeleton"><div className="spinner" /></div>;
+  if (initializing && !guidelines) return <Loading size="lg" fullPage />;
   if (!guidelines) return <div className="error-container">Guidelines not found.</div>;
 
   return (

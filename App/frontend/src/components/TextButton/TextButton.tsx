@@ -1,4 +1,5 @@
 import React, { forwardRef } from 'react';
+import { Loading } from '../common/Loading';
 import './TextButton.css';
 
 export interface TextButtonProps {
@@ -57,11 +58,7 @@ const TextButton = forwardRef<HTMLButtonElement, TextButtonProps>(
         title={title}
         form={form}
       >
-        {loading && (
-          <span className="text-button__spinner">
-            <span className="text-button__spinner-ring" />
-          </span>
-        )}
+        {loading && <Loading size="xs" className="text-button__spinner" />}
         {iconLeft && !loading && (
           <span className="text-button__icon text-button__icon--left">
             {iconLeft}

@@ -47,6 +47,7 @@ import ManuscriptEditor, { type ManuscriptEditorRef } from './ManuscriptEditor';
 import { Save, Check, Bullet, Warning, HamburgerMenu, AIAssist, Refresh, Globe, Lightbulb, MoreHorizontal, Clock } from '../../../components/icons';
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
+import { Loading } from '../../../components/common/Loading';
 import './NovelEditorPanel.css';
 
 interface NovelEditorPanelProps {
@@ -596,8 +597,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   if (isResolvingContentId) {
     return (
       <div className="novel-editor-panel loading">
-        <div className="spinner" />
-        <p>Loading chapter content...</p>
+        <Loading size="lg" text="Loading chapter content..." />
       </div>
     );
   }
@@ -614,7 +614,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   if (loading && !manuscript) {
     return (
       <div className="novel-editor-panel loading">
-        <div className="spinner" />
+        <Loading size="lg" />
         <p>Loading manuscript...</p>
         <p style={{ fontSize: '0.875rem', color: 'var(--color-text-tertiary)', marginTop: '0.5rem' }}>
           Manuscript ID: {manuscriptId}

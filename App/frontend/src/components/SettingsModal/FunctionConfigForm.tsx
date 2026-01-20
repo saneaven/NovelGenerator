@@ -16,6 +16,7 @@ interface FunctionConfigFormProps {
   functionType: AIFunctionType;
   config: FunctionAIConfig;
   credentials: ProviderCredentials;
+  serverVaultEnabled: boolean;
   onChange: (config: FunctionAIConfig) => void;
 }
 
@@ -23,6 +24,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
   functionType,
   config,
   credentials,
+  serverVaultEnabled,
   onChange,
 }) => {
   const [showModelBrowser, setShowModelBrowser] = useState(false);
@@ -191,6 +193,7 @@ const FunctionConfigForm: React.FC<FunctionConfigFormProps> = ({
               currentModel={config.model}
               providerPreference={config.providerPreference}
               credentials={credentials}
+              serverVaultEnabled={serverVaultEnabled}
               onSelectModel={handleModelChange}
               onUpdateProviderPreference={(pref) =>
                 onChange({ ...config, providerPreference: pref })

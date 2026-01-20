@@ -462,9 +462,9 @@
 
 
     /* Neutral Scale - Inverted for dark */
-    --color-neutral-00: oklch(0.050 0.001 55.0);
-    --color-neutral-50: oklch(0.100 0.001 55.0);
-    --color-neutral-100: oklch(0.180 0.002 55.0);
+    --color-neutral-0: oklch(0.050 0.001 55.0);
+    --color-neutral-50: oklch(0.160 0.001 55.0);
+    --color-neutral-100: oklch(0.220 0.002 55.0);
     --color-neutral-200: oklch(0.260 0.003 55.0);
     --color-neutral-300: oklch(0.340 0.005 55.0);
     --color-neutral-400: oklch(0.420 0.006 55.0);
@@ -500,11 +500,11 @@
     --color-feedback-error-contrast: var(--color-error-100);
 
     /* ===== Surface Colors - Dark Backgrounds ===== */
-    --color-surface-base: var(--color-neutral-100);
+    --color-surface-base: var(--color-neutral-50);
+    --color-surface-subtle: var(--color-neutral-100);
     --color-surface-elevated: var(--color-neutral-200);
     --color-surface-overlay: var(--color-neutral-400);
-    --color-surface-subtle: var(--color-neutral-300);
-    --color-surface-muted: var(--color-neutral-50);
+    --color-surface-muted: var(--color-neutral-0);
     --color-surface-hover: var(--color-neutral-400);
 
     /* ===== Text Colors - Light on Dark ===== */
@@ -519,11 +519,11 @@
     --color-text-overlay: var(--color-neutral-900);
 
     /* ===== Border Colors - Subtle on Dark ===== */
-    --color-border-subtle: var(--color-neutral-300);
-    --color-border-default: var(--color-neutral-400);
-    --color-border-medium: var(--color-neutral-500);
-    --color-border-strong: var(--color-neutral-600);
-    --color-border-focus: var(--color-primary-700);
+    --color-border-subtle: var(--color-neutral-200);
+    --color-border-default: var(--color-neutral-300);
+    --color-border-medium: var(--color-neutral-400);
+    --color-border-strong: var(--color-neutral-500);
+    --color-border-focus: var(--color-primary-600);
 
     /* ===== Gradients - Adjusted for Dark Mode ===== */
     --gradient-primary: linear-gradient(in oklch 135deg, var(--color-primary-200) 0%, var(--color-primary-300) 100%);

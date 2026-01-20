@@ -1,9 +1,11 @@
 import React, { forwardRef } from 'react';
+import { Loading } from '../common/Loading';
 import './IconButton.css';
 
 export interface IconButtonProps {
   icon: React.ReactNode;
   onClick?: React.MouseEventHandler<HTMLButtonElement>;
+  type?: 'button' | 'submit' | 'reset';
   title?: string;
   ariaLabel?: string;
   ariaExpanded?: boolean;
@@ -21,6 +23,7 @@ const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
     {
       icon,
       onClick,
+      type = 'button',
       title,
       ariaLabel,
       ariaExpanded,
@@ -48,6 +51,7 @@ const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
     return (
       <button
         ref={ref}
+        type={type}
         className={buttonClasses}
         onClick={onClick}
         title={title}
@@ -57,11 +61,7 @@ const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
       >
         <span className="icon-button__icon">
           {icon}
-          {showSpinner && (
-            <span className="icon-button__spinner">
-              <span className="icon-button__spinner-ring" />
-            </span>
-          )}
+          {showSpinner && <Loading size="xs" className="icon-button__spinner" />}
           {showDot && !showSpinner && <span className="icon-button__dot" />}
         </span>
       </button>

@@ -34,21 +34,6 @@
     color: var(--color-text-secondary);
 }
 
-.image-preview-spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid var(--color-border);
-    border-top-color: var(--color-primary);
-    border-radius: 50%;
-    animation: image-preview-spin 0.8s linear infinite;
-}
-
-@keyframes image-preview-spin {
-    to {
-        transform: rotate(360deg);
-    }
-}
-
 .image-preview-error {
     color: var(--color-error);
 }

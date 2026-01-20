@@ -1,7 +1,14 @@
 import { type ConversationBlock, type ThinkingDetail, type TokenUsage } from "./requestTypes";
 import { type ProviderType, type ProviderConfig, type ProviderPreference, type ThinkingConfig, type RetryConfig, type CustomApiFormat } from "../store/settingsStore";
 
-const API_BASE = `http://${window.location.hostname}:8000/api/v1`;
+import { apiClient, API_BASE_URL } from "../api/client";
+
+const API_BASE = `${API_BASE_URL}/api/v1`;
+
+function getAuthHeaders(): HeadersInit {
+    const token = apiClient.getAuthToken();
+    return token ? { "Authorization": `Bearer ${token}` } : {};
+}
 
 /**
  * Sleep utility for retry delays
@@ -126,7 +133,7 @@ export async function* streamLLM(
             // 1. Make fetch request
             res = await fetch(endpoint, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", ...getAuthHeaders() },
                 body: JSON.stringify(requestBody),
                 signal: opts?.signal,
             });
@@ -368,7 +375,7 @@ export async function fetchModels(
 
     const response = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify(backendConfig)
     });
 
@@ -390,7 +397,7 @@ export async function fetchProviders(): Promise<any>
 
     const response = await fetch(endpoint, {
         method: "GET",
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() }
     });
 
     if (!response.ok)
@@ -406,16 +413,21 @@ export async function fetchProviders(): Promise<any>
  */
 export async function fetchModelEndpoints(
     canonicalSlug: string,
-    apiKey: string
+    apiKey?: string
 ): Promise<any>
 {
-    const endpoint = `https://openrouter.ai/api/v1/models/${canonicalSlug}/endpoints`;
+    // If apiKey is provided, use direct OpenRouter call (non-vault mode).
+    // If not, use backend proxy which resolves the key from the encrypted vault.
+    const useProxy = !apiKey;
+    const endpoint = useProxy
+        ? `${API_BASE}/openrouter/models/${canonicalSlug}/endpoints`
+        : `https://openrouter.ai/api/v1/models/${canonicalSlug}/endpoints`;
 
     const response = await fetch(endpoint, {
         method: "GET",
         headers: {
-            "Authorization": `Bearer ${apiKey}`,
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            ...(useProxy ? getAuthHeaders() : { "Authorization": `Bearer ${apiKey}` }),
         }
     });
 

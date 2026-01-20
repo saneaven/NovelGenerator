@@ -2,7 +2,7 @@ import type { FunctionCallStatus, FunctionCallFailureType, ApplicationResult } f
 
 export type Role = "system" | "user" | "assistant" | "tool_results";
 
-export type ContentPartType = "content" | "thinking" | "error";
+export type ContentPartType = "content" | "thinking";
 
 export interface ContentPart {
   type: ContentPartType;

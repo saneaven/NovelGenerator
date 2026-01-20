@@ -11,6 +11,7 @@
 import { useAgentStore } from '../store/agentStore';
 import { useAgentUIStore } from '../store/agentUIStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useCredentialsStore } from '../store/credentialsStore';
 import { useLLMSessionStore } from '../store/llmSessionStore';
 import { startLLMSession } from '../llmSession';
 import { LLMTaskMode, type AgentWorkspacePromptContext, type AgentTranslationPromptContext, createEmptyUserHistory } from '../llm';
@@ -74,11 +75,12 @@ export const AgentExecutor = {
   async start(input: AgentExecutorInput, onSessionCreated?: (sessionId: string) => void): Promise<string> {
     const agentStore = useAgentStore.getState();
     const settingsStore = useSettingsStore.getState();
+    const credentialsStore = useCredentialsStore.getState();
     const sessionStore = useLLMSessionStore.getState();
 
     const settings = settingsStore.settings;
     const agentConfig = settingsStore.getFunctionConfig('agent');
-    const providerConfig = settingsStore.getProviderConfig(agentConfig.provider);
+    const providerConfig = credentialsStore.getProviderConfigForBackend(agentConfig.provider);
 
     const userInput = input.userInput ?? '';
     const language = input.outputLanguage;
@@ -223,10 +225,11 @@ export const AgentExecutor = {
   async translate(input: AgentTranslationInput, onSessionCreated?: (sessionId: string) => void): Promise<string> {
     const agentStore = useAgentStore.getState();
     const settingsStore = useSettingsStore.getState();
+    const credentialsStore = useCredentialsStore.getState();
     const sessionStore = useLLMSessionStore.getState();
 
     const translationConfig = settingsStore.getFunctionConfig('translation');
-    const providerConfig = settingsStore.getProviderConfig(translationConfig.provider);
+    const providerConfig = credentialsStore.getProviderConfigForBackend(translationConfig.provider);
 
     const promptContext: AgentTranslationPromptContext = {
       projectId: input.projectId,

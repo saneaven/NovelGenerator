@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../store/projectStore';
 import './Home.css';
@@ -7,17 +7,21 @@ import { useSettingsStore } from '../store/settingsStore';
 import { getAssetUrl } from '../utils/assetUrl';
 import SettingsModal from '../components/SettingsModal/SettingsModal';
 import { IconButton } from '../components/IconButton';
-import { Settings, Logout, Close, Plus } from '../components/icons';
+import { Settings, Logout, Close, Plus, Upload } from '../components/icons';
+import { Loading } from '../components/common/Loading';
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
-  const { projects, createProject, deleteProject, setCurrentProject, fetchProjects, isLoading, error } = useProjectStore();
+  const { projects, createProject, importProject, deleteProject, setCurrentProject, fetchProjects, isLoading, error } =
+    useProjectStore();
   const { logout, user } = useAuthStore();
   const { settings } = useSettingsStore();
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [projectName, setProjectName] = useState('');
   const [projectDescription, setProjectDescription] = useState('');
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   // Fetch projects on mount and when returning to page
   useEffect(() => {
@@ -73,13 +77,36 @@ const Home: React.FC = () => {
     }
   };
 
+  const handleImportClick = () => {
+    importInputRef.current?.click();
+  };
+
+  const handleImportFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    if (file.name && !file.name.toLowerCase().endsWith('.nbproj')) {
+      alert('Please select a .nbproj file.');
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      const imported = await importProject(file);
+      setCurrentProject(imported.id);
+      navigate(`/project/${imported.id}`);
+    } catch (err) {
+      console.error('Failed to import project:', err);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   if (isLoading && projects.length === 0) {
     return (
       <div className="home-layout loading">
-        <div className="loading-spinner">
-          <div className="spinner-ring"></div>
-          <p>Loading your library...</p>
-        </div>
+        <Loading fullPage text="Loading your library..." />
       </div>
     );
   }
@@ -120,13 +147,30 @@ const Home: React.FC = () => {
 
         <div className="controls-bar">
           <h2 className="section-title">Library</h2>
-          <button 
-            className="btn-create-project" 
-            onClick={() => setShowCreateForm(true)}
-          >
-            <Plus size="md" />
-            <span>New Project</span>
-          </button>
+          <div className="controls-actions">
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".nbproj"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                void handleImportFileSelected(e);
+              }}
+            />
+            <button
+              className="btn-import-project"
+              onClick={handleImportClick}
+              disabled={isImporting || isLoading}
+              title="Import a .nbproj archive"
+            >
+              <Upload size="md" />
+              <span>{isImporting ? 'Importing...' : 'Import Project'}</span>
+            </button>
+            <button className="btn-create-project" onClick={() => setShowCreateForm(true)} disabled={isLoading}>
+              <Plus size="md" />
+              <span>New Project</span>
+            </button>
+          </div>
         </div>
 
         <div className="projects-grid">

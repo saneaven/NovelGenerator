@@ -4,6 +4,7 @@ import { assetService, type Asset } from '../../api/assetService';
 import { getAssetUrl } from '../../utils/assetUrl';
 import { useProjectStore } from '../../store/projectStore';
 import { TextButton } from '../TextButton';
+import { Loading } from '../common/Loading';
 import './ImagePreviewModal.css';
 
 interface ImagePreviewModalProps {
@@ -57,8 +58,7 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
             <div className="image-preview-content">
                 {isLoading && (
                     <div className="image-preview-loading">
-                        <div className="image-preview-spinner" />
-                        <span>Loading image...</span>
+                        <Loading size="lg" text="Loading image..." />
                     </div>
                 )}
                 {error && (

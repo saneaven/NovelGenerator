@@ -106,6 +106,7 @@ export const FunctionCallCardContainer: React.FC<FunctionCallCardContainerProps>
   cards = [],
   streamingProgress = [],
   onConfirm,
+  onConfirmAndPause,
   projectId,
   isApplyDisabled = false,
   applyDisabledReason,
@@ -174,6 +175,16 @@ export const FunctionCallCardContainer: React.FC<FunctionCallCardContainerProps>
       setIsConfirming(false);
     }
   }, [onConfirm, isConfirming, isPending, selections]);
+
+  const handleConfirmAndPause = useCallback(async () => {
+    if (!onConfirmAndPause || isConfirming || !isPending) return;
+    setIsConfirming(true);
+    try {
+      await onConfirmAndPause(selections);
+    } finally {
+      setIsConfirming(false);
+    }
+  }, [onConfirmAndPause, isConfirming, isPending, selections]);
 
   if (isStreaming && streamingProgress.length === 0) return null;
   if (!isStreaming && cards.length === 0) return null;
@@ -289,14 +300,26 @@ export const FunctionCallCardContainer: React.FC<FunctionCallCardContainerProps>
               <span className="function-call-card__footer-warning">{applyDisabledReason}</span>
             )}
           </div>
-          <button
-            type="button"
-            className="function-call-btn function-call-btn--primary"
-            onClick={handleConfirm}
-            disabled={isConfirming || isApplyDisabled}
-          >
-            {isConfirming ? 'Applying…' : 'Confirm'}
-          </button>
+          <div className="function-call-card__footer-buttons">
+            {onConfirmAndPause && (
+              <button
+                type="button"
+                className="function-call-btn function-call-btn--secondary"
+                onClick={handleConfirmAndPause}
+                disabled={isConfirming || isApplyDisabled}
+              >
+                {isConfirming ? 'Applying…' : 'Confirm & Pause'}
+              </button>
+            )}
+            <button
+              type="button"
+              className="function-call-btn function-call-btn--primary"
+              onClick={handleConfirm}
+              disabled={isConfirming || isApplyDisabled}
+            >
+              {isConfirming ? 'Applying…' : 'Confirm'}
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { Loading } from '../components/common/Loading';
 import './Landing.css';
 
 const Landing: React.FC = () => {
@@ -18,7 +19,7 @@ const Landing: React.FC = () => {
   if (isChecking) {
     return (
       <div className="landing-container">
-        <div className="landing-spinner"></div>
+        <Loading size="lg" />
       </div>
     );
   }

@@ -249,7 +249,7 @@ export interface AgentResponse extends BaseMetadata {
 }
 
 export interface ContentPart {
-  type: 'content' | 'thinking' | 'error';
+  type: 'content' | 'thinking';
   text: string;
 }
 

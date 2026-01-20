@@ -53,14 +53,6 @@
   }
 }
 
-@keyframes notification-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
 
 /* ===== Notification Header (Thin Floating Card) ===== */
 .notification-header {
@@ -306,22 +298,6 @@
 .notification-icon--cancelled {
   background: var(--color-text-muted);
   color: white;
-}
-
-/* Spinner */
-.notification-spinner {
-  width: 18px;
-  height: 18px;
-  position: relative;
-}
-
-.notification-spinner-ring {
-  width: 100%;
-  height: 100%;
-  border: 2px solid var(--color-border-default);
-  border-top-color: var(--color-info);
-  border-radius: 50%;
-  animation: notification-spin 0.8s linear infinite;
 }
 
 /* Text content */

@@ -8,6 +8,7 @@ export interface FunctionCallCardContainerProps {
   cards?: EditCard[];
   streamingProgress?: FunctionCallProgress[];
   onConfirm?: (selections: Record<string, boolean>) => Promise<void>;
+  onConfirmAndPause?: (selections: Record<string, boolean>) => Promise<void>;
   projectId: string;
   isApplyDisabled?: boolean;
   applyDisabledReason?: string;

@@ -127,6 +127,25 @@ class UserSettings(Base):
 
 
 # ============================================================================
+# USER CREDENTIAL VAULT (ENCRYPTED)
+# ============================================================================
+
+class UserCredentials(Base):
+    """Encrypted credentials (API keys) stored server-side (never returned in plaintext)"""
+    __tablename__ = "user_credentials"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
+
+    # Encrypted blob (Fernet token) containing ProviderCredentials JSON
+    provider_credentials_enc = Column(Text, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    user = relationship("User")
+
+# ============================================================================
 # PROMPT PRESETS
 # ============================================================================
 

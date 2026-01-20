@@ -13,11 +13,11 @@ interface WorkspaceTabsSidebarProps {
 
 const storyObjectTabs: { id: StoryObjectTabType; label: string; icon: React.ReactNode }[] = [
   { id: 'basicInfo', label: 'Basic Info', icon: <Clipboard size="md" /> },
+  { id: 'guidelines', label: 'Guidelines', icon: <Document size="md" /> },
   { id: 'characters', label: 'Characters', icon: <People size="md" /> },
   { id: 'organizations', label: 'Organizations', icon: <Organization size="md" /> },
   { id: 'locations', label: 'Locations', icon: <Map size="md" /> },
   { id: 'lorebook', label: 'Lorebook', icon: <Books size="md" /> },
-  { id: 'outline', label: 'Outline', icon: <Document size="md" /> },
 ];
 
 const WorkspaceTabsSidebar: React.FC<WorkspaceTabsSidebarProps> = ({

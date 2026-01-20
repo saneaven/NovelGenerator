@@ -564,14 +564,6 @@
   color: var(--color-text-secondary);
 }
 
-.ai-streaming-spinner {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: 3px solid var(--color-border-medium);
-  border-top-color: var(--color-brand-primary);
-  animation: spin 1s linear infinite;
-}
 
 .status-pill {
   font-size: var(--font-size-sm);

@@ -1,0 +1,160 @@
+/* ========================================
+   UNIFIED LOADING COMPONENT
+   ======================================== */
+
+.loading {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.loading--fullpage {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-lg);
+  background-color: var(--color-surface-base);
+  z-index: var(--z-modal);
+}
+
+/* ===== Size Variants ===== */
+/* xs: 12px, sm: 16px, md: 24px, lg: 32px */
+
+.loading--xs .loading-spinner,
+.loading--xs .loading-pulse {
+  width: 12px;
+  height: 12px;
+}
+
+.loading--sm .loading-spinner,
+.loading--sm .loading-pulse {
+  width: 16px;
+  height: 16px;
+}
+
+.loading--md .loading-spinner,
+.loading--md .loading-pulse {
+  width: 24px;
+  height: 24px;
+}
+
+.loading--lg .loading-spinner,
+.loading--lg .loading-pulse {
+  width: 32px;
+  height: 32px;
+}
+
+/* Dots sizing */
+.loading--xs .loading-dot {
+  width: 4px;
+  height: 4px;
+}
+
+.loading--sm .loading-dot {
+  width: 5px;
+  height: 5px;
+}
+
+.loading--md .loading-dot {
+  width: 6px;
+  height: 6px;
+}
+
+.loading--lg .loading-dot {
+  width: 8px;
+  height: 8px;
+}
+
+/* ===== Spinner Variant ===== */
+.loading-spinner {
+  border: 2px solid var(--color-border-default);
+  border-top-color: var(--color-brand-primary);
+  border-radius: 50%;
+  animation: loading-spin 0.8s linear infinite;
+}
+
+.loading--lg .loading-spinner {
+  border-width: 3px;
+}
+
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ===== Dots Variant ===== */
+.loading-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.loading-dot {
+  background-color: var(--color-brand-primary);
+  border-radius: 50%;
+  animation: loading-bounce 1.4s ease-in-out infinite both;
+}
+
+.loading-dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.loading-dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+.loading-dot:nth-child(3) {
+  animation-delay: 0s;
+}
+
+@keyframes loading-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ===== Pulse Variant ===== */
+.loading-pulse {
+  background-color: var(--color-brand-primary);
+  border-radius: 50%;
+  animation: loading-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes loading-pulse {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ===== Text ===== */
+.loading-text {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.loading--fullpage .loading-text {
+  font-size: var(--font-size-base);
+}
+
+/* ===== Reduced Motion ===== */
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner,
+  .loading-dot,
+  .loading-pulse {
+    animation-duration: 2s;
+  }
+}

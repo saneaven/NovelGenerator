@@ -148,6 +148,7 @@
   font-family: inherit;
   line-height: var(--line-height-normal);
   resize: none;
+  field-sizing: content;
   min-height: 3rem;
   max-height: 10rem;
   background: var(--color-surface-base);

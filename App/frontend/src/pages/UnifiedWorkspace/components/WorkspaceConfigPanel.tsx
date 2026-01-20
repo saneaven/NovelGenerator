@@ -8,8 +8,14 @@ import {
   type ImageCleanupPolicy,
   type ImageCleanupPreviewResponse,
 } from '../../../api/assetService';
+import {
+  projectService,
+  type ProjectExportOptions,
+  type ProjectExportPreviewResponse,
+  type ProjectExportPreviewAssetItem,
+} from '../../../api/projectService';
 import { useErrorStore } from '../../../store/errorStore';
-import { List, Trash, Refresh } from '../../../components/icons';
+import { List, Trash, Refresh, Download } from '../../../components/icons';
 import './WorkspaceConfigPanel.css';
 
 interface WorkspaceConfigPanelProps {
@@ -24,6 +30,7 @@ const DEFAULT_POLICY: ImageCleanupPolicy = {
 };
 
 const STORAGE_KEY_PREFIX = 'workspace_image_cleanup_policy_';
+const EXPORT_STORAGE_KEY_PREFIX = 'workspace_project_export_options_';
 
 function loadPolicy(projectId: string): ImageCleanupPolicy {
   try {
@@ -33,6 +40,24 @@ function loadPolicy(projectId: string): ImageCleanupPolicy {
     return { ...DEFAULT_POLICY, ...parsed };
   } catch {
     return DEFAULT_POLICY;
+  }
+}
+
+const DEFAULT_EXPORT_OPTIONS: ProjectExportOptions = {
+  include_images: true,
+  image_scope: 'used_only',
+  include_non_main_story_object_images: false,
+  treat_generation_reference_images_as_used: true,
+};
+
+function loadExportOptions(projectId: string): ProjectExportOptions {
+  try {
+    const raw = localStorage.getItem(`${EXPORT_STORAGE_KEY_PREFIX}${projectId}`);
+    if (!raw) return DEFAULT_EXPORT_OPTIONS;
+    const parsed = JSON.parse(raw) as Partial<ProjectExportOptions>;
+    return { ...DEFAULT_EXPORT_OPTIONS, ...parsed };
+  } catch {
+    return DEFAULT_EXPORT_OPTIONS;
   }
 }
 
@@ -61,12 +86,24 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
   const [lastExecute, setLastExecute] = useState<ImageCleanupExecuteResponse | null>(null);
   const [lastRebuildSummary, setLastRebuildSummary] = useState<string | null>(null);
 
+  const [exportOptions, setExportOptions] = useState<ProjectExportOptions>(() => loadExportOptions(projectId));
+  const [exportPreview, setExportPreview] = useState<ProjectExportPreviewResponse | null>(null);
+  const [exportSelectedIds, setExportSelectedIds] = useState<Set<string>>(new Set());
+  const [isExportPreviewing, setIsExportPreviewing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [lastExportSummary, setLastExportSummary] = useState<string | null>(null);
+
   useEffect(() => {
     setPolicy(loadPolicy(projectId));
     setPreview(null);
     setSelectedIds(new Set());
     setLastExecute(null);
     setLastRebuildSummary(null);
+
+    setExportOptions(loadExportOptions(projectId));
+    setExportPreview(null);
+    setExportSelectedIds(new Set());
+    setLastExportSummary(null);
   }, [projectId]);
 
   useEffect(() => {
@@ -76,6 +113,14 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
       // ignore
     }
   }, [projectId, policy]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`${EXPORT_STORAGE_KEY_PREFIX}${projectId}`, JSON.stringify(exportOptions));
+    } catch {
+      // ignore
+    }
+  }, [projectId, exportOptions]);
 
   const candidates = preview?.candidates ?? [];
 
@@ -175,6 +220,119 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
     }
   }, [projectId, showError]);
 
+  const exportAssets = exportPreview?.assets ?? [];
+  const isExportManual = exportOptions.include_images && exportOptions.image_scope === 'manual';
+  const exportAnySelected = exportSelectedIds.size > 0;
+
+  const exportSelectedTotalBytes = useMemo(() => {
+    if (!exportAssets.length || !exportAnySelected) return 0;
+    let total = 0;
+    for (const a of exportAssets) {
+      if (exportSelectedIds.has(a.asset_id)) {
+        total += a.file_size ?? 0;
+      }
+    }
+    return total;
+  }, [exportAssets, exportSelectedIds, exportAnySelected]);
+
+  const exportSummary = useMemo(() => {
+    if (!exportPreview) return null;
+
+    const base = exportPreview.summary;
+    if (!exportOptions.include_images) {
+      return {
+        objects: base.objects,
+        assets_total: base.assets_total,
+        assets_selected: 0,
+        images_selected_bytes: 0,
+      };
+    }
+
+    if (!isExportManual) {
+      return base;
+    }
+
+    return {
+      objects: base.objects,
+      assets_total: base.assets_total,
+      assets_selected: exportSelectedIds.size,
+      images_selected_bytes: exportSelectedTotalBytes,
+    };
+  }, [exportPreview, exportOptions.include_images, isExportManual, exportSelectedIds.size, exportSelectedTotalBytes]);
+
+  const handleExportPreview = useCallback(async () => {
+    setIsExportPreviewing(true);
+    setLastExportSummary(null);
+    try {
+      const result = await projectService.exportPreview(projectId, exportOptions);
+      setExportPreview(result);
+      setExportSelectedIds(new Set(result.default_selected_asset_ids));
+    } catch (err: any) {
+      console.error('Export preview failed:', err);
+      showError('Project Export', 'Failed to preview project export.');
+    } finally {
+      setIsExportPreviewing(false);
+    }
+  }, [projectId, exportOptions, showError]);
+
+  const handleExportToggleSelected = useCallback((assetId: string, checked: boolean) => {
+    setExportSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(assetId);
+      } else {
+        next.delete(assetId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleExportSelectAll = useCallback((assets: ProjectExportPreviewAssetItem[]) => {
+    setExportSelectedIds(new Set(assets.map((a) => a.asset_id)));
+  }, []);
+
+  const handleExportSelectNone = useCallback(() => {
+    setExportSelectedIds(new Set());
+  }, []);
+
+  const handleExportSelectUsed = useCallback((assets: ProjectExportPreviewAssetItem[]) => {
+    setExportSelectedIds(new Set(assets.filter((a) => a.used).map((a) => a.asset_id)));
+  }, []);
+
+  const handleExportDownload = useCallback(async () => {
+    setIsExporting(true);
+    setLastExportSummary(null);
+    try {
+      let previewResult = exportPreview;
+      let selected = exportSelectedIds;
+
+      if (exportOptions.include_images && exportOptions.image_scope === 'manual' && !previewResult) {
+        previewResult = await projectService.exportPreview(projectId, exportOptions);
+        setExportPreview(previewResult);
+        const defaultIds = new Set(previewResult.default_selected_asset_ids);
+        setExportSelectedIds(defaultIds);
+        selected = defaultIds;
+      }
+
+      if (exportOptions.include_images && exportOptions.image_scope === 'manual' && selected.size === 0) {
+        showError('Project Export', 'Select at least one image, or disable "Include images".');
+        return;
+      }
+
+      await projectService.exportDownload(projectId, {
+        options: exportOptions,
+        asset_ids: exportOptions.image_scope === 'manual' ? Array.from(selected) : undefined,
+      });
+
+      setLastExportSummary('Export started. Check your downloads.');
+    } catch (err: any) {
+      console.error('Export failed:', err);
+      showError('Project Export', 'Failed to export project.');
+    } finally {
+      setIsExporting(false);
+    }
+  }, [exportPreview, exportSelectedIds, exportOptions, projectId, showError]);
+
   return (
     <div className="workspace-config-panel">
       <div className="workspace-config-card">
@@ -182,6 +340,159 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
         <p className="workspace-config-hint">
           Image cleanup uses the last manual-save state. Autosaved (local) edits are not reflected until you save.
         </p>
+      </div>
+
+      <div className="workspace-config-card">
+        <h3>Project Export (.nbproj)</h3>
+        <p className="workspace-config-hint">
+          Exports include the latest server-saved state. Thumbnails are regenerated on import to save space.
+        </p>
+
+        <div className="workspace-config-form">
+          <div className="workspace-config-field">
+            <ToggleSwitch
+              checked={exportOptions.include_images}
+              onChange={(checked) => setExportOptions((prev) => ({ ...prev, include_images: checked }))}
+              label="Include original images"
+              icon={<Download size="sm" />}
+            />
+          </div>
+
+          <div className="workspace-config-field">
+            <label>Image Scope</label>
+            <select
+              className="workspace-config-select"
+              value={exportOptions.image_scope}
+              onChange={(e) =>
+                setExportOptions((prev) => ({
+                  ...prev,
+                  image_scope: e.target.value as ProjectExportOptions['image_scope'],
+                }))
+              }
+              disabled={!exportOptions.include_images}
+            >
+              <option value="used_only">Used only</option>
+              <option value="all">All images</option>
+              <option value="manual">Manual selection</option>
+            </select>
+            <p className="workspace-config-hint">
+              Manual selection starts from the used set (manuscripts + story objects) and can be adjusted.
+            </p>
+          </div>
+
+          <div className="workspace-config-field">
+            <ToggleSwitch
+              checked={exportOptions.include_non_main_story_object_images}
+              onChange={(checked) =>
+                setExportOptions((prev) => ({ ...prev, include_non_main_story_object_images: checked }))
+              }
+              label="Include non-main story object images"
+              icon={<List size="sm" />}
+              disabled={!exportOptions.include_images}
+            />
+          </div>
+
+          <div className="workspace-config-field">
+            <ToggleSwitch
+              checked={exportOptions.treat_generation_reference_images_as_used}
+              onChange={(checked) =>
+                setExportOptions((prev) => ({ ...prev, treat_generation_reference_images_as_used: checked }))
+              }
+              label="Include generation reference images (recursive)"
+              icon={<List size="sm" />}
+              disabled={!exportOptions.include_images}
+            />
+          </div>
+        </div>
+
+        <div className="workspace-config-actions">
+          <TextButton
+            onClick={handleExportPreview}
+            variant="secondary"
+            size="sm"
+            iconLeft={<List size="xs" />}
+            loading={isExportPreviewing}
+          >
+            Preview
+          </TextButton>
+          <TextButton
+            onClick={handleExportDownload}
+            variant="primary"
+            size="sm"
+            iconLeft={<Download size="xs" />}
+            loading={isExporting}
+          >
+            Download .nbproj
+          </TextButton>
+        </div>
+
+        {lastExportSummary && <div className="workspace-config-result">{lastExportSummary}</div>}
+
+        {exportPreview && exportSummary && (
+          <div className="workspace-config-preview-summary workspace-config-preview-summary--stack">
+            <div>
+              Objects: <strong>{exportSummary.objects}</strong> | Assets: <strong>{exportSummary.assets_total}</strong>
+            </div>
+            <div>
+              Selected images: <strong>{exportSummary.assets_selected}</strong> | Size:{' '}
+              <strong>{formatBytes(exportSummary.images_selected_bytes)}</strong>
+            </div>
+          </div>
+        )}
+
+        {exportOptions.include_images && exportPreview && isExportManual && (
+          <div className="workspace-config-actions">
+            <TextButton onClick={() => handleExportSelectUsed(exportAssets)} size="sm" variant="secondary">
+              Select Used
+            </TextButton>
+            <TextButton onClick={() => handleExportSelectAll(exportAssets)} size="sm" variant="secondary">
+              Select All
+            </TextButton>
+            <TextButton onClick={handleExportSelectNone} size="sm" variant="secondary">
+              Select None
+            </TextButton>
+          </div>
+        )}
+
+        {!exportPreview ? (
+          <div className="workspace-config-empty">No preview. Click Preview to see what will be exported.</div>
+        ) : !exportOptions.include_images ? (
+          <div className="workspace-config-empty">Images are excluded. Download will export data only.</div>
+        ) : exportAssets.length === 0 ? (
+          <div className="workspace-config-empty">No assets found for this selection.</div>
+        ) : (
+          <ul className="workspace-config-candidate-list">
+            {exportAssets.map((a) => {
+              const checked = exportSelectedIds.has(a.asset_id);
+              return (
+                <li key={a.asset_id} className="workspace-config-candidate-item">
+                  {isExportManual && (
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => handleExportToggleSelected(a.asset_id, e.target.checked)}
+                    />
+                  )}
+                  <img
+                    className="workspace-config-thumb"
+                    src={getAssetUrl(a, 'thumbnail') || ''}
+                    alt={a.name}
+                    loading="lazy"
+                  />
+                  <div className="workspace-config-candidate-meta">
+                    <div className="workspace-config-candidate-title">{a.name}</div>
+                    <div className="workspace-config-candidate-sub">
+                      {a.asset_type ?? 'uncategorized'}
+                      {a.file_size != null && <> | {formatBytes(a.file_size)}</>}
+                      {a.used && <> | used</>}
+                      {a.reasons.length > 0 && <> | {a.reasons.join(', ')}</>}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
       <div className="workspace-config-card">

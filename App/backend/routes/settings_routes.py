@@ -10,7 +10,6 @@ from ..schemas.settings import (
     UserSettingsResponse,
     UserSettingsUpdate,
     FunctionAIConfig,
-    ProviderCredentials,
     AIFunctionType,
     RetryConfig,
     ImageGenConfig
@@ -77,16 +76,6 @@ async def get_user_settings(
                     }
                 }
             },
-            provider_credentials={
-                'openai': {'apiKey': ''},
-                'gemini': {'apiKey': ''},
-                'claude': {'apiKey': ''},
-                'openrouter': {'apiKey': ''},
-                'custom': {'baseUrl': '', 'apiKey': ''},
-                'xai': {'apiKey': ''},
-                'novelai': {'apiKey': ''}
-            },
-            provider_preferences={},
             main_language='English',
             sub_languages=[],
             default_sub_language=None
@@ -119,7 +108,6 @@ async def get_user_settings(
 
     return UserSettingsResponse(
         functionConfigs=settings.function_configs,
-        providerCredentials=settings.provider_credentials,
         mainLanguage=settings.main_language,
         subLanguages=settings.sub_languages or [],
         defaultSubLanguage=settings.default_sub_language,
@@ -160,9 +148,6 @@ async def update_user_settings(
             k: v.model_dump(exclude_none=True)
             for k, v in update_data.functionConfigs.items()
         }
-
-    if update_data.providerCredentials is not None:
-        settings.provider_credentials = update_data.providerCredentials.model_dump()
 
     if update_data.mainLanguage is not None:
         settings.main_language = update_data.mainLanguage
@@ -235,7 +220,6 @@ async def update_user_settings(
 
     return UserSettingsResponse(
         functionConfigs=settings.function_configs,
-        providerCredentials=settings.provider_credentials,
         mainLanguage=settings.main_language,
         subLanguages=settings.sub_languages or [],
         defaultSubLanguage=settings.default_sub_language,
@@ -302,7 +286,6 @@ async def update_function_config(
 
     return UserSettingsResponse(
         functionConfigs=settings.function_configs,
-        providerCredentials=settings.provider_credentials,
         mainLanguage=settings.main_language,
         subLanguages=settings.sub_languages or [],
         defaultSubLanguage=settings.default_sub_language,
@@ -361,7 +344,6 @@ async def sync_settings_from_client(
         settings = UserSettings(
             user_id=current_user.id,
             function_configs=client_settings.get('functionConfigs', {}),
-            provider_credentials=client_settings.get('providerCredentials', {}),
             main_language=client_settings.get('mainLanguage', 'English'),
             sub_languages=client_settings.get('subLanguages', []),
             default_sub_language=client_settings.get('defaultSubLanguage'),
@@ -379,8 +361,6 @@ async def sync_settings_from_client(
     else:
         # Update existing settings
         settings.function_configs = client_settings.get('functionConfigs', settings.function_configs)  # type: ignore
-        settings.provider_credentials = client_settings.get('providerCredentials', settings.provider_credentials)  # type: ignore
-        settings.provider_preferences = client_settings.get('providerPreferences', settings.provider_preferences)  # type: ignore
         settings.main_language = client_settings.get('mainLanguage', settings.main_language)  # type: ignore
         settings.sub_languages = client_settings.get('subLanguages', settings.sub_languages)  # type: ignore
         settings.default_sub_language = client_settings.get('defaultSubLanguage', settings.default_sub_language)  # type: ignore

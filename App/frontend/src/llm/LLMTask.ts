@@ -20,6 +20,7 @@ import type {
   LLMTaskModeType,
 } from './types';
 import { LLMTaskMode } from './types';
+import { useCredentialsStore } from '../store/credentialsStore';
 
 /**
  * Map LLMTaskMode to AIFunctionType for settings lookup
@@ -89,14 +90,15 @@ export class LLMTask {
 
     try {
       // 1. Get provider/model config (from settings or overrides)
-      const { settings, getProviderConfig } = settingsStore;
+      const { settings } = settingsStore;
+      const credentialsStore = useCredentialsStore.getState();
 
       // Get function type for this mode to lookup settings
       const functionType = MODE_TO_FUNCTION_TYPE[this.config.mode];
       const functionConfig = settings.functionConfigs[functionType];
 
       const provider = this.config.provider ?? functionConfig.provider;
-      const providerConfig = this.config.providerConfig ?? getProviderConfig(provider);
+      const providerConfig = this.config.providerConfig ?? credentialsStore.getProviderConfigForBackend(provider);
       const model = this.config.model ?? functionConfig.model;
       const temperature = this.config.temperature ?? functionConfig.temperature;
       const thinkingMode = this.config.thinkingMode ?? functionConfig.advanced.thinkingMode;

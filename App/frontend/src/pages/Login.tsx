@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { Loading } from '../components/common/Loading';
 import './Auth.css';
 
 const Login: React.FC = () => {
@@ -131,7 +132,7 @@ const Login: React.FC = () => {
           <button type="submit" className="auth-submit" disabled={isLoading}>
             {isLoading ? (
               <>
-                <span className="spinner"></span>
+                <Loading size="xs" />
                 Signing in...
               </>
             ) : (

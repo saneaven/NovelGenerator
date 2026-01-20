@@ -19,7 +19,7 @@ import { TextButton } from '../../../components/TextButton';
 import { IconButton } from '../../../components/IconButton';
 import AgentModeToggle from '../../../components/ui/AgentModeToggle';
 import { collapseContentParts } from '../../../agent/utils/contentParts';
-import { Settings, Edit, Trash, Globe, CircularArrow, ChevronDown } from '../../../components/icons';
+import { Settings, Edit, Trash, Globe, CircularArrow, ChevronDown, Send, Stop } from '../../../components/icons';
 import { useAgentOrchestration } from '../../../agent/hooks';
 import { getBestLanguageData } from '../../../utils/languageData';
 import { AgentExecutor, applyAgentEdits } from '../../../agent';
@@ -98,13 +98,23 @@ const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({ projectId, m
                     onKeyDown={handleKeyDown}
                 />
                 {isLoading ? (
-                    <TextButton key="stop" type="button" variant="danger" onClick={onStop} className="agent-submit-btn">
-                        Stop
-                    </TextButton>
+                    <IconButton
+                        key="stop"
+                        icon={<Stop size="md" />}
+                        onClick={onStop}
+                        variant="danger"
+                        title="Stop"
+                        className="agent-submit-btn"
+                    />
                 ) : (
-                    <TextButton key="send" type="submit" variant="primary" className="agent-submit-btn">
-                        Send
-                    </TextButton>
+                    <IconButton
+                        key="send"
+                        type="submit"
+                        icon={<Send size="md" />}
+                        variant="primary"
+                        title="Send"
+                        className="agent-submit-btn"
+                    />
                 )}
             </div>
         </form>
@@ -159,6 +169,7 @@ interface DisplayMessageInfo
     displayLanguage: string;
     hasRequestedLanguage: boolean;
     fallbackLanguage: string | null;
+    sessionError?: string;
 }
 
 const AgentPanel: React.FC<AgentPanelProps> = ({
@@ -184,6 +195,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         handleDeleteMessage: onDeleteMessage,
         handleSelectAgent: onSelectAgent,
         editTextareaRef,
+        triggerAutoContinue,
     } = agentHandlers;
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -237,13 +249,24 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     const storedMessages = useMemo(() => selectedAgent?.messages ?? [], [selectedAgent]);
 
     // Only subscribe to agent sessions for this project (reduces re-renders from other sessions)
-    const llmSessions = useLLMSessionStore((state) => state.sessions);
+    const projectAgentSessions = useLLMSessionStore(
+        useShallow((state) => {
+            const filtered: Record<string, any> = {};
+            for (const [id, session] of Object.entries(state.sessions)) {
+                if (session &&
+                    session.kind === 'agent' &&
+                    (session.input as any)?.projectId === projectId) {
+                    filtered[id] = session;
+                }
+            }
+            return filtered;
+        })
+    );
+
     const agentSessionByMessageId = useMemo(() => {
         const map: Record<string, any> = {};
-        for (const session of Object.values(llmSessions)) {
+        for (const session of Object.values(projectAgentSessions)) {
             if (!session) continue;
-            if (session.kind !== 'agent') continue;
-            if ((session.input as any)?.projectId !== projectId) continue;
 
             const assistantMessageId = (session.result as any)?.assistantMessageId as string | undefined;
             if (!assistantMessageId) continue;
@@ -254,11 +277,28 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
             }
         }
         return map;
-    }, [llmSessions, projectId]);
+    }, [projectAgentSessions]);
 
     const [translatingMessages, setTranslatingMessages] = useState<Record<string, boolean>>({});
     const [translationErrors, setTranslationErrors] = useState<Record<string, string | null>>({});
     const [translationSessionByMessageId, setTranslationSessionByMessageId] = useState<Record<string, string>>({});
+
+    // Track translation session statuses - use a stable selector to avoid infinite loops
+    const translationSessionIds = useMemo(
+        () => Object.values(translationSessionByMessageId),
+        [translationSessionByMessageId]
+    );
+    const translationSessionStatusesSelector = useMemo(
+        () => (state: ReturnType<typeof useLLMSessionStore.getState>) => {
+            const statuses: Record<string, string | undefined> = {};
+            for (const sessionId of translationSessionIds) {
+                statuses[sessionId] = state.sessions[sessionId]?.status;
+            }
+            return statuses;
+        },
+        [translationSessionIds]
+    );
+    const translationSessionStatuses = useLLMSessionStore(useShallow(translationSessionStatusesSelector));
     // Per-message language view: tracks which messages are showing translation
     const [messageLanguageView, setMessageLanguageView] = useState<Record<string, 'primary' | 'secondary'>>({});
     const [applyingMessageEdits, setApplyingMessageEdits] = useState<Record<string, boolean>>({});
@@ -388,6 +428,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
             const streaming = agentSession?.status === 'running'
                 ? { contentParts: agentSession.contentParts, thinkingDetails: agentSession.thinkingDetails }
                 : undefined;
+            const sessionError = agentSession?.status === 'error' ? agentSession.error : undefined;
 
             if (hasRequestedLanguage)
             {
@@ -403,7 +444,8 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                     requestedLanguage,
                     displayLanguage: requestedLanguage,
                     hasRequestedLanguage: true,
-                    fallbackLanguage: null
+                    fallbackLanguage: null,
+                    sessionError,
                 };
             }
 
@@ -427,7 +469,8 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                 requestedLanguage,
                 displayLanguage,
                 hasRequestedLanguage: false,
-                fallbackLanguage
+                fallbackLanguage,
+                sessionError,
             };
         },
         [messageLanguageView, mainLanguage, defaultSubLanguage, convertToDisplayMessage, agentSessionByMessageId]
@@ -442,9 +485,11 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         const entries = Object.entries(translationSessionByMessageId);
         if (entries.length === 0) return;
 
+        // Use getState() for translation session tracking to avoid subscribing to all sessions
+        const allSessions = useLLMSessionStore.getState().sessions;
         const finished: Array<{ messageId: string; sessionId: string; status: string; error?: string }> = [];
         for (const [messageId, sessionId] of entries) {
-            const session = llmSessions[sessionId];
+            const session = allSessions[sessionId];
             if (!session) continue;
             if (session.status === 'running' || session.status === 'applying') continue;
             finished.push({ messageId, sessionId, status: session.status, error: session.error });
@@ -491,7 +536,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                 showError('Translation Failed', item.error ?? 'Unknown error occurred during translation.');
             }
         }
-    }, [translationSessionByMessageId, llmSessions, showError]);
+    }, [translationSessionByMessageId, translationSessionStatuses, showError]);
 
     const translateMessage = async (message: StoredAgentMessage) =>
     {
@@ -550,11 +595,6 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         processed: { displayContent: React.ReactNode }
     ) =>
     {
-        // Extract error parts from contentParts
-        const errorParts = message.chatMessage.contentParts?.filter(
-            (part: any) => part.type === 'error'
-        ) || [];
-
         return (
             <div className="message-content">
                 {!message.hasRequestedLanguage && (
@@ -572,11 +612,11 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                             </div>
                         </div>
                     )}
-                {errorParts.map((errorPart: any, index: number) => (
-                    <div key={`error-${index}`} className="message-error">
-                        {errorPart.text}
+                {message.sessionError && (
+                    <div className="message-error">
+                        {message.sessionError}
                     </div>
-                ))}
+                )}
             </div>
         );
     };
@@ -702,6 +742,53 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                     mode={cardMode as any}
                                                     cards={cardsToRender as any}
                                                     onConfirm={
+                                                        cardMode === 'pending'
+                                                            ? async (selections: Record<string, boolean>) => {
+                                                                if (hasUnsavedChanges) {
+                                                                    showError('Cannot Apply', 'Save your changes first - unsaved work will be overwritten.');
+                                                                    return;
+                                                                }
+
+                                                                if (hasSessionCards && agentSession) {
+                                                                    await applyAgentEdits({
+                                                                        sessionId: agentSession.id,
+                                                                        projectId,
+                                                                        language: mainLanguage,
+                                                                        selections,
+                                                                        options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
+                                                                    });
+                                                                    // Auto-continue: trigger next LLM turn with tool results
+                                                                    await triggerAutoContinue();
+                                                                    return;
+                                                                }
+
+                                                                if (!selectedAgentId || storedFunctionCalls.length === 0) return;
+
+                                                                setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: true }));
+                                                                try {
+                                                                    const nextFunctionCalls = await applyFunctionCallsDirect({
+                                                                        projectId,
+                                                                        language: mainLanguage,
+                                                                        functionCalls: storedFunctionCalls,
+                                                                        selections,
+                                                                        options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
+                                                                    });
+
+                                                                    await useAgentStore.getState().updateMessageFunctionCalls(
+                                                                        projectId,
+                                                                        selectedAgentId,
+                                                                        message.chatMessage.id,
+                                                                        nextFunctionCalls
+                                                                    );
+                                                                } finally {
+                                                                    setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: false }));
+                                                                }
+                                                                // Auto-continue: trigger next LLM turn with tool results
+                                                                await triggerAutoContinue();
+                                                            }
+                                                            : undefined
+                                                    }
+                                                    onConfirmAndPause={
                                                         cardMode === 'pending'
                                                             ? async (selections: Record<string, boolean>) => {
                                                                 if (hasUnsavedChanges) {

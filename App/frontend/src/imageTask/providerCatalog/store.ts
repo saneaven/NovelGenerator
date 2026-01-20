@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import { assetService, type ImageProvider } from '../../api/assetService';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useCredentialsStore } from '../../store/credentialsStore';
 
 type ModelInfo = { id: string; name: string };
 
 function getApiKeyForImageProvider(provider: string): string {
-  const creds = useSettingsStore.getState().settings.providerCredentials;
+  const creds = useCredentialsStore.getState().credentials;
   switch (provider) {
     case 'openai':
       return creds.openai.apiKey;
@@ -72,4 +72,3 @@ export const useImageProviderCatalogStore = create<ProviderCatalogState>((set, g
   getProvider: (name) => get().providers.find((p) => p.name === name) ?? null,
   supportsImageInput: (name) => get().providers.find((p) => p.name === name)?.supports_image_input ?? false,
 }));
-

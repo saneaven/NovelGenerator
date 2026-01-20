@@ -2,6 +2,7 @@ import React, { useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { motion, useMotionTemplate, useTransform, useMotionValue, animate, useDragControls, type MotionValue } from 'motion/react';
 import type { NotificationEntry } from '../../store/notificationStore';
 import { Check, Close, ChevronRight, Trash } from '../icons';
+import { Loading } from '../common/Loading';
 
 interface NotificationItemProps {
   notification: NotificationEntry;
@@ -167,11 +168,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   const getStatusIcon = () => {
     switch (status) {
       case 'running':
-        return (
-          <div className="notification-spinner">
-            <div className="notification-spinner-ring" />
-          </div>
-        );
+        return <Loading size="sm" />;
       case 'pending':
         return <span className="notification-icon notification-icon--pending">!</span>;
       case 'success':

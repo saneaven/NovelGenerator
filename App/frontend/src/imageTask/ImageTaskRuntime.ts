@@ -1,7 +1,7 @@
 import apiClient, { ApiError } from '../api/client';
 import { assetService, type Asset } from '../api/assetService';
 import { useAssetStore } from '../store/assetStore';
-import { useSettingsStore } from '../store/settingsStore';
+import { useCredentialsStore } from '../store/credentialsStore';
 import { generateTempId } from '../utils/tempId';
 import { useImageTaskStore } from './store';
 import type { ImageProgressStage, ImageTaskInput, ImageTaskSession } from './types';
@@ -20,7 +20,7 @@ const handlersByTaskId = new Map<
 >();
 
 function getApiKeyForProvider(provider: string): string {
-  const creds = useSettingsStore.getState().settings.providerCredentials;
+  const creds = useCredentialsStore.getState().credentials;
   switch (provider) {
     case 'openai':
       return creds.openai.apiKey;

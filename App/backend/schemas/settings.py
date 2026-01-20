@@ -176,7 +176,6 @@ class ImageGenConfig(BaseModel):
 class UserSettingsResponse(BaseModel):
     """User settings response"""
     functionConfigs: Dict[str, FunctionAIConfig]
-    providerCredentials: ProviderCredentials
     mainLanguage: str
     subLanguages: List[str] = []
     defaultSubLanguage: Optional[str] = None
@@ -197,7 +196,6 @@ class UserSettingsResponse(BaseModel):
 class UserSettingsUpdate(BaseModel):
     """Update user settings"""
     functionConfigs: Optional[Dict[str, FunctionAIConfig]] = None
-    providerCredentials: Optional[ProviderCredentials] = None
     mainLanguage: Optional[str] = None
     subLanguages: Optional[List[str]] = None
     defaultSubLanguage: Optional[str] = None

@@ -2,6 +2,7 @@ import React from 'react';
 import SyntaxHighlightedTextarea from './SyntaxHighlighter/SyntaxHighlightedTextarea';
 import ValidationWarnings from './ValidationWarnings';
 import { Save } from '../icons';
+import { Loading } from '../common/Loading';
 import './TemplateEditor.css';
 
 interface ValidationResult {
@@ -42,7 +43,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({
     if (isLoading) {
         return (
             <div className="template-editor template-editor--loading">
-                <div className="loading-indicator">Loading...</div>
+                <Loading size="md" text="Loading..." />
             </div>
         );
     }
@@ -78,7 +79,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({
                         title="Save"
                     >
                         {isSaving ? (
-                            <span className="template-editor__fab-spinner" />
+                            <Loading size="xs" />
                         ) : (
                             <Save size="md" />
                         )}

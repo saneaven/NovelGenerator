@@ -56,6 +56,8 @@ export interface AgentHandlersReturn {
   handleCancelEdit: () => void;
   /** Handle deleting a message */
   handleDeleteMessage: (messageId: string) => void;
+  /** Trigger auto-continue after function call confirmation */
+  triggerAutoContinue: () => Promise<void>;
 }
 
 /**

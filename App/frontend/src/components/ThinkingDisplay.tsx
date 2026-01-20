@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { ContentPart } from '../llm/requestTypes';
 import { ChevronRight } from './icons/navigation/ChevronRight';
+import { Loading } from './common/Loading';
 import './ThinkingDisplay.css';
 
 interface ThinkingDisplayProps {
@@ -68,7 +69,7 @@ const ThinkingDisplay: React.FC<ThinkingDisplayProps> = ({
                 <ChevronRight size="sm"/>
               </span>
               <span className="toggle-label">Thinking</span>
-              {streaming && <span className="streaming-indicator" />}
+              {streaming && <Loading variant="pulse" size="xs" className="streaming-indicator" />}
             </button>
 
             <div className="thinking-card-content">

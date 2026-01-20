@@ -1,5 +1,9 @@
 """Project CRUD routes"""
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+import zipfile
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 from typing import List
 import uuid
@@ -9,7 +13,13 @@ from ..database import get_db
 from ..models.db_models import User, Project, StoryObjectAsset, Asset, BasicInfo, Guidelines
 from ..models.translation_models import ObjectVersion
 from ..schemas.projects import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse
+from ..schemas.project_transfer import (
+    ProjectExportOptions,
+    ProjectExportPreviewResponse,
+    ProjectExportRequest,
+)
 from ..auth import get_current_user
+from ..services.project_transfer_service import ProjectTransferService
 
 
 def _get_cover_asset(db: Session, project: Project) -> dict | None:
@@ -258,3 +268,110 @@ async def delete_project(
     db.commit()
 
     return None
+
+
+# ============================================================================
+# PROJECT EXPORT / IMPORT (.nbproj)
+# ============================================================================
+
+
+@router.post(
+    "/{project_id}/export/preview",
+    response_model=ProjectExportPreviewResponse,
+)
+async def preview_project_export(
+    project_id: uuid.UUID,
+    options: ProjectExportOptions,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Preview the assets that would be included in a project export."""
+    try:
+        return ProjectTransferService.build_export_preview(
+            db=db,
+            user_id=current_user.id,
+            project_id=project_id,
+            options=options,
+        )
+    except ValueError as e:
+        message = str(e)
+        if message == "Project not found":
+            raise HTTPException(status_code=404, detail=message)
+        raise HTTPException(status_code=400, detail=message)
+
+
+@router.post(
+    "/{project_id}/export",
+    response_class=FileResponse,
+)
+async def export_project(
+    project_id: uuid.UUID,
+    request: ProjectExportRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Export a project as a .nbproj archive."""
+    try:
+        tmp_path, filename = ProjectTransferService.export_project_to_nbproj(
+            db=db,
+            user_id=current_user.id,
+            project_id=project_id,
+            options=request.options,
+            manual_asset_ids=request.asset_ids,
+        )
+    except ValueError as e:
+        message = str(e)
+        if message == "Project not found":
+            raise HTTPException(status_code=404, detail=message)
+        raise HTTPException(status_code=400, detail=message)
+
+    def _cleanup() -> None:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+
+    background_tasks.add_task(_cleanup)
+    return FileResponse(
+        path=tmp_path,
+        media_type="application/octet-stream",
+        filename=filename,
+        background=background_tasks,
+    )
+
+
+@router.post(
+    "/import",
+    response_model=ProjectResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def import_project(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Import a project from a .nbproj archive (creates a new project)."""
+    filename = file.filename or ""
+    if filename and not filename.lower().endswith(".nbproj"):
+        raise HTTPException(status_code=400, detail="Invalid file type. Expected .nbproj")
+
+    try:
+        data = await file.read()
+        new_project_id = ProjectTransferService.import_nbproj(db=db, user_id=current_user.id, nbproj_bytes=data)
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=400, detail="Invalid .nbproj file (bad zip)")
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid .nbproj structure: missing {e}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    project = db.query(Project).options(joinedload(Project.basic_info)).filter(
+        Project.id == new_project_id,
+        Project.user_id == current_user.id,
+    ).first()
+    if not project:
+        raise HTTPException(status_code=500, detail="Import succeeded but project not found")
+
+    return _project_to_response(db, project)

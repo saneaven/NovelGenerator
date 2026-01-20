@@ -21,6 +21,7 @@ import { DropdownMenu, DropdownItem } from './ui/DropdownMenu';
 import { IconButton } from './IconButton';
 import { TextButton } from './TextButton';
 import { Edit, Refresh, Books, AIAssist, Warning, MoreHorizontal, Image, Save, Close } from './icons';
+import { Loading } from './common/Loading';
 import type { BasicInfoObject, BasicInfoData } from '../types/unifiedObject';
 
 interface BasicInfoManagerProps {
@@ -189,10 +190,10 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   }, [projectId, basicInfoId, fetchStoryObjectAssets]);
 
   if (!projectId) return <div className="error-container">Project ID not found.</div>;
-  if (loading && !basicInfo) return <div className="basic-info-skeleton"><div className="spinner" /></div>;
+  if (loading && !basicInfo) return <Loading size="lg" fullPage />;
   if (error) return <div className="error-container"><p>{error}</p><button onClick={() => basicInfoId && fetchObject('basic_info', basicInfoId)}>Retry</button></div>;
   if (initializationError && !basicInfo) return <div className="error-container"><p>{initializationError}</p><button onClick={initializeBasicInfo} disabled={initializing}>Retry</button></div>;
-  if (initializing && !basicInfo) return <div className="basic-info-skeleton"><div className="spinner" /></div>;
+  if (initializing && !basicInfo) return <Loading size="lg" fullPage />;
   if (!basicInfo) return <div className="error-container">Basic information not found.</div>;
 
   return (

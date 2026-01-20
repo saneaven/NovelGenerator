@@ -12,6 +12,7 @@ interface GeneralPanelProps {
     imagePrompt: FunctionAIConfig;
   };
   credentials: ProviderCredentials;
+  serverVaultEnabled: boolean;
   activeFunction: AIFunctionType;
   onFunctionChange: (functionType: AIFunctionType) => void;
   onConfigChange: (functionType: AIFunctionType, config: FunctionAIConfig) => void;
@@ -34,6 +35,7 @@ const FUNCTION_DESCRIPTIONS: Record<AIFunctionType, string> = {
 const GeneralPanel: React.FC<GeneralPanelProps> = ({
   functionConfigs,
   credentials,
+  serverVaultEnabled,
   activeFunction,
   onFunctionChange,
   onConfigChange,
@@ -75,6 +77,7 @@ const GeneralPanel: React.FC<GeneralPanelProps> = ({
         functionType={activeFunction}
         config={currentConfig}
         credentials={credentials}
+        serverVaultEnabled={serverVaultEnabled}
         onChange={(config) => onConfigChange(activeFunction, config)}
       />
     </div>

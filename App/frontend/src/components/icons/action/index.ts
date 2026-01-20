@@ -6,3 +6,5 @@ export { Plus } from './Plus';
 export { Shuffle } from './Shuffle';
 export { Download } from './Download';
 export { Upload } from './Upload';
+export { Send } from './Send';
+export { Stop } from './Stop';
