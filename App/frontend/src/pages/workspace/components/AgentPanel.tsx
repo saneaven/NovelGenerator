@@ -25,7 +25,7 @@ import { useAgentOrchestration } from '../../../agent/hooks';
 import { getBestLanguageData } from '../../../utils/languageData';
 import { AgentExecutor, applyAgentEdits } from '../../../agent';
 import { applyFunctionCallsDirect } from '../../../llmTask/functionCalls/functionCallEngine';
-import { CRUD_OPTIONS } from '../../../functionCall/applicator/types';
+import { CRUD_OPTIONS } from '../../../functionCall/apply/types';
 import { buildEditCardsFromFunctionCallMetadata } from '../../../functionCall';
 
 interface AgentPanelProps
@@ -311,8 +311,6 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     const [applyingMessageEdits, setApplyingMessageEdits] = useState<Record<string, boolean>>({});
     // Mobile agent overlay closing animation state
     const [isOverlayClosing, setIsOverlayClosing] = useState(false);
-    // Mobile touch state for showing message actions
-    const [touchedMessageId, setTouchedMessageId] = useState<string | null>(null);
 
     const handleCloseAgent = useCallback(() => {
         setIsOverlayClosing(true);
@@ -350,20 +348,6 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
             document.removeEventListener('keydown', handleKeyDown);
         };
     }, [isContextDropdownOpen]);
-
-    // Close message actions on outside click (mobile)
-    useEffect(() => {
-        if (!touchedMessageId) return;
-
-        const handleOutsideClick = (e: MouseEvent) => {
-            if (!(e.target as Element).closest('.agent-message')) {
-                setTouchedMessageId(null);
-            }
-        };
-
-        document.addEventListener('click', handleOutsideClick);
-        return () => document.removeEventListener('click', handleOutsideClick);
-    }, [touchedMessageId]);
 
     const currentProject = getCurrentProject();
 
@@ -724,8 +708,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                     return (
                         <div
                             key={message.chatMessage.id}
-                            className={`agent-message ${message.chatMessage.role}${isEditing ? ' editing' : ''}${isSameRoleAsPrevious ? ' same-role-as-previous' : ''}${touchedMessageId === message.chatMessage.id ? ' touched' : ''}`}
-                            onClick={() => setTouchedMessageId(message.chatMessage.id)}
+                            className={`agent-message ${message.chatMessage.role}${isEditing ? ' editing' : ''}${isSameRoleAsPrevious ? ' same-role-as-previous' : ''}`}
                         >
                             <div className="message-wrapper">
                                 {!isSameRoleAsPrevious && (

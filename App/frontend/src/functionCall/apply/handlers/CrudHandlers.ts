@@ -1,5 +1,5 @@
 /**
- * CRUD Handlers
+ * Apply Handlers - CRUD
  *
  * Handlers for create and delete operations:
  * - create_story_object / delete_story_object

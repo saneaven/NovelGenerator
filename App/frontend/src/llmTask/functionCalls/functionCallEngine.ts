@@ -2,9 +2,6 @@ import type { FunctionCallMetadata } from '../../llm/requestTypes';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import {
-  UnifiedApplicator,
-  BatchStoreActions,
-  createStoreActions,
   buildEditCards,
   applyValidationResults,
   validate,
@@ -13,9 +10,15 @@ import {
   type NormalizedFunctionCall,
   type EditCard,
 } from '../../functionCall';
-import type { HandlerOptions } from '../../functionCall/applicator/types';
+import type { HandlerContext, Handler, HandlerOptions, StoreActions } from '../../functionCall/apply/types';
 import type { StoredEditCard } from '../uiTypes';
 import type { ApplicationResult, FunctionCallFailureType, FunctionCallStatus } from '../../functionCall/types';
+import { CRUD_HANDLERS } from '../../functionCall/apply/handlers/CrudHandlers';
+import { PATCH_HANDLERS } from '../../functionCall/apply/handlers/PatchHandlers';
+import { REPLACE_HANDLERS } from '../../functionCall/apply/handlers/ReplaceHandlers';
+import { READ_HANDLERS } from '../../functionCall/apply/handlers/ReadHandlers';
+import { FunctionCallBatchStore } from './FunctionCallBatchStore';
+import { ManuscriptBatch } from './manuscriptBatch';
 
 function stripCallbacks(card: EditCard): StoredEditCard {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -62,6 +65,78 @@ async function yieldToUI(): Promise<void> {
     }
     setTimeout(resolve, 0);
   });
+}
+
+function createBaseStore(): StoreActions {
+  const store = useUnifiedObjectStore.getState();
+  return {
+    getObject: (id) => store.getObject(id),
+    fetchObject: (type, id) => store.fetchObject(type, id),
+    listObjects: (type, projectId) => store.listObjects(type, projectId),
+    createObject: (type, projectId, data, language, metadata, userRequest) =>
+      store.createObject(type, projectId, data, language, metadata, userRequest),
+    updateObject: (type, id, request) => store.updateObject(type, id, request),
+    deleteObject: (type, id) => store.deleteObject(type, id),
+  };
+}
+
+const HANDLERS: Record<string, Handler> = {
+  ...CRUD_HANDLERS,
+  ...PATCH_HANDLERS,
+  ...REPLACE_HANDLERS,
+  ...READ_HANDLERS,
+};
+
+async function applyFunctionCall(params: {
+  functionCall: RawFunctionCall;
+  context: Omit<HandlerContext, 'store'>;
+  store: FunctionCallBatchStore;
+  manuscriptBatch: ManuscriptBatch;
+}): Promise<ApplicationResult> {
+  const { functionCall, context, store, manuscriptBatch } = params;
+  const normalized = normalizeFunctionCall(functionCall);
+  const handlerContext: HandlerContext = { ...context, store, options: context.options };
+
+  try {
+    if (normalized.functionName === 'patch_manuscript') {
+      return manuscriptBatch.applyPatch({
+        callId: normalized.id,
+        args: normalized.arguments,
+        store,
+        language: context.language,
+        options: context.options,
+      });
+    }
+
+    if (normalized.functionName === 'replace_manuscript') {
+      return manuscriptBatch.applyReplace({
+        callId: normalized.id,
+        args: normalized.arguments,
+        store,
+        projectId: context.projectId,
+        language: context.language,
+        options: context.options,
+      });
+    }
+
+    const handler = HANDLERS[normalized.functionName];
+    if (!handler) {
+      return {
+        success: false,
+        message: 'Unknown function',
+        error: `Unsupported function: ${normalized.functionName}`,
+      };
+    }
+
+    return await handler(normalized.arguments, handlerContext);
+  } catch (error) {
+    console.error(`Error executing ${normalized.functionName}:`, error);
+    return {
+      success: false,
+      message: `Error executing ${normalized.functionName}`,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 export async function stageSessionEdits(params: {
@@ -124,9 +199,9 @@ export async function applySessionEdits(params: {
 
   store.updateSession(sessionId, { status: 'applying' });
 
-  const baseStore = createStoreActions(useUnifiedObjectStore.getState());
-  const batchStore = new BatchStoreActions({ baseStore });
-  const applicator = new UnifiedApplicator({ store: batchStore });
+  const baseStore = createBaseStore();
+  const batchStore = new FunctionCallBatchStore({ baseStore });
+  const manuscriptBatch = new ManuscriptBatch();
 
   const nextCards: StoredEditCard[] = [];
   let appliedCount = 0;
@@ -166,7 +241,12 @@ export async function applySessionEdits(params: {
 
     try {
       batchStore.beginCall(rawFunctionCall.id);
-      const result = await applicator.apply(rawFunctionCall, { projectId, language, options });
+      const result = await applyFunctionCall({
+        functionCall: rawFunctionCall,
+        context: { projectId, language, options },
+        store: batchStore,
+        manuscriptBatch,
+      });
       if (result.success) {
         nextCards.push({
           ...card,
@@ -213,6 +293,7 @@ export async function applySessionEdits(params: {
 
   await yieldToUI();
 
+  await manuscriptBatch.stageAll({ store: batchStore, yieldToUI });
   const flushResults = await batchStore.flush();
   const finalizedCards =
     flushResults.size === 0
@@ -306,9 +387,9 @@ export async function applyFunctionCallsDirect(params: {
 }): Promise<FunctionCallMetadata[]> {
   const { projectId, language, functionCalls, selections, options } = params;
 
-  const baseStore = createStoreActions(useUnifiedObjectStore.getState());
-  const batchStore = new BatchStoreActions({ baseStore });
-  const applicator = new UnifiedApplicator({ store: batchStore });
+  const baseStore = createBaseStore();
+  const batchStore = new FunctionCallBatchStore({ baseStore });
+  const manuscriptBatch = new ManuscriptBatch();
 
   const nextCalls: FunctionCallMetadata[] = [];
   let appliedCount = 0;
@@ -345,7 +426,12 @@ export async function applyFunctionCallsDirect(params: {
 
     try {
       batchStore.beginCall(rawFunctionCall.id);
-      const result = await applicator.apply(rawFunctionCall, { projectId, language, options });
+      const result = await applyFunctionCall({
+        functionCall: rawFunctionCall,
+        context: { projectId, language, options },
+        store: batchStore,
+        manuscriptBatch,
+      });
       if (result.success) {
         nextCalls.push({
           ...fc,
@@ -383,6 +469,7 @@ export async function applyFunctionCallsDirect(params: {
 
   await yieldToUI();
 
+  await manuscriptBatch.stageAll({ store: batchStore, yieldToUI });
   const flushResults = await batchStore.flush();
   if (flushResults.size === 0) return nextCalls;
 

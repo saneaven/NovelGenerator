@@ -11,7 +11,7 @@ import OutlineSidebar from './OutlineSidebar';
 import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu';
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
-import { Expand, Collapse, Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close, HamburgerMenu, ChevronRight, Scroll } from '../../../components/icons';
+import { Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close, HamburgerMenu, ChevronRight, Scroll } from '../../../components/icons';
 import { Warning } from '../../../components/icons';
 import type { UnifiedObject, OutlineObject, ActObject, ChapterObject } from '../../../types/unifiedObject';
 import './OutlinePanel.css';
@@ -656,16 +656,6 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                           <span className="card-meta">{actChapters.length} Chapters</span>
                                         </div>
                                       )}
-
-                                      {editingAct !== act.id && (
-                                        <div className="card-actions">
-                                          <IconButton
-                                            icon={isActExpanded ? <Collapse size="sm" /> : <Expand size="sm" />}
-                                            onClick={() => toggleActExpand(act.id)}
-                                            size="sm"
-                                          />
-                                        </div>
-                                      )}
                                     </div>
 
                                     {editingAct === act.id ? (
@@ -819,13 +809,6 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                                     <span className="chapter-index">CH {chapterIndex + 1}</span>
                                                     <h4>{chData.name || 'Untitled Chapter'}</h4>
                                                     {chFallback && <Warning size="xs" className="warning-icon" />}
-                                                  </div>
-                                                  <div className="chapter-actions">
-                                                    <IconButton
-                                                      icon={isChapterExpanded ? <Collapse size="xs" /> : <Expand size="xs" />}
-                                                      size="xs"
-                                                      onClick={() => toggleChapterExpand(chapter.id)}
-                                                    />
                                                   </div>
                                                 </div>
                                                 <div className={`chapter-expand-wrapper ${isChapterExpanded ? 'is-expanded' : ''}`}>

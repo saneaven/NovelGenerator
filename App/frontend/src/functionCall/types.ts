@@ -24,7 +24,7 @@ export type StoryObjectSubtype =
   | 'organization'
   | 'lorebook';
 
-/** Execution modes for the applicator */
+/** Execution modes for the function-call system */
 export type ExecutionMode = 'storyObject' | 'novelEditor' | 'translation' | 'editAssistant';
 
 // ============================================================================

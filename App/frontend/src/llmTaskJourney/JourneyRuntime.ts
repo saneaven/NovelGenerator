@@ -10,7 +10,7 @@ import {
   rejectAllSessionEdits,
   toFunctionCallMetadata,
 } from '../llmTask/functionCalls/functionCallEngine';
-import type { HandlerOptions } from '../functionCall/applicator/types';
+import type { HandlerOptions } from '../functionCall/apply/types';
 import { registerJourneyNotification, updateJourneyNotification } from './notificationHelpers';
 import { generateTempId } from '../utils/tempId';
 import { getJourneySpec, type JourneyKind } from './journeySpecs';

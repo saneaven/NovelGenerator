@@ -21,7 +21,7 @@ import {
   applyAgentEdits,
   rejectAllAgentEdits,
 } from '../agent';
-import { CRUD_OPTIONS } from '../functionCall/applicator/types';
+import { CRUD_OPTIONS } from '../functionCall/apply/types';
 import './LLMTaskModals.css';
 
 export const LLMTaskModals: React.FC = () => {

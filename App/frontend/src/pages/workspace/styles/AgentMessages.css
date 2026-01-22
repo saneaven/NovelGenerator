@@ -218,9 +218,7 @@
     transition: max-height 0.2s ease-out, opacity 0.2s ease-out, padding 0.2s ease-out;
 }
 
-/* Show on message hover (desktop) or when touched (mobile) */
-.agent-message:hover .message-actions,
-.agent-message.touched .message-actions {
+.agent-message:hover .message-actions {
     max-height: 3rem;
     opacity: 1;
     padding-top: var(--spacing-xs);

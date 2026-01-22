@@ -6,7 +6,8 @@ import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useVariableStore } from '../store/variableStore';
 import { fragmentService } from '../api/fragmentService';
 import type { UnifiedObject } from '../types/unifiedObject';
-import { docToPlainText, docWordCount, normalizeDoc } from '../editor/manuscript/doc';
+import { docWordCount, normalizeDoc } from '../editor/manuscript/doc';
+import { docToMarkdown } from '../editor/manuscript/convert';
 import {
   LLMTaskMode,
   type LLMTaskModeType,
@@ -687,12 +688,14 @@ export class PromptManager {
                   .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0))
                   .map(chapter => {
                     const chapterData = this.getObjectDataForLanguage(chapter, language);
+                    const manuscript = manuscripts.find(ms => ms.metadata?.chapter_id === chapter.id);
                     return {
                       id: chapter.id,
                       name: chapterData.name || '',
                       description: chapterData.description || '',
                       order: (chapter.metadata?.order as number) || 0,
                       actId: act.id,
+                      manuscriptId: manuscript?.id || '',
                     };
                   }),
               };
@@ -716,7 +719,7 @@ export class PromptManager {
       const chapter = chapters.find(ch => ch.id === chapterId);
       const chapterData = chapter ? this.getObjectDataForLanguage(chapter, language) : {};
       const doc = normalizeDoc((data as any).doc);
-      const content = docToPlainText(doc);
+      const content = docToMarkdown(doc);
       const wordCount = typeof (data as any).wordCount === 'number' ? (data as any).wordCount : docWordCount(doc);
       return {
         id: ms.id,
@@ -797,6 +800,15 @@ export class PromptManager {
             imagePromptNegative: entry.metadata?.image_prompt_negative || undefined,
           };
         }),
+        ...outlines.map(outlineObj => {
+          const data = outlineObj.data[lang] || {};
+          return {
+            type: 'outline',
+            id: outlineObj.id,
+            name: data.name || '',
+            description: data.description || '',
+          };
+        }),
         ...acts
           .slice()
           .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0))
@@ -850,12 +862,14 @@ export class PromptManager {
                     .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0))
                     .map(chapter => {
                       const chapterData = chapter.data[lang] || {};
+                      const manuscript = manuscripts.find(ms => ms.metadata?.chapter_id === chapter.id);
                       return {
                         id: chapter.id,
                         name: chapterData.name || '',
                         description: chapterData.description || '',
                         order: (chapter.metadata?.order as number) || 0,
                         actId: act.id,
+                        manuscriptId: manuscript?.id || '',
                       };
                     }),
                 };
@@ -871,7 +885,7 @@ export class PromptManager {
         const chapter = chapters.find(ch => ch.id === chapterId);
         const chapterData = chapter?.data[lang] || {};
         const doc = normalizeDoc((data as any).doc);
-        const content = docToPlainText(doc);
+        const content = docToMarkdown(doc);
         return {
           id: ms.id,
           chapterId,

@@ -1,5 +1,5 @@
 import type { ObjectType, UnifiedObject, UpdateObjectRequest } from '../../types/unifiedObject';
-import type { StoreActions } from './types';
+import type { StoreActions } from '../../functionCall/apply/types';
 
 type UpdateKey = string;
 
@@ -36,17 +36,14 @@ function mergeMetadata(
 }
 
 /**
- * StoreActions wrapper that batches updateObject() calls and applies them once per object/language.
+ * StoreActions wrapper that stages updateObject() calls and applies them at flush().
  *
- * Goal:
- * - Reduce "N function calls → N versions" into "N function calls → 1 version per object"
- * - Avoid repeated network roundtrips when applying many edits (10+)
+ * - createObject/deleteObject are delegated immediately
+ * - updateObject is staged (deduped by object+language+createNewVersion)
  *
- * Notes:
- * - createObject/deleteObject are delegated immediately (not batched)
- * - updateObject is staged, and flush() performs the real updates
+ * This is scoped to a single apply run (create one instance per apply).
  */
-export class BatchStoreActions implements StoreActions {
+export class FunctionCallBatchStore implements StoreActions {
   private readonly baseStore: StoreActions;
 
   private readonly cacheById = new Map<string, UnifiedObject>();
@@ -207,4 +204,3 @@ export class BatchStoreActions implements StoreActions {
     }
   }
 }
-

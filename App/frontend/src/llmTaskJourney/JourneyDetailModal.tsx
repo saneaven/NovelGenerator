@@ -17,8 +17,8 @@ import { IconButton } from '../components/IconButton';
 import { FunctionCallCard } from '../components/functionCall';
 import { buildEditCardsFromFunctionCallMetadata } from '../functionCall';
 import { JourneyRuntime, applyJourneyEdits, rejectAllJourneyEdits } from './index';
-import type { HandlerOptions } from '../functionCall/applicator/types';
-import { CRUD_OPTIONS, TRANSLATION_OPTIONS } from '../functionCall/applicator/types';
+import type { HandlerOptions } from '../functionCall/apply/types';
+import { CRUD_OPTIONS, TRANSLATION_OPTIONS } from '../functionCall/apply/types';
 import '../llmTask/LLMTaskModals.css';
 
 function getApplyLanguage(journey: Journey, mainLanguage: string): string {

@@ -46,14 +46,25 @@
 {{/if}}
 
 {{#if (hasItems (filterByType filteredObjects "lorebook"))}}
-<lorebook-entries>
+<lorebooks>
 {{#each (filterByType filteredObjects "lorebook")}}
 <lorebook id="{{ this.id }}">
 <name>{{ this.name }}</name>
 <description>{{ this.description }}</description>
 </lorebook>
 {{/each}}
-</lorebook-entries>
+</lorebooks>
+{{/if}}
+
+{{#if (hasItems (filterByType filteredObjects "outline"))}}
+<outlines>
+{{#each (filterByType filteredObjects "outline")}}
+<outline id="{{ this.id }}">
+<name>{{ this.name }}</name>
+<description>{{ this.description }}</description>
+</outline>
+{{/each}}
+</outlines>
 {{/if}}
 
 {{#if (hasItems (filterByType filteredObjects "act"))}}

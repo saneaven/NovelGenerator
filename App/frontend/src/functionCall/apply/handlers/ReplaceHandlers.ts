@@ -1,10 +1,9 @@
 /**
- * Replace Handlers
+ * Apply Handlers - Replace
  *
  * Handlers for full replacement operations:
  * - replace_basic_info
  * - replace_story_object
- * - replace_manuscript
  * - replace_outline / replace_outline_act / replace_outline_chapter
  */
 
@@ -12,8 +11,6 @@ import type { ApplicationResult } from '../../types';
 import { getObjectData, ALL_OBJECT_TYPE_MAP } from '../../types';
 import type { HandlerContext } from '../types';
 import type { ObjectType, UnifiedObject } from '../../../types/unifiedObject';
-import { markdownToDoc } from '../../../editor/manuscript/convert';
-import { docWordCount } from '../../../editor/manuscript/doc';
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -127,54 +124,6 @@ export async function replaceStoryObject(
   });
 
   return ok(`Updated ${type}`, { id, type });
-}
-
-/**
- * Replace manuscript content
- */
-export async function replaceManuscript(
-  args: Record<string, unknown>,
-  context: HandlerContext
-): Promise<ApplicationResult> {
-  const { id, content } = args as {
-    id?: string;
-    content?: string;
-  };
-
-  if (!id || content === undefined) {
-    return error('Missing id or content for replace_manuscript');
-  }
-
-  const { store, projectId, language } = context;
-  const { createNewVersion = true, userRequest = 'AI Edit' } = context.options;
-
-  const nextDoc = markdownToDoc(content);
-  const wordCount = docWordCount(nextDoc);
-
-  // Get manuscript by ID
-  let manuscript = store.getObject(id) ?? null;
-
-  if (!manuscript) {
-    // Create new manuscript if it doesn't exist
-    manuscript = await store.createObject(
-      'manuscript',
-      projectId,
-      { doc: nextDoc, wordCount },
-      language,
-      { chapter_id: id },
-      userRequest
-    );
-    return ok('Updated manuscript', { id: manuscript.id });
-  }
-
-  await store.updateObject('manuscript', manuscript.id, {
-    data: { doc: nextDoc, wordCount },
-    language,
-    create_new_version: createNewVersion,
-    user_request: userRequest,
-  });
-
-  return ok('Updated manuscript', { id: manuscript.id });
 }
 
 // ============================================================================
@@ -321,7 +270,6 @@ export const REPLACE_HANDLERS = {
   // Basic handlers
   replace_basic_info: replaceBasicInfo,
   replace_story_object: replaceStoryObject,
-  replace_manuscript: replaceManuscript,
   // Outline handlers
   replace_outline: replaceOutline,
   replace_outline_act: replaceOutlineAct,

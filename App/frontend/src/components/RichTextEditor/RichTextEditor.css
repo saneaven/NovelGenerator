@@ -302,7 +302,7 @@
     border: none;
     border-radius: var(--border-radius-sm);
     background: var(--color-brand-primary);
-    color: white;
+    color: var(--color-text-inverse);
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-medium);
     cursor: pointer;
@@ -600,7 +600,7 @@
     }
 
     .editor-content-wrapper {
-        padding: var(--spacing-xl);
+        padding: var(--spacing-lg);
     }
     
     .editor-content-wrapper::after {

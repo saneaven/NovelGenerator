@@ -1,8 +1,7 @@
 /**
- * Applicator Types
+ * Function Call Apply Types
  *
- * Interfaces for dependency injection into the UnifiedApplicator.
- * This allows the applicator to work with real stores or mocks for testing.
+ * Types shared between the function-call engine and apply handlers.
  */
 
 import type { ObjectType, UnifiedObject, UpdateObjectRequest } from '../../types/unifiedObject';
@@ -37,28 +36,6 @@ export interface StoreActions {
     request: UpdateObjectRequest
   ) => Promise<void>;
   deleteObject: (type: ObjectType, id: string) => Promise<void>;
-}
-
-// ============================================================================
-// APPLICATOR CONFIGURATION
-// ============================================================================
-
-/**
- * Configuration for the UnifiedApplicator
- */
-export interface ApplicatorConfig {
-  /** Store actions for object operations */
-  store: StoreActions;
-}
-
-/**
- * Context passed to the applicator.
- *
- * `language` is the target language for the operation.
- * `options` controls versioning and user_request metadata.
- */
-export interface ApplicatorContext extends ExecutionContext {
-  options?: HandlerOptions;
 }
 
 // ============================================================================
@@ -107,11 +84,3 @@ export type Handler = (
   args: Record<string, unknown>,
   context: HandlerContext
 ) => Promise<ApplicationResult>;
-
-/**
- * Handler registry entry
- */
-export interface HandlerEntry {
-  name: string;
-  handler: Handler;
-}

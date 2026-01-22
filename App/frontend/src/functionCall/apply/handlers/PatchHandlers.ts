@@ -1,10 +1,9 @@
 /**
- * Patch Handlers
+ * Apply Handlers - Patch
  *
  * Handlers for search-replace patch operations:
  * - patch_basic_info
  * - patch_story_object
- * - patch_manuscript
  * - patch_outline / patch_outline_act / patch_outline_chapter
  *
  * Each patch function handles a single replacement (field, old, new).
@@ -16,8 +15,6 @@ import { getObjectData, ALL_OBJECT_TYPE_MAP } from '../../types';
 import type { HandlerContext } from '../types';
 import type { ObjectType, UnifiedObject } from '../../../types/unifiedObject';
 import { applySingleReplacement } from '../../../utils/patchUtils';
-import { docToMarkdown, markdownToDoc } from '../../../editor/manuscript/convert';
-import { docWordCount, normalizeDoc } from '../../../editor/manuscript/doc';
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -151,49 +148,6 @@ export async function patchStoryObject(
   });
 
   return ok(`Updated ${type}`, { id, field });
-}
-
-/**
- * Patch manuscript content using search and replace
- */
-export async function patchManuscript(
-  args: Record<string, unknown>,
-  context: HandlerContext
-): Promise<ApplicationResult> {
-  const { id, old: oldText, new: newText } = args as {
-    id?: string;
-    old?: string;
-    new?: string;
-  };
-
-  if (!id || !oldText || newText === undefined) {
-    return error('Missing required fields (id, old, new) for patch_manuscript');
-  }
-
-  const { store, language } = context;
-  const { createNewVersion = true, userRequest = 'AI Edit' } = context.options;
-
-  const manuscript = await ensureObject(store, 'manuscript', id);
-  const currentData = getObjectData(manuscript, language);
-  const currentDoc = normalizeDoc((currentData as any).doc);
-  const currentMarkdown = docToMarkdown(currentDoc);
-
-  const result = applySingleReplacement(currentMarkdown, oldText, newText);
-  if (!result.success) {
-    return error(result.error ?? 'Patch failed', manuscript.id, 'manuscript');
-  }
-
-  const nextDoc = markdownToDoc(result.value);
-  const wordCount = docWordCount(nextDoc);
-
-  await store.updateObject('manuscript', manuscript.id, {
-    data: { doc: nextDoc, wordCount },
-    language,
-    create_new_version: createNewVersion,
-    user_request: userRequest,
-  });
-
-  return ok('Updated manuscript', { id: manuscript.id });
 }
 
 // ============================================================================
@@ -367,7 +321,6 @@ export const PATCH_HANDLERS = {
   // Basic handlers
   patch_basic_info: patchBasicInfo,
   patch_story_object: patchStoryObject,
-  patch_manuscript: patchManuscript,
   // Outline handlers
   patch_outline: patchOutline,
   patch_outline_act: patchOutlineAct,

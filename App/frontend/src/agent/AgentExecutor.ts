@@ -24,7 +24,7 @@ import {
   rejectAllSessionEdits,
   toFunctionCallMetadata,
 } from '../llmTask/functionCalls/functionCallEngine';
-import type { HandlerOptions } from '../functionCall/applicator/types';
+import type { HandlerOptions } from '../functionCall/apply/types';
 import { generateTempId } from '../utils/tempId';
 import { registerSessionNotification, updateSessionNotification } from '../llmTask/notificationHelpers';
 

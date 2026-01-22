@@ -4,7 +4,6 @@
  * Unified system for handling LLM function calls.
  *
  * Main exports:
- * - UnifiedApplicator: Apply function calls to the store
  * - schemaRegistry: Single source of truth for function schemas
  * - buildEditCard: Build EditCard from function call
  */
@@ -61,18 +60,6 @@ export {
   isKnownFunction,
   getIdFromArgs,
 } from './normalizer';
-
-// Applicator
-export { UnifiedApplicator, createApplicator, BatchStoreActions } from './applicator';
-export type {
-  StoreActions,
-  ApplicatorConfig,
-  HandlerContext,
-  Handler,
-} from './applicator';
-
-// Applicator utilities
-export { createStoreActions, createApplicatorWithStore, useApplicator } from './applicator';
 
 // EditCards
 export {

@@ -1,5 +1,5 @@
 /**
- * Read Handlers
+ * Apply Handlers - Read
  *
  * Handlers for read operations:
  * - read_story_object: Read character, location, organization, lorebook, basic_info, or guidelines
@@ -10,7 +10,8 @@
 import type { ApplicationResult } from '../../types';
 import { getObjectData } from '../../types';
 import type { Handler, HandlerContext } from '../types';
-import { docToPlainText, normalizeDoc } from '../../../editor/manuscript/doc';
+import { normalizeDoc } from '../../../editor/manuscript/doc';
+import { docToMarkdown } from '../../../editor/manuscript/convert';
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -107,15 +108,15 @@ export async function readManuscript(
 
   const data = getObjectData(manuscript, context.language);
   const doc = normalizeDoc((data as { doc?: unknown }).doc);
-  let plainText = docToPlainText(doc);
-  const totalLength = plainText.length;
+  let markdown = docToMarkdown(doc);
+  const totalLength = markdown.length;
 
   // Apply offset if provided
   if (offset) {
-    plainText = plainText.slice(offset.from, offset.to);
+    markdown = markdown.slice(offset.from, offset.to);
   }
 
-  return ok(plainText, {
+  return ok(markdown, {
     wordCount: (data as { wordCount?: number }).wordCount,
     totalLength,
     offset: offset ?? null,
