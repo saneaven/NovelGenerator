@@ -78,7 +78,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 function computeOutputMode(rawMode?: boolean): OutputMode {
   const settingsStore = useSettingsStore.getState();
   if (rawMode) return 'raw_output';
-  return settingsStore.settings.nativeOutputMode ? 'native_function_call' : 'tool_call';
+  return settingsStore.settings.nativeOutputMode ? 'native_tool_call' : 'tool_call';
 }
 
 function getObjectLabel(obj: any, language: string): { name: string; description: string } {
@@ -198,7 +198,7 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
 
     const mainLanguage = settingsStore.settings.mainLanguage;
     const outputMode = computeOutputMode(input.rawMode);
-    const editAssistantConfig = settingsStore.getFunctionConfig('editAssistant');
+    const editAssistantConfig = settingsStore.getTaskConfig('editAssistant');
 
     const isManuscriptMode = input.category === 'manuscript';
     const targetId = journey.editingTargets.kind === 'aiEdit' ? journey.editingTargets.targetId : (input.targetId ?? '');
@@ -236,8 +236,7 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
         outputMode,
         outputLanguage: mainLanguage,
         enablePrefill: editAssistantConfig.advanced.enablePrefill,
-        enableThinking: editAssistantConfig.advanced.thinkingMode === 'model',
-        enableCustomThinking: editAssistantConfig.advanced.thinkingMode === 'custom',
+        thinkingMode: editAssistantConfig.advanced.thinkingMode,
       };
 
       return {
@@ -246,7 +245,7 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
         promptContext,
         prepared: {
           messages: [],
-          functions: PromptManager.getFunctionsForMode(LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT, promptContext),
+          tools: PromptManager.getToolsForMode(LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT, promptContext),
           outputMode,
         },
         thinkingMode: editAssistantConfig.advanced.thinkingMode,
@@ -261,8 +260,7 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
       outputMode,
       outputLanguage: mainLanguage,
       enablePrefill: editAssistantConfig.advanced.enablePrefill,
-      enableThinking: editAssistantConfig.advanced.thinkingMode === 'model',
-      enableCustomThinking: editAssistantConfig.advanced.thinkingMode === 'custom',
+      thinkingMode: editAssistantConfig.advanced.thinkingMode,
     };
 
     return {
@@ -271,7 +269,7 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
       promptContext,
       prepared: {
         messages: [],
-        functions: PromptManager.getFunctionsForMode(LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT, promptContext),
+        tools: PromptManager.getToolsForMode(LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT, promptContext),
         outputMode,
       },
       thinkingMode: editAssistantConfig.advanced.thinkingMode,
@@ -333,7 +331,7 @@ const translateObjectsSpec: JourneySpec<TranslateObjectsInput> = {
 
   buildLLMConfig: (input) => {
     const settingsStore = useSettingsStore.getState();
-    const translationConfig = settingsStore.getFunctionConfig('translation');
+    const translationConfig = settingsStore.getTaskConfig('translation');
 
     const outputMode = computeOutputMode(input.rawMode);
 
@@ -351,8 +349,7 @@ const translateObjectsSpec: JourneySpec<TranslateObjectsInput> = {
       outputMode,
       outputLanguage: input.targetLanguage,
       enablePrefill: translationConfig.advanced.enablePrefill,
-      enableThinking: translationConfig.advanced.thinkingMode === 'model',
-      enableCustomThinking: translationConfig.advanced.thinkingMode === 'custom',
+      thinkingMode: translationConfig.advanced.thinkingMode,
     };
 
     return {
@@ -361,7 +358,7 @@ const translateObjectsSpec: JourneySpec<TranslateObjectsInput> = {
       promptContext,
       prepared: {
         messages: [],
-        functions: PromptManager.getFunctionsForMode(LLMTaskMode.TRANSLATION, promptContext),
+        tools: PromptManager.getToolsForMode(LLMTaskMode.TRANSLATION, promptContext),
         outputMode,
       },
       thinkingMode: translationConfig.advanced.thinkingMode,
@@ -433,7 +430,7 @@ const imagePromptSpec: JourneySpec<ImagePromptInput, ImagePromptResult> = {
     const settingsStore = useSettingsStore.getState();
     const unifiedStore = useUnifiedObjectStore.getState();
 
-    const imagePromptConfig = settingsStore.getFunctionConfig('imagePrompt');
+    const imagePromptConfig = settingsStore.getTaskConfig('imagePrompt');
     const mainLanguage = settingsStore.settings.mainLanguage;
 
     const outputMode: OutputMode = 'raw_output';
@@ -457,8 +454,7 @@ const imagePromptSpec: JourneySpec<ImagePromptInput, ImagePromptResult> = {
         outputMode,
         outputLanguage: mainLanguage,
         enablePrefill: imagePromptConfig.advanced.enablePrefill,
-        enableThinking: imagePromptConfig.advanced.thinkingMode === 'model',
-        enableCustomThinking: imagePromptConfig.advanced.thinkingMode === 'custom',
+        thinkingMode: imagePromptConfig.advanced.thinkingMode,
       };
 
       return {
@@ -494,8 +490,7 @@ const imagePromptSpec: JourneySpec<ImagePromptInput, ImagePromptResult> = {
         outputMode,
         outputLanguage: mainLanguage,
         enablePrefill: imagePromptConfig.advanced.enablePrefill,
-        enableThinking: imagePromptConfig.advanced.thinkingMode === 'model',
-        enableCustomThinking: imagePromptConfig.advanced.thinkingMode === 'custom',
+        thinkingMode: imagePromptConfig.advanced.thinkingMode,
       };
 
       return {
@@ -535,8 +530,7 @@ const imagePromptSpec: JourneySpec<ImagePromptInput, ImagePromptResult> = {
       outputMode,
       outputLanguage: mainLanguage,
       enablePrefill: imagePromptConfig.advanced.enablePrefill,
-      enableThinking: imagePromptConfig.advanced.thinkingMode === 'model',
-      enableCustomThinking: imagePromptConfig.advanced.thinkingMode === 'custom',
+      thinkingMode: imagePromptConfig.advanced.thinkingMode,
     };
 
     return {

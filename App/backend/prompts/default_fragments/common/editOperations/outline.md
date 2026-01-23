@@ -31,9 +31,9 @@ Each patch operation applies a single search-and-replace:
 **Important Rules:**
 - The `old` string must be **unique** in the field - include enough context to ensure uniqueness
 - If multiple matches exist, add more surrounding text to `old` to make it unique
-- For multiple changes, make multiple patch function calls
+- For multiple changes, make multiple patch tool calls
 
-## Available Functions
+## Available Tools
 
 ### Outline CRUD Operations
 - `create_outline` - Create a new outline (for parallel storylines)
@@ -58,14 +58,14 @@ Each patch operation applies a single search-and-replace:
 Both replace and patch operations for acts and chapters support an `order` field:
 - Use 1-based positioning (order: 1 = first, order: 2 = second, etc.)
 - When you change an element's order, siblings are automatically reordered
-- Example: `{ "function": "replace_outline_act", "id": "act-123", "order": 2 }`
+- Example: `{ "tool": "replace_outline_act", "id": "act-123", "order": 2 }`
 
 ## Moving Chapters Between Acts
 
 Use `replace_outline_chapter` with `actId` to move a chapter to a different act:
 ```json
 {
-  "function": "replace_outline_chapter",
+  "tool": "replace_outline_chapter",
   "id": "chapter-123",
   "actId": "new-act-id",
   "order": 1
@@ -75,7 +75,7 @@ Use `replace_outline_chapter` with `actId` to move a chapter to a different act:
 If you need to move a chapter **and** make a targeted text edit at the same time, you can use `patch_outline_chapter` with `actId`:
 ```json
 {
-  "function": "patch_outline_chapter",
+  "tool": "patch_outline_chapter",
   "id": "chapter-123",
   "field": "description",
   "old": "text to find",

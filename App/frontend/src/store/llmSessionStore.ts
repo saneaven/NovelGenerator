@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ContentPart, FunctionCallProgress } from '../llm/requestTypes';
+import type { ContentPart, ToolCallProgress } from '../llm/requestTypes';
 import type { TaskSessionState } from '../llmTask';
 
 // AbortController registry (outside Zustand store to avoid serialization issues)
@@ -7,7 +7,7 @@ const abortControllers = new Map<string, AbortController>();
 
 type AnySession = TaskSessionState<any, any>;
 
-function getProgressKey(progress: FunctionCallProgress): string {
+function getProgressKey(progress: ToolCallProgress): string {
   const index = progress?.draft?.index;
   if (typeof index === 'number') {
     return `index:${index}`;
@@ -15,17 +15,17 @@ function getProgressKey(progress: FunctionCallProgress): string {
   return `id:${progress?.draft?.id ?? ''}`;
 }
 
-function mergeFunctionCallProgress(
-  existing: FunctionCallProgress[] | undefined,
-  incoming: FunctionCallProgress[]
-): FunctionCallProgress[] {
+function mergeToolCallProgress(
+  existing: ToolCallProgress[] | undefined,
+  incoming: ToolCallProgress[]
+): ToolCallProgress[] {
   // Explicit empty array means "clear"
   if (incoming.length === 0) {
     return [];
   }
 
   const order: string[] = [];
-  const map = new Map<string, FunctionCallProgress>();
+  const map = new Map<string, ToolCallProgress>();
 
   for (const p of existing ?? []) {
     const key = getProgressKey(p);
@@ -83,9 +83,9 @@ export const useLLMSessionStore = create<LLMSessionStore>((set, get) => ({
       if (!existing) return state;
 
       const mergedProgress =
-        partial.functionCallProgress !== undefined
-          ? mergeFunctionCallProgress(existing.functionCallProgress, partial.functionCallProgress)
-          : existing.functionCallProgress;
+        partial.toolCallProgress !== undefined
+          ? mergeToolCallProgress(existing.toolCallProgress, partial.toolCallProgress)
+          : existing.toolCallProgress;
 
       return {
         sessions: {
@@ -93,7 +93,7 @@ export const useLLMSessionStore = create<LLMSessionStore>((set, get) => ({
           [id]: {
             ...existing,
             ...partial,
-            functionCallProgress: mergedProgress,
+            toolCallProgress: mergedProgress,
             updatedAt: Date.now(),
           },
         },

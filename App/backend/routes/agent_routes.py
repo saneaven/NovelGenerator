@@ -218,7 +218,7 @@ async def create_message(
         agent_id=agent_id,
         role=data.role,
         data=message_data,
-        function_calls=data.function_calls
+        tool_calls=data.tool_calls
     )
 
     db.add(message)
@@ -298,10 +298,10 @@ async def update_message(
     message.data = message_data  # type: ignore
     flag_modified(message, "data")
 
-    # Update function calls if provided
-    if data.function_calls is not None:
-        message.function_calls = data.function_calls  # type: ignore
-        flag_modified(message, "function_calls")
+    # Update tool calls if provided
+    if data.tool_calls is not None:
+        message.tool_calls = data.tool_calls  # type: ignore
+        flag_modified(message, "tool_calls")
 
     db.commit()
     db.refresh(message)

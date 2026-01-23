@@ -13,7 +13,7 @@ import NotificationProgressBar from '../components/Notification/NotificationProg
 import { Close } from '../components/icons';
 import { TextButton } from '../components/TextButton';
 import { IconButton } from '../components/IconButton';
-import { FunctionCallCard } from '../components/functionCall';
+import { ToolCallCard } from '../components/toolCall';
 import {
   AgentExecutor,
   type AgentExecutorInput,
@@ -21,7 +21,7 @@ import {
   applyAgentEdits,
   rejectAllAgentEdits,
 } from '../agent';
-import { CRUD_OPTIONS } from '../functionCall/apply/types';
+import { CRUD_OPTIONS } from '../toolCall/apply/types';
 import './LLMTaskModals.css';
 
 export const LLMTaskModals: React.FC = () => {
@@ -58,26 +58,26 @@ export const LLMTaskModals: React.FC = () => {
 
   // Auto-scroll to bottom when content changes
   const lastContentPart = session?.contentParts?.[session.contentParts.length - 1]?.text ?? '';
-  const functionCallProgressLength = session?.functionCallProgress?.length ?? 0;
+  const toolCallProgressLength = session?.toolCallProgress?.length ?? 0;
 
   useEffect(() => {
     if (userScrolledUpRef.current) return;
     const el = bodyRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [lastContentPart, functionCallProgressLength, session?.status]);
+  }, [lastContentPart, toolCallProgressLength, session?.status]);
 
-  const hasStreamingCalls = session?.status === 'running' && (session.functionCallProgress?.length ?? 0) > 0;
+  const hasStreamingCalls = session?.status === 'running' && (session.toolCallProgress?.length ?? 0) > 0;
   const hasCards = (session?.editCards?.length ?? 0) > 0;
-  const hasFunctionCalls = hasStreamingCalls || hasCards;
+  const hasToolCalls = hasStreamingCalls || hasCards;
 
   useEffect(() => {
-    if (hasFunctionCalls) {
+    if (hasToolCalls) {
       setOutputExpanded(false);
     } else {
       setOutputExpanded(true);
     }
-  }, [hasFunctionCalls]);
+  }, [hasToolCalls]);
 
   const statusLabel = useMemo(() => {
     if (!session) return '';
@@ -109,7 +109,7 @@ export const LLMTaskModals: React.FC = () => {
 
   const isApplying = session?.status === 'applying';
   const hasPendingCards = session?.editCards?.some(
-    c => c.functionCall.status === 'pending' || c.functionCall.status === 'validating'
+    c => c.toolCall.status === 'pending' || c.toolCall.status === 'validating'
   ) ?? false;
   const isPending = session?.status === 'pending_confirmation' || isApplying || hasPendingCards;
 
@@ -245,18 +245,18 @@ export const LLMTaskModals: React.FC = () => {
         </div>
 
         {hasStreamingCalls && (
-          <div className="llm-task-modal-function-calls">
-            <FunctionCallCard
+          <div className="llm-task-modal-tool-calls">
+            <ToolCallCard
               mode="streaming"
-              streamingProgress={session.functionCallProgress}
+              streamingProgress={session.toolCallProgress}
               projectId={projectId}
             />
           </div>
         )}
 
         {hasCards && (
-          <div className="llm-task-modal-function-calls">
-            <FunctionCallCard
+          <div className="llm-task-modal-tool-calls">
+            <ToolCallCard
               mode={isPending ? 'pending' : 'confirmed'}
               cards={session.editCards}
               onConfirm={isPending ? handleConfirm : undefined}

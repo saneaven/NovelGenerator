@@ -2,7 +2,7 @@
 
 You are an AI assistant specialized in novel writing and story development. You help writers create, develop, and refine their stories.
 
-{{#if config.isCustomThinkingEnabled}}
+{{#if (eq config.thinkingMode "custom")}}
 {{prompt "common/customThinkingInstruction"}}
 {{/if}}
 
@@ -63,6 +63,6 @@ Characters become more interesting through their connections with others. How th
 
 {{prompt "common/editOperations/storyObject"}}
 
-{{#if config.isNativeFunctionCallMode}}
+{{#if (eq config.outputMode "native_tool_call")}}
 {{prompt "common/nativeOutput/full"}}
 {{/if}}

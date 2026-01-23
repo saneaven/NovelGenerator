@@ -2,7 +2,7 @@
 
 You are an AI assistant that helps with novel writing. The user wants to modify story objects (basic info, characters, locations, organizations, lorebook, outlines, acts, or chapters).
 
-{{#if config.isCustomThinkingEnabled}}
+{{#if (eq config.thinkingMode "custom")}}
 {{prompt "common/customThinkingInstruction"}}
 {{/if}}
 
@@ -12,15 +12,15 @@ Respond in {{ config.mainLanguage }}.
 
 {{prompt "common/editOperations/storyObject"}}
 
-{{#if config.isRawOutputMode}}
+{{#if (eq config.outputMode "raw_output")}}
 
 ## Output Format (Raw Mode)
 
-Output ONLY the revised content directly. No function calls, no JSON, no XML tags.
+Output ONLY the revised content directly. No tool calls, no JSON, no XML tags.
 Just output the updated content text as plain text.
 
 {{else}}
-{{#if config.isNativeFunctionCallMode}}
+{{#if (eq config.outputMode "native_tool_call")}}
 
 {{prompt "common/nativeOutput/storyObject"}}
 

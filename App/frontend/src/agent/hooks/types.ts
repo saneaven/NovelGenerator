@@ -2,7 +2,7 @@
  * Agent Orchestration Hook Types
  *
  * Types for the unified agent orchestration hook that consolidates
- * agent management, function call handling, and context management.
+ * agent management, tool call handling, and context management.
  */
 
 import type { MutableRefObject } from 'react';
@@ -56,7 +56,7 @@ export interface AgentHandlersReturn {
   handleCancelEdit: () => void;
   /** Handle deleting a message */
   handleDeleteMessage: (messageId: string) => void;
-  /** Trigger auto-continue after function call confirmation */
+  /** Trigger auto-continue after tool call confirmation */
   triggerAutoContinue: () => Promise<void>;
 }
 

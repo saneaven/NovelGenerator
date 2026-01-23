@@ -1,4 +1,4 @@
-import type { EditCard } from '../functionCall';
+import type { EditCard } from '../toolCall';
 
 export type StoredEditCard = Omit<EditCard, 'onApply' | 'onReject'>;
 

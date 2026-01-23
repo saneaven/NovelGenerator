@@ -1,4 +1,4 @@
-import type { ChatMessage, FunctionCallMetadata } from '../llm/requestTypes';
+import type { ChatMessage, ToolCallMetadata } from '../llm/requestTypes';
 import { PromptManager } from '../llm/PromptManager';
 import { useSettingsStore } from '../store/settingsStore';
 import { useLLMSessionStore } from '../store/llmSessionStore';
@@ -8,9 +8,9 @@ import {
   stageSessionEdits,
   applySessionEdits,
   rejectAllSessionEdits,
-  toFunctionCallMetadata,
-} from '../llmTask/functionCalls/functionCallEngine';
-import type { HandlerOptions } from '../functionCall/apply/types';
+  toToolCallMetadata,
+} from '../llmTask/toolCalls/toolCallEngine';
+import type { HandlerOptions } from '../toolCall/apply/types';
 import { registerJourneyNotification, updateJourneyNotification } from './notificationHelpers';
 import { generateTempId } from '../utils/tempId';
 import { getJourneySpec, type JourneyKind } from './journeySpecs';
@@ -18,7 +18,7 @@ import type { LLMTaskJourney, JourneySpec } from './types';
 import { createChatMessage, collapseContentParts } from './types';
 
 // =====================================================================
-// Journey Function Call Sync Helpers (Simplified)
+// Journey Tool Call Sync Helpers (Simplified)
 // =====================================================================
 
 function findLastAssistantMessageId(journey: Journey | LLMTaskJourney): string | null {
@@ -29,23 +29,23 @@ function findLastAssistantMessageId(journey: Journey | LLMTaskJourney): string |
   return null;
 }
 
-function updateJourneyAssistantFunctionCalls(params: {
+function updateJourneyAssistantToolCalls(params: {
   journeyId: string;
   assistantMessageId: string;
-  functionCalls: FunctionCallMetadata[];
+  toolCalls: ToolCallMetadata[];
 }): void {
-  const { journeyId, assistantMessageId, functionCalls } = params;
+  const { journeyId, assistantMessageId, toolCalls } = params;
   const journeyStore = useJourneyStore.getState();
   const journey = journeyStore.getJourneyById(journeyId);
   if (!journey) return;
 
   const nextMessages = journey.messages.map((m) =>
-    m.id === assistantMessageId ? { ...m, functionCalls } : m
+    m.id === assistantMessageId ? { ...m, toolCalls } : m
   );
   journeyStore.updateJourney(journeyId, { messages: nextMessages });
 }
 
-function syncAssistantFunctionCallsFromCards(params: {
+function syncAssistantToolCallsFromCards(params: {
   journeyId: string;
   assistantMessageId: string;
 }): void {
@@ -54,10 +54,10 @@ function syncAssistantFunctionCallsFromCards(params: {
   const journey = journeyStore.getJourneyById(journeyId);
   const cards = journey?.editCards ?? [];
   if (!cards.length) return;
-  updateJourneyAssistantFunctionCalls({
+  updateJourneyAssistantToolCalls({
     journeyId,
     assistantMessageId,
-    functionCalls: toFunctionCallMetadata(cards),
+    toolCalls: toToolCallMetadata(cards),
   });
 }
 
@@ -69,9 +69,9 @@ async function stageJourneyEdits(params: {
   assistantMessageId: string;
   projectId: string;
   language: string;
-  functionCalls: FunctionCallMetadata[];
+  toolCalls: ToolCallMetadata[];
 }): Promise<void> {
-  const { journeyId, assistantMessageId, projectId, language, functionCalls } = params;
+  const { journeyId, assistantMessageId, projectId, language, toolCalls } = params;
   const journeyStore = useJourneyStore.getState();
   const journey = journeyStore.getJourneyById(journeyId);
   const sessionId = journey?.activeSessionId;
@@ -81,10 +81,10 @@ async function stageJourneyEdits(params: {
   }
 
   // Store initial (pending) tool calls on the assistant message
-  updateJourneyAssistantFunctionCalls({ journeyId, assistantMessageId, functionCalls });
+  updateJourneyAssistantToolCalls({ journeyId, assistantMessageId, toolCalls });
 
   // Stage edits using journey.sessionId
-  await stageSessionEdits({ sessionId, projectId, language, functionCalls });
+  await stageSessionEdits({ sessionId, projectId, language, toolCalls });
 
   // Copy editCards from llmSessionStore to journeyStore
   const session = useLLMSessionStore.getState().getSessionById(sessionId);
@@ -93,7 +93,7 @@ async function stageJourneyEdits(params: {
   }
 
   // Mirror validation results back into assistant message
-  syncAssistantFunctionCallsFromCards({ journeyId, assistantMessageId });
+  syncAssistantToolCallsFromCards({ journeyId, assistantMessageId });
 }
 
 /**
@@ -130,7 +130,7 @@ export async function applyJourneyEdits(params: {
   }
 
   if (assistantMessageId) {
-    syncAssistantFunctionCallsFromCards({ journeyId, assistantMessageId });
+    syncAssistantToolCallsFromCards({ journeyId, assistantMessageId });
   }
 
   // Update notification with new status
@@ -168,7 +168,7 @@ export function rejectAllJourneyEdits(params: { journeyId: string; reason?: stri
   }
 
   if (assistantMessageId) {
-    syncAssistantFunctionCallsFromCards({ journeyId, assistantMessageId });
+    syncAssistantToolCallsFromCards({ journeyId, assistantMessageId });
   }
 
   // Update notification with new status
@@ -198,7 +198,7 @@ function toLegacyJourney(journey: Journey): LLMTaskJourney {
     createdAt: journey.createdAt,
     updatedAt: journey.updatedAt,
     editingTargets: journey.editingTargets,
-    functions: journey.functions,
+    tools: journey.tools,
     messages: journey.messages,
   };
 }
@@ -240,8 +240,8 @@ function createFailedSession(params: {
     createdAt: now,
     updatedAt: now,
     contentParts: [],
-    functionCallProgress: [],
-    functionCalls: [],
+    toolCallProgress: [],
+    toolCalls: [],
     error,
   } as any);
   return sessionId;
@@ -279,7 +279,7 @@ function startAttempt(params: { journeyId: string }): AttemptContext {
   const assistantMessage = createChatMessage({ role: 'assistant', content: '', idPrefix: 'journey-assistant' });
   const assistantMessageId = assistantMessage.id;
 
-  const functions = PromptManager.getFunctionsForMode(llmConfig.mode, llmConfig.promptContext);
+  const tools = PromptManager.getToolsForMode(llmConfig.mode, llmConfig.promptContext);
 
   const handle = startLLMSession({
     kind: journey.kind as any,
@@ -297,7 +297,7 @@ function startAttempt(params: { journeyId: string }): AttemptContext {
 
   journeyStore.updateJourney(journeyId, {
     messages: [...journey.messages, assistantMessage],
-    functions,
+    tools,
     status: 'running',
     error: undefined,
     warning: undefined,
@@ -342,7 +342,7 @@ async function finalizeAttempt(ctx: AttemptContext, session: any): Promise<void>
   const finalizedAssistant: ChatMessage = {
     ...currentJourney.messages[idx],
     contentParts: session.contentParts ?? [],
-    functionCalls: session.functionCalls ?? [],
+    toolCalls: session.toolCalls ?? [],
     thinking_details: session.thinkingDetails ?? undefined,
   };
   const finalizedMessages = currentJourney.messages.slice();
@@ -388,8 +388,8 @@ async function finalizeAttempt(ctx: AttemptContext, session: any): Promise<void>
   }
 
   // Tool call modes: stage edit cards for confirmation
-  const functionCalls = session.functionCalls ?? [];
-  if (!functionCalls.length) {
+  const toolCalls = session.toolCalls ?? [];
+  if (!toolCalls.length) {
     journeyStore.updateJourney(journeyId, { status: 'error', error: 'AI response did not include any actions to apply.' });
     updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
     return;
@@ -404,7 +404,7 @@ async function finalizeAttempt(ctx: AttemptContext, session: any): Promise<void>
       assistantMessageId: finalizedAssistant.id,
       projectId: llmConfig.projectId,
       language,
-      functionCalls,
+      toolCalls,
     });
     journeyStore.updateJourney(journeyId, { status: 'pending_confirmation' });
     updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
@@ -444,7 +444,7 @@ export const JourneyRuntime = {
       createdAt: now,
       updatedAt: now,
       editingTargets: spec.buildEditingTargets(input),
-      functions: undefined,
+      tools: undefined,
       messages: [userMessage],
       activeSessionId: undefined,
       sessionHistory: undefined,

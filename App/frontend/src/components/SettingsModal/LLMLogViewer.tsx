@@ -144,10 +144,10 @@ const LLMLogViewer: React.FC = () => {
                                                     <label>{t('settings.llmLog.thinkingMode')}:</label>
                                                     <span>{log.request.thinkingMode}</span>
                                                 </div>
-                                                {log.request.functions && (
+                                                {log.request.tools && (
                                                     <div className="param">
-                                                        <label>{t('settings.llmLog.functions')}:</label>
-                                                        <span>{t('settings.llmLog.functionsDefined', { count: log.request.functions.length })}</span>
+                                                        <label>{t('settings.llmLog.tools')}:</label>
+                                                        <span>{t('settings.llmLog.toolsDefined', { count: log.request.tools.length })}</span>
                                                     </div>
                                                 )}
                                             </div>
@@ -169,11 +169,11 @@ const LLMLogViewer: React.FC = () => {
                                                         {JSON.stringify(log.response.contentParts, null, 2)}
                                                     </pre>
                                                 </div>
-                                                {log.response.functionCalls.length > 0 && (
-                                                    <div className="log-function-calls">
-                                                        <h5>{t('settings.llmLog.functionCalls', { count: log.response.functionCalls.length })}</h5>
+                                                {log.response.toolCalls.length > 0 && (
+                                                    <div className="log-tool-calls">
+                                                        <h5>{t('settings.llmLog.toolCalls', { count: log.response.toolCalls.length })}</h5>
                                                         <pre className="log-json">
-                                                            {JSON.stringify(log.response.functionCalls, null, 2)}
+                                                            {JSON.stringify(log.response.toolCalls, null, 2)}
                                                         </pre>
                                                     </div>
                                                 )}

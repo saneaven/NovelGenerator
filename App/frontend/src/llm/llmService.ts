@@ -43,14 +43,14 @@ export async function* streamLLM(
         signal?: AbortSignal;
         temperature?: number;
         model?: string;
-        functions?: any[];
+        tools?: any[];
         toolChoice?: 'auto' | 'required' | 'none';
         providerPreference?: ProviderPreference;
         thinkingConfig?: ThinkingConfig;
         thinkingMode?: 'off' | 'custom' | 'model';
         customApiFormat?: CustomApiFormat;
         retryConfig?: RetryConfig;
-        nativeFunctionCall?: boolean;
+        nativeToolCall?: boolean;
     }
 ): AsyncGenerator<string | { content: string | null; tool_calls?: any[]; thinking?: string; thinking_details?: ThinkingDetail[]; thinking_text?: string; thinking_signature?: string; usage?: TokenUsage }>
 {
@@ -70,9 +70,9 @@ export async function* streamLLM(
         config: backendConfig
     };
 
-    if (opts?.functions)
+    if (opts?.tools)
     {
-        requestBody.functions = opts.functions;
+        requestBody.tools = opts.tools;
     }
 
     if (opts?.toolChoice)
@@ -100,9 +100,9 @@ export async function* streamLLM(
         requestBody.custom_api_format = opts.customApiFormat;
     }
 
-    if (opts?.nativeFunctionCall === true)
+    if (opts?.nativeToolCall === true)
     {
-        requestBody.native_function_call = true;
+        requestBody.native_tool_call = true;
     }
 
     // Retry configuration

@@ -9,8 +9,8 @@ from ..models.db_models import User, UserSettings
 from ..schemas.settings import (
     UserSettingsResponse,
     UserSettingsUpdate,
-    FunctionAIConfig,
-    AIFunctionType,
+    TaskAIConfig,
+    AITaskType,
     RetryConfig,
     ImageGenConfig
 )
@@ -34,7 +34,7 @@ async def get_user_settings(
         # Create default settings if not exists
         settings = UserSettings(
             user_id=current_user.id,
-            function_configs={
+            task_configs={
                 'agent': {
                     'provider': 'openrouter',
                     'model': 'gpt-5-mini',
@@ -107,7 +107,7 @@ async def get_user_settings(
     }
 
     return UserSettingsResponse(
-        functionConfigs=settings.function_configs,
+        taskConfigs=settings.task_configs,
         mainLanguage=settings.main_language,
         subLanguages=settings.sub_languages or [],
         defaultSubLanguage=settings.default_sub_language,
@@ -117,7 +117,7 @@ async def get_user_settings(
         nativeOutputMode=settings.native_output_mode,
         patchAutoRetry=getattr(settings, 'patch_auto_retry', True),
         llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
-        functionCallHistoryLimit=getattr(settings, 'function_call_history_limit', 5),
+        toolCallHistoryLimit=getattr(settings, 'tool_call_history_limit', 5),
         thinkingHistoryLimit=getattr(settings, 'thinking_history_limit', 5),
         displayLanguage=getattr(settings, 'display_language', 'English'),
         uiLanguage=getattr(settings, 'ui_language', 'en')
@@ -143,11 +143,11 @@ async def update_user_settings(
         )
 
     # Update fields if provided
-    if update_data.functionConfigs is not None:
+    if update_data.taskConfigs is not None:
         # Convert Pydantic models to dict for JSONB storage
-        settings.function_configs = {
+        settings.task_configs = {
             k: v.model_dump(exclude_none=True)
-            for k, v in update_data.functionConfigs.items()
+            for k, v in update_data.taskConfigs.items()
         }
 
     if update_data.mainLanguage is not None:
@@ -185,8 +185,8 @@ async def update_user_settings(
     if update_data.llmLoggingEnabled is not None:
         settings.llm_logging_enabled = update_data.llmLoggingEnabled  # type: ignore
 
-    if update_data.functionCallHistoryLimit is not None:
-        settings.function_call_history_limit = update_data.functionCallHistoryLimit  # type: ignore
+    if update_data.toolCallHistoryLimit is not None:
+        settings.tool_call_history_limit = update_data.toolCallHistoryLimit  # type: ignore
 
     if update_data.thinkingHistoryLimit is not None:
         settings.thinking_history_limit = update_data.thinkingHistoryLimit  # type: ignore
@@ -223,7 +223,7 @@ async def update_user_settings(
     }
 
     return UserSettingsResponse(
-        functionConfigs=settings.function_configs,
+        taskConfigs=settings.task_configs,
         mainLanguage=settings.main_language,
         subLanguages=settings.sub_languages or [],
         defaultSubLanguage=settings.default_sub_language,
@@ -233,21 +233,21 @@ async def update_user_settings(
         nativeOutputMode=settings.native_output_mode,
         patchAutoRetry=getattr(settings, 'patch_auto_retry', True),
         llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
-        functionCallHistoryLimit=getattr(settings, 'function_call_history_limit', 5),
+        toolCallHistoryLimit=getattr(settings, 'tool_call_history_limit', 5),
         thinkingHistoryLimit=getattr(settings, 'thinking_history_limit', 5),
         displayLanguage=getattr(settings, 'display_language', 'English'),
         uiLanguage=getattr(settings, 'ui_language', 'en')
     )
 
 
-@router.patch("/function/{function_type}", response_model=UserSettingsResponse)
-async def update_function_config(
-    function_type: AIFunctionType,
-    config: FunctionAIConfig,
+@router.patch("/task/{task_type}", response_model=UserSettingsResponse)
+async def update_task_config(
+    task_type: AITaskType,
+    config: TaskAIConfig,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Update configuration for a specific AI function"""
+    """Update configuration for a specific AI task"""
 
     settings = db.query(UserSettings).filter(
         UserSettings.user_id == current_user.id
@@ -259,10 +259,10 @@ async def update_function_config(
             detail="Settings not found"
         )
 
-    # Update specific function config
-    function_configs = settings.function_configs.copy()
-    function_configs[function_type.value] = config.model_dump(exclude_none=True)
-    settings.function_configs = function_configs
+    # Update specific task config
+    task_configs = settings.task_configs.copy()
+    task_configs[task_type.value] = config.model_dump(exclude_none=True)
+    settings.task_configs = task_configs
 
     db.commit()
     db.refresh(settings)
@@ -290,7 +290,7 @@ async def update_function_config(
     }
 
     return UserSettingsResponse(
-        functionConfigs=settings.function_configs,
+        taskConfigs=settings.task_configs,
         mainLanguage=settings.main_language,
         subLanguages=settings.sub_languages or [],
         defaultSubLanguage=settings.default_sub_language,
@@ -300,7 +300,7 @@ async def update_function_config(
         nativeOutputMode=settings.native_output_mode,
         patchAutoRetry=getattr(settings, 'patch_auto_retry', True),
         llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
-        functionCallHistoryLimit=getattr(settings, 'function_call_history_limit', 5),
+        toolCallHistoryLimit=getattr(settings, 'tool_call_history_limit', 5),
         thinkingHistoryLimit=getattr(settings, 'thinking_history_limit', 5),
         displayLanguage=getattr(settings, 'display_language', 'English'),
         uiLanguage=getattr(settings, 'ui_language', 'en')
@@ -349,7 +349,7 @@ async def sync_settings_from_client(
         # Create new settings from client data
         settings = UserSettings(
             user_id=current_user.id,
-            function_configs=client_settings.get('functionConfigs', {}),
+            task_configs=client_settings.get('taskConfigs', {}),
             main_language=client_settings.get('mainLanguage', 'English'),
             sub_languages=client_settings.get('subLanguages', []),
             default_sub_language=client_settings.get('defaultSubLanguage'),
@@ -359,7 +359,7 @@ async def sync_settings_from_client(
             native_output_mode=client_settings.get('nativeOutputMode', False),
             patch_auto_retry=client_settings.get('patchAutoRetry', True),
             llm_logging_enabled=client_settings.get('llmLoggingEnabled', False),
-            function_call_history_limit=client_settings.get('functionCallHistoryLimit', 5),
+            tool_call_history_limit=client_settings.get('toolCallHistoryLimit', 5),
             thinking_history_limit=client_settings.get('thinkingHistoryLimit', 5),
             display_language=client_settings.get('displayLanguage', 'English'),
             ui_language=client_settings.get('uiLanguage', 'en')
@@ -367,7 +367,7 @@ async def sync_settings_from_client(
         db.add(settings)
     else:
         # Update existing settings
-        settings.function_configs = client_settings.get('functionConfigs', settings.function_configs)  # type: ignore
+        settings.task_configs = client_settings.get('taskConfigs', settings.task_configs)  # type: ignore
         settings.main_language = client_settings.get('mainLanguage', settings.main_language)  # type: ignore
         settings.sub_languages = client_settings.get('subLanguages', settings.sub_languages)  # type: ignore
         settings.default_sub_language = client_settings.get('defaultSubLanguage', settings.default_sub_language)  # type: ignore
@@ -377,7 +377,7 @@ async def sync_settings_from_client(
         settings.native_output_mode = client_settings.get('nativeOutputMode', settings.native_output_mode)  # type: ignore
         settings.patch_auto_retry = client_settings.get('patchAutoRetry', getattr(settings, 'patch_auto_retry', True))  # type: ignore
         settings.llm_logging_enabled = client_settings.get('llmLoggingEnabled', getattr(settings, 'llm_logging_enabled', False))  # type: ignore
-        settings.function_call_history_limit = client_settings.get('functionCallHistoryLimit', getattr(settings, 'function_call_history_limit', 5))  # type: ignore
+        settings.tool_call_history_limit = client_settings.get('toolCallHistoryLimit', getattr(settings, 'tool_call_history_limit', 5))  # type: ignore
         settings.thinking_history_limit = client_settings.get('thinkingHistoryLimit', getattr(settings, 'thinking_history_limit', 5))  # type: ignore
         settings.display_language = client_settings.get('displayLanguage', getattr(settings, 'display_language', 'English'))  # type: ignore
         settings.ui_language = client_settings.get('uiLanguage', getattr(settings, 'ui_language', 'en'))  # type: ignore

@@ -1,4 +1,4 @@
-import type { ChatMessage, ContentPart, FunctionCallProgress, FunctionCallMetadata } from '../../llm/requestTypes';
+import type { ChatMessage, ContentPart, ToolCallProgress, ToolCallMetadata } from '../../llm/requestTypes';
 import type { LLMTaskModeType, PromptContext } from '../../llm/types';
 import type { ProviderType, ProviderConfig, ThinkingConfig, CustomApiFormat, RetryConfig } from '../../store/settingsStore';
 import { LLMTask } from '../../llm/LLMTask';
@@ -57,8 +57,8 @@ export function startLLMSession<TInput = unknown, TResult = unknown>(
     createdAt: now,
     updatedAt: now,
     contentParts: [],
-    functionCallProgress: [],
-    functionCalls: [],
+    toolCallProgress: [],
+    toolCalls: [],
   } as any);
 
   // Register abort immediately so Stop works right away
@@ -86,9 +86,9 @@ export function startLLMSession<TInput = unknown, TResult = unknown>(
           onUpdate: (parts: ContentPart[]) => {
             store.setContentParts(sessionId, parts);
           },
-          onFunctionProgress: (progress: FunctionCallProgress[]) => {
+          onToolCallProgress: (progress: ToolCallProgress[]) => {
             // Merge progress updates so multiple calls can stream concurrently
-            store.updateSession(sessionId, { functionCallProgress: progress } as any);
+            store.updateSession(sessionId, { toolCallProgress: progress } as any);
           },
         }
       );
@@ -98,7 +98,7 @@ export function startLLMSession<TInput = unknown, TResult = unknown>(
       store.updateSession(sessionId, {
         status: 'success',
         contentParts: result.contentParts,
-        functionCalls: result.functionCalls as FunctionCallMetadata[],
+        toolCalls: result.toolCalls as ToolCallMetadata[],
         thinkingDetails: result.thinkingDetails,
         provider: result.provider,
         model: result.model,

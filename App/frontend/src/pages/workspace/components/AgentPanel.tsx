@@ -15,7 +15,7 @@ import AgentSidebar from '../../../components/Agent/AgentSidebar';
 import { DefaultDisplayProcessor } from '../../../agent/processors/DisplayProcessor';
 import type { ChatMessage } from '../../../llm/requestTypes';
 import ThinkingDisplay from '../../../components/common/ThinkingDisplay';
-import { FunctionCallCard } from '../../../components/functionCall';
+import { ToolCallCard } from '../../../components/toolCall';
 import { TextButton } from '../../../components/TextButton';
 import { IconButton } from '../../../components/IconButton';
 import AgentModeToggle from '../../../components/ui/AgentModeToggle';
@@ -24,9 +24,9 @@ import { Settings, Edit, Trash, Globe, CircularArrow, ChevronDown, Send, Stop } 
 import { useAgentOrchestration } from '../../../agent/hooks';
 import { getBestLanguageData } from '../../../utils/languageData';
 import { AgentExecutor, applyAgentEdits } from '../../../agent';
-import { applyFunctionCallsDirect } from '../../../llmTask/functionCalls/functionCallEngine';
-import { CRUD_OPTIONS } from '../../../functionCall/apply/types';
-import { buildEditCardsFromFunctionCallMetadata } from '../../../functionCall';
+import { applyToolCallsDirect } from '../../../llmTask/toolCalls/toolCallEngine';
+import { CRUD_OPTIONS } from '../../../toolCall/apply/types';
+import { buildEditCardsFromToolCallMetadata } from '../../../toolCall';
 
 interface AgentPanelProps
 {
@@ -689,18 +689,18 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                     const hasStreamingCalls = Boolean(
                         agentSession &&
                         agentSession.status === 'running' &&
-                        agentSession.functionCallProgress?.length > 0
+                        agentSession.toolCallProgress?.length > 0
                     );
                     const sessionCards = agentSession?.editCards;
                     const hasSessionCards = Boolean(sessionCards && sessionCards.length > 0);
-                    const storedFunctionCalls = message.storedMessage.functionCalls ?? [];
-                    const fallbackCards = !hasSessionCards && storedFunctionCalls.length > 0
-                        ? buildEditCardsFromFunctionCallMetadata(storedFunctionCalls)
+                    const storedToolCalls = message.storedMessage.toolCalls ?? [];
+                    const fallbackCards = !hasSessionCards && storedToolCalls.length > 0
+                        ? buildEditCardsFromToolCallMetadata(storedToolCalls)
                         : [];
                     const cardsToRender = (hasSessionCards ? sessionCards : fallbackCards) ?? [];
                     const hasEditCards = cardsToRender.length > 0;
                     const isApplying = agentSession?.status === 'applying' || applyingMessageEdits[message.chatMessage.id] === true;
-                    const hasPendingCards = cardsToRender.some((card: any) => card.functionCall.status === 'pending' || card.functionCall.status === 'validating');
+                    const hasPendingCards = cardsToRender.some((card: any) => card.toolCall.status === 'pending' || card.toolCall.status === 'validating');
                     const cardMode = hasSessionCards
                         ? (agentSession?.status === 'pending_confirmation' || isApplying || hasPendingCards ? 'pending' : 'confirmed')
                         : (hasPendingCards || isApplying ? 'pending' : 'confirmed');
@@ -739,9 +739,9 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                 {renderMessageContent(message, processingResult)}
                                         {hasStreamingCalls && (
                                             <div className="message-edit-cards">
-                                                <FunctionCallCard
+                                                <ToolCallCard
                                                     mode="streaming"
-                                                    streamingProgress={agentSession.functionCallProgress}
+                                                    streamingProgress={agentSession.toolCallProgress}
                                                     projectId={projectId}
                                                 />
                                             </div>
@@ -749,7 +749,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
 
                                         {hasEditCards && (
                                             <div className="message-edit-cards">
-                                                <FunctionCallCard
+                                                <ToolCallCard
                                                     mode={cardMode as any}
                                                     cards={cardsToRender as any}
                                                     onConfirm={
@@ -773,23 +773,23 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                     return;
                                                                 }
 
-                                                                if (!selectedAgentId || storedFunctionCalls.length === 0) return;
+                                                                if (!selectedAgentId || storedToolCalls.length === 0) return;
 
                                                                 setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: true }));
                                                                 try {
-                                                                    const nextFunctionCalls = await applyFunctionCallsDirect({
+                                                                    const nextToolCalls = await applyToolCallsDirect({
                                                                         projectId,
                                                                         language: mainLanguage,
-                                                                        functionCalls: storedFunctionCalls,
+                                                                        toolCalls: storedToolCalls,
                                                                         selections,
                                                                         options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
                                                                     });
 
-                                                                    await useAgentStore.getState().updateMessageFunctionCalls(
+                                                                    await useAgentStore.getState().updateMessageToolCalls(
                                                                         projectId,
                                                                         selectedAgentId,
                                                                         message.chatMessage.id,
-                                                                        nextFunctionCalls
+                                                                        nextToolCalls
                                                                     );
                                                                 } finally {
                                                                     setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: false }));
@@ -818,23 +818,23 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                     return;
                                                                 }
 
-                                                                if (!selectedAgentId || storedFunctionCalls.length === 0) return;
+                                                                if (!selectedAgentId || storedToolCalls.length === 0) return;
 
                                                                 setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: true }));
                                                                 try {
-                                                                    const nextFunctionCalls = await applyFunctionCallsDirect({
+                                                                    const nextToolCalls = await applyToolCallsDirect({
                                                                         projectId,
                                                                         language: mainLanguage,
-                                                                        functionCalls: storedFunctionCalls,
+                                                                        toolCalls: storedToolCalls,
                                                                         selections,
                                                                         options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
                                                                     });
 
-                                                                    await useAgentStore.getState().updateMessageFunctionCalls(
+                                                                    await useAgentStore.getState().updateMessageToolCalls(
                                                                         projectId,
                                                                         selectedAgentId,
                                                                         message.chatMessage.id,
-                                                                        nextFunctionCalls
+                                                                        nextToolCalls
                                                                     );
                                                                 } finally {
                                                                     setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: false }));

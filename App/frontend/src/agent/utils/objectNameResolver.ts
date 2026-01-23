@@ -23,12 +23,12 @@ const getAllActs = (storyObjects: SimplifiedStoryObjects): ActLike[] => {
 };
 
 /**
- * Parses a function name like "update_character" into { action: "update", objectType: "character" }
+ * Parses a tool name like "update_character" into { action: "update", objectType: "character" }
  */
-export const parseFunctionName = (
-  functionName: string
+export const parseToolName = (
+  toolName: string
 ): { action: string; objectType: string } | undefined => {
-  if (!functionName) return undefined;
+  if (!toolName) return undefined;
 
   // Handle patterns like: create_character, update_basic_info, delete_lorebook_entry
   const patterns: Array<{ regex: RegExp; objectType: string }> = [
@@ -43,7 +43,7 @@ export const parseFunctionName = (
   ];
 
   for (const { regex, objectType } of patterns) {
-    const match = functionName.match(regex);
+    const match = toolName.match(regex);
     if (match) {
       return { action: match[1], objectType };
     }
@@ -54,7 +54,7 @@ export const parseFunctionName = (
 
 /**
  * Resolves an object ID to its human-readable name using storyObjects.
- * Used to display friendly names instead of UUIDs in function call previews.
+ * Used to display friendly names instead of UUIDs in tool call previews.
  */
 export const resolveStoryObjectName = (
   storyObjects: SimplifiedStoryObjects,

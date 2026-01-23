@@ -14,8 +14,8 @@ class ProviderType(str, Enum):
     XAI = "xai"
 
 
-class AIFunctionType(str, Enum):
-    """AI function types"""
+class AITaskType(str, Enum):
+    """AI task types"""
     AGENT = "agent"
     TRANSLATION = "translation"
     EDIT_ASSISTANT = "editAssistant"
@@ -38,21 +38,21 @@ class ThinkingConfig(BaseModel):
     geminiBudgetTokens: Optional[int] = None
 
 
-class AdvancedFunctionSettings(BaseModel):
-    """Advanced settings for AI functions"""
+class AdvancedTaskSettings(BaseModel):
+    """Advanced settings for AI tasks"""
     enablePrefill: bool = False
     thinkingMode: str = "off"  # 'off' | 'model' | 'custom'
     thinkingConfig: Optional[ThinkingConfig] = Field(default_factory=lambda: ThinkingConfig())
     customApiFormat: str = "openai"  # 'openai' | 'claude' | 'gemini' | 'openrouter' - for custom provider
 
 
-class FunctionAIConfig(BaseModel):
-    """Configuration for a specific AI function"""
+class TaskAIConfig(BaseModel):
+    """Configuration for a specific AI task"""
     provider: ProviderType
     model: str = Field(..., min_length=1, max_length=200)
     temperature: float = Field(default=0.7, ge=0, le=2)
     providerPreference: Optional[ProviderPreference] = None
-    advanced: AdvancedFunctionSettings = Field(default_factory=AdvancedFunctionSettings)
+    advanced: AdvancedTaskSettings = Field(default_factory=AdvancedTaskSettings)
 
     class Config:
         use_enum_values = True
@@ -175,7 +175,7 @@ class ImageGenConfig(BaseModel):
 
 class UserSettingsResponse(BaseModel):
     """User settings response"""
-    functionConfigs: Dict[str, FunctionAIConfig]
+    taskConfigs: Dict[str, TaskAIConfig]
     mainLanguage: str
     subLanguages: List[str] = []
     defaultSubLanguage: Optional[str] = None
@@ -185,7 +185,7 @@ class UserSettingsResponse(BaseModel):
     nativeOutputMode: bool = False
     patchAutoRetry: bool = True
     llmLoggingEnabled: bool = False
-    functionCallHistoryLimit: int = 5
+    toolCallHistoryLimit: int = 5
     thinkingHistoryLimit: int = 5
     displayLanguage: str = "English"
     uiLanguage: str = "en"
@@ -196,7 +196,7 @@ class UserSettingsResponse(BaseModel):
 
 class UserSettingsUpdate(BaseModel):
     """Update user settings"""
-    functionConfigs: Optional[Dict[str, FunctionAIConfig]] = None
+    taskConfigs: Optional[Dict[str, TaskAIConfig]] = None
     mainLanguage: Optional[str] = None
     subLanguages: Optional[List[str]] = None
     defaultSubLanguage: Optional[str] = None
@@ -206,7 +206,7 @@ class UserSettingsUpdate(BaseModel):
     nativeOutputMode: Optional[bool] = None
     patchAutoRetry: Optional[bool] = None
     llmLoggingEnabled: Optional[bool] = None
-    functionCallHistoryLimit: Optional[int] = None
+    toolCallHistoryLimit: Optional[int] = None
     thinkingHistoryLimit: Optional[int] = None
     displayLanguage: Optional[str] = None
     uiLanguage: Optional[str] = None

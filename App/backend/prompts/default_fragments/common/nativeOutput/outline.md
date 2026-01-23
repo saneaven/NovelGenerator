@@ -1,87 +1,87 @@
 ## Native Outline Output
 
-You are in native function call mode.
+You are in native tool call mode.
 
 ### Example: Outline structure changes
 ```xml
-<function_calls>
-  <function_call>{"function":"create_outline_act","outlineId":"outline-1","name":"Act II","description":"The confrontation begins","content":"Full act content..."}</function_call>
-  <function_call>{"function":"replace_outline_act","id":"act-123","name":"Rising Action","order":2}</function_call>
-</function_calls>
+<tool_calls>
+  <tool_call>{"tool":"create_outline_act","outlineId":"outline-1","name":"Act II","description":"The confrontation begins","content":"Full act content..."}</tool_call>
+  <tool_call>{"tool":"replace_outline_act","id":"act-123","name":"Rising Action","order":2}</tool_call>
+</tool_calls>
 ```
 
 ### Example: Multiple patch edits
 ```xml
-<function_calls>
-  <function_call>{"function":"patch_outline_act","id":"act-123","field":"description","old":"the hero fails","new":"the hero succeeds"}</function_call>
-  <function_call>{"function":"patch_outline_chapter","id":"ch-456","field":"name","old":"Chapter One","new":"The Beginning"}</function_call>
-</function_calls>
+<tool_calls>
+  <tool_call>{"tool":"patch_outline_act","id":"act-123","field":"description","old":"the hero fails","new":"the hero succeeds"}</tool_call>
+  <tool_call>{"tool":"patch_outline_chapter","id":"ch-456","field":"name","old":"Chapter One","new":"The Beginning"}</tool_call>
+</tool_calls>
 ```
 
 ### Outline Operations
 
 **create_outline**
 ```json
-{ "function": "create_outline", "name": "Main Story", "description": "One-line summary", "content": "The primary storyline" }
+{ "tool": "create_outline", "name": "Main Story", "description": "One-line summary", "content": "The primary storyline" }
 ```
 
 **delete_outline**
 ```json
-{ "function": "delete_outline", "id": "outline-123" }
+{ "tool": "delete_outline", "id": "outline-123" }
 ```
 
 **replace_outline** (only include fields to change)
 ```json
-{ "function": "replace_outline", "id": "outline-123", "name": "New Name", "description": "New summary", "content": "New content" }
+{ "tool": "replace_outline", "id": "outline-123", "name": "New Name", "description": "New summary", "content": "New content" }
 ```
 
 **patch_outline** (single targeted edit)
 ```json
-{ "function": "patch_outline", "id": "outline-123", "field": "description", "old": "text to find", "new": "replacement" }
+{ "tool": "patch_outline", "id": "outline-123", "field": "description", "old": "text to find", "new": "replacement" }
 ```
 
 ### Act Operations
 
 **create_outline_act**
 ```json
-{ "function": "create_outline_act", "outlineId": "outline-123", "name": "Act I", "description": "One-line summary", "content": "Setup and introduction" }
+{ "tool": "create_outline_act", "outlineId": "outline-123", "name": "Act I", "description": "One-line summary", "content": "Setup and introduction" }
 ```
 
 **delete_outline_act**
 ```json
-{ "function": "delete_outline_act", "id": "act-123" }
+{ "tool": "delete_outline_act", "id": "act-123" }
 ```
 
 **replace_outline_act** (only include fields to change)
 ```json
-{ "function": "replace_outline_act", "id": "act-123", "name": "New Name", "description": "New summary", "content": "New content", "order": 2 }
+{ "tool": "replace_outline_act", "id": "act-123", "name": "New Name", "description": "New summary", "content": "New content", "order": 2 }
 ```
 
 **patch_outline_act** (single targeted edit, can also change order)
 ```json
-{ "function": "patch_outline_act", "id": "act-123", "field": "description", "old": "text to find", "new": "replacement", "order": 3 }
+{ "tool": "patch_outline_act", "id": "act-123", "field": "description", "old": "text to find", "new": "replacement", "order": 3 }
 ```
 
 ### Chapter Operations
 
 **create_outline_chapter**
 ```json
-{ "function": "create_outline_chapter", "actId": "act-123", "name": "Chapter Name", "description": "One-line summary", "content": "Full chapter content" }
+{ "tool": "create_outline_chapter", "actId": "act-123", "name": "Chapter Name", "description": "One-line summary", "content": "Full chapter content" }
 ```
 
 **delete_outline_chapter**
 ```json
-{ "function": "delete_outline_chapter", "id": "ch-123" }
+{ "tool": "delete_outline_chapter", "id": "ch-123" }
 ```
 
 **replace_outline_chapter** (only include fields to change)
 ```json
-{ "function": "replace_outline_chapter", "id": "ch-123", "name": "New Name", "description": "New summary", "content": "New content", "actId": "act-456", "order": 2 }
+{ "tool": "replace_outline_chapter", "id": "ch-123", "name": "New Name", "description": "New summary", "content": "New content", "actId": "act-456", "order": 2 }
 ```
 
 **patch_outline_chapter** (single targeted edit, can also change order/actId)
 ```json
-{ "function": "patch_outline_chapter", "id": "ch-123", "field": "description", "old": "text to find", "new": "replacement", "actId": "act-456", "order": 3 }
+{ "tool": "patch_outline_chapter", "id": "ch-123", "field": "description", "old": "text to find", "new": "replacement", "actId": "act-456", "order": 3 }
 ```
 
 **Important:**

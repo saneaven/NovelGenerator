@@ -1,5 +1,5 @@
-import type { FunctionCallSchema } from '../functionCall';
-import { STORY_OBJECT_EDIT_FUNCTIONS, MANUSCRIPT_EDIT_FUNCTIONS, getFunctionsForSet } from '../functionCall';
+import type { ToolCallSchema } from '../toolCall';
+import { STORY_OBJECT_EDIT_TOOLS, MANUSCRIPT_EDIT_TOOLS, getToolsForSet } from '../toolCall';
 import { renderTemplate, registerFragments, type PromptFragment } from '../templateEngine/engine';
 import { useSettingsStore } from '../store/settingsStore';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
@@ -12,6 +12,7 @@ import {
   LLMTaskMode,
   type LLMTaskModeType,
   type OutputMode,
+  type ThinkingMode,
   type PromptBundle,
   type PromptContext,
   type TemplateData,
@@ -151,10 +152,10 @@ export class PromptManager {
     return renderTemplate(template, data);
   }
 
-  static getFunctionsForMode(
+  static getToolsForMode(
     mode: LLMTaskModeType,
     context: PromptContext
-  ): FunctionCallSchema[] | undefined {
+  ): ToolCallSchema[] | undefined {
     const outputMode = this.resolveOutputMode(context);
     if (outputMode !== 'tool_call') return undefined;
 
@@ -162,13 +163,13 @@ export class PromptManager {
       case LLMTaskMode.AGENT_STORYOBJECT:
       case LLMTaskMode.AGENT_NOVEL_EDITOR:
       case LLMTaskMode.AGENT_OUTLINE_MANAGER:
-        return (context as AgentWorkspacePromptContext).functions;
+        return (context as AgentWorkspacePromptContext).tools;
       case LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT:
-        return this.getEditAssistantFunctions('storyObject');
+        return this.getEditAssistantTools('storyObject');
       case LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT:
-        return this.getEditAssistantFunctions('manuscript');
+        return this.getEditAssistantTools('manuscript');
       case LLMTaskMode.TRANSLATION:
-        return getFunctionsForSet('translateObjects');
+        return getToolsForSet('translateObjects');
       case LLMTaskMode.AGENT_TRANSLATION:
         return undefined;
       case LLMTaskMode.OBJECT_IMAGE_PROMPT:
@@ -521,8 +522,7 @@ export class PromptManager {
   // ==================== Helpers ====================
 
   private static buildConfigData(context: {
-    enableThinking?: boolean;
-    enableCustomThinking?: boolean;
+    thinkingMode?: ThinkingMode;
     enablePrefill?: boolean;
     outputMode?: OutputMode;
   }): TemplateData['config'] {
@@ -534,12 +534,9 @@ export class PromptManager {
       mainLanguage: settings.mainLanguage,
       displayLanguage: settings.displayLanguage || settings.mainLanguage,
       today: new Date().toISOString().split('T')[0],
-      isThinkingEnabled: context.enableThinking ?? false,
+      thinkingMode: context.thinkingMode ?? 'off',
       isPrefillEnabled: context.enablePrefill ?? false,
-      isCustomThinkingEnabled: context.enableCustomThinking ?? false,
       outputMode,
-      isNativeFunctionCallMode: outputMode === 'native_function_call',
-      isRawOutputMode: outputMode === 'raw_output',
     };
   }
 
@@ -940,11 +937,11 @@ export class PromptManager {
     };
   }
 
-  // ==================== Function Schemas ====================
+  // ==================== Tool Schemas ====================
 
-  private static getEditAssistantFunctions(
+  private static getEditAssistantTools(
     mode: 'manuscript' | 'storyObject'
-  ): FunctionCallSchema[] | undefined {
-    return mode === 'manuscript' ? MANUSCRIPT_EDIT_FUNCTIONS : STORY_OBJECT_EDIT_FUNCTIONS;
+  ): ToolCallSchema[] | undefined {
+    return mode === 'manuscript' ? MANUSCRIPT_EDIT_TOOLS : STORY_OBJECT_EDIT_TOOLS;
   }
 }

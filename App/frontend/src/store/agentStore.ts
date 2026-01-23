@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { agentService, type AgentResponse, type AgentMessageResponse } from '../api';
-import { type ChatMessage, type FunctionCallMetadata, type ContentPart, type Role } from '../llm/requestTypes';
+import { type ChatMessage, type ToolCallMetadata, type ContentPart, type Role } from '../llm/requestTypes';
 import { type LanguageData } from '../types/multilingual';
-import { type FunctionCallStatus, type FunctionCallFailureType, type ApplicationResult } from '../functionCall/types';
+import { type ToolCallStatus, type ToolCallFailureType, type ApplicationResult } from '../toolCall/types';
 
 // Language-specific content for agent messages
 export interface MessageContentData {
@@ -49,18 +49,18 @@ interface AgentStore {
   getMessages: (projectId: string, agentId: string, language: string) => ChatMessage[];
   deleteMessage: (projectId: string, agentId: string, messageId: string) => Promise<void>;
 
-  // Function call management
-  updateMessageFunctionCalls: (projectId: string, agentId: string, messageId: string, functionCalls: FunctionCallMetadata[]) => void;
-  updateFunctionCallStatus: (
+  // Tool call management
+  updateMessageToolCalls: (projectId: string, agentId: string, messageId: string, toolCalls: ToolCallMetadata[]) => void;
+  updateToolCallStatus: (
     projectId: string,
     agentId: string,
     messageId: string,
-    functionCallId: string,
-    status: FunctionCallStatus,
+    toolCallId: string,
+    status: ToolCallStatus,
     options?: {
       result?: ApplicationResult;
       reason?: string;
-      failureType?: FunctionCallFailureType;
+      failureType?: ToolCallFailureType;
     }
   ) => void;
 
@@ -113,7 +113,7 @@ const convertBackendMessage = (message: AgentMessageResponse): StoredAgentMessag
     id: message.id,
     role: message.role as Role,
     data: message.data,
-    functionCalls: message.function_calls,
+    toolCalls: message.tool_calls,
     timestamp: new Date(message.created_at),
   };
 };
@@ -328,8 +328,8 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
         content_parts: message.contentParts,
       };
 
-      if (message.functionCalls) {
-        payload.function_calls = message.functionCalls;
+      if (message.toolCalls) {
+        payload.tool_calls = message.toolCalls;
       }
 
       if (message.thinking_details) {
@@ -481,8 +481,8 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
     }
   },
 
-  // Function call management - syncs to backend
-  updateMessageFunctionCalls: async (projectId: string, agentId: string, messageId: string, functionCalls: FunctionCallMetadata[]) => {
+  // Tool call management - syncs to backend
+  updateMessageToolCalls: async (projectId: string, agentId: string, messageId: string, toolCalls: ToolCallMetadata[]) => {
     // Update local state first for immediate UI response
     set((state) => ({
       agentsByProject: {
@@ -493,7 +493,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
               ? {
                   ...agent,
                   messages: agent.messages.map((msg) =>
-                    msg.id === messageId ? { ...msg, functionCalls } : msg
+                    msg.id === messageId ? { ...msg, toolCalls } : msg
                   ),
                 }
               : agent
@@ -514,23 +514,23 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
       await agentService.updateMessage(projectId, agentId, messageId, {
         content_parts: contentParts,
         language: primaryLanguage,
-        function_calls: functionCalls,
+        tool_calls: toolCalls,
       });
     } catch (error) {
-      console.error('Failed to sync function calls to backend:', error);
+      console.error('Failed to sync tool calls to backend:', error);
     }
   },
 
-  updateFunctionCallStatus: async (
+  updateToolCallStatus: async (
     projectId: string,
     agentId: string,
     messageId: string,
-    functionCallId: string,
-    status: FunctionCallStatus,
+    toolCallId: string,
+    status: ToolCallStatus,
     options?: {
       result?: ApplicationResult;
       reason?: string;
-      failureType?: FunctionCallFailureType;
+      failureType?: ToolCallFailureType;
     }
   ) => {
     // Update local state first for immediate UI response
@@ -546,17 +546,17 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
                     msg.id === messageId
                       ? {
                           ...msg,
-                          functionCalls: msg.functionCalls?.map((funcCall) =>
-                            funcCall.id === functionCallId
+                          toolCalls: msg.toolCalls?.map((tc) =>
+                            tc.id === toolCallId
                               ? {
-                                  ...funcCall,
+                                  ...tc,
                                   status,
                                   reason: options?.reason,
                                   failureType: options?.failureType,
                                   result: options?.result,
                                   acceptedAt: status === 'accepted' ? new Date() : undefined,
                                 }
-                              : funcCall
+                              : tc
                           ),
                         }
                       : msg
@@ -571,7 +571,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
     try {
       const agent = get().getAgent(projectId, agentId);
       const message = agent?.messages.find((msg) => msg.id === messageId);
-      if (!message || !message.functionCalls) return;
+      if (!message || !message.toolCalls) return;
 
       // Get the primary language content for this message
       const primaryLanguage = Object.keys(message.data)[0] || 'English';
@@ -580,10 +580,10 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
       await agentService.updateMessage(projectId, agentId, messageId, {
         content_parts: contentParts,
         language: primaryLanguage,
-        function_calls: message.functionCalls,
+        tool_calls: message.toolCalls,
       });
     } catch (error) {
-      console.error('Failed to sync function call status to backend:', error);
+      console.error('Failed to sync tool call status to backend:', error);
     }
   },
 

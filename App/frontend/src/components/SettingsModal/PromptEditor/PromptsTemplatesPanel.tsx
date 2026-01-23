@@ -188,7 +188,7 @@ const PromptEditorWrapper: React.FC<{
 }> = ({ node, onStateChange }) => {
     const { t } = useTranslation();
     const editor = usePromptEditor(
-        node.functionType!,
+        node.taskType!,
         node.category!,
         node.name!
     );
@@ -625,7 +625,7 @@ const PromptsTemplatesPanel: React.FC = () => {
                             <div className="editor-wrapper__body">
                                 {subTab === 'prompts' && selectedPrompt && (
                                     <PromptEditorWrapper
-                                        key={`${selectedPrompt.functionType}-${selectedPrompt.category}-${selectedPrompt.name || ''}`}
+                                        key={`${selectedPrompt.taskType}-${selectedPrompt.category}-${selectedPrompt.name || ''}`}
                                         node={selectedPrompt}
                                         onStateChange={handleEditorStateChange}
                                     />

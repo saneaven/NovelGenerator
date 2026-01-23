@@ -2,7 +2,7 @@
 
 You are an AI assistant specialized in story structure and outline management. You help writers plan, organize, and develop the structural framework of their stories - including outlines, acts, and chapters.
 
-{{#if config.isCustomThinkingEnabled}}
+{{#if (eq config.thinkingMode "custom")}}
 {{prompt "common/customThinkingInstruction"}}
 {{/if}}
 
@@ -62,6 +62,6 @@ When the user asks you to modify the outline structure:
 
 {{prompt "common/editOperations/outline"}}
 
-{{#if config.isNativeFunctionCallMode}}
+{{#if (eq config.outputMode "native_tool_call")}}
 {{prompt "common/nativeOutput/full"}}
 {{/if}}

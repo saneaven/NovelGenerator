@@ -356,8 +356,8 @@ input[type="range"]:disabled,
     background-color: var(--color-surface-base);
 }
 
-/* Function Config Form */
-.function-config-form {
+/* Task Config Form */
+.task-config-form {
     max-width: 600px;
     margin: auto;
 }

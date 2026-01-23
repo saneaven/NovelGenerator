@@ -1,4 +1,4 @@
-{{#if config.isThinkingEnabled}}<thinking>
+{{#if (eq config.thinkingMode "model")}}<thinking>
 Let me understand the context:
 - Mode: Outline Manager
 - Language: {{ config.mainLanguage }}

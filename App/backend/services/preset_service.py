@@ -17,7 +17,7 @@ from ..prompts import get_default_prompts, get_default_fragments
 
 DEFAULT_PROMPT_NAME = "__default__"
 
-EXPECTED_PROMPT_NAMES_BY_FUNCTION: dict[str, list[str]] = {
+EXPECTED_PROMPT_NAMES_BY_TASK: dict[str, list[str]] = {
     "agent": ["storyObject", "novelEditor", "outlineManager"],
     "editAssistant": ["manuscript", "storyObject"],
     "imagePrompt": ["object", "scene", "coverImage"],
@@ -112,10 +112,10 @@ class PresetService:
 
     @staticmethod
     def _count_unique_prompts(db: Session, preset_id: uuid.UUID) -> int:
-        """Count unique prompts (by function_type, category, name combination)"""
+        """Count unique prompts (by task_type, category, name combination)"""
         # Use distinct on the identifying columns
         return db.query(
-            PromptVersion.function_type,
+            PromptVersion.task_type,
             PromptVersion.prompt_category,
             PromptVersion.prompt_name
         ).filter(
@@ -206,7 +206,7 @@ class PresetService:
         now = datetime.utcnow()
         count = 0
 
-        for function_type, categories in default_prompts.items():
+        for task_type, categories in default_prompts.items():
             for category, prompts in categories.items():
                 if isinstance(prompts, dict):
                     for name, content in prompts.items():
@@ -214,7 +214,7 @@ class PresetService:
                             id=uuid.uuid4(),
                             user_id=user_id,
                             preset_id=preset_id,
-                            function_type=function_type,
+                            task_type=task_type,
                             prompt_category=category,
                             prompt_name=name,
                             content=content,
@@ -230,7 +230,7 @@ class PresetService:
                         id=uuid.uuid4(),
                         user_id=user_id,
                         preset_id=preset_id,
-                        function_type=function_type,
+                        task_type=task_type,
                         prompt_category=category,
                         prompt_name=DEFAULT_PROMPT_NAME,
                         content=prompts,
@@ -362,7 +362,7 @@ class PresetService:
         """Copy latest version of each prompt to target preset."""
         # Get all unique prompt identifiers
         unique_prompts = db.query(
-            PromptVersion.function_type,
+            PromptVersion.task_type,
             PromptVersion.prompt_category,
             PromptVersion.prompt_name
         ).filter(
@@ -372,12 +372,12 @@ class PresetService:
         count = 0
         now = datetime.utcnow()
 
-        for function_type, prompt_category, prompt_name in unique_prompts:
+        for task_type, prompt_category, prompt_name in unique_prompts:
             # Get latest version
             latest = db.query(PromptVersion).filter(
                 and_(
                     PromptVersion.preset_id == source_preset_id,
-                    PromptVersion.function_type == function_type,
+                    PromptVersion.task_type == task_type,
                     PromptVersion.prompt_category == prompt_category,
                     PromptVersion.prompt_name == prompt_name
                 )
@@ -388,7 +388,7 @@ class PresetService:
                     id=uuid.uuid4(),
                     user_id=user_id,
                     preset_id=target_preset_id,
-                    function_type=latest.function_type,
+                    task_type=latest.task_type,
                     prompt_category=latest.prompt_category,
                     prompt_name=latest.prompt_name,
                     content=latest.content,
@@ -741,7 +741,7 @@ class PresetService:
         # 2. Get unique prompts (latest version of each)
         prompts_dict = {}
         unique_prompts = db.query(
-            PromptVersion.function_type,
+            PromptVersion.task_type,
             PromptVersion.prompt_category,
             PromptVersion.prompt_name
         ).filter(PromptVersion.preset_id == preset_id).distinct().all()
@@ -751,7 +751,7 @@ class PresetService:
             latest = db.query(PromptVersion).filter(
                 and_(
                     PromptVersion.preset_id == preset_id,
-                    PromptVersion.function_type == func_type,
+                    PromptVersion.task_type == func_type,
                     PromptVersion.prompt_category == category,
                     PromptVersion.prompt_name == name
                 )
@@ -865,7 +865,7 @@ class PresetService:
                         id=uuid.uuid4(),
                         user_id=user_id,
                         preset_id=preset.id,
-                        function_type=func_type,
+                        task_type=func_type,
                         prompt_category=category,
                         prompt_name=DEFAULT_PROMPT_NAME,
                         content=content,
@@ -878,12 +878,12 @@ class PresetService:
                     prompt_count += 1
 
                     # Backfill expected named prompts for known function types to keep the app usable
-                    for expected_name in EXPECTED_PROMPT_NAMES_BY_FUNCTION.get(func_type, []):
+                    for expected_name in EXPECTED_PROMPT_NAMES_BY_TASK.get(func_type, []):
                         prompt = PromptVersion(
                             id=uuid.uuid4(),
                             user_id=user_id,
                             preset_id=preset.id,
-                            function_type=func_type,
+                            task_type=func_type,
                             prompt_category=category,
                             prompt_name=expected_name,
                             content=content,
@@ -901,7 +901,7 @@ class PresetService:
                             id=uuid.uuid4(),
                             user_id=user_id,
                             preset_id=preset.id,
-                            function_type=func_type,
+                            task_type=func_type,
                             prompt_category=category,
                             prompt_name=prompt_name,
                             content=prompt_data["content"],

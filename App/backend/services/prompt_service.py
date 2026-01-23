@@ -21,7 +21,7 @@ class PromptService:
         db: Session,
         user_id: uuid.UUID,
         preset_id: uuid.UUID,
-        function_type: str,
+        task_type: str,
         prompt_category: str,
         prompt_name: str
     ) -> Optional[PromptContentResponse]:
@@ -32,7 +32,7 @@ class PromptService:
             db: Database session
             user_id: User ID
             preset_id: Preset ID
-            function_type: Function type (chat, translation, etc.)
+            task_type: Task type (agent, translation, etc.)
             prompt_category: Prompt category (systemPrompt, prefill, etc.)
             prompt_name: Optional prompt name (workspace, novelEditor, etc.)
 
@@ -44,7 +44,7 @@ class PromptService:
             and_(
                 PromptVersion.user_id == user_id,
                 PromptVersion.preset_id == preset_id,
-                PromptVersion.function_type == function_type,
+                PromptVersion.task_type == task_type,
                 PromptVersion.prompt_category == prompt_category,
                 PromptVersion.prompt_name == prompt_name,
             )
@@ -65,7 +65,7 @@ class PromptService:
         db: Session,
         user_id: uuid.UUID,
         preset_id: uuid.UUID,
-        function_type: str,
+        task_type: str,
         prompt_category: str,
         content: str,
         prompt_name: str,
@@ -78,7 +78,7 @@ class PromptService:
             db: Database session
             user_id: User ID
             preset_id: Preset ID
-            function_type: Function type
+            task_type: Task type
             prompt_category: Prompt category
             content: Prompt content
             note: Optional version note
@@ -92,7 +92,7 @@ class PromptService:
             and_(
                 PromptVersion.user_id == user_id,
                 PromptVersion.preset_id == preset_id,
-                PromptVersion.function_type == function_type,
+                PromptVersion.task_type == task_type,
                 PromptVersion.prompt_category == prompt_category,
                 PromptVersion.prompt_name == prompt_name
             )
@@ -105,7 +105,7 @@ class PromptService:
             id=uuid.uuid4(),
             user_id=user_id,
             preset_id=preset_id,
-            function_type=function_type,
+            task_type=task_type,
             prompt_category=prompt_category,
             prompt_name=prompt_name,
             content=content,
@@ -133,7 +133,7 @@ class PromptService:
         db: Session,
         user_id: uuid.UUID,
         preset_id: uuid.UUID,
-        function_type: str,
+        task_type: str,
         prompt_category: str,
         prompt_name: str
     ) -> List[VersionHistoryItem]:
@@ -144,7 +144,7 @@ class PromptService:
             db: Database session
             user_id: User ID
             preset_id: Preset ID
-            function_type: Function type
+            task_type: Task type
             prompt_category: Prompt category
             prompt_name: Optional prompt name
 
@@ -155,7 +155,7 @@ class PromptService:
             and_(
                 PromptVersion.user_id == user_id,
                 PromptVersion.preset_id == preset_id,
-                PromptVersion.function_type == function_type,
+                PromptVersion.task_type == task_type,
                 PromptVersion.prompt_category == prompt_category,
                 PromptVersion.prompt_name == prompt_name
             )
@@ -177,7 +177,7 @@ class PromptService:
         db: Session,
         user_id: uuid.UUID,
         preset_id: uuid.UUID,
-        function_type: str,
+        task_type: str,
         prompt_category: str,
         version_number: int,
         prompt_name: str
@@ -190,7 +190,7 @@ class PromptService:
             db: Database session
             user_id: User ID
             preset_id: Preset ID
-            function_type: Function type
+            task_type: Task type
             prompt_category: Prompt category
             version_number: Version number to restore
             prompt_name: Optional prompt name
@@ -203,7 +203,7 @@ class PromptService:
             and_(
                 PromptVersion.user_id == user_id,
                 PromptVersion.preset_id == preset_id,
-                PromptVersion.function_type == function_type,
+                PromptVersion.task_type == task_type,
                 PromptVersion.prompt_category == prompt_category,
                 PromptVersion.prompt_name == prompt_name,
                 PromptVersion.version_number == version_number
@@ -218,7 +218,7 @@ class PromptService:
             db=db,
             user_id=user_id,
             preset_id=preset_id,
-            function_type=function_type,
+            task_type=task_type,
             prompt_category=prompt_category,
             content=version_to_restore.content,
             note=f"Restored from v{version_to_restore.version_number}",

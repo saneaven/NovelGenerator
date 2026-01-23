@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import type { FunctionType, PromptCategory } from '../../../types/prompts';
+import type { TaskType, PromptCategory } from '../../../types/prompts';
 import { SpeechBubble, Globe, Edit, Palette } from '../../icons';
 
 export interface PromptNode {
@@ -14,7 +14,7 @@ export interface PromptNode {
   type: 'category' | 'prompt';
 
   // For prompt nodes
-  functionType?: FunctionType;
+  taskType?: TaskType;
   category?: PromptCategory;
   name?: string;
   description?: string;
@@ -45,7 +45,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'agent-storyobject-system',
             label: 'System Prompt',
             type: 'prompt',
-            functionType: 'agent',
+            taskType: 'agent',
             category: 'systemPrompt',
             name: 'storyObject',
             description: 'Main AI behavior for Story Object conversations'
@@ -54,7 +54,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'agent-storyobject-user',
             label: 'User Prompt',
             type: 'prompt',
-            functionType: 'agent',
+            taskType: 'agent',
             category: 'userPrompt',
             name: 'storyObject',
             description: 'Default template for user messages (middle messages in multi-turn)'
@@ -63,7 +63,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'agent-storyobject-first',
             label: 'First User Prompt',
             type: 'prompt',
-            functionType: 'agent',
+            taskType: 'agent',
             category: 'firstUserPrompt',
             name: 'storyObject',
             description: 'Template for the first user message in conversation'
@@ -72,7 +72,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'agent-storyobject-last',
             label: 'Last User Prompt',
             type: 'prompt',
-            functionType: 'agent',
+            taskType: 'agent',
             category: 'lastUserPrompt',
             name: 'storyObject',
             description: 'Template for the last (current) user message in agent'
@@ -81,7 +81,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'agent-storyobject-prefill',
             label: 'Prefill Template',
             type: 'prompt',
-            functionType: 'agent',
+            taskType: 'agent',
             category: 'prefill',
             name: 'storyObject',
             description: 'AI response starter for Story Object mode'
@@ -97,7 +97,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'agent-noveleditor-system',
             label: 'System Prompt',
             type: 'prompt',
-            functionType: 'agent',
+            taskType: 'agent',
             category: 'systemPrompt',
             name: 'novelEditor',
             description: 'Main AI behavior for Novel Editor conversations'
@@ -106,7 +106,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'agent-noveleditor-user',
             label: 'User Prompt',
             type: 'prompt',
-            functionType: 'agent',
+            taskType: 'agent',
             category: 'userPrompt',
             name: 'novelEditor',
             description: 'Default template for user messages (middle messages in multi-turn)'
@@ -115,7 +115,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'agent-noveleditor-first',
             label: 'First User Prompt',
             type: 'prompt',
-            functionType: 'agent',
+            taskType: 'agent',
             category: 'firstUserPrompt',
             name: 'novelEditor',
             description: 'Template for the first user message in novel editor conversation'
@@ -124,7 +124,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'agent-noveleditor-last',
             label: 'Last User Prompt',
             type: 'prompt',
-            functionType: 'agent',
+            taskType: 'agent',
             category: 'lastUserPrompt',
             name: 'novelEditor',
             description: 'Template for the last (current) user message in novel editor agent'
@@ -133,7 +133,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'agent-noveleditor-prefill',
             label: 'Prefill Template',
             type: 'prompt',
-            functionType: 'agent',
+            taskType: 'agent',
             category: 'prefill',
             name: 'novelEditor',
             description: 'AI response starter for Novel Editor mode'
@@ -149,7 +149,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'agent-outlinemanager-system',
             label: 'System Prompt',
             type: 'prompt',
-            functionType: 'agent',
+            taskType: 'agent',
             category: 'systemPrompt',
             name: 'outlineManager',
             description: 'Main AI behavior for Outline Manager conversations'
@@ -158,7 +158,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'agent-outlinemanager-user',
             label: 'User Prompt',
             type: 'prompt',
-            functionType: 'agent',
+            taskType: 'agent',
             category: 'userPrompt',
             name: 'outlineManager',
             description: 'Default template for user messages (middle messages in multi-turn)'
@@ -167,7 +167,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'agent-outlinemanager-first',
             label: 'First User Prompt',
             type: 'prompt',
-            functionType: 'agent',
+            taskType: 'agent',
             category: 'firstUserPrompt',
             name: 'outlineManager',
             description: 'Template for the first user message in outline manager conversation'
@@ -176,7 +176,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'agent-outlinemanager-last',
             label: 'Last User Prompt',
             type: 'prompt',
-            functionType: 'agent',
+            taskType: 'agent',
             category: 'lastUserPrompt',
             name: 'outlineManager',
             description: 'Template for the last (current) user message in outline manager agent'
@@ -185,7 +185,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'agent-outlinemanager-prefill',
             label: 'Prefill Template',
             type: 'prompt',
-            functionType: 'agent',
+            taskType: 'agent',
             category: 'prefill',
             name: 'outlineManager',
             description: 'AI response starter for Outline Manager mode'
@@ -210,7 +210,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'translation-object-system',
             label: 'System Prompt',
             type: 'prompt',
-            functionType: 'translation',
+            taskType: 'translation',
             category: 'systemPrompt',
             name: 'object',
             description: 'Instructions for translating story objects (single or batch)'
@@ -219,7 +219,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'translation-object-user',
             label: 'User Prompt',
             type: 'prompt',
-            functionType: 'translation',
+            taskType: 'translation',
             category: 'userPrompt',
             name: 'object',
             description: 'Auto-generated user message with story object payload'
@@ -228,7 +228,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'translation-object-initial',
             label: 'Initial User Prompt',
             type: 'prompt',
-            functionType: 'translation',
+            taskType: 'translation',
             category: 'initialUserPrompt',
             name: 'object',
             description: 'Template for single-message translation requests (rich context)'
@@ -237,7 +237,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'translation-object-first',
             label: 'First User Prompt',
             type: 'prompt',
-            functionType: 'translation',
+            taskType: 'translation',
             category: 'firstUserPrompt',
             name: 'object',
             description: 'Template for first feedback in multi-turn translation sessions'
@@ -246,7 +246,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'translation-object-last',
             label: 'Last User Prompt',
             type: 'prompt',
-            functionType: 'translation',
+            taskType: 'translation',
             category: 'lastUserPrompt',
             name: 'object',
             description: 'Template for last feedback in multi-turn translation sessions'
@@ -255,7 +255,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'translation-object-prefill',
             label: 'Prefill Template',
             type: 'prompt',
-            functionType: 'translation',
+            taskType: 'translation',
             category: 'prefill',
             name: 'object',
             description: 'Template for story-object translation responses'
@@ -271,7 +271,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'translation-message-system',
             label: 'System Prompt',
             type: 'prompt',
-            functionType: 'translation',
+            taskType: 'translation',
             category: 'systemPrompt',
             name: 'message',
             description: 'Instructions for translating agent messages'
@@ -280,7 +280,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'translation-message-user',
             label: 'User Prompt',
             type: 'prompt',
-            functionType: 'translation',
+            taskType: 'translation',
             category: 'userPrompt',
             name: 'message',
             description: 'Auto-generated user message with agent message payload'
@@ -289,7 +289,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'translation-message-prefill',
             label: 'Prefill Template',
             type: 'prompt',
-            functionType: 'translation',
+            taskType: 'translation',
             category: 'prefill',
             name: 'message',
             description: 'Template for agent message translation responses'
@@ -314,7 +314,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'editassistant-manuscript-system',
             label: 'System Prompt',
             type: 'prompt',
-            functionType: 'editAssistant',
+            taskType: 'editAssistant',
             category: 'systemPrompt',
             name: 'manuscript',
             description: 'Instructions for manuscript editing behavior'
@@ -323,7 +323,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'editassistant-manuscript-user',
             label: 'User Prompt',
             type: 'prompt',
-            functionType: 'editAssistant',
+            taskType: 'editAssistant',
             category: 'userPrompt',
             name: 'manuscript',
             description: 'Auto-generated user message that conveys manuscript content and requests'
@@ -332,7 +332,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'editassistant-manuscript-initial',
             label: 'Initial User Prompt',
             type: 'prompt',
-            functionType: 'editAssistant',
+            taskType: 'editAssistant',
             category: 'initialUserPrompt',
             name: 'manuscript',
             description: 'Template for single-message manuscript edit requests (rich context)'
@@ -341,7 +341,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'editassistant-manuscript-first',
             label: 'First User Prompt',
             type: 'prompt',
-            functionType: 'editAssistant',
+            taskType: 'editAssistant',
             category: 'firstUserPrompt',
             name: 'manuscript',
             description: 'Template for first feedback in multi-turn manuscript edit sessions'
@@ -350,7 +350,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'editassistant-manuscript-last',
             label: 'Last User Prompt',
             type: 'prompt',
-            functionType: 'editAssistant',
+            taskType: 'editAssistant',
             category: 'lastUserPrompt',
             name: 'manuscript',
             description: 'Template for last feedback in multi-turn manuscript edit sessions'
@@ -359,7 +359,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'editassistant-manuscript-prefill',
             label: 'Prefill Template',
             type: 'prompt',
-            functionType: 'editAssistant',
+            taskType: 'editAssistant',
             category: 'prefill',
             name: 'manuscript',
             description: 'Template for manuscript edit responses'
@@ -375,7 +375,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'editassistant-storyobject-system',
             label: 'System Prompt',
             type: 'prompt',
-            functionType: 'editAssistant',
+            taskType: 'editAssistant',
             category: 'systemPrompt',
             name: 'storyObject',
             description: 'Instructions for story object editing behavior'
@@ -384,7 +384,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'editassistant-storyobject-user',
             label: 'User Prompt',
             type: 'prompt',
-            functionType: 'editAssistant',
+            taskType: 'editAssistant',
             category: 'userPrompt',
             name: 'storyObject',
             description: 'Auto-generated user message that delivers object context and current data'
@@ -393,7 +393,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'editassistant-storyobject-initial',
             label: 'Initial User Prompt',
             type: 'prompt',
-            functionType: 'editAssistant',
+            taskType: 'editAssistant',
             category: 'initialUserPrompt',
             name: 'storyObject',
             description: 'Template for single-message story object edit requests (rich context)'
@@ -402,7 +402,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'editassistant-storyobject-first',
             label: 'First User Prompt',
             type: 'prompt',
-            functionType: 'editAssistant',
+            taskType: 'editAssistant',
             category: 'firstUserPrompt',
             name: 'storyObject',
             description: 'Template for first feedback in multi-turn story object edit sessions'
@@ -411,7 +411,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'editassistant-storyobject-last',
             label: 'Last User Prompt',
             type: 'prompt',
-            functionType: 'editAssistant',
+            taskType: 'editAssistant',
             category: 'lastUserPrompt',
             name: 'storyObject',
             description: 'Template for last feedback in multi-turn story object edit sessions'
@@ -420,7 +420,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'editassistant-storyobject-prefill',
             label: 'Prefill Template',
             type: 'prompt',
-            functionType: 'editAssistant',
+            taskType: 'editAssistant',
             category: 'prefill',
             name: 'storyObject',
             description: 'Template for story object edit responses'
@@ -445,7 +445,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'imageprompt-object-system',
             label: 'System Prompt',
             type: 'prompt',
-            functionType: 'imagePrompt',
+            taskType: 'imagePrompt',
             category: 'systemPrompt',
             name: 'object',
             description: 'Instructions for generating prompts for story object images'
@@ -454,7 +454,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'imageprompt-object-user',
             label: 'User Prompt',
             type: 'prompt',
-            functionType: 'imagePrompt',
+            taskType: 'imagePrompt',
             category: 'userPrompt',
             name: 'object',
             description: 'Template for object image prompt requests'
@@ -463,7 +463,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'imageprompt-object-initial',
             label: 'Initial User Prompt',
             type: 'prompt',
-            functionType: 'imagePrompt',
+            taskType: 'imagePrompt',
             category: 'initialUserPrompt',
             name: 'object',
             description: 'Template for single-message object image prompt requests (rich context)'
@@ -472,7 +472,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'imageprompt-object-first',
             label: 'First User Prompt',
             type: 'prompt',
-            functionType: 'imagePrompt',
+            taskType: 'imagePrompt',
             category: 'firstUserPrompt',
             name: 'object',
             description: 'Template for first feedback in multi-turn object image prompt sessions'
@@ -481,7 +481,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'imageprompt-object-last',
             label: 'Last User Prompt',
             type: 'prompt',
-            functionType: 'imagePrompt',
+            taskType: 'imagePrompt',
             category: 'lastUserPrompt',
             name: 'object',
             description: 'Template for last feedback in multi-turn object image prompt sessions'
@@ -490,7 +490,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'imageprompt-object-prefill',
             label: 'Prefill Template',
             type: 'prompt',
-            functionType: 'imagePrompt',
+            taskType: 'imagePrompt',
             category: 'prefill',
             name: 'object',
             description: 'Template for object image prompt responses'
@@ -506,7 +506,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'imageprompt-scene-system',
             label: 'System Prompt',
             type: 'prompt',
-            functionType: 'imagePrompt',
+            taskType: 'imagePrompt',
             category: 'systemPrompt',
             name: 'scene',
             description: 'Instructions for generating scene image prompts with object selection'
@@ -515,7 +515,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'imageprompt-scene-user',
             label: 'User Prompt',
             type: 'prompt',
-            functionType: 'imagePrompt',
+            taskType: 'imagePrompt',
             category: 'userPrompt',
             name: 'scene',
             description: 'Template for scene image prompt requests with available objects'
@@ -524,7 +524,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'imageprompt-scene-initial',
             label: 'Initial User Prompt',
             type: 'prompt',
-            functionType: 'imagePrompt',
+            taskType: 'imagePrompt',
             category: 'initialUserPrompt',
             name: 'scene',
             description: 'Template for single-message scene image prompt requests (rich context)'
@@ -533,7 +533,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'imageprompt-scene-first',
             label: 'First User Prompt',
             type: 'prompt',
-            functionType: 'imagePrompt',
+            taskType: 'imagePrompt',
             category: 'firstUserPrompt',
             name: 'scene',
             description: 'Template for first feedback in multi-turn scene image prompt sessions'
@@ -542,7 +542,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'imageprompt-scene-last',
             label: 'Last User Prompt',
             type: 'prompt',
-            functionType: 'imagePrompt',
+            taskType: 'imagePrompt',
             category: 'lastUserPrompt',
             name: 'scene',
             description: 'Template for last feedback in multi-turn scene image prompt sessions'
@@ -551,7 +551,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'imageprompt-scene-prefill',
             label: 'Prefill Template',
             type: 'prompt',
-            functionType: 'imagePrompt',
+            taskType: 'imagePrompt',
             category: 'prefill',
             name: 'scene',
             description: 'Template for scene image prompt responses'
@@ -567,7 +567,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'imageprompt-coverimage-system',
             label: 'System Prompt',
             type: 'prompt',
-            functionType: 'imagePrompt',
+            taskType: 'imagePrompt',
             category: 'systemPrompt',
             name: 'coverImage',
             description: 'Instructions for generating cover image prompts from story context'
@@ -576,7 +576,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'imageprompt-coverimage-user',
             label: 'User Prompt',
             type: 'prompt',
-            functionType: 'imagePrompt',
+            taskType: 'imagePrompt',
             category: 'userPrompt',
             name: 'coverImage',
             description: 'Template for cover image prompt requests with title, logline, and selected objects'
@@ -585,7 +585,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'imageprompt-coverimage-initial',
             label: 'Initial User Prompt',
             type: 'prompt',
-            functionType: 'imagePrompt',
+            taskType: 'imagePrompt',
             category: 'initialUserPrompt',
             name: 'coverImage',
             description: 'Template for single-message cover image prompt requests (rich context)'
@@ -594,7 +594,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'imageprompt-coverimage-first',
             label: 'First User Prompt',
             type: 'prompt',
-            functionType: 'imagePrompt',
+            taskType: 'imagePrompt',
             category: 'firstUserPrompt',
             name: 'coverImage',
             description: 'Template for first feedback in multi-turn cover image prompt sessions'
@@ -603,7 +603,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'imageprompt-coverimage-last',
             label: 'Last User Prompt',
             type: 'prompt',
-            functionType: 'imagePrompt',
+            taskType: 'imagePrompt',
             category: 'lastUserPrompt',
             name: 'coverImage',
             description: 'Template for last feedback in multi-turn cover image prompt sessions'
@@ -612,7 +612,7 @@ export const PROMPT_TREE: PromptNode[] = [
             id: 'imageprompt-coverimage-prefill',
             label: 'Prefill Template',
             type: 'prompt',
-            functionType: 'imagePrompt',
+            taskType: 'imagePrompt',
             category: 'prefill',
             name: 'coverImage',
             description: 'Template for cover image prompt responses'

@@ -1,6 +1,6 @@
-import type { ContentPart, FunctionCallMetadata, FunctionCallProgress, TokenUsage } from './requestTypes';
+import type { ContentPart, ToolCallMetadata, ToolCallProgress, TokenUsage } from './requestTypes';
 import type { ProviderConfig, ProviderType, ThinkingConfig, RetryConfig, CustomApiFormat } from '../store/settingsStore';
-import type { FunctionCallSchema } from '../functionCall';
+import type { ToolCallSchema } from '../toolCall';
 
 /**
  * LLM Task Mode - determines which prompts and functions to use
@@ -24,10 +24,19 @@ export type LLMTaskModeType = typeof LLMTaskMode[keyof typeof LLMTaskMode];
  * Output mode - determines how LLM output is interpreted
  *
  * - tool_call: provider-native tool calling (tools/functions included in request)
- * - native_function_call: model emits <function_calls> tags in text; backend parses into tool_calls deltas
+ * - native_tool_call: model emits <tool_calls> tags in text; backend parses into tool_calls deltas
  * - raw_output: plain text content only (no tool schemas, no parsing/conversion)
  */
-export type OutputMode = 'tool_call' | 'native_function_call' | 'raw_output';
+export type OutputMode = 'tool_call' | 'native_tool_call' | 'raw_output';
+
+/**
+ * Thinking mode - determines how thinking/reasoning is handled
+ *
+ * - off: no thinking instructions or prefill
+ * - model: use model-native thinking (provider's extended thinking feature)
+ * - custom: include custom thinking instructions in prompt
+ */
+export type ThinkingMode = 'off' | 'model' | 'custom';
 
 /**
  * Template data structure passed to all templates
@@ -38,12 +47,9 @@ export interface TemplateData {
     mainLanguage: string;
     displayLanguage: string;
     today: string;
-    isThinkingEnabled: boolean;
+    thinkingMode: ThinkingMode;
     isPrefillEnabled: boolean;
-    isCustomThinkingEnabled: boolean;
     outputMode: OutputMode;
-    isNativeFunctionCallMode: boolean;
-    isRawOutputMode: boolean;
   };
   project: {
     basicInfo: { id: string; title: string; logline: string; genre: string };
@@ -146,8 +152,7 @@ export interface BasePromptContext {
   projectId?: string;  // For fetching project data from unifiedObjectStore
   outputLanguage?: string;
   enablePrefill?: boolean;
-  enableThinking?: boolean;
-  enableCustomThinking?: boolean;
+  thinkingMode?: ThinkingMode;
   outputMode?: OutputMode;
 }
 
@@ -155,7 +160,7 @@ export interface BasePromptContext {
  * Context for workspace agent
  */
 export interface AgentWorkspacePromptContext extends BasePromptContext {
-  functions?: FunctionCallSchema[];
+  tools?: ToolCallSchema[];
   contextObjectIds?: string[];
 }
 
@@ -166,7 +171,7 @@ export interface AgentWorkspacePromptContext extends BasePromptContext {
  * Manuscripts are included via contextObjectIds, not a separate novelData field.
  */
 export interface AgentNovelEditorPromptContext extends BasePromptContext {
-  functions?: FunctionCallSchema[];
+  tools?: ToolCallSchema[];
   contextObjectIds?: string[];
 }
 
@@ -175,7 +180,7 @@ export interface AgentNovelEditorPromptContext extends BasePromptContext {
  * Used for AI-assisted story structure planning and organization.
  */
 export interface AgentOutlineManagerPromptContext extends BasePromptContext {
-  functions?: FunctionCallSchema[];
+  tools?: ToolCallSchema[];
   contextObjectIds?: string[];
   selectedOutlineId?: string;
   selectedActId?: string;
@@ -325,7 +330,7 @@ export interface LLMTaskConfig {
  */
 export type LLMTaskResult = {
   contentParts: ContentPart[];
-  functionCalls: FunctionCallMetadata[];
+  toolCalls: ToolCallMetadata[];
   thinkingDetails?: any[];
   usage?: TokenUsage;
   warning?: string;
@@ -338,7 +343,7 @@ export type LLMTaskResult = {
  */
 export interface LLMTaskCallbacks {
   onUpdate: (parts: ContentPart[]) => void;
-  onFunctionProgress?: (progress: FunctionCallProgress[]) => void;
+  onToolCallProgress?: (progress: ToolCallProgress[]) => void;
 }
 
 /**

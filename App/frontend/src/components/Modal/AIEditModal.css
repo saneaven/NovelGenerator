@@ -519,7 +519,7 @@
   animation: spin 2s linear infinite;
 }
 
-/* Function Call Preview Section */
+/* Tool Call Preview Section */
 .ai-function-preview {
   background: var(--color-surface-elevated);
   border: 1px solid var(--color-border-default);

@@ -3,13 +3,13 @@ import type {
   ContentPart,
   ContentPartType,
   ConversationBlock,
-  FunctionCallMetadata,
-  FunctionCallProgress,
+  ToolCallMetadata,
+  ToolCallProgress,
 } from './requestTypes';
 import { streamLLM } from './llmService';
-import { useSettingsStore, type AIFunctionType } from '../store/settingsStore';
+import { useSettingsStore, type AITaskType } from '../store/settingsStore';
 import { useLLMLogStore } from '../store/llmLogStore';
-import { FunctionCallStreamTracker } from '../agent/streaming/FunctionCallStreamTracker';
+import { ToolCallStreamTracker } from '../agent/streaming/ToolCallStreamTracker';
 import { PromptManager } from './PromptManager';
 import type {
   LLMTaskConfig,
@@ -23,9 +23,9 @@ import { LLMTaskMode } from './types';
 import { useCredentialsStore } from '../store/credentialsStore';
 
 /**
- * Map LLMTaskMode to AIFunctionType for settings lookup
+ * Map LLMTaskMode to AITaskType for settings lookup
  */
-const MODE_TO_FUNCTION_TYPE: Record<LLMTaskModeType, AIFunctionType> = {
+const MODE_TO_TASK_TYPE: Record<LLMTaskModeType, AITaskType> = {
   [LLMTaskMode.AGENT_STORYOBJECT]: 'agent',
   [LLMTaskMode.AGENT_NOVEL_EDITOR]: 'agent',
   [LLMTaskMode.AGENT_OUTLINE_MANAGER]: 'agent',
@@ -46,7 +46,7 @@ const MODE_TO_FUNCTION_TYPE: Record<LLMTaskModeType, AIFunctionType> = {
  * - Stream LLM response via streamChat()
  * - Content part accumulation (thinking, content)
  * - Interval-based updates for smooth streaming (50ms cadence)
- * - Tool call tracking via FunctionCallStreamTracker
+ * - Tool call tracking via ToolCallStreamTracker
  * - Abort handling
  */
 export class LLMTask {
@@ -54,8 +54,8 @@ export class LLMTask {
   private readonly callbacks: LLMTaskCallbacks;
   private pendingParts: ContentPart[] = [];
   private isRunning = false;
-  private functionTracker: FunctionCallStreamTracker | null = null;
-  private pendingProgress: FunctionCallProgress[] | null = null;
+  private toolTracker: ToolCallStreamTracker | null = null;
+  private pendingProgress: ToolCallProgress[] | null = null;
 
   // Interval-based smoothing for consistent update cadence
   private updateIntervalId: number | null = null;
@@ -93,17 +93,17 @@ export class LLMTask {
       const { settings } = settingsStore;
       const credentialsStore = useCredentialsStore.getState();
 
-      // Get function type for this mode to lookup settings
-      const functionType = MODE_TO_FUNCTION_TYPE[this.config.mode];
-      const functionConfig = settings.functionConfigs[functionType];
+      // Get task type for this mode to lookup settings
+      const taskType = MODE_TO_TASK_TYPE[this.config.mode];
+      const taskConfig = settings.taskConfigs[taskType];
 
-      const provider = this.config.provider ?? functionConfig.provider;
+      const provider = this.config.provider ?? taskConfig.provider;
       const providerConfig = this.config.providerConfig ?? credentialsStore.getProviderConfigForBackend(provider);
-      const model = this.config.model ?? functionConfig.model;
-      const temperature = this.config.temperature ?? functionConfig.temperature;
-      const thinkingMode = this.config.thinkingMode ?? functionConfig.advanced.thinkingMode;
-      const thinkingConfig = this.config.thinkingConfig ?? functionConfig.advanced.thinkingConfig;
-      const customApiFormat = this.config.customApiFormat ?? functionConfig.advanced.customApiFormat;
+      const model = this.config.model ?? taskConfig.model;
+      const temperature = this.config.temperature ?? taskConfig.temperature;
+      const thinkingMode = this.config.thinkingMode ?? taskConfig.advanced.thinkingMode;
+      const thinkingConfig = this.config.thinkingConfig ?? taskConfig.advanced.thinkingConfig;
+      const customApiFormat = this.config.customApiFormat ?? taskConfig.advanced.customApiFormat;
       const retryConfig = this.config.retryConfig ?? settings.retryConfig;
 
       // 2. Generate prompt bundle
@@ -112,8 +112,8 @@ export class LLMTask {
         this.config.promptContext
       );
 
-      // 3. Get functions for this mode
-      const functions = PromptManager.getFunctionsForMode(
+      // 3. Get tools for this mode
+      const tools = PromptManager.getToolsForMode(
         this.config.mode,
         this.config.promptContext
       );
@@ -125,17 +125,17 @@ export class LLMTask {
           ? (this.config.mode === LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT ||
               this.config.mode === LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT ||
               this.config.mode === LLMTaskMode.TRANSLATION
-              ? 'native_function_call'
+              ? 'native_tool_call'
               : 'raw_output')
           : 'tool_call');
 
       // 4. Prepare messages
       const messages = await this.prepareMessages(history, promptBundle);
 
-      const nativeFunctionCall = outputMode === 'native_function_call';
+      const nativeToolCall = outputMode === 'native_tool_call';
 
-      if (outputMode !== 'tool_call' && functions?.length) {
-        throw new Error(`${outputMode} requires functions to be omitted`);
+      if (outputMode !== 'tool_call' && tools?.length) {
+        throw new Error(`${outputMode} requires tools to be omitted`);
       }
 
       // Log LLM request structure for debugging
@@ -146,7 +146,7 @@ export class LLMTask {
         temperature,
         thinkingMode,
         outputMode,
-        functions,
+        tools,
         messages,
       });
 
@@ -161,14 +161,14 @@ export class LLMTask {
             temperature,
             thinkingMode,
             outputMode,
-            functions,
+            tools,
             messages,
           },
         });
       }
 
       // 5. Initialize function tracker
-      this.functionTracker = new FunctionCallStreamTracker();
+      this.toolTracker = new ToolCallStreamTracker();
 
       // 7. Stream with interval-based smoothing for consistent update cadence
       let currentPartType: ContentPartType | null = null;
@@ -199,11 +199,11 @@ export class LLMTask {
                 this.callbacks.onUpdate(currentParts);
               }
             }
-            // Update function call progress if pending
+            // Update tool call progress if pending
             if (this.pendingProgressUpdate && this.pendingProgress) {
               this.pendingProgressUpdate = false;
-              if (this.callbacks.onFunctionProgress) {
-                this.callbacks.onFunctionProgress(this.pendingProgress);
+              if (this.callbacks.onToolCallProgress) {
+                this.callbacks.onToolCallProgress(this.pendingProgress);
               }
             }
           }, this.UPDATE_INTERVAL_MS);
@@ -221,14 +221,14 @@ export class LLMTask {
         providerConfig,
         {
           signal: this.config.abortController.signal,
-          functions,
+          tools,
           model,
           temperature,
           thinkingConfig: thinkingMode === 'model' ? thinkingConfig : undefined,
           thinkingMode,
           customApiFormat,
           retryConfig,
-          nativeFunctionCall,
+          nativeToolCall,
         }
       )) {
         // Handle string chunk (content)
@@ -301,9 +301,9 @@ export class LLMTask {
         }
 
         // Handle tool calls (interval-throttled for smooth updates)
-        if (chunk.tool_calls && this.functionTracker) {
-          const progressEvents = this.functionTracker.applyDelta(chunk.tool_calls);
-          if (progressEvents.length && this.callbacks.onFunctionProgress) {
+        if (chunk.tool_calls && this.toolTracker) {
+          const progressEvents = this.toolTracker.applyDelta(chunk.tool_calls);
+          if (progressEvents.length && this.callbacks.onToolCallProgress) {
             this.pendingProgress = progressEvents;
             this.pendingProgressUpdate = true;
             startUpdateInterval();
@@ -333,8 +333,8 @@ export class LLMTask {
       }
 
       // Flush any pending progress updates
-      if (this.pendingProgress && this.callbacks.onFunctionProgress) {
-        this.callbacks.onFunctionProgress(this.pendingProgress);
+      if (this.pendingProgress && this.callbacks.onToolCallProgress) {
+        this.callbacks.onToolCallProgress(this.pendingProgress);
         this.pendingProgress = null;
       }
 
@@ -344,20 +344,20 @@ export class LLMTask {
       this.callbacks.onUpdate([...this.pendingParts]);
 
       // 9. Complete with results
-      const rawFunctionCalls = this.functionTracker?.finalize() ?? [];
-      const functionCalls: FunctionCallMetadata[] = rawFunctionCalls.map((fc: any) => ({
+      const rawToolCalls = this.toolTracker?.finalize() ?? [];
+      const toolCalls: ToolCallMetadata[] = rawToolCalls.map((fc: any) => ({
         id: fc.id,
-        function_name: fc.function?.name ?? '',
+        tool_name: fc.function?.name ?? '',
         arguments: this.parseArguments(fc.function?.arguments),
         status: 'pending',
       }));
-      
+
       // Log streaming completion
       console.log('✅ LLM Streaming Complete:', {
         success: true,
         contentParts: [...this.pendingParts],
-        functionCallCount: functionCalls.length,
-        functionCalls,
+        toolCallCount: toolCalls.length,
+        toolCalls,
       });
 
       // Update log entry to success
@@ -367,7 +367,7 @@ export class LLMTask {
           durationMs: Date.now() - requestStartTime,
           response: {
             contentParts: [...this.pendingParts],
-            functionCalls,
+            toolCalls,
             thinkingDetails: accumulatedThinkingDetails,
           },
         });
@@ -375,7 +375,7 @@ export class LLMTask {
 
       return {
         contentParts: [...this.pendingParts],
-        functionCalls,
+        toolCalls,
         thinkingDetails: accumulatedThinkingDetails,
         usage: capturedUsage,
         provider,
@@ -435,7 +435,7 @@ export class LLMTask {
   ): Promise<ConversationBlock[]> {
     const messages: ConversationBlock[] = [];
     const { settings } = useSettingsStore.getState();
-    const fcLimit = settings.functionCallHistoryLimit;
+    const fcLimit = settings.toolCallHistoryLimit;
     const thinkingLimit = settings.thinkingHistoryLimit;
 
     // 1. System prompt
@@ -444,8 +444,8 @@ export class LLMTask {
       contentParts: [{ type: 'content', text: promptBundle.systemPrompt }],
     });
 
-    // 2. Count assistant messages to determine which ones should include function calls
-    // (we include function calls from the last N assistant messages)
+    // 2. Count assistant messages to determine which ones should include tool calls
+    // (we include tool calls from the last N assistant messages)
     const assistantIndices: number[] = [];
     for (let i = 0; i < history.length; i++) {
       if (history[i].role === 'assistant') {
@@ -494,7 +494,7 @@ export class LLMTask {
         // For assistant messages, potentially include tool_calls and thinking
         assistantCount++;
 
-        // Determine if we should include function calls for this message
+        // Determine if we should include tool calls for this message
         // fcLimit: 0 = none, -1 = all, N = last N assistant messages
         const shouldIncludeFC = fcLimit === -1 ||
           (fcLimit > 0 && assistantCount > totalAssistants - fcLimit);
@@ -517,12 +517,12 @@ export class LLMTask {
         };
 
         // Add tool_calls if applicable
-        if (shouldIncludeFC && msg.functionCalls && msg.functionCalls.length > 0) {
-          block.tool_calls = msg.functionCalls.map(fc => ({
+        if (shouldIncludeFC && msg.toolCalls && msg.toolCalls.length > 0) {
+          block.tool_calls = msg.toolCalls.map(fc => ({
             id: fc.id,
             type: 'function' as const,
             function: {
-              name: fc.function_name,
+              name: fc.tool_name,
               arguments: typeof fc.arguments === 'string'
                 ? fc.arguments
                 : JSON.stringify(fc.arguments),
@@ -533,8 +533,8 @@ export class LLMTask {
         messages.push(block);
 
         // Add tool_results message if this assistant message had tool_calls with results
-        if (block.tool_calls && block.tool_calls.length > 0 && msg.functionCalls) {
-          const toolResults = msg.functionCalls
+        if (block.tool_calls && block.tool_calls.length > 0 && msg.toolCalls) {
+          const toolResults = msg.toolCalls
             .filter(fc => fc.status !== 'pending')
             .map(fc => {
               let content: string;
@@ -553,7 +553,7 @@ export class LLMTask {
               }
               return {
                 tool_call_id: fc.id,
-                function_name: fc.function_name,
+                tool_name: fc.tool_name,
                 content,
               };
             });
@@ -599,14 +599,14 @@ export class LLMTask {
   }
 
   /**
-   * Parse function call arguments from JSON string to object
+   * Parse tool call arguments from JSON string to object
    */
   private parseArguments(args: string | undefined): any {
     if (!args) return {};
     try {
       return JSON.parse(args);
     } catch {
-      console.error('Failed to parse function call arguments:', args);
+      console.error('Failed to parse tool call arguments:', args);
       return {};
     }
   }

@@ -29,7 +29,7 @@ When story objects are provided:
 
 ## Output Format
 
-Output ONLY the image prompt text directly. No function calls, no JSON, no additional explanation.
+Output ONLY the image prompt text directly. No tool calls, no JSON, no additional explanation.
 
 Just the pure prompt content - either natural language sentences or comma-separated tags depending on the requested format.
 

@@ -32,7 +32,7 @@ Each patch operation applies a single search-and-replace:
 **Important Rules:**
 - The `old` string must be **unique** in the manuscript - include enough context to ensure uniqueness
 - If multiple matches exist, add more surrounding text to `old` to make it unique
-- For multiple changes, make multiple patch function calls
+- For multiple changes, make multiple patch tool calls
 
 ### Example: Changing a phrase
 
@@ -61,7 +61,7 @@ For multiple edits, call patch_manuscript multiple times:
 { "id": "manuscript-123", "old": "The shadows deepened", "new": "Darkness fell" }
 ```
 
-## Available Functions
+## Available Tools
 
 ### Replace Operations
 - `replace_manuscript` - Replace manuscript content (full chapter rewrite)

@@ -58,8 +58,8 @@ function buildTooltip(desc: string, example: any): string {
     return `${desc}\nExample: ${exampleStr}`;
 }
 
-function getSchemaKey(functionType: string, name?: string): PromptType | null {
-    switch (functionType) {
+function getSchemaKey(taskType: string, name?: string): PromptType | null {
+    switch (taskType) {
         case 'agent': return 'agent';
         case 'translation': return 'translation';
         case 'editAssistant': return 'editAssistant';
@@ -118,7 +118,7 @@ const TemplateSyntaxHint: React.FC<TemplateSyntaxHintProps> = ({ selectedNode })
         if (!selectedNode || selectedNode.type !== 'prompt') {
             return [];
         }
-        const key = getSchemaKey(selectedNode.functionType || '', selectedNode.name);
+        const key = getSchemaKey(selectedNode.taskType || '', selectedNode.name);
         return key ? PROMPT_TYPE_VARIABLES[key] : [];
     }, [selectedNode]);
 

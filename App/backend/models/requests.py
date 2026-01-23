@@ -57,9 +57,9 @@ class ToolCall(BaseModel):
     function: ToolCallFunction
 
 class ToolResult(BaseModel):
-    """Result of a tool/function call execution"""
+    """Result of a tool call execution"""
     tool_call_id: str
-    function_name: str  # Required for Gemini provider
+    tool_name: str  # Required for Gemini provider
     content: str
 
 class Message(BaseModel):
@@ -76,7 +76,7 @@ class ChatCompletionRequest(BaseModel):
     messages: List[Message]
     model: str
     temperature: float = Field(default=0.7, ge=0, le=2)
-    functions: Optional[List[Dict]] = None
+    tools: Optional[List[Dict]] = None
     tool_choice: Optional[Literal["auto", "required", "none"]] = None
     max_tokens: Optional[int] = None
     config: ProviderConfig = Field(default_factory=ProviderConfig)
@@ -85,4 +85,4 @@ class ChatCompletionRequest(BaseModel):
     thinking_config: Optional[ThinkingConfig] = None
     custom_api_format: Optional[Literal["openai", "claude", "gemini", "openrouter"]] = None  # For custom provider
     retry_config: Optional[RetryConfig] = None
-    native_function_call: bool = False
+    native_tool_call: bool = False

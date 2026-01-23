@@ -11,7 +11,7 @@
  * AI Features:
  * - AI Edit modal for content improvement
  * - Chat integration for AI assistance
- * - Function calling for AI-generated content
+ * - Tool calling for AI-generated content
  *
  * Translation Features:
  * - Multi-language support

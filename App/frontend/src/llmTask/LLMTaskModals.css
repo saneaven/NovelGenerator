@@ -212,8 +212,8 @@
   margin-bottom: var(--spacing-lg);
 }
 
-/* Function Calls Section in Body */
-.llm-task-modal-function-calls {
+/* Tool Calls Section in Body */
+.llm-task-modal-tool-calls {
   margin-bottom: var(--spacing-md);
 }
 
@@ -348,8 +348,8 @@
   border: 1px solid var(--color-border-default);
 }
 
-/* Function calls inside AI message */
-.llm-task-modal-journey-message-function-calls {
+/* Tool calls inside AI message */
+.llm-task-modal-journey-message-tool-calls {
   margin-top: var(--spacing-sm);
 }
 

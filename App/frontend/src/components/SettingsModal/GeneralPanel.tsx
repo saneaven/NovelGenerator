@@ -1,24 +1,24 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AIFunctionType, FunctionAIConfig, ProviderCredentials } from '../../store/settingsStore';
-import FunctionConfigForm from './FunctionConfigForm';
+import type { AITaskType, TaskAIConfig, ProviderCredentials } from '../../store/settingsStore';
+import TaskConfigForm from './TaskConfigForm';
 import { SpeechBubble, Globe, Edit, Palette } from '../icons';
 import './GeneralPanel.css';
 
 interface GeneralPanelProps {
-  functionConfigs: {
-    agent: FunctionAIConfig;
-    translation: FunctionAIConfig;
-    editAssistant: FunctionAIConfig;
-    imagePrompt: FunctionAIConfig;
+  taskConfigs: {
+    agent: TaskAIConfig;
+    translation: TaskAIConfig;
+    editAssistant: TaskAIConfig;
+    imagePrompt: TaskAIConfig;
   };
   credentials: ProviderCredentials;
-  activeFunction: AIFunctionType;
-  onFunctionChange: (functionType: AIFunctionType) => void;
-  onConfigChange: (functionType: AIFunctionType, config: FunctionAIConfig) => void;
+  activeTask: AITaskType;
+  onTaskChange: (taskType: AITaskType) => void;
+  onConfigChange: (taskType: AITaskType, config: TaskAIConfig) => void;
 }
 
-const FUNCTION_ICONS: Record<AIFunctionType, React.ReactNode> = {
+const TASK_ICONS: Record<AITaskType, React.ReactNode> = {
   agent: <SpeechBubble size="sm" />,
   translation: <Globe size="sm" />,
   editAssistant: <Edit size="sm" />,
@@ -26,52 +26,52 @@ const FUNCTION_ICONS: Record<AIFunctionType, React.ReactNode> = {
 };
 
 const GeneralPanel: React.FC<GeneralPanelProps> = ({
-  functionConfigs,
+  taskConfigs,
   credentials,
-  activeFunction,
-  onFunctionChange,
+  activeTask,
+  onTaskChange,
   onConfigChange,
 }) => {
   const { t } = useTranslation();
-  const currentConfig = functionConfigs[activeFunction];
+  const currentConfig = taskConfigs[activeTask];
 
-  const functionTypes: AIFunctionType[] = ['agent', 'translation', 'editAssistant', 'imagePrompt'];
+  const taskTypes: AITaskType[] = ['agent', 'translation', 'editAssistant', 'imagePrompt'];
 
   return (
     <div className="general-panel">
-      {/* Function Selection Tabs */}
-      <div className="function-selector">
-        {functionTypes.map((funcType) => {
-          const isActive = funcType === activeFunction;
+      {/* Task Selection Tabs */}
+      <div className="task-selector">
+        {taskTypes.map((taskType) => {
+          const isActive = taskType === activeTask;
 
           return (
             <button
-              key={funcType}
-              className={`function-tab ${isActive ? 'active' : ''}`}
-              onClick={() => onFunctionChange(funcType)}
+              key={taskType}
+              className={`task-tab ${isActive ? 'active' : ''}`}
+              onClick={() => onTaskChange(taskType)}
             >
-              <span className="tab-icon">{FUNCTION_ICONS[funcType]}</span>
-              <span className="tab-label">{t(`settings.general.functions.${funcType}.label`)}</span>
+              <span className="tab-icon">{TASK_ICONS[taskType]}</span>
+              <span className="tab-label">{t(`settings.general.tasks.${taskType}.label`)}</span>
             </button>
           );
         })}
       </div>
 
-      {/* Function Description */}
-      <div className="function-description">
+      {/* Task Description */}
+      <div className="task-description">
         <div className="description-header">
-          <span className="description-icon">{FUNCTION_ICONS[activeFunction]}</span>
-          <h3>{t(`settings.general.functions.${activeFunction}.label`)} {t('settings.general.configuration')}</h3>
+          <span className="description-icon">{TASK_ICONS[activeTask]}</span>
+          <h3>{t(`settings.general.tasks.${activeTask}.label`)} {t('settings.general.configuration')}</h3>
         </div>
-        <p>{t(`settings.general.functions.${activeFunction}.description`)}</p>
+        <p>{t(`settings.general.tasks.${activeTask}.description`)}</p>
       </div>
 
       {/* Configuration Form */}
-      <FunctionConfigForm
-        functionType={activeFunction}
+      <TaskConfigForm
+        taskType={activeTask}
         config={currentConfig}
         credentials={credentials}
-        onChange={(config) => onConfigChange(activeFunction, config)}
+        onChange={(config) => onConfigChange(activeTask, config)}
       />
     </div>
   );

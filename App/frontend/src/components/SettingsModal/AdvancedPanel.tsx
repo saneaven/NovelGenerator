@@ -20,8 +20,8 @@ interface AdvancedPanelProps {
     onBackupDelete: (password: string) => Promise<void>;
     nativeOutputMode: boolean;
     onNativeOutputModeChange: (enabled: boolean) => void;
-    functionCallHistoryLimit: number;
-    onFunctionCallHistoryLimitChange: (limit: number) => void;
+    toolCallHistoryLimit: number;
+    onToolCallHistoryLimitChange: (limit: number) => void;
     thinkingHistoryLimit: number;
     onThinkingHistoryLimitChange: (limit: number) => void;
 }
@@ -37,8 +37,8 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
     onBackupDelete,
     nativeOutputMode,
     onNativeOutputModeChange,
-    functionCallHistoryLimit,
-    onFunctionCallHistoryLimitChange,
+    toolCallHistoryLimit,
+    onToolCallHistoryLimitChange,
     thinkingHistoryLimit,
     onThinkingHistoryLimitChange,
 }) => {
@@ -331,32 +331,32 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                 </div>
             </div>
 
-            {/* Function Call History */}
+            {/* Tool Call History */}
             <div className="advanced-settings-card">
-                <h3>{t('settings.advanced.functionCallHistory.title')}</h3>
+                <h3>{t('settings.advanced.toolCallHistory.title')}</h3>
                 <div className="form-field">
-                    <label>{t('settings.advanced.functionCallHistory.label')}</label>
+                    <label>{t('settings.advanced.toolCallHistory.label')}</label>
                     <div className="slider-container">
                         <input
                             type="range"
                             min="0"
                             max="11"
-                            value={functionCallHistoryLimit === -1 ? 11 : functionCallHistoryLimit}
+                            value={toolCallHistoryLimit === -1 ? 11 : toolCallHistoryLimit}
                             onChange={(e) => {
                                 const val = parseInt(e.target.value, 10);
-                                onFunctionCallHistoryLimitChange(val === 11 ? -1 : val);
+                                onToolCallHistoryLimitChange(val === 11 ? -1 : val);
                             }}
                             className="slider"
                         />
                         <span className="slider-value">
-                            {functionCallHistoryLimit === -1 ? t('settings.advanced.functionCallHistory.all') : functionCallHistoryLimit}
+                            {toolCallHistoryLimit === -1 ? t('settings.advanced.toolCallHistory.all') : toolCallHistoryLimit}
                         </span>
                     </div>
                     <div className="slider-labels">
                         <span>0</span>
-                        <span>{t('settings.advanced.functionCallHistory.all')}</span>
+                        <span>{t('settings.advanced.toolCallHistory.all')}</span>
                     </div>
-                    <p className="field-hint">{t('settings.advanced.functionCallHistory.hint')}</p>
+                    <p className="field-hint">{t('settings.advanced.toolCallHistory.hint')}</p>
                 </div>
             </div>
 

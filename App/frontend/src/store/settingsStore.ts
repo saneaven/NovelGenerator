@@ -2,12 +2,12 @@
 import { persist } from 'zustand/middleware';
 import { settingsService } from '../api/settingsService';
 import { promptService } from '../api/promptService';
-import type { FunctionType, PromptCategory } from '../types/prompts';
+import type { TaskType, PromptCategory } from '../types/prompts';
 import { getPromptKey } from '../types/prompts';
 
 // Types
 export type ProviderType = 'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom' | 'xai';
-export type AIFunctionType = 'agent' | 'translation' | 'editAssistant' | 'imagePrompt';
+export type AITaskType = 'agent' | 'translation' | 'editAssistant' | 'imagePrompt';
 export type ImageProviderType = 'openai' | 'gemini' | 'xai' | 'novelai';
 export type PromptType = 'natural' | 'tag_based';
 export type ThemeMode = 'light' | 'dark' | 'system';
@@ -59,7 +59,7 @@ export interface ProviderPreference {
     ignore?: string[];
 }
 
-// Custom API format for custom endpoints (controls both thinking and function calling)
+// Custom API format for custom endpoints (controls both thinking and tool calling)
 export type CustomApiFormat = 'openai' | 'claude' | 'gemini' | 'openrouter';
 
 // Thinking configuration for model-native thinking
@@ -81,20 +81,20 @@ export interface RetryConfig {
 }
 
 // Advanced settings for AI functions
-export interface AdvancedFunctionSettings {
+export interface AdvancedTaskSettings {
     enablePrefill: boolean;
     thinkingMode: 'off' | 'model' | 'custom';
     thinkingConfig?: ThinkingConfig;
-    customApiFormat?: CustomApiFormat;  // For custom endpoint API format (affects thinking + function calling)
+    customApiFormat?: CustomApiFormat;  // For custom endpoint API format (affects thinking + tool calling)
 }
 
 // Complete configuration for a single AI function
-export interface FunctionAIConfig {
+export interface TaskAIConfig {
     provider: ProviderType;
     model: string;
     temperature: number;
     providerPreference?: ProviderPreference;
-    advanced: AdvancedFunctionSettings;
+    advanced: AdvancedTaskSettings;
 }
 
 // Custom image style for natural language providers (prefix/postfix)
@@ -157,8 +157,8 @@ export interface ImageGenConfig {
 // Main settings interface
 export interface Settings {
     // Per-function complete configurations
-    functionConfigs: {
-        [K in AIFunctionType]: FunctionAIConfig;
+    taskConfigs: {
+        [K in AITaskType]: TaskAIConfig;
     };
 
     // Image generation configuration
@@ -177,15 +177,15 @@ export interface Settings {
     // Retry configuration (global)
     retryConfig: RetryConfig;
 
-    // Native output mode - skip function calling and output raw text/XML
+    // Native output mode - skip tool calling and output raw text/XML
     nativeOutputMode: boolean;
 
     // LLM request logging - enable logging of LLM requests for debugging
     llmLoggingEnabled: boolean;
 
-    // Function call history limit - how many recent assistant messages to include function calls for
+    // Tool call history limit - how many recent assistant messages to include tool calls for
     // 0 = none, 1-10 = last N messages, -1 = all
-    functionCallHistoryLimit: number;
+    toolCallHistoryLimit: number;
 
     // Thinking history limit - how many recent assistant messages to include thinking for
     // 0 = none, 1-10 = last N messages, -1 = all
@@ -194,7 +194,7 @@ export interface Settings {
 
 // Default settings
 const defaultSettings: Settings = {
-    functionConfigs: {
+    taskConfigs: {
         // Agent: Fast and cheap for conversation
         agent: {
             provider: 'openrouter',
@@ -304,8 +304,8 @@ const defaultSettings: Settings = {
     // LLM logging disabled by default
     llmLoggingEnabled: false,
 
-    // Function call history limit - include function calls from last 5 assistant messages by default
-    functionCallHistoryLimit: 5,
+    // Tool call history limit - include tool calls from last 5 assistant messages by default
+    toolCallHistoryLimit: 5,
 
     // Thinking history limit - include thinking from last 5 assistant messages by default
     thinkingHistoryLimit: 5,
@@ -325,15 +325,15 @@ interface SettingsStore {
     saveToServer: () => Promise<void>;
 
     // Function config setters
-    setFunctionConfig: (functionType: AIFunctionType, config: FunctionAIConfig) => void;
-    setFunctionProvider: (functionType: AIFunctionType, provider: ProviderType) => void;
-    setFunctionModel: (functionType: AIFunctionType, model: string) => void;
-    setFunctionTemperature: (functionType: AIFunctionType, temperature: number) => void;
-    setFunctionProviderPreference: (functionType: AIFunctionType, pref?: ProviderPreference) => void;
-    setFunctionAdvanced: (functionType: AIFunctionType, advanced: Partial<AdvancedFunctionSettings>) => void;
+    setTaskConfig: (functionType: AITaskType, config: TaskAIConfig) => void;
+    setTaskProvider: (functionType: AITaskType, provider: ProviderType) => void;
+    setTaskModel: (functionType: AITaskType, model: string) => void;
+    setTaskTemperature: (functionType: AITaskType, temperature: number) => void;
+    setTaskProviderPreference: (functionType: AITaskType, pref?: ProviderPreference) => void;
+    setTaskAdvanced: (functionType: AITaskType, advanced: Partial<AdvancedTaskSettings>) => void;
 
     // Getters
-    getFunctionConfig: (functionType: AIFunctionType) => FunctionAIConfig;
+    getTaskConfig: (functionType: AITaskType) => TaskAIConfig;
 
     // Image generation config setters
     setImageGenConfig: (config: Partial<ImageGenConfig>) => void;
@@ -357,9 +357,9 @@ interface SettingsStore {
     setLLMLoggingEnabled: (enabled: boolean) => void;
 
     // Prompt methods
-    loadPrompt: (functionType: FunctionType, category: PromptCategory, name: string) => Promise<string>;
-    getPromptFromCache: (functionType: FunctionType, category: PromptCategory, name: string) => string | null;
-    invalidatePromptCache: (functionType?: FunctionType, category?: PromptCategory, name?: string) => void;
+    loadPrompt: (functionType: TaskType, category: PromptCategory, name: string) => Promise<string>;
+    getPromptFromCache: (functionType: TaskType, category: PromptCategory, name: string) => string | null;
+    invalidatePromptCache: (functionType?: TaskType, category?: PromptCategory, name?: string) => void;
 
     // Other methods
     updateSettings: (updates: Partial<Settings>) => void;
@@ -367,7 +367,7 @@ interface SettingsStore {
 }
 
 // Helper to normalize advanced settings without legacy fallbacks
-const migrateAdvancedSettings = (advanced: any): AdvancedFunctionSettings => ({
+const migrateAdvancedSettings = (advanced: any): AdvancedTaskSettings => ({
     enablePrefill: advanced.enablePrefill ?? false,
     thinkingMode: advanced.thinkingMode ?? 'off',
     thinkingConfig: advanced.thinkingConfig ?? { effort: 'medium' },
@@ -381,10 +381,10 @@ const mergeWithDefaults = (stored: any): Settings => {
     }
 
     const migratedFunctionConfigs: any = {};
-    if (stored.functionConfigs) {
-        for (const [key, config] of Object.entries(stored.functionConfigs) as [string, any][]) {
+    if (stored.taskConfigs) {
+        for (const [key, config] of Object.entries(stored.taskConfigs) as [string, any][]) {
             migratedFunctionConfigs[key] = {
-                ...defaultSettings.functionConfigs[key as AIFunctionType],
+                ...defaultSettings.taskConfigs[key as AITaskType],
                 ...config,
                 advanced: migrateAdvancedSettings(config.advanced || {}),
             };
@@ -392,8 +392,8 @@ const mergeWithDefaults = (stored: any): Settings => {
     }
 
     return {
-        functionConfigs: {
-            ...defaultSettings.functionConfigs,
+        taskConfigs: {
+            ...defaultSettings.taskConfigs,
             ...migratedFunctionConfigs,
         },
         imageGenConfig: {
@@ -429,7 +429,7 @@ const mergeWithDefaults = (stored: any): Settings => {
         },
         nativeOutputMode: stored.nativeOutputMode ?? defaultSettings.nativeOutputMode,
         llmLoggingEnabled: stored.llmLoggingEnabled ?? defaultSettings.llmLoggingEnabled,
-        functionCallHistoryLimit: stored.functionCallHistoryLimit ?? defaultSettings.functionCallHistoryLimit,
+        toolCallHistoryLimit: stored.toolCallHistoryLimit ?? defaultSettings.toolCallHistoryLimit,
         thinkingHistoryLimit: stored.thinkingHistoryLimit ?? defaultSettings.thinkingHistoryLimit,
     };
 };
@@ -470,30 +470,30 @@ export const useSettingsStore = create<SettingsStore>()(
             },
 
             // Function configuration
-            setFunctionConfig: (functionType, config) => {
+            setTaskConfig: (functionType, config) => {
                 set((state) => ({
                     settings: {
                         ...state.settings,
-                        functionConfigs: {
-                            ...state.settings.functionConfigs,
+                        taskConfigs: {
+                            ...state.settings.taskConfigs,
                             [functionType]: config,
                         },
                     },
                 }));
             },
 
-            setFunctionProvider: (functionType, provider) => {
+            setTaskProvider: (functionType, provider) => {
                 set((state) => ({
                     settings: {
                         ...state.settings,
-                        functionConfigs: {
-                            ...state.settings.functionConfigs,
+                        taskConfigs: {
+                            ...state.settings.taskConfigs,
                             [functionType]: {
-                                ...state.settings.functionConfigs[functionType],
+                                ...state.settings.taskConfigs[functionType],
                                 provider,
                                 // Clear provider preferences if switching away from OpenRouter
                                 providerPreference: provider === 'openrouter'
-                                    ? state.settings.functionConfigs[functionType].providerPreference
+                                    ? state.settings.taskConfigs[functionType].providerPreference
                                     : undefined,
                             },
                         },
@@ -501,14 +501,14 @@ export const useSettingsStore = create<SettingsStore>()(
                 }));
             },
 
-            setFunctionModel: (functionType, model) => {
+            setTaskModel: (functionType, model) => {
                 set((state) => ({
                     settings: {
                         ...state.settings,
-                        functionConfigs: {
-                            ...state.settings.functionConfigs,
+                        taskConfigs: {
+                            ...state.settings.taskConfigs,
                             [functionType]: {
-                                ...state.settings.functionConfigs[functionType],
+                                ...state.settings.taskConfigs[functionType],
                                 model,
                             },
                         },
@@ -516,14 +516,14 @@ export const useSettingsStore = create<SettingsStore>()(
                 }));
             },
 
-            setFunctionTemperature: (functionType, temperature) => {
+            setTaskTemperature: (functionType, temperature) => {
                 set((state) => ({
                     settings: {
                         ...state.settings,
-                        functionConfigs: {
-                            ...state.settings.functionConfigs,
+                        taskConfigs: {
+                            ...state.settings.taskConfigs,
                             [functionType]: {
-                                ...state.settings.functionConfigs[functionType],
+                                ...state.settings.taskConfigs[functionType],
                                 temperature,
                             },
                         },
@@ -531,14 +531,14 @@ export const useSettingsStore = create<SettingsStore>()(
                 }));
             },
 
-            setFunctionProviderPreference: (functionType, pref) => {
+            setTaskProviderPreference: (functionType, pref) => {
                 set((state) => ({
                     settings: {
                         ...state.settings,
-                        functionConfigs: {
-                            ...state.settings.functionConfigs,
+                        taskConfigs: {
+                            ...state.settings.taskConfigs,
                             [functionType]: {
-                                ...state.settings.functionConfigs[functionType],
+                                ...state.settings.taskConfigs[functionType],
                                 providerPreference: pref,
                             },
                         },
@@ -546,16 +546,16 @@ export const useSettingsStore = create<SettingsStore>()(
                 }));
             },
 
-            setFunctionAdvanced: (functionType, advanced) => {
+            setTaskAdvanced: (functionType, advanced) => {
                 set((state) => ({
                     settings: {
                         ...state.settings,
-                        functionConfigs: {
-                            ...state.settings.functionConfigs,
+                        taskConfigs: {
+                            ...state.settings.taskConfigs,
                             [functionType]: {
-                                ...state.settings.functionConfigs[functionType],
+                                ...state.settings.taskConfigs[functionType],
                                 advanced: {
-                                    ...state.settings.functionConfigs[functionType].advanced,
+                                    ...state.settings.taskConfigs[functionType].advanced,
                                     ...advanced,
                                 },
                             },
@@ -565,8 +565,8 @@ export const useSettingsStore = create<SettingsStore>()(
             },
 
             // Getters
-            getFunctionConfig: (functionType) => {
-                return get().settings.functionConfigs[functionType];
+            getTaskConfig: (functionType) => {
+                return get().settings.taskConfigs[functionType];
             },
 
             // Image generation config

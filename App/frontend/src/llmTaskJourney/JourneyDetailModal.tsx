@@ -14,11 +14,11 @@ import NotificationProgressBar from '../components/Notification/NotificationProg
 import { Close, Edit, Trash } from '../components/icons';
 import { TextButton } from '../components/TextButton';
 import { IconButton } from '../components/IconButton';
-import { FunctionCallCard } from '../components/functionCall';
-import { buildEditCardsFromFunctionCallMetadata } from '../functionCall';
+import { ToolCallCard } from '../components/toolCall';
+import { buildEditCardsFromToolCallMetadata } from '../toolCall';
 import { JourneyRuntime, applyJourneyEdits, rejectAllJourneyEdits } from './index';
-import type { HandlerOptions } from '../functionCall/apply/types';
-import { CRUD_OPTIONS, TRANSLATION_OPTIONS } from '../functionCall/apply/types';
+import type { HandlerOptions } from '../toolCall/apply/types';
+import { CRUD_OPTIONS, TRANSLATION_OPTIONS } from '../toolCall/apply/types';
 import '../llmTask/LLMTaskModals.css';
 
 function getApplyLanguage(journey: Journey, mainLanguage: string): string {
@@ -87,21 +87,21 @@ export const JourneyDetailModal: React.FC = () => {
   // Auto-scroll to bottom when content changes
   const journeyMessagesLength = journey?.messages?.length ?? 0;
   const lastContentPart = session?.contentParts?.[session.contentParts.length - 1]?.text ?? '';
-  const functionCallProgressLength = session?.functionCallProgress?.length ?? 0;
+  const toolCallProgressLength = session?.toolCallProgress?.length ?? 0;
 
   useEffect(() => {
     if (userScrolledUpRef.current) return;
     const el = bodyRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [journeyMessagesLength, lastContentPart, functionCallProgressLength, journey?.status]);
+  }, [journeyMessagesLength, lastContentPart, toolCallProgressLength, journey?.status]);
 
   useEffect(() => {
     setFeedbackOpen(false);
     setFeedbackText('');
   }, [detailJourneyId]);
 
-  const hasStreamingCalls = journey?.status === 'running' && (session?.functionCallProgress?.length ?? 0) > 0;
+  const hasStreamingCalls = journey?.status === 'running' && (session?.toolCallProgress?.length ?? 0) > 0;
   const hasCards = (journey?.editCards?.length ?? 0) > 0;
 
   const statusLabel = useMemo(() => {
@@ -129,7 +129,7 @@ export const JourneyDetailModal: React.FC = () => {
 
   const isApplying = journey?.status === 'applying';
   const hasPendingCards = journey?.editCards?.some(
-    c => c.functionCall.status === 'pending' || c.functionCall.status === 'validating'
+    c => c.toolCall.status === 'pending' || c.toolCall.status === 'validating'
   ) ?? false;
   const isPending = journey?.status === 'pending_confirmation' || isApplying || hasPendingCards;
 
@@ -284,15 +284,15 @@ export const JourneyDetailModal: React.FC = () => {
                 .join('')
                 .trim();
 
-              const storedFunctionCalls = m.functionCalls ?? [];
-              const historicalCards = !isLastAssistant && storedFunctionCalls.length > 0
-                ? buildEditCardsFromFunctionCallMetadata(storedFunctionCalls)
+              const storedToolCalls = m.toolCalls ?? [];
+              const historicalCards = !isLastAssistant && storedToolCalls.length > 0
+                ? buildEditCardsFromToolCallMetadata(storedToolCalls)
                 : [];
 
-              const messageHasFunctionCalls = historicalCards.length > 0 ||
+              const messageHasToolCalls = historicalCards.length > 0 ||
                 (isLastAssistant && (hasStreamingCalls || hasCards));
 
-              const showContent = text || (m.role === 'assistant' && !messageHasFunctionCalls);
+              const showContent = text || (m.role === 'assistant' && !messageHasToolCalls);
               const isEditing = editingMessageId === m.id;
               const canEditDelete = !['running', 'applying', 'pending_confirmation'].includes(journey.status);
 
@@ -353,8 +353,8 @@ export const JourneyDetailModal: React.FC = () => {
                   {m.role === 'assistant' && (
                     <>
                       {historicalCards.length > 0 && (
-                        <div className="llm-task-modal-journey-message-function-calls">
-                          <FunctionCallCard
+                        <div className="llm-task-modal-journey-message-tool-calls">
+                          <ToolCallCard
                             mode="confirmed"
                             cards={historicalCards}
                             projectId={projectId}
@@ -363,18 +363,18 @@ export const JourneyDetailModal: React.FC = () => {
                       )}
 
                       {isLastAssistant && hasStreamingCalls && (
-                        <div className="llm-task-modal-journey-message-function-calls">
-                          <FunctionCallCard
+                        <div className="llm-task-modal-journey-message-tool-calls">
+                          <ToolCallCard
                             mode="streaming"
-                            streamingProgress={session?.functionCallProgress}
+                            streamingProgress={session?.toolCallProgress}
                             projectId={projectId}
                           />
                         </div>
                       )}
 
                       {isLastAssistant && hasCards && (
-                        <div className="llm-task-modal-journey-message-function-calls">
-                          <FunctionCallCard
+                        <div className="llm-task-modal-journey-message-tool-calls">
+                          <ToolCallCard
                             mode={isPending ? 'pending' : 'confirmed'}
                             cards={journey.editCards}
                             onConfirm={isPending ? handleConfirm : undefined}

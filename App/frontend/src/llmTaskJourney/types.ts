@@ -1,5 +1,5 @@
 import type { ChatMessage, ContentPart, Role } from '../llm/requestTypes';
-import type { FunctionCallSchema } from '../functionCall';
+import type { ToolCallSchema } from '../toolCall';
 import type { LLMRunConfig } from '../llmSession';
 import { generateTempId } from '../utils/tempId';
 
@@ -57,8 +57,8 @@ export type LLMTaskJourney = {
   // Operation metadata for computing context + apply targets
   editingTargets: EditingTargets;
 
-  // Functions allowed for this journey (undefined when outputMode != tool_call)
-  functions?: FunctionCallSchema[];
+  // Tools allowed for this journey (undefined when outputMode != tool_call)
+  tools?: ToolCallSchema[];
 
   // All messages (user input + assistant outputs) - LLMTask renders templates
   messages: ChatMessage[];

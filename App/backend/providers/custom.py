@@ -173,7 +173,7 @@ class CustomProvider(BaseProvider):
         messages: List[Dict],
         model: str,
         temperature: float = 0.7,
-        functions: Optional[List[Dict]] = None,
+        tools: Optional[List[Dict]] = None,
         tool_choice: Optional[str] = None,
         max_tokens: Optional[int] = None,
         provider_preference: Optional[Dict] = None,
@@ -181,7 +181,7 @@ class CustomProvider(BaseProvider):
         thinking_mode: Optional[str] = None,
         custom_api_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
-        native_function_call: bool = False,
+        native_tool_call: bool = False,
     ) -> AsyncGenerator[bytes, None]:
         """Stream chat completions by delegating to the appropriate native SDK provider.
 
@@ -189,7 +189,7 @@ class CustomProvider(BaseProvider):
             messages: List of message dicts
             model: Model identifier
             temperature: Temperature for generation
-            functions: Optional function calling schemas
+            tools: Optional tool calling schemas
             tool_choice: Tool choice mode
             max_tokens: Maximum tokens to generate
             provider_preference: Provider-specific preferences
@@ -209,7 +209,7 @@ class CustomProvider(BaseProvider):
             messages=messages,
             model=model,
             temperature=temperature,
-            functions=functions,
+            tools=tools,
             tool_choice=tool_choice,
             max_tokens=max_tokens,
             provider_preference=provider_preference,
@@ -217,7 +217,7 @@ class CustomProvider(BaseProvider):
             thinking_mode=thinking_mode,
             custom_api_format=custom_api_format,
             retry_config=retry_config,
-            native_function_call=native_function_call,
+            native_tool_call=native_tool_call,
         ):
             yield chunk
 

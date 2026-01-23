@@ -1,4 +1,4 @@
-import type { FunctionCallStatus, FunctionCallFailureType, ApplicationResult } from '../functionCall/types';
+import type { ToolCallStatus, ToolCallFailureType, ApplicationResult } from '../toolCall/types';
 
 export type Role = "system" | "user" | "assistant" | "tool_results";
 
@@ -19,19 +19,19 @@ export interface ToolCall {
 }
 
 /**
- * Tool result block for sending function call results back to the LLM.
+ * Tool result block for sending tool call results back to the LLM.
  * Used in multi-turn conversations where the assistant made tool_calls.
  */
 export interface ToolResultBlock {
   tool_call_id: string;
-  function_name: string;  // Required for Gemini provider
+  tool_name: string;  // Required for Gemini provider
   content: string;
 }
 
 export interface ConversationBlock {
   role: Role;
   contentParts: ContentPart[];
-  tool_calls?: ToolCall[]; // for assistant messages with function calls
+  tool_calls?: ToolCall[]; // for assistant messages with tool calls
   tool_results?: ToolResultBlock[]; // for tool_results role messages
 }
 
@@ -50,50 +50,50 @@ export interface TokenUsage {
   total_tokens: number;
 }
 
-export interface FunctionCallMetadata {
+export interface ToolCallMetadata {
   id: string;
-  function_name: string;
+  tool_name: string;
   arguments: any;
-  /** Current status of the function call */
-  status: FunctionCallStatus;
+  /** Current status of the tool call */
+  status: ToolCallStatus;
   /** Error message (when failed) or user-provided reason (when rejected) */
   reason?: string;
   /** Type of failure when status is 'failed' */
-  failureType?: FunctionCallFailureType;
-  /** Result from applying the function call (when accepted) */
+  failureType?: ToolCallFailureType;
+  /** Result from applying the tool call (when accepted) */
   result?: ApplicationResult;
-  /** Timestamp when the function call was accepted */
+  /** Timestamp when the tool call was accepted */
   acceptedAt?: Date;
 }
 
-export type FunctionCallProgressStatus = 'collecting' | 'validating' | 'ready' | 'error';
+export type ToolCallProgressStatus = 'collecting' | 'validating' | 'ready' | 'error';
 
-export interface FunctionCallDraft {
+export interface ToolCallDraft {
   id: string;
   index: number;
-  functionName: string;
+  toolName: string;
   rawArguments: string;
   parsedArguments: any | null;
 }
 
-export interface FunctionCallOperationFieldPreview {
+export interface ToolCallOperationFieldPreview {
   key: string;
   label: string;
   value: string;
 }
 
-export interface FunctionCallOperationChapterPreview {
+export interface ToolCallOperationChapterPreview {
   name?: string;
   description?: string;
 }
 
-export interface FunctionCallReplacementPreview {
+export interface ToolCallReplacementPreview {
   field?: string;
   old: string;
   new: string;
 }
 
-export interface FunctionCallOperationPreview {
+export interface ToolCallOperationPreview {
   key: string;
   action?: string;
   type?: string;
@@ -101,24 +101,24 @@ export interface FunctionCallOperationPreview {
   targetName?: string;
   summary?: string;
   data?: Record<string, any>;
-  fields?: FunctionCallOperationFieldPreview[];
-  chapters?: FunctionCallOperationChapterPreview[];
+  fields?: ToolCallOperationFieldPreview[];
+  chapters?: ToolCallOperationChapterPreview[];
   missingFields?: string[];
   rawSnippet?: string;
   /** For PATCH operations - array of search/replace pairs */
-  replacements?: FunctionCallReplacementPreview[];
+  replacements?: ToolCallReplacementPreview[];
   /** For translation operations - target language code */
   targetLanguage?: string;
   /** Indices of failed replacements (for retry context display) */
   failedReplacementIndices?: number[];
 }
 
-export interface FunctionCallProgress {
-  draft: FunctionCallDraft;
-  status: FunctionCallProgressStatus;
+export interface ToolCallProgress {
+  draft: ToolCallDraft;
+  status: ToolCallProgressStatus;
   preview?: any;
   rawPreview: string;
-  operationPreviews?: FunctionCallOperationPreview[];
+  operationPreviews?: ToolCallOperationPreview[];
   error?: string;
   updatedAt: number;
 }
@@ -126,7 +126,7 @@ export interface FunctionCallProgress {
 export interface ChatMessage extends ConversationBlock {
   id: string;
   timestamp: Date;
-  functionCalls?: FunctionCallMetadata[];
+  toolCalls?: ToolCallMetadata[];
   thinking_details?: ThinkingDetail[];
 }
 

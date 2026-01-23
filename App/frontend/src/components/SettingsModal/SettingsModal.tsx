@@ -5,7 +5,7 @@ import { BaseSidebar } from '../BaseSidebar';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useCredentialsStore } from '../../store/credentialsStore';
 import { useSidebarStore } from '../../store/sidebarStore';
-import type { ProviderCredentials, Settings, AIFunctionType } from '../../store/settingsStore';
+import type { ProviderCredentials, Settings, AITaskType } from '../../store/settingsStore';
 import CredentialsPanel from './CredentialsPanel';
 import GeneralPanel from './GeneralPanel';
 import LanguagePanel from './LanguagePanel';
@@ -34,7 +34,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [localCredentials, setLocalCredentials] = useState<ProviderCredentials>(credentialsStore.credentials);
   const [isSaving, setIsSaving] = useState(false);
   const [mainTab, setMainTab] = useState<MainTab>('profile');
-  const [activeFunction, setActiveFunction] = useState<AIFunctionType>('agent');
+  const [activeTask, setActiveTask] = useState<AITaskType>('agent');
 
   // Mobile sidebar state from store
   const openSidebar = useSidebarStore((state) => state.openSidebar);
@@ -262,16 +262,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
         {mainTab === 'general' && (
           <GeneralPanel
-            functionConfigs={localSettings.functionConfigs}
+            taskConfigs={localSettings.taskConfigs}
             credentials={localCredentials}
-            activeFunction={activeFunction}
-            onFunctionChange={setActiveFunction}
-            onConfigChange={(functionType, config) =>
+            activeTask={activeTask}
+            onTaskChange={setActiveTask}
+            onConfigChange={(taskType, config) =>
               setLocalSettings({
                 ...localSettings,
-                functionConfigs: {
-                  ...localSettings.functionConfigs,
-                  [functionType]: config,
+                taskConfigs: {
+                  ...localSettings.taskConfigs,
+                  [taskType]: config,
                 },
               })
             }
@@ -345,9 +345,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             onNativeOutputModeChange={(enabled) =>
               setLocalSettings(prev => ({ ...prev, nativeOutputMode: enabled }))
             }
-            functionCallHistoryLimit={localSettings.functionCallHistoryLimit}
-            onFunctionCallHistoryLimitChange={(limit) =>
-              setLocalSettings(prev => ({ ...prev, functionCallHistoryLimit: limit }))
+            toolCallHistoryLimit={localSettings.toolCallHistoryLimit}
+            onToolCallHistoryLimitChange={(limit) =>
+              setLocalSettings(prev => ({ ...prev, toolCallHistoryLimit: limit }))
             }
             thinkingHistoryLimit={localSettings.thinkingHistoryLimit}
             onThinkingHistoryLimitChange={(limit) =>

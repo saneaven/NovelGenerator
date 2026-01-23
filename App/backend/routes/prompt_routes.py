@@ -32,11 +32,11 @@ def get_active_preset_id(current_user: User) -> uuid.UUID:
 # All prompt routes require an explicit prompt_name.
 
 @router.get(
-    "/{function_type}/{prompt_category}/{prompt_name}",
+    "/{task_type}/{prompt_category}/{prompt_name}",
     response_model=PromptContentResponse
 )
 async def get_prompt_with_name(
-    function_type: str = Path(..., description="Function type"),
+    task_type: str = Path(..., description="Function type"),
     prompt_category: str = Path(..., description="Prompt category (systemPrompt, userPrompt, prefill, userMessageTag)"),
     prompt_name: str = Path(..., description="Prompt name (workspace, novelEditor, etc.)"),
     current_user: User = Depends(get_current_user),
@@ -49,7 +49,7 @@ async def get_prompt_with_name(
         db=db,
         user_id=current_user.id,
         preset_id=preset_id,
-        function_type=function_type,
+        task_type=task_type,
         prompt_category=prompt_category,
         prompt_name=prompt_name
     )
@@ -57,18 +57,18 @@ async def get_prompt_with_name(
     if not result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Prompt not found: {function_type}/{prompt_category}/{prompt_name}"
+            detail=f"Prompt not found: {task_type}/{prompt_category}/{prompt_name}"
         )
 
     return result
 
 
 @router.post(
-    "/{function_type}/{prompt_category}/{prompt_name}/save",
+    "/{task_type}/{prompt_category}/{prompt_name}/save",
     response_model=PromptVersionResponse
 )
 async def save_prompt_with_name(
-    function_type: str,
+    task_type: str,
     prompt_category: str,
     prompt_name: str,
     data: PromptVersionCreate,
@@ -82,7 +82,7 @@ async def save_prompt_with_name(
         db=db,
         user_id=current_user.id,
         preset_id=preset_id,
-        function_type=function_type,
+        task_type=task_type,
         prompt_category=prompt_category,
         content=data.content,
         note=data.note,
@@ -93,11 +93,11 @@ async def save_prompt_with_name(
 
 
 @router.get(
-    "/{function_type}/{prompt_category}/{prompt_name}/versions",
+    "/{task_type}/{prompt_category}/{prompt_name}/versions",
     response_model=List[VersionHistoryItem]
 )
 async def get_version_history_with_name(
-    function_type: str,
+    task_type: str,
     prompt_category: str,
     prompt_name: str,
     current_user: User = Depends(get_current_user),
@@ -110,7 +110,7 @@ async def get_version_history_with_name(
         db=db,
         user_id=current_user.id,
         preset_id=preset_id,
-        function_type=function_type,
+        task_type=task_type,
         prompt_category=prompt_category,
         prompt_name=prompt_name
     )
@@ -119,11 +119,11 @@ async def get_version_history_with_name(
 
 
 @router.post(
-    "/{function_type}/{prompt_category}/{prompt_name}/restore",
+    "/{task_type}/{prompt_category}/{prompt_name}/restore",
     status_code=status.HTTP_200_OK
 )
 async def restore_version_with_name(
-    function_type: str,
+    task_type: str,
     prompt_category: str,
     prompt_name: str,
     data: PromptRestoreRequest,
@@ -137,7 +137,7 @@ async def restore_version_with_name(
         db=db,
         user_id=current_user.id,
         preset_id=preset_id,
-        function_type=function_type,
+        task_type=task_type,
         prompt_category=prompt_category,
         version_number=data.version_number,
         prompt_name=prompt_name

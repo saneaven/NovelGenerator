@@ -385,7 +385,7 @@ Get chat details with all messages.
           "content": "Hello!"
         }
       },
-      "function_calls": null,
+      "tool_calls": null,
       "created_at": "2025-01-01T00:00:00Z"
     }
   ]
@@ -437,7 +437,7 @@ Add a message to a chat.
   "role": "user",
   "content": "What should I write about?",
   "language": "English",
-  "function_calls": null
+  "tool_calls": null
 }
 ```
 

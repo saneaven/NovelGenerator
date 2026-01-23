@@ -111,13 +111,13 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
             .map(p => p.text)
             .join('') || '';
 
-        // Extract prompt from functionCallProgress (for function call mode)
-        const functionProgress = streamingSession.functionCallProgress?.[0];
-        const parsedArgs = functionProgress?.draft?.parsedArguments;
-        const functionPrompt = (parsedArgs as any)?.prompt || '';
+        // Extract prompt from toolCallProgress (for tool call mode)
+        const toolProgress = streamingSession.toolCallProgress?.[0];
+        const parsedArgs = toolProgress?.draft?.parsedArguments;
+        const toolPrompt = (parsedArgs as any)?.prompt || '';
 
         // Use whichever has content
-        const streamingPrompt = functionPrompt || textContent;
+        const streamingPrompt = toolPrompt || textContent;
 
         // Update the appropriate prompt field
         if (streamingPrompt) {

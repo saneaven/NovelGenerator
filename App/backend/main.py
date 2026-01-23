@@ -102,7 +102,7 @@ async def list_providers():
             "capabilities": {
                 "chat": True,
                 "models": True,
-                "functions": provider_name in {"openrouter", "custom", "gemini", "claude"},
+                "tools": provider_name in {"openrouter", "custom", "gemini", "claude"},
                 "thinking": provider_name in {"openrouter", "claude", "gemini", "custom"}
             }
         }
@@ -166,10 +166,10 @@ async def stream_chat(
 ):
     """Stream chat completions from specified provider"""
     try:
-        if request.native_function_call and request.functions:
+        if request.native_tool_call and request.tools:
             raise HTTPException(
                 status_code=400,
-                detail="native_function_call requires functions to be omitted",
+                detail="native_tool_call requires tools to be omitted",
             )
 
         provider_instance = ProviderRegistry.get_provider(
@@ -212,7 +212,7 @@ async def stream_chat(
                 messages=messages,
                 model=request.model,
                 temperature=request.temperature,
-                functions=request.functions,
+                tools=request.tools,
                 tool_choice=request.tool_choice,
                 max_tokens=request.max_tokens,
                 provider_preference=provider_pref,
@@ -220,7 +220,7 @@ async def stream_chat(
                 thinking_mode=request.thinking_mode,
                 custom_api_format=request.custom_api_format,
                 retry_config=retry_cfg,
-                native_function_call=request.native_function_call,
+                native_tool_call=request.native_tool_call,
             )
 
             try:

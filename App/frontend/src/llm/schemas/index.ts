@@ -1,5 +1,5 @@
-// Function call schemas for LLM tasks
-// Note: Agent functions and edit functions have been merged into functionCall module
+// Tool call schemas for LLM tasks
+// Note: Agent tools and edit tools have been merged into toolCall module
 
-export * from './translationFunctions';
-export * from './imagePromptFunctions';
+export * from './translationTools';
+export * from './imagePromptTools';

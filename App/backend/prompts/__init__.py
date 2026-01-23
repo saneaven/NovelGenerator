@@ -6,7 +6,7 @@ The structure mirrors the frontend prompts structure defined in:
 - App/frontend/src/prompts/defaults.ts
 - App/frontend/src/agent/
 
-Format: {function_type: {category: {name?: content}}}
+Format: {task_type: {category: {name?: content}}}
 """
 
 from pathlib import Path
@@ -102,7 +102,7 @@ _COVER_IMAGE_PROMPT_LAST_USER_PROMPT = _load_prompt_file('imagePrompt/coverImage
 _COVER_IMAGE_PROMPT_PREFILL = _load_prompt_file('imagePrompt/coverImage/prefill.md')
 
 # Default prompts structure
-# Format matches the frontend structure: {function_type: {category: {name?: content}}}
+# Format matches the frontend structure: {task_type: {category: {name?: content}}}
 DEFAULT_PROMPTS = {
     'agent': {
         'systemPrompt': {
@@ -220,7 +220,7 @@ def get_default_prompts():
     Get the default prompts dictionary.
 
     Returns:
-        dict: Default prompts in the format {function_type: {category: {name?: content}}}
+        dict: Default prompts in the format {task_type: {category: {name?: content}}}
     """
     return DEFAULT_PROMPTS
 

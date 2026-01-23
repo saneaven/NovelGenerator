@@ -32,13 +32,13 @@ export {
   type ContentPart,
   type ConversationBlock,
   type ThinkingDetail,
-  type FunctionCallMetadata,
-  type FunctionCallProgressStatus,
-  type FunctionCallDraft,
-  type FunctionCallOperationFieldPreview,
-  type FunctionCallOperationChapterPreview,
-  type FunctionCallOperationPreview,
-  type FunctionCallProgress,
+  type ToolCallMetadata,
+  type ToolCallProgressStatus,
+  type ToolCallDraft,
+  type ToolCallOperationFieldPreview,
+  type ToolCallOperationChapterPreview,
+  type ToolCallOperationPreview,
+  type ToolCallProgress,
   type ChatMessage,
   createEmptyUserHistory,
 } from './requestTypes';
@@ -46,31 +46,31 @@ export {
 // Re-export LLM service functions (moved from llm_request/)
 export { streamLLM, BackendError, fetchModels, fetchProviders, fetchModelEndpoints } from './llmService';
 
-// Function schemas - all from unified functionCall module
+// Tool schemas - all from unified toolCall module
 export {
-  type FunctionCallSchema,
-  AGENT_FUNCTIONS,
-  AGENT_FUNCTION_NAMES,
-  STORY_OBJECT_EDIT_FUNCTIONS,
-  MANUSCRIPT_EDIT_FUNCTIONS,
-  OUTLINE_EDIT_FUNCTIONS,
-  getFunctionsForSet,
-  type FunctionSetName,
-} from '../functionCall';
+  type ToolCallSchema,
+  AGENT_TOOLS,
+  AGENT_TOOL_NAMES,
+  STORY_OBJECT_EDIT_TOOLS,
+  MANUSCRIPT_EDIT_TOOLS,
+  OUTLINE_EDIT_TOOLS,
+  getToolsForSet,
+  type ToolSetName,
+} from '../toolCall';
 
 export {
-  TRANSLATION_FUNCTIONS,
+  TRANSLATION_TOOLS,
   SET_MESSAGE_TRANSLATION,
-  AGENT_TRANSLATION_FUNCTIONS,
-  SET_FUNCTION_NAMES,
-  PATCH_FUNCTION_NAMES,
-  ALL_TRANSLATION_FUNCTION_NAMES,
-  FUNCTION_TO_OBJECT_TYPE,
-} from './schemas/translationFunctions';
+  AGENT_TRANSLATION_TOOLS,
+  SET_TOOL_NAMES,
+  PATCH_TOOL_NAMES,
+  ALL_TRANSLATION_TOOL_NAMES,
+  TOOL_TO_OBJECT_TYPE,
+} from './schemas/translationTools';
 
 export {
-  OBJECT_IMAGE_PROMPT_FUNCTION,
-  SCENE_IMAGE_PROMPT_FUNCTION,
-  OBJECT_IMAGE_PROMPT_FUNCTIONS,
-  SCENE_IMAGE_PROMPT_FUNCTIONS,
-} from './schemas/imagePromptFunctions';
+  OBJECT_IMAGE_PROMPT_TOOL,
+  SCENE_IMAGE_PROMPT_TOOL,
+  OBJECT_IMAGE_PROMPT_TOOLS,
+  SCENE_IMAGE_PROMPT_TOOLS,
+} from './schemas/imagePromptTools';

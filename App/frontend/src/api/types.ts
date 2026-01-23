@@ -266,14 +266,14 @@ export interface AgentMessageCreate {
   role: string;
   content_parts?: ContentPart[];
   language?: string;
-  function_calls?: any;
+  tool_calls?: any;
   thinking_details?: any[];
 }
 
 export interface AgentMessageUpdate {
   content_parts?: ContentPart[];
   language?: string;
-  function_calls?: any;
+  tool_calls?: any;
   thinking_details?: any[];
 }
 
@@ -285,7 +285,7 @@ export interface AgentMessageResponse {
     contentParts: ContentPart[];
     thinking_details?: any[];
   }>;
-  function_calls?: any;
+  tool_calls?: any;
   created_at: string;
 }
 

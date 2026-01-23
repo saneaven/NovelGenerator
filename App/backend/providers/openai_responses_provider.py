@@ -27,7 +27,7 @@ from openai import (
 )
 
 from .base import BaseProvider
-from .native_function_calls_parser import NativeFunctionCallsStreamParser
+from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .registry import ProviderRegistry
 
 # Text/chat model patterns: gpt-* or o{number}*
@@ -174,7 +174,7 @@ class OpenAIResponsesProvider(BaseProvider):
         messages: List[Dict],
         model: str,
         temperature: float = 0.7,
-        functions: Optional[List[Dict]] = None,
+        tools: Optional[List[Dict]] = None,
         tool_choice: Optional[str] = None,
         max_tokens: Optional[int] = None,
         provider_preference: Optional[Dict] = None,
@@ -182,7 +182,7 @@ class OpenAIResponsesProvider(BaseProvider):
         thinking_mode: Optional[str] = None,
         custom_api_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
-        native_function_call: bool = False,
+        native_tool_call: bool = False,
     ) -> AsyncGenerator[bytes, None]:
         """
         Stream chat using OpenAI Responses API.
@@ -222,10 +222,10 @@ class OpenAIResponsesProvider(BaseProvider):
         if max_tokens is not None:
             request["max_output_tokens"] = max_tokens
 
-        # Add tools/functions if provided
+        # Add tools if provided
         # Responses API uses flat tool format: {type, name, description, parameters}
         # Chat Completions uses nested: {type, function: {name, description, parameters}}
-        if functions:
+        if tools:
             request["tools"] = [
                 {
                     "type": "function",
@@ -233,7 +233,7 @@ class OpenAIResponsesProvider(BaseProvider):
                     "description": fn.get("description"),
                     "parameters": fn.get("parameters"),
                 }
-                for fn in functions
+                for fn in tools
             ]
             if tool_choice:
                 request["tool_choice"] = tool_choice
@@ -241,7 +241,7 @@ class OpenAIResponsesProvider(BaseProvider):
         # Track state for SSE conversion
         captured_usage: Optional[Dict] = None
         stream = None
-        native_fc_parser = NativeFunctionCallsStreamParser() if native_function_call else None
+        native_tc_parser = NativeToolCallsStreamParser() if native_tool_call else None
         tool_call_indices: Dict[str, int] = {}
 
         try:
@@ -256,8 +256,8 @@ class OpenAIResponsesProvider(BaseProvider):
                     if delta_text:
                         text_to_emit = delta_text
                         tool_calls = None
-                        if native_fc_parser:
-                            text_to_emit, tool_calls = native_fc_parser.process_chunk(delta_text)
+                        if native_tc_parser:
+                            text_to_emit, tool_calls = native_tc_parser.process_chunk(delta_text)
 
                         if text_to_emit:
                             # Convert to Chat Completions format
@@ -280,8 +280,8 @@ class OpenAIResponsesProvider(BaseProvider):
                             }
                             yield self._format_sse(tool_chunk)
 
-                        # Stop streaming after function_calls block completes
-                        if native_fc_parser and native_fc_parser.function_calls_completed:
+                        # Stop streaming after tool_calls block completes
+                        if native_tc_parser and native_tc_parser.tool_calls_completed:
                             yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
                             return
 
@@ -313,7 +313,7 @@ class OpenAIResponsesProvider(BaseProvider):
                         }
                         yield self._format_sse(chunk)
 
-                # Handle function call arguments delta
+                # Handle tool call arguments delta (OpenAI Responses API event)
                 elif event_type == "response.function_call_arguments.delta":
                     delta_args = getattr(event, "delta", "")
                     call_id = getattr(event, "call_id", "")
@@ -344,9 +344,9 @@ class OpenAIResponsesProvider(BaseProvider):
 
                 # Handle response completion
                 elif event_type == "response.completed":
-                    # Flush any buffered function_calls content before emitting finish_reason.
-                    if native_fc_parser:
-                        tail_text, tail_tool_calls = native_fc_parser.finalize()
+                    # Flush any buffered tool_calls content before emitting finish_reason.
+                    if native_tc_parser:
+                        tail_text, tail_tool_calls = native_tc_parser.finalize()
                         if tail_text:
                             chunk = {
                                 "choices": [{
@@ -365,11 +365,11 @@ class OpenAIResponsesProvider(BaseProvider):
                                 }]
                             }
                             yield self._format_sse(chunk)
-                        # Emit finish_reason if function calls were completed
-                        if native_fc_parser.function_calls_completed:
+                        # Emit finish_reason if tool calls were completed
+                        if native_tc_parser.tool_calls_completed:
                             yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
                             return
-                        native_fc_parser = None
+                        native_tc_parser = None
 
                     response_obj = getattr(event, "response", None)
                     if response_obj:
@@ -420,8 +420,8 @@ class OpenAIResponsesProvider(BaseProvider):
             if stream is not None and hasattr(stream, "close"):
                 await stream.close()
 
-        if native_fc_parser:
-            tail_text, tail_tool_calls = native_fc_parser.finalize()
+        if native_tc_parser:
+            tail_text, tail_tool_calls = native_tc_parser.finalize()
             if tail_text:
                 chunk = {
                     "choices": [{
@@ -440,8 +440,8 @@ class OpenAIResponsesProvider(BaseProvider):
                     }]
                 }
                 yield self._format_sse(chunk)
-            # Emit finish_reason if function calls were completed
-            if native_fc_parser.function_calls_completed:
+            # Emit finish_reason if tool calls were completed
+            if native_tc_parser.tool_calls_completed:
                 yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
                 return
 

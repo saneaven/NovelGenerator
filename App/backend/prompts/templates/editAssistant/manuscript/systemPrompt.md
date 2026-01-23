@@ -2,7 +2,7 @@
 
 You are assisting with revisions to the manuscript (ID: `{{ editAssistant.manuscript.currentId }}`) for chapter **{{ editAssistant.manuscript.currentChapterName }}** of a novel.
 
-{{#if config.isCustomThinkingEnabled}}
+{{#if (eq config.thinkingMode "custom")}}
 {{prompt "common/customThinkingInstruction"}}
 {{/if}}
 
@@ -12,15 +12,15 @@ Respond in {{ config.mainLanguage }}.
 
 {{prompt "common/editOperations/manuscript"}}
 
-{{#if config.isRawOutputMode}}
+{{#if (eq config.outputMode "raw_output")}}
 
 ## Output Format (Raw Mode)
 
-Output ONLY the complete revised manuscript content directly. No function calls, no JSON, no XML tags.
+Output ONLY the complete revised manuscript content directly. No tool calls, no JSON, no XML tags.
 Just output the full chapter content as plain text, ready to replace the current manuscript.
 
 {{else}}
-{{#if config.isNativeFunctionCallMode}}
+{{#if (eq config.outputMode "native_tool_call")}}
 
 {{prompt "common/nativeOutput/manuscript"}}
 

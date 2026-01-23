@@ -13,7 +13,7 @@ class BaseProvider(ABC):
         messages: List[Dict],
         model: str,
         temperature: float = 0.7,
-        functions: Optional[List[Dict]] = None,
+        tools: Optional[List[Dict]] = None,
         tool_choice: Optional[str] = None,
         max_tokens: Optional[int] = None,
         provider_preference: Optional[Dict] = None,
@@ -21,7 +21,7 @@ class BaseProvider(ABC):
         thinking_mode: Optional[str] = None,
         custom_api_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
-        native_function_call: bool = False,
+        native_tool_call: bool = False,
     ) -> AsyncGenerator[bytes, None]:
         """
         Stream chat completions from the provider
@@ -30,7 +30,7 @@ class BaseProvider(ABC):
             messages: List of message dicts with 'role' and 'content'
             model: Model identifier
             temperature: Temperature for generation
-            functions: Optional function calling schemas
+            tools: Optional tool calling schemas
             tool_choice: Tool choice mode ('auto', 'required', 'none')
             max_tokens: Maximum tokens to generate
             provider_preference: Provider-specific preferences (e.g., OpenRouter only/ignore)
@@ -38,7 +38,7 @@ class BaseProvider(ABC):
             thinking_mode: Thinking mode ('off', 'custom', 'model')
             custom_api_format: API format for custom provider ('openai', 'claude', 'gemini', 'openrouter')
             retry_config: Retry configuration for error handling
-            native_function_call: If true, provider should parse <function_calls> tags from text and emit tool_calls deltas.
+            native_tool_call: If true, provider should parse <tool_calls> tags from text and emit tool_calls deltas.
 
         Yields:
             SSE-formatted bytes

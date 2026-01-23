@@ -32,7 +32,7 @@ Each patch operation applies a single search-and-replace:
 **Important Rules:**
 - The `old` string must be **unique** in the field - include enough context to ensure uniqueness
 - If multiple matches exist, add more surrounding text to `old` to make it unique
-- For multiple changes, make multiple patch function calls
+- For multiple changes, make multiple patch tool calls
 
 ### Example: Changing a phrase in a description
 
@@ -63,7 +63,7 @@ For multiple edits, call patch_story_object multiple times:
 { "id": "char-123", "type": "character", "field": "description", "old": "His sword gleams", "new": "His banner waves" }
 ```
 
-## Available Functions
+## Available Tools
 
 ### CRUD Operations
 - `create_story_object` - Create a new story object (character, location, organization, lorebook)

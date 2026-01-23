@@ -412,7 +412,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
               icon={<Document size="sm" />}
             />
             <p className="field-hint">
-              Output translation directly without function calls.
+              Output translation directly without tool calls.
             </p>
           </div>
         )}

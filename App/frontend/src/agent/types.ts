@@ -14,7 +14,7 @@ export interface ProcessedChatMessage extends ChatMessage {
  */
 export interface DisplayProcessingResult {
   displayContent: React.ReactNode;
-  editCards: import('../functionCall/types').EditCard[];
+  editCards: import('../toolCall/types').EditCard[];
 }
 
 /**

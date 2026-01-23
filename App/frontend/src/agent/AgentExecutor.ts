@@ -5,7 +5,7 @@
  * Manages agent-specific concerns:
  * - Message creation in agentStore
  * - Streaming via llmTaskStore (LLMTask handles session management)
- * - Function call handling
+ * - Tool call handling
  */
 
 import { useAgentStore } from '../store/agentStore';
@@ -17,14 +17,14 @@ import { startLLMSession } from '../llmSession';
 import { LLMTaskMode, type AgentWorkspacePromptContext, type AgentTranslationPromptContext, createEmptyUserHistory } from '../llm';
 import type { OutputMode } from '../llm/types';
 import type { ContentPart } from '../llm/requestTypes';
-import { getFunctionsForSet } from '../functionCall';
+import { getToolsForSet } from '../toolCall';
 import {
   stageSessionEdits,
   applySessionEdits,
   rejectAllSessionEdits,
-  toFunctionCallMetadata,
-} from '../llmTask/functionCalls/functionCallEngine';
-import type { HandlerOptions } from '../functionCall/apply/types';
+  toToolCallMetadata,
+} from '../llmTask/toolCalls/toolCallEngine';
+import type { HandlerOptions } from '../toolCall/apply/types';
 import { generateTempId } from '../utils/tempId';
 import { registerSessionNotification, updateSessionNotification } from '../llmTask/notificationHelpers';
 
@@ -79,12 +79,12 @@ export const AgentExecutor = {
     const sessionStore = useLLMSessionStore.getState();
 
     const settings = settingsStore.settings;
-    const agentConfig = settingsStore.getFunctionConfig('agent');
+    const agentConfig = settingsStore.getTaskConfig('agent');
     const providerConfig = credentialsStore.getProviderConfigForBackend(agentConfig.provider);
 
     const userInput = input.userInput ?? '';
     const language = input.outputLanguage;
-    const outputMode: OutputMode = settings.nativeOutputMode ? 'native_function_call' : 'tool_call';
+    const outputMode: OutputMode = settings.nativeOutputMode ? 'native_tool_call' : 'tool_call';
 
     // 1) Create user message (if any) and assistant placeholder
     if (userInput.trim()) {
@@ -137,9 +137,8 @@ export const AgentExecutor = {
       outputLanguage: language,
       outputMode,
       enablePrefill: agentConfig.advanced.enablePrefill,
-      enableThinking: agentConfig.advanced.thinkingMode === 'model',
-      enableCustomThinking: agentConfig.advanced.thinkingMode === 'custom',
-      functions: outputMode === 'tool_call' ? getFunctionsForSet('agent') : undefined,
+      thinkingMode: agentConfig.advanced.thinkingMode,
+      tools: outputMode === 'tool_call' ? getToolsForSet('agent') : undefined,
       contextObjectIds: input.contextObjectIds,
     };
 
@@ -200,16 +199,16 @@ export const AgentExecutor = {
         console.error('Failed to sync message to backend:', error);
       }
 
-      // 5) Handle function calls
-      if (finalSession.functionCalls.length > 0) {
+      // 5) Handle tool calls
+      if (finalSession.toolCalls.length > 0) {
         await stageSessionEdits({
           sessionId,
           projectId: input.projectId,
           language: settings.mainLanguage,
-          functionCalls: finalSession.functionCalls,
+          toolCalls: finalSession.toolCalls,
         });
         // Sync to agentStore
-        await syncAgentFunctionCalls(sessionId);
+        await syncAgentToolCalls(sessionId);
       }
     });
 
@@ -228,7 +227,7 @@ export const AgentExecutor = {
     const credentialsStore = useCredentialsStore.getState();
     const sessionStore = useLLMSessionStore.getState();
 
-    const translationConfig = settingsStore.getFunctionConfig('translation');
+    const translationConfig = settingsStore.getTaskConfig('translation');
     const providerConfig = credentialsStore.getProviderConfigForBackend(translationConfig.provider);
 
     const promptContext: AgentTranslationPromptContext = {
@@ -239,8 +238,7 @@ export const AgentExecutor = {
       outputMode: 'raw_output',
       outputLanguage: input.targetLanguage,
       enablePrefill: translationConfig.advanced.enablePrefill,
-      enableThinking: translationConfig.advanced.thinkingMode === 'model',
-      enableCustomThinking: translationConfig.advanced.thinkingMode === 'custom',
+      thinkingMode: translationConfig.advanced.thinkingMode,
     };
 
     const handle = startLLMSession<AgentTranslationInput, AgentTranslationResult>({
@@ -327,9 +325,9 @@ export const AgentExecutor = {
 };
 
 /**
- * Sync function call status from editCards to agentStore message
+ * Sync tool call status from editCards to agentStore message
  */
-async function syncAgentFunctionCalls(sessionId: string): Promise<void> {
+async function syncAgentToolCalls(sessionId: string): Promise<void> {
   const sessionStore = useLLMSessionStore.getState();
   const agentStore = useAgentStore.getState();
   const session = sessionStore.getSessionById(sessionId);
@@ -345,19 +343,19 @@ async function syncAgentFunctionCalls(sessionId: string): Promise<void> {
   const cards = session.editCards ?? [];
   if (cards.length === 0) return;
 
-  await agentStore.updateMessageFunctionCalls(
+  await agentStore.updateMessageToolCalls(
     projectId,
     agentId,
     assistantMessageId,
-    toFunctionCallMetadata(cards)
+    toToolCallMetadata(cards)
   );
 }
 
 /**
- * Execute confirmed agent function calls with sync.
+ * Execute confirmed agent tool calls with sync.
  * After read operations are confirmed, tool_results will be included in the next LLM call.
  */
-export async function executeAgentFunctionCalls(params: {
+export async function executeAgentToolCalls(params: {
   sessionId: string;
   projectId: string;
   language: string;
@@ -365,23 +363,23 @@ export async function executeAgentFunctionCalls(params: {
   options: HandlerOptions;
 }): Promise<{ hasAcceptedReads: boolean }> {
   await applySessionEdits(params);
-  await syncAgentFunctionCalls(params.sessionId);
+  await syncAgentToolCalls(params.sessionId);
 
   // Check if we have accepted read operations that need continuation
   const session = useLLMSessionStore.getState().getSessionById(params.sessionId);
   if (!session?.editCards) return { hasAcceptedReads: false };
 
-  const { isReadFunction } = await import('../functionCall/schemas/schemaRegistry');
+  const { isReadTool } = await import('../toolCall/schemas/schemaRegistry');
   const hasAcceptedReads = session.editCards.some(
-    c => c.functionCall.status === 'accepted' && isReadFunction(c.functionCall.functionName)
+    c => c.toolCall.status === 'accepted' && isReadTool(c.toolCall.toolName)
   );
 
   // Return whether continuation is needed - caller handles the continuation
   return { hasAcceptedReads };
 }
 
-/** @deprecated Use executeAgentFunctionCalls instead */
-export const applyAgentEdits = executeAgentFunctionCalls;
+/** @deprecated Use executeAgentToolCalls instead */
+export const applyAgentEdits = executeAgentToolCalls;
 
 /**
  * Reject all agent edits with sync
@@ -391,5 +389,5 @@ export async function rejectAllAgentEdits(params: {
   reason?: string;
 }): Promise<void> {
   rejectAllSessionEdits(params);
-  await syncAgentFunctionCalls(params.sessionId);
+  await syncAgentToolCalls(params.sessionId);
 }

@@ -1,4 +1,4 @@
-import type { EditCard } from '../../functionCall/types';
+import type { EditCard } from '../../toolCall/types';
 
 type EditCardMap = Record<string, EditCard[]>;
 
@@ -22,13 +22,13 @@ const areEditCardsEquivalent = (prev: EditCard[] = [], next: EditCard[] = []): b
       prevCard.type !== nextCard.type ||
       prevCard.title !== nextCard.title ||
       prevCard.description !== nextCard.description ||
-      prevCard.functionCall?.status !== nextCard.functionCall?.status
+      prevCard.toolCall?.status !== nextCard.toolCall?.status
     ) {
       return false;
     }
 
-    const prevAcceptedAt = normalizeTimestamp(prevCard.functionCall?.acceptedAt);
-    const nextAcceptedAt = normalizeTimestamp(nextCard.functionCall?.acceptedAt);
+    const prevAcceptedAt = normalizeTimestamp(prevCard.toolCall?.acceptedAt);
+    const nextAcceptedAt = normalizeTimestamp(nextCard.toolCall?.acceptedAt);
     if (prevAcceptedAt !== nextAcceptedAt) {
       return false;
     }

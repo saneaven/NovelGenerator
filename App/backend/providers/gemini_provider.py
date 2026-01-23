@@ -5,7 +5,7 @@ from google import genai
 from google.genai import types, errors
 
 from .base import BaseProvider
-from .native_function_calls_parser import NativeFunctionCallsStreamParser
+from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .registry import ProviderRegistry
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
 
@@ -135,7 +135,7 @@ class GeminiProvider(BaseProvider):
         """Convert messages to Gemini format.
 
         Handles tool_calls in assistant messages by converting to Gemini's
-        FunctionCall parts.
+        ToolCall parts.
         """
         contents: List[types.Content] = []
         system_instruction: Optional[types.Content] = None
@@ -159,7 +159,7 @@ class GeminiProvider(BaseProvider):
                     for tr in tool_results:
                         # Gemini uses from_function_response with name and response dict
                         parts.append(types.Part.from_function_response(
-                            name=tr.get("function_name", ""),
+                            name=tr.get("tool_name", ""),
                             response={"result": tr.get("content", "")}
                         ))
                     contents.append(types.Content(role="tool", parts=parts))
@@ -173,7 +173,7 @@ class GeminiProvider(BaseProvider):
                 # Add text content if present
                 if text:
                     parts.append(types.Part.from_text(text=text))
-                # Convert tool_calls to Gemini FunctionCall parts
+                # Convert tool_calls to Gemini ToolCall parts
                 for tc in tool_calls:
                     tc_function = tc.get("function", {})
                     args_str = tc_function.get("arguments", "{}")
@@ -181,7 +181,7 @@ class GeminiProvider(BaseProvider):
                         args = json.loads(args_str) if isinstance(args_str, str) else args_str
                     except json.JSONDecodeError:
                         args = {}
-                    # Create FunctionCall part using the SDK's method
+                    # Create ToolCall part using the SDK's method
                     parts.append(types.Part.from_function_call(
                         name=tc_function.get("name", ""),
                         args=args
@@ -207,7 +207,7 @@ class GeminiProvider(BaseProvider):
         messages: List[Dict],
         model: str,
         temperature: float = 0.7,
-        functions: Optional[List[Dict]] = None,
+        tools: Optional[List[Dict]] = None,
         tool_choice: Optional[str] = None,
         max_tokens: Optional[int] = None,
         provider_preference: Optional[Dict] = None,
@@ -215,7 +215,7 @@ class GeminiProvider(BaseProvider):
         thinking_mode: Optional[str] = None,
         custom_api_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
-        native_function_call: bool = False,
+        native_tool_call: bool = False,
     ) -> AsyncGenerator[bytes, None]:
         if not self.validate_config():
             yield self._format_error("Gemini API key is required")
@@ -238,10 +238,10 @@ class GeminiProvider(BaseProvider):
         if thinking_cfg:
             config_dict["thinkingConfig"] = thinking_cfg
 
-        # Map function tools if provided
-        if functions:
+        # Map tool definitions if provided
+        if tools:
             function_declarations: List[types.FunctionDeclaration] = []
-            for fn in functions:
+            for fn in tools:
                 try:
                     params = fn.get("parameters") if isinstance(fn.get("parameters"), dict) else None
                     decl = types.FunctionDeclaration(
@@ -270,7 +270,7 @@ class GeminiProvider(BaseProvider):
         # Always parse <thinking> tags from text content to prevent leakage into regular content
         prefill_has_thinking = has_unclosed_thinking_tag(messages) if thinking_mode == "custom" else False
         parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking)
-        native_fc_parser = NativeFunctionCallsStreamParser() if native_function_call else None
+        native_tc_parser = NativeToolCallsStreamParser() if native_tool_call else None
         tool_call_counter = 0
         stream = None
 
@@ -334,7 +334,7 @@ class GeminiProvider(BaseProvider):
                                 yield self._format_sse(thinking_payload)
                             continue
 
-                        # Function calls / tool calls
+                        # Tool calls (Gemini SDK uses function_call attribute)
                         if getattr(part, "function_call", None):
                             fc = part.function_call
                             arguments = fc.args or {}
@@ -344,7 +344,7 @@ class GeminiProvider(BaseProvider):
                             if signature and isinstance(signature, (bytes, bytearray)):
                                 import base64
                                 signature = base64.b64encode(signature).decode("utf-8")
-                            # Ensure each distinct function call has a stable, unique id
+                            # Ensure each distinct tool call has a stable, unique id
                             if getattr(fc, "id", None):
                                 # tool_call_id = fc.id
                                 tool_call_counter += 1
@@ -364,7 +364,7 @@ class GeminiProvider(BaseProvider):
                                     }
                                 ]
                             }
-                            # Gemini 3 function calls carry a thought signature that must be
+                            # Gemini 3 tool calls carry a thought signature that must be
                             # returned on the next turn; expose it alongside the tool call.
                             if signature:
                                 delta["thinking"] = {"signature": signature}
@@ -386,8 +386,8 @@ class GeminiProvider(BaseProvider):
                                         {"choices": [{"delta": {"thinking": {"text": thinking_block}}}]}
                                     )
 
-                            if native_fc_parser and text_to_emit:
-                                clean_content, tool_calls = native_fc_parser.process_chunk(text_to_emit)
+                            if native_tc_parser and text_to_emit:
+                                clean_content, tool_calls = native_tc_parser.process_chunk(text_to_emit)
                                 text_to_emit = clean_content
                                 if tool_calls:
                                     extra_chunks.append(
@@ -403,16 +403,16 @@ class GeminiProvider(BaseProvider):
                                 if self._has_meaningful_payload(extra):
                                     yield self._format_sse(extra)
 
-                            # Stop streaming after function_calls block completes
-                            if native_fc_parser and native_fc_parser.function_calls_completed:
+                            # Stop streaming after tool_calls block completes
+                            if native_tc_parser and native_tc_parser.tool_calls_completed:
                                 yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
                                 return
 
             for final_chunk in self._finalize_parser(parser):
                 delta = (final_chunk.get("choices") or [{}])[0].get("delta") or {}
                 content = delta.get("content")
-                if native_fc_parser and isinstance(content, str) and content:
-                    clean_content, tool_calls = native_fc_parser.process_chunk(content)
+                if native_tc_parser and isinstance(content, str) and content:
+                    clean_content, tool_calls = native_tc_parser.process_chunk(content)
                     if clean_content:
                         payload = {"choices": [{"delta": {"content": clean_content}}]}
                         if self._has_meaningful_payload(payload):
@@ -425,8 +425,8 @@ class GeminiProvider(BaseProvider):
                     if self._has_meaningful_payload(final_chunk):
                         yield self._format_sse(final_chunk)
 
-            if native_fc_parser:
-                tail_text, tail_tool_calls = native_fc_parser.finalize()
+            if native_tc_parser:
+                tail_text, tail_tool_calls = native_tc_parser.finalize()
                 if tail_text:
                     payload = {"choices": [{"delta": {"content": tail_text}}]}
                     if self._has_meaningful_payload(payload):
@@ -435,8 +435,8 @@ class GeminiProvider(BaseProvider):
                     payload = {"choices": [{"delta": {"tool_calls": tail_tool_calls}}]}
                     if self._has_meaningful_payload(payload):
                         yield self._format_sse(payload)
-                # Emit finish_reason if function calls were completed
-                if native_fc_parser.function_calls_completed:
+                # Emit finish_reason if tool calls were completed
+                if native_tc_parser.tool_calls_completed:
                     yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
                     return
 

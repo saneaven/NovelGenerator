@@ -6,23 +6,23 @@ from typing import Optional, Dict, Any, List, Literal
 from enum import Enum
 
 
-class FunctionCallStatus(str, Enum):
-    """Status of a function call"""
+class ToolCallStatus(str, Enum):
+    """Status of a tool call"""
     FAILED = "failed"
     PENDING = "pending"
     REJECTED = "rejected"
     ACCEPTED = "accepted"
 
 
-class FunctionCallFailureType(str, Enum):
-    """Type of function call failure"""
+class ToolCallFailureType(str, Enum):
+    """Type of tool call failure"""
     VALIDATION = "validation"
     EXECUTION = "execution"
     PARTIAL = "partial"
 
 
 class ApplicationResult(BaseModel):
-    """Result of applying a function call"""
+    """Result of applying a tool call"""
     success: bool
     message: str
     error: Optional[str] = None
@@ -31,14 +31,14 @@ class ApplicationResult(BaseModel):
     data: Optional[Dict[str, Any]] = None
 
 
-class FunctionCallSchema(BaseModel):
-    """Schema for function call data stored in messages"""
+class ToolCallSchema(BaseModel):
+    """Schema for tool call data stored in messages"""
     id: str
-    function_name: str
+    tool_name: str
     arguments: Any
-    status: FunctionCallStatus = FunctionCallStatus.PENDING
+    status: ToolCallStatus = ToolCallStatus.PENDING
     reason: Optional[str] = None
-    failureType: Optional[FunctionCallFailureType] = None
+    failureType: Optional[ToolCallFailureType] = None
     result: Optional[ApplicationResult] = None
     acceptedAt: Optional[datetime] = None
 
@@ -76,14 +76,14 @@ class MessageCreate(BaseModel):
     role: str = Field(..., pattern="^(user|assistant|system)$")
     content_parts: Optional[List[ContentPart]] = None
     language: str = "English"
-    function_calls: Optional[List[Dict[str, Any]]] = None
+    tool_calls: Optional[List[Dict[str, Any]]] = None
     thinking_details: Optional[List[Dict[str, Any]]] = None
 
 
 class MessageUpdate(BaseModel):
     content_parts: Optional[List[ContentPart]] = None
     language: str = "English"
-    function_calls: Optional[List[Dict[str, Any]]] = None
+    tool_calls: Optional[List[Dict[str, Any]]] = None
     thinking_details: Optional[List[Dict[str, Any]]] = None
 
 
@@ -93,7 +93,7 @@ class MessageResponse(BaseModel):
     agent_id: UUID
     role: str
     data: Dict[str, Any]  # Multilingual content
-    function_calls: Optional[List[Dict[str, Any]]]
+    tool_calls: Optional[List[Dict[str, Any]]]
     created_at: datetime
 
     class Config:

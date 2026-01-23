@@ -42,7 +42,7 @@ You may use these as a starting point or create something entirely new based on 
 
 ---
 
-{{#if config.isRawOutputMode}}
+{{#if (eq config.outputMode "raw_output")}}
 Output ONLY the generated prompt text directly.
 {{else}}
 Call the `generate_object_image_prompt` function with your generated prompt.

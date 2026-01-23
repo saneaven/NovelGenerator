@@ -176,7 +176,7 @@
       "instantChange": "테마 변경은 페이지 새로고침 없이 즉시 적용됩니다"
     },
     "credentials": {
-      "description": "API 키와 엔드포인트를 설정합니다. 이 자격 증명은 모든 AI 기능에서 공유됩니다.",
+      "description": "API 키와 엔드포인트를 설정합니다. 이 자격 증명은 모든 AI 작업에서 공유됩니다.",
       "apiKey": "API 키",
       "accessToken": "액세스 토큰",
       "baseUrl": "기본 URL",
@@ -221,9 +221,9 @@
       }
     },
     "general": {
-      "description": "각 기능에 대한 AI 모델 설정을 구성합니다.",
+      "description": "각 작업에 대한 AI 모델 설정을 구성합니다.",
       "configuration": "설정",
-      "functions": {
+      "tasks": {
         "agent": {
           "label": "에이전트",
           "description": "스토리 기획 및 브레인스토밍을 위한 일반 대화 및 지원"
@@ -274,12 +274,12 @@
       "nativeOutput": {
         "title": "네이티브 출력 모드",
         "enableNative": "네이티브 출력 모드 활성화",
-        "hint": "활성화하면 편집/번역 작업이 <function_calls> 블록을 출력합니다 (서버 측에서 일반 함수 호출로 변환). 이미지 프롬프트 작업은 항상 원시 텍스트를 출력합니다."
+        "hint": "활성화하면 편집/번역 작업이 <tool_calls> 블록을 출력합니다 (서버 측에서 일반 도구 호출로 변환). 이미지 프롬프트 작업은 항상 원시 텍스트를 출력합니다."
       },
-      "functionCallHistory": {
-        "title": "함수 호출 기록",
-        "label": "에이전트 기록에 함수 호출 포함",
-        "hint": "AI에 전송되는 대화 기록에 함수 호출이 포함될 최근 어시스턴트 메시지 수입니다. 비활성화하려면 0으로 설정하세요.",
+      "toolCallHistory": {
+        "title": "도구 호출 기록",
+        "label": "에이전트 기록에 도구 호출 포함",
+        "hint": "AI에 전송되는 대화 기록에 도구 호출이 포함될 최근 어시스턴트 메시지 수입니다. 비활성화하려면 0으로 설정하세요.",
         "all": "전체"
       },
       "thinkingHistory": {
@@ -353,7 +353,7 @@
       },
       "note": "참고: 선택한 제공자의 API 키가 자격 증명 탭에서 설정되어 있는지 확인하세요."
     },
-    "functionConfig": {
+    "taskConfig": {
       "basicSettings": "기본 설정",
       "provider": "제공자",
       "providerDescriptions": {
@@ -445,12 +445,12 @@
       "model": "모델:",
       "temperature": "온도:",
       "thinkingMode": "사고 모드:",
-      "functions": "함수:",
-      "defined": "정의됨",
+      "tools": "도구:",
+      "toolsDefined": "{{count}}개 정의됨",
       "messages": "메시지 ({{count}})",
       "response": "응답",
       "contentParts": "콘텐츠 파트",
-      "functionCalls": "함수 호출 ({{count}})",
+      "toolCalls": "도구 호출 ({{count}})",
       "thinkingDetails": "사고 세부 사항",
       "error": "오류"
     },

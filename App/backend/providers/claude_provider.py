@@ -4,7 +4,7 @@ from typing import AsyncGenerator, Dict, List, Optional, Tuple
 from anthropic import AsyncAnthropic
 
 from .base import BaseProvider
-from .native_function_calls_parser import NativeFunctionCallsStreamParser
+from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .registry import ProviderRegistry
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
 
@@ -107,7 +107,7 @@ class ClaudeProvider(BaseProvider):
 
             mapped_role = "user" if role == "user" else "assistant"
 
-            # Handle tool_results messages (from frontend after function call application)
+            # Handle tool_results messages (from frontend after tool call application)
             if role == "tool_results":
                 tool_results = msg.get("tool_results", [])
                 if tool_results:
@@ -182,7 +182,7 @@ class ClaudeProvider(BaseProvider):
         messages: List[Dict],
         model: str,
         temperature: float = 0.7,
-        functions: Optional[List[Dict]] = None,
+        tools: Optional[List[Dict]] = None,
         tool_choice: Optional[str] = None,
         max_tokens: Optional[int] = None,
         provider_preference: Optional[Dict] = None,
@@ -190,7 +190,7 @@ class ClaudeProvider(BaseProvider):
         thinking_mode: Optional[str] = None,
         custom_api_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
-        native_function_call: bool = False,
+        native_tool_call: bool = False,
     ) -> AsyncGenerator[bytes, None]:
         if not self.validate_config():
             yield self._format_error("Claude API key is required")
@@ -213,23 +213,23 @@ class ClaudeProvider(BaseProvider):
         if thinking_kwargs:
             request["thinking"] = thinking_kwargs
 
-        if functions:
+        if tools:
             # Anthropic native tool format (NOT OpenAI format)
-            tools = []
-            for fn in functions:
-                tools.append({
+            anthropic_tools = []
+            for fn in tools:
+                anthropic_tools.append({
                     "name": fn.get("name"),
                     "description": fn.get("description", ""),
                     "input_schema": fn.get("parameters") or {},
                 })
-            request["tools"] = tools
+            request["tools"] = anthropic_tools
             request["tool_choice"] = self.TOOL_CHOICE_MAP.get(tool_choice or "auto", {"type": "auto"})
 
         # Check if prefill has unclosed <thinking> tag - parser should start inside thinking block
         # Always parse <thinking> tags from text content to prevent leakage into regular content
         prefill_has_thinking = has_unclosed_thinking_tag(messages) if thinking_mode == "custom" else False
         parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking)
-        native_fc_parser = NativeFunctionCallsStreamParser() if native_function_call else None
+        native_tc_parser = NativeToolCallsStreamParser() if native_tool_call else None
 
         # Track content block meta by index
         block_meta: Dict[int, Dict[str, Optional[str]]] = {}
@@ -358,8 +358,8 @@ class ClaudeProvider(BaseProvider):
                                         {"choices": [{"delta": {"thinking": {"text": thinking_block}}}]}
                                     )
 
-                            if native_fc_parser and text_to_emit:
-                                clean_content, tool_calls = native_fc_parser.process_chunk(text_to_emit)
+                            if native_tc_parser and text_to_emit:
+                                clean_content, tool_calls = native_tc_parser.process_chunk(text_to_emit)
                                 text_to_emit = clean_content
                                 if tool_calls:
                                     extra_chunks.append(
@@ -375,8 +375,8 @@ class ClaudeProvider(BaseProvider):
                                 if self._has_meaningful_payload(extra):
                                     yield self._format_sse(extra)
 
-                            # Stop streaming after function_calls block completes
-                            if native_fc_parser and native_fc_parser.function_calls_completed:
+                            # Stop streaming after tool_calls block completes
+                            if native_tc_parser and native_tc_parser.tool_calls_completed:
                                 yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
                                 return
 
@@ -386,8 +386,8 @@ class ClaudeProvider(BaseProvider):
                 for final_chunk in self._finalize_parser(parser):
                     delta = (final_chunk.get("choices") or [{}])[0].get("delta") or {}
                     content = delta.get("content")
-                    if native_fc_parser and isinstance(content, str) and content:
-                        clean_content, tool_calls = native_fc_parser.process_chunk(content)
+                    if native_tc_parser and isinstance(content, str) and content:
+                        clean_content, tool_calls = native_tc_parser.process_chunk(content)
                         if clean_content:
                             payload = {"choices": [{"delta": {"content": clean_content}}]}
                             if self._has_meaningful_payload(payload):
@@ -399,8 +399,8 @@ class ClaudeProvider(BaseProvider):
                     else:
                         yield self._format_sse(final_chunk)
 
-                if native_fc_parser:
-                    tail_text, tail_tool_calls = native_fc_parser.finalize()
+                if native_tc_parser:
+                    tail_text, tail_tool_calls = native_tc_parser.finalize()
                     if tail_text:
                         payload = {"choices": [{"delta": {"content": tail_text}}]}
                         if self._has_meaningful_payload(payload):
@@ -409,8 +409,8 @@ class ClaudeProvider(BaseProvider):
                         payload = {"choices": [{"delta": {"tool_calls": tail_tool_calls}}]}
                         if self._has_meaningful_payload(payload):
                             yield self._format_sse(payload)
-                    # Emit finish_reason if function calls were completed
-                    if native_fc_parser.function_calls_completed:
+                    # Emit finish_reason if tool calls were completed
+                    if native_tc_parser.tool_calls_completed:
                         yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
                         return
 

@@ -2,7 +2,7 @@
  * Patch Utilities for Search-Replace based editing
  *
  * This module provides utilities for applying search-replace patches to text.
- * Used by patch_* function calls to perform partial text modifications.
+ * Used by patch_* tool calls to perform partial text modifications.
  * Each patch operation handles a single replacement (old → new).
  */
 

@@ -2,7 +2,7 @@
 
 You are an AI assistant specialized in novel writing. You help writers write, revise, and refine their novel chapters and prose.
 
-{{#if config.isCustomThinkingEnabled}}
+{{#if (eq config.thinkingMode "custom")}}
 {{prompt "common/customThinkingInstruction"}}
 {{/if}}
 
@@ -92,6 +92,6 @@ Respond in {{ config.mainLanguage }}.
 
 {{prompt "common/editOperations/manuscript"}}
 
-{{#if config.isNativeFunctionCallMode}}
+{{#if (eq config.outputMode "native_tool_call")}}
 {{prompt "common/nativeOutput/full"}}
 {{/if}}

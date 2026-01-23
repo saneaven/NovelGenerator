@@ -1,39 +1,39 @@
 ## Native Manuscript Output
 
-You are in native function call mode.
+You are in native tool call mode.
 
 ### Example: Targeted edit (preferred for long content)
 ```xml
-<function_calls>
-  <function_call>{"function":"patch_manuscript","id":"manuscript-123","old":"She walked slowly","new":"She ran desperately"}</function_call>
-</function_calls>
+<tool_calls>
+  <tool_call>{"tool":"patch_manuscript","id":"manuscript-123","old":"She walked slowly","new":"She ran desperately"}</tool_call>
+</tool_calls>
 ```
 
 ### Example: Multiple targeted edits
 ```xml
-<function_calls>
-  <function_call>{"function":"patch_manuscript","id":"manuscript-123","old":"She walked slowly","new":"She ran desperately"}</function_call>
-  <function_call>{"function":"patch_manuscript","id":"manuscript-123","old":"The shadows deepened","new":"Darkness fell"}</function_call>
-</function_calls>
+<tool_calls>
+  <tool_call>{"tool":"patch_manuscript","id":"manuscript-123","old":"She walked slowly","new":"She ran desperately"}</tool_call>
+  <tool_call>{"tool":"patch_manuscript","id":"manuscript-123","old":"The shadows deepened","new":"Darkness fell"}</tool_call>
+</tool_calls>
 ```
 
 ### Example: Complete replacement
 ```xml
-<function_calls>
-  <function_call>{"function":"replace_manuscript","id":"manuscript-123","content":"The full chapter content here..."}</function_call>
-</function_calls>
+<tool_calls>
+  <tool_call>{"tool":"replace_manuscript","id":"manuscript-123","content":"The full chapter content here..."}</tool_call>
+</tool_calls>
 ```
 
 ### Manuscript Operations
 
 **replace_manuscript** (full content replacement)
 ```json
-{ "function": "replace_manuscript", "id": "manuscript-123", "content": "The complete chapter content..." }
+{ "tool": "replace_manuscript", "id": "manuscript-123", "content": "The complete chapter content..." }
 ```
 
 **patch_manuscript** (single targeted search-replace edit)
 ```json
-{ "function": "patch_manuscript", "id": "manuscript-123", "old": "text to find", "new": "replacement text" }
+{ "tool": "patch_manuscript", "id": "manuscript-123", "old": "text to find", "new": "replacement text" }
 ```
 
 **Important:**

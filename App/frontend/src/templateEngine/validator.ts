@@ -1,7 +1,7 @@
 /**
  * Template variable validation logic
  */
-import type { FunctionType } from '../types/prompts';
+import type { TaskType } from '../types/prompts';
 import type { PromptType } from './schema';
 import { UNIFIED_SCHEMA, PROMPT_TYPE_VARIABLES, isGroupAvailableForType } from './schema';
 import type { VariableReference } from './engine';
@@ -15,13 +15,13 @@ export interface VariableWarning {
 }
 
 /**
- * Maps FunctionType to PromptType
+ * Maps TaskType to PromptType
  */
-export function mapFunctionTypeToSchemaType(
-  functionType: FunctionType,
+export function mapTaskTypeToSchemaType(
+  taskType: TaskType,
   name?: string
 ): PromptType | null {
-  switch (functionType) {
+  switch (taskType) {
     case 'agent':
       return 'agent';
     case 'translation':

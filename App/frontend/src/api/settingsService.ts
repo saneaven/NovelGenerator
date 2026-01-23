@@ -2,7 +2,7 @@ import { apiClient } from './client';
 import type { Settings } from '../store/settingsStore';
 
 export interface SettingsSyncResponse {
-    functionConfigs: Settings['functionConfigs'];
+    taskConfigs: Settings['taskConfigs'];
     mainLanguage: string;
     subLanguages: string[];
     defaultSubLanguage: string | null;
@@ -28,14 +28,14 @@ export const settingsService = {
     },
 
     /**
-     * Update a specific function's configuration
+     * Update a specific task's configuration
      */
-    async updateFunctionConfig(
-        functionType: 'agent' | 'translation' | 'editAssistant' | 'imagePrompt',
-        config: Settings['functionConfigs']['agent']
+    async updateTaskConfig(
+        taskType: 'agent' | 'translation' | 'editAssistant' | 'imagePrompt',
+        config: Settings['taskConfigs']['agent']
     ): Promise<SettingsSyncResponse> {
         return await apiClient.patch<SettingsSyncResponse>(
-            `/api/v1/settings/function/${functionType}`,
+            `/api/v1/settings/task/${taskType}`,
             config
         );
     },

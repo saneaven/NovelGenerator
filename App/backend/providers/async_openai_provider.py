@@ -13,7 +13,7 @@ from openai import (
 )
 
 from .base import BaseProvider
-from .native_function_calls_parser import NativeFunctionCallsStreamParser
+from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
 
 
@@ -61,7 +61,7 @@ class AsyncOpenAIProvider(BaseProvider):
         messages: List[Dict],
         model: str,
         temperature: float,
-        functions: Optional[List[Dict]],
+        tools: Optional[List[Dict]],
         tool_choice: Optional[str],
         max_tokens: Optional[int],
         provider_preference: Optional[Dict],
@@ -88,8 +88,8 @@ class AsyncOpenAIProvider(BaseProvider):
             else:
                 request["max_tokens"] = max_tokens
 
-        if functions:
-            request["tools"] = [{"type": "function", "function": fn} for fn in functions]
+        if tools:
+            request["tools"] = [{"type": "function", "function": fn} for fn in tools]
             request["tool_choice"] = tool_choice or "auto"
 
         extra_body = self._build_extra_body(provider_preference, thinking_config, model)
@@ -211,10 +211,10 @@ class AsyncOpenAIProvider(BaseProvider):
 
         return updated_chunk, extra_chunks
 
-    def _apply_native_function_calls_parser(
+    def _apply_native_tool_calls_parser(
         self,
         chunk: Optional[Dict],
-        parser: Optional[NativeFunctionCallsStreamParser],
+        parser: Optional[NativeToolCallsStreamParser],
     ) -> Tuple[Optional[Dict], List[Dict]]:
         if parser is None or chunk is None:
             return chunk, []
@@ -268,9 +268,9 @@ class AsyncOpenAIProvider(BaseProvider):
             final_chunks.append({"choices": [{"delta": {"thinking": {"text": final_thinking}}}]})
         return final_chunks
 
-    def _finalize_native_function_calls_parser(
+    def _finalize_native_tool_calls_parser(
         self,
-        parser: Optional[NativeFunctionCallsStreamParser],
+        parser: Optional[NativeToolCallsStreamParser],
     ) -> List[Dict]:
         if parser is None:
             return []
@@ -288,7 +288,7 @@ class AsyncOpenAIProvider(BaseProvider):
         messages: List[Dict],
         model: str,
         temperature: float = 0.7,
-        functions: Optional[List[Dict]] = None,
+        tools: Optional[List[Dict]] = None,
         tool_choice: Optional[str] = None,
         max_tokens: Optional[int] = None,
         provider_preference: Optional[Dict] = None,
@@ -296,7 +296,7 @@ class AsyncOpenAIProvider(BaseProvider):
         thinking_mode: Optional[str] = None,
         custom_api_format: Optional[str] = None,
         retry_config: Optional[Dict] = None,
-        native_function_call: bool = False,
+        native_tool_call: bool = False,
     ) -> AsyncGenerator[bytes, None]:
         if not self.validate_config():
             yield self._format_error("Invalid provider configuration")
@@ -311,7 +311,7 @@ class AsyncOpenAIProvider(BaseProvider):
             converted_messages,
             model,
             temperature,
-            functions,
+            tools,
             tool_choice,
             max_tokens,
             provider_preference,
@@ -323,7 +323,7 @@ class AsyncOpenAIProvider(BaseProvider):
         # Always parse <thinking> tags from text content to prevent leakage into regular content
         prefill_has_thinking = has_unclosed_thinking_tag(messages) if thinking_mode == "custom" else False
         parser = ThinkingStreamParser(inside_thinking=prefill_has_thinking)
-        native_fc_parser = NativeFunctionCallsStreamParser() if native_function_call else None
+        native_tc_parser = NativeToolCallsStreamParser() if native_tool_call else None
         last_finish_reason = None
         stream = None
         captured_usage: Optional[Dict] = None
@@ -347,7 +347,7 @@ class AsyncOpenAIProvider(BaseProvider):
                 chunk_dict, parser_chunks = self._apply_thinking_parser(chunk_dict, parser)
                 extra_chunks.extend(parser_chunks)
 
-                chunk_dict, fc_chunks = self._apply_native_function_calls_parser(chunk_dict, native_fc_parser)
+                chunk_dict, fc_chunks = self._apply_native_tool_calls_parser(chunk_dict, native_tc_parser)
 
                 if chunk_dict and self._has_meaningful_payload(chunk_dict):
                     yield self._format_sse(chunk_dict)
@@ -356,21 +356,21 @@ class AsyncOpenAIProvider(BaseProvider):
                     if self._has_meaningful_payload(extra):
                         yield self._format_sse(extra)
 
-                # Stop streaming after function_calls block completes
-                if native_fc_parser and native_fc_parser.function_calls_completed:
+                # Stop streaming after tool_calls block completes
+                if native_tc_parser and native_tc_parser.tool_calls_completed:
                     yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
                     return
 
                 for extra in extra_chunks:
-                    extra, extra_fc_chunks = self._apply_native_function_calls_parser(extra, native_fc_parser)
+                    extra, extra_fc_chunks = self._apply_native_tool_calls_parser(extra, native_tc_parser)
                     if extra and self._has_meaningful_payload(extra):
                         yield self._format_sse(extra)
                     for extra_fc in extra_fc_chunks:
                         if self._has_meaningful_payload(extra_fc):
                             yield self._format_sse(extra_fc)
 
-                    # Stop streaming after function_calls block completes
-                    if native_fc_parser and native_fc_parser.function_calls_completed:
+                    # Stop streaming after tool_calls block completes
+                    if native_tc_parser and native_tc_parser.tool_calls_completed:
                         yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
                         return
 
@@ -393,19 +393,19 @@ class AsyncOpenAIProvider(BaseProvider):
 
         try:
             for final_chunk in self._finalize_parser(parser):
-                final_chunk, final_fc_chunks = self._apply_native_function_calls_parser(final_chunk, native_fc_parser)
+                final_chunk, final_fc_chunks = self._apply_native_tool_calls_parser(final_chunk, native_tc_parser)
                 if final_chunk and self._has_meaningful_payload(final_chunk):
                     yield self._format_sse(final_chunk)
                 for extra in final_fc_chunks:
                     if self._has_meaningful_payload(extra):
                         yield self._format_sse(extra)
 
-            for final_fc_chunk in self._finalize_native_function_calls_parser(native_fc_parser):
+            for final_fc_chunk in self._finalize_native_tool_calls_parser(native_tc_parser):
                 if self._has_meaningful_payload(final_fc_chunk):
                     yield self._format_sse(final_fc_chunk)
 
-            # Emit finish_reason if function calls were completed
-            if native_fc_parser and native_fc_parser.function_calls_completed:
+            # Emit finish_reason if tool calls were completed
+            if native_tc_parser and native_tc_parser.tool_calls_completed:
                 yield self._format_sse({"choices": [{"finish_reason": "tool_calls"}]})
                 return
         except Exception as exc:

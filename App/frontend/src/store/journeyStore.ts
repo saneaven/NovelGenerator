@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ChatMessage, TokenUsage } from '../llm/requestTypes';
-import type { FunctionCallSchema } from '../functionCall';
+import type { ToolCallSchema } from '../toolCall';
 import type { StoredEditCard } from '../llmTask/uiTypes';
 import type { EditingTargets } from '../llmTaskJourney/types';
 import { useLLMSessionStore } from './llmSessionStore';
@@ -40,7 +40,7 @@ export interface Journey<TInput = unknown, TResult = unknown> {
 
   // Journey-specific data (no preConversation - LLMTask handles templates)
   editingTargets: EditingTargets;
-  functions?: FunctionCallSchema[];
+  tools?: ToolCallSchema[];
   messages: ChatMessage[];  // All messages (user input + assistant outputs)
 
   // Reference to current session for streaming data
@@ -48,7 +48,7 @@ export interface Journey<TInput = unknown, TResult = unknown> {
   // Optional history of attempts (oldest -> newest)
   sessionHistory?: string[];
 
-  // Function call confirmation
+  // Tool call confirmation
   editCards?: StoredEditCard[];
 
   // Result

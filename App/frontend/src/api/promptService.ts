@@ -2,7 +2,7 @@
  * API service for prompt management
  */
 import { apiClient } from './client';
-import type { FunctionType, PromptCategory } from '../types/prompts';
+import type { TaskType, PromptCategory } from '../types/prompts';
 
 export interface PromptContent {
   content: string;
@@ -45,14 +45,14 @@ export interface ValidationResult {
  * Build API path for prompt
  */
 function buildPromptPath(
-  functionType: FunctionType,
+  taskType: TaskType,
   category: PromptCategory,
   name: string
 ): string {
   if (!name) {
-    throw new Error(`Prompt name is required for ${functionType}/${category}`);
+    throw new Error(`Prompt name is required for ${taskType}/${category}`);
   }
-  return `/api/v1/prompts/${functionType}/${category}/${name}`;
+  return `/api/v1/prompts/${taskType}/${category}/${name}`;
 }
 
 export const promptService = {
@@ -60,11 +60,11 @@ export const promptService = {
    * Get active prompt content
    */
   async getPrompt(
-    functionType: FunctionType,
+    taskType: TaskType,
     category: PromptCategory,
     name: string
   ): Promise<PromptContent> {
-    const path = buildPromptPath(functionType, category, name);
+    const path = buildPromptPath(taskType, category, name);
     return await apiClient.get<PromptContent>(path);
   },
 
@@ -72,13 +72,13 @@ export const promptService = {
    * Save new version of a prompt
    */
   async savePrompt(
-    functionType: FunctionType,
+    taskType: TaskType,
     category: PromptCategory,
     content: string,
     name: string,
     note?: string
   ): Promise<PromptVersion> {
-    const path = buildPromptPath(functionType, category, name);
+    const path = buildPromptPath(taskType, category, name);
     return await apiClient.post<PromptVersion>(`${path}/save`, {
       content,
       note,
@@ -89,11 +89,11 @@ export const promptService = {
    * Get version history for a prompt
    */
   async getVersionHistory(
-    functionType: FunctionType,
+    taskType: TaskType,
     category: PromptCategory,
     name: string
   ): Promise<VersionHistoryItem[]> {
-    const path = buildPromptPath(functionType, category, name);
+    const path = buildPromptPath(taskType, category, name);
     return await apiClient.get<VersionHistoryItem[]>(`${path}/versions`);
   },
 
@@ -101,12 +101,12 @@ export const promptService = {
    * Restore a specific version by creating a new version with the restored content
    */
   async restoreVersion(
-    functionType: FunctionType,
+    taskType: TaskType,
     category: PromptCategory,
     versionNumber: number,
     name: string
   ): Promise<{ new_version: number }> {
-    const path = buildPromptPath(functionType, category, name);
+    const path = buildPromptPath(taskType, category, name);
     return await apiClient.post<{ new_version: number }>(`${path}/restore`, {
       version_number: versionNumber,
     });

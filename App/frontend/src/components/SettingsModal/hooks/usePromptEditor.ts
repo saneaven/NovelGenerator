@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { promptService, type ValidationResult } from '../../../api/promptService';
 import { validateTemplate } from '../../../templateEngine/engine';
-import { mapFunctionTypeToSchemaType } from '../../../templateEngine/validator';
-import type { FunctionType, PromptCategory } from '../../../types/prompts';
+import { mapTaskTypeToSchemaType } from '../../../templateEngine/validator';
+import type { TaskType, PromptCategory } from '../../../types/prompts';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { usePresetStore } from '../../../store/presetStore';
 
@@ -23,7 +23,7 @@ interface UsePromptEditorResult {
 }
 
 export function usePromptEditor(
-    functionType: FunctionType,
+    taskType: TaskType,
     category: PromptCategory,
     name: string
 ): UsePromptEditorResult {
@@ -40,7 +40,7 @@ export function usePromptEditor(
     const loadPromptContent = useCallback(async () => {
         setIsLoading(true);
         try {
-            const promptContent = await loadPrompt(functionType, category, name);
+            const promptContent = await loadPrompt(taskType, category, name);
             setContent(promptContent);
             setOriginalContent(promptContent);
         } catch (error) {
@@ -48,7 +48,7 @@ export function usePromptEditor(
         } finally {
             setIsLoading(false);
         }
-    }, [functionType, category, name, loadPrompt, activePresetId]);
+    }, [taskType, category, name, loadPrompt, activePresetId]);
 
     useEffect(() => {
         loadPromptContent();
@@ -60,10 +60,10 @@ export function usePromptEditor(
             validateContent(content);
         }, 500);
         return () => clearTimeout(timer);
-    }, [content, functionType, category, name]);
+    }, [content, taskType, category, name]);
 
     const validateContent = async (text: string) => {
-        const schemaType = mapFunctionTypeToSchemaType(functionType, name);
+        const schemaType = mapTaskTypeToSchemaType(taskType, name);
         const result = await validateTemplate(text, schemaType || undefined);
 
         if (result.isValid) {
@@ -102,12 +102,12 @@ export function usePromptEditor(
         setIsSaving(true);
         try {
             await promptService.savePrompt(
-                functionType,
+                taskType,
                 category,
                 content,
                 name
             );
-            invalidatePromptCache(functionType, category, name);
+            invalidatePromptCache(taskType, category, name);
             setOriginalContent(content);
             alert('Prompt saved successfully!');
         } catch (error) {
@@ -123,9 +123,9 @@ export function usePromptEditor(
 
     const versionHistoryProps = {
         title: "Prompt Version History",
-        loadVersions: () => promptService.getVersionHistory(functionType, category, name),
+        loadVersions: () => promptService.getVersionHistory(taskType, category, name),
         restoreVersion: async (vn: number) => {
-            await promptService.restoreVersion(functionType, category, vn, name);
+            await promptService.restoreVersion(taskType, category, vn, name);
             await loadPromptContent();  // Reload to get the new version
         },
     };

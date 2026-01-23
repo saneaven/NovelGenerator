@@ -23,12 +23,9 @@ export const UNIFIED_SCHEMA = {
     mainLanguage: { desc: "Primary language", example: "Korean" },
     displayLanguage: { desc: "Current display language", example: "English" },
     today: { desc: "Current date (YYYY-MM-DD)", example: "2025-01-15" },
-    isThinkingEnabled: { desc: "Thinking mode enabled", example: true },
+    thinkingMode: { desc: "Thinking mode ('off' | 'model' | 'custom')", example: "off" },
     isPrefillEnabled: { desc: "Prefill enabled", example: true },
-    isCustomThinkingEnabled: { desc: "Custom thinking enabled", example: false },
-    outputMode: { desc: "LLM output mode ('tool_call' | 'native_function_call' | 'raw_output')", example: "tool_call" },
-    isNativeFunctionCallMode: { desc: "True when outputMode is 'native_function_call'", example: false },
-    isRawOutputMode: { desc: "True when outputMode is 'raw_output'", example: false },
+    outputMode: { desc: "LLM output mode ('tool_call' | 'native_tool_call' | 'raw_output')", example: "tool_call" },
   },
 
   project: {
@@ -113,16 +110,16 @@ export const UNIFIED_SCHEMA = {
 
   input: {
     userMessage: { desc: "User's input message", example: "Help me write a scene where..." },
-    functionResults: {
-      desc: "Previous function call results",
+    toolResults: {
+      desc: "Previous tool call results",
       example: [{
-        functionCallId: "function-call-1",
-        functionName: "update_manuscript",
+        toolCallId: "tool-call-1",
+        toolName: "update_manuscript",
         success: true,
         status: "accepted",
         resultMessage: "Applied successfully",
         acceptedAt: "2025-01-02T00:00:00Z"
-      }] as Array<{ functionCallId: string; functionName: string; success: boolean; status: string; resultMessage: string; acceptedAt?: string }>
+      }] as Array<{ toolCallId: string; toolName: string; success: boolean; status: string; resultMessage: string; acceptedAt?: string }>
     },
   },
 

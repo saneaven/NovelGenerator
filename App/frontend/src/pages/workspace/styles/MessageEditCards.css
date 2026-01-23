@@ -1,6 +1,6 @@
 /* ========================================
    MESSAGE EDIT CARDS STYLES
-   Function Call & Edit Card Interface
+   Tool Call & Edit Card Interface
    ======================================== */
 
 .message-edit-cards {
@@ -11,8 +11,8 @@
   max-width: none;
 }
 
-/* ===== Function Call Indicator ===== */
-.function-call-indicator {
+/* ===== Tool Call Indicator ===== */
+.tool-call-indicator {
   background: var(--gradient-surface);
   border: 1px solid var(--color-border-medium);
   border-radius: var(--border-radius-lg);
@@ -21,32 +21,32 @@
   animation: fadeInScale var(--transition-base) ease-out;
 }
 
-.function-call-indicator-header {
+.tool-call-indicator-header {
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
   margin-bottom: var(--spacing-md);
 }
 
-.function-call-indicator-icon {
+.tool-call-indicator-icon {
   font-size: var(--font-size-xl);
   animation: pulse 2s infinite;
 }
 
-.function-call-indicator-text {
+.tool-call-indicator-text {
   font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
   flex-grow: 1;
   font-size: var(--font-size-sm);
 }
 
-.function-call-preview {
+.tool-call-preview {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
 }
 
-.function-call-preview-item {
+.tool-call-preview-item {
   background: var(--color-surface-base);
   padding: var(--spacing-md);
   border-radius: var(--border-radius-md);
@@ -60,31 +60,31 @@
   box-shadow: var(--shadow-xs);
 }
 
-.function-call-preview-header {
+.tool-call-preview-header {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   gap: var(--spacing-md);
 }
 
-.function-call-preview-title {
+.tool-call-preview-title {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
 }
 
-.function-call-preview-name {
+.tool-call-preview-name {
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
 
-.function-call-preview-status {
+.tool-call-preview-status {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
-.function-call-preview-placeholder {
+.tool-call-preview-placeholder {
   background: var(--color-surface-muted);
   border-radius: var(--border-radius-sm);
   padding: var(--spacing-sm) var(--spacing-md);
@@ -92,13 +92,13 @@
   color: var(--color-text-secondary);
 }
 
-.function-call-operation-list {
+.tool-call-operation-list {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
 }
 
-.function-call-preview-error {
+.tool-call-preview-error {
   color: var(--color-error);
   font-size: var(--font-size-sm);
   line-height: 1.4;
@@ -315,7 +315,7 @@
   background: var(--color-success-light);
 }
 
-.function-call-review-card .review-card-header {
+.tool-call-review-card .review-card-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -542,7 +542,7 @@
     gap: var(--spacing-sm);
   }
 
-  .function-call-indicator,
+  .tool-call-indicator,
   .edit-card {
     padding: var(--spacing-md);
   }

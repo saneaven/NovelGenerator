@@ -178,7 +178,7 @@
       "instantChange": "Theme changes apply immediately without reloading the page"
     },
     "credentials": {
-      "description": "Configure API keys and endpoints. These credentials are shared across all AI functions.",
+      "description": "Configure API keys and endpoints. These credentials are shared across all AI tasks.",
       "apiKey": "API Key",
       "accessToken": "Access Token",
       "baseUrl": "Base URL",
@@ -223,9 +223,9 @@
       }
     },
     "general": {
-      "description": "Configure AI model settings for each function.",
+      "description": "Configure AI model settings for each task.",
       "configuration": "Configuration",
-      "functions": {
+      "tasks": {
         "agent": {
           "label": "Agent",
           "description": "General conversation and assistance for story planning and brainstorming"
@@ -286,12 +286,12 @@
       "nativeOutput": {
         "title": "Native Output Mode",
         "enableNative": "Enable native output mode",
-        "hint": "When enabled, edit/translation tasks emit <function_calls> blocks (converted server-side into normal function calls). Image prompt tasks always output raw text."
+        "hint": "When enabled, edit/translation tasks emit <tool_calls> blocks (converted server-side into normal tool calls). Image prompt tasks always output raw text."
       },
-      "functionCallHistory": {
-        "title": "Function Call History",
-        "label": "Include function calls in agent history",
-        "hint": "Number of recent assistant messages whose function calls will be included in the conversation history sent to the AI. Set to 0 to disable.",
+      "toolCallHistory": {
+        "title": "Tool Call History",
+        "label": "Include tool calls in agent history",
+        "hint": "Number of recent assistant messages whose tool calls will be included in the conversation history sent to the AI. Set to 0 to disable.",
         "all": "All"
       },
       "thinkingHistory": {
@@ -365,7 +365,7 @@
       },
       "note": "Note: Make sure you have configured the API key for the selected provider in the Credentials tab."
     },
-    "functionConfig": {
+    "taskConfig": {
       "basicSettings": "Basic Settings",
       "provider": "Provider",
       "providerDescriptions": {
@@ -457,12 +457,12 @@
       "model": "Model:",
       "temperature": "Temperature:",
       "thinkingMode": "Thinking Mode:",
-      "functions": "Functions:",
-      "defined": "defined",
+      "tools": "Tools:",
+      "toolsDefined": "{{count}} defined",
       "messages": "Messages ({{count}})",
       "response": "Response",
       "contentParts": "Content Parts",
-      "functionCalls": "Function Calls ({{count}})",
+      "toolCalls": "Tool Calls ({{count}})",
       "thinkingDetails": "Thinking Details",
       "error": "Error"
     },

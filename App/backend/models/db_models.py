@@ -48,8 +48,8 @@ class UserSettings(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, unique=True)
 
-    # Function-based configuration (provider, model, temperature, advanced settings per function)
-    function_configs = Column(JSONB, nullable=False, server_default="""{
+    # Task-based configuration (provider, model, temperature, advanced settings per task)
+    task_configs = Column(JSONB, nullable=False, server_default="""{
         "agent": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
         "translation": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.2, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
         "editAssistant": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "advanced": {"enablePrefill": true, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
@@ -97,7 +97,7 @@ class UserSettings(Base):
         "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"}
     }""")
 
-    # Native output mode - use raw LLM output instead of function calling
+    # Native output mode - use raw LLM output instead of tool calling
     native_output_mode = Column(Boolean, default=False, nullable=False)
 
     # Patch auto-retry - automatically retry with replace mode if patch fails
@@ -106,8 +106,8 @@ class UserSettings(Base):
     # LLM logging enabled - enable LLM request logging for debugging
     llm_logging_enabled = Column(Boolean, default=False, nullable=False)
 
-    # Function call history limit - number of recent assistant messages to include function calls for
-    function_call_history_limit = Column(Integer, default=5, nullable=False)
+    # Tool call history limit - number of recent assistant messages to include tool calls for
+    tool_call_history_limit = Column(Integer, default=5, nullable=False)
 
     # Thinking history limit - number of recent assistant messages to include thinking for
     thinking_history_limit = Column(Integer, default=5, nullable=False)
@@ -195,7 +195,7 @@ class PromptVersion(Base):
     preset_id = Column(UUID(as_uuid=True), ForeignKey('prompt_presets.id', ondelete='CASCADE'), nullable=False, index=True)
 
     # Prompt identification
-    function_type = Column(String(50), nullable=False)  # 'agent', 'translation', 'editAssistant', 'imagePrompt'
+    task_type = Column(String(50), nullable=False)  # 'agent', 'translation', 'editAssistant', 'imagePrompt'
     prompt_category = Column(String(50), nullable=False)  # 'systemPrompt', 'prefill', 'userMessageTag'
     prompt_name = Column(String(50), nullable=False)  # 'storyObject', 'novelEditor', etc (required)
 
@@ -556,7 +556,7 @@ class Agent(Base):
 
 
 class AgentMessage(Base):
-    """Agent messages with multilingual support and function calls"""
+    """Agent messages with multilingual support and tool calls"""
     __tablename__ = 'agent_messages'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -568,8 +568,8 @@ class AgentMessage(Base):
     # Format: { "English": { "content": "..." }, "Korean": { "content": "..." } }
     data = Column(JSONB, nullable=False)
 
-    # Function calls metadata (if any) stored as JSONB array
-    function_calls = Column(JSONB)
+    # Tool calls metadata (if any) stored as JSONB array
+    tool_calls = Column(JSONB)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
