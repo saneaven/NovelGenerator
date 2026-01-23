@@ -3,7 +3,7 @@ import { useSidebarStore } from '../../../store/sidebarStore';
 import { BaseSidebar } from '../../../components/BaseSidebar';
 import { Close, Clipboard, People, Organization, Map, Books, Document } from '../../../components/icons';
 import { IconButton } from '../../../components/IconButton';
-import type { StoryObjectTabType } from '../../../types/storyObject';
+import type { StoryObjectTabType } from '../../../types/objectTypeConfig';
 import { useStoryObjectTab } from '../hooks/useStoryObjectTab';
 import './WorkspaceTabsSidebar.css';
 

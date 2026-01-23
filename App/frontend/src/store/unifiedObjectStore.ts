@@ -563,26 +563,29 @@ export interface SimplifiedStoryObjects {
     logline: string;
     genre: string;
   } | null;
-  characters: Array<{ id: string; name: string; description: string }>;
-  organizations: Array<{ id: string; name: string; description: string }>;
-  locations: Array<{ id: string; name: string; description: string }>;
-  lorebook: Array<{ id: string; name: string; description: string }>;
+  characters: Array<{ id: string; name: string; description: string; content: string }>;
+  organizations: Array<{ id: string; name: string; description: string; content: string }>;
+  locations: Array<{ id: string; name: string; description: string; content: string }>;
+  lorebook: Array<{ id: string; name: string; description: string; content: string }>;
   outline: {
     outlines: Array<{
       id: string;
       name: string;
       description: string;
+      content: string;
       order: number;
       acts: Array<{
         id: string;
         name: string;
         description: string;
+        content: string;
         order: number;
         outlineId: string;
         chapters: Array<{
           id: string;
           name: string;
           description: string;
+          content: string;
           order: number;
           actId: string;
         }>;
@@ -667,6 +670,7 @@ export function useStoryObjects(projectId: string | undefined, language: string)
             id: outlineObj.id,
             name: outlineData.name || '',
             description: outlineData.description || '',
+            content: outlineData.content || '',
             order: outlineObj.metadata.order || 0,
             acts: acts
               .filter(act => act.metadata.outline_id === outlineObj.id)
@@ -677,6 +681,7 @@ export function useStoryObjects(projectId: string | undefined, language: string)
                   id: act.id,
                   name: actData.name || '',
                   description: actData.description || '',
+                  content: actData.content || '',
                   order: act.metadata.order || 0,
                   outlineId: act.metadata.outline_id || '',
                   chapters: chapters
@@ -688,6 +693,7 @@ export function useStoryObjects(projectId: string | undefined, language: string)
                         id: chapter.id,
                         name: chapterData.name || '',
                         description: chapterData.description || '',
+                        content: chapterData.content || '',
                         order: chapter.metadata.order || 0,
                         actId: chapter.metadata.act_id || '',
                       };
@@ -706,6 +712,7 @@ export function useStoryObjects(projectId: string | undefined, language: string)
           id: ch.id,
           name: data.name || '',
           description: data.description || '',
+          content: data.content || '',
         };
       }),
       organizations: organizations.map(org => {
@@ -714,6 +721,7 @@ export function useStoryObjects(projectId: string | undefined, language: string)
           id: org.id,
           name: data.name || '',
           description: data.description || '',
+          content: data.content || '',
         };
       }),
       locations: locations.map(loc => {
@@ -722,6 +730,7 @@ export function useStoryObjects(projectId: string | undefined, language: string)
           id: loc.id,
           name: data.name || '',
           description: data.description || '',
+          content: data.content || '',
         };
       }),
       lorebook: lorebook.map(entry => {
@@ -730,6 +739,7 @@ export function useStoryObjects(projectId: string | undefined, language: string)
           id: entry.id,
           name: data.name || '',
           description: data.description || '',
+          content: data.content || '',
         };
       }),
       outline,

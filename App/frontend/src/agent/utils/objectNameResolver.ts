@@ -1,8 +1,4 @@
 import type { SimplifiedStoryObjects } from '../../store/unifiedObjectStore';
-import type { StoryObjects } from '../../types/storyObject';
-
-// Common interface for both SimplifiedStoryObjects and StoryObjects
-type StoryObjectsLike = SimplifiedStoryObjects | StoryObjects;
 
 /** Generic act type for name resolution - only needs id, name, and chapters */
 interface ActLike {
@@ -18,20 +14,12 @@ interface ChapterLike {
 }
 
 /**
- * Extracts all acts from either StoryObjects or SimplifiedStoryObjects.
- * Handles the structural difference between the two types.
+ * Extracts all acts from SimplifiedStoryObjects.
  */
-const getAllActs = (storyObjects: StoryObjectsLike): ActLike[] => {
+const getAllActs = (storyObjects: SimplifiedStoryObjects): ActLike[] => {
   const outline = storyObjects.outline;
   if (!outline) return [];
-
-  // SimplifiedStoryObjects has { outlines: Array<{ acts: ... }> }
-  if ('outlines' in outline) {
-    return outline.outlines.flatMap((o) => o.acts || []);
-  }
-
-  // StoryObjects has Outline with direct acts property
-  return (outline as { acts?: ActLike[] }).acts || [];
+  return outline.outlines.flatMap((o) => o.acts || []);
 };
 
 /**
@@ -69,7 +57,7 @@ export const parseFunctionName = (
  * Used to display friendly names instead of UUIDs in function call previews.
  */
 export const resolveStoryObjectName = (
-  storyObjects: StoryObjectsLike,
+  storyObjects: SimplifiedStoryObjects,
   type?: string,
   id?: string
 ): string | undefined => {

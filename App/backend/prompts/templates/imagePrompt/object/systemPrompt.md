@@ -9,7 +9,7 @@ Always output the image prompt in English. Image generation models work best wit
 ## Your Task
 
 Generate an image prompt for the provided story object based on:
-1. The object's name and description
+1. The object's name and content
 2. The user's specific visualization request (if provided)
 3. The specified prompt format (natural language OR tag-based)
 

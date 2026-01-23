@@ -107,7 +107,8 @@ function filterGroups(
       const filteredItems = group.items.filter(item => {
         const matchesSearch = !normalizedQuery ||
           item.name.toLowerCase().includes(normalizedQuery) ||
-          item.description?.toLowerCase().includes(normalizedQuery);
+          item.description?.toLowerCase().includes(normalizedQuery) ||
+          item.content?.toLowerCase().includes(normalizedQuery);
         const matchesType = !typeFilter || item.type === typeFilter;
         return matchesSearch && matchesType;
       });
@@ -117,7 +118,8 @@ function filterGroups(
         const childFilteredItems = childGroup.items.filter(item => {
           const matchesSearch = !normalizedQuery ||
             item.name.toLowerCase().includes(normalizedQuery) ||
-            item.description?.toLowerCase().includes(normalizedQuery);
+            item.description?.toLowerCase().includes(normalizedQuery) ||
+            item.content?.toLowerCase().includes(normalizedQuery);
           return matchesSearch;
         });
 

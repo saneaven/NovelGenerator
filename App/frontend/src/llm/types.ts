@@ -47,23 +47,26 @@ export interface TemplateData {
   };
   project: {
     basicInfo: { id: string; title: string; logline: string; genre: string };
-    objects: Array<{ type: string; id: string; name: string; description: string; imagePrompt?: string; imagePromptPositive?: string; imagePromptNegative?: string }>;
+    objects: Array<{ type: string; id: string; name: string; description: string; content: string; imagePrompt?: string; imagePromptPositive?: string; imagePromptNegative?: string }>;
     outline: {
       outlines: Array<{
         id: string;
         name: string;
         description: string;
+        content: string;
         order: number;
         acts: Array<{
           id: string;
           name: string;
           description: string;
+          content: string;
           order: number;
           outlineId: string;
           chapters: Array<{
             id: string;
             name: string;
             description: string;
+            content: string;
             order: number;
             actId: string;
           }>;
@@ -251,7 +254,8 @@ export interface SelectedObjectContext {
   id: string;
   type: string;
   name: string;
-  description: string;
+  description: string;  // One-line summary for object indexes
+  content: string;  // Full content
   imagePrompt?: string;
 }
 

@@ -15,7 +15,7 @@ type TabType = 'edit' | 'image';
 
 interface StoryObjectCardExpandedProps {
     itemId: string;
-    itemData: { name: string; description: string };
+    itemData: { name: string; description: string; content: string };
     effectiveLanguage: string;
     versionNumber: number;
     objectType: 'character' | 'organization' | 'location' | 'lorebook';
@@ -23,7 +23,7 @@ interface StoryObjectCardExpandedProps {
     loading?: boolean;
     showSecondaryLanguage?: boolean;
     isNewItem?: boolean;
-    onSave: (name: string, description: string) => void;
+    onSave: (name: string, description: string, content: string) => void;
     onCancel: () => void;
     onAIEdit?: () => void;
     onVersionHistory?: () => void;
@@ -54,16 +54,18 @@ const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
     const [activeTab, setActiveTab] = useState<TabType>('edit');
     const [name, setName] = useState(itemData.name);
     const [description, setDescription] = useState(itemData.description);
+    const [content, setContent] = useState(itemData.content);
     const editorRef = useRef<RichTextEditorRef>(null);
 
     // Reset form when itemData changes
     useEffect(() => {
         setName(itemData.name);
         setDescription(itemData.description);
-    }, [itemData.name, itemData.description]);
+        setContent(itemData.content);
+    }, [itemData.name, itemData.description, itemData.content]);
 
-    // Use editorRef.hasChanges() for description comparison (handles TipTap normalization)
-    const hasUnsavedChanges = name !== itemData.name || (editorRef.current?.hasChanges() ?? false);
+    // Use editorRef.hasChanges() for content comparison (handles TipTap normalization)
+    const hasUnsavedChanges = name !== itemData.name || description !== itemData.description || (editorRef.current?.hasChanges() ?? false);
     const hasImage = Boolean(mainAsset);
 
     const handleTabSwitch = (tab: TabType) => {
@@ -73,6 +75,7 @@ const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
             }
             setName(itemData.name);
             setDescription(itemData.description);
+            setContent(itemData.content);
         }
         setActiveTab(tab);
     };
@@ -81,7 +84,7 @@ const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
         if (!name.trim()) {
             return;
         }
-        onSave(name.trim(), description);
+        onSave(name.trim(), description, content);
     };
 
     const handleCancel = () => {
@@ -156,15 +159,29 @@ const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
                                 />
                             </div>
 
-                            {/* Description field - Rich Text Editor */}
+                            {/* Description field - One-line summary */}
+                            <div className="expanded-field">
+                                <label htmlFor={`expanded-description-${itemId}`}>Summary</label>
+                                <input
+                                    id={`expanded-description-${itemId}`}
+                                    type="text"
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
+                                    placeholder="One-line summary..."
+                                    className="expanded-input expanded-input-description"
+                                    maxLength={500}
+                                />
+                            </div>
+
+                            {/* Content field - Rich Text Editor */}
                             <div className="expanded-field expanded-field-grow">
-                                <label>Description</label>
+                                <label>Content</label>
                                 <RichTextEditor
                                     ref={editorRef}
                                     key={itemId}
-                                    initialContent={itemData.description}
-                                    onChange={setDescription}
-                                    placeholder="Enter description..."
+                                    initialContent={itemData.content}
+                                    onChange={setContent}
+                                    placeholder="Enter content..."
                                 />
                             </div>
 

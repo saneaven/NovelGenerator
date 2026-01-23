@@ -27,6 +27,24 @@
   grid-row: span 2;
 }
 
+/* Mobile Support */
+@media (max-width: 768px) {
+
+    .story-object-cards-grid {
+        grid-template-columns: 1fr;
+    grid-auto-rows: 60dvh;
+    }
+
+    .story-object-cards-grid > div[data-span="horizontal"] {
+    grid-column: span 1;
+    }
+
+    .story-object-cards-grid > div[data-span="vertical"] {
+    grid-row: span 1;
+    }
+
+}
+
 /* ========================================
    Card Visual Component (.story-object-card)
    This fills the wrapper and contains the actual UI.
@@ -182,7 +200,7 @@
 
 /* Always show description for text-only cards */
 .story-object-card[data-has-image="false"] .story-object-card__description-wrapper {
-  flex: 3;
+  flex: 5;
   max-height: none;
   opacity: 1;
   margin-top: var(--spacing-md);

@@ -5,7 +5,7 @@ You are in native function call mode.
 ### Example: Outline structure changes
 ```xml
 <function_calls>
-  <function_call>{"function":"create_outline_act","outlineId":"outline-1","name":"Act II","description":"The confrontation begins"}</function_call>
+  <function_call>{"function":"create_outline_act","outlineId":"outline-1","name":"Act II","description":"The confrontation begins","content":"Full act content..."}</function_call>
   <function_call>{"function":"replace_outline_act","id":"act-123","name":"Rising Action","order":2}</function_call>
 </function_calls>
 ```
@@ -22,7 +22,7 @@ You are in native function call mode.
 
 **create_outline**
 ```json
-{ "function": "create_outline", "name": "Main Story", "description": "The primary storyline" }
+{ "function": "create_outline", "name": "Main Story", "description": "One-line summary", "content": "The primary storyline" }
 ```
 
 **delete_outline**
@@ -32,7 +32,7 @@ You are in native function call mode.
 
 **replace_outline** (only include fields to change)
 ```json
-{ "function": "replace_outline", "id": "outline-123", "name": "New Name", "description": "New description" }
+{ "function": "replace_outline", "id": "outline-123", "name": "New Name", "description": "New summary", "content": "New content" }
 ```
 
 **patch_outline** (single targeted edit)
@@ -44,7 +44,7 @@ You are in native function call mode.
 
 **create_outline_act**
 ```json
-{ "function": "create_outline_act", "outlineId": "outline-123", "name": "Act I", "description": "Setup and introduction" }
+{ "function": "create_outline_act", "outlineId": "outline-123", "name": "Act I", "description": "One-line summary", "content": "Setup and introduction" }
 ```
 
 **delete_outline_act**
@@ -54,7 +54,7 @@ You are in native function call mode.
 
 **replace_outline_act** (only include fields to change)
 ```json
-{ "function": "replace_outline_act", "id": "act-123", "name": "New Name", "description": "New description", "order": 2 }
+{ "function": "replace_outline_act", "id": "act-123", "name": "New Name", "description": "New summary", "content": "New content", "order": 2 }
 ```
 
 **patch_outline_act** (single targeted edit, can also change order)
@@ -66,7 +66,7 @@ You are in native function call mode.
 
 **create_outline_chapter**
 ```json
-{ "function": "create_outline_chapter", "actId": "act-123", "name": "Chapter Name", "description": "Description" }
+{ "function": "create_outline_chapter", "actId": "act-123", "name": "Chapter Name", "description": "One-line summary", "content": "Full chapter content" }
 ```
 
 **delete_outline_chapter**
@@ -76,7 +76,7 @@ You are in native function call mode.
 
 **replace_outline_chapter** (only include fields to change)
 ```json
-{ "function": "replace_outline_chapter", "id": "ch-123", "name": "New Name", "description": "New description", "actId": "act-456", "order": 2 }
+{ "function": "replace_outline_chapter", "id": "ch-123", "name": "New Name", "description": "New summary", "content": "New content", "actId": "act-456", "order": 2 }
 ```
 
 **patch_outline_chapter** (single targeted edit, can also change order/actId)

@@ -1,5 +1,8 @@
 import type { ObjectType } from './unifiedObject';
 
+// UI Tab types for story object panels
+export type StoryObjectTabType = 'basicInfo' | 'guidelines' | 'characters' | 'organizations' | 'locations' | 'lorebook' | 'outline';
+
 export const OBJECT_TYPE_CONFIG: Record<ObjectType, { label: string; order: number }> = {
   basic_info: { label: 'Basic Info', order: 0 },
   guidelines: { label: 'Guidelines', order: 9 },

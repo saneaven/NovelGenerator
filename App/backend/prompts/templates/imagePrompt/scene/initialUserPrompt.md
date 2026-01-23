@@ -29,12 +29,12 @@ The image will be inserted at the cursor position in the novel. Here is the surr
 {{#if (hasItems imagePrompt.selectedObjectIds)}}
 ## Story Object Context
 
-The following objects are relevant to this scene. Use their descriptions and saved image prompts (if available) to inform your generated prompt:
+The following objects are relevant to this scene. Use their content and saved image prompts (if available) to inform your generated prompt:
 
 {{#with (filterByIds project.objects imagePrompt.selectedObjectIds) as |selectedObjects|}}
 {{#each selectedObjects}}
 ### {{ this.type }}: {{ this.name }}
-{{ this.description }}
+{{ this.content }}
 {{#if this.imagePrompt}}
 **Saved Image Prompt:** {{ this.imagePrompt }}
 {{/if}}

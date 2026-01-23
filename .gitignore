@@ -3,7 +3,6 @@
 *.env
 /App/backend/storage/assets
 nul
-/.claude
-/.claude
 /App/backend/__pycache__
 /App/backend/.tmp_pyc/
+/.claude

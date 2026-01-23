@@ -66,6 +66,7 @@ function objectToItem(obj: UnifiedObject, language: string): ObjectPickerItem {
     id: obj.id,
     name: (data.name as string) || (data.title as string) || obj.id,
     description: (data.description as string) || (data.logline as string) || undefined,
+    content: (data.content as string) || undefined,
     type: obj.type,
     parentId: (obj.metadata?.act_id as string) || (obj.metadata?.chapter_id as string) || undefined,
     order: obj.metadata?.order as number | undefined,
@@ -126,6 +127,7 @@ function buildGroups(
           id: outline.id,
           name: (outlineData.name as string) || 'Unnamed Outline',
           description: (outlineData.description as string) || undefined,
+          content: (outlineData.content as string) || undefined,
           type: 'outline',
           order: outline.metadata?.order as number | undefined,
         };
@@ -142,6 +144,7 @@ function buildGroups(
             id: act.id,
             name: (actData.name as string) || 'Unnamed Act',
             description: (actData.description as string) || undefined,
+            content: (actData.content as string) || undefined,
             type: 'act',
             order: act.metadata?.order as number | undefined,
           };

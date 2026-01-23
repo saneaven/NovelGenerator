@@ -101,39 +101,14 @@ export interface BasicInfoData {
   genre: string;
 }
 
-export interface CharacterData {
-  name: string;
-  description: string;
-}
-
-export interface OrganizationData {
-  name: string;
-  description: string;
-}
-
-export interface LocationData {
-  name: string;
-  description: string;
-}
-
-export interface LorebookEntryData {
-  name: string;
-  description: string;
-}
-
-export interface OutlineData {
-  name: string;
-  description: string;
-}
-
-export interface ActData {
-  name: string;
-  description: string;
-}
-
-export interface ChapterData {
-  name: string;
-  description: string;
+/**
+ * Unified data type for all story objects:
+ * character, organization, location, lorebook, outline, act, chapter
+ */
+export interface StoryObjectData {
+  name: string;          // Object name
+  description: string;   // One-line summary for object indexes
+  content: string;       // Full content
 }
 
 export interface ManuscriptData {
@@ -150,13 +125,7 @@ export interface GuidelinesData {
 // ============================================================================
 
 export type BasicInfoObject = UnifiedObject<BasicInfoData>;
-export type CharacterObject = UnifiedObject<CharacterData>;
-export type OrganizationObject = UnifiedObject<OrganizationData>;
-export type LocationObject = UnifiedObject<LocationData>;
-export type LorebookEntryObject = UnifiedObject<LorebookEntryData>;
-export type OutlineObject = UnifiedObject<OutlineData>;
-export type ActObject = UnifiedObject<ActData>;
-export type ChapterObject = UnifiedObject<ChapterData>;
+export type StoryObject = UnifiedObject<StoryObjectData>;
 export type ManuscriptObject = UnifiedObject<ManuscriptData>;
 export type GuidelinesObject = UnifiedObject<GuidelinesData>;
 

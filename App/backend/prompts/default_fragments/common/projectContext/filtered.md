@@ -18,7 +18,7 @@
 {{#each (filterByType selectedObjects "character")}}
 #### {{ this.name }} (id: {{ this.id }})
 
-{{ this.description }}
+{{ this.content }}
 
 {{/each}}
 {{/if}}
@@ -29,7 +29,7 @@
 {{#each (filterByType selectedObjects "organization")}}
 #### {{ this.name }} (id: {{ this.id }})
 
-{{ this.description }}
+{{ this.content }}
 
 {{/each}}
 {{/if}}
@@ -40,7 +40,7 @@
 {{#each (filterByType selectedObjects "location")}}
 #### {{ this.name }} (id: {{ this.id }})
 
-{{ this.description }}
+{{ this.content }}
 
 {{/each}}
 {{/if}}
@@ -51,7 +51,7 @@
 {{#each (filterByType selectedObjects "lorebook")}}
 #### {{ this.name }} (id: {{ this.id }})
 
-{{ this.description }}
+{{ this.content }}
 
 {{/each}}
 {{/if}}
@@ -63,20 +63,20 @@
 {{#each selectedOutlines}}
 ### Story Outline - {{ this.name }} (id: {{ this.id }})
 
-{{ this.description }}
+{{ this.content }}
 
 {{#with (filterByIds this.acts @root.params.[0]) as |selectedActs|}}
 {{#if (hasItems selectedActs)}}
 {{#each selectedActs}}
 #### Act: {{ this.name }} (id: {{ this.id }})
 
-{{ this.description }}
+{{ this.content }}
 
 {{#with (filterByIds this.chapters @root.params.[0]) as |selectedChapters|}}
 {{#if (hasItems selectedChapters)}}
 **Chapters:**
 {{#each selectedChapters}}
-- **{{ this.name }}** (id: {{ this.id }}): {{ this.description }}
+- **{{ this.name }}** (id: {{ this.id }}): {{ this.content }}
 {{/each}}
 {{/if}}
 {{/with}}

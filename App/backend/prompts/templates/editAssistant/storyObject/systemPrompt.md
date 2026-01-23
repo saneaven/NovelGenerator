@@ -16,8 +16,8 @@ Respond in {{ config.mainLanguage }}.
 
 ## Output Format (Raw Mode)
 
-Output ONLY the revised description directly. No function calls, no JSON, no XML tags.
-Just output the updated description text as plain text.
+Output ONLY the revised content directly. No function calls, no JSON, no XML tags.
+Just output the updated content text as plain text.
 
 {{else}}
 {{#if config.isNativeFunctionCallMode}}

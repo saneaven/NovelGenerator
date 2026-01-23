@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../../store/settingsStore';
@@ -14,6 +14,8 @@ import { TextButton } from '../../../components/TextButton';
 import { Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close, HamburgerMenu, ChevronRight, Scroll } from '../../../components/icons';
 import { Warning } from '../../../components/icons';
 import type { UnifiedObject, OutlineObject, ActObject, ChapterObject } from '../../../types/unifiedObject';
+import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
+import { MarkdownRenderer } from '../../../components/MarkdownRenderer';
 import './OutlinePanel.css';
 
 interface OutlinePanelProps {
@@ -33,7 +35,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
   // Editing state for outlines (sidebar handles editing and adding now)
   const [editingOutline, setEditingOutline] = useState<string | null>(null);
-  const [editOutlineData, setEditOutlineData] = useState<{ name: string; description: string }>({ name: '', description: '' });
+  const [editOutlineData, setEditOutlineData] = useState<{ name: string; description: string; content: string }>({ name: '', description: '', content: '' });
   const [showOutlineAIModal, setShowOutlineAIModal] = useState<string | null>(null);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
 
@@ -44,13 +46,13 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
   // Editing state for acts
   const [editingAct, setEditingAct] = useState<string | null>(null);
-  const [editActData, setEditActData] = useState<{ name: string; description: string }>({ name: '', description: '' });
+  const [editActData, setEditActData] = useState<{ name: string; description: string; content: string }>({ name: '', description: '', content: '' });
   const [showAddActForm, setShowAddActForm] = useState<string | null>(null);
   const [showActAIModal, setShowActAIModal] = useState<string | null>(null);
 
   // Editing state for chapters
   const [editingChapter, setEditingChapter] = useState<string | null>(null);
-  const [editChapterData, setEditChapterData] = useState<{ name: string; description: string }>({ name: '', description: '' });
+  const [editChapterData, setEditChapterData] = useState<{ name: string; description: string; content: string }>({ name: '', description: '', content: '' });
   const [showAddChapterForm, setShowAddChapterForm] = useState<string | null>(null);
   const [showChapterAIModal, setShowChapterAIModal] = useState<string | null>(null);
 
@@ -58,6 +60,11 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const [collapsedActs, setCollapsedActs] = useState<Set<string>>(new Set());
   const [expandedChapters, setExpandedChapters] = useState<Set<string>>(new Set());
   const [expandCount, setExpandCount] = useState<Record<string, number>>({});
+
+  // RichTextEditor refs for content editing
+  const outlineEditorRef = useRef<RichTextEditorRef>(null);
+  const actEditorRef = useRef<RichTextEditorRef>(null);
+  const chapterEditorRef = useRef<RichTextEditorRef>(null);
 
   // Load outlines, acts, and chapters on mount
   useEffect(() => {
@@ -200,7 +207,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     if (!outline) return;
     const { effectiveLanguage } = getEffectiveLanguage(outline);
     const data = getDataForLanguage(outline, effectiveLanguage);
-    setEditOutlineData({ name: data.name || '', description: data.description || '' });
+    setEditOutlineData({ name: data.name || '', description: data.description || '', content: data.content || '' });
     setEditingOutline(outlineId);
   };
 
@@ -214,7 +221,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
     try {
       await store.updateObject('outline', editingOutline, {
-        data: { name: editOutlineData.name.trim(), description: editOutlineData.description.trim() },
+        data: { name: editOutlineData.name.trim(), description: editOutlineData.description.trim(), content: editOutlineData.content.trim() },
         language: effectiveLanguage,
         create_new_version: true,
         user_request: 'Manual Edit',
@@ -228,7 +235,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
   const cancelEditingOutline = () => {
     setEditingOutline(null);
-    setEditOutlineData({ name: '', description: '' });
+    setEditOutlineData({ name: '', description: '', content: '' });
   };
 
   // Inline description editing handlers
@@ -294,7 +301,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   // ACT HANDLERS
   // ========================================================================
 
-  const handleAddAct = async (outlineId: string, name: string, description: string) => {
+  const handleAddAct = async (outlineId: string, name: string, description: string, content: string) => {
     if (!projectId || !name.trim()) return;
 
     try {
@@ -303,7 +310,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       await store.createObject(
         'act',
         projectId,
-        { name: name.trim(), description: description.trim() },
+        { name: name.trim(), description: description.trim(), content: content.trim() },
         settings.settings.mainLanguage,
         { outline_id: outlineId, order: actOrder }
       );
@@ -319,7 +326,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     if (!act) return;
     const { effectiveLanguage } = getEffectiveLanguage(act);
     const data = getDataForLanguage(act, effectiveLanguage);
-    setEditActData({ name: data.name || '', description: data.description || '' });
+    setEditActData({ name: data.name || '', description: data.description || '', content: data.content || '' });
     setEditingAct(actId);
   };
 
@@ -333,7 +340,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
     try {
       await store.updateObject('act', editingAct, {
-        data: { name: editActData.name.trim(), description: editActData.description.trim() },
+        data: { name: editActData.name.trim(), description: editActData.description.trim(), content: editActData.content.trim() },
         language: effectiveLanguage,
         create_new_version: true,
         user_request: 'Manual Edit',
@@ -347,7 +354,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
   const cancelEditingAct = () => {
     setEditingAct(null);
-    setEditActData({ name: '', description: '' });
+    setEditActData({ name: '', description: '', content: '' });
   };
 
   const handleDeleteAct = async (actId: string) => {
@@ -367,7 +374,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   // CHAPTER HANDLERS
   // ========================================================================
 
-  const handleAddChapter = async (actId: string, name: string, description: string) => {
+  const handleAddChapter = async (actId: string, name: string, description: string, content: string) => {
     if (!projectId || !name.trim()) return;
 
     try {
@@ -376,7 +383,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       await store.createObject(
         'chapter',
         projectId,
-        { name: name.trim(), description: description.trim() },
+        { name: name.trim(), description: description.trim(), content: content.trim() },
         settings.settings.mainLanguage,
         { act_id: actId, order: chapterOrder }
       );
@@ -392,7 +399,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
     if (!chapter) return;
     const { effectiveLanguage } = getEffectiveLanguage(chapter);
     const data = getDataForLanguage(chapter, effectiveLanguage);
-    setEditChapterData({ name: data.name || '', description: data.description || '' });
+    setEditChapterData({ name: data.name || '', description: data.description || '', content: data.content || '' });
     setEditingChapter(chapterId);
   };
 
@@ -406,7 +413,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
     try {
       await store.updateObject('chapter', editingChapter, {
-        data: { name: editChapterData.name.trim(), description: editChapterData.description.trim() },
+        data: { name: editChapterData.name.trim(), description: editChapterData.description.trim(), content: editChapterData.content.trim() },
         language: effectiveLanguage,
         create_new_version: true,
         user_request: 'Manual Edit',
@@ -420,7 +427,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
   const cancelEditingChapter = () => {
     setEditingChapter(null);
-    setEditChapterData({ name: '', description: '' });
+    setEditChapterData({ name: '', description: '', content: '' });
   };
 
   const handleDeleteChapter = async (chapterId: string) => {
@@ -599,7 +606,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
             {showAddActForm === selectedOutlineId && selectedOutlineId && (
               <div className="timeline-creation-panel">
                 <AddActForm
-                  onAdd={(name, desc) => handleAddAct(selectedOutlineId, name, desc)}
+                  onAdd={(name, desc, content) => handleAddAct(selectedOutlineId, name, desc, content)}
                   onCancel={() => setShowAddActForm(null)}
                 />
               </div>
@@ -668,6 +675,15 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                             placeholder="Describe the main events that happen in this act"
                                             rows={4}
                                           />
+                                          <div className="inline-content-editor">
+                                            <RichTextEditor
+                                              ref={actEditorRef}
+                                              key={editingAct}
+                                              initialContent={editActData.content}
+                                              onChange={(markdown) => setEditActData(prev => ({ ...prev, content: markdown }))}
+                                              placeholder="Full act content..."
+                                            />
+                                          </div>
                                           <div className="edit-actions-split">
                                             <TextButton
                                               variant="ghost"
@@ -701,7 +717,13 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                     ) : (
                                       <div className={`card-body-wrapper ${isActExpanded ? 'is-expanded' : ''}`}>
                                         <div className="card-body-content">
-                                          <p>{actData.description || <span className="placeholder-text">No description provided.</span>}</p>
+                                          {actData.content ? (
+                                            <MarkdownRenderer>
+                                              {actData.content}
+                                            </MarkdownRenderer>
+                                          ) : (
+                                            <p className="placeholder-text">No content provided.</p>
+                                          )}
                                           <div className="card-footer-actions">
                                             <DropdownMenu
                                               trigger={
@@ -771,6 +793,15 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                                       placeholder="Describe what happens in this chapter"
                                                       rows={3}
                                                     />
+                                                    <div className="inline-content-editor">
+                                                      <RichTextEditor
+                                                        ref={chapterEditorRef}
+                                                        key={editingChapter}
+                                                        initialContent={editChapterData.content}
+                                                        onChange={(markdown) => setEditChapterData(prev => ({ ...prev, content: markdown }))}
+                                                        placeholder="Full chapter content..."
+                                                      />
+                                                    </div>
                                                     <div className="edit-actions-split">
                                                       <TextButton
                                                         variant="ghost"
@@ -813,8 +844,12 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                                 </div>
                                                 <div className={`chapter-expand-wrapper ${isChapterExpanded ? 'is-expanded' : ''}`}>
                                                   <div className="chapter-expand-content">
-                                                    {chData.description && (
-                                                      <p className="chapter-description">{chData.description}</p>
+                                                    {chData.content ? (
+                                                      <MarkdownRenderer className="markdown-content chapter-content">
+                                                        {chData.content}
+                                                      </MarkdownRenderer>
+                                                    ) : (
+                                                      <p className="placeholder-text">No content provided.</p>
                                                     )}
                                                     <div className="chapter-footer-actions">
                                                       <DropdownMenu
@@ -851,7 +886,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                       <div className="chapter-marker creation-marker"><Plus size="xs" /></div>
                                       <div className="chapter-content-wrapper">
                                         <AddChapterForm
-                                          onAdd={(name, desc) => handleAddChapter(act.id, name, desc)}
+                                          onAdd={(name, desc, content) => handleAddChapter(act.id, name, desc, content)}
                                           onCancel={() => setShowAddChapterForm(null)}
                                         />
                                       </div>
@@ -938,6 +973,16 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                 rows={4}
               />
             </div>
+            <div className="form-group form-group-grow">
+              <label>Content</label>
+              <RichTextEditor
+                ref={outlineEditorRef}
+                key={editingOutline}
+                initialContent={editOutlineData.content}
+                onChange={(markdown) => setEditOutlineData((prev) => ({ ...prev, content: markdown }))}
+                placeholder="Full outline content..."
+              />
+            </div>
           </div>
         </BaseModal>
       )}
@@ -992,19 +1037,21 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 // ============================================================================
 
 interface AddActFormProps {
-  onAdd: (name: string, description: string) => void;
+  onAdd: (name: string, description: string, content: string) => void;
   onCancel: () => void;
 }
 
 const AddActForm: React.FC<AddActFormProps> = ({ onAdd, onCancel }) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [content, setContent] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onAdd(name, description);
+    onAdd(name, description, content);
     setName('');
     setDescription('');
+    setContent('');
   };
 
   return (
@@ -1032,6 +1079,14 @@ const AddActForm: React.FC<AddActFormProps> = ({ onAdd, onCancel }) => {
             rows={3}
           />
         </div>
+        <div className="form-group form-group-grow">
+          <label>Content (Optional)</label>
+          <RichTextEditor
+            initialContent={content}
+            onChange={setContent}
+            placeholder="Full act content..."
+          />
+        </div>
         <div className="form-actions">
           <TextButton variant="ghost" size="sm" onClick={onCancel}>
             Cancel
@@ -1050,19 +1105,21 @@ const AddActForm: React.FC<AddActFormProps> = ({ onAdd, onCancel }) => {
 // ============================================================================
 
 interface AddChapterFormProps {
-  onAdd: (name: string, description: string) => void;
+  onAdd: (name: string, description: string, content: string) => void;
   onCancel: () => void;
 }
 
 const AddChapterForm: React.FC<AddChapterFormProps> = ({ onAdd, onCancel }) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [content, setContent] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onAdd(name, description);
+    onAdd(name, description, content);
     setName('');
     setDescription('');
+    setContent('');
   };
 
   return (
@@ -1088,6 +1145,14 @@ const AddChapterForm: React.FC<AddChapterFormProps> = ({ onAdd, onCancel }) => {
             onChange={(e) => setDescription(e.target.value)}
             placeholder="What happens in this chapter..."
             rows={2}
+          />
+        </div>
+        <div className="form-group form-group-grow">
+          <label>Content (Optional)</label>
+          <RichTextEditor
+            initialContent={content}
+            onChange={setContent}
+            placeholder="Full chapter content..."
           />
         </div>
         <div className="form-actions">

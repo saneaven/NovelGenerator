@@ -14,7 +14,7 @@ Translate content from **{{ translation.sourceLanguage }}** to **{{ translation.
 
 Output ONLY the translated content directly. No function calls, no JSON, no XML tags.
 
-- For story objects (character, location, etc.): Output only the translated **description** text
+- For story objects (character, location, etc.): Output only the translated **content** text
 - For manuscripts: Output only the translated **content** text
 
 Just output the translated text as plain text, nothing else.
@@ -41,7 +41,7 @@ Just output the translated text as plain text, nothing else.
 
 {{#if config.isRawOutputMode}}
 - **MUST output ONLY the translated text** - no function calls, no JSON, no XML tags
-- **Do NOT include any prefixes** like "name:" or "description:" - just the text itself
+- **Do NOT include any prefixes** like "name:" or "content:" - just the text itself
 - Keep terminology consistent with any provided context
 {{else}}
 {{#if config.isNativeFunctionCallMode}}

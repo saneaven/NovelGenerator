@@ -36,13 +36,14 @@ export async function createStoryObject(
   args: Record<string, unknown>,
   context: HandlerContext
 ): Promise<ApplicationResult> {
-  const { type, name, description } = args as {
+  const { type, name, description, content } = args as {
     type?: string;
     name?: string;
     description?: string;
+    content?: string;
   };
 
-  if (!type || !name || !description) {
+  if (!type || !name || !content) {
     return error('Missing required fields for create_story_object');
   }
 
@@ -54,7 +55,7 @@ export async function createStoryObject(
   const { store, projectId, language } = context;
   const userRequest = context.options.userRequest ?? 'AI Edit';
 
-  await store.createObject(objectType, projectId, { name, description }, language, undefined, userRequest);
+  await store.createObject(objectType, projectId, { name, description: description ?? '', content }, language, undefined, userRequest);
   return ok(`Created ${type}: ${name}`);
 }
 
@@ -91,12 +92,13 @@ export async function createOutline(
   args: Record<string, unknown>,
   context: HandlerContext
 ): Promise<ApplicationResult> {
-  const { name, description } = args as {
+  const { name, description, content } = args as {
     name?: string;
     description?: string;
+    content?: string;
   };
 
-  if (!name || !description) {
+  if (!name || !content) {
     return error('Missing required fields for create_outline');
   }
 
@@ -107,7 +109,7 @@ export async function createOutline(
   const outlines = await store.listObjects('outline', projectId);
   const order = outlines.length;
 
-  await store.createObject('outline', projectId, { name, description }, language, { order }, userRequest);
+  await store.createObject('outline', projectId, { name, description: description ?? '', content }, language, { order }, userRequest);
   return ok(`Created outline: ${name}`);
 }
 
@@ -135,13 +137,14 @@ export async function createOutlineAct(
   args: Record<string, unknown>,
   context: HandlerContext
 ): Promise<ApplicationResult> {
-  const { outlineId, name, description } = args as {
+  const { outlineId, name, description, content } = args as {
     outlineId?: string;
     name?: string;
     description?: string;
+    content?: string;
   };
 
-  if (!outlineId || !name || !description) {
+  if (!outlineId || !name || !content) {
     return error('Missing required fields for create_outline_act');
   }
 
@@ -156,7 +159,7 @@ export async function createOutlineAct(
   await store.createObject(
     'act',
     projectId,
-    { name, description },
+    { name, description: description ?? '', content },
     language,
     { outline_id: outlineId, order },
     userRequest
@@ -189,13 +192,14 @@ export async function createOutlineChapter(
   args: Record<string, unknown>,
   context: HandlerContext
 ): Promise<ApplicationResult> {
-  const { actId, name, description } = args as {
+  const { actId, name, description, content } = args as {
     actId?: string;
     name?: string;
     description?: string;
+    content?: string;
   };
 
-  if (!actId || !name || !description) {
+  if (!actId || !name || !content) {
     return error('Missing required fields for create_outline_chapter');
   }
 
@@ -210,7 +214,7 @@ export async function createOutlineChapter(
   await store.createObject(
     'chapter',
     projectId,
-    { name, description },
+    { name, description: description ?? '', content },
     language,
     { act_id: actId, order },
     userRequest

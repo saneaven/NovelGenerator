@@ -55,7 +55,7 @@ export async function readStoryObject(
   } else if (type === 'guidelines') {
     content = (data.authorNote as string) ?? '';
   } else {
-    content = `Name: ${data.name ?? ''}\nDescription: ${data.description ?? ''}`;
+    content = `Name: ${data.name ?? ''}\nContent: ${data.content ?? ''}`;
   }
 
   return ok(content, { raw: data, objectId: id, objectType: type });
@@ -80,7 +80,7 @@ export async function readOutline(
   }
 
   const data = getObjectData(obj, context.language);
-  const content = `Name: ${data.name ?? ''}\nDescription: ${data.description ?? ''}`;
+  const content = `Name: ${data.name ?? ''}\nContent: ${data.content ?? ''}`;
 
   return ok(content, { raw: data, objectId: id, objectType: type ?? obj.type });
 }

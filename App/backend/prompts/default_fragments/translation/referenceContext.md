@@ -13,28 +13,28 @@ Use the following already-translated content as reference to maintain consistent
 {{#if (hasItems (filterByType this.objects "character"))}}
 ### Characters
 {{#each (filterByType this.objects "character")}}
-- **{{ this.name }}**: {{ this.description }}
+- **{{ this.name }}**: {{ this.content }}
 {{/each}}
 {{/if}}
 
 {{#if (hasItems (filterByType this.objects "organization"))}}
 ### Organizations
 {{#each (filterByType this.objects "organization")}}
-- **{{ this.name }}**: {{ this.description }}
+- **{{ this.name }}**: {{ this.content }}
 {{/each}}
 {{/if}}
 
 {{#if (hasItems (filterByType this.objects "location"))}}
 ### Locations
 {{#each (filterByType this.objects "location")}}
-- **{{ this.name }}**: {{ this.description }}
+- **{{ this.name }}**: {{ this.content }}
 {{/each}}
 {{/if}}
 
 {{#if (hasItems (filterByType this.objects "lorebook"))}}
 ### World Details
 {{#each (filterByType this.objects "lorebook")}}
-- **{{ this.name }}**: {{ this.description }}
+- **{{ this.name }}**: {{ this.content }}
 {{/each}}
 {{/if}}
 

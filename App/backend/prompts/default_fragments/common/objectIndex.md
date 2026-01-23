@@ -8,7 +8,7 @@ Use read functions to get full content of any object listed below.
 ### Story Objects
 
 {{#each project.objects}}
-- [{{ this.type }}] {{ this.name }} (id: {{ this.id }})
+- [{{ this.type }}] {{ this.name }}: {{ this.description }} (id: {{ this.id }})
 {{/each}}
 
 {{#if project.outline}}

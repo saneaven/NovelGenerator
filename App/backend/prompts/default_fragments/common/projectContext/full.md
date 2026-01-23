@@ -12,7 +12,7 @@
 {{#each (filterByType project.objects "character")}}
 #### {{ this.name }} (id: {{ this.id }})
 
-{{ this.description }}
+{{ this.content }}
 
 {{/each}}
 {{/if}}
@@ -23,7 +23,7 @@
 {{#each (filterByType project.objects "organization")}}
 #### {{ this.name }} (id: {{ this.id }})
 
-{{ this.description }}
+{{ this.content }}
 
 {{/each}}
 {{/if}}
@@ -34,7 +34,7 @@
 {{#each (filterByType project.objects "location")}}
 #### {{ this.name }} (id: {{ this.id }})
 
-{{ this.description }}
+{{ this.content }}
 
 {{/each}}
 {{/if}}
@@ -45,7 +45,7 @@
 {{#each (filterByType project.objects "lorebook")}}
 #### {{ this.name }} (id: {{ this.id }})
 
-{{ this.description }}
+{{ this.content }}
 
 {{/each}}
 {{/if}}
@@ -54,18 +54,18 @@
 {{#each project.outline.outlines}}
 ### Story Outline - {{ this.name }} (id: {{ this.id }})
 
-{{ this.description }}
+{{ this.content }}
 
 {{#if (hasItems this.acts)}}
 {{#each this.acts}}
 #### Act: {{ this.name }} (id: {{ this.id }})
 
-{{ this.description }}
+{{ this.content }}
 
 {{#if (hasItems this.chapters)}}
 **Chapters:**
 {{#each this.chapters}}
-- **{{ this.name }}** (id: {{ this.id }}): {{ this.description }}
+- **{{ this.name }}** (id: {{ this.id }}): {{ this.content }}
 {{/each}}
 {{/if}}
 

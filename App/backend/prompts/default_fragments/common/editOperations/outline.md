@@ -44,9 +44,9 @@ Each patch operation applies a single search-and-replace:
 - `delete_outline_chapter` - Delete a chapter
 
 ### Outline Replace Operations
-- `replace_outline` - Replace outline fields (name, description)
-- `replace_outline_act` - Replace act fields (name, description, order)
-- `replace_outline_chapter` - Replace chapter fields (name, description, actId, order)
+- `replace_outline` - Replace outline fields (name, description, content)
+- `replace_outline_act` - Replace act fields (name, description, content, order)
+- `replace_outline_chapter` - Replace chapter fields (name, description, content, actId, order)
 
 ### Outline Patch Operations
 - `patch_outline` - Patch outline using search-replace (single edit per call)

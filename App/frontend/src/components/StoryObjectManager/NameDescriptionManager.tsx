@@ -51,11 +51,12 @@ import { useGridColumnCount } from '../../hooks/useGridColumnCount';
 import type { UnifiedObject, ObjectType } from '../../types/unifiedObject';
 import type { Asset } from '../../api/assetService';
 import { getAssetUrl } from '../../utils/assetUrl';
-import { renderMarkdown } from '../../utils/markdown';
+import { MarkdownRenderer } from '../MarkdownRenderer';
 
 interface NameDescriptionData {
   name: string;
-  description: string;
+  description: string;  // One-line summary for object indexes
+  content: string;      // Full content
 }
 
 type NameDescriptionObject = UnifiedObject<NameDescriptionData>;
@@ -265,14 +266,14 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   // CRUD OPERATIONS
   // ============================================================================
 
-  const handleAdd = async (name: string, description: string) => {
+  const handleAdd = async (name: string, description: string, content: string) => {
     if (!projectId || !name.trim()) return;
 
     try {
       await store.createObject(
         category,
         projectId,
-        { name: name.trim(), description: description.trim() },
+        { name: name.trim(), description: description.trim(), content: content.trim() },
         settings.mainLanguage
       );
       setIsCreatingNew(false);
@@ -282,7 +283,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     }
   };
 
-  const handleUpdate = async (itemId: string, name: string, description: string) => {
+  const handleUpdate = async (itemId: string, name: string, description: string, content: string) => {
     if (!name.trim()) return;
 
     const item = store.objects[itemId] as NameDescriptionObject;
@@ -294,6 +295,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
         data: {
           name: name.trim(),
           description: description.trim(),
+          content: content.trim(),
         },
         language: effectiveLanguage,
         user_request: 'User Edit',
@@ -339,9 +341,9 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     // Fallback to first available language
     const availableLanguages = Object.keys(item.data);
     if (availableLanguages.length > 0) {
-      return item.data[availableLanguages[0]] || { name: '', description: '' };
+      return item.data[availableLanguages[0]] || { name: '', description: '', content: '' };
     }
-    return { name: '', description: '' };
+    return { name: '', description: '', content: '' };
   };
 
   // ============================================================================
@@ -526,8 +528,8 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
                     mainAsset={mainAsset}
                     loading={loading}
                     showSecondaryLanguage={showSecondaryLanguage}
-                    onSave={(name, description) => {
-                      handleUpdate(item.id, name, description);
+                    onSave={(name, description, content) => {
+                      handleUpdate(item.id, name, description, content);
                       closeFullExpand();
                     }}
                     onCancel={closeFullExpand}
@@ -563,15 +565,15 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
               >
                 <StoryObjectCardExpanded
                   itemId="new"
-                  itemData={{ name: '', description: '' }}
+                  itemData={{ name: '', description: '', content: '' }}
                   effectiveLanguage={settings.mainLanguage}
                   versionNumber={0}
                   objectType={category}
                   mainAsset={null}
                   loading={false}
                   isNewItem={true}
-                  onSave={(name, description) => {
-                    handleAdd(name, description);
+                  onSave={(name, description, content) => {
+                    handleAdd(name, description, content);
                   }}
                   onCancel={() => setIsCreatingNew(false)}
                 />
@@ -732,16 +734,13 @@ const ItemDisplay = React.memo<ItemDisplayProps>(({
           )}
         </header>
 
-        {/* Description - always in DOM, CSS controls visibility via max-height */}
+        {/* Content - always in DOM, CSS controls visibility via max-height */}
         <div className="story-object-card__description-wrapper">
-          <div
-            className="story-object-card__description markdown-content"
-            dangerouslySetInnerHTML={{
-              __html: itemData.description
-                ? renderMarkdown(itemData.description)
-                : '<p>No description.</p>'
-            }}
-          />
+          <div className="story-object-card__description">
+            <MarkdownRenderer>
+              {itemData.content || 'No content.'}
+            </MarkdownRenderer>
+          </div>
         </div>
       </div>
 
@@ -765,6 +764,7 @@ const ItemDisplay = React.memo<ItemDisplayProps>(({
     prevProps.item.version.number === nextProps.item.version.number &&
     prevProps.itemData.name === nextProps.itemData.name &&
     prevProps.itemData.description === nextProps.itemData.description &&
+    prevProps.itemData.content === nextProps.itemData.content &&
     prevProps.isExpanded === nextProps.isExpanded &&
     prevProps.isFullExpanded === nextProps.isFullExpanded &&
     prevProps.isAnimating === nextProps.isAnimating &&

@@ -10,7 +10,7 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 <function_calls>
   <function_call>{"function":"replace_story_object","id":"char-123","type":"character","name":"Alexander the Bold"}</function_call>
   <function_call>{"function":"patch_story_object","id":"char-456","type":"character","field":"description","old":"fights alone","new":"leads a rebellion"}</function_call>
-  <function_call>{"function":"create_outline_chapter","actId":"act-1","name":"The Awakening","description":"The hero discovers their power"}</function_call>
+  <function_call>{"function":"create_outline_chapter","actId":"act-1","name":"The Awakening","description":"The hero discovers their power","content":"Detailed chapter content..."}</function_call>
 </function_calls>
 ```
 
@@ -27,7 +27,7 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 
 **create_story_object**
 ```json
-{ "function": "create_story_object", "type": "character", "name": "Name", "description": "Description" }
+{ "function": "create_story_object", "type": "character", "name": "Name", "description": "One-line summary", "content": "Full content" }
 ```
 
 **delete_story_object**
@@ -44,12 +44,12 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 
 **replace_story_object** (only include fields to change)
 ```json
-{ "function": "replace_story_object", "id": "obj-123", "type": "character", "name": "New Name", "description": "New description" }
+{ "function": "replace_story_object", "id": "obj-123", "type": "character", "name": "New Name", "description": "New summary", "content": "New content" }
 ```
 
 **replace_outline_chapter** (only include fields to change)
 ```json
-{ "function": "replace_outline_chapter", "id": "ch-123", "name": "New Name", "description": "New description", "actId": "act-456", "order": 2 }
+{ "function": "replace_outline_chapter", "id": "ch-123", "name": "New Name", "description": "New summary", "content": "New content", "actId": "act-456", "order": 2 }
 ```
 
 #### Patch Operations

@@ -7,7 +7,7 @@
 
 import { useState, useEffect, type RefObject } from 'react';
 
-const DVH = window.innerHeight * 0.2; // 20dvh
+const DVH = window.innerHeight * 0.3; // 30dvh
 
 export function useGridColumnCount(gridRef: RefObject<HTMLElement | null>): number {
   const [columnCount, setColumnCount] = useState(2);

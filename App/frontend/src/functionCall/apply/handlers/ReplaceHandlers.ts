@@ -90,11 +90,12 @@ export async function replaceStoryObject(
   args: Record<string, unknown>,
   context: HandlerContext
 ): Promise<ApplicationResult> {
-  const { id, type, name, description } = args as {
+  const { id, type, name, description, content } = args as {
     id?: string;
     type?: string;
     name?: string;
     description?: string;
+    content?: string;
   };
 
   if (!id || !type) {
@@ -117,6 +118,7 @@ export async function replaceStoryObject(
     data: {
       name: name ?? currentData.name ?? '',
       description: description ?? currentData.description ?? '',
+      content: content ?? currentData.content ?? '',
     },
     language,
     create_new_version: createNewVersion,
@@ -137,10 +139,11 @@ export async function replaceOutline(
   args: Record<string, unknown>,
   context: HandlerContext
 ): Promise<ApplicationResult> {
-  const { id, name, description } = args as {
+  const { id, name, description, content } = args as {
     id?: string;
     name?: string;
     description?: string;
+    content?: string;
   };
 
   if (!id) {
@@ -157,6 +160,7 @@ export async function replaceOutline(
     data: {
       name: name ?? currentData.name ?? '',
       description: description ?? currentData.description ?? '',
+      content: content ?? currentData.content ?? '',
     },
     language,
     create_new_version: createNewVersion,
@@ -173,10 +177,11 @@ export async function replaceOutlineAct(
   args: Record<string, unknown>,
   context: HandlerContext
 ): Promise<ApplicationResult> {
-  const { id, name, description, order } = args as {
+  const { id, name, description, content, order } = args as {
     id?: string;
     name?: string;
     description?: string;
+    content?: string;
     order?: number;
   };
 
@@ -193,6 +198,7 @@ export async function replaceOutlineAct(
   const updateData: Record<string, unknown> = {
     name: name ?? currentData.name ?? '',
     description: description ?? currentData.description ?? '',
+    content: content ?? currentData.content ?? '',
   };
 
   // Build metadata for structural changes (order)
@@ -219,11 +225,12 @@ export async function replaceOutlineChapter(
   args: Record<string, unknown>,
   context: HandlerContext
 ): Promise<ApplicationResult> {
-  const { id, actId, name, description, order } = args as {
+  const { id, actId, name, description, content, order } = args as {
     id?: string;
     actId?: string;
     name?: string;
     description?: string;
+    content?: string;
     order?: number;
   };
 
@@ -240,6 +247,7 @@ export async function replaceOutlineChapter(
   const updateData: Record<string, unknown> = {
     name: name ?? currentData.name ?? '',
     description: description ?? currentData.description ?? '',
+    content: content ?? currentData.content ?? '',
   };
 
   // Build metadata for structural changes (actId, order)

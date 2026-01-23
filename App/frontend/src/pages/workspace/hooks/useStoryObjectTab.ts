@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { StoryObjectTabType } from '../../../types/storyObject';
+import type { StoryObjectTabType } from '../../../types/objectTypeConfig';
 
 interface StoryObjectTabStore {
   activeTab: StoryObjectTabType;

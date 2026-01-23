@@ -1,5 +1,5 @@
 import React from 'react';
-import { renderMarkdown } from '../../utils/markdown';
+import { MarkdownRenderer } from '../../components/MarkdownRenderer';
 import type {
   DisplayProcessor,
   DisplayProcessingResult,
@@ -34,13 +34,10 @@ export class DefaultDisplayProcessor implements DisplayProcessor {
       content = this.removeSystemTags(content);
     }
 
-    content = renderMarkdown(content);
-
     return (
-      <div
-        className="message-text"
-        dangerouslySetInnerHTML={{ __html: content }}
-      />
+      <MarkdownRenderer className="message-text">
+        {content}
+      </MarkdownRenderer>
     );
   }
 

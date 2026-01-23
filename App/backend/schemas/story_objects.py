@@ -41,14 +41,16 @@ class BasicInfoResponse(BaseMetadata):
 class NameDescriptionCreate(BaseModel):
     """Create name/description object"""
     name: str = Field(..., max_length=255)
-    description: str
+    description: str = ""  # One-line summary for object indexes
+    content: str  # Full content
     language: str = "English"
 
 
 class NameDescriptionUpdate(BaseModel):
     """Update name/description object"""
     name: Optional[str] = Field(None, max_length=255)
-    description: Optional[str] = None
+    description: Optional[str] = None  # One-line summary for object indexes
+    content: Optional[str] = None  # Full content
     language: Optional[str] = None
 
 
@@ -56,7 +58,8 @@ class NameDescriptionResponse(BaseMetadata):
     """Name/description object response"""
     project_id: UUID
     name: Optional[str]
-    description: Optional[str]
+    description: Optional[str]  # One-line summary for object indexes
+    content: Optional[str]  # Full content
     # Image prompts (stored on base object, not versioned)
     image_prompt: Optional[str] = None
     image_prompt_positive: Optional[str] = None
@@ -77,7 +80,8 @@ class ImagePromptUpdate(BaseModel):
 class ChapterCreate(BaseModel):
     """Create chapter"""
     name: str = Field(..., max_length=255)
-    description: str
+    description: str = ""  # One-line summary for object indexes
+    content: str  # Full content
     order: int
     language: str = "English"
 
@@ -85,7 +89,8 @@ class ChapterCreate(BaseModel):
 class ChapterUpdate(BaseModel):
     """Update chapter"""
     name: Optional[str] = Field(None, max_length=255)
-    description: Optional[str] = None
+    description: Optional[str] = None  # One-line summary for object indexes
+    content: Optional[str] = None  # Full content
     order: Optional[int] = None
     language: Optional[str] = None
 
@@ -94,14 +99,16 @@ class ChapterResponse(BaseMetadata):
     """Chapter response"""
     act_id: UUID
     name: Optional[str]
-    description: Optional[str]
+    description: Optional[str]  # One-line summary for object indexes
+    content: Optional[str]  # Full content
     order: int
 
 
 class ActCreate(BaseModel):
     """Create act"""
     name: str = Field(..., max_length=255)
-    description: str
+    description: str = ""  # One-line summary for object indexes
+    content: str  # Full content
     order: int
     language: str = "English"
 
@@ -109,7 +116,8 @@ class ActCreate(BaseModel):
 class ActUpdate(BaseModel):
     """Update act"""
     name: Optional[str] = Field(None, max_length=255)
-    description: Optional[str] = None
+    description: Optional[str] = None  # One-line summary for object indexes
+    content: Optional[str] = None  # Full content
     order: Optional[int] = None
     language: Optional[str] = None
 
@@ -118,7 +126,8 @@ class ActResponse(BaseMetadata):
     """Act response"""
     outline_id: UUID
     name: Optional[str]
-    description: Optional[str]
+    description: Optional[str]  # One-line summary for object indexes
+    content: Optional[str]  # Full content
     order: int
     chapters: List[ChapterResponse] = []
 

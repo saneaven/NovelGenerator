@@ -36,7 +36,7 @@ For object/basic/outline patches (single targeted edit):
 {
   "id": "object-id",
   "type": "character",
-  "field": "description",
+  "field": "content",
   "old": "Text to find",
   "new": "Replacement text"
 }
@@ -59,7 +59,7 @@ For multiple edits, make multiple patch calls:
 { "id": "char-123", "type": "character", "field": "name", "old": "Old Name", "new": "New Name" }
 
 // Second patch call
-{ "id": "char-123", "type": "character", "field": "description", "old": "old text", "new": "new text" }
+{ "id": "char-123", "type": "character", "field": "content", "old": "old text", "new": "new text" }
 ```
 
 ## Decision Guide

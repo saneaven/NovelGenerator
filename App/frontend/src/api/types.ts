@@ -109,20 +109,23 @@ export interface BasicInfoResponse extends BaseMetadata {
 
 export interface NameDescriptionCreate {
   name: string;
-  description: string;
+  description?: string;  // One-line summary for object indexes
+  content: string;  // Full content
   language?: string;
 }
 
 export interface NameDescriptionUpdate {
   name?: string;
-  description?: string;
+  description?: string;  // One-line summary for object indexes
+  content?: string;  // Full content
   language?: string;
 }
 
 export interface NameDescriptionResponse extends BaseMetadata {
   project_id: string;
   name?: string;
-  description?: string;
+  description?: string;  // One-line summary for object indexes
+  content?: string;  // Full content
 }
 
 // ============================================================================
@@ -136,14 +139,16 @@ export interface OutlineResponse extends BaseMetadata {
 
 export interface ActCreate {
   name: string;
-  description: string;
+  description?: string;  // One-line summary for object indexes
+  content: string;  // Full content
   order: number;
   language?: string;
 }
 
 export interface ActUpdate {
   name?: string;
-  description?: string;
+  description?: string;  // One-line summary for object indexes
+  content?: string;  // Full content
   order?: number;
   language?: string;
 }
@@ -151,21 +156,24 @@ export interface ActUpdate {
 export interface ActResponse extends BaseMetadata {
   outline_id: string;
   name?: string;
-  description?: string;
+  description?: string;  // One-line summary for object indexes
+  content?: string;  // Full content
   order: number;
   chapters: ChapterResponse[];
 }
 
 export interface ChapterCreate {
   name: string;
-  description: string;
+  description?: string;  // One-line summary for object indexes
+  content: string;  // Full content
   order: number;
   language?: string;
 }
 
 export interface ChapterUpdate {
   name?: string;
-  description?: string;
+  description?: string;  // One-line summary for object indexes
+  content?: string;  // Full content
   order?: number;
   language?: string;
 }
@@ -173,7 +181,8 @@ export interface ChapterUpdate {
 export interface ChapterResponse extends BaseMetadata {
   act_id: string;
   name?: string;
-  description?: string;
+  description?: string;  // One-line summary for object indexes
+  content?: string;  // Full content
   order: number;
 }
 

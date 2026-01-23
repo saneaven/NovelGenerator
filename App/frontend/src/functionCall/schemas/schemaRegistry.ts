@@ -12,6 +12,7 @@ import {
   idProperty,
   nameProperty,
   descriptionProperty,
+  contentProperty,
 } from './schemaBuilders';
 
 // ============================================================================
@@ -29,8 +30,9 @@ const CREATE_STORY_OBJECT: FunctionSchema = {
       type: storyObjectTypeSchema,
       name: nameProperty,
       description: descriptionProperty,
+      content: contentProperty,
     },
-    required: ['type', 'name', 'description'],
+    required: ['type', 'name', 'content'],
   },
 };
 
@@ -64,8 +66,9 @@ const CREATE_OUTLINE: FunctionSchema = {
     properties: {
       name: nameProperty,
       description: descriptionProperty,
+      content: contentProperty,
     },
-    required: ['name', 'description'],
+    required: ['name', 'content'],
   },
 };
 
@@ -95,8 +98,9 @@ const CREATE_OUTLINE_ACT: FunctionSchema = {
       outlineId: { type: 'string', description: 'ID of the parent outline' },
       name: nameProperty,
       description: descriptionProperty,
+      content: contentProperty,
     },
-    required: ['outlineId', 'name', 'description'],
+    required: ['outlineId', 'name', 'content'],
   },
 };
 
@@ -126,8 +130,9 @@ const CREATE_OUTLINE_CHAPTER: FunctionSchema = {
       actId: { type: 'string', description: 'ID of the parent act' },
       name: nameProperty,
       description: descriptionProperty,
+      content: contentProperty,
     },
-    required: ['actId', 'name', 'description'],
+    required: ['actId', 'name', 'content'],
   },
 };
 
@@ -178,7 +183,8 @@ const REPLACE_STORY_OBJECT: FunctionSchema = {
       id: idProperty,
       type: storyObjectTypeSchema,
       name: { type: 'string', description: 'New name' },
-      description: { type: 'string', description: 'New description' },
+      description: { type: 'string', description: 'New one-line summary' },
+      content: { type: 'string', description: 'New full content' },
     },
     required: ['id', 'type'],
   },
@@ -199,7 +205,8 @@ const REPLACE_OUTLINE: FunctionSchema = {
     properties: {
       id: idProperty,
       name: { type: 'string', description: 'New outline name' },
-      description: { type: 'string', description: 'New outline description' },
+      description: { type: 'string', description: 'New outline summary' },
+      content: { type: 'string', description: 'New outline content' },
     },
     required: ['id'],
   },
@@ -216,7 +223,8 @@ const REPLACE_OUTLINE_ACT: FunctionSchema = {
     properties: {
       id: idProperty,
       name: { type: 'string', description: 'New act name' },
-      description: { type: 'string', description: 'New act description' },
+      description: { type: 'string', description: 'New act summary' },
+      content: { type: 'string', description: 'New act content' },
       order: { type: 'integer', description: 'New position (1-based). Acts will be reordered automatically.' },
     },
     required: ['id'],
@@ -235,7 +243,8 @@ const REPLACE_OUTLINE_CHAPTER: FunctionSchema = {
       id: idProperty,
       actId: { type: 'string', description: 'New parent act ID' },
       name: { type: 'string', description: 'New chapter name' },
-      description: { type: 'string', description: 'New chapter description' },
+      description: { type: 'string', description: 'New chapter summary' },
+      content: { type: 'string', description: 'New chapter content' },
       order: { type: 'integer', description: 'New position (1-based). Chapters will be reordered automatically.' },
     },
     required: ['id'],
@@ -301,7 +310,7 @@ const PATCH_STORY_OBJECT: FunctionSchema = {
       type: storyObjectTypeSchema,
       field: {
         type: 'string',
-        enum: ['name', 'description'],
+        enum: ['name', 'description', 'content'],
         description: 'Field to patch',
       },
       old: {
@@ -333,7 +342,7 @@ const PATCH_OUTLINE: FunctionSchema = {
       id: idProperty,
       field: {
         type: 'string',
-        enum: ['name', 'description'],
+        enum: ['name', 'description', 'content'],
         description: 'Field to patch',
       },
       old: {
@@ -361,7 +370,7 @@ const PATCH_OUTLINE_ACT: FunctionSchema = {
       id: idProperty,
       field: {
         type: 'string',
-        enum: ['name', 'description'],
+        enum: ['name', 'description', 'content'],
         description: 'Field to patch',
       },
       old: {
@@ -390,7 +399,7 @@ const PATCH_OUTLINE_CHAPTER: FunctionSchema = {
       id: idProperty,
       field: {
         type: 'string',
-        enum: ['name', 'description'],
+        enum: ['name', 'description', 'content'],
         description: 'Field to patch',
       },
       old: {

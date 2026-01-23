@@ -617,6 +617,7 @@ export class PromptManager {
           id: ch.id,
           name: data.name || '',
           description: data.description || '',
+          content: data.content || '',
           imagePrompt: ch.metadata?.image_prompt || undefined,
           imagePromptPositive: ch.metadata?.image_prompt_positive || undefined,
           imagePromptNegative: ch.metadata?.image_prompt_negative || undefined,
@@ -629,6 +630,7 @@ export class PromptManager {
           id: org.id,
           name: data.name || '',
           description: data.description || '',
+          content: data.content || '',
           imagePrompt: org.metadata?.image_prompt || undefined,
           imagePromptPositive: org.metadata?.image_prompt_positive || undefined,
           imagePromptNegative: org.metadata?.image_prompt_negative || undefined,
@@ -641,6 +643,7 @@ export class PromptManager {
           id: loc.id,
           name: data.name || '',
           description: data.description || '',
+          content: data.content || '',
           imagePrompt: loc.metadata?.image_prompt || undefined,
           imagePromptPositive: loc.metadata?.image_prompt_positive || undefined,
           imagePromptNegative: loc.metadata?.image_prompt_negative || undefined,
@@ -653,6 +656,7 @@ export class PromptManager {
           id: entry.id,
           name: data.name || '',
           description: data.description || '',
+          content: data.content || '',
           imagePrompt: entry.metadata?.image_prompt || undefined,
           imagePromptPositive: entry.metadata?.image_prompt_positive || undefined,
           imagePromptNegative: entry.metadata?.image_prompt_negative || undefined,
@@ -674,6 +678,7 @@ export class PromptManager {
             id: outlineObj.id,
             name: outlineData.name || '',
             description: outlineData.description || '',
+            content: outlineData.content || '',
             order: (outlineObj.metadata?.order as number) || 0,
             acts: outlineActs.map(act => {
               const actData = this.getObjectDataForLanguage(act, language);
@@ -681,6 +686,7 @@ export class PromptManager {
                 id: act.id,
                 name: actData.name || '',
                 description: actData.description || '',
+                content: actData.content || '',
                 order: (act.metadata?.order as number) || 0,
                 outlineId: outlineObj.id,
                 chapters: chapters
@@ -693,6 +699,7 @@ export class PromptManager {
                       id: chapter.id,
                       name: chapterData.name || '',
                       description: chapterData.description || '',
+                      content: chapterData.content || '',
                       order: (chapter.metadata?.order as number) || 0,
                       actId: act.id,
                       manuscriptId: manuscript?.id || '',
@@ -759,6 +766,7 @@ export class PromptManager {
             id: ch.id,
             name: data.name || '',
             description: data.description || '',
+            content: data.content || '',
             imagePrompt: ch.metadata?.image_prompt || undefined,
             imagePromptPositive: ch.metadata?.image_prompt_positive || undefined,
             imagePromptNegative: ch.metadata?.image_prompt_negative || undefined,
@@ -771,6 +779,7 @@ export class PromptManager {
             id: org.id,
             name: data.name || '',
             description: data.description || '',
+            content: data.content || '',
             imagePrompt: org.metadata?.image_prompt || undefined,
             imagePromptPositive: org.metadata?.image_prompt_positive || undefined,
             imagePromptNegative: org.metadata?.image_prompt_negative || undefined,
@@ -783,6 +792,7 @@ export class PromptManager {
             id: loc.id,
             name: data.name || '',
             description: data.description || '',
+            content: data.content || '',
             imagePrompt: loc.metadata?.image_prompt || undefined,
             imagePromptPositive: loc.metadata?.image_prompt_positive || undefined,
             imagePromptNegative: loc.metadata?.image_prompt_negative || undefined,
@@ -795,6 +805,7 @@ export class PromptManager {
             id: entry.id,
             name: data.name || '',
             description: data.description || '',
+            content: data.content || '',
             imagePrompt: entry.metadata?.image_prompt || undefined,
             imagePromptPositive: entry.metadata?.image_prompt_positive || undefined,
             imagePromptNegative: entry.metadata?.image_prompt_negative || undefined,
@@ -807,6 +818,7 @@ export class PromptManager {
             id: outlineObj.id,
             name: data.name || '',
             description: data.description || '',
+            content: data.content || '',
           };
         }),
         ...acts
@@ -819,6 +831,7 @@ export class PromptManager {
               id: act.id,
               name: data.name || '',
               description: data.description || '',
+              content: data.content || '',
             };
           }),
         ...chapters
@@ -831,6 +844,7 @@ export class PromptManager {
               id: chapter.id,
               name: data.name || '',
               description: data.description || '',
+              content: data.content || '',
             };
           }),
       ];
@@ -848,6 +862,7 @@ export class PromptManager {
               id: outlineObj.id,
               name: outlineData.name || '',
               description: outlineData.description || '',
+              content: outlineData.content || '',
               order: (outlineObj.metadata?.order as number) || 0,
               acts: outlineActs.map(act => {
                 const actData = act.data[lang] || {};
@@ -855,6 +870,7 @@ export class PromptManager {
                   id: act.id,
                   name: actData.name || '',
                   description: actData.description || '',
+                  content: actData.content || '',
                   order: (act.metadata?.order as number) || 0,
                   outlineId: outlineObj.id,
                   chapters: chapters
@@ -867,6 +883,7 @@ export class PromptManager {
                         id: chapter.id,
                         name: chapterData.name || '',
                         description: chapterData.description || '',
+                        content: chapterData.content || '',
                         order: (chapter.metadata?.order as number) || 0,
                         actId: act.id,
                         manuscriptId: manuscript?.id || '',

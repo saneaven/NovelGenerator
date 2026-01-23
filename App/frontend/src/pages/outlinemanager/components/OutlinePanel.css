@@ -572,6 +572,95 @@
   background-color: var(--color-surface-base);
 }
 
+/* Content Editor */
+.outline-manager .inline-content-editor {
+  margin-top: var(--spacing-md);
+}
+
+.outline-manager .inline-content-editor .rich-text-editor {
+  min-height: 150px;
+}
+
+/* Form group grow - for content editors in modals */
+.item-form .form-group-grow {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.item-form .form-group-grow .rich-text-editor {
+  flex: 1;
+  min-height: 200px;
+}
+
+/* Markdown Content Display */
+.outline-manager .markdown-content {
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text-primary);
+}
+
+.outline-manager .markdown-content p {
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.outline-manager .markdown-content p:last-child {
+  margin-bottom: 0;
+}
+
+.outline-manager .markdown-content h1,
+.outline-manager .markdown-content h2,
+.outline-manager .markdown-content h3,
+.outline-manager .markdown-content h4,
+.outline-manager .markdown-content h5,
+.outline-manager .markdown-content h6 {
+  margin: var(--spacing-md) 0 var(--spacing-sm) 0;
+  font-weight: var(--font-weight-semibold);
+}
+
+.outline-manager .markdown-content h1:first-child,
+.outline-manager .markdown-content h2:first-child,
+.outline-manager .markdown-content h3:first-child,
+.outline-manager .markdown-content h4:first-child,
+.outline-manager .markdown-content h5:first-child,
+.outline-manager .markdown-content h6:first-child {
+  margin-top: 0;
+}
+
+.outline-manager .markdown-content ul,
+.outline-manager .markdown-content ol {
+  margin: var(--spacing-sm) 0;
+  padding-left: var(--spacing-lg);
+}
+
+.outline-manager .markdown-content blockquote {
+  margin: var(--spacing-sm) 0;
+  padding-left: var(--spacing-md);
+  border-left: 3px solid var(--color-border-default);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.outline-manager .markdown-content code {
+  background-color: var(--color-surface-elevated);
+  padding: 2px 6px;
+  border-radius: var(--border-radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.outline-manager .markdown-content pre {
+  background-color: var(--color-surface-elevated);
+  padding: var(--spacing-md);
+  border-radius: var(--border-radius-md);
+  overflow-x: auto;
+}
+
+.outline-manager .markdown-content pre code {
+  background: none;
+  padding: 0;
+}
+
 /* Edit Actions */
 .outline-manager .edit-actions {
   display: flex;

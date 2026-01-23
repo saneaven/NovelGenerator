@@ -42,9 +42,9 @@ const ObjectPickerPreview: React.FC<ObjectPickerPreviewProps> = ({
               </div>
             )}
 
-            {item.description && (
+            {item.content && (
               <div className="object-picker-preview-description">
-                {item.description}
+                {item.content}
               </div>
             )}
           </div>
@@ -84,9 +84,9 @@ const ObjectPickerPreview: React.FC<ObjectPickerPreviewProps> = ({
           </div>
         )}
 
-        {item.description && (
+        {item.content && (
           <div className="object-picker-preview-description">
-            {item.description}
+            {item.content}
           </div>
         )}
       </div>

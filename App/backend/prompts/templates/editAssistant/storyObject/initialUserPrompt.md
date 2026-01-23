@@ -10,7 +10,7 @@
 {{#each (filterByIds project.objects targetIds)}}
 ### {{ this.type }}: {{ this.name }} (ID: {{ this.id }})
 
-{{ this.description }}
+{{ this.content }}
 
 {{/each}}
 
@@ -19,14 +19,14 @@
 {{#if (includes targetIds this.id)}}
 ### Outline: {{ this.name }} (ID: {{ this.id }})
 
-{{ this.description }}
+{{ this.content }}
 
 {{/if}}
 
 {{#each (filterByIds this.acts targetIds)}}
 ### Act: {{ this.name }} (ID: {{ this.id }}, Outline: {{ ../name }})
 
-{{ this.description }}
+{{ this.content }}
 
 {{/each}}
 
@@ -34,7 +34,7 @@
 {{#each (filterByIds this.chapters targetIds)}}
 ### Chapter: {{ this.name }} (ID: {{ this.id }}, Act: {{ ../name }}, Outline: {{ ../../name }})
 
-{{ this.description }}
+{{ this.content }}
 
 {{/each}}
 {{/each}}

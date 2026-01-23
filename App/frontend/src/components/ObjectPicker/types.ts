@@ -34,7 +34,8 @@ export type StoryObjectType = 'character' | 'organization' | 'location' | 'loreb
 export interface ObjectPickerItem {
   id: string;
   name: string;
-  description?: string;
+  description?: string;      // One-line summary for object indexes
+  content?: string;          // Full content
   type: ObjectType;
   parentId?: string;         // act_id for chapters, chapter_id for manuscripts
   order?: number;

@@ -71,7 +71,7 @@ For multiple edits, call patch_story_object multiple times:
 
 ### Replace Operations
 - `replace_basic_info` - Replace basic info fields (title, logline, genre)
-- `replace_story_object` - Replace story object fields (name, description)
+- `replace_story_object` - Replace story object fields (name, description, content)
 
 ### Patch Operations
 - `patch_basic_info` - Patch basic info using search-replace (single edit per call)

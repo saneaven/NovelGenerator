@@ -18,6 +18,7 @@
 <character id="{{ this.id }}">
 <name>{{ this.name }}</name>
 <description>{{ this.description }}</description>
+<content>{{ this.content }}</content>
 </character>
 {{/each}}
 </characters>
@@ -29,6 +30,7 @@
 <organization id="{{ this.id }}">
 <name>{{ this.name }}</name>
 <description>{{ this.description }}</description>
+<content>{{ this.content }}</content>
 </organization>
 {{/each}}
 </organizations>
@@ -40,6 +42,7 @@
 <location id="{{ this.id }}">
 <name>{{ this.name }}</name>
 <description>{{ this.description }}</description>
+<content>{{ this.content }}</content>
 </location>
 {{/each}}
 </locations>
@@ -51,6 +54,7 @@
 <lorebook id="{{ this.id }}">
 <name>{{ this.name }}</name>
 <description>{{ this.description }}</description>
+<content>{{ this.content }}</content>
 </lorebook>
 {{/each}}
 </lorebooks>
@@ -62,6 +66,7 @@
 <outline id="{{ this.id }}">
 <name>{{ this.name }}</name>
 <description>{{ this.description }}</description>
+<content>{{ this.content }}</content>
 </outline>
 {{/each}}
 </outlines>
@@ -73,6 +78,7 @@
 <act id="{{ this.id }}">
 <name>{{ this.name }}</name>
 <description>{{ this.description }}</description>
+<content>{{ this.content }}</content>
 </act>
 {{/each}}
 </acts>
@@ -84,6 +90,7 @@
 <chapter id="{{ this.id }}">
 <name>{{ this.name }}</name>
 <description>{{ this.description }}</description>
+<content>{{ this.content }}</content>
 </chapter>
 {{/each}}
 </chapters>

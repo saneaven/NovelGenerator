@@ -6,7 +6,7 @@ import BasicInfoManager from '../../../components/StoryObjectManager/BasicInfoMa
 import GuidelinesManager from '../../../components/StoryObjectManager/GuidelinesManager';
 import NameDescriptionManager from '../../../components/StoryObjectManager/NameDescriptionManager';
 import { Clipboard, People, Organization, Map, Books, ChevronLeft, ChevronRight, Document } from '../../../components/icons';
-import type { StoryObjectTabType } from '../../../types/storyObject';
+import type { StoryObjectTabType } from '../../../types/objectTypeConfig';
 import { useStoryObjectTab } from '../hooks/useStoryObjectTab';
 
 interface StoryObjectPanelProps {

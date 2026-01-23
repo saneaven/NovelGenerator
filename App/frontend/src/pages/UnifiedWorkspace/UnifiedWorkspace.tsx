@@ -5,11 +5,10 @@ import { useAgentStore } from '../../store/agentStore';
 import { useAgentUIStore } from '../../store/agentUIStore';
 import { useSidebarStore } from '../../store/sidebarStore';
 import { useProjectStore } from '../../store/projectStore';
-import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { useUnifiedObjectStore, type SimplifiedStoryObjects } from '../../store/unifiedObjectStore';
 import { useNovelEditorStore } from '../../store/novelEditorStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useErrorStore } from '../../store/errorStore';
-import type { StoryObjects } from '../../types/storyObject';
 
 import ErrorModal from '../../components/Modal/ErrorModal';
 import SettingsModal from '../../components/SettingsModal/SettingsModal';
@@ -154,13 +153,13 @@ const UnifiedWorkspace: React.FC = () => {
   const [showTranslateModal, setShowTranslateModal] = useState(false);
 
   // NovelEditor story objects state
-  const [storyObjects, setStoryObjects] = useState<StoryObjects>({
+  const [storyObjects, setStoryObjects] = useState<SimplifiedStoryObjects>({
     basicInfo: null,
     characters: [],
     organizations: [],
     locations: [],
     lorebook: [],
-    outline: null,
+    outline: { outlines: [] },
   });
   const [isOutlineInitialized, setIsOutlineInitialized] = useState(false);
 
@@ -223,7 +222,7 @@ const UnifiedWorkspace: React.FC = () => {
     };
   }, [selectedChapterId, unifiedObjects, currentDisplayLanguage, mainLanguage]);
 
-  const hasChapters = storyObjects.outline?.acts.some(act => act.chapters.length > 0) ?? false;
+  const hasChapters = storyObjects.outline.outlines.some(outline => outline.acts.some(act => act.chapters.length > 0));
 
   // Helper to get data for a specific language
   const getDataForLanguage = (obj: any, language: string): Record<string, any> => {
@@ -285,12 +284,13 @@ const UnifiedWorkspace: React.FC = () => {
 
     const buildStoryObjects = async () => {
       try {
-        const [basicInfoList, characters, organizations, locations, lorebook, acts, chapters] = await Promise.all([
+        const [basicInfoList, characters, organizations, locations, lorebook, outlines, acts, chapters] = await Promise.all([
           listObjects('basic_info', projectId),
           listObjects('character', projectId),
           listObjects('organization', projectId),
           listObjects('location', projectId),
           listObjects('lorebook', projectId),
+          listObjects('outline', projectId),
           listObjects('act', projectId),
           listObjects('chapter', projectId),
         ]);
@@ -305,29 +305,46 @@ const UnifiedWorkspace: React.FC = () => {
           };
         })() : null;
 
-        const outline = {
-          acts: acts
+        // Build outline hierarchy: Outline > Acts > Chapters
+        const outlineData = {
+          outlines: outlines
             .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-            .map(act => {
-              const actData = getDataForLanguage(act, mainLanguage);
+            .map(outline => {
+              const oData = getDataForLanguage(outline, mainLanguage);
+              const outlineActs = acts
+                .filter(act => act.metadata.outline_id === outline.id)
+                .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0));
               return {
-                id: act.id,
-                name: actData.name || '',
-                description: actData.description || '',
-                order: act.metadata.order || 0,
-                chapters: chapters
-                  .filter(ch => ch.metadata.act_id === act.id)
-                  .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
-                  .map(chapter => {
-                    const chapterData = getDataForLanguage(chapter, mainLanguage);
-                    return {
-                      id: chapter.id,
-                      name: chapterData.name || '',
-                      description: chapterData.description || '',
-                      order: chapter.metadata.order || 0,
-                      actId: chapter.metadata.act_id || '',
-                    };
-                  }),
+                id: outline.id,
+                name: oData.name || '',
+                description: oData.description || '',
+                content: oData.content || '',
+                order: outline.metadata.order || 0,
+                acts: outlineActs.map(act => {
+                  const actData = getDataForLanguage(act, mainLanguage);
+                  return {
+                    id: act.id,
+                    name: actData.name || '',
+                    description: actData.description || '',
+                    content: actData.content || '',
+                    order: act.metadata.order || 0,
+                    outlineId: act.metadata.outline_id || '',
+                    chapters: chapters
+                      .filter(ch => ch.metadata.act_id === act.id)
+                      .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+                      .map(chapter => {
+                        const chapterData = getDataForLanguage(chapter, mainLanguage);
+                        return {
+                          id: chapter.id,
+                          name: chapterData.name || '',
+                          description: chapterData.description || '',
+                          content: chapterData.content || '',
+                          order: chapter.metadata.order || 0,
+                          actId: chapter.metadata.act_id || '',
+                        };
+                      }),
+                  };
+                }),
               };
             }),
         };
@@ -337,30 +354,31 @@ const UnifiedWorkspace: React.FC = () => {
             basicInfo,
             characters: characters.map(ch => {
               const data = getDataForLanguage(ch, mainLanguage);
-              return { id: ch.id, name: data.name || '', description: data.description || '' };
+              return { id: ch.id, name: data.name || '', description: data.description || '', content: data.content || '' };
             }),
             organizations: organizations.map(org => {
               const data = getDataForLanguage(org, mainLanguage);
-              return { id: org.id, name: data.name || '', description: data.description || '' };
+              return { id: org.id, name: data.name || '', description: data.description || '', content: data.content || '' };
             }),
             locations: locations.map(loc => {
               const data = getDataForLanguage(loc, mainLanguage);
-              return { id: loc.id, name: data.name || '', description: data.description || '' };
+              return { id: loc.id, name: data.name || '', description: data.description || '', content: data.content || '' };
             }),
             lorebook: lorebook.map(entry => {
               const data = getDataForLanguage(entry, mainLanguage);
-              return { id: entry.id, name: data.name || '', description: data.description || '' };
+              return { id: entry.id, name: data.name || '', description: data.description || '', content: data.content || '' };
             }),
-            outline,
-          } as unknown as StoryObjects);
+            outline: outlineData,
+          });
 
           if (activeProjectId) {
-            const firstActWithChapters = outline.acts.find(act => act.chapters.length > 0);
+            const allActs = outlineData.outlines.flatMap(o => o.acts);
+            const firstActWithChapters = allActs.find(act => act.chapters.length > 0);
             const firstChapter = firstActWithChapters?.chapters[0];
             if (firstChapter) {
               const existingSelection = getSelectedChapterId(activeProjectId);
               const selectionStillExists = existingSelection
-                ? outline.acts.some(act => act.chapters.some(ch => ch.id === existingSelection))
+                ? allActs.some(act => act.chapters.some(ch => ch.id === existingSelection))
                 : false;
 
               if (!selectionStillExists) {

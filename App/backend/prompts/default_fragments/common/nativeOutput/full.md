@@ -9,8 +9,8 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 ```xml
 <function_calls>
   <function_call>{"function":"replace_story_object","id":"char-123","type":"character","name":"Alexander the Bold"}</function_call>
-  <function_call>{"function":"patch_story_object","id":"char-456","type":"character","field":"description","old":"fights alone","new":"leads a rebellion"}</function_call>
-  <function_call>{"function":"create_outline_chapter","actId":"act-1","name":"The Awakening","description":"The hero discovers their power"}</function_call>
+  <function_call>{"function":"patch_story_object","id":"char-456","type":"character","field":"content","old":"fights alone","new":"leads a rebellion"}</function_call>
+  <function_call>{"function":"create_outline_chapter","actId":"act-1","name":"The Awakening","description":"The hero discovers their power","content":"Detailed chapter content..."}</function_call>
 </function_calls>
 ```
 
@@ -29,7 +29,7 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 
 **create_story_object**
 ```json
-{ "function": "create_story_object", "type": "character", "name": "Name", "description": "Description" }
+{ "function": "create_story_object", "type": "character", "name": "Name", "description": "One-line summary", "content": "Full content" }
 ```
 
 **delete_story_object**
@@ -46,7 +46,7 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 
 **replace_story_object** (only include fields to change)
 ```json
-{ "function": "replace_story_object", "id": "obj-123", "type": "character", "name": "New Name", "description": "New description" }
+{ "function": "replace_story_object", "id": "obj-123", "type": "character", "name": "New Name", "description": "New summary", "content": "New content" }
 ```
 
 ### Patch Operations
@@ -58,7 +58,7 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 
 **patch_story_object** (single targeted edit)
 ```json
-{ "function": "patch_story_object", "id": "obj-123", "type": "character", "field": "description", "old": "text to find", "new": "replacement" }
+{ "function": "patch_story_object", "id": "obj-123", "type": "character", "field": "content", "old": "text to find", "new": "replacement" }
 ```
 
 ---
@@ -67,7 +67,7 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 
 **create_outline**
 ```json
-{ "function": "create_outline", "name": "Main Story", "description": "The primary storyline" }
+{ "function": "create_outline", "name": "Main Story", "description": "One-line summary", "content": "The primary storyline" }
 ```
 
 **delete_outline**
@@ -77,12 +77,12 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 
 **replace_outline** (only include fields to change)
 ```json
-{ "function": "replace_outline", "id": "outline-123", "name": "New Name", "description": "New description" }
+{ "function": "replace_outline", "id": "outline-123", "name": "New Name", "description": "New summary", "content": "New content" }
 ```
 
 **patch_outline** (single targeted edit)
 ```json
-{ "function": "patch_outline", "id": "outline-123", "field": "description", "old": "text to find", "new": "replacement" }
+{ "function": "patch_outline", "id": "outline-123", "field": "content", "old": "text to find", "new": "replacement" }
 ```
 
 ---
@@ -91,7 +91,7 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 
 **create_outline_act**
 ```json
-{ "function": "create_outline_act", "outlineId": "outline-123", "name": "Act I", "description": "Setup and introduction" }
+{ "function": "create_outline_act", "outlineId": "outline-123", "name": "Act I", "description": "One-line summary", "content": "Setup and introduction" }
 ```
 
 **delete_outline_act**
@@ -101,12 +101,12 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 
 **replace_outline_act** (only include fields to change)
 ```json
-{ "function": "replace_outline_act", "id": "act-123", "name": "New Name", "description": "New description", "order": 2 }
+{ "function": "replace_outline_act", "id": "act-123", "name": "New Name", "description": "New summary", "content": "New content", "order": 2 }
 ```
 
 **patch_outline_act** (single targeted edit, can also change order)
 ```json
-{ "function": "patch_outline_act", "id": "act-123", "field": "description", "old": "text to find", "new": "replacement", "order": 3 }
+{ "function": "patch_outline_act", "id": "act-123", "field": "content", "old": "text to find", "new": "replacement", "order": 3 }
 ```
 
 ---
@@ -115,7 +115,7 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 
 **create_outline_chapter**
 ```json
-{ "function": "create_outline_chapter", "actId": "act-123", "name": "Chapter Name", "description": "Description" }
+{ "function": "create_outline_chapter", "actId": "act-123", "name": "Chapter Name", "description": "One-line summary", "content": "Chapter content" }
 ```
 
 **delete_outline_chapter**
@@ -125,12 +125,12 @@ Each `<function_call>` MUST contain exactly one JSON object (no markdown code fe
 
 **replace_outline_chapter** (only include fields to change)
 ```json
-{ "function": "replace_outline_chapter", "id": "ch-123", "name": "New Name", "description": "New description", "actId": "act-456", "order": 2 }
+{ "function": "replace_outline_chapter", "id": "ch-123", "name": "New Name", "description": "New summary", "content": "New content", "actId": "act-456", "order": 2 }
 ```
 
 **patch_outline_chapter** (single targeted edit, can also change order/actId)
 ```json
-{ "function": "patch_outline_chapter", "id": "ch-123", "field": "description", "old": "text to find", "new": "replacement", "actId": "act-456", "order": 3 }
+{ "function": "patch_outline_chapter", "id": "ch-123", "field": "content", "old": "text to find", "new": "replacement", "actId": "act-456", "order": 3 }
 ```
 
 ---
