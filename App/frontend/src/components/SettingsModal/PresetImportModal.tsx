@@ -119,7 +119,7 @@ const PresetImportModal: React.FC<PresetImportModalProps> = ({
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder={t('settings.presetImport.namePlaceholder')}
+          placeholder={t('settings.presetImport.presetNamePlaceholder')}
           autoFocus
         />
       </div>

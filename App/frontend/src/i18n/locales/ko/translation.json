@@ -26,7 +26,13 @@
     "note": "참고",
     "auto": "자동",
     "low": "낮음",
-    "high": "높음"
+    "high": "높음",
+    "true": "참",
+    "false": "거짓",
+    "refresh": "새로고침",
+    "enabled": "활성화됨",
+    "copied": "{{value}} 복사됨",
+    "copyFailed": "복사 실패"
   },
   "landing": {
     "title": "Novel Buds",
@@ -157,7 +163,9 @@
       "passwordsNotMatch": "비밀번호가 일치하지 않습니다",
       "passwordChanged": "비밀번호가 성공적으로 변경되었습니다",
       "passwordChangeFailed": "비밀번호 변경에 실패했습니다",
-      "changingPassword": "변경 중..."
+      "changingPassword": "변경 중...",
+      "passwordChangeBackupWarning": "비밀번호를 변경하면 서버에 백업된 API 키가 삭제됩니다.",
+      "passwordChangeBackupConfirm": "비밀번호를 변경하면 서버에 백업된 API 키가 삭제됩니다. 계속하시겠습니까?"
     },
     "theme": {
       "title": "테마 설정",
@@ -264,12 +272,22 @@
         "504": "게이트웨이 시간 초과"
       },
       "serverVault": {
-        "title": "서버 자격 증명 저장소",
-        "enableVault": "서버에 API 키 암호화 저장",
-        "vaultHint": "활성화하면 API 키가 서버에 암호화되어 저장되고 요청에서 api_key가 생략됩니다.",
+        "title": "서버 자격 증명 백업",
+        "backupTitle": "서버 자격 증명 백업",
+        "backupHint": "API 키를 종단 간 암호화된 블롭으로 서버에 백업합니다 (서버는 복호화할 수 없음). 복원에는 계정 비밀번호가 필요합니다.",
         "refreshStatus": "상태 새로고침",
-        "deleteKeys": "서버 저장 키 삭제",
-        "vaultConfigured": "저장소 설정됨"
+        "refreshBackupStatus": "상태 새로고침",
+        "statusHasBackup": "서버에 백업이 있습니다",
+        "statusNoBackup": "서버에 백업이 없습니다",
+        "backupActionTitle": "서버에 백업",
+        "backupActionDescription": "현재 API 키를 암호화하여 업로드하려면 계정 비밀번호를 입력하세요.",
+        "backupActionConfirm": "백업",
+        "restoreActionTitle": "서버에서 복원",
+        "restoreActionDescription": "백업을 다운로드하고 이 브라우저에서 복호화하려면 계정 비밀번호를 입력하세요.",
+        "restoreActionConfirm": "복원",
+        "deleteActionTitle": "서버 백업 삭제",
+        "deleteActionDescription": "서버 백업을 삭제하려면 계정 비밀번호를 입력하세요.",
+        "deleteActionConfirm": "백업 삭제"
       },
       "nativeOutput": {
         "title": "네이티브 출력 모드",
@@ -432,7 +450,9 @@
         "thinkingBudget25": "사고 예산 (토큰) 2.5용",
         "thinkingBudget25Placeholder": "비활성화하려면 0으로 설정",
         "thinkingBudget25Hint": "지원되는 경우 사고를 효과적으로 비활성화하려면 0으로 설정하세요."
-      }
+      },
+      "tokenizer": "토크나이저",
+      "tokenizerHint": "토큰 수 추정에 사용할 토크나이저를 선택하세요"
     },
     "llmLog": {
       "enableLogging": "LLM 요청 로깅 활성화",
@@ -492,15 +512,16 @@
       "oSeries": "O-시리즈"
     },
     "presetSelector": {
-      "selectPreset": "프리셋 선택...",
+      "selectPlaceholder": "프리셋 선택...",
       "presetLabel": "프리셋:",
       "editPreset": "프리셋 편집",
       "duplicatePreset": "프리셋 복제",
       "exportPreset": "프리셋 내보내기",
       "deletePreset": "프리셋 삭제",
-      "createNewPreset": "새 프리셋 만들기",
-      "importPreset": "파일에서 프리셋 가져오기",
-      "confirmDelete": "\"{{name}}\"을(를) 삭제하시겠습니까?",
+      "createNew": "새 프리셋 만들기",
+      "importFromFile": "파일에서 프리셋 가져오기",
+      "deleteConfirm": "\"{{name}}\"을(를) 삭제하시겠습니까?",
+      "thisPreset": "이 프리셋",
       "invalidFileFormat": "잘못된 프리셋 파일 형식",
       "failedToReadFile": "파일 읽기 실패"
     },
@@ -515,6 +536,30 @@
       "nameRequired": "프리셋 이름은 필수입니다",
       "duplicateName": "이 이름의 프리셋이 이미 존재합니다",
       "importFailed": "프리셋 가져오기 실패"
+    },
+    "presetModal": {
+      "createTitle": "새 프리셋 만들기",
+      "duplicateTitle": "프리셋 복제",
+      "editTitle": "프리셋 편집",
+      "nameLabel": "프리셋 이름 *",
+      "namePlaceholder": "예: 나만의 글쓰기 스타일",
+      "descriptionLabel": "설명 (선택사항)",
+      "descriptionPlaceholder": "프리셋에 대한 간단한 설명",
+      "initializeWithDefaults": "기본 프롬프트와 프래그먼트로 초기화",
+      "initializeHintEnabled": "활성화하면 새 프리셋에 모든 기본 프롬프트와 프래그먼트가 포함됩니다.",
+      "initializeHintDisabled": "비활성화하면 프리셋이 비어 있게 됩니다.",
+      "duplicateHint": "\"{{name}}\"의 모든 프롬프트, 프래그먼트, 변수가 포함된 복사본을 만듭니다.",
+      "errors": {
+        "nameRequired": "프리셋 이름이 필요합니다",
+        "nameExists": "이 이름의 프리셋이 이미 존재합니다",
+        "saveFailed": "프리셋 저장 실패"
+      },
+      "buttons": {
+        "create": "프리셋 만들기",
+        "duplicate": "복제",
+        "saveChanges": "변경 저장",
+        "cancel": "취소"
+      }
     },
     "promptEditor": {
       "prompts": "프롬프트",
@@ -597,6 +642,67 @@
       },
       "treeNav": {
         "closeSidebar": "사이드바 닫기"
+      },
+      "previewPrompt": "프롬프트 미리보기",
+      "preview": {
+        "title": "프롬프트 미리보기",
+        "showProjectContext": "프로젝트 컨텍스트 표시",
+        "includeFilteredIds": "필터된 ID 전체 포함",
+        "promptTypeControls": "프롬프트 타입 컨트롤",
+        "overrides": "변수 재정의",
+        "resetOverrides": "전체 초기화",
+        "noProjectWarning": "선택된 프로젝트가 없습니다. 플레이스홀더 데이터를 사용합니다.",
+        "renderError": "템플릿 렌더링 오류",
+        "configSection": "설정",
+        "variablesSection": "사용자 변수",
+        "characterCount": "{{count}}자",
+        "tokenCount": "{{count}} 토큰",
+        "tokenEstimateHint": "tiktoken으로 추정 (실제 API 결과와 다를 수 있음)",
+        "thinkingMode": {
+          "off": "끄기",
+          "model": "모델",
+          "custom": "커스텀"
+        },
+        "outputMode": {
+          "toolCall": "도구 호출",
+          "nativeToolCall": "네이티브 도구 호출",
+          "rawOutput": "원시 출력"
+        },
+        "fields": {
+          "mode": "모드",
+          "sourceLanguage": "원본 언어",
+          "targetLanguage": "대상 언어",
+          "objectType": "객체 유형",
+          "objectInfo": "객체 정보",
+          "promptMode": "프롬프트 모드",
+          "currentPrompt": "현재 프롬프트",
+          "positiveTags": "긍정 태그",
+          "negativeTags": "부정 태그",
+          "scenePreContext": "장면 앞 맥락",
+          "scenePostContext": "장면 뒤 맥락"
+        },
+        "loadingPreview": "미리보기 로딩 중..."
+      },
+      "syntaxHint": {
+        "groups": {
+          "config": "설정 (구성)",
+          "project": "프로젝트 데이터",
+          "input": "입력",
+          "agent": "에이전트 모드",
+          "editAssistant": "편집 어시스턴트",
+          "translation": "번역",
+          "imagePrompt": "이미지 프롬프트"
+        },
+        "noVariablesForType": "이 프롬프트 유형에 사용할 수 있는 변수가 없습니다.",
+        "noVariables": "사용 가능한 변수가 없습니다.",
+        "viewSyntaxTokens": "템플릿 구문 토큰 보기",
+        "handlebarsSyntax": "핸들바 구문",
+        "closeSyntaxPanel": "구문 패널 닫기",
+        "variables": "변수",
+        "helpers": "헬퍼"
+      },
+      "templateEditor": {
+        "syntaxError": "저장 불가: 템플릿에 구문 오류가 있습니다"
       }
     }
   },
@@ -616,7 +722,10 @@
     "searchPlaceholder": "객체 검색...",
     "allTypes": "전체 유형",
     "clearSearch": "검색 지우기",
-    "selectAll": "전체 선택"
+    "selectAll": "전체 선택",
+    "tokenCount": "{{count}} 토큰",
+    "tokenEstimateHint": "tiktoken으로 추정 (실제 API 결과와 다를 수 있음)",
+    "noTokens": "토큰 없음"
   },
   "richTextEditor": {
     "loading": "에디터 로딩 중...",

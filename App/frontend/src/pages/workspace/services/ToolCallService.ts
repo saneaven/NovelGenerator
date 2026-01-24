@@ -83,19 +83,19 @@ const meta: Record<string, ToolMeta> = {
     summary: (args) => args?.id || "Location",
   },
 
-  create_lorebook_entry: {
+  create_lorebook: {
     editType: "add",
     title: "Add Lore Entry",
     description: "Create a lorebook entry.",
     summary: (args) => args?.name || "Lore entry",
   },
-  update_lorebook_entry: {
+  update_lorebook: {
     editType: "edit",
     title: "Edit Lore Entry",
     description: "Update a lorebook entry.",
     summary: (args) => args?.name || args?.id || "Lore entry",
   },
-  delete_lorebook_entry: {
+  delete_lorebook: {
     editType: "remove",
     title: "Delete Lore Entry",
     description: "Remove a lorebook entry.",

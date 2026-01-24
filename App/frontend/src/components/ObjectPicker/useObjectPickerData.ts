@@ -13,6 +13,7 @@ import type {
   UseObjectPickerDataResult,
 } from './types';
 import { OBJECT_TYPE_CONFIG } from '../../types/objectTypeConfig';
+import { docToMarkdown } from '../../editor/manuscript/convert';
 
 /**
  * Helper to get data for a specific language from an object.
@@ -218,10 +219,16 @@ function buildGroups(
 
               const manuscriptData = getObjectDataForLanguage(manuscript, language);
 
+              // Convert TipTap doc to markdown for content
+              const manuscriptContent = manuscriptData?.doc
+                ? docToMarkdown(manuscriptData.doc)
+                : undefined;
+
               const item: ObjectPickerItem = {
                 id: manuscript.id,
                 name: (chapterData.name as string) || 'Unnamed Chapter',
                 description: chapterData.description as string | undefined,
+                content: manuscriptContent || undefined,
                 type: 'manuscript' as ObjectType,
                 parentId: ch.id,
                 order: ch.metadata?.order as number | undefined,

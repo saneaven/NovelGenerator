@@ -570,7 +570,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
                 size="sm"
                 onClick={() => toggleSectionExpansion(`${model.id}-description`)}
               >
-                {isDescExpanded ? t('common.showLess') : t('common.showMore')}
+                {isDescExpanded ? t('settings.modelBrowser.showLess') : t('settings.modelBrowser.showMore')}
               </TextButton>
             )}
           </div>
@@ -624,7 +624,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
 
         {expandedSections.has(`${model.id}-pricing`) && model.pricing && (
           <div className="model-card__details">
-            <h5>{t('settings.modelBrowser.pricingPer1M')}</h5>
+            <h5>{t('settings.modelBrowser.pricingPerMillion')}</h5>
             <ul>
               <li>{t('settings.modelBrowser.prompt')}: ${(parseFloat(model.pricing.prompt) * 1000000).toFixed(2)}</li>
               <li>{t('settings.modelBrowser.completion')}: ${(parseFloat(model.pricing.completion) * 1000000).toFixed(2)}</li>
@@ -753,7 +753,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
         >
           <span className="model-tree__toggle">{isExpanded ? <Collapse size="xs" /> : <Expand size="xs" />}</span>
           <span className="model-tree__label">{node.label}</span>
-          <span className="model-tree__count">{t('settings.modelBrowser.modelCount', { count: modelCount })}</span>
+          <span className="model-tree__count">{`${modelCount} ${t('settings.modelBrowser.models')}`}</span>
         </div>
         {isExpanded && node.children && (
           <div className="model-tree__children">
@@ -774,7 +774,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
         <div className="model-browser__error">
           <p>{t('common.error')}: {modelsError}</p>
           <TextButton variant="secondary" size="sm" type="button" onClick={loadModels}>
-            {t('common.retry')}
+            {t('settings.modelBrowser.retry')}
           </TextButton>
         </div>
       );
@@ -813,7 +813,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
           <div className="model-browser__toolbar">
             <input
               type="text"
-              placeholder={t('settings.modelBrowser.searchModels')}
+              placeholder={t('settings.modelBrowser.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="model-browser__search"

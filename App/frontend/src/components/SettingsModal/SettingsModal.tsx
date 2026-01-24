@@ -76,7 +76,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     <BaseModal
       isOpen={isOpen}
       onClose={handleCancel}
-      size="large"
+      size="xlarge"
       showHeader={false}
       className="settings-modal"
       footer={

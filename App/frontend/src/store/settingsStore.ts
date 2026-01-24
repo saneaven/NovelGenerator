@@ -80,12 +80,16 @@ export interface RetryConfig {
     retryDelayMs: number;              // Delay between retries in ms
 }
 
+// Tokenizer type for token counting (used with openrouter/custom providers)
+export type TokenizerOverride = 'openai' | 'claude' | 'gemini';
+
 // Advanced settings for AI functions
 export interface AdvancedTaskSettings {
     enablePrefill: boolean;
     thinkingMode: 'off' | 'model' | 'custom';
     thinkingConfig?: ThinkingConfig;
     customApiFormat?: CustomApiFormat;  // For custom endpoint API format (affects thinking + tool calling)
+    tokenizerOverride?: TokenizerOverride;  // For openrouter/custom providers: which tokenizer to use for token counting
 }
 
 // Complete configuration for a single AI function

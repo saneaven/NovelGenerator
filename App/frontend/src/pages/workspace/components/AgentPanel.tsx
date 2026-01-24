@@ -953,6 +953,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                         maxHeight="350px"
                         showSearch={true}
                         showSelectAll={true}
+                        showTokenCount={true}
                     />
                 </div>
                 <div className="agent-controls-row">

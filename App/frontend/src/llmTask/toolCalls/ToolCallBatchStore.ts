@@ -172,7 +172,7 @@ export class ToolCallBatchStore implements StoreActions {
     await this.baseStore.deleteObject(type, id);
   }
 
-  async flush(): Promise<Map<UpdateKey, FlushStatus>> {
+  async flush(yieldToUI?: () => Promise<void>): Promise<Map<UpdateKey, FlushStatus>> {
     const results = new Map<UpdateKey, FlushStatus>();
 
     for (const [key, staged] of this.stagedByKey.entries()) {
@@ -183,6 +183,7 @@ export class ToolCallBatchStore implements StoreActions {
         const message = error instanceof Error ? error.message : String(error);
         results.set(key, { success: false, reason: message });
       }
+      if (yieldToUI) await yieldToUI();
     }
 
     this.stagedByKey.clear();

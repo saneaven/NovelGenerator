@@ -26,7 +26,13 @@
     "note": "Note",
     "auto": "Auto",
     "low": "Low",
-    "high": "High"
+    "high": "High",
+    "true": "True",
+    "false": "False",
+    "refresh": "Refresh",
+    "enabled": "Enabled",
+    "copied": "Copied {{value}}",
+    "copyFailed": "Copy failed"
   },
   "landing": {
     "title": "Novel Buds",
@@ -444,7 +450,9 @@
         "thinkingBudget25": "Thinking Budget (tokens) for 2.5",
         "thinkingBudget25Placeholder": "Set 0 to disable",
         "thinkingBudget25Hint": "Set 0 to effectively disable thinking where supported."
-      }
+      },
+      "tokenizer": "Tokenizer",
+      "tokenizerHint": "Select which tokenizer to use for token counting estimates"
     },
     "llmLog": {
       "enableLogging": "Enable LLM Request Logging",
@@ -529,6 +537,30 @@
       "duplicateName": "A preset with this name already exists",
       "importFailed": "Failed to import preset"
     },
+    "presetModal": {
+      "createTitle": "Create New Preset",
+      "duplicateTitle": "Duplicate Preset",
+      "editTitle": "Edit Preset",
+      "nameLabel": "Preset Name *",
+      "namePlaceholder": "e.g., My Writing Style",
+      "descriptionLabel": "Description (optional)",
+      "descriptionPlaceholder": "Brief description of this preset",
+      "initializeWithDefaults": "Initialize with default prompts and fragments",
+      "initializeHintEnabled": "When enabled, the new preset will include all default prompts and fragments.",
+      "initializeHintDisabled": "When disabled, the preset will be empty.",
+      "duplicateHint": "This will create a copy of \"{{name}}\" with all its prompts, fragments, and variables.",
+      "errors": {
+        "nameRequired": "Preset name is required",
+        "nameExists": "A preset with this name already exists",
+        "saveFailed": "Failed to save preset"
+      },
+      "buttons": {
+        "create": "Create Preset",
+        "duplicate": "Duplicate",
+        "saveChanges": "Save Changes",
+        "cancel": "Cancel"
+      }
+    },
     "promptEditor": {
       "prompts": "Prompts",
       "fragments": "Fragments",
@@ -610,6 +642,67 @@
       },
       "treeNav": {
         "closeSidebar": "Close sidebar"
+      },
+      "previewPrompt": "Preview Prompt",
+      "preview": {
+        "title": "Prompt Preview",
+        "showProjectContext": "Show Project Context",
+        "includeFilteredIds": "Include All Filtered IDs",
+        "promptTypeControls": "Prompt-Type Controls",
+        "overrides": "Variable Overrides",
+        "resetOverrides": "Reset All",
+        "noProjectWarning": "No project selected. Using placeholder data.",
+        "renderError": "Template rendering error",
+        "configSection": "Config",
+        "variablesSection": "User Variables",
+        "characterCount": "{{count}} characters",
+        "tokenCount": "{{count}} tokens",
+        "tokenEstimateHint": "Estimated using tiktoken (may differ from actual API count)",
+        "thinkingMode": {
+          "off": "Off",
+          "model": "Model",
+          "custom": "Custom"
+        },
+        "outputMode": {
+          "toolCall": "Tool Call",
+          "nativeToolCall": "Native Tool Call",
+          "rawOutput": "Raw Output"
+        },
+        "fields": {
+          "mode": "Mode",
+          "sourceLanguage": "Source Language",
+          "targetLanguage": "Target Language",
+          "objectType": "Object Type",
+          "objectInfo": "Object Info",
+          "promptMode": "Prompt Mode",
+          "currentPrompt": "Current Prompt",
+          "positiveTags": "Positive Tags",
+          "negativeTags": "Negative Tags",
+          "scenePreContext": "Scene Pre-Context",
+          "scenePostContext": "Scene Post-Context"
+        },
+        "loadingPreview": "Loading preview..."
+      },
+      "syntaxHint": {
+        "groups": {
+          "config": "Config (Settings)",
+          "project": "Project Data",
+          "input": "Input",
+          "agent": "Agent Mode",
+          "editAssistant": "Edit Assistant",
+          "translation": "Translation",
+          "imagePrompt": "Image Prompt"
+        },
+        "noVariablesForType": "No variables available for this prompt type.",
+        "noVariables": "No variables available.",
+        "viewSyntaxTokens": "View template syntax tokens",
+        "handlebarsSyntax": "Handlebars Syntax",
+        "closeSyntaxPanel": "Close syntax panel",
+        "variables": "Variables",
+        "helpers": "Helpers"
+      },
+      "templateEditor": {
+        "syntaxError": "Cannot save: template contains syntax errors"
       }
     }
   },
@@ -629,7 +722,10 @@
     "searchPlaceholder": "Search objects...",
     "allTypes": "All Types",
     "clearSearch": "Clear search",
-    "selectAll": "Select All"
+    "selectAll": "Select All",
+    "tokenCount": "{{count}} tokens",
+    "tokenEstimateHint": "Estimated using tiktoken (may differ from actual API count)",
+    "noTokens": "No tokens"
   },
   "richTextEditor": {
     "loading": "Loading editor...",

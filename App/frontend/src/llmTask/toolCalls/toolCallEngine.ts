@@ -204,8 +204,6 @@ export async function applySessionEdits(params: {
   const manuscriptBatch = new ManuscriptBatch();
 
   const nextCards: StoredEditCard[] = [];
-  let appliedCount = 0;
-
   for (const card of session.editCards) {
     const normalized: NormalizedToolCall = {
       id: card.toolCall.id,
@@ -284,17 +282,14 @@ export async function applySessionEdits(params: {
       });
     } finally {
       batchStore.endCall();
-      appliedCount += 1;
-      if (appliedCount % 2 === 0) {
-        await yieldToUI();
-      }
+      await yieldToUI();
     }
   }
 
   await yieldToUI();
 
   await manuscriptBatch.stageAll({ store: batchStore, yieldToUI });
-  const flushResults = await batchStore.flush();
+  const flushResults = await batchStore.flush(yieldToUI);
   const finalizedCards =
     flushResults.size === 0
       ? nextCards
@@ -392,8 +387,6 @@ export async function applyToolCallsDirect(params: {
   const manuscriptBatch = new ManuscriptBatch();
 
   const nextCalls: ToolCallMetadata[] = [];
-  let appliedCount = 0;
-
   for (const tc of toolCalls) {
     const status = (tc.status ?? 'pending') as ToolCallStatus;
 
@@ -460,17 +453,14 @@ export async function applyToolCallsDirect(params: {
       });
     } finally {
       batchStore.endCall();
-      appliedCount += 1;
-      if (appliedCount % 2 === 0) {
-        await yieldToUI();
-      }
+      await yieldToUI();
     }
   }
 
   await yieldToUI();
 
   await manuscriptBatch.stageAll({ store: batchStore, yieldToUI });
-  const flushResults = await batchStore.flush();
+  const flushResults = await batchStore.flush(yieldToUI);
   if (flushResults.size === 0) return nextCalls;
 
   return nextCalls.map((tc) => {

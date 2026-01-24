@@ -30,13 +30,13 @@ export const parseToolName = (
 ): { action: string; objectType: string } | undefined => {
   if (!toolName) return undefined;
 
-  // Handle patterns like: create_character, update_basic_info, delete_lorebook_entry
+  // Handle patterns like: create_character, update_basic_info, delete_lorebook
   const patterns: Array<{ regex: RegExp; objectType: string }> = [
     { regex: /^(create|update|delete)_basic_info$/, objectType: 'basic_info' },
     { regex: /^(create|update|delete)_character$/, objectType: 'character' },
     { regex: /^(create|update|delete)_organization$/, objectType: 'organization' },
     { regex: /^(create|update|delete)_location$/, objectType: 'location' },
-    { regex: /^(create|update|delete)_lorebook_entry$/, objectType: 'lorebook' },
+    { regex: /^(create|update|delete)_lorebook$/, objectType: 'lorebook' },
     { regex: /^(create|update|delete)_act$/, objectType: 'act' },
     { regex: /^(create|update|delete)_chapter$/, objectType: 'chapter' },
     { regex: /^(update)_manuscript$/, objectType: 'manuscript' },

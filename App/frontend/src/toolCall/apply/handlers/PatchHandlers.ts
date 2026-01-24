@@ -117,7 +117,7 @@ export async function patchStoryObject(
     return error('Missing required fields (id, type, field, old, new) for patch_story_object');
   }
 
-  const validFields = ['name', 'description'];
+  const validFields = ['name', 'description', 'content'];
   if (!validFields.includes(field)) {
     return error(`Invalid field "${field}" for patch_story_object. Valid fields: ${validFields.join(', ')}`, id, type);
   }
@@ -172,7 +172,7 @@ export async function patchOutline(
     return error('Missing required fields (id, field, old, new) for patch_outline');
   }
 
-  const validFields = ['name', 'description'];
+  const validFields = ['name', 'description', 'content'];
   if (!validFields.includes(field)) {
     return error(`Invalid field "${field}" for patch_outline. Valid fields: ${validFields.join(', ')}`, id, 'outline');
   }
@@ -218,7 +218,7 @@ export async function patchOutlineAct(
     return error('Missing required fields (id, field, old, new) for patch_outline_act');
   }
 
-  const validFields = ['name', 'description'];
+  const validFields = ['name', 'description', 'content'];
   if (!validFields.includes(field)) {
     return error(`Invalid field "${field}" for patch_outline_act. Valid fields: ${validFields.join(', ')}`, id, 'act');
   }
@@ -272,7 +272,7 @@ export async function patchOutlineChapter(
     return error('Missing required fields (id, field, old, new) for patch_outline_chapter');
   }
 
-  const validFields = ['name', 'description'];
+  const validFields = ['name', 'description', 'content'];
   if (!validFields.includes(field)) {
     return error(`Invalid field "${field}" for patch_outline_chapter. Valid fields: ${validFields.join(', ')}`, id, 'chapter');
   }

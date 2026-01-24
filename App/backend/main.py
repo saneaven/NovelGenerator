@@ -42,6 +42,9 @@ from .routes.variable_routes import router as variable_router
 # Preset management routes
 from .routes.preset_routes import router as preset_router
 
+# Token counting routes
+from .routes.token_routes import router as token_router
+
 load_dotenv()
 
 app = FastAPI(
@@ -73,6 +76,9 @@ app.include_router(variable_router)
 
 # Include preset management router
 app.include_router(preset_router)
+
+# Include token counting router
+app.include_router(token_router)
 
 # Mount static files for asset storage
 storage_path = Path(__file__).parent / "storage" / "assets"

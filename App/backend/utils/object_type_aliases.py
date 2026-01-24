@@ -3,9 +3,7 @@
 from typing import Dict
 
 # Aliases map external names -> canonical names stored in DB
-OBJECT_TYPE_ALIASES: Dict[str, str] = {
-    'lorebook': 'lorebook_entry',
-}
+OBJECT_TYPE_ALIASES: Dict[str, str] = {}
 
 # Precompute reverse map (canonical -> preferred external)
 REVERSE_OBJECT_TYPE_ALIASES: Dict[str, str] = {

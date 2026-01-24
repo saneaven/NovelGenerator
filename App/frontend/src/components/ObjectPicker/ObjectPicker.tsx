@@ -15,6 +15,8 @@ import ObjectPickerSearch from './ObjectPickerSearch';
 import ObjectPickerGroup from './ObjectPickerGroup';
 import ObjectPickerPreview from './ObjectPickerPreview';
 import { useObjectPickerData } from './useObjectPickerData';
+import { useTokenCount } from '../../hooks/useTokenCount';
+import { useSettingsStore } from '../../store/settingsStore';
 import type { ObjectPickerProps, ObjectPickerItem as PickerItem, ObjectPickerGroup as Group, SelectionState } from './types';
 import './ObjectPicker.css';
 
@@ -65,6 +67,23 @@ function getAllItemIds(groups: Group[]): string[] {
 
   groups.forEach(group => collectIds(group));
   return ids;
+}
+
+/**
+ * Get all items from groups (including deeply nested child groups)
+ */
+function getAllItems(groups: Group[]): PickerItem[] {
+  const items: PickerItem[] = [];
+
+  function collectItems(group: Group) {
+    items.push(...group.items);
+    if (group.childGroups) {
+      group.childGroups.forEach(childGroup => collectItems(childGroup));
+    }
+  }
+
+  groups.forEach(group => collectItems(group));
+  return items;
 }
 
 /**
@@ -170,8 +189,13 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
   emptyMessage,
   showSearch = true,
   showSelectAll = false,
+  showTokenCount = false,
 }) => {
   const { t } = useTranslation();
+
+  // Get settings for token counting
+  const taskConfigs = useSettingsStore(state => state.settings.taskConfigs);
+  const agentConfig = taskConfigs.agent;
   // Internal state
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<ObjectType | null>(null);
@@ -228,6 +252,30 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
     if (selectedCount === allIds.length) return 'checked';
     return 'indeterminate';
   }, [groups, selectedIdSet, excludedIdSet, preSelectedIdSet]);
+
+  // Calculate combined content from selected items for token counting
+  const selectedItemsContent = useMemo(() => {
+    if (!showTokenCount) return '';
+    const allItems = getAllItems(groups);
+    const selectedItems = allItems.filter(item => selectedIdSet.has(item.id));
+    return selectedItems
+      .map(item => item.content || item.description || '')
+      .filter(content => content.length > 0)
+      .join('\n\n');
+  }, [groups, selectedIdSet, showTokenCount]);
+
+  // Token counting for selected items
+  const {
+    tokenCount,
+    isLoading: isCountingTokens,
+    isEstimate: isTokenCountEstimate,
+  } = useTokenCount({
+    text: selectedItemsContent,
+    provider: agentConfig?.provider || 'openrouter',
+    model: agentConfig?.model || '',
+    tokenizerOverride: agentConfig?.advanced?.tokenizerOverride,
+    enabled: showTokenCount && selectedItemsContent.length > 0,
+  });
 
   // Handle select/deselect all toggle
   const handleSelectAllToggle = useCallback(() => {
@@ -350,18 +398,46 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
         )}
 
         {/* Select All Header */}
-        {showSelectAll && selectionMode === 'multi' && (
-          <div className="object-picker-select-all-header">
-            <label className="object-picker-select-all-label">
-              <input
-                type="checkbox"
-                checked={globalSelectionState === 'checked'}
-                ref={(el) => { if (el) el.indeterminate = globalSelectionState === 'indeterminate'; }}
-                onChange={handleSelectAllToggle}
-                disabled={disabled}
-              />
-              <span>{t('objectPicker.selectAll')}</span>
-            </label>
+        {(showSelectAll || showTokenCount) && selectionMode === 'multi' && (
+          <div className="object-picker-header">
+            {/* Token Count (left side) */}
+            {showTokenCount && (
+              <div className="object-picker-token-count">
+                {isCountingTokens ? (
+                  <span className="object-picker-token-spinner" />
+                ) : tokenCount !== null && tokenCount > 0 ? (
+                  <>
+                    <span>{t('objectPicker.tokenCount', { count: tokenCount })}</span>
+                    {isTokenCountEstimate && (
+                      <span
+                        className="object-picker-token-estimate"
+                        title={t('objectPicker.tokenEstimateHint')}
+                      >
+                        ~
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className="object-picker-token-empty">
+                    {t('objectPicker.noTokens')}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Select All (right side) */}
+            {showSelectAll && (
+              <label className="object-picker-select-all-label">
+                <input
+                  type="checkbox"
+                  checked={globalSelectionState === 'checked'}
+                  ref={(el) => { if (el) el.indeterminate = globalSelectionState === 'indeterminate'; }}
+                  onChange={handleSelectAllToggle}
+                  disabled={disabled}
+                />
+                <span>{t('objectPicker.selectAll')}</span>
+              </label>
+            )}
           </div>
         )}
 

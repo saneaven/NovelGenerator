@@ -18,9 +18,10 @@ import { PromptManager } from '../../../llm/PromptManager';
 import { PROMPT_TREE, getFirstPromptNode, type PromptNode } from './promptTree';
 import { IconButton } from '../../IconButton';
 import { TextButton } from '../../TextButton';
-import { ChevronLeft, ChevronRight, Document, Copy, Clock, Trash, Edit } from '../../icons';
+import { ChevronLeft, ChevronRight, Document, Copy, Clock, Trash, Edit, Eye } from '../../icons';
 import './PromptsTemplatesPanel.css';
 import TemplateSyntaxHint from './TemplateSyntaxHint';
+import PromptPreviewModal from './PromptPreviewModal';
 import type { PresetListItem } from '../../../types/presets';
 
 type SubTab = 'prompts' | 'fragments' | 'variables';
@@ -319,6 +320,9 @@ const PromptsTemplatesPanel: React.FC = () => {
     // Version history modal
     const [showVersionHistory, setShowVersionHistory] = useState(false);
 
+    // Prompt preview modal
+    const [showPreviewModal, setShowPreviewModal] = useState(false);
+
     // Inline description editing
     const [isEditingDescription, setIsEditingDescription] = useState(false);
     const [editedDescription, setEditedDescription] = useState('');
@@ -585,6 +589,17 @@ const PromptsTemplatesPanel: React.FC = () => {
                                         <>
                                             <TemplateSyntaxHint selectedNode={subTab === 'prompts' ? selectedPrompt : null} />
 
+                                            {/* Preview button (prompts only) */}
+                                            {subTab === 'prompts' && selectedPrompt && editorState && (
+                                                <IconButton
+                                                    icon={<Eye size="sm" />}
+                                                    onClick={() => setShowPreviewModal(true)}
+                                                    title={t('settings.promptEditor.previewPrompt')}
+                                                    size="sm"
+                                                    disabled={editorState.isSaving}
+                                                />
+                                            )}
+
                                             {/* History button */}
                                             {editorState?.versionHistoryProps && (
                                                 <IconButton
@@ -752,6 +767,16 @@ const PromptsTemplatesPanel: React.FC = () => {
                     onClose={() => setShowVersionHistory(false)}
                     onRestoreVersion={handleRestoreComplete}
                     textVersionProps={editorState.versionHistoryProps}
+                />
+            )}
+
+            {/* Prompt preview modal */}
+            {showPreviewModal && selectedPrompt && editorState && (
+                <PromptPreviewModal
+                    isOpen={showPreviewModal}
+                    onClose={() => setShowPreviewModal(false)}
+                    templateContent={editorState.content}
+                    promptNode={selectedPrompt}
                 />
             )}
 

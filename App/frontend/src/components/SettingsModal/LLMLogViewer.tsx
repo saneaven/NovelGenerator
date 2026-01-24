@@ -80,7 +80,7 @@ const LLMLogViewer: React.FC = () => {
 
             {!llmLoggingEnabled && (
                 <div className="log-disabled-notice">
-                    {t('settings.llmLog.disabledNotice')}
+                    {t('settings.llmLog.loggingDisabled')}
                 </div>
             )}
 
@@ -202,7 +202,7 @@ const LLMLogViewer: React.FC = () => {
                     </div>
 
                     <div className="log-info">
-                        {t('settings.llmLog.logInfo', { count: logs.length })}
+                        {t('settings.llmLog.showingEntries', { count: logs.length })}
                     </div>
                 </>
             )}

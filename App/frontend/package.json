@@ -33,6 +33,7 @@
     "diff": "^8.0.2",
     "handlebars": "^4.7.8",
     "i18next": "^25.7.4",
+    "js-tiktoken": "^1.0.18",
     "masonic": "^4.1.0",
     "motion": "^12.23.25",
     "partial-json": "^0.1.7",

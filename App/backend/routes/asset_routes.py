@@ -55,7 +55,7 @@ OBJECT_BINDING_MODELS = {
     "character": Character,
     "organization": Organization,
     "location": Location,
-    "lorebook_entry": LorebookEntry,
+    "lorebook": LorebookEntry,
 }
 
 

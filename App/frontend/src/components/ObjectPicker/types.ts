@@ -89,6 +89,7 @@ export interface ObjectPickerProps {
   className?: string;
   emptyMessage?: string;
   showSearch?: boolean;            // Whether to show search bar (default: true)
+  showTokenCount?: boolean;        // Whether to show total token count of selected items
 }
 
 /** Props for ObjectPickerGroup */
