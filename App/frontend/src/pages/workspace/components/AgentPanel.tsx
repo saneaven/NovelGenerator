@@ -956,6 +956,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                         showTokenCount={true}
                     />
                 </div>
+
                 <div className="agent-controls-row">
                     <AgentModeToggle
                         currentMode={mode}

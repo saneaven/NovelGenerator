@@ -4,6 +4,7 @@ import { ChevronDown } from '../icons';
 import { ActionBadge } from './ActionBadge';
 import { OperationDetails } from './OperationDetails';
 import type { CardMode } from './types';
+import type { ApplicationResult } from '../../toolCall/types';
 
 type StreamingStatus = 'collecting' | 'validating' | 'ready' | 'error';
 type CallStatus = 'validating' | 'pending' | 'failed' | 'accepted' | 'rejected';
@@ -42,6 +43,7 @@ export interface OperationItemProps {
   detailsData?: unknown;
   rawText?: string;
   errorMessage?: string;
+  result?: ApplicationResult;
 }
 
 export const OperationItem: React.FC<OperationItemProps> = ({
@@ -60,6 +62,7 @@ export const OperationItem: React.FC<OperationItemProps> = ({
   detailsData,
   rawText,
   errorMessage,
+  result,
 }) => {
   const { t } = useTranslation();
   const panelId = `tool-call-op-panel-${id}`;
@@ -119,10 +122,9 @@ export const OperationItem: React.FC<OperationItemProps> = ({
 
       {isExpanded && (
         <div id={panelId} className="tool-call-op__details" role="region">
-          <OperationDetails data={detailsData} rawText={rawText} errorMessage={errorMessage} />
+          <OperationDetails data={detailsData} rawText={rawText} errorMessage={errorMessage} result={result} />
         </div>
       )}
     </div>
   );
 };
-

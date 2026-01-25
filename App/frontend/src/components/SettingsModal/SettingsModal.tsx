@@ -5,7 +5,8 @@ import { BaseSidebar } from '../BaseSidebar';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useCredentialsStore } from '../../store/credentialsStore';
 import { useSidebarStore } from '../../store/sidebarStore';
-import type { ProviderCredentials, Settings, AITaskType } from '../../store/settingsStore';
+import type { ProviderCredentials, Settings, AITaskType, ProviderType } from '../../store/settingsStore';
+import { ragService, type RagEmbeddingProfile } from '../../api/ragService';
 import CredentialsPanel from './CredentialsPanel';
 import GeneralPanel from './GeneralPanel';
 import LanguagePanel from './LanguagePanel';
@@ -14,7 +15,8 @@ import ThemePanel from './ThemePanel';
 import AdvancedPanel from './AdvancedPanel';
 import ImageGenPanel from './ImageGenPanel';
 import ProfilePanel from './ProfilePanel';
-import { Settings as SettingsIcon, Lock, Image, Document, Globe, Palette, Wrench, HamburgerMenu, People } from '../icons';
+import RagSearchPanel from './RagSearchPanel';
+import { Settings as SettingsIcon, Lock, Image, Document, Globe, Palette, Wrench, HamburgerMenu, People, List } from '../icons';
 import { TextButton } from '../TextButton';
 import './SettingsModal.css';
 import './_shared-components.css';
@@ -24,7 +26,16 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-type MainTab = 'profile' | 'credentials' | 'general' | 'imageGen' | 'prompts' | 'language' | 'theme' | 'advanced';
+type MainTab =
+  | 'profile'
+  | 'credentials'
+  | 'ragSearch'
+  | 'general'
+  | 'imageGen'
+  | 'prompts'
+  | 'language'
+  | 'theme'
+  | 'advanced';
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const { t } = useTranslation();
@@ -32,6 +43,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const credentialsStore = useCredentialsStore();
   const [localSettings, setLocalSettings] = useState<Settings>(settingsStore.settings);
   const [localCredentials, setLocalCredentials] = useState<ProviderCredentials>(credentialsStore.credentials);
+  const [savedRagProfile, setSavedRagProfile] = useState<RagEmbeddingProfile | null>(null);
+  const [localRagProfile, setLocalRagProfile] = useState<{ provider: ProviderType; model: string }>({
+    provider: 'openai',
+    model: '',
+  });
+  const [isRagProfileLoading, setIsRagProfileLoading] = useState(false);
+  const [ragProfileLoadError, setRagProfileLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [mainTab, setMainTab] = useState<MainTab>('profile');
   const [activeTask, setActiveTask] = useState<AITaskType>('agent');
@@ -50,13 +68,66 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     }
   }, [isOpen, settingsStore.settings]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let cancelled = false;
+    setIsRagProfileLoading(true);
+    setRagProfileLoadError(null);
+
+    ragService
+      .getProfile()
+      .then((profile) => {
+        if (cancelled) return;
+        setSavedRagProfile(profile);
+        if (profile) {
+          setLocalRagProfile({ provider: profile.provider as ProviderType, model: profile.model });
+        } else {
+          setLocalRagProfile({ provider: 'openai', model: '' });
+        }
+      })
+      .catch((err: any) => {
+        if (cancelled) return;
+        console.error('Failed to load RAG profile:', err);
+        setSavedRagProfile(null);
+        setLocalRagProfile({ provider: 'openai', model: '' });
+        setRagProfileLoadError(String(err?.message || err || 'Failed to load profile'));
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setIsRagProfileLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
+
   const handleSave = async () => {
+    const ragProvider = String(localRagProfile.provider || '').trim();
+    const ragModel = String(localRagProfile.model || '').trim();
+    const ragChanged = savedRagProfile
+      ? savedRagProfile.provider !== ragProvider || savedRagProfile.model !== ragModel
+      : Boolean(ragProvider && ragModel);
+
+    if (ragChanged && (!ragProvider || !ragModel)) {
+      alert(t('settings.ragSearch.saveValidationError'));
+      return;
+    }
+
     setIsSaving(true);
     try {
       settingsStore.updateSettings(localSettings);
       await settingsStore.saveToServer();
 
       credentialsStore.setCredentials(localCredentials);
+
+      if (ragChanged) {
+        const updated = await ragService.updateProfile({ provider: ragProvider, model: ragModel });
+        setSavedRagProfile(updated);
+        setLocalRagProfile({ provider: updated.provider as ProviderType, model: updated.model });
+      }
+
       onClose();
     } catch (error) {
       console.error('Failed to save settings:', error);
@@ -69,6 +140,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const handleCancel = () => {
     setLocalSettings(settingsStore.settings);
     setLocalCredentials(credentialsStore.credentials);
+    if (savedRagProfile) {
+      setLocalRagProfile({ provider: savedRagProfile.provider as ProviderType, model: savedRagProfile.model });
+    } else {
+      setLocalRagProfile({ provider: 'openai', model: '' });
+    }
     onClose();
   };
 
@@ -130,6 +206,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             >
               <Lock size="md" />
               <span>{t('settings.tabs.credentials')}</span>
+            </button>
+          </li>
+          <li>
+            <button
+              className={`settings-mobile-sidebar-item ${mainTab === 'ragSearch' ? 'active' : ''}`}
+              onClick={() => { setMainTab('ragSearch'); closeSidebar('__global__'); }}
+            >
+              <List size="md" />
+              <span>{t('settings.tabs.ragSearch')}</span>
             </button>
           </li>
           <li>
@@ -206,6 +291,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           <span className="tab-label">{t('settings.tabs.credentials')}</span>
         </button>
         <button
+          className={`main-tab ${mainTab === 'ragSearch' ? 'active' : ''}`}
+          onClick={() => setMainTab('ragSearch')}
+        >
+          <span className="tab-icon"><List size="sm" /></span>
+          <span className="tab-label">{t('settings.tabs.ragSearch')}</span>
+        </button>
+        <button
           className={`main-tab ${mainTab === 'general' ? 'active' : ''}`}
           onClick={() => setMainTab('general')}
         >
@@ -257,6 +349,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           <CredentialsPanel
             credentials={localCredentials}
             onChange={setLocalCredentials}
+          />
+        )}
+
+        {mainTab === 'ragSearch' && (
+          <RagSearchPanel
+            profile={localRagProfile}
+            savedProfile={savedRagProfile}
+            credentials={localCredentials}
+            mainLanguage={localSettings.mainLanguage}
+            loading={isRagProfileLoading}
+            loadError={ragProfileLoadError}
+            onChange={setLocalRagProfile}
           />
         )}
 

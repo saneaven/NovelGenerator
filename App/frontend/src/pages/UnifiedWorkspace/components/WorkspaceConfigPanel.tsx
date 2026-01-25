@@ -15,7 +15,9 @@ import {
   type ProjectExportPreviewResponse,
   type ProjectExportPreviewAssetItem,
 } from '../../../api/projectService';
+import { ragService, type RagProjectStatusResponse } from '../../../api/ragService';
 import { useErrorStore } from '../../../store/errorStore';
+import { useCredentialsStore } from '../../../store/credentialsStore';
 import { List, Trash, Refresh, Download } from '../../../components/icons';
 import './WorkspaceConfigPanel.css';
 
@@ -78,6 +80,7 @@ function formatBytes(bytes: number): string {
 const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }) => {
   const { t } = useTranslation();
   const { showError } = useErrorStore();
+  const credentials = useCredentialsStore((state) => state.credentials);
 
   const [policy, setPolicy] = useState<ImageCleanupPolicy>(() => loadPolicy(projectId));
   const [preview, setPreview] = useState<ImageCleanupPreviewResponse | null>(null);
@@ -94,6 +97,11 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
   const [isExportPreviewing, setIsExportPreviewing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [lastExportSummary, setLastExportSummary] = useState<string | null>(null);
+
+  const [ragStatus, setRagStatus] = useState<RagProjectStatusResponse | null>(null);
+  const [isRagLoading, setIsRagLoading] = useState(false);
+  const [isRagReindexing, setIsRagReindexing] = useState(false);
+  const [lastRagSummary, setLastRagSummary] = useState<string | null>(null);
 
   useEffect(() => {
     setPolicy(loadPolicy(projectId));
@@ -123,6 +131,23 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
       // ignore
     }
   }, [projectId, exportOptions]);
+
+  const loadRagStatus = useCallback(async () => {
+    setIsRagLoading(true);
+    try {
+      const status = await ragService.getStatus(projectId);
+      setRagStatus(status);
+    } catch (err: any) {
+      console.error('Failed to load RAG status:', err);
+      setRagStatus(null);
+    } finally {
+      setIsRagLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    loadRagStatus();
+  }, [loadRagStatus]);
 
   const candidates = preview?.candidates ?? [];
 
@@ -335,6 +360,48 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
     }
   }, [exportPreview, exportSelectedIds, exportOptions, projectId, showError, t]);
 
+  const handleRagReindex = useCallback(async () => {
+    setIsRagReindexing(true);
+    setLastRagSummary(null);
+
+    try {
+      const profile = ragStatus?.profile;
+      if (!profile) {
+        showError('RAG', 'Embedding profile is not configured. Set it in Settings > RAG Search.');
+        return;
+      }
+
+      const provider = profile.provider;
+      const config: any = {};
+      if (provider === 'custom') {
+        config.api_key = credentials.custom?.apiKey || undefined;
+        config.base_url = credentials.custom?.baseUrl || undefined;
+      } else {
+        config.api_key = (credentials as any)[provider]?.apiKey || undefined;
+      }
+
+      if (!config.api_key) {
+        showError('RAG', `Missing API key for provider '${provider}' (Settings > Credentials).`);
+        return;
+      }
+      if (provider === 'custom' && !config.base_url) {
+        showError('RAG', 'Missing baseUrl for custom provider (Settings > Credentials).');
+        return;
+      }
+
+      const res = await ragService.reindex(projectId, { config });
+      setLastRagSummary(
+        `Reindex complete: rebuilt ${res.rebuilt_sources}/${res.indexed_sources} (missing main_language: ${res.missing_main_language_sources}).`
+      );
+      await loadRagStatus();
+    } catch (err: any) {
+      console.error('RAG reindex failed:', err);
+      showError('RAG', 'Failed to reindex project.');
+    } finally {
+      setIsRagReindexing(false);
+    }
+  }, [credentials, loadRagStatus, projectId, ragStatus?.profile, showError]);
+
   return (
     <div className="workspace-config-panel">
       <div className="workspace-config-card">
@@ -342,6 +409,66 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
         <p className="workspace-config-hint">
           {t('workspaceConfig.imageCleanupHint')}
         </p>
+      </div>
+
+      <div className="workspace-config-card">
+        <h3>{t('workspaceConfig.rag.title')}</h3>
+        <p className="workspace-config-hint">{t('workspaceConfig.rag.hint')}</p>
+
+        {isRagLoading ? (
+          <div className="workspace-config-empty">{t('common.loading')}</div>
+        ) : !ragStatus ? (
+          <div className="workspace-config-empty">{t('workspaceConfig.rag.statusUnavailable')}</div>
+        ) : !ragStatus.profile ? (
+          <div className="workspace-config-empty">{t('workspaceConfig.rag.profileMissing')}</div>
+        ) : (
+          <div className="workspace-config-preview-summary workspace-config-preview-summary--stack">
+            <div>
+              <strong>{t('workspaceConfig.rag.profile')}</strong> {ragStatus.profile.provider} / {ragStatus.profile.model}
+            </div>
+            <div>
+              <strong>{t('workspaceConfig.rag.dimensions')}</strong> {ragStatus.profile.dimensions ?? t('workspaceConfig.rag.unknown')}
+            </div>
+            <div>
+              <strong>{t('workspaceConfig.rag.sources')}</strong> {ragStatus.ready_sources}/{ragStatus.total_sources}
+              {ragStatus.missing_main_language_sources > 0 && (
+                <span> · {t('workspaceConfig.rag.missingMainLanguage', { count: ragStatus.missing_main_language_sources })}</span>
+              )}
+              {ragStatus.error_sources > 0 && (
+                <span> · {t('workspaceConfig.rag.errors', { count: ragStatus.error_sources })}</span>
+              )}
+            </div>
+            {ragStatus.last_indexed_at && (
+              <div>
+                <strong>{t('workspaceConfig.rag.lastIndexed')}</strong> {ragStatus.last_indexed_at}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="workspace-config-actions">
+          <TextButton
+            onClick={loadRagStatus}
+            variant="secondary"
+            size="sm"
+            iconLeft={<Refresh size="xs" />}
+            loading={isRagLoading}
+          >
+            {t('workspaceConfig.rag.refresh')}
+          </TextButton>
+          <TextButton
+            onClick={handleRagReindex}
+            variant="primary"
+            size="sm"
+            iconLeft={<Refresh size="xs" />}
+            loading={isRagReindexing}
+            disabled={!ragStatus?.profile}
+          >
+            {t('workspaceConfig.rag.reindex')}
+          </TextButton>
+        </div>
+
+        {lastRagSummary && <div className="workspace-config-result">{lastRagSummary}</div>}
       </div>
 
       <div className="workspace-config-card">

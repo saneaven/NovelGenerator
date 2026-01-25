@@ -106,10 +106,35 @@
       "language": "Language",
       "general": "General",
       "credentials": "Credentials",
+      "ragSearch": "RAG Search",
       "theme": "Theme",
       "imageGen": "Image Generation",
       "advanced": "Advanced",
       "prompts": "Prompts & Templates"
+    },
+    "ragSearch": {
+      "title": "RAG Search",
+      "description": "Configure embedding provider/model for RAG indexing and search.",
+      "provider": "Provider",
+      "providerHint": "Uses the same credentials you set in Settings > Credentials.",
+      "model": "Embedding Model",
+      "modelPlaceholder": "e.g. text-embedding-3-large",
+      "modelHint": "This model is used for indexing and search (embeddings).",
+      "browse": "Browse models",
+      "indexLanguage": "Index language",
+      "indexLanguageHint": "RAG indexes only main_language.",
+      "dimensions": "Embedding dimensions",
+      "dimensionsUnknown": "Unknown (detected on first index/search)",
+      "dimensionsHint": "Detected automatically from the embedding response.",
+      "rulesTitle": "Indexing rules",
+      "rules": {
+        "mainLanguageOnly": "Indexes only main_language",
+        "excludesMarkdownAssets": "Excludes images, tables, and code blocks",
+        "orderedResults": "Search results are returned by type/chapter order (not relevance)",
+        "reindexRequired": "Changing provider/model wipes existing vectors; reindex per project"
+      },
+      "loadErrorTitle": "Failed to load RAG profile",
+      "saveValidationError": "Please set provider and model for RAG Search."
     },
     "language": {
       "title": "Language Settings",
@@ -868,6 +893,21 @@
   "workspaceConfig": {
     "title": "Config",
     "imageCleanupHint": "Image cleanup uses the last manual-save state. Autosaved (local) edits are not reflected until you save.",
+    "rag": {
+      "title": "RAG Index",
+      "hint": "Indexes main language only (excludes images/tables/code blocks). Results are ordered by type and chapter order.",
+      "profileMissing": "Embedding profile is not configured. Set it in Settings > RAG Search.",
+      "statusUnavailable": "RAG status is unavailable.",
+      "profile": "Profile:",
+      "dimensions": "Dimensions:",
+      "unknown": "unknown",
+      "sources": "Sources (ready/total):",
+      "missingMainLanguage": "missing main_language: {{count}}",
+      "errors": "errors: {{count}}",
+      "lastIndexed": "Last indexed:",
+      "refresh": "Refresh",
+      "reindex": "Reindex"
+    },
     "projectExport": {
       "title": "Project Export (.nbproj)",
       "hint": "Exports include the latest server-saved state. Thumbnails are regenerated on import to save space.",

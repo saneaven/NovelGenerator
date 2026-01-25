@@ -25,6 +25,7 @@ from .routes.agent_routes import router as agent_router
 from .routes.settings_routes import router as settings_router
 from .routes.credentials_backup_routes import router as credentials_backup_router
 from .routes.prompt_routes import router as prompt_router
+from .routes.rag_routes import router as rag_router
 
 # New unified translation system routes
 from .routes.unified_object_routes import router as unified_object_router
@@ -60,6 +61,7 @@ app.include_router(agent_router)
 app.include_router(settings_router)
 app.include_router(credentials_backup_router)
 app.include_router(prompt_router)
+app.include_router(rag_router)
 
 # Include new unified translation system routers
 app.include_router(unified_object_router, prefix="/api/v1", tags=["objects"])

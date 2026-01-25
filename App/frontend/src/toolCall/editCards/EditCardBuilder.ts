@@ -301,6 +301,18 @@ const TOOL_META: Record<string, ToolMeta> = {
       return `id: ${args.id}`;
     },
   },
+  rag_search: {
+    editType: 'init',
+    title: 'RAG Search',
+    description: 'Search project knowledge base',
+    summary: (args) => {
+      const queries = (args.queries as unknown[]) ?? [];
+      if (Array.isArray(queries)) {
+        return `${queries.length} query(s)`;
+      }
+      return 'queries';
+    },
+  },
 };
 
 // ============================================================================

@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useEffect, useCallback } from 'react';
 import { humanizePreviewKey } from '../../agent/utils/toolCallPreview';
+import type { ApplicationResult } from '../../toolCall/types';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -22,9 +23,10 @@ export interface OperationDetailsProps {
   data?: unknown;
   rawText?: string;
   errorMessage?: string;
+  result?: ApplicationResult;
 }
 
-export const OperationDetails: React.FC<OperationDetailsProps> = ({ data, rawText, errorMessage }) => {
+export const OperationDetails: React.FC<OperationDetailsProps> = ({ data, rawText, errorMessage, result }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
 
@@ -41,36 +43,46 @@ export const OperationDetails: React.FC<OperationDetailsProps> = ({ data, rawTex
     const el = panelRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [data, rawText]);
+  }, [data, rawText, result?.message]);
 
   const fields = useMemo(() => {
+    const resultField = result
+      ? (() => {
+          const formatted = formatValue(result.message);
+          return [{ key: 'result', label: 'Result', ...formatted }];
+        })()
+      : [];
+
     if (isRecord(data)) {
-      return Object.entries(data).map(([key, value]) => {
+      const base = Object.entries(data).map(([key, value]) => {
         const formatted = formatValue(value);
         return { key, label: humanizePreviewKey(key), ...formatted };
       });
+      return [...resultField, ...base];
     }
 
     if (Array.isArray(data)) {
       const formatted = formatValue(data);
-      return [{ key: 'array', label: 'Data', ...formatted }];
+      return [...resultField, { key: 'array', label: 'Data', ...formatted }];
     }
 
     if (typeof data === 'string') {
-      return [{ key: 'text', label: 'Data', text: data, isCode: false }];
+      return [...resultField, { key: 'text', label: 'Data', text: data, isCode: false }];
     }
 
     if (data !== undefined) {
       const formatted = formatValue(data);
-      return [{ key: 'value', label: 'Data', ...formatted }];
+      return [...resultField, { key: 'value', label: 'Data', ...formatted }];
     }
 
     if (rawText) {
-      return [{ key: 'raw', label: 'Raw', text: rawText, isCode: true }];
+      return [...resultField, { key: 'raw', label: 'Raw', text: rawText, isCode: true }];
     }
 
-    return [{ key: 'empty', label: 'Data', text: '(empty)', isCode: false }];
-  }, [data, rawText]);
+    return resultField.length > 0
+      ? resultField
+      : [{ key: 'empty', label: 'Data', text: '(empty)', isCode: false }];
+  }, [data, rawText, result]);
 
   return (
     <div className="tool-call-details">
@@ -88,4 +100,3 @@ export const OperationDetails: React.FC<OperationDetailsProps> = ({ data, rawTex
     </div>
   );
 };
-

@@ -508,6 +508,32 @@ const READ_MANUSCRIPT: ToolSchema = {
   },
 };
 
+const RAG_SEARCH: ToolSchema = {
+  name: 'rag_search',
+  description: 'Search project knowledge base (story objects → outline → manuscript). Results are returned in deterministic order (not by relevance).',
+  category: 'read',
+  target: 'story_object',
+  parameters: {
+    type: 'object',
+    properties: {
+      queries: {
+        type: 'array',
+        description: 'Array of search queries. Backend embeds and searches.',
+        items: { type: 'string' },
+      },
+      top_k_per_query: {
+        type: 'integer',
+        description: 'Candidate pool size per query (similarity top-K). Final ordering is not by similarity.',
+      },
+      neighbor_window: {
+        type: 'integer',
+        description: 'Optional neighbor expansion window (same source_id, chunk_index +/- window).',
+      },
+    },
+    required: ['queries'],
+  },
+};
+
 // ============================================================================
 // SCHEMA REGISTRY CLASS
 // ============================================================================
@@ -556,6 +582,7 @@ class SchemaRegistryClass {
     this.register(READ_STORY_OBJECT);
     this.register(READ_OUTLINE);
     this.register(READ_MANUSCRIPT);
+    this.register(RAG_SEARCH);
   }
 
   register(schema: ToolSchema): void {
@@ -681,6 +708,7 @@ export const READ_TOOL_NAMES = new Set([
   'read_story_object',
   'read_outline',
   'read_manuscript',
+  'rag_search',
 ]);
 
 /** Check if a tool name is a read tool */
@@ -762,6 +790,7 @@ export const AGENT_TOOLS = [
   READ_STORY_OBJECT,
   READ_OUTLINE,
   READ_MANUSCRIPT,
+  RAG_SEARCH,
 ].map(s => ({ name: s.name, description: s.description, parameters: s.parameters }));
 
 /** All agent tool names for validation */
@@ -784,7 +813,7 @@ const TOOL_SET_SCHEMAS: Record<ToolSetName, ToolSchema[]> = {
     REPLACE_OUTLINE, REPLACE_OUTLINE_ACT, REPLACE_OUTLINE_CHAPTER,
     PATCH_BASIC_INFO, PATCH_STORY_OBJECT, PATCH_MANUSCRIPT,
     PATCH_OUTLINE, PATCH_OUTLINE_ACT, PATCH_OUTLINE_CHAPTER,
-    READ_STORY_OBJECT, READ_OUTLINE, READ_MANUSCRIPT,
+    READ_STORY_OBJECT, READ_OUTLINE, READ_MANUSCRIPT, RAG_SEARCH,
   ],
   manuscript: [REPLACE_MANUSCRIPT, PATCH_MANUSCRIPT],
   storyObject: [

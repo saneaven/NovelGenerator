@@ -11,6 +11,7 @@ import './ToolCallCard.css';
 
 function getAction(toolName: string): string | undefined {
   if (!toolName) return undefined;
+  if (toolName === 'rag_search') return 'read';
   if (toolName.startsWith('create_')) return 'create';
   if (toolName.startsWith('delete_')) return 'delete';
   if (toolName.startsWith('replace_')) return 'replace';
@@ -24,6 +25,7 @@ function getType(toolName: string, args: Record<string, unknown> | undefined): s
   const argType = args?.type;
   if (typeof argType === 'string' && argType.trim()) return argType;
 
+  if (toolName === 'rag_search') return 'rag';
   if (toolName.includes('basic_info')) return 'basic_info';
   if (toolName.includes('manuscript')) return 'manuscript';
   if (toolName.includes('outline_act')) return 'act';
@@ -287,6 +289,7 @@ export const ToolCallCardContainer: React.FC<ToolCallCardContainerProps> = ({
               isCheckboxDisabled={selectionDisabled || isValidationFailed}
               onToggleSelected={() => toggleSelection(card.id)}
               detailsData={args}
+              result={card.toolCall.result}
               errorMessage={card.toolCall.reason}
             />
           );
