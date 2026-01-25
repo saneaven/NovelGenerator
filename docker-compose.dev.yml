@@ -1,0 +1,23 @@
+services:
+  backend:
+    environment:
+      UVICORN_RELOAD: "1"
+      WATCHFILES_FORCE_POLLING: "true"
+    volumes:
+      - ./App/backend:/app/App/backend
+      - assets_data:/app/App/backend/storage/assets
+
+  frontend:
+    environment:
+      FRONTEND_MODE: "dev"
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - ./App/frontend:/app/App/frontend
+      - frontend_node_modules:/app/App/frontend/node_modules
+
+  caddy:
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/Caddyfile.dev:/etc/caddy/Caddyfile:ro

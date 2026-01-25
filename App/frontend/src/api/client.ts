@@ -2,7 +2,8 @@
  * Base API client with authentication and error handling
  */
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`;
+const rawBaseUrl = (import.meta.env.VITE_API_URL || '').trim();
+export const API_BASE_URL = rawBaseUrl ? rawBaseUrl.replace(/\/+$/, '') : '';
 
 export class ApiError extends Error {
   status: number;
@@ -70,7 +71,8 @@ class ApiClient {
     customHeaders?: Record<string, string>,
     requestOptions?: RequestOptions
   ): Promise<T> {
-    const url = `${this.baseURL}${path}`;
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    const url = `${this.baseURL}${normalizedPath}`;
 
     const init: RequestInit = {
       method,

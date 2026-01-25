@@ -247,7 +247,7 @@ export const assetService = {
      */
     async getAssetByUrl(projectId: string, fileUrl: string): Promise<Asset | null> {
         try {
-            // Extract path from full URL (e.g., "http://localhost:8000/storage/assets/xxx.png" -> "/storage/assets/xxx.png")
+            // Extract path from full URL (e.g., "https://example.com/storage/assets/xxx.png" -> "/storage/assets/xxx.png")
             let urlPath: string;
             try {
                 urlPath = new URL(fileUrl).pathname;

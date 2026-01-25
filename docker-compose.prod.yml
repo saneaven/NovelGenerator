@@ -1,0 +1,17 @@
+services:
+  backend:
+    environment:
+      UVICORN_RELOAD: "0"
+    volumes:
+      - assets_data:/app/App/backend/storage/assets
+
+  frontend:
+    environment:
+      FRONTEND_MODE: "prod"
+
+  caddy:
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/Caddyfile.prod:/etc/caddy/Caddyfile:ro

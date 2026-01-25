@@ -1,6 +1,8 @@
 *.pyc
 *.pyc.*
 *.env
+.env.dev
+.env.prod
 /App/backend/storage/assets
 nul
 /App/backend/__pycache__
