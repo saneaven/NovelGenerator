@@ -115,6 +115,11 @@ async def get_user_settings(
         retryConfig=retry_config_dict,  # type: ignore
         imageGenConfig=image_gen_config_dict,  # type: ignore
         nativeOutputMode=settings.native_output_mode,
+        ragSearchEnabled=getattr(settings, "rag_search_enabled", False),
+        ragSearchTopKPerQuery=getattr(settings, "rag_search_top_k_per_query", 20),
+        ragSearchNeighborWindow=getattr(settings, "rag_search_neighbor_window", 0),
+        ragSearchMaxPrimaryChunks=getattr(settings, "rag_search_max_primary_chunks", 20),
+        ragSearchMaxTotalChunks=getattr(settings, "rag_search_max_total_chunks", 60),
         patchAutoRetry=getattr(settings, 'patch_auto_retry', True),
         llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
         toolCallHistoryLimit=getattr(settings, 'tool_call_history_limit', 5),
@@ -179,6 +184,21 @@ async def update_user_settings(
     if update_data.nativeOutputMode is not None:
         settings.native_output_mode = update_data.nativeOutputMode  # type: ignore
 
+    if update_data.ragSearchEnabled is not None:
+        settings.rag_search_enabled = update_data.ragSearchEnabled  # type: ignore
+
+    if update_data.ragSearchTopKPerQuery is not None:
+        settings.rag_search_top_k_per_query = update_data.ragSearchTopKPerQuery  # type: ignore
+
+    if update_data.ragSearchNeighborWindow is not None:
+        settings.rag_search_neighbor_window = update_data.ragSearchNeighborWindow  # type: ignore
+
+    if update_data.ragSearchMaxPrimaryChunks is not None:
+        settings.rag_search_max_primary_chunks = update_data.ragSearchMaxPrimaryChunks  # type: ignore
+
+    if update_data.ragSearchMaxTotalChunks is not None:
+        settings.rag_search_max_total_chunks = update_data.ragSearchMaxTotalChunks  # type: ignore
+
     if update_data.patchAutoRetry is not None:
         settings.patch_auto_retry = update_data.patchAutoRetry  # type: ignore
 
@@ -231,6 +251,11 @@ async def update_user_settings(
         retryConfig=retry_config_dict,  # type: ignore
         imageGenConfig=image_gen_config_dict,  # type: ignore
         nativeOutputMode=settings.native_output_mode,
+        ragSearchEnabled=getattr(settings, "rag_search_enabled", False),
+        ragSearchTopKPerQuery=getattr(settings, "rag_search_top_k_per_query", 20),
+        ragSearchNeighborWindow=getattr(settings, "rag_search_neighbor_window", 0),
+        ragSearchMaxPrimaryChunks=getattr(settings, "rag_search_max_primary_chunks", 20),
+        ragSearchMaxTotalChunks=getattr(settings, "rag_search_max_total_chunks", 60),
         patchAutoRetry=getattr(settings, 'patch_auto_retry', True),
         llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
         toolCallHistoryLimit=getattr(settings, 'tool_call_history_limit', 5),
@@ -298,6 +323,11 @@ async def update_task_config(
         retryConfig=retry_config_dict,  # type: ignore
         imageGenConfig=image_gen_config_dict,  # type: ignore
         nativeOutputMode=settings.native_output_mode,
+        ragSearchEnabled=getattr(settings, "rag_search_enabled", False),
+        ragSearchTopKPerQuery=getattr(settings, "rag_search_top_k_per_query", 20),
+        ragSearchNeighborWindow=getattr(settings, "rag_search_neighbor_window", 0),
+        ragSearchMaxPrimaryChunks=getattr(settings, "rag_search_max_primary_chunks", 20),
+        ragSearchMaxTotalChunks=getattr(settings, "rag_search_max_total_chunks", 60),
         patchAutoRetry=getattr(settings, 'patch_auto_retry', True),
         llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
         toolCallHistoryLimit=getattr(settings, 'tool_call_history_limit', 5),
@@ -357,6 +387,11 @@ async def sync_settings_from_client(
             retry_config=client_settings.get('retryConfig', default_retry_config),
             image_gen_config=client_settings.get('imageGenConfig', default_image_gen_config),
             native_output_mode=client_settings.get('nativeOutputMode', False),
+            rag_search_enabled=client_settings.get('ragSearchEnabled', False),
+            rag_search_top_k_per_query=client_settings.get('ragSearchTopKPerQuery', 20),
+            rag_search_neighbor_window=client_settings.get('ragSearchNeighborWindow', 0),
+            rag_search_max_primary_chunks=client_settings.get('ragSearchMaxPrimaryChunks', 20),
+            rag_search_max_total_chunks=client_settings.get('ragSearchMaxTotalChunks', 60),
             patch_auto_retry=client_settings.get('patchAutoRetry', True),
             llm_logging_enabled=client_settings.get('llmLoggingEnabled', False),
             tool_call_history_limit=client_settings.get('toolCallHistoryLimit', 5),
@@ -375,6 +410,11 @@ async def sync_settings_from_client(
         settings.retry_config = client_settings.get('retryConfig', settings.retry_config or default_retry_config)  # type: ignore
         settings.image_gen_config = client_settings.get('imageGenConfig', settings.image_gen_config or default_image_gen_config)  # type: ignore
         settings.native_output_mode = client_settings.get('nativeOutputMode', settings.native_output_mode)  # type: ignore
+        settings.rag_search_enabled = client_settings.get('ragSearchEnabled', getattr(settings, 'rag_search_enabled', False))  # type: ignore
+        settings.rag_search_top_k_per_query = client_settings.get('ragSearchTopKPerQuery', getattr(settings, 'rag_search_top_k_per_query', 20))  # type: ignore
+        settings.rag_search_neighbor_window = client_settings.get('ragSearchNeighborWindow', getattr(settings, 'rag_search_neighbor_window', 0))  # type: ignore
+        settings.rag_search_max_primary_chunks = client_settings.get('ragSearchMaxPrimaryChunks', getattr(settings, 'rag_search_max_primary_chunks', 20))  # type: ignore
+        settings.rag_search_max_total_chunks = client_settings.get('ragSearchMaxTotalChunks', getattr(settings, 'rag_search_max_total_chunks', 60))  # type: ignore
         settings.patch_auto_retry = client_settings.get('patchAutoRetry', getattr(settings, 'patch_auto_retry', True))  # type: ignore
         settings.llm_logging_enabled = client_settings.get('llmLoggingEnabled', getattr(settings, 'llm_logging_enabled', False))  # type: ignore
         settings.tool_call_history_limit = client_settings.get('toolCallHistoryLimit', getattr(settings, 'tool_call_history_limit', 5))  # type: ignore

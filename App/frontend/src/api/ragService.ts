@@ -18,6 +18,7 @@ export interface RagProviderConfig {
 }
 
 export interface RagProjectStatusResponse {
+  enabled: boolean;
   profile?: RagEmbeddingProfile | null;
   total_sources: number;
   ready_sources: number;
@@ -108,4 +109,3 @@ export const ragService = {
     return await apiClient.post<RagSearchResponse>(`/api/v1/projects/${projectId}/rag/search`, request);
   },
 };
-

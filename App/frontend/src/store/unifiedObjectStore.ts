@@ -17,6 +17,7 @@ import { create } from 'zustand';
 import { unifiedObjectService } from '../api/unifiedObjectService';
 import { ragService } from '../api/ragService';
 import { useCredentialsStore } from './credentialsStore';
+import { useSettingsStore } from './settingsStore';
 import type {
   UnifiedObject,
   ObjectType,
@@ -148,6 +149,11 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     const { projectId, objectType, objectId } = args;
     if (!projectId) return;
 
+    const ragEnabled = useSettingsStore.getState().settings.ragSearchEnabled;
+    if (!ragEnabled) return;
+
+    if (objectType === 'basic_info' || objectType === 'guidelines') return;
+
     const profile = await getRagProfileCached();
     if (!profile?.provider || !profile?.model) return;
 
@@ -169,6 +175,11 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
   }): Promise<void> => {
     const { projectId, objectType, objectId } = args;
     if (!projectId) return;
+
+    const ragEnabled = useSettingsStore.getState().settings.ragSearchEnabled;
+    if (!ragEnabled) return;
+
+    if (objectType === 'basic_info' || objectType === 'guidelines') return;
 
     try {
       await ragService.deleteObject(projectId, { object_type: objectType, object_id: objectId });

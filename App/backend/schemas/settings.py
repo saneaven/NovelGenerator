@@ -183,6 +183,11 @@ class UserSettingsResponse(BaseModel):
     retryConfig: RetryConfig = Field(default_factory=RetryConfig)
     imageGenConfig: ImageGenConfig = Field(default_factory=ImageGenConfig)
     nativeOutputMode: bool = False
+    ragSearchEnabled: bool = False
+    ragSearchTopKPerQuery: int = Field(default=20, ge=1, le=200)
+    ragSearchNeighborWindow: int = Field(default=0, ge=0, le=20)
+    ragSearchMaxPrimaryChunks: int = Field(default=20, ge=1, le=200)
+    ragSearchMaxTotalChunks: int = Field(default=60, ge=1, le=500)
     patchAutoRetry: bool = True
     llmLoggingEnabled: bool = False
     toolCallHistoryLimit: int = 5
@@ -204,6 +209,11 @@ class UserSettingsUpdate(BaseModel):
     retryConfig: Optional[RetryConfig] = None
     imageGenConfig: Optional[ImageGenConfig] = None
     nativeOutputMode: Optional[bool] = None
+    ragSearchEnabled: Optional[bool] = None
+    ragSearchTopKPerQuery: Optional[int] = Field(default=None, ge=1, le=200)
+    ragSearchNeighborWindow: Optional[int] = Field(default=None, ge=0, le=20)
+    ragSearchMaxPrimaryChunks: Optional[int] = Field(default=None, ge=1, le=200)
+    ragSearchMaxTotalChunks: Optional[int] = Field(default=None, ge=1, le=500)
     patchAutoRetry: Optional[bool] = None
     llmLoggingEnabled: Optional[bool] = None
     toolCallHistoryLimit: Optional[int] = None

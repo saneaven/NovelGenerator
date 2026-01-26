@@ -11,6 +11,7 @@ from ..database import get_db
 from ..models.db_models import (
     User,
     Project,
+    UserSettings,
     BasicInfo,
     Guidelines,
     Character,
@@ -47,6 +48,16 @@ from ..services.rag_search_service import search_project
 
 
 router = APIRouter(prefix="/api/v1", tags=["rag"])
+
+
+def _is_rag_enabled(db: Session, *, user_id: UUID) -> bool:
+    settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
+    return bool(getattr(settings, "rag_search_enabled", False)) if settings else False
+
+
+def _require_rag_enabled(db: Session, *, user_id: UUID) -> None:
+    if not _is_rag_enabled(db, user_id=user_id):
+        raise HTTPException(status_code=400, detail="RAG Search is disabled (Settings > RAG Search)")
 
 
 def _get_project_or_404(db: Session, *, user_id: UUID, project_id: UUID) -> Project:
@@ -132,7 +143,9 @@ async def get_rag_status(
     db: Session = Depends(get_db),
 ):
     _get_project_or_404(db, user_id=current_user.id, project_id=project_id)
+    enabled = _is_rag_enabled(db, user_id=current_user.id)
     status_data = get_project_status(db, user_id=current_user.id, project_id=project_id)
+    status_data["enabled"] = enabled
     return RagProjectStatusResponse(**status_data)
 
 
@@ -144,6 +157,7 @@ async def rag_index_object(
     db: Session = Depends(get_db),
 ):
     _get_project_or_404(db, user_id=current_user.id, project_id=project_id)
+    _require_rag_enabled(db, user_id=current_user.id)
     _ensure_object_in_project(db, project_id=project_id, object_type=request.object_type, object_id=request.object_id)
 
     profile = get_active_profile(db, user_id=current_user.id)
@@ -182,6 +196,7 @@ async def rag_delete_object(
     db: Session = Depends(get_db),
 ):
     _get_project_or_404(db, user_id=current_user.id, project_id=project_id)
+    _require_rag_enabled(db, user_id=current_user.id)
     deleted = delete_object_index(
         db,
         user_id=current_user.id,
@@ -200,6 +215,7 @@ async def rag_reindex_project(
     db: Session = Depends(get_db),
 ):
     _get_project_or_404(db, user_id=current_user.id, project_id=project_id)
+    _require_rag_enabled(db, user_id=current_user.id)
 
     profile = get_active_profile(db, user_id=current_user.id)
     if not profile:
@@ -235,6 +251,7 @@ async def rag_search(
     db: Session = Depends(get_db),
 ):
     _get_project_or_404(db, user_id=current_user.id, project_id=project_id)
+    _require_rag_enabled(db, user_id=current_user.id)
 
     profile = get_active_profile(db, user_id=current_user.id)
     if not profile:

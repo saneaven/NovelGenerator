@@ -10,6 +10,7 @@ import {
   validateTypeMapping,
   validateRequiredId,
   validatePatchRequiredFields,
+  validateRagSearchEnabled,
   validateObjectExists,
   validatePatchApplicable,
   validateOutlineParentExists,
@@ -122,6 +123,7 @@ export const TOOL_VALIDATORS: Record<string, Validator[]> = {
   read_story_object: [validateTypeMapping, validateRequiredId, validateObjectExists],
   read_outline: [validateRequiredId, validateObjectExists],
   read_manuscript: [validateRequiredId, validateObjectExists],
+  rag_search: [validateRagSearchEnabled],
 };
 
 /**

@@ -8,20 +8,11 @@ from sqlalchemy.orm import Session
 
 from ..models.rag_models import RagSource
 from .rag_embedding_service import embed_many
-from .rag_index_service import TYPE_GROUP_ORDER, get_active_profile, get_main_language
+from .rag_index_service import get_active_profile, get_main_language
 
 
 def _vec_to_pg(vec: List[float]) -> str:
     return "[" + ",".join(str(float(x)) for x in vec) + "]"
-
-
-def _nulls_last_int(v: Any) -> tuple[int, int]:
-    if v is None:
-        return (1, 0)
-    try:
-        return (0, int(v))
-    except Exception:
-        return (1, 0)
 
 
 async def search_project(
@@ -45,6 +36,7 @@ async def search_project(
         model=profile.model,
         inputs=queries,
         config=provider_config,
+        purpose="query",
     )
 
     best: Dict[UUID, Dict[str, Any]] = {}
@@ -178,22 +170,18 @@ async def search_project(
 
     results = list(best.values())
 
-    # Deterministic ordering (NOT by distance)
     def sort_key(r: Dict[str, Any]):
-        type_group = r.get("type_group") or ""
-        try:
-            group_idx = TYPE_GROUP_ORDER.index(type_group)
-        except ValueError:
-            group_idx = len(TYPE_GROUP_ORDER)
+        dist = r.get("distance")
+        dist_missing = dist is None
+        dist_value = float(dist) if dist is not None else 0.0
         return (
-            group_idx,
-            *_nulls_last_int(r.get("outline_order")),
-            *_nulls_last_int(r.get("act_order")),
-            *_nulls_last_int(r.get("chapter_order")),
-            *_nulls_last_int(r.get("story_object_order")),
+            1 if dist_missing else 0,
+            dist_value,
+            str(r.get("object_type") or ""),
+            r.get("object_id"),
             int(r.get("chunk_index") or 0),
+            str(r.get("field_path") or ""),
         )
 
     results.sort(key=sort_key)
     return results
-

@@ -17,6 +17,7 @@ from .providers.xai_provider import XAIProvider
 from .auth import get_current_user
 from .database import get_db
 from .models.db_models import User
+from .services.embedding_models_service import list_embedding_models
 
 # Import database API routes
 from .routes.auth_routes import router as auth_router
@@ -158,6 +159,34 @@ async def get_models(
         models_data = await provider_instance.get_models()
         return models_data
 
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/providers/{provider}/embedding-models")
+async def get_embedding_models(
+    provider: str,
+    config: ProviderConfig,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get available embedding models for a specific provider."""
+    try:
+        provider_instance = ProviderRegistry.get_provider(
+            provider,
+            config.model_dump(),
+        )
+
+        # Keep parity with /models: require a valid provider configuration to list.
+        if not provider_instance.validate_config():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid configuration for provider '{provider}'",
+            )
+
+        return await list_embedding_models(provider=provider, config=config.model_dump())
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

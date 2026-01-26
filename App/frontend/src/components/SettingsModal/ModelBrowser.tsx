@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ProviderType, ProviderPreference, ProviderCredentials } from '../../store/settingsStore';
-import { fetchModels, fetchModelEndpoints } from '../../llm/llmService';
+import { fetchModels, fetchEmbeddingModels, fetchModelEndpoints } from '../../llm/llmService';
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
 import { Check, Expand, Collapse } from '../icons';
@@ -9,6 +9,7 @@ import './ModelBrowser.css';
 
 interface ModelBrowserProps {
   provider: ProviderType;
+  mode?: 'chat' | 'embedding';
   currentModel: string;
   providerPreference?: ProviderPreference;
   credentials: ProviderCredentials;
@@ -234,6 +235,7 @@ const buildOpenAITree = (models: any[]): TreeNode[] => {
 
 const ModelBrowser: React.FC<ModelBrowserProps> = ({
   provider,
+  mode = 'chat',
   currentModel,
   providerPreference,
   credentials,
@@ -277,7 +279,9 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
         config.baseUrl = providerCreds.baseUrl;
       }
 
-      const data = await fetchModels(provider, config);
+      const data = mode === 'embedding'
+        ? await fetchEmbeddingModels(provider, config)
+        : await fetchModels(provider, config);
       setModelsData(data);
     } catch (error) {
       setModelsError(error instanceof Error ? error.message : 'Failed to fetch models');
@@ -313,6 +317,9 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
 
   // Determine if provider should use tree grouping
   const shouldGroupByFamily = (): boolean => {
+    if (mode === 'embedding') {
+      return provider === 'openrouter';
+    }
     return provider === 'openrouter' || provider === 'gemini' || provider === 'openai';
   };
 
@@ -322,7 +329,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
       return {
         showArchitecture: true,
         showPricing: true,
-        showEndpoints: true,
+        showEndpoints: mode === 'chat',
       };
     }
     return {
@@ -333,7 +340,7 @@ const ModelBrowser: React.FC<ModelBrowserProps> = ({
   };
 
   const loadModelEndpoints = async (modelId: string, canonicalSlug: string) => {
-    if (provider !== 'openrouter' || modelEndpoints[modelId]) {
+    if (mode !== 'chat' || provider !== 'openrouter' || modelEndpoints[modelId]) {
       return;
     }
 

@@ -389,6 +389,37 @@ export async function fetchModels(
 }
 
 /**
+ * Fetch available embedding models for a provider (RAG / vector search)
+ */
+export async function fetchEmbeddingModels(
+    provider: ProviderType,
+    config: ProviderConfig
+): Promise<any>
+{
+    const endpoint = `${API_BASE}/providers/${provider}/embedding-models`;
+
+    const backendConfig = {
+        api_key: config.apiKey,
+        base_url: config.baseUrl,
+        additional_headers: config.additionalHeaders
+    };
+
+    const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify(backendConfig)
+    });
+
+    if (!response.ok)
+    {
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch embedding models: ${errorText}`);
+    }
+
+    return response.json();
+}
+
+/**
  * Fetch list of available providers
  */
 export async function fetchProviders(): Promise<any>

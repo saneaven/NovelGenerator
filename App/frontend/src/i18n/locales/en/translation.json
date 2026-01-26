@@ -116,6 +116,8 @@
     "ragSearch": {
       "title": "RAG Search",
       "description": "Configure embedding provider/model for RAG indexing and search.",
+      "enableLabel": "Use RAG Search",
+      "enableHint": "When disabled, indexing and rag_search tool calls are turned off.",
       "provider": "Provider",
       "providerHint": "Uses the same credentials you set in Settings > Credentials.",
       "model": "Embedding Model",
@@ -127,11 +129,19 @@
       "dimensions": "Embedding dimensions",
       "dimensionsUnknown": "Unknown (detected on first index/search)",
       "dimensionsHint": "Detected automatically from the embedding response.",
+      "topKPerQuery": "Top K per query",
+      "topKPerQueryHint": "Candidate pool size per query (higher = more results, slower).",
+      "neighborWindow": "Neighbor window",
+      "neighborWindowHint": "Include nearby chunks from the same source (chunk_index +/- window).",
+      "maxPrimaryChunks": "Max primary chunks",
+      "maxPrimaryChunksHint": "Max number of ranked (distance-based) chunks returned to the model.",
+      "maxTotalChunks": "Max total chunks",
+      "maxTotalChunksHint": "Hard cap for total returned chunks including neighbor expansion.",
       "rulesTitle": "Indexing rules",
       "rules": {
         "mainLanguageOnly": "Indexes only main_language",
         "excludesMarkdownAssets": "Excludes images, tables, and code blocks",
-        "orderedResults": "Search results are returned by type/chapter order (not relevance)",
+        "orderedResults": "Search results are returned by relevance (embedding distance)",
         "reindexRequired": "Changing provider/model wipes existing vectors; reindex per project"
       },
       "loadErrorTitle": "Failed to load RAG profile",
@@ -244,7 +254,7 @@
       "novelai": {
         "title": "NovelAI",
         "placeholder": "eyJ...",
-        "hint": "Your NovelAI JWT access token. Get it from your browser's developer tools while logged in to NovelAI (look for 'auth_token' in local storage)."
+        "hint": "Your NovelAI token."
       },
       "custom": {
         "title": "Custom Endpoint",
@@ -897,6 +907,7 @@
     "rag": {
       "title": "RAG Index",
       "hint": "Indexes main language only (excludes images/tables/code blocks). Results are ordered by type and chapter order.",
+      "disabled": "RAG Search is disabled. Enable it in Settings > RAG Search.",
       "profileMissing": "Embedding profile is not configured. Set it in Settings > RAG Search.",
       "statusUnavailable": "RAG status is unavailable.",
       "profile": "Profile:",

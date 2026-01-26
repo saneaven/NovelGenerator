@@ -132,13 +132,13 @@ export const AgentExecutor = {
           ? LLMTaskMode.AGENT_OUTLINE_MANAGER
           : LLMTaskMode.AGENT_NOVEL_EDITOR;
 
-    const promptContext: AgentWorkspacePromptContext = {
+      const promptContext: AgentWorkspacePromptContext = {
       projectId: input.projectId,
       outputLanguage: language,
       outputMode,
       enablePrefill: agentConfig.advanced.enablePrefill,
       thinkingMode: agentConfig.advanced.thinkingMode,
-      tools: outputMode === 'tool_call' ? getToolsForSet('agent') : undefined,
+      tools: outputMode === 'tool_call' ? getToolsForSet('agent', { ragSearchEnabled: settings.ragSearchEnabled }) : undefined,
       contextObjectIds: input.contextObjectIds,
     };
 

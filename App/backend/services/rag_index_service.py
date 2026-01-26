@@ -40,6 +40,7 @@ MANUSCRIPT_TYPES = {"manuscript"}
 
 TYPE_GROUP_ORDER = ["story_object", "outline", "manuscript"]
 
+EXCLUDED_OBJECT_TYPES = {"basic_info", "guidelines"}
 
 MIN_CHARS = 200
 TARGET_CHARS = 600
@@ -125,7 +126,7 @@ def chunk_fields(text_by_field: Dict[str, str]) -> List[Dict[str, Any]]:
     chunks: List[Dict[str, Any]] = []
     chunk_index = 0
 
-    for field_path in ["name", "description", "content", "doc"]:
+    for field_path in ["content", "doc"]:
         raw = (text_by_field.get(field_path) or "").strip()
         if not raw:
             continue
@@ -328,6 +329,9 @@ async def index_object(
     provider_config: Dict[str, Any],
     force: bool = False,
 ) -> Dict[str, Any]:
+    if object_type in EXCLUDED_OBJECT_TYPES:
+        return {"rebuilt": False, "skipped": True, "missing_main_language": False}
+
     profile = get_active_profile(db, user_id=user_id)
     if not profile:
         raise ValueError("RAG embedding profile is not configured")
@@ -364,15 +368,28 @@ async def index_object(
 
     chunks = chunk_fields(text_by_field)
     if not chunks:
-        source.index_state = "missing_main_language"
+        source.index_state = "ready"
         source.version_number = latest.version_number
-        source.content_hash = None
+        source.content_hash = compute_chunks_hash([])
         source.indexed_at = datetime.utcnow()
         db.query(RagChunk).filter(RagChunk.source_id == source.id).delete(synchronize_session=False)
         db.commit()
-        return {"rebuilt": False, "skipped": True, "missing_main_language": True}
+        return {"rebuilt": False, "skipped": True, "missing_main_language": False}
 
-    new_hash = compute_chunks_hash(chunks)
+    name_prefix: Optional[str] = None
+    if object_type in STORY_OBJECT_TYPES and object_type not in EXCLUDED_OBJECT_TYPES:
+        name_prefix = (text_by_field.get("name") or "").strip() or None
+
+    embedding_texts: List[str] = []
+    hash_chunks: List[Dict[str, Any]] = []
+    for c in chunks:
+        embed_text = c["text"]
+        if name_prefix and c["field_path"] == "content":
+            embed_text = f"{name_prefix}\n\n{embed_text}"
+        embedding_texts.append(embed_text)
+        hash_chunks.append({"field_path": c["field_path"], "chunk_index": c["chunk_index"], "text": embed_text})
+
+    new_hash = compute_chunks_hash(hash_chunks)
 
     if (not force) and source.content_hash == new_hash:
         source.index_state = "ready"
@@ -380,13 +397,13 @@ async def index_object(
         source.indexed_at = datetime.utcnow()
         db.commit()
         return {"rebuilt": False, "skipped": True, "missing_main_language": False}
-    texts = [c["text"] for c in chunks]
 
     vectors = await embed_many(
         provider=profile.provider,
         model=profile.model,
-        inputs=texts,
+        inputs=embedding_texts,
         config=provider_config,
+        purpose="document",
     )
 
     if not vectors:
@@ -434,14 +451,6 @@ def _project_object_refs(db: Session, *, project_id: UUID) -> List[Tuple[str, UU
     refs: List[Tuple[str, UUID]] = []
 
     # Story objects (order within group is deterministic but not critical for indexing)
-    basic = db.query(BasicInfo).filter(BasicInfo.project_id == project_id).first()
-    if basic:
-        refs.append(("basic_info", basic.id))
-
-    guidelines = db.query(Guidelines).filter(Guidelines.project_id == project_id).first()
-    if guidelines:
-        refs.append(("guidelines", guidelines.id))
-
     for row in db.query(Character).filter(Character.project_id == project_id).order_by(Character.order.asc()).all():
         refs.append(("character", row.id))
     for row in db.query(Organization).filter(Organization.project_id == project_id).order_by(Organization.order.asc()).all():
@@ -514,26 +523,19 @@ async def reindex_project(
 
 
 def get_project_status(db: Session, *, user_id: UUID, project_id: UUID) -> Dict[str, Any]:
-    total_sources = db.query(RagSource).filter(RagSource.user_id == user_id, RagSource.project_id == project_id).count()
-    ready_sources = db.query(RagSource).filter(
+    base_filters = [
         RagSource.user_id == user_id,
         RagSource.project_id == project_id,
-        RagSource.index_state == "ready",
-    ).count()
-    missing_sources = db.query(RagSource).filter(
-        RagSource.user_id == user_id,
-        RagSource.project_id == project_id,
-        RagSource.index_state == "missing_main_language",
-    ).count()
-    error_sources = db.query(RagSource).filter(
-        RagSource.user_id == user_id,
-        RagSource.project_id == project_id,
-        RagSource.index_state == "error",
-    ).count()
+    ]
+
+    total_sources = db.query(RagSource).filter(*base_filters).count()
+    ready_sources = db.query(RagSource).filter(*base_filters, RagSource.index_state == "ready").count()
+    missing_sources = db.query(RagSource).filter(*base_filters, RagSource.index_state == "missing_main_language").count()
+    error_sources = db.query(RagSource).filter(*base_filters, RagSource.index_state == "error").count()
 
     last_indexed = (
         db.query(RagSource.indexed_at)
-        .filter(RagSource.user_id == user_id, RagSource.project_id == project_id, RagSource.indexed_at.isnot(None))
+        .filter(*base_filters, RagSource.indexed_at.isnot(None))
         .order_by(RagSource.indexed_at.desc())
         .first()
     )

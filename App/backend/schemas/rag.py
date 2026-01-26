@@ -20,6 +20,7 @@ class RagEmbeddingProfileUpdate(BaseModel):
 
 
 class RagProjectStatusResponse(BaseModel):
+    enabled: bool = False
     profile: Optional[RagEmbeddingProfileResponse] = None
     total_sources: int = 0
     ready_sources: int = 0

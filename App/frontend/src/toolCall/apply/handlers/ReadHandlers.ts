@@ -12,9 +12,10 @@ import { getObjectData } from '../../types';
 import type { Handler, HandlerContext } from '../types';
 import { normalizeDoc } from '../../../editor/manuscript/doc';
 import { docToMarkdown } from '../../../editor/manuscript/convert';
-import { ragService } from '../../../api/ragService';
+import { ragService, type RagSearchResult as ApiRagSearchResult } from '../../../api/ragService';
 import { useCredentialsStore } from '../../../store/credentialsStore';
 import { useRagStore } from '../../../store/ragStore';
+import { useSettingsStore } from '../../../store/settingsStore';
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -136,15 +137,24 @@ export async function ragSearch(
   args: Record<string, unknown>,
   context: HandlerContext
 ): Promise<ApplicationResult> {
-  const { queries, top_k_per_query, neighbor_window } = args as {
+  const { queries } = args as {
     queries?: unknown;
-    top_k_per_query?: number;
-    neighbor_window?: number;
   };
 
   if (!Array.isArray(queries) || queries.length === 0 || !queries.every(q => typeof q === 'string' && q.trim())) {
     return error('Invalid queries for rag_search (expected non-empty string[])');
   }
+
+  const settings = useSettingsStore.getState().settings;
+  const ragEnabled = settings.ragSearchEnabled;
+  if (!ragEnabled) {
+    return error('RAG Search is disabled (Settings > RAG Search)');
+  }
+
+  const topKPerQuery = Math.max(1, settings.ragSearchTopKPerQuery);
+  const neighborWindow = Math.max(0, settings.ragSearchNeighborWindow);
+  const maxPrimary = Math.max(1, settings.ragSearchMaxPrimaryChunks);
+  const maxTotal = Math.max(maxPrimary, settings.ragSearchMaxTotalChunks);
 
   const projectId = context.projectId;
   const profile = await ragService.getProfile();
@@ -172,8 +182,8 @@ export async function ragSearch(
 
   const res = await ragService.search(projectId, {
     queries: queries.map(q => String(q)),
-    top_k_per_query: typeof top_k_per_query === 'number' ? top_k_per_query : undefined,
-    neighbor_window: typeof neighbor_window === 'number' ? neighbor_window : undefined,
+    top_k_per_query: topKPerQuery,
+    neighbor_window: neighborWindow,
     config,
   });
 
@@ -183,28 +193,96 @@ export async function ragSearch(
     receivedAt: new Date().toISOString(),
   });
 
-  const maxReturn = 20;
-  const items = (res.results ?? []).slice(0, maxReturn);
+  const all = (Array.isArray(res.results) ? res.results : []) as ApiRagSearchResult[];
+  if (all.length === 0) {
+    return ok('RAG Results: 0', { count: 0 });
+  }
 
-  const lines = items.map((r, i) => {
-    const loc = [
-      r.type_group,
-      r.outline_order != null ? `outline=${r.outline_order}` : null,
-      r.act_order != null ? `act=${r.act_order}` : null,
-      r.chapter_order != null ? `chapter=${r.chapter_order}` : null,
-      r.story_object_order != null ? `order=${r.story_object_order}` : null,
-      `chunk=${r.chunk_index}`,
-      `field=${r.field_path}`,
-    ].filter(Boolean).join(', ');
+  const primary = all.filter(r => typeof r.distance === 'number').slice(0, maxPrimary);
 
-    return `[#${i + 1}] ${r.object_type} (${loc})\n${r.text}`;
+  const selected: ApiRagSearchResult[] = [...primary];
+  const selectedChunkIds = new Set(primary.map(r => r.chunk_id));
+
+  if (neighborWindow > 0 && selected.length < maxTotal) {
+    const sourceIds = new Set(primary.map(r => r.source_id));
+    for (const r of all) {
+      if (selected.length >= maxTotal) break;
+      if (!sourceIds.has(r.source_id)) continue;
+      if (typeof r.distance === 'number') continue;
+      if (selectedChunkIds.has(r.chunk_id)) continue;
+      selectedChunkIds.add(r.chunk_id);
+      selected.push(r);
+    }
+  }
+
+  type Group = {
+    objectType: string;
+    objectId: string;
+    bestDistance: number | null;
+    items: ApiRagSearchResult[];
+  };
+
+  const groupsByObject = new Map<string, Group>();
+  for (const r of selected) {
+    const key = `${r.object_type}:${r.object_id}`;
+    const existing = groupsByObject.get(key);
+    if (!existing) {
+      groupsByObject.set(key, {
+        objectType: r.object_type,
+        objectId: r.object_id,
+        bestDistance: typeof r.distance === 'number' ? r.distance : null,
+        items: [r],
+      });
+      continue;
+    }
+    existing.items.push(r);
+    if (typeof r.distance === 'number') {
+      existing.bestDistance = existing.bestDistance == null ? r.distance : Math.min(existing.bestDistance, r.distance);
+    }
+  }
+
+  const groups = Array.from(groupsByObject.values()).sort((a, b) => {
+    const ad = a.bestDistance ?? Number.POSITIVE_INFINITY;
+    const bd = b.bestDistance ?? Number.POSITIVE_INFINITY;
+    if (ad !== bd) return ad - bd;
+    if (a.objectType !== b.objectType) return a.objectType.localeCompare(b.objectType);
+    return a.objectId.localeCompare(b.objectId);
   });
 
-  const message = lines.length
-    ? `RAG results (ordered; showing ${lines.length}/${res.results.length}):\n\n${lines.join('\n\n')}`
-    : 'RAG results: 0';
+  const lines: string[] = [];
+  lines.push('RAG Results:');
 
-  return ok(message, { count: res.results.length });
+  for (const g of groups) {
+    const obj = context.store.getObject(g.objectId);
+    let displayName = g.objectId;
+    if (obj) {
+      const data = getObjectData(obj, context.language);
+      displayName = String((data as any).name ?? g.objectId);
+    }
+
+    if (neighborWindow > 0) {
+      g.items.sort((a, b) => (a.chunk_index ?? 0) - (b.chunk_index ?? 0));
+    } else {
+      g.items.sort((a, b) => {
+        const ad = typeof a.distance === 'number' ? a.distance : Number.POSITIVE_INFINITY;
+        const bd = typeof b.distance === 'number' ? b.distance : Number.POSITIVE_INFINITY;
+        if (ad !== bd) return ad - bd;
+        return (a.chunk_index ?? 0) - (b.chunk_index ?? 0);
+      });
+    }
+
+    lines.push('');
+    lines.push(`<object type="${g.objectType}" id="${g.objectId}">`);
+    lines.push(`${displayName}`);
+    for (const item of g.items) {
+      lines.push('<result>');
+      lines.push(item.text);
+      lines.push('</result>');
+    }
+    lines.push('</object>');
+  }
+
+  return ok(lines.join('\n'), { count: all.length, returned_chunks: selected.length, returned_objects: groups.length });
 }
 
 // ============================================================================

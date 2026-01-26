@@ -100,6 +100,15 @@ class UserSettings(Base):
     # Native output mode - use raw LLM output instead of tool calling
     native_output_mode = Column(Boolean, default=False, nullable=False)
 
+    # RAG Search (embeddings + pgvector) enable toggle
+    rag_search_enabled = Column(Boolean, default=False, nullable=False)
+
+    # RAG Search defaults
+    rag_search_top_k_per_query = Column(Integer, default=20, nullable=False)
+    rag_search_neighbor_window = Column(Integer, default=0, nullable=False)
+    rag_search_max_primary_chunks = Column(Integer, default=20, nullable=False)
+    rag_search_max_total_chunks = Column(Integer, default=60, nullable=False)
+
     # Patch auto-retry - automatically retry with replace mode if patch fails
     patch_auto_retry = Column(Boolean, default=True, nullable=False)
 

@@ -6,6 +6,7 @@
  */
 
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import type { ObjectType } from '../../types/unifiedObject';
 import type { Validator } from './types';
 import { validResult, invalidResult } from './types';
@@ -152,6 +153,20 @@ export const validatePatchRequiredFields: Validator = (args, toolName, _context)
     if (!field) {
       return invalidResult(`Missing required field 'field' for ${toolName}`);
     }
+  }
+
+  return validResult();
+};
+
+/**
+ * Validate that RAG Search is enabled for rag_search tool calls.
+ */
+export const validateRagSearchEnabled: Validator = (_args, toolName, _context) => {
+  if (toolName !== 'rag_search') return validResult();
+
+  const enabled = useSettingsStore.getState().settings.ragSearchEnabled;
+  if (!enabled) {
+    return invalidResult('RAG Search is disabled (Settings > RAG Search)');
   }
 
   return validResult();

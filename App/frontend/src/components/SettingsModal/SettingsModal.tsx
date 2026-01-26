@@ -107,11 +107,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const handleSave = async () => {
     const ragProvider = String(localRagProfile.provider || '').trim();
     const ragModel = String(localRagProfile.model || '').trim();
+    const ragEnabled = Boolean(localSettings.ragSearchEnabled);
     const ragChanged = savedRagProfile
       ? savedRagProfile.provider !== ragProvider || savedRagProfile.model !== ragModel
       : Boolean(ragProvider && ragModel);
 
-    if (ragChanged && (!ragProvider || !ragModel)) {
+    if (ragEnabled && (!ragProvider || !ragModel)) {
       alert(t('settings.ragSearch.saveValidationError'));
       return;
     }
@@ -123,7 +124,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
       credentialsStore.setCredentials(localCredentials);
 
-      if (ragChanged) {
+      if (ragChanged && ragProvider && ragModel) {
         const updated = await ragService.updateProfile({ provider: ragProvider, model: ragModel });
         setSavedRagProfile(updated);
         setLocalRagProfile({ provider: updated.provider as ProviderType, model: updated.model });
@@ -386,10 +387,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
         {mainTab === 'ragSearch' && (
           <RagSearchPanel
+            enabled={localSettings.ragSearchEnabled}
+            onEnabledChange={(enabled) => setLocalSettings(prev => ({ ...prev, ragSearchEnabled: enabled }))}
             profile={localRagProfile}
             savedProfile={savedRagProfile}
             credentials={localCredentials}
             mainLanguage={localSettings.mainLanguage}
+            topKPerQuery={localSettings.ragSearchTopKPerQuery}
+            onTopKPerQueryChange={(value) => setLocalSettings(prev => ({ ...prev, ragSearchTopKPerQuery: value }))}
+            neighborWindow={localSettings.ragSearchNeighborWindow}
+            onNeighborWindowChange={(value) => setLocalSettings(prev => ({ ...prev, ragSearchNeighborWindow: value }))}
+            maxPrimaryChunks={localSettings.ragSearchMaxPrimaryChunks}
+            onMaxPrimaryChunksChange={(value) => setLocalSettings(prev => ({ ...prev, ragSearchMaxPrimaryChunks: value }))}
+            maxTotalChunks={localSettings.ragSearchMaxTotalChunks}
+            onMaxTotalChunksChange={(value) => setLocalSettings(prev => ({ ...prev, ragSearchMaxTotalChunks: value }))}
             loading={isRagProfileLoading}
             loadError={ragProfileLoadError}
             onChange={setLocalRagProfile}

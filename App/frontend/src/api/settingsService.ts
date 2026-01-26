@@ -10,6 +10,11 @@ export interface SettingsSyncResponse {
     retryConfig: Settings['retryConfig'];
     imageGenConfig: Settings['imageGenConfig'];
     nativeOutputMode: boolean;
+    ragSearchEnabled?: boolean;
+    ragSearchTopKPerQuery?: number;
+    ragSearchNeighborWindow?: number;
+    ragSearchMaxPrimaryChunks?: number;
+    ragSearchMaxTotalChunks?: number;
 }
 
 export const settingsService = {

@@ -1,5 +1,11 @@
 /* Prompts Templates Panel */
 
+.prompts-templates-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
 .prompts-layout__content {
     position: relative;
     display: flex;
@@ -8,13 +14,13 @@
 }
 
 /* Panel Split Layout */
-.panel-split {
+.panel-editor {
     display: flex;
     flex: 1;
     min-height: 0;
 }
 
-.panel-split__backdrop {
+.panel-editor__backdrop {
     position: absolute;
     inset: 0;
     background-color: var(--overlay-dark-medium);
@@ -23,12 +29,12 @@
     transition: opacity var(--transition-base);
 }
 
-.panel-split--collapsed .panel-split__backdrop {
+.panel-editor--collapsed .panel-editor__backdrop {
     opacity: 0;
     pointer-events: none;
 }
 
-.panel-split__main {
+.panel-editor__main {
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -37,7 +43,7 @@
     overflow: hidden;
 }
 
-.panel-split__sidebar {
+.panel-editor__sidebar {
     position: absolute;
     top: 0;
     right: 0;
@@ -54,17 +60,17 @@
     transition: transform var(--transition-base);
 }
 
-.panel-split--collapsed .panel-split__sidebar {
+.panel-editor--collapsed .panel-editor__sidebar {
     transform: translateX(100%);
 }
 
 /* Preset Selector in Sidebar */
-.panel-split__sidebar > .preset-selector {
+.panel-editor__sidebar > .preset-selector {
     padding: var(--spacing-sm);
     border-bottom: 1px solid var(--color-border-subtle);
 }
 
-.panel-split__sidebar > .preset-selector .preset-selector__trigger {
+.panel-editor__sidebar > .preset-selector .preset-selector__trigger {
     width: 100%;
     min-width: 0;
 }
@@ -261,7 +267,7 @@
 
 /* Responsive */
 @media (max-width: 768px) {
-    .panel-split__backdrop {
+    .panel-editor__backdrop {
         display: block;
         position: absolute;
         inset: 0;
@@ -271,7 +277,7 @@
         transition: opacity var(--transition-base);
     }
 
-    .panel-split__sidebar {
+    .panel-editor__sidebar {
         position: absolute;
         top: 0;
         right: 0;
@@ -284,12 +290,12 @@
         transition: transform var(--transition-base), opacity var(--transition-base);
     }
 
-    .panel-split--collapsed .panel-split__backdrop {
+    .panel-editor--collapsed .panel-editor__backdrop {
         opacity: 0;
         pointer-events: none;
     }
 
-    .panel-split--collapsed .panel-split__sidebar {
+    .panel-editor--collapsed .panel-editor__sidebar {
         width: 280px;
         transform: translateX(100%);
         opacity: 1;

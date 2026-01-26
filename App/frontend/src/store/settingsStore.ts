@@ -184,6 +184,15 @@ export interface Settings {
     // Native output mode - skip tool calling and output raw text/XML
     nativeOutputMode: boolean;
 
+    // RAG Search - enable embeddings-based search/indexing
+    ragSearchEnabled: boolean;
+
+    // RAG Search defaults (tool + formatting)
+    ragSearchTopKPerQuery: number;
+    ragSearchNeighborWindow: number;
+    ragSearchMaxPrimaryChunks: number;
+    ragSearchMaxTotalChunks: number;
+
     // LLM request logging - enable logging of LLM requests for debugging
     llmLoggingEnabled: boolean;
 
@@ -304,6 +313,15 @@ const defaultSettings: Settings = {
 
     // Native output mode disabled by default
     nativeOutputMode: false,
+
+    // RAG Search disabled by default (must be explicitly enabled)
+    ragSearchEnabled: false,
+
+    // RAG Search defaults
+    ragSearchTopKPerQuery: 20,
+    ragSearchNeighborWindow: 0,
+    ragSearchMaxPrimaryChunks: 20,
+    ragSearchMaxTotalChunks: 60,
 
     // LLM logging disabled by default
     llmLoggingEnabled: false,
@@ -432,6 +450,11 @@ const mergeWithDefaults = (stored: any): Settings => {
             ...stored.retryConfig,
         },
         nativeOutputMode: stored.nativeOutputMode ?? defaultSettings.nativeOutputMode,
+        ragSearchEnabled: stored.ragSearchEnabled ?? defaultSettings.ragSearchEnabled,
+        ragSearchTopKPerQuery: stored.ragSearchTopKPerQuery ?? defaultSettings.ragSearchTopKPerQuery,
+        ragSearchNeighborWindow: stored.ragSearchNeighborWindow ?? defaultSettings.ragSearchNeighborWindow,
+        ragSearchMaxPrimaryChunks: stored.ragSearchMaxPrimaryChunks ?? defaultSettings.ragSearchMaxPrimaryChunks,
+        ragSearchMaxTotalChunks: stored.ragSearchMaxTotalChunks ?? defaultSettings.ragSearchMaxTotalChunks,
         llmLoggingEnabled: stored.llmLoggingEnabled ?? defaultSettings.llmLoggingEnabled,
         toolCallHistoryLimit: stored.toolCallHistoryLimit ?? defaultSettings.toolCallHistoryLimit,
         thinkingHistoryLimit: stored.thinkingHistoryLimit ?? defaultSettings.thinkingHistoryLimit,

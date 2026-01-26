@@ -508,14 +508,14 @@ const PromptsTemplatesPanel: React.FC = () => {
             </div>
 
             <div className="prompts-layout__content">
-                <div className={`panel-split ${isSidebarCollapsed ? 'panel-split--collapsed' : ''}`}>
+                <div className={`panel-editor ${isSidebarCollapsed ? 'panel-editor--collapsed' : ''}`}>
                     {/* Mobile Backdrop */}
                     {!isSidebarCollapsed && (
-                        <div className="panel-split__backdrop" onClick={() => setIsSidebarCollapsed(true)} />
+                        <div className="panel-editor__backdrop" onClick={() => setIsSidebarCollapsed(true)} />
                     )}
 
                     {/* Main Content Area */}
-                    <main className="panel-split__main">
+                    <main className="panel-editor__main">
                         <div className="editor-wrapper">
                             {/* Header - always visible for prompts/fragments tabs, hidden for variables tab as VariableEditor has its own */}
                             {subTab !== 'variables' && (
@@ -697,7 +697,7 @@ const PromptsTemplatesPanel: React.FC = () => {
                     </main>
 
                     {/* Sidebar */}
-                    <aside className="panel-split__sidebar">
+                    <aside className="panel-editor__sidebar">
                         {/* Preset Selector */}
                         <PresetSelector
                             onCreatePreset={handleCreatePreset}

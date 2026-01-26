@@ -510,7 +510,7 @@ const READ_MANUSCRIPT: ToolSchema = {
 
 const RAG_SEARCH: ToolSchema = {
   name: 'rag_search',
-  description: 'Search project knowledge base (story objects → outline → manuscript). Results are returned in deterministic order (not by relevance).',
+  description: 'Search project knowledge base (story objects → outline → manuscript). Results are returned by relevance (embedding distance).',
   category: 'read',
   target: 'story_object',
   parameters: {
@@ -520,14 +520,6 @@ const RAG_SEARCH: ToolSchema = {
         type: 'array',
         description: 'Array of search queries. Backend embeds and searches.',
         items: { type: 'string' },
-      },
-      top_k_per_query: {
-        type: 'integer',
-        description: 'Candidate pool size per query (similarity top-K). Final ordering is not by similarity.',
-      },
-      neighbor_window: {
-        type: 'integer',
-        description: 'Optional neighbor expansion window (same source_id, chunk_index +/- window).',
       },
     },
     required: ['queries'],
@@ -838,9 +830,20 @@ const TOOL_SET_SCHEMAS: Record<ToolSetName, ToolSchema[]> = {
 /**
  * Get LLM-compatible tool schemas for a specific set
  */
-export function getToolsForSet(setName: ToolSetName): ToolCallSchema[] {
+export interface ToolSetOptions {
+  ragSearchEnabled?: boolean;
+}
+
+export function getToolsForSet(setName: ToolSetName, options?: ToolSetOptions): ToolCallSchema[] {
   const schemas = TOOL_SET_SCHEMAS[setName];
-  return schemas.map(s => ({ name: s.name, description: s.description, parameters: s.parameters }));
+  const ragEnabled = options?.ragSearchEnabled ?? true;
+
+  const filtered =
+    setName === 'agent' && !ragEnabled
+      ? schemas.filter((s) => s.name !== 'rag_search')
+      : schemas;
+
+  return filtered.map(s => ({ name: s.name, description: s.description, parameters: s.parameters }));
 }
 
 // ============================================================================

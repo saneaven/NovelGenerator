@@ -365,6 +365,11 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
     setLastRagSummary(null);
 
     try {
+      if (!ragStatus?.enabled) {
+        showError('RAG', 'RAG Search is disabled. Enable it in Settings > RAG Search.');
+        return;
+      }
+
       const profile = ragStatus?.profile;
       if (!profile) {
         showError('RAG', 'Embedding profile is not configured. Set it in Settings > RAG Search.');
@@ -419,6 +424,8 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
           <div className="workspace-config-empty">{t('common.loading')}</div>
         ) : !ragStatus ? (
           <div className="workspace-config-empty">{t('workspaceConfig.rag.statusUnavailable')}</div>
+        ) : !ragStatus.enabled ? (
+          <div className="workspace-config-empty">{t('workspaceConfig.rag.disabled')}</div>
         ) : !ragStatus.profile ? (
           <div className="workspace-config-empty">{t('workspaceConfig.rag.profileMissing')}</div>
         ) : (
@@ -462,7 +469,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
             size="sm"
             iconLeft={<Refresh size="xs" />}
             loading={isRagReindexing}
-            disabled={!ragStatus?.profile}
+            disabled={!ragStatus?.enabled || !ragStatus?.profile}
           >
             {t('workspaceConfig.rag.reindex')}
           </TextButton>
