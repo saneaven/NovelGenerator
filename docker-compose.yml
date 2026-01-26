@@ -2,9 +2,9 @@ services:
   db:
     image: pgvector/pgvector:pg18
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:?set in .env.dev/.env.prod}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env.dev/.env.prod}
-      POSTGRES_DB: ${POSTGRES_DB:-novel_generator}
+      POSTGRES_DB: ${POSTGRES_DB:?set in .env.dev/.env.prod}
     volumes:
       - db_data:/var/lib/postgresql
     healthcheck:
@@ -19,14 +19,13 @@ services:
       context: .
       dockerfile: docker/backend/Dockerfile
     environment:
-      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_USER: ${POSTGRES_USER:?set in .env.dev/.env.prod}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       DB_HOST: db
       DB_PORT: 5432
-      DB_NAME: ${POSTGRES_DB:-novel_generator}
+      DB_NAME: ${POSTGRES_DB:?set in .env.dev/.env.prod}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set in .env.dev/.env.prod}
       CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:?set in .env.dev/.env.prod}
-      UVICORN_RELOAD: ${UVICORN_RELOAD:-0}
     depends_on:
       db:
         condition: service_healthy
@@ -39,8 +38,7 @@ services:
       context: .
       dockerfile: docker/frontend/Dockerfile
     environment:
-      FRONTEND_MODE: ${FRONTEND_MODE:-dev}
-      VITE_API_URL: ${VITE_API_URL:-}
+      VITE_API_URL: ${VITE_API_URL}
     expose:
       - "5173"
     restart: unless-stopped

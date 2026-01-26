@@ -190,10 +190,10 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   }, [projectId, basicInfoId, fetchStoryObjectAssets]);
 
   if (!projectId) return <div className="error-container">Project ID not found.</div>;
-  if (loading && !basicInfo) return <Loading size="lg" fullPage />;
+  if (loading && !basicInfo) return <div className="loading-container"><Loading size="lg" /></div>;
   if (error) return <div className="error-container"><p>{error}</p><button onClick={() => basicInfoId && fetchObject('basic_info', basicInfoId)}>Retry</button></div>;
   if (initializationError && !basicInfo) return <div className="error-container"><p>{initializationError}</p><button onClick={initializeBasicInfo} disabled={initializing}>Retry</button></div>;
-  if (initializing && !basicInfo) return <Loading size="lg" fullPage />;
+  if (initializing && !basicInfo) return <div className="loading-container"><Loading size="lg" /></div>;
   if (!basicInfo) return <div className="error-container">Basic information not found.</div>;
 
   return (

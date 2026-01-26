@@ -862,9 +862,9 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                 {/* Per-message language toggle - only show when translation exists */}
                                                 {translationAvailable && (
                                                     <IconButton
-                                                        icon={<Globe size="xs" />}
+                                                        icon={<Globe size="sm" />}
                                                         variant="ghost"
-                                                        size="xs"
+                                                        size="sm"
                                                         isActive={messageLanguageView[message.storedMessage.id] === 'secondary'}
                                                         onClick={() => setMessageLanguageView(prev => ({
                                                             ...prev,
@@ -878,16 +878,16 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                 )}
                                                 {translationEnabled && (
                                                     <IconButton
-                                                        icon={isTranslating ? <CircularArrow size="xs" /> : translationAvailable ? <CircularArrow size="xs" /> : <Globe size="xs" />}
+                                                        icon={isTranslating ? <CircularArrow size="sm" /> : translationAvailable ? <CircularArrow size="sm" /> : <Globe size="sm" />}
                                                         onClick={() => translateMessage(message.storedMessage)}
                                                         disabled={translateDisabled}
                                                         title={translateButtonLabel}
                                                         variant="ghost"
-                                                        size="xs"
+                                                        size="sm"
                                                     />
                                                 )}
                                                 <IconButton
-                                                    icon={<Edit size="xs" />}
+                                                    icon={<Edit size="sm" />}
                                                     onClick={() => {
                                                         // Switch to primary view for this message when editing
                                                         setMessageLanguageView(prev => ({
@@ -899,15 +899,15 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                     disabled={isTranslating || !primaryPlainContent.trim()}
                                                     title={t('agent.edit')}
                                                     variant="ghost"
-                                                    size="xs"
+                                                    size="sm"
                                                 />
                                                 <IconButton
-                                                    icon={<Trash size="xs" />}
+                                                    icon={<Trash size="sm" />}
                                                     onClick={() => onDeleteMessage(message.chatMessage.id)}
                                                     disabled={isTranslating}
                                                     title={t('agent.delete')}
                                                     variant="ghost"
-                                                    size="xs"
+                                                    size="sm"
                                                     className="icon-button--ghost-danger"
                                                 />
                                             </div>

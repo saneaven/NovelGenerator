@@ -3,8 +3,6 @@
 .settings-modal {
     display: flex;
     flex-direction: column;
-    height: 100%;
-    max-height: 85vh;
     background-color: var(--color-surface-base);
 }
 
@@ -137,22 +135,62 @@
     color: var(--color-brand-primary);
 }
 
+/* Main content wrapper - flex container for sidebar + content */
+.settings-modal-main {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Desktop Sidebar */
+.settings-desktop-sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 240px;
+    min-width: 240px;
+    background-color: var(--color-surface-subtle);
+    border-right: 1px solid var(--color-border-default);
+    overflow-y: auto;
+}
+
+.settings-desktop-sidebar-list {
+    list-style: none;
+    margin: 0;
+    padding: var(--spacing-sm);
+}
+
+.settings-desktop-sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    width: 100%;
+    padding: var(--spacing-md) var(--spacing-lg);
+    border: none;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-base);
+    text-align: left;
+    cursor: pointer;
+    border-radius: var(--border-radius-md);
+    transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.settings-desktop-sidebar-item:hover {
+    background-color: var(--color-surface-hover);
+    color: var(--color-text-primary);
+}
+
+.settings-desktop-sidebar-item.active {
+    background-color: var(--color-brand-primary-soft);
+    color: var(--color-brand-primary);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
-    /* Make settings modal truly fullscreen on mobile */
-    .base-modal-overlay:has(.settings-modal) {
-        padding: 0;
-    }
-
-    .base-modal.settings-modal {
-        width: 100%;
-        height: 100dvh;
-        max-height: 100dvh;
-        border-radius: 0;
-    }
-
-    .settings-modal {
-        max-height: 100vh;
+    /* Hide desktop sidebar on mobile */
+    .settings-desktop-sidebar {
+        display: none;
     }
 
     .settings-modal-header {

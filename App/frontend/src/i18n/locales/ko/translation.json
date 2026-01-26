@@ -100,6 +100,7 @@
     "saveSettings": "설정 저장",
     "saving": "저장 중...",
     "saveError": "서버에 설정을 저장하지 못했습니다. 변경 사항은 로컬에 저장되었습니다.",
+    "savedSuccessfully": "설정이 저장되었습니다",
     "openNavigation": "탐색 메뉴 열기",
     "tabs": {
       "ragSearch": "RAG Search",

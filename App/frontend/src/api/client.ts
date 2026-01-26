@@ -2,8 +2,8 @@
  * Base API client with authentication and error handling
  */
 
-const rawBaseUrl = (import.meta.env.VITE_API_URL || '').trim();
-export const API_BASE_URL = rawBaseUrl ? rawBaseUrl.replace(/\/+$/, '') : '';
+const rawBaseUrl = (import.meta.env.VITE_API_URL).trim();
+export const API_BASE_URL = rawBaseUrl.replace(/\/+$/, '');
 
 export class ApiError extends Error {
   status: number;

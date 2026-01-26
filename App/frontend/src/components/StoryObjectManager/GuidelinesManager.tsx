@@ -172,10 +172,10 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
   };
 
   if (!projectId) return <div className="error-container">Project ID not found.</div>;
-  if (loading && !guidelines) return <Loading size="lg" fullPage />;
+  if (loading && !guidelines) return <div className="loading-container"><Loading size="lg" /></div>;
   if (error) return <div className="error-container"><p>{error}</p><button onClick={() => guidelinesId && fetchObject('guidelines', guidelinesId)}>Retry</button></div>;
   if (initializationError && !guidelines) return <div className="error-container"><p>{initializationError}</p><button onClick={initializeGuidelines} disabled={initializing}>Retry</button></div>;
-  if (initializing && !guidelines) return <Loading size="lg" fullPage />;
+  if (initializing && !guidelines) return <div className="loading-container"><Loading size="lg" /></div>;
   if (!guidelines) return <div className="error-container">Guidelines not found.</div>;
 
   return (

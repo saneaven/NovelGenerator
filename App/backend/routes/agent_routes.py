@@ -1,5 +1,6 @@
 """Agent and message routes"""
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.orm.attributes import flag_modified
 from typing import List
@@ -218,7 +219,7 @@ async def create_message(
         agent_id=agent_id,
         role=data.role,
         data=message_data,
-        tool_calls=data.tool_calls
+        tool_calls=jsonable_encoder(data.tool_calls) if data.tool_calls is not None else None
     )
 
     db.add(message)
@@ -300,7 +301,7 @@ async def update_message(
 
     # Update tool calls if provided
     if data.tool_calls is not None:
-        message.tool_calls = data.tool_calls  # type: ignore
+        message.tool_calls = jsonable_encoder(data.tool_calls)  # type: ignore
         flag_modified(message, "tool_calls")
 
     db.commit()

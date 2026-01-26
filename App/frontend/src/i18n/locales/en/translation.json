@@ -100,6 +100,7 @@
     "saveSettings": "Save Settings",
     "saving": "Saving...",
     "saveError": "Failed to save settings to server. Changes are saved locally.",
+    "savedSuccessfully": "Settings saved",
     "openNavigation": "Open navigation menu",
     "tabs": {
       "profile": "Profile",

@@ -11,7 +11,7 @@ def main() -> None:
     port = int(os.getenv("DB_PORT", "5432"))
     user = os.getenv("DB_USER", "postgres")
     password = os.getenv("DB_PASSWORD", "")
-    dbname = os.getenv("DB_NAME", "novel_generator")
+    dbname = os.getenv("DB_NAME", "novel_buds")
 
     timeout_s = int(os.getenv("DB_WAIT_SECONDS", "60"))
     deadline = time.time() + timeout_s

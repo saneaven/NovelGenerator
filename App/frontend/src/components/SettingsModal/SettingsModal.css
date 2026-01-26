@@ -6,3 +6,31 @@
 @import './styles/forms.css';
 
 /* Modal-specific overrides if needed */
+
+/* Success Toast */
+.settings-saved-toast {
+  position: fixed;
+  top: var(--spacing-xl);
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: var(--color-success);
+  color: var(--color-success-dark);
+  padding: var(--spacing-md) var(--spacing-xl);
+  border-radius: var(--border-radius-lg);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-medium);
+  z-index: var(--z-max);
+  animation: toast-slide-down var(--transition-fast);
+  box-shadow: var(--shadow-md);
+}
+
+@keyframes toast-slide-down {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}

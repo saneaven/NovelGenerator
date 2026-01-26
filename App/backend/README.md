@@ -52,7 +52,7 @@ A comprehensive backend service for the Novel Buds application, featuring:
    DB_PASSWORD=your_password
    DB_HOST=localhost
    DB_PORT=5432
-   DB_NAME=novel_generator
+   DB_NAME=novel_buds
 
    # JWT
    JWT_SECRET_KEY=your-secret-key-here
@@ -63,7 +63,7 @@ A comprehensive backend service for the Novel Buds application, featuring:
 
 3. **Create database**:
    ```bash
-   createdb -U postgres novel_generator
+   createdb -U postgres novel_buds
    ```
 
 4. **Run database initialization**:

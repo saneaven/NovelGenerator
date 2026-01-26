@@ -51,6 +51,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [isRagProfileLoading, setIsRagProfileLoading] = useState(false);
   const [ragProfileLoadError, setRagProfileLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [showSavedToast, setShowSavedToast] = useState(false);
   const [mainTab, setMainTab] = useState<MainTab>('profile');
   const [activeTask, setActiveTask] = useState<AITaskType>('agent');
 
@@ -128,7 +129,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         setLocalRagProfile({ provider: updated.provider as ProviderType, model: updated.model });
       }
 
-      onClose();
+      // Show success toast
+      setShowSavedToast(true);
+      setTimeout(() => setShowSavedToast(false), 2000);
     } catch (error) {
       console.error('Failed to save settings:', error);
       alert(t('settings.saveError'));
@@ -152,7 +155,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     <BaseModal
       isOpen={isOpen}
       onClose={handleCancel}
-      size="xlarge"
+      size="full"
       showHeader={false}
       className="settings-modal"
       footer={
@@ -166,6 +169,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         </>
       }
     >
+      {/* Success Toast */}
+      {showSavedToast && (
+        <div className="settings-saved-toast">
+          {t('settings.savedSuccessfully')}
+        </div>
+      )}
+
       {/* Custom Header */}
       <div className="settings-modal-header">
         <button
@@ -210,20 +220,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           </li>
           <li>
             <button
-              className={`settings-mobile-sidebar-item ${mainTab === 'ragSearch' ? 'active' : ''}`}
-              onClick={() => { setMainTab('ragSearch'); closeSidebar('__global__'); }}
-            >
-              <List size="md" />
-              <span>{t('settings.tabs.ragSearch')}</span>
-            </button>
-          </li>
-          <li>
-            <button
               className={`settings-mobile-sidebar-item ${mainTab === 'general' ? 'active' : ''}`}
               onClick={() => { setMainTab('general'); closeSidebar('__global__'); }}
             >
               <SettingsIcon size="md" />
               <span>{t('settings.tabs.general')}</span>
+            </button>
+          </li>
+          <li>
+            <button
+              className={`settings-mobile-sidebar-item ${mainTab === 'ragSearch' ? 'active' : ''}`}
+              onClick={() => { setMainTab('ragSearch'); closeSidebar('__global__'); }}
+            >
+              <List size="md" />
+              <span>{t('settings.tabs.ragSearch')}</span>
             </button>
           </li>
           <li>
@@ -274,75 +284,97 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         </ul>
       </BaseSidebar>
 
-      {/* Main Category Tabs */}
-      <div className="main-tabs">
-        <button
-          className={`main-tab ${mainTab === 'profile' ? 'active' : ''}`}
-          onClick={() => setMainTab('profile')}
-        >
-          <span className="tab-icon"><People size="sm" /></span>
-          <span className="tab-label">{t('settings.tabs.profile')}</span>
-        </button>
-        <button
-          className={`main-tab ${mainTab === 'credentials' ? 'active' : ''}`}
-          onClick={() => setMainTab('credentials')}
-        >
-          <span className="tab-icon"><Lock size="sm" /></span>
-          <span className="tab-label">{t('settings.tabs.credentials')}</span>
-        </button>
-        <button
-          className={`main-tab ${mainTab === 'ragSearch' ? 'active' : ''}`}
-          onClick={() => setMainTab('ragSearch')}
-        >
-          <span className="tab-icon"><List size="sm" /></span>
-          <span className="tab-label">{t('settings.tabs.ragSearch')}</span>
-        </button>
-        <button
-          className={`main-tab ${mainTab === 'general' ? 'active' : ''}`}
-          onClick={() => setMainTab('general')}
-        >
-          <span className="tab-icon"><SettingsIcon size="sm" /></span>
-          <span className="tab-label">{t('settings.tabs.general')}</span>
-        </button>
-        <button
-          className={`main-tab ${mainTab === 'imageGen' ? 'active' : ''}`}
-          onClick={() => setMainTab('imageGen')}
-        >
-          <span className="tab-icon"><Image size="sm" /></span>
-          <span className="tab-label">{t('settings.tabs.imageGen')}</span>
-        </button>
-        <button
-          className={`main-tab ${mainTab === 'prompts' ? 'active' : ''}`}
-          onClick={() => setMainTab('prompts')}
-        >
-          <span className="tab-icon"><Document size="sm" /></span>
-          <span className="tab-label">{t('settings.tabs.prompts')}</span>
-        </button>
-        <button
-          className={`main-tab ${mainTab === 'language' ? 'active' : ''}`}
-          onClick={() => setMainTab('language')}
-        >
-          <span className="tab-icon"><Globe size="sm" /></span>
-          <span className="tab-label">{t('settings.tabs.language')}</span>
-        </button>
-        <button
-          className={`main-tab ${mainTab === 'theme' ? 'active' : ''}`}
-          onClick={() => setMainTab('theme')}
-        >
-          <span className="tab-icon"><Palette size="sm" /></span>
-          <span className="tab-label">{t('settings.tabs.theme')}</span>
-        </button>
-        <button
-          className={`main-tab ${mainTab === 'advanced' ? 'active' : ''}`}
-          onClick={() => setMainTab('advanced')}
-        >
-          <span className="tab-icon"><Wrench size="sm" /></span>
-          <span className="tab-label">{t('settings.tabs.advanced')}</span>
-        </button>
-      </div>
+      {/* Main content area with sidebar layout */}
+      <div className="settings-modal-main">
+        {/* Desktop Sidebar */}
+        <aside className="settings-desktop-sidebar">
+          <ul className="settings-desktop-sidebar-list">
+            <li>
+              <button
+                className={`settings-desktop-sidebar-item ${mainTab === 'profile' ? 'active' : ''}`}
+                onClick={() => setMainTab('profile')}
+              >
+                <People size="md" />
+                <span>{t('settings.tabs.profile')}</span>
+              </button>
+            </li>
+            <li>
+              <button
+                className={`settings-desktop-sidebar-item ${mainTab === 'credentials' ? 'active' : ''}`}
+                onClick={() => setMainTab('credentials')}
+              >
+                <Lock size="md" />
+                <span>{t('settings.tabs.credentials')}</span>
+              </button>
+            </li>
+            <li>
+              <button
+                className={`settings-desktop-sidebar-item ${mainTab === 'general' ? 'active' : ''}`}
+                onClick={() => setMainTab('general')}
+              >
+                <SettingsIcon size="md" />
+                <span>{t('settings.tabs.general')}</span>
+              </button>
+            </li>
+            <li>
+              <button
+                className={`settings-desktop-sidebar-item ${mainTab === 'ragSearch' ? 'active' : ''}`}
+                onClick={() => setMainTab('ragSearch')}
+              >
+                <List size="md" />
+                <span>{t('settings.tabs.ragSearch')}</span>
+              </button>
+            </li>
+            <li>
+              <button
+                className={`settings-desktop-sidebar-item ${mainTab === 'imageGen' ? 'active' : ''}`}
+                onClick={() => setMainTab('imageGen')}
+              >
+                <Image size="md" />
+                <span>{t('settings.tabs.imageGen')}</span>
+              </button>
+            </li>
+            <li>
+              <button
+                className={`settings-desktop-sidebar-item ${mainTab === 'prompts' ? 'active' : ''}`}
+                onClick={() => setMainTab('prompts')}
+              >
+                <Document size="md" />
+                <span>{t('settings.tabs.prompts')}</span>
+              </button>
+            </li>
+            <li>
+              <button
+                className={`settings-desktop-sidebar-item ${mainTab === 'language' ? 'active' : ''}`}
+                onClick={() => setMainTab('language')}
+              >
+                <Globe size="md" />
+                <span>{t('settings.tabs.language')}</span>
+              </button>
+            </li>
+            <li>
+              <button
+                className={`settings-desktop-sidebar-item ${mainTab === 'theme' ? 'active' : ''}`}
+                onClick={() => setMainTab('theme')}
+              >
+                <Palette size="md" />
+                <span>{t('settings.tabs.theme')}</span>
+              </button>
+            </li>
+            <li>
+              <button
+                className={`settings-desktop-sidebar-item ${mainTab === 'advanced' ? 'active' : ''}`}
+                onClick={() => setMainTab('advanced')}
+              >
+                <Wrench size="md" />
+                <span>{t('settings.tabs.advanced')}</span>
+              </button>
+            </li>
+          </ul>
+        </aside>
 
-      {/* Panel Content */}
-      <div className="settings-panel-content">
+        {/* Panel Content */}
+        <div className="settings-panel-content">
         {mainTab === 'profile' && <ProfilePanel />}
 
         {mainTab === 'credentials' && (
@@ -459,6 +491,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             }
           />
         )}
+        </div>
       </div>
     </BaseModal>
   );

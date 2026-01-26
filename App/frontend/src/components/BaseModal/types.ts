@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-export type ModalSize = 'small' | 'medium' | 'large' | 'xlarge';
+export type ModalSize = 'small' | 'medium' | 'large' | 'xlarge' | 'full';
 
 export interface BaseModalProps {
   /** Whether the modal is open */
@@ -48,4 +48,5 @@ export const MODAL_SIZE_CONFIG: Record<ModalSize, { maxWidth: string; maxHeight:
   medium: { maxWidth: '700px', maxHeight: '85dvh' },
   large: { maxWidth: '900px', maxHeight: '90dvh' },
   xlarge: { maxWidth: '1100px', maxHeight: '90dvh' },
+  full: { maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(100dvh - 32px)' },
 };

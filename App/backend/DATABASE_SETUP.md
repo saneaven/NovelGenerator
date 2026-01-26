@@ -22,7 +22,7 @@ DB_USER=postgres
 DB_PASSWORD=your_password_here
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=novel_generator
+DB_NAME=novel_buds
 ```
 
 ### 2. Create Database
@@ -34,7 +34,7 @@ First, create the PostgreSQL database:
 psql -U postgres
 
 # Create database
-CREATE DATABASE novel_generator;
+CREATE DATABASE novel_buds;
 
 # Exit psql
 \q
@@ -201,20 +201,20 @@ alembic history
 
 ```bash
 # Backup entire database
-pg_dump -U postgres novel_generator > backup.sql
+pg_dump -U postgres novel_buds > backup.sql
 
 # Backup with compression
-pg_dump -U postgres novel_generator | gzip > backup.sql.gz
+pg_dump -U postgres novel_buds | gzip > backup.sql.gz
 ```
 
 ### Restore
 
 ```bash
 # Restore from backup
-psql -U postgres novel_generator < backup.sql
+psql -U postgres novel_buds < backup.sql
 
 # Restore from compressed backup
-gunzip -c backup.sql.gz | psql -U postgres novel_generator
+gunzip -c backup.sql.gz | psql -U postgres novel_buds
 ```
 
 ### Reset Database (Development Only)
@@ -224,8 +224,8 @@ gunzip -c backup.sql.gz | psql -U postgres novel_generator
 python db_commands.py reset
 
 # Or manually
-dropdb -U postgres novel_generator
-createdb -U postgres novel_generator
+dropdb -U postgres novel_buds
+createdb -U postgres novel_buds
 alembic upgrade head
 ```
 
@@ -239,7 +239,7 @@ All database configuration is stored in `.env`:
 | `DB_PASSWORD` | PostgreSQL password | _(required)_ |
 | `DB_HOST` | Database host | `localhost` |
 | `DB_PORT` | Database port | `5432` |
-| `DB_NAME` | Database name | `novel_generator` |
+| `DB_NAME` | Database name | `novel_buds` |
 
 ## Troubleshooting
 
@@ -272,7 +272,7 @@ brew services start postgresql  # macOS
 psql -U postgres -l
 
 # Create database
-createdb -U postgres novel_generator
+createdb -U postgres novel_buds
 ```
 
 ### Migration Conflicts
