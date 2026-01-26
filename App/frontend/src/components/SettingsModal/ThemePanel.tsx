@@ -14,11 +14,12 @@ const ThemePanel: React.FC<ThemePanelProps> = ({ theme, onThemeChange }) => {
 
   return (
     <div className="theme-panel">
-      <div className="panel-description">
-        <p>{t('settings.theme.description')}</p>
+      <div className="panel-header">
+        <h3>{t('settings.theme.title')}</h3>
+        <p className="panel-description">{t('settings.theme.description')}</p>
       </div>
 
-      <div className="theme-settings-card">
+      <div className="settings-panel-card">
         <div className="form-field">
           <label>{t('settings.theme.themePreference')}</label>
 
@@ -68,7 +69,7 @@ const ThemePanel: React.FC<ThemePanelProps> = ({ theme, onThemeChange }) => {
         </div>
       </div>
 
-      <div className="theme-info-box">
+      <div className="info-box">
         <h4><Lightbulb size="md" /> {t('settings.theme.aboutThemes')}</h4>
         <ul>
           <li>

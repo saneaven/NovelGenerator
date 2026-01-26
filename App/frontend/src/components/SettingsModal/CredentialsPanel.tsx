@@ -17,8 +17,9 @@ const CredentialsPanel: React.FC<CredentialsPanelProps> = ({
 
   return (
     <div className="credentials-panel">
-      <div className="panel-description">
-        <p>{t('settings.credentials.description')}</p>
+      <div className="panel-header">
+        <h3>{t('settings.credentials.title')}</h3>
+        <p className="panel-description">{t('settings.credentials.description')}</p>
       </div>
 
       {/* OpenAI */}

@@ -39,6 +39,11 @@ const GeneralPanel: React.FC<GeneralPanelProps> = ({
 
   return (
     <div className="general-panel">
+      <div className="panel-header">
+        <h3>{t('settings.general.title')}</h3>
+        <p className="panel-description">{t('settings.general.description')}</p>
+      </div>
+
       {/* Task Selection Tabs */}
       <div className="task-selector">
         {taskTypes.map((taskType) => {

@@ -1,18 +1,10 @@
 /* Prompts Templates Panel */
 
-.prompts-layout {
+.prompts-layout__content {
     position: relative;
     display: flex;
-    flex-direction: column;
-    height: 100%;
-    min-height: 400px;
-    padding: var(--spacing-xl);
-}
-
-.prompts-layout__content {
-    display: flex;
     flex: 1;
-    min-height: 0;
+    min-height: 400px;
 }
 
 /* Panel Split Layout */
@@ -302,10 +294,6 @@
         transform: translateX(100%);
         opacity: 1;
         pointer-events: none;
-    }
-
-    .prompts-layout {
-        padding: var(--spacing-lg);
     }
 
     .editor-wrapper__header {

@@ -79,11 +79,12 @@ const LanguagePanel: React.FC<LanguagePanelProps> = ({
 
   return (
     <div className="language-panel">
-      <div className="panel-description">
-        <p>{t('settings.language.description')}</p>
+      <div className="panel-header">
+        <h3>{t('settings.language.title')}</h3>
+        <p className="panel-description">{t('settings.language.description')}</p>
       </div>
 
-      <div className="language-settings-card">
+      <div className="settings-panel-card">
         <div className="form-field">
           <label>{t('settings.language.uiLanguage')}</label>
           <select
@@ -166,7 +167,7 @@ const LanguagePanel: React.FC<LanguagePanelProps> = ({
         </div>
       </div>
 
-      <div className="language-info-box">
+      <div className="info-box">
         <h4>{t('settings.language.languageSupport')}</h4>
         <ul>
           <li>{t('settings.language.languageSupportInfo.mainLanguage')}</li>

@@ -1,22 +1,5 @@
 /* Image Gen Panel */
 
-.image-gen-panel {
-    width: 100%;
-    max-width: 800px;
-}
-
-/* Panel Header */
-.panel-header {
-    margin-bottom: var(--spacing-xl);
-}
-
-.panel-header h3 {
-    margin: 0 0 var(--spacing-sm) 0;
-    font-size: var(--font-size-lg);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-}
-
 /* Settings Grid */
 .settings-grid {
     display: grid;

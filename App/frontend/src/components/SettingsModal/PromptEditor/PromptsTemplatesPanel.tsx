@@ -501,7 +501,12 @@ const PromptsTemplatesPanel: React.FC = () => {
         (subTab === 'variables');
 
     return (
-        <div className="prompts-layout">
+        <div className="prompts-templates-panel">
+            <div className="panel-header">
+                <h3>{t('settings.promptEditor.title')}</h3>
+                <p className="panel-description">{t('settings.promptEditor.description')}</p>
+            </div>
+
             <div className="prompts-layout__content">
                 <div className={`panel-split ${isSidebarCollapsed ? 'panel-split--collapsed' : ''}`}>
                     {/* Mobile Backdrop */}

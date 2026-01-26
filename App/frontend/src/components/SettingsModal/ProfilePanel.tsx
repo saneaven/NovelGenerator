@@ -110,12 +110,13 @@ const ProfilePanel: React.FC = () => {
 
   return (
     <div className="profile-panel">
-      <div className="panel-description">
-        <p>{t('settings.profile.description')}</p>
+      <div className="panel-header">
+        <h3>{t('settings.profile.title')}</h3>
+        <p className="panel-description">{t('settings.profile.description')}</p>
       </div>
 
       {/* Profile Information Card */}
-      <div className="profile-settings-card">
+      <div className="settings-panel-card">
         <h3 className="section-title">
           <People size="md" /> {t('settings.profile.profileInformation')}
         </h3>
@@ -158,7 +159,7 @@ const ProfilePanel: React.FC = () => {
       </div>
 
       {/* Password Change Card */}
-      <div className="profile-settings-card">
+      <div className="settings-panel-card">
         <h3 className="section-title">
           <Lock size="md" /> {t('settings.profile.changePassword')}
         </h3>

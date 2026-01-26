@@ -63,11 +63,13 @@ const RagSearchPanel: React.FC<RagSearchPanelProps> = ({
   }
 
   return (
-    <div className="settings-panel-card">
-      <div className="config-section">
-        <h3 className="section-title">{t('settings.ragSearch.title')}</h3>
-        <p className="field-hint">{t('settings.ragSearch.description')}</p>
+    <div className="rag-search-panel">
+      <div className="panel-header">
+        <h3>{t('settings.ragSearch.title')}</h3>
+        <p className="panel-description">{t('settings.ragSearch.description')}</p>
+      </div>
 
+      <div className="settings-panel-card">
         <div className="form-field">
           <label>{t('settings.ragSearch.provider')}</label>
           <CustomSelect
@@ -138,15 +140,16 @@ const RagSearchPanel: React.FC<RagSearchPanelProps> = ({
           <p className="field-hint">{t('settings.ragSearch.dimensionsHint')}</p>
         </div>
 
-        <div className="info-box">
-          <h4>{t('settings.ragSearch.rulesTitle')}</h4>
-          <ul>
-            <li>{t('settings.ragSearch.rules.mainLanguageOnly')}</li>
-            <li>{t('settings.ragSearch.rules.excludesMarkdownAssets')}</li>
-            <li>{t('settings.ragSearch.rules.orderedResults')}</li>
-            <li>{t('settings.ragSearch.rules.reindexRequired')}</li>
-          </ul>
-        </div>
+      </div>
+
+      <div className="info-box">
+        <h4>{t('settings.ragSearch.rulesTitle')}</h4>
+        <ul>
+          <li>{t('settings.ragSearch.rules.mainLanguageOnly')}</li>
+          <li>{t('settings.ragSearch.rules.excludesMarkdownAssets')}</li>
+          <li>{t('settings.ragSearch.rules.orderedResults')}</li>
+          <li>{t('settings.ragSearch.rules.reindexRequired')}</li>
+        </ul>
       </div>
     </div>
   );

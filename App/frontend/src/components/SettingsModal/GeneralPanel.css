@@ -1,10 +1,5 @@
 /* General Panel */
 
-.general-panel {
-    width: 100%;
-    max-width: 700px;
-}
-
 /* Task Description */
 .task-description {
     margin-bottom: var(--spacing-xl);

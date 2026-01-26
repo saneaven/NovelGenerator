@@ -74,20 +74,14 @@
 .settings-panel-content {
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: var(--spacing-xl);
+    padding: var(--spacing-xl) var(--spacing-4xl);
     background-color: var(--color-surface-base);
 }
 
-/* When containing prompts layout, don't add extra scroll - let content manage it */
-.settings-panel-content:has(.prompts-layout) {
-    align-items: stretch;
-    overflow: hidden;
-    padding: 0;
-}
 
 /* Mobile Sidebar */
 .settings-mobile-sidebar {
@@ -202,6 +196,6 @@
     }
 
     .settings-panel-content {
-        padding: var(--spacing-lg);
+        padding: var(--spacing-lg) var(--spacing-xl);
     }
 }

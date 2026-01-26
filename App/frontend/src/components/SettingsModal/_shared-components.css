@@ -27,6 +27,24 @@
     color: var(--color-error);
 }
 
+/* Panel Header */
+.panel-header {
+    margin-bottom: var(--spacing-xl);
+}
+
+.panel-header h3 {
+    margin: 0 0 var(--spacing-sm) 0;
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+}
+
+.panel-header .panel-description {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+}
+
 /* Common Panel Styles */
 .settings-panel-card {
     margin-bottom: var(--spacing-lg);

@@ -1,24 +1,6 @@
 /* Advanced Panel */
 
-.advanced-panel {
-    width: 100%;
-    max-width: 700px;
-}
-
-/* Advanced Settings Card */
-.advanced-settings-card {
-    margin-bottom: var(--spacing-lg);
-    padding: var(--spacing-lg);
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--border-radius-lg);
-    background-color: var(--color-surface-base);
-}
-
-.advanced-settings-card:last-child {
-    margin-bottom: 0;
-}
-
-.advanced-settings-card h3 {
+.advanced-panel .settings-panel-card h3 {
     margin: 0 0 var(--spacing-lg) 0;
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-medium);
@@ -137,42 +119,6 @@
     background-color: var(--color-surface-subtle);
     color: var(--color-text-secondary);
     font-size: var(--font-size-sm);
-}
-
-/* Advanced Info Box */
-.advanced-info-box {
-    margin-bottom: var(--spacing-lg);
-    padding: var(--spacing-lg);
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--border-radius-md);
-    background-color: var(--color-surface-subtle);
-}
-
-.advanced-info-box h4 {
-    margin: 0 0 var(--spacing-md) 0;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-    color: var(--color-text-primary);
-}
-
-.advanced-info-box ul {
-    margin: 0;
-    padding-left: var(--spacing-xl);
-}
-
-.advanced-info-box li {
-    margin-bottom: var(--spacing-xs);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-}
-
-.advanced-info-box li:last-child {
-    margin-bottom: 0;
-}
-
-.advanced-info-box strong {
-    color: var(--color-text-primary);
-    font-family: var(--font-family-mono);
 }
 
 /* Slider Container */

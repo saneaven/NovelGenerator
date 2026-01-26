@@ -107,11 +107,12 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
 
     return (
         <div className="advanced-panel">
-            <div className="panel-description">
-                <p>{t('settings.advanced.description')}</p>
+            <div className="panel-header">
+                <h3>{t('settings.advanced.title')}</h3>
+                <p className="panel-description">{t('settings.advanced.description')}</p>
             </div>
 
-            <div className="advanced-settings-card">
+            <div className="settings-panel-card">
                 <h3>{t('settings.advanced.errorRetry.title')}</h3>
 
                 {/* Enable/Disable Toggle */}
@@ -212,7 +213,7 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                 </div>
             </div>
 
-            <div className="advanced-info-box">
+            <div className="info-box">
                 <h4>{t('settings.advanced.commonErrorCodes.title')}</h4>
                 <ul>
                     <li><strong>429:</strong> {t('settings.advanced.commonErrorCodes.429')}</li>
@@ -224,7 +225,7 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
             </div>
 
             {/* Server Credentials Backup (E2E) */}
-            <div className="advanced-settings-card">
+            <div className="settings-panel-card">
                 <h3>{t('settings.advanced.serverVault.backupTitle')}</h3>
                 <div className="form-field">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -318,7 +319,7 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
             />
 
             {/* Native Output Mode */}
-            <div className="advanced-settings-card">
+            <div className="settings-panel-card">
                 <h3>{t('settings.advanced.nativeOutput.title')}</h3>
                 <div className="form-field">
                     <ToggleSwitch
@@ -332,7 +333,7 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
             </div>
 
             {/* Tool Call History */}
-            <div className="advanced-settings-card">
+            <div className="settings-panel-card">
                 <h3>{t('settings.advanced.toolCallHistory.title')}</h3>
                 <div className="form-field">
                     <label>{t('settings.advanced.toolCallHistory.label')}</label>
@@ -361,7 +362,7 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
             </div>
 
             {/* Thinking History */}
-            <div className="advanced-settings-card">
+            <div className="settings-panel-card">
                 <h3>{t('settings.advanced.thinkingHistory.title')}</h3>
                 <div className="form-field">
                     <label>{t('settings.advanced.thinkingHistory.label')}</label>
@@ -390,7 +391,7 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
             </div>
 
             {/* LLM Request Logging */}
-            <div className="advanced-settings-card">
+            <div className="settings-panel-card">
                 <h3>{t('settings.advanced.llmLogging.title')}</h3>
                 <div className="panel-description">
                     <p>{t('settings.advanced.llmLogging.description')}</p>
