@@ -1,17 +1,30 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getToolDisplayName } from '../../toolCall';
 import type { ToolCallProgress } from '../../llm/requestTypes';
 import { resolveStoryObjectName } from '../../agent/utils/objectNameResolver';
 import { useStoryObjects } from '../../store/unifiedObjectStore';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useSettingsStore, type ToolCallAutoApproveConfig } from '../../store/settingsStore';
 import type { ToolCallCardContainerProps, CardMode } from './types';
 import { useCardSelection } from './hooks';
 import { OperationItem } from './OperationItem';
 import './ToolCallCard.css';
 
+type AutoApproveOperation = keyof ToolCallAutoApproveConfig;
+
+function getAutoApproveOperation(toolName: string): AutoApproveOperation | null {
+  if (!toolName) return null;
+  if (toolName === 'rag_search') return 'search';
+  if (toolName.startsWith('read_')) return 'read';
+  if (toolName.startsWith('create_')) return 'create';
+  if (toolName.startsWith('delete_')) return 'delete';
+  if (toolName.startsWith('replace_')) return 'replace';
+  if (toolName.startsWith('patch_')) return 'patch';
+  return null;
+}
+
 function getAction(toolName: string): string | undefined {
   if (!toolName) return undefined;
-  if (toolName === 'rag_search') return 'read';
+  if (toolName === 'rag_search') return 'search';
   if (toolName.startsWith('create_')) return 'create';
   if (toolName.startsWith('delete_')) return 'delete';
   if (toolName.startsWith('replace_')) return 'replace';
@@ -114,7 +127,8 @@ export const ToolCallCardContainer: React.FC<ToolCallCardContainerProps> = ({
   isApplyDisabled = false,
   applyDisabledReason,
 }) => {
-  const mainLanguage = useSettingsStore(state => state.settings.mainLanguage);
+  const mainLanguage = useSettingsStore((state) => state.settings.mainLanguage);
+  const toolCallAutoApprove = useSettingsStore((state) => state.settings.toolCallAutoApprove);
   const storyObjects = useStoryObjects(projectId, mainLanguage);
 
   const isStreaming = mode === 'streaming';
@@ -188,6 +202,32 @@ export const ToolCallCardContainer: React.FC<ToolCallCardContainerProps> = ({
       setIsConfirming(false);
     }
   }, [onConfirmAndPause, isConfirming, isPending, selections]);
+
+  const autoConfirmSignature = useMemo(() => {
+    if (!isPending || !onConfirm || isApplyDisabled) return null;
+    if (cards.length === 0) return null;
+    // Only auto-confirm when every card is validated and pending.
+    if (!cards.every((c) => c.toolCall.status === 'pending')) return null;
+
+    for (const card of cards) {
+      const op = getAutoApproveOperation(card.toolCall.toolName);
+      if (!op) return null;
+      if (!toolCallAutoApprove?.[op]) return null;
+    }
+
+    const ids = cards.map((c) => c.id).join(',');
+    const config = JSON.stringify(toolCallAutoApprove ?? {});
+    return `${ids}|${config}`;
+  }, [isPending, onConfirm, isApplyDisabled, cards, toolCallAutoApprove]);
+
+  const lastAutoConfirmedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!autoConfirmSignature) return;
+    if (isConfirming) return;
+    if (lastAutoConfirmedRef.current === autoConfirmSignature) return;
+    lastAutoConfirmedRef.current = autoConfirmSignature;
+    void handleConfirm();
+  }, [autoConfirmSignature, isConfirming, handleConfirm]);
 
   if (isStreaming && streamingProgress.length === 0) return null;
   if (!isStreaming && cards.length === 0) return null;

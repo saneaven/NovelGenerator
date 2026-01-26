@@ -106,6 +106,15 @@ async def get_user_settings(
         "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"}
     }
 
+    tool_call_auto_approve_dict = getattr(settings, "tool_call_auto_approve", None) or {
+        "create": False,
+        "delete": False,
+        "patch": False,
+        "replace": False,
+        "read": False,
+        "search": False,
+    }
+
     return UserSettingsResponse(
         taskConfigs=settings.task_configs,
         mainLanguage=settings.main_language,
@@ -124,6 +133,7 @@ async def get_user_settings(
         llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
         toolCallHistoryLimit=getattr(settings, 'tool_call_history_limit', 5),
         thinkingHistoryLimit=getattr(settings, 'thinking_history_limit', 5),
+        toolCallAutoApprove=tool_call_auto_approve_dict,
         displayLanguage=getattr(settings, 'display_language', 'English'),
         uiLanguage=getattr(settings, 'ui_language', 'en')
     )
@@ -211,6 +221,9 @@ async def update_user_settings(
     if update_data.thinkingHistoryLimit is not None:
         settings.thinking_history_limit = update_data.thinkingHistoryLimit  # type: ignore
 
+    if update_data.toolCallAutoApprove is not None:
+        settings.tool_call_auto_approve = update_data.toolCallAutoApprove.model_dump()  # type: ignore
+
     if update_data.displayLanguage is not None:
         settings.display_language = update_data.displayLanguage  # type: ignore
 
@@ -242,6 +255,15 @@ async def update_user_settings(
         "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"}
     }
 
+    tool_call_auto_approve_dict = getattr(settings, "tool_call_auto_approve", None) or {
+        "create": False,
+        "delete": False,
+        "patch": False,
+        "replace": False,
+        "read": False,
+        "search": False,
+    }
+
     return UserSettingsResponse(
         taskConfigs=settings.task_configs,
         mainLanguage=settings.main_language,
@@ -260,6 +282,7 @@ async def update_user_settings(
         llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
         toolCallHistoryLimit=getattr(settings, 'tool_call_history_limit', 5),
         thinkingHistoryLimit=getattr(settings, 'thinking_history_limit', 5),
+        toolCallAutoApprove=tool_call_auto_approve_dict,
         displayLanguage=getattr(settings, 'display_language', 'English'),
         uiLanguage=getattr(settings, 'ui_language', 'en')
     )
@@ -314,6 +337,15 @@ async def update_task_config(
         "novelaiSettings": {"sampler": "k_euler_ancestral", "steps": 28, "scale": 6.0, "noise_schedule": "karras"}
     }
 
+    tool_call_auto_approve_dict = getattr(settings, "tool_call_auto_approve", None) or {
+        "create": False,
+        "delete": False,
+        "patch": False,
+        "replace": False,
+        "read": False,
+        "search": False,
+    }
+
     return UserSettingsResponse(
         taskConfigs=settings.task_configs,
         mainLanguage=settings.main_language,
@@ -332,6 +364,7 @@ async def update_task_config(
         llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
         toolCallHistoryLimit=getattr(settings, 'tool_call_history_limit', 5),
         thinkingHistoryLimit=getattr(settings, 'thinking_history_limit', 5),
+        toolCallAutoApprove=tool_call_auto_approve_dict,
         displayLanguage=getattr(settings, 'display_language', 'English'),
         uiLanguage=getattr(settings, 'ui_language', 'en')
     )
@@ -396,6 +429,14 @@ async def sync_settings_from_client(
             llm_logging_enabled=client_settings.get('llmLoggingEnabled', False),
             tool_call_history_limit=client_settings.get('toolCallHistoryLimit', 5),
             thinking_history_limit=client_settings.get('thinkingHistoryLimit', 5),
+            tool_call_auto_approve=client_settings.get('toolCallAutoApprove', {
+                "create": False,
+                "delete": False,
+                "patch": False,
+                "replace": False,
+                "read": False,
+                "search": False,
+            }),
             display_language=client_settings.get('displayLanguage', 'English'),
             ui_language=client_settings.get('uiLanguage', 'en')
         )
@@ -419,6 +460,14 @@ async def sync_settings_from_client(
         settings.llm_logging_enabled = client_settings.get('llmLoggingEnabled', getattr(settings, 'llm_logging_enabled', False))  # type: ignore
         settings.tool_call_history_limit = client_settings.get('toolCallHistoryLimit', getattr(settings, 'tool_call_history_limit', 5))  # type: ignore
         settings.thinking_history_limit = client_settings.get('thinkingHistoryLimit', getattr(settings, 'thinking_history_limit', 5))  # type: ignore
+        settings.tool_call_auto_approve = client_settings.get('toolCallAutoApprove', getattr(settings, 'tool_call_auto_approve', {
+            "create": False,
+            "delete": False,
+            "patch": False,
+            "replace": False,
+            "read": False,
+            "search": False,
+        }))  # type: ignore
         settings.display_language = client_settings.get('displayLanguage', getattr(settings, 'display_language', 'English'))  # type: ignore
         settings.ui_language = client_settings.get('uiLanguage', getattr(settings, 'ui_language', 'en'))  # type: ignore
 

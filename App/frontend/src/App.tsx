@@ -15,7 +15,7 @@ registerJourneyModals();
 registerImageTaskModals();
 
 function App() {
-  const settingsStore = useSettingsStore();
+  const loadFromServer = useSettingsStore((state) => state.loadFromServer);
   const uiLanguage = useSettingsStore((state) => state.settings.uiLanguage);
   const { i18n } = useTranslation();
 
@@ -34,7 +34,7 @@ function App() {
     document.documentElement.classList.add('no-transitions');
 
     // Load settings from server on app start
-    settingsStore.loadFromServer().catch((error) => {
+    loadFromServer().catch((error: Error) => {
       console.warn('Failed to load settings from server, using local:', error);
       // Continue with local settings if server fails
     });

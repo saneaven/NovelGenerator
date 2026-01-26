@@ -120,6 +120,16 @@ class RetryConfig(BaseModel):
     retryDelayMs: int = Field(default=1000, ge=100, le=30000)
 
 
+class ToolCallAutoApprove(BaseModel):
+    """Tool call auto-approve configuration (all-or-none per assistant response)."""
+    create: bool = False
+    delete: bool = False
+    patch: bool = False
+    replace: bool = False
+    read: bool = False
+    search: bool = False
+
+
 # Image generation settings schemas
 class NaturalImageStyle(BaseModel):
     """Custom image style for natural language providers (prefix/postfix)"""
@@ -192,6 +202,7 @@ class UserSettingsResponse(BaseModel):
     llmLoggingEnabled: bool = False
     toolCallHistoryLimit: int = 5
     thinkingHistoryLimit: int = 5
+    toolCallAutoApprove: ToolCallAutoApprove = Field(default_factory=ToolCallAutoApprove)
     displayLanguage: str = "English"
     uiLanguage: str = "en"
 
@@ -218,5 +229,6 @@ class UserSettingsUpdate(BaseModel):
     llmLoggingEnabled: Optional[bool] = None
     toolCallHistoryLimit: Optional[int] = None
     thinkingHistoryLimit: Optional[int] = None
+    toolCallAutoApprove: Optional[ToolCallAutoApprove] = None
     displayLanguage: Optional[str] = None
     uiLanguage: Optional[str] = None

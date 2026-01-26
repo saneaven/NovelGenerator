@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { RetryConfig } from '../../store/settingsStore';
+import type { RetryConfig, ToolCallAutoApproveConfig } from '../../store/settingsStore';
 import LLMLogViewer from './LLMLogViewer';
 import ToggleSwitch from '../common/ToggleSwitch';
 import { TextButton } from '../TextButton';
@@ -24,6 +24,8 @@ interface AdvancedPanelProps {
     onToolCallHistoryLimitChange: (limit: number) => void;
     thinkingHistoryLimit: number;
     onThinkingHistoryLimitChange: (limit: number) => void;
+    toolCallAutoApprove: ToolCallAutoApproveConfig;
+    onToolCallAutoApproveChange: (config: ToolCallAutoApproveConfig) => void;
 }
 
 const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
@@ -41,6 +43,8 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
     onToolCallHistoryLimitChange,
     thinkingHistoryLimit,
     onThinkingHistoryLimitChange,
+    toolCallAutoApprove,
+    onToolCallAutoApproveChange,
 }) => {
     const [newErrorCode, setNewErrorCode] = useState('');
     const [passwordModalOpen, setPasswordModalOpen] = useState(false);
@@ -329,6 +333,57 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                         icon={<Document size="sm" />}
                     />
                     <p className="field-hint">{t('settings.advanced.nativeOutput.hint')}</p>
+                </div>
+            </div>
+
+            {/* Tool Call Auto-Approve */}
+            <div className="settings-panel-card">
+                <h3>{t('settings.advanced.toolCallAutoApprove.title')}</h3>
+                <div className="panel-description">
+                    <p>{t('settings.advanced.toolCallAutoApprove.hint')}</p>
+                </div>
+
+                <div className="form-field">
+                    <ToggleSwitch
+                        checked={toolCallAutoApprove.read}
+                        onChange={(checked) => onToolCallAutoApproveChange({ ...toolCallAutoApprove, read: checked })}
+                        label={t('settings.advanced.toolCallAutoApprove.read')}
+                    />
+                </div>
+                <div className="form-field">
+                    <ToggleSwitch
+                        checked={toolCallAutoApprove.search}
+                        onChange={(checked) => onToolCallAutoApproveChange({ ...toolCallAutoApprove, search: checked })}
+                        label={t('settings.advanced.toolCallAutoApprove.search')}
+                    />
+                </div>
+                <div className="form-field">
+                    <ToggleSwitch
+                        checked={toolCallAutoApprove.create}
+                        onChange={(checked) => onToolCallAutoApproveChange({ ...toolCallAutoApprove, create: checked })}
+                        label={t('settings.advanced.toolCallAutoApprove.create')}
+                    />
+                </div>
+                <div className="form-field">
+                    <ToggleSwitch
+                        checked={toolCallAutoApprove.patch}
+                        onChange={(checked) => onToolCallAutoApproveChange({ ...toolCallAutoApprove, patch: checked })}
+                        label={t('settings.advanced.toolCallAutoApprove.patch')}
+                    />
+                </div>
+                <div className="form-field">
+                    <ToggleSwitch
+                        checked={toolCallAutoApprove.replace}
+                        onChange={(checked) => onToolCallAutoApproveChange({ ...toolCallAutoApprove, replace: checked })}
+                        label={t('settings.advanced.toolCallAutoApprove.replace')}
+                    />
+                </div>
+                <div className="form-field">
+                    <ToggleSwitch
+                        checked={toolCallAutoApprove.delete}
+                        onChange={(checked) => onToolCallAutoApproveChange({ ...toolCallAutoApprove, delete: checked })}
+                        label={t('settings.advanced.toolCallAutoApprove.delete')}
+                    />
                 </div>
             </div>
 

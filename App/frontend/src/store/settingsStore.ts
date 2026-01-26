@@ -80,6 +80,16 @@ export interface RetryConfig {
     retryDelayMs: number;              // Delay between retries in ms
 }
 
+// Tool call auto-approve configuration (confirmation bypass)
+export interface ToolCallAutoApproveConfig {
+    create: boolean;
+    delete: boolean;
+    patch: boolean;
+    replace: boolean;
+    read: boolean;
+    search: boolean;
+}
+
 // Tokenizer type for token counting (used with openrouter/custom providers)
 export type TokenizerOverride = 'openai' | 'claude' | 'gemini';
 
@@ -203,6 +213,9 @@ export interface Settings {
     // Thinking history limit - how many recent assistant messages to include thinking for
     // 0 = none, 1-10 = last N messages, -1 = all
     thinkingHistoryLimit: number;
+
+    // Tool call auto-approve settings (all-or-none per assistant response)
+    toolCallAutoApprove: ToolCallAutoApproveConfig;
 }
 
 // Default settings
@@ -331,6 +344,16 @@ const defaultSettings: Settings = {
 
     // Thinking history limit - include thinking from last 5 assistant messages by default
     thinkingHistoryLimit: 5,
+
+    // Tool call auto-approve - disabled by default
+    toolCallAutoApprove: {
+        create: false,
+        delete: false,
+        patch: false,
+        replace: false,
+        read: false,
+        search: false,
+    },
 };
 
 // Store interface
@@ -458,6 +481,12 @@ const mergeWithDefaults = (stored: any): Settings => {
         llmLoggingEnabled: stored.llmLoggingEnabled ?? defaultSettings.llmLoggingEnabled,
         toolCallHistoryLimit: stored.toolCallHistoryLimit ?? defaultSettings.toolCallHistoryLimit,
         thinkingHistoryLimit: stored.thinkingHistoryLimit ?? defaultSettings.thinkingHistoryLimit,
+        toolCallAutoApprove: {
+            ...defaultSettings.toolCallAutoApprove,
+            ...(stored.toolCallAutoApprove && typeof stored.toolCallAutoApprove === 'object'
+                ? stored.toolCallAutoApprove
+                : {}),
+        },
     };
 };
 

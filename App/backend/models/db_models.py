@@ -121,6 +121,20 @@ class UserSettings(Base):
     # Thinking history limit - number of recent assistant messages to include thinking for
     thinking_history_limit = Column(Integer, default=5, nullable=False)
 
+    # Tool call auto-approve settings (all-or-none per assistant response)
+    tool_call_auto_approve = Column(
+        JSONB,
+        nullable=False,
+        default=lambda: {
+            "create": False,
+            "delete": False,
+            "patch": False,
+            "replace": False,
+            "read": False,
+            "search": False,
+        },
+    )
+
     # Display language for UI (content display language)
     display_language = Column(String(50), default='English', nullable=False)
 

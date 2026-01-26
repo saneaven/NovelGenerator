@@ -330,6 +330,16 @@
         "enableNative": "Enable native output mode",
         "hint": "When enabled, edit/translation tasks emit <tool_calls> blocks (converted server-side into normal tool calls). Image prompt tasks always output raw text."
       },
+      "toolCallAutoApprove": {
+        "title": "Tool Call Auto-Approve",
+        "hint": "Auto-approve selected tool call types. Auto-approval only happens when an assistant response contains exclusively auto-approved operation types. If any non-approved operation is present, confirmation is required.",
+        "create": "Auto-approve Create",
+        "delete": "Auto-approve Delete",
+        "patch": "Auto-approve Patch",
+        "replace": "Auto-approve Replace",
+        "read": "Auto-approve Read",
+        "search": "Auto-approve Search"
+      },
       "toolCallHistory": {
         "title": "Tool Call History",
         "label": "Include tool calls in agent history",

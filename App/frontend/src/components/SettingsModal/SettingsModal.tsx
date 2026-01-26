@@ -67,7 +67,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         // Ignore - status is best-effort
       });
     }
-  }, [isOpen, settingsStore.settings]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -499,6 +500,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             thinkingHistoryLimit={localSettings.thinkingHistoryLimit}
             onThinkingHistoryLimitChange={(limit) =>
               setLocalSettings(prev => ({ ...prev, thinkingHistoryLimit: limit }))
+            }
+            toolCallAutoApprove={localSettings.toolCallAutoApprove}
+            onToolCallAutoApproveChange={(config) =>
+              setLocalSettings(prev => ({ ...prev, toolCallAutoApprove: config }))
             }
           />
         )}

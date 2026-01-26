@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 
 revision = "0003_add_rag_search_defaults"
@@ -18,32 +19,49 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "user_settings",
-        sa.Column("rag_search_top_k_per_query", sa.Integer(), nullable=False, server_default=sa.text("20")),
-    )
-    op.add_column(
-        "user_settings",
-        sa.Column("rag_search_neighbor_window", sa.Integer(), nullable=False, server_default=sa.text("0")),
-    )
-    op.add_column(
-        "user_settings",
-        sa.Column("rag_search_max_primary_chunks", sa.Integer(), nullable=False, server_default=sa.text("20")),
-    )
-    op.add_column(
-        "user_settings",
-        sa.Column("rag_search_max_total_chunks", sa.Integer(), nullable=False, server_default=sa.text("60")),
-    )
+    bind = op.get_bind()
+    inspector = inspect(bind)
+    existing = {col["name"] for col in inspector.get_columns("user_settings")}
 
-    op.alter_column("user_settings", "rag_search_top_k_per_query", server_default=None)
-    op.alter_column("user_settings", "rag_search_neighbor_window", server_default=None)
-    op.alter_column("user_settings", "rag_search_max_primary_chunks", server_default=None)
-    op.alter_column("user_settings", "rag_search_max_total_chunks", server_default=None)
+    if "rag_search_top_k_per_query" not in existing:
+        op.add_column(
+            "user_settings",
+            sa.Column("rag_search_top_k_per_query", sa.Integer(), nullable=False, server_default=sa.text("20")),
+        )
+        op.alter_column("user_settings", "rag_search_top_k_per_query", server_default=None)
+
+    if "rag_search_neighbor_window" not in existing:
+        op.add_column(
+            "user_settings",
+            sa.Column("rag_search_neighbor_window", sa.Integer(), nullable=False, server_default=sa.text("0")),
+        )
+        op.alter_column("user_settings", "rag_search_neighbor_window", server_default=None)
+
+    if "rag_search_max_primary_chunks" not in existing:
+        op.add_column(
+            "user_settings",
+            sa.Column("rag_search_max_primary_chunks", sa.Integer(), nullable=False, server_default=sa.text("20")),
+        )
+        op.alter_column("user_settings", "rag_search_max_primary_chunks", server_default=None)
+
+    if "rag_search_max_total_chunks" not in existing:
+        op.add_column(
+            "user_settings",
+            sa.Column("rag_search_max_total_chunks", sa.Integer(), nullable=False, server_default=sa.text("60")),
+        )
+        op.alter_column("user_settings", "rag_search_max_total_chunks", server_default=None)
 
 
 def downgrade() -> None:
-    op.drop_column("user_settings", "rag_search_max_total_chunks")
-    op.drop_column("user_settings", "rag_search_max_primary_chunks")
-    op.drop_column("user_settings", "rag_search_neighbor_window")
-    op.drop_column("user_settings", "rag_search_top_k_per_query")
+    bind = op.get_bind()
+    inspector = inspect(bind)
+    existing = {col["name"] for col in inspector.get_columns("user_settings")}
 
+    if "rag_search_max_total_chunks" in existing:
+        op.drop_column("user_settings", "rag_search_max_total_chunks")
+    if "rag_search_max_primary_chunks" in existing:
+        op.drop_column("user_settings", "rag_search_max_primary_chunks")
+    if "rag_search_neighbor_window" in existing:
+        op.drop_column("user_settings", "rag_search_neighbor_window")
+    if "rag_search_top_k_per_query" in existing:
+        op.drop_column("user_settings", "rag_search_top_k_per_query")
