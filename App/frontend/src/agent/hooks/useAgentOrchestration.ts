@@ -66,6 +66,13 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
   // ============================================================================
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const activeSessionIdRef = useRef<string | null>(null);
+
+  // Keep ref in sync with state for handleStop to avoid stale closure
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
+
   const activeSessionStatus = useLLMSessionStore(
     (state) => (activeSessionId ? state.sessions[activeSessionId]?.status : undefined)
   );
@@ -141,9 +148,10 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
   }, [projectId, getSelectedAgentId, getObjectsMissingMainLanguage, mainLanguage, clearInput, mode, selectedContextIds]);
 
   const handleStop = useCallback(() => {
-    if (!activeSessionId) return;
-    useLLMSessionStore.getState().cancelSession(activeSessionId);
-  }, [activeSessionId]);
+    const sessionId = activeSessionIdRef.current;
+    if (!sessionId) return;
+    useLLMSessionStore.getState().cancelSession(sessionId);
+  }, []);
 
   const adjustTextareaHeight = useCallback(() => {
     if (editTextareaRef.current) {

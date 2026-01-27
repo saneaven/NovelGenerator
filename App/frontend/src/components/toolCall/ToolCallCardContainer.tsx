@@ -185,6 +185,7 @@ export const ToolCallCardContainer: React.FC<ToolCallCardContainerProps> = ({
 
   const handleConfirm = useCallback(async () => {
     if (!onConfirm || isConfirming || !isPending) return;
+    setIsCardCollapsed(true);
     setIsConfirming(true);
     try {
       await onConfirm(selections);
@@ -195,6 +196,7 @@ export const ToolCallCardContainer: React.FC<ToolCallCardContainerProps> = ({
 
   const handleConfirmAndPause = useCallback(async () => {
     if (!onConfirmAndPause || isConfirming || !isPending) return;
+    setIsCardCollapsed(true);
     setIsConfirming(true);
     try {
       await onConfirmAndPause(selections);
