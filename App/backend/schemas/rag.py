@@ -14,11 +14,6 @@ class RagEmbeddingProfileResponse(BaseModel):
     dimensions: Optional[int] = None
 
 
-class RagEmbeddingProfileUpdate(BaseModel):
-    provider: str = Field(..., min_length=1, max_length=50)
-    model: str = Field(..., min_length=1, max_length=200)
-
-
 class RagProjectStatusResponse(BaseModel):
     enabled: bool = False
     profile: Optional[RagEmbeddingProfileResponse] = None

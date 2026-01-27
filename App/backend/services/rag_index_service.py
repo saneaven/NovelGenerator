@@ -24,7 +24,8 @@ from ..models.db_models import (
     UserSettings,
 )
 from ..models.translation_models import ObjectVersion
-from ..models.rag_models import RagChunk, RagEmbeddingProfile, RagSource
+from ..models.rag_models import RagChunk, RagSource
+from .embedding_config_service import get_embedding_profile, set_embedding_dimensions
 from .rag_chunker import (
     merge_blocks_by_length,
     split_markdown_blocks,
@@ -62,35 +63,8 @@ class OrderMeta:
     chapter_id: Optional[UUID] = None
 
 
-def get_active_profile(db: Session, *, user_id: UUID) -> Optional[RagEmbeddingProfile]:
-    return db.query(RagEmbeddingProfile).filter(RagEmbeddingProfile.user_id == user_id).first()
-
-
-def upsert_profile(db: Session, *, user_id: UUID, provider: str, model: str) -> RagEmbeddingProfile:
-    profile = get_active_profile(db, user_id=user_id)
-    if profile and profile.provider == provider and profile.model == model:
-        return profile
-
-    # Early dev: switching profile invalidates all existing vectors.
-    wipe_user_index(db, user_id=user_id)
-
-    if not profile:
-        profile = RagEmbeddingProfile(user_id=user_id, provider=provider, model=model, dimensions=None)
-        db.add(profile)
-    else:
-        profile.provider = provider
-        profile.model = model
-        profile.dimensions = None
-        profile.updated_at = datetime.utcnow()
-
-    db.commit()
-    db.refresh(profile)
-    return profile
-
-
 def wipe_user_index(db: Session, *, user_id: UUID) -> None:
     db.query(RagSource).filter(RagSource.user_id == user_id).delete(synchronize_session=False)
-    db.commit()
 
 
 def get_main_language(db: Session, *, user_id: UUID) -> str:
@@ -332,7 +306,7 @@ async def index_object(
     if object_type in EXCLUDED_OBJECT_TYPES:
         return {"rebuilt": False, "skipped": True, "missing_main_language": False}
 
-    profile = get_active_profile(db, user_id=user_id)
+    profile = get_embedding_profile(db, user_id=user_id, feature="ragSearch")
     if not profile:
         raise ValueError("RAG embedding profile is not configured")
 
@@ -399,8 +373,8 @@ async def index_object(
         return {"rebuilt": False, "skipped": True, "missing_main_language": False}
 
     vectors = await embed_many(
-        provider=profile.provider,
-        model=profile.model,
+        provider=profile["provider"],
+        model=profile["model"],
         inputs=embedding_texts,
         config=provider_config,
         purpose="document",
@@ -417,11 +391,12 @@ async def index_object(
     if any(len(v) != embedding_dim for v in vectors):
         raise RuntimeError("Embedding vectors have inconsistent dimensions")
 
-    # Auto-fill profile dimensions on first successful embed
-    if profile.dimensions is None:
-        profile.dimensions = embedding_dim
-    elif profile.dimensions != embedding_dim:
-        raise RuntimeError(f"Embedding dimensions mismatch (profile={profile.dimensions}, got={embedding_dim})")
+    # Auto-fill profile dimensions on first successful embed (stored in user settings)
+    stored_dim = profile.get("dimensions")
+    if stored_dim is None:
+        set_embedding_dimensions(db, user_id=user_id, feature="ragSearch", dimensions=embedding_dim)
+    elif stored_dim != embedding_dim:
+        raise RuntimeError(f"Embedding dimensions mismatch (profile={stored_dim}, got={embedding_dim})")
 
     # Rebuild chunks
     db.query(RagChunk).filter(RagChunk.source_id == source.id).delete(synchronize_session=False)
@@ -484,7 +459,7 @@ async def reindex_project(
     provider_config: Dict[str, Any],
     force: bool = False,
 ) -> Dict[str, int]:
-    profile = get_active_profile(db, user_id=user_id)
+    profile = get_embedding_profile(db, user_id=user_id, feature="ragSearch")
     if not profile:
         raise ValueError("RAG embedding profile is not configured")
 
@@ -540,12 +515,10 @@ def get_project_status(db: Session, *, user_id: UUID, project_id: UUID) -> Dict[
         .first()
     )
 
-    profile = get_active_profile(db, user_id=user_id)
+    profile = get_embedding_profile(db, user_id=user_id, feature="ragSearch")
 
     return {
-        "profile": None
-        if not profile
-        else {"provider": profile.provider, "model": profile.model, "dimensions": profile.dimensions},
+        "profile": profile,
         "total_sources": total_sources,
         "ready_sources": ready_sources,
         "missing_main_language_sources": missing_sources,

@@ -20,6 +20,7 @@ export interface Agent {
   name: string;
   messages: StoredAgentMessage[];
   project_id: string;
+  archived_until_message_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -40,6 +41,7 @@ interface AgentStore {
   getSelectedAgent: (projectId: string) => Agent | undefined;
   renameAgent: (projectId: string, agentId: string, name: string) => Promise<void>;
   deleteAgent: (projectId: string, agentId: string) => Promise<void>;
+  setArchivedUntilMessageId: (projectId: string, agentId: string, messageId: string | null) => void;
 
   // Message management
   fetchMessages: (projectId: string, agentId: string) => Promise<void>;
@@ -124,6 +126,7 @@ const convertBackendAgent = (agent: AgentResponse): Agent => {
     id: agent.id,
     name: agent.name,
     project_id: agent.project_id,
+    archived_until_message_id: (agent as any).archived_until_message_id ?? null,
     created_at: agent.created_at,
     updated_at: agent.updated_at,
     messages: agent.messages.map(convertBackendMessage),
@@ -265,6 +268,18 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
       });
       throw error;
     }
+  },
+
+  setArchivedUntilMessageId: (projectId: string, agentId: string, messageId: string | null) => {
+    set((state) => ({
+      agentsByProject: {
+        ...state.agentsByProject,
+        [projectId]:
+          state.agentsByProject[projectId]?.map((agent) =>
+            agent.id === agentId ? { ...agent, archived_until_message_id: messageId } : agent
+          ) || [],
+      },
+    }));
   },
 
   deleteAgent: async (projectId: string, agentId: string) => {

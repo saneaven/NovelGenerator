@@ -38,7 +38,34 @@
     "title": "Novel Buds",
     "tagline": "AI와 함께 창작 소설을 작성하세요",
     "signIn": "로그인",
-    "createAccount": "계정 만들기"
+    "createAccount": "계정 만들기",
+    "hero": {
+      "title": "Novel Buds",
+      "subtitle": "AI 기반 창작 글쓰기 동반자"
+    },
+    "about": {
+      "title": "Novel Buds란?",
+      "description": "Novel Buds는 당신의 이야기에 생명을 불어넣는 지능형 글쓰기 플랫폼입니다. 강력한 AI 지원, 체계적인 스토리 관리, 원활한 번역 기능으로 가장 중요한 것인 창작에 집중할 수 있습니다."
+    },
+    "features": {
+      "ai": {
+        "title": "AI 글쓰기 지원",
+        "description": "지능적인 제안, 캐릭터 개발, 플롯 지원 등을 통해 AI가 스토리 개발을 도와드립니다. AI가 맥락을 이해하고 작가의 벽을 극복하도록 도와줍니다."
+      },
+      "organize": {
+        "title": "스토리 정리",
+        "description": "캐릭터, 장소, 조직, 설정을 한 곳에서 관리하세요. 항상 손끝에서 접근 가능한 상호 연결된 스토리 요소로 풍부하고 일관된 세계를 구축하세요."
+      },
+      "language": {
+        "title": "다국어 지원",
+        "description": "원하는 언어로 작성하고 콘텐츠를 원활하게 번역하세요. 글로벌 독자에게 다가가거나 모국어로 작성하면서 새로운 시장으로 확장하기에 완벽합니다."
+      }
+    },
+    "cta": {
+      "title": "여정을 시작하세요",
+      "subtitle": "오늘 첫 번째 이야기를 만들고 AI 지원 창작 글쓰기의 즐거움을 발견하세요.",
+      "signUp": "무료로 시작하기"
+    }
   },
   "auth": {
     "welcomeBack": "다시 오신 것을 환영합니다",
@@ -104,6 +131,7 @@
     "openNavigation": "탐색 메뉴 열기",
     "tabs": {
       "ragSearch": "RAG Search",
+      "agentMemory": "Agent Memory",
       "profile": "프로필",
       "language": "언어",
       "general": "일반",
@@ -112,6 +140,10 @@
       "imageGen": "이미지 생성",
       "advanced": "고급",
       "prompts": "프롬프트 & 템플릿"
+    },
+    "embeddings": {
+      "enableLabel": "임베딩 사용",
+      "enableHint": "임베딩 기반 기능 전체(RAG Search 도구 + Agent Memory 검색)를 켜고 끕니다. 비활성화하면 Agent Memory는 요약만 사용합니다."
     },
     "ragSearch": {
       "title": "RAG Search",
@@ -146,6 +178,27 @@
       },
       "loadErrorTitle": "Failed to load RAG profile",
       "saveValidationError": "Please set provider and model for RAG Search."
+    },
+    "agentMemory": {
+      "title": "Agent Memory",
+      "description": "Configure embedding provider/model and retrieval settings for archived chat memory.",
+      "provider": "Provider",
+      "providerHint": "Uses the same credentials you set in Settings > Credentials.",
+      "model": "Embedding Model",
+      "modelPlaceholder": "e.g. text-embedding-3-large",
+      "modelHint": "This model is used to embed archived chat messages and search queries.",
+      "browse": "Browse models",
+      "dimensions": "Embedding dimensions",
+      "dimensionsUnknown": "Unknown (detected on first index/search)",
+      "dimensionsHint": "Detected automatically from the embedding response.",
+      "topKPerQuery": "Top K per query",
+      "topKPerQueryHint": "Candidate pool size per query (higher = more results, slower).",
+      "neighborWindow": "Neighbor window",
+      "neighborWindowHint": "Include nearby chat messages around each hit (message_index +/- window).",
+      "maxPrimaryMessages": "Max primary messages",
+      "maxPrimaryMessagesHint": "Max number of ranked (distance-based) messages injected into the prompt (before neighbor expansion).",
+      "maxTotalMessages": "Max total messages",
+      "maxTotalMessagesHint": "Hard cap for total injected messages including neighbor expansion."
     },
     "language": {
       "title": "언어 설정",
@@ -283,6 +336,10 @@
         "imagePrompt": {
           "label": "이미지 프롬프트",
           "description": "스토리 컨텍스트에서 상세한 이미지 프롬프트를 AI로 생성"
+        },
+        "summary": {
+          "label": "요약",
+          "description": "백그라운드 요약(장기 기억 등 요약 작업에 사용)"
         }
       }
     },

@@ -21,6 +21,7 @@ import type {
 } from './types';
 import { LLMTaskMode } from './types';
 import { useCredentialsStore } from '../store/credentialsStore';
+import { buildConversationBlocks } from './conversation/buildConversationBlocks';
 
 /**
  * Map LLMTaskMode to AITaskType for settings lookup
@@ -130,7 +131,11 @@ export class LLMTask {
           : 'tool_call');
 
       // 4. Prepare messages
-      const messages = await this.prepareMessages(history, promptBundle);
+      const messages = buildConversationBlocks(history, promptBundle, {
+        toolCallHistoryLimit: settings.toolCallHistoryLimit,
+        thinkingHistoryLimit: settings.thinkingHistoryLimit,
+        includePrefill: true,
+      });
 
       const nativeToolCall = outputMode === 'native_tool_call';
 
@@ -429,175 +434,6 @@ export class LLMTask {
   /**
    * Prepare messages from history and prompt bundle
    */
-  private async prepareMessages(
-    history: ChatMessage[],
-    promptBundle: PromptBundle
-  ): Promise<ConversationBlock[]> {
-    const messages: ConversationBlock[] = [];
-    const { settings } = useSettingsStore.getState();
-    const fcLimit = settings.toolCallHistoryLimit;
-    const thinkingLimit = settings.thinkingHistoryLimit;
-
-    // 1. System prompt
-    messages.push({
-      role: 'system',
-      contentParts: [{ type: 'content', text: promptBundle.systemPrompt }],
-    });
-
-    // 2. Count assistant messages to determine which ones should include tool calls
-    // (we include tool calls from the last N assistant messages)
-    const assistantIndices: number[] = [];
-    for (let i = 0; i < history.length; i++) {
-      if (history[i].role === 'assistant') {
-        assistantIndices.push(i);
-      }
-    }
-    const totalAssistants = assistantIndices.length;
-
-    // Find all user message indices for position-based template selection
-    const userIndices: number[] = [];
-    for (let i = 0; i < history.length; i++) {
-      if (history[i].role === 'user') userIndices.push(i);
-    }
-    const totalUsers = userIndices.length;
-    const firstUserIndex = userIndices[0] ?? -1;
-    const lastUserIndex = userIndices[userIndices.length - 1] ?? -1;
-    const isSingleUser = totalUsers === 1;
-
-    // 3. Process history (all previous messages - AgentManager passes history without current user message)
-    let assistantCount = 0;
-    for (let i = 0; i < history.length; i++) {
-      const msg = history[i];
-
-      if (msg.role === 'user') {
-        // Position-based template selection
-        let template: string;
-        if (isSingleUser) {
-          template = promptBundle.initialUserPrompt ?? promptBundle.lastUserPrompt ?? promptBundle.firstUserPrompt ?? promptBundle.userPrompt;
-        } else if (i === firstUserIndex) {
-          template = promptBundle.firstUserPrompt ?? promptBundle.userPrompt;
-        } else if (i === lastUserIndex) {
-          template = promptBundle.lastUserPrompt ?? promptBundle.userPrompt;
-        } else {
-          template = promptBundle.userPrompt;
-        }
-
-        const rendered = PromptManager.renderTemplate(template, {
-          ...promptBundle.templateData,
-          input: { userMessage: this.getMessageText(msg) },
-        });
-        messages.push({
-          role: 'user',
-          contentParts: [{ type: 'content', text: rendered }],
-        });
-      } else if (msg.role === 'assistant') {
-        // For assistant messages, potentially include tool_calls and thinking
-        assistantCount++;
-
-        // Determine if we should include tool calls for this message
-        // fcLimit: 0 = none, -1 = all, N = last N assistant messages
-        const shouldIncludeFC = fcLimit === -1 ||
-          (fcLimit > 0 && assistantCount > totalAssistants - fcLimit);
-
-        // Determine if we should include thinking for this message
-        // thinkingLimit: 0 = none, -1 = all, N = last N assistant messages
-        const shouldIncludeThinking = thinkingLimit === -1 ||
-          (thinkingLimit > 0 && assistantCount > totalAssistants - thinkingLimit);
-
-        // Filter contentParts: remove thinking if not included
-        const filteredContentParts = shouldIncludeThinking
-          ? msg.contentParts
-          : msg.contentParts.filter(part => part.type !== 'thinking');
-
-        const block: ConversationBlock = {
-          role: msg.role,
-          contentParts: filteredContentParts.length > 0
-            ? filteredContentParts
-            : [{ type: 'content', text: '' }],
-        };
-
-        // Add tool_calls if applicable
-        if (shouldIncludeFC && msg.toolCalls && msg.toolCalls.length > 0) {
-          block.tool_calls = msg.toolCalls.map(fc => ({
-            id: fc.id,
-            type: 'function' as const,
-            function: {
-              name: fc.tool_name,
-              arguments: typeof fc.arguments === 'string'
-                ? fc.arguments
-                : JSON.stringify(fc.arguments),
-            },
-          }));
-        }
-
-        messages.push(block);
-
-        // Add tool_results message if this assistant message had tool_calls with results
-        if (block.tool_calls && block.tool_calls.length > 0 && msg.toolCalls) {
-          const toolResults = msg.toolCalls
-            .filter(fc => fc.status !== 'pending')
-            .map(fc => {
-              let content: string;
-              switch (fc.status) {
-                case 'accepted':
-                  content = fc.result?.message || 'Applied successfully';
-                  break;
-                case 'rejected':
-                  content = fc.reason ? `User rejected: ${fc.reason}` : 'User rejected this action';
-                  break;
-                case 'failed':
-                  content = `Failed: ${fc.reason || 'Unknown error'}`;
-                  break;
-                default:
-                  content = 'Pending user confirmation';
-              }
-              return {
-                tool_call_id: fc.id,
-                tool_name: fc.tool_name,
-                content,
-              };
-            });
-
-          if (toolResults.length > 0) {
-            messages.push({
-              role: 'tool_results' as const,
-              contentParts: [],  // Required by ConversationBlock but not used for tool_results
-              tool_results: toolResults,
-            });
-          }
-        }
-      } else {
-        // Use raw message content for other roles
-        messages.push({
-          role: msg.role,
-          contentParts: msg.contentParts.length > 0
-            ? msg.contentParts
-            : [{ type: 'content', text: '' }],
-        });
-      }
-    }
-
-    // 4. Prefill (if configured)
-    if (promptBundle.prefill) {
-      messages.push({
-        role: 'assistant',
-        contentParts: [{ type: 'content', text: promptBundle.prefill }],
-      });
-    }
-
-    return messages;
-  }
-
-  /**
-   * Get text content from a message
-   */
-  private getMessageText(msg: ChatMessage): string {
-    return msg.contentParts
-      .filter((p: ContentPart) => p.type === 'content')
-      .map((p: ContentPart) => p.text)
-      .join('');
-  }
-
   /**
    * Parse tool call arguments from JSON string to object
    */

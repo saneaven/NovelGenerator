@@ -12,8 +12,11 @@ from ..schemas.settings import (
     TaskAIConfig,
     AITaskType,
     RetryConfig,
-    ImageGenConfig
+    ImageGenConfig,
 )
+from ..services.agent_memory_service import wipe_agent_memory_index
+from ..services.embedding_config_service import merge_embedding_configs
+from ..services.rag_index_service import wipe_user_index
 
 router = APIRouter(prefix="/api/v1/settings", tags=["settings"])
 
@@ -43,7 +46,7 @@ async def get_user_settings(
                         'enablePrefill': False,
                         'thinkingMode': 'off',
                         'thinkingConfig': {'effort': 'medium'}
-                    }
+                    },
                 },
                 'translation': {
                     'provider': 'openrouter',
@@ -53,7 +56,7 @@ async def get_user_settings(
                         'enablePrefill': False,
                         'thinkingMode': 'off',
                         'thinkingConfig': {'effort': 'medium'}
-                    }
+                    },
                 },
                 'editAssistant': {
                     'provider': 'openrouter',
@@ -63,7 +66,7 @@ async def get_user_settings(
                         'enablePrefill': True,
                         'thinkingMode': 'off',
                         'thinkingConfig': {'effort': 'medium'}
-                    }
+                    },
                 },
                 'imagePrompt': {
                     'provider': 'openrouter',
@@ -73,8 +76,18 @@ async def get_user_settings(
                         'enablePrefill': False,
                         'thinkingMode': 'off',
                         'thinkingConfig': {'effort': 'medium'}
-                    }
-                }
+                    },
+                },
+                'summary': {
+                    'provider': 'openrouter',
+                    'model': 'gpt-5-mini',
+                    'temperature': 0.2,
+                    'advanced': {
+                        'enablePrefill': False,
+                        'thinkingMode': 'off',
+                        'thinkingConfig': {'effort': 'medium'}
+                    },
+                },
             },
             main_language='English',
             sub_languages=[],
@@ -115,6 +128,8 @@ async def get_user_settings(
         "search": False,
     }
 
+    embedding_configs_dict = merge_embedding_configs(getattr(settings, "embedding_configs", None))
+
     return UserSettingsResponse(
         taskConfigs=settings.task_configs,
         mainLanguage=settings.main_language,
@@ -125,10 +140,15 @@ async def get_user_settings(
         imageGenConfig=image_gen_config_dict,  # type: ignore
         nativeOutputMode=settings.native_output_mode,
         ragSearchEnabled=getattr(settings, "rag_search_enabled", False),
+        embeddingConfigs=embedding_configs_dict,
         ragSearchTopKPerQuery=getattr(settings, "rag_search_top_k_per_query", 20),
         ragSearchNeighborWindow=getattr(settings, "rag_search_neighbor_window", 0),
         ragSearchMaxPrimaryChunks=getattr(settings, "rag_search_max_primary_chunks", 20),
         ragSearchMaxTotalChunks=getattr(settings, "rag_search_max_total_chunks", 60),
+        agentMemoryTopKPerQuery=getattr(settings, "agent_memory_top_k_per_query", 20),
+        agentMemoryNeighborWindow=getattr(settings, "agent_memory_neighbor_window", 0),
+        agentMemoryMaxPrimaryMessages=getattr(settings, "agent_memory_max_primary_messages", 20),
+        agentMemoryMaxTotalMessages=getattr(settings, "agent_memory_max_total_messages", 60),
         patchAutoRetry=getattr(settings, 'patch_auto_retry', True),
         llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
         toolCallHistoryLimit=getattr(settings, 'tool_call_history_limit', 5),
@@ -197,6 +217,24 @@ async def update_user_settings(
     if update_data.ragSearchEnabled is not None:
         settings.rag_search_enabled = update_data.ragSearchEnabled  # type: ignore
 
+    if update_data.embeddingConfigs is not None:
+        prev = merge_embedding_configs(getattr(settings, "embedding_configs", None))
+        next_cfg = merge_embedding_configs(update_data.embeddingConfigs.model_dump(exclude_none=True))
+
+        rag_prev = prev.get("ragSearch", {})
+        rag_next = next_cfg.get("ragSearch", {})
+        if rag_prev.get("provider") != rag_next.get("provider") or rag_prev.get("model") != rag_next.get("model"):
+            wipe_user_index(db, user_id=current_user.id)
+            rag_next["dimensions"] = None
+
+        mem_prev = prev.get("agentMemory", {})
+        mem_next = next_cfg.get("agentMemory", {})
+        if mem_prev.get("provider") != mem_next.get("provider") or mem_prev.get("model") != mem_next.get("model"):
+            wipe_agent_memory_index(db, user_id=current_user.id)
+            mem_next["dimensions"] = None
+
+        settings.embedding_configs = next_cfg  # type: ignore
+
     if update_data.ragSearchTopKPerQuery is not None:
         settings.rag_search_top_k_per_query = update_data.ragSearchTopKPerQuery  # type: ignore
 
@@ -208,6 +246,18 @@ async def update_user_settings(
 
     if update_data.ragSearchMaxTotalChunks is not None:
         settings.rag_search_max_total_chunks = update_data.ragSearchMaxTotalChunks  # type: ignore
+
+    if update_data.agentMemoryTopKPerQuery is not None:
+        settings.agent_memory_top_k_per_query = update_data.agentMemoryTopKPerQuery  # type: ignore
+
+    if update_data.agentMemoryNeighborWindow is not None:
+        settings.agent_memory_neighbor_window = update_data.agentMemoryNeighborWindow  # type: ignore
+
+    if update_data.agentMemoryMaxPrimaryMessages is not None:
+        settings.agent_memory_max_primary_messages = update_data.agentMemoryMaxPrimaryMessages  # type: ignore
+
+    if update_data.agentMemoryMaxTotalMessages is not None:
+        settings.agent_memory_max_total_messages = update_data.agentMemoryMaxTotalMessages  # type: ignore
 
     if update_data.patchAutoRetry is not None:
         settings.patch_auto_retry = update_data.patchAutoRetry  # type: ignore
@@ -264,6 +314,8 @@ async def update_user_settings(
         "search": False,
     }
 
+    embedding_configs_dict = merge_embedding_configs(getattr(settings, "embedding_configs", None))
+
     return UserSettingsResponse(
         taskConfigs=settings.task_configs,
         mainLanguage=settings.main_language,
@@ -274,10 +326,15 @@ async def update_user_settings(
         imageGenConfig=image_gen_config_dict,  # type: ignore
         nativeOutputMode=settings.native_output_mode,
         ragSearchEnabled=getattr(settings, "rag_search_enabled", False),
+        embeddingConfigs=embedding_configs_dict,
         ragSearchTopKPerQuery=getattr(settings, "rag_search_top_k_per_query", 20),
         ragSearchNeighborWindow=getattr(settings, "rag_search_neighbor_window", 0),
         ragSearchMaxPrimaryChunks=getattr(settings, "rag_search_max_primary_chunks", 20),
         ragSearchMaxTotalChunks=getattr(settings, "rag_search_max_total_chunks", 60),
+        agentMemoryTopKPerQuery=getattr(settings, "agent_memory_top_k_per_query", 20),
+        agentMemoryNeighborWindow=getattr(settings, "agent_memory_neighbor_window", 0),
+        agentMemoryMaxPrimaryMessages=getattr(settings, "agent_memory_max_primary_messages", 20),
+        agentMemoryMaxTotalMessages=getattr(settings, "agent_memory_max_total_messages", 60),
         patchAutoRetry=getattr(settings, 'patch_auto_retry', True),
         llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
         toolCallHistoryLimit=getattr(settings, 'tool_call_history_limit', 5),
@@ -346,6 +403,8 @@ async def update_task_config(
         "search": False,
     }
 
+    embedding_configs_dict = merge_embedding_configs(getattr(settings, "embedding_configs", None))
+
     return UserSettingsResponse(
         taskConfigs=settings.task_configs,
         mainLanguage=settings.main_language,
@@ -356,10 +415,15 @@ async def update_task_config(
         imageGenConfig=image_gen_config_dict,  # type: ignore
         nativeOutputMode=settings.native_output_mode,
         ragSearchEnabled=getattr(settings, "rag_search_enabled", False),
+        embeddingConfigs=embedding_configs_dict,
         ragSearchTopKPerQuery=getattr(settings, "rag_search_top_k_per_query", 20),
         ragSearchNeighborWindow=getattr(settings, "rag_search_neighbor_window", 0),
         ragSearchMaxPrimaryChunks=getattr(settings, "rag_search_max_primary_chunks", 20),
         ragSearchMaxTotalChunks=getattr(settings, "rag_search_max_total_chunks", 60),
+        agentMemoryTopKPerQuery=getattr(settings, "agent_memory_top_k_per_query", 20),
+        agentMemoryNeighborWindow=getattr(settings, "agent_memory_neighbor_window", 0),
+        agentMemoryMaxPrimaryMessages=getattr(settings, "agent_memory_max_primary_messages", 20),
+        agentMemoryMaxTotalMessages=getattr(settings, "agent_memory_max_total_messages", 60),
         patchAutoRetry=getattr(settings, 'patch_auto_retry', True),
         llmLoggingEnabled=getattr(settings, 'llm_logging_enabled', False),
         toolCallHistoryLimit=getattr(settings, 'tool_call_history_limit', 5),
@@ -410,6 +474,7 @@ async def sync_settings_from_client(
 
     if not settings:
         # Create new settings from client data
+        embedding_configs = merge_embedding_configs(client_settings.get("embeddingConfigs"))
         settings = UserSettings(
             user_id=current_user.id,
             task_configs=client_settings.get('taskConfigs', {}),
@@ -421,10 +486,15 @@ async def sync_settings_from_client(
             image_gen_config=client_settings.get('imageGenConfig', default_image_gen_config),
             native_output_mode=client_settings.get('nativeOutputMode', False),
             rag_search_enabled=client_settings.get('ragSearchEnabled', False),
+            embedding_configs=embedding_configs,
             rag_search_top_k_per_query=client_settings.get('ragSearchTopKPerQuery', 20),
             rag_search_neighbor_window=client_settings.get('ragSearchNeighborWindow', 0),
             rag_search_max_primary_chunks=client_settings.get('ragSearchMaxPrimaryChunks', 20),
             rag_search_max_total_chunks=client_settings.get('ragSearchMaxTotalChunks', 60),
+            agent_memory_top_k_per_query=client_settings.get('agentMemoryTopKPerQuery', 20),
+            agent_memory_neighbor_window=client_settings.get('agentMemoryNeighborWindow', 0),
+            agent_memory_max_primary_messages=client_settings.get('agentMemoryMaxPrimaryMessages', 20),
+            agent_memory_max_total_messages=client_settings.get('agentMemoryMaxTotalMessages', 60),
             patch_auto_retry=client_settings.get('patchAutoRetry', True),
             llm_logging_enabled=client_settings.get('llmLoggingEnabled', False),
             tool_call_history_limit=client_settings.get('toolCallHistoryLimit', 5),
@@ -456,6 +526,10 @@ async def sync_settings_from_client(
         settings.rag_search_neighbor_window = client_settings.get('ragSearchNeighborWindow', getattr(settings, 'rag_search_neighbor_window', 0))  # type: ignore
         settings.rag_search_max_primary_chunks = client_settings.get('ragSearchMaxPrimaryChunks', getattr(settings, 'rag_search_max_primary_chunks', 20))  # type: ignore
         settings.rag_search_max_total_chunks = client_settings.get('ragSearchMaxTotalChunks', getattr(settings, 'rag_search_max_total_chunks', 60))  # type: ignore
+        settings.agent_memory_top_k_per_query = client_settings.get('agentMemoryTopKPerQuery', getattr(settings, 'agent_memory_top_k_per_query', 20))  # type: ignore
+        settings.agent_memory_neighbor_window = client_settings.get('agentMemoryNeighborWindow', getattr(settings, 'agent_memory_neighbor_window', 0))  # type: ignore
+        settings.agent_memory_max_primary_messages = client_settings.get('agentMemoryMaxPrimaryMessages', getattr(settings, 'agent_memory_max_primary_messages', 20))  # type: ignore
+        settings.agent_memory_max_total_messages = client_settings.get('agentMemoryMaxTotalMessages', getattr(settings, 'agent_memory_max_total_messages', 60))  # type: ignore
         settings.patch_auto_retry = client_settings.get('patchAutoRetry', getattr(settings, 'patch_auto_retry', True))  # type: ignore
         settings.llm_logging_enabled = client_settings.get('llmLoggingEnabled', getattr(settings, 'llm_logging_enabled', False))  # type: ignore
         settings.tool_call_history_limit = client_settings.get('toolCallHistoryLimit', getattr(settings, 'tool_call_history_limit', 5))  # type: ignore
@@ -470,6 +544,24 @@ async def sync_settings_from_client(
         }))  # type: ignore
         settings.display_language = client_settings.get('displayLanguage', getattr(settings, 'display_language', 'English'))  # type: ignore
         settings.ui_language = client_settings.get('uiLanguage', getattr(settings, 'ui_language', 'en'))  # type: ignore
+
+        if "embeddingConfigs" in client_settings:
+            prev = merge_embedding_configs(getattr(settings, "embedding_configs", None))
+            next_cfg = merge_embedding_configs(client_settings.get("embeddingConfigs"))
+
+            rag_prev = prev.get("ragSearch", {})
+            rag_next = next_cfg.get("ragSearch", {})
+            if rag_prev.get("provider") != rag_next.get("provider") or rag_prev.get("model") != rag_next.get("model"):
+                wipe_user_index(db, user_id=current_user.id)
+                rag_next["dimensions"] = None
+
+            mem_prev = prev.get("agentMemory", {})
+            mem_next = next_cfg.get("agentMemory", {})
+            if mem_prev.get("provider") != mem_next.get("provider") or mem_prev.get("model") != mem_next.get("model"):
+                wipe_agent_memory_index(db, user_id=current_user.id)
+                mem_next["dimensions"] = None
+
+            settings.embedding_configs = next_cfg  # type: ignore
 
     db.commit()
     db.refresh(settings)

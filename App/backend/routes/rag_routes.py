@@ -25,7 +25,6 @@ from ..models.db_models import (
 )
 from ..schemas.rag import (
     RagEmbeddingProfileResponse,
-    RagEmbeddingProfileUpdate,
     RagProjectStatusResponse,
     RagIndexObjectRequest,
     RagDeleteObjectRequest,
@@ -36,13 +35,12 @@ from ..schemas.rag import (
     RagSearchResult,
 )
 from ..services.credential_resolver import resolve_provider_config
+from ..services.embedding_config_service import get_embedding_profile
 from ..services.rag_index_service import (
     delete_object_index,
-    get_active_profile,
     get_project_status,
     index_object,
     reindex_project,
-    upsert_profile,
 )
 from ..services.rag_search_service import search_project
 
@@ -57,7 +55,7 @@ def _is_rag_enabled(db: Session, *, user_id: UUID) -> bool:
 
 def _require_rag_enabled(db: Session, *, user_id: UUID) -> None:
     if not _is_rag_enabled(db, user_id=user_id):
-        raise HTTPException(status_code=400, detail="RAG Search is disabled (Settings > RAG Search)")
+        raise HTTPException(status_code=400, detail="Embeddings are disabled (Settings > RAG Search)")
 
 
 def _get_project_or_404(db: Session, *, user_id: UUID, project_id: UUID) -> Project:
@@ -115,27 +113,6 @@ def _ensure_object_in_project(db: Session, *, project_id: UUID, object_type: str
         raise HTTPException(status_code=404, detail="Object not found in project")
 
 
-@router.get("/rag/profile", response_model=Optional[RagEmbeddingProfileResponse])
-async def get_rag_profile(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    profile = get_active_profile(db, user_id=current_user.id)
-    if not profile:
-        return None
-    return RagEmbeddingProfileResponse(provider=profile.provider, model=profile.model, dimensions=profile.dimensions)
-
-
-@router.put("/rag/profile", response_model=RagEmbeddingProfileResponse)
-async def update_rag_profile(
-    update: RagEmbeddingProfileUpdate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    profile = upsert_profile(db, user_id=current_user.id, provider=update.provider, model=update.model)
-    return RagEmbeddingProfileResponse(provider=profile.provider, model=profile.model, dimensions=profile.dimensions)
-
-
 @router.get("/projects/{project_id}/rag/status", response_model=RagProjectStatusResponse)
 async def get_rag_status(
     project_id: UUID,
@@ -160,12 +137,12 @@ async def rag_index_object(
     _require_rag_enabled(db, user_id=current_user.id)
     _ensure_object_in_project(db, project_id=project_id, object_type=request.object_type, object_id=request.object_id)
 
-    profile = get_active_profile(db, user_id=current_user.id)
+    profile = get_embedding_profile(db, user_id=current_user.id, feature="ragSearch")
     if not profile:
         raise HTTPException(status_code=400, detail="RAG embedding profile is not configured")
 
     cfg: Dict[str, Any] = resolve_provider_config(
-        provider=profile.provider,
+        provider=profile["provider"],
         request_config=request.config.model_dump(),
         current_user=current_user,
         db=db,
@@ -217,12 +194,12 @@ async def rag_reindex_project(
     _get_project_or_404(db, user_id=current_user.id, project_id=project_id)
     _require_rag_enabled(db, user_id=current_user.id)
 
-    profile = get_active_profile(db, user_id=current_user.id)
+    profile = get_embedding_profile(db, user_id=current_user.id, feature="ragSearch")
     if not profile:
         raise HTTPException(status_code=400, detail="RAG embedding profile is not configured")
 
     cfg: Dict[str, Any] = resolve_provider_config(
-        provider=profile.provider,
+        provider=profile["provider"],
         request_config=request.config.model_dump(),
         current_user=current_user,
         db=db,
@@ -253,12 +230,12 @@ async def rag_search(
     _get_project_or_404(db, user_id=current_user.id, project_id=project_id)
     _require_rag_enabled(db, user_id=current_user.id)
 
-    profile = get_active_profile(db, user_id=current_user.id)
+    profile = get_embedding_profile(db, user_id=current_user.id, feature="ragSearch")
     if not profile:
         raise HTTPException(status_code=400, detail="RAG embedding profile is not configured")
 
     cfg: Dict[str, Any] = resolve_provider_config(
-        provider=profile.provider,
+        provider=profile["provider"],
         request_config=request.config.model_dump(),
         current_user=current_user,
         db=db,

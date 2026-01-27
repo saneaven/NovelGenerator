@@ -35,6 +35,8 @@ export interface AgentExecutorInput {
   userInput: string;
   outputLanguage: string;
   contextObjectIds?: string[];
+  historyOverride?: ChatMessage[]; // LLM history base (excludes current userInput)
+  promptContextOverride?: Partial<AgentWorkspacePromptContext>;
 }
 
 export interface AgentExecutorResult {
@@ -107,20 +109,34 @@ export const AgentExecutor = {
     const fullHistory = agentStore.getMessages(input.projectId, input.agentId, language);
     const historyWithoutAssistant = fullHistory.slice(0, -1);
 
+    // Build base history:
+    // - Default: from agentStore (includes current userInput message that we just added)
+    // - Override: provided by AgentMemoryManager (excludes current userInput)
+    let history = [...(input.historyOverride ?? historyWithoutAssistant)];
+
     // Merge trailing user messages (failed previous runs) into one
-    let history = [...historyWithoutAssistant];
     const trailingUserTexts: string[] = [];
     while (history.length > 0 && history[history.length - 1].role === 'user') {
       const last = history[history.length - 1];
       trailingUserTexts.unshift(getMessageText(last.contentParts));
       history = history.slice(0, -1);
     }
-
     if (trailingUserTexts.length > 0) {
       history.push({
         id: generateTempId(),
         role: 'user' as const,
         contentParts: [{ type: 'content', text: trailingUserTexts.join('\n\n') }],
+        timestamp: new Date(),
+      });
+    }
+
+    // If historyOverride is provided, append the current userInput for the LLM request.
+    // (The store message created above is for UI/backend persistence, not used in historyOverride.)
+    if (input.historyOverride && userInput.trim()) {
+      history.push({
+        id: generateTempId(),
+        role: 'user',
+        contentParts: [{ type: 'content', text: userInput }],
         timestamp: new Date(),
       });
     }
@@ -141,6 +157,10 @@ export const AgentExecutor = {
       tools: outputMode === 'tool_call' ? getToolsForSet('agent', { ragSearchEnabled: settings.ragSearchEnabled }) : undefined,
       contextObjectIds: input.contextObjectIds,
     };
+    const mergedPromptContext: AgentWorkspacePromptContext = {
+      ...promptContext,
+      ...(input.promptContextOverride ?? {}),
+    };
 
     // 3) Start session + stream via llmSessionStore
     const handle = startLLMSession<AgentExecutorInput, AgentExecutorResult>({
@@ -149,7 +169,7 @@ export const AgentExecutor = {
       input,
       mode: llmMode,
       projectId: input.projectId,
-      promptContext,
+      promptContext: mergedPromptContext,
       provider: agentConfig.provider,
       providerConfig,
       model: agentConfig.model,

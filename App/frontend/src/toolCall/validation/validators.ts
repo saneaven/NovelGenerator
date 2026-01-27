@@ -166,7 +166,7 @@ export const validateRagSearchEnabled: Validator = (_args, toolName, _context) =
 
   const enabled = useSettingsStore.getState().settings.ragSearchEnabled;
   if (!enabled) {
-    return invalidResult('RAG Search is disabled (Settings > RAG Search)');
+    return invalidResult('Embeddings are disabled (Settings > RAG Search)');
   }
 
   return validResult();

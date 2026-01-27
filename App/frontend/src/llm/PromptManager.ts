@@ -199,13 +199,22 @@ export class PromptManager {
 
     const settings = useSettingsStore.getState().settings;
     const variables = useVariableStore.getState().getVariablesForTemplate();
+    const previousSummary = Array.isArray((context as any).previousSummary) ? (context as any).previousSummary : [];
+    const relevantChats = Array.isArray((context as any).relevantChats) ? (context as any).relevantChats : [];
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
       project: this.buildProjectData(context.projectId, settings.mainLanguage),
       input: {
         // userMessage is injected per user block in prepareMessages()
       },
-      agent: { mode, contextObjectIds: context.contextObjectIds },
+      agent: {
+        mode,
+        contextObjectIds: context.contextObjectIds,
+        selectedOutlineId: (context as any).selectedOutlineId,
+        selectedActId: (context as any).selectedActId,
+        previousSummary,
+        relevantChats,
+      },
       variables,
     };
 

@@ -91,6 +91,12 @@ handlebars.registerHelper('json', (obj: any) => JSON.stringify(obj, null, 2));
 // array(item) - Wrap single item in array (useful for filterByIds with single object)
 handlebars.registerHelper('array', (item: any) => item ? [item] : []);
 
+// last(array) - Get last element of an array
+handlebars.registerHelper('last', (arr: any[] | undefined) => {
+  if (!arr || !Array.isArray(arr) || arr.length === 0) return undefined;
+  return arr[arr.length - 1];
+});
+
 // includes(array, value) - Check if array includes value
 handlebars.registerHelper('includes', (arr: any[] | undefined, value: any) => {
   if (!arr || !Array.isArray(arr)) return false;

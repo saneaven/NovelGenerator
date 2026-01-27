@@ -1,7 +1,6 @@
 """RAG models (pgvector-backed).
 
 This project is early-stage; we intentionally keep the schema minimal:
-- Single active embedding profile per user (provider/model/dimensions).
 - Per project/object sources with deterministic ordering metadata.
 - Chunk table stores embeddings as pgvector `vector` (no ANN index in MVP).
 """
@@ -41,22 +40,6 @@ class Vector(UserDefinedType):
             return "[" + ",".join(str(float(x)) for x in value) + "]"
 
         return process
-
-
-class RagEmbeddingProfile(Base):
-    __tablename__ = "rag_embedding_profiles"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
-
-    provider = Column(String(50), nullable=False)  # openai|openrouter|custom (MVP)
-    model = Column(String(200), nullable=False)
-    dimensions = Column(Integer, nullable=True)  # auto-filled on first successful embedding call
-
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-    user = relationship("User")
 
 
 class RagSource(Base):
@@ -117,4 +100,4 @@ class RagChunk(Base):
     )
 
 
-__all__ = ["RagEmbeddingProfile", "RagSource", "RagChunk"]
+__all__ = ["RagSource", "RagChunk"]

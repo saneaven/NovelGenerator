@@ -2,7 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AITaskType, TaskAIConfig, ProviderCredentials } from '../../store/settingsStore';
 import TaskConfigForm from './TaskConfigForm';
-import { SpeechBubble, Globe, Edit, Palette } from '../icons';
+import { SpeechBubble, Globe, Edit, Palette, Document } from '../icons';
 import './GeneralPanel.css';
 
 interface GeneralPanelProps {
@@ -11,6 +11,7 @@ interface GeneralPanelProps {
     translation: TaskAIConfig;
     editAssistant: TaskAIConfig;
     imagePrompt: TaskAIConfig;
+    summary: TaskAIConfig;
   };
   credentials: ProviderCredentials;
   activeTask: AITaskType;
@@ -23,6 +24,7 @@ const TASK_ICONS: Record<AITaskType, React.ReactNode> = {
   translation: <Globe size="sm" />,
   editAssistant: <Edit size="sm" />,
   imagePrompt: <Palette size="sm" />,
+  summary: <Document size="sm" />,
 };
 
 const GeneralPanel: React.FC<GeneralPanelProps> = ({
@@ -35,7 +37,7 @@ const GeneralPanel: React.FC<GeneralPanelProps> = ({
   const { t } = useTranslation();
   const currentConfig = taskConfigs[activeTask];
 
-  const taskTypes: AITaskType[] = ['agent', 'translation', 'editAssistant', 'imagePrompt'];
+  const taskTypes: AITaskType[] = ['agent', 'translation', 'editAssistant', 'imagePrompt', 'summary'];
 
   return (
     <div className="general-panel">

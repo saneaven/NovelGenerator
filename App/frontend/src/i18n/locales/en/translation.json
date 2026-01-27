@@ -38,7 +38,34 @@
     "title": "Novel Buds",
     "tagline": "Write creative novels with AI assistance",
     "signIn": "Sign In",
-    "createAccount": "Create Account"
+    "createAccount": "Create Account",
+    "hero": {
+      "title": "Novel Buds",
+      "subtitle": "Your AI-powered creative writing companion"
+    },
+    "about": {
+      "title": "What is Novel Buds?",
+      "description": "Novel Buds is an intelligent writing platform that helps you bring your stories to life. With powerful AI assistance, organized story management, and seamless translation capabilities, you can focus on what matters most - your creativity."
+    },
+    "features": {
+      "ai": {
+        "title": "AI-Assisted Writing",
+        "description": "Let AI help you develop your story with intelligent suggestions, character development, plot assistance, and more. Our AI understands context and helps you overcome writer's block."
+      },
+      "organize": {
+        "title": "Organize Your Story",
+        "description": "Keep track of your characters, locations, organizations, and lore in one place. Build rich, consistent worlds with interconnected story elements that are always at your fingertips."
+      },
+      "language": {
+        "title": "Multi-language Support",
+        "description": "Write in any language you prefer and seamlessly translate your content. Perfect for reaching global audiences or writing in your native language while expanding to new markets."
+      }
+    },
+    "cta": {
+      "title": "Start Your Journey",
+      "subtitle": "Create your first story today and discover the joy of AI-assisted creative writing.",
+      "signUp": "Sign Up Free"
+    }
   },
   "auth": {
     "welcomeBack": "Welcome Back",
@@ -108,10 +135,15 @@
       "general": "General",
       "credentials": "Credentials",
       "ragSearch": "RAG Search",
+      "agentMemory": "Agent Memory",
       "theme": "Theme",
       "imageGen": "Image Generation",
       "advanced": "Advanced",
       "prompts": "Prompts & Templates"
+    },
+    "embeddings": {
+      "enableLabel": "Enable embeddings",
+      "enableHint": "Turns on/off all embedding-based features (RAG Search tool + Agent Memory retrieval). When disabled, Agent Memory uses summaries only."
     },
     "ragSearch": {
       "title": "RAG Search",
@@ -146,6 +178,27 @@
       },
       "loadErrorTitle": "Failed to load RAG profile",
       "saveValidationError": "Please set provider and model for RAG Search."
+    },
+    "agentMemory": {
+      "title": "Agent Memory",
+      "description": "Configure embedding provider/model and retrieval settings for archived chat memory.",
+      "provider": "Provider",
+      "providerHint": "Uses the same credentials you set in Settings > Credentials.",
+      "model": "Embedding Model",
+      "modelPlaceholder": "e.g. text-embedding-3-large",
+      "modelHint": "This model is used to embed archived chat messages and search queries.",
+      "browse": "Browse models",
+      "dimensions": "Embedding dimensions",
+      "dimensionsUnknown": "Unknown (detected on first index/search)",
+      "dimensionsHint": "Detected automatically from the embedding response.",
+      "topKPerQuery": "Top K per query",
+      "topKPerQueryHint": "Candidate pool size per query (higher = more results, slower).",
+      "neighborWindow": "Neighbor window",
+      "neighborWindowHint": "Include nearby chat messages around each hit (message_index +/- window).",
+      "maxPrimaryMessages": "Max primary messages",
+      "maxPrimaryMessagesHint": "Max number of ranked (distance-based) messages injected into the prompt (before neighbor expansion).",
+      "maxTotalMessages": "Max total messages",
+      "maxTotalMessagesHint": "Hard cap for total injected messages including neighbor expansion."
     },
     "language": {
       "title": "Language Settings",
@@ -283,6 +336,10 @@
         "imagePrompt": {
           "label": "Image Prompt",
           "description": "AI-assisted generation of detailed image prompts from story context"
+        },
+        "summary": {
+          "label": "Summary",
+          "description": "Background summarization (used by long-term memory and other summary tasks)"
         }
       }
     },

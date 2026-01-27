@@ -254,6 +254,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     );
     const selectedAgent = useAgentStore(agentSelector);
     const storedMessages = useMemo(() => selectedAgent?.messages ?? [], [selectedAgent]);
+    const archiveBoundaryId = selectedAgent?.archived_until_message_id ?? null;
 
     // Only subscribe to agent sessions for this project (reduces re-renders from other sessions)
     const projectAgentSessions = useLLMSessionStore(
@@ -706,11 +707,11 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                         : (hasPendingCards || isApplying ? 'pending' : 'confirmed');
 
                     return (
-                        <div
-                            key={message.chatMessage.id}
-                            className={`agent-message ${message.chatMessage.role}${isEditing ? ' editing' : ''}${isSameRoleAsPrevious ? ' same-role-as-previous' : ''}`}
-                        >
-                            <div className="message-wrapper">
+                        <React.Fragment key={message.chatMessage.id}>
+                            <div
+                                className={`agent-message ${message.chatMessage.role}${isEditing ? ' editing' : ''}${isSameRoleAsPrevious ? ' same-role-as-previous' : ''}`}
+                            >
+                                <div className="message-wrapper">
                                 {!isSameRoleAsPrevious && (
                                     <div className="message-header">
                                         <span className="message-role">{isUser ? t('agent.you') : t('agent.ai')}</span>
@@ -914,8 +915,17 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                         </div>
                                     </>
                                 )}
+                                </div>
                             </div>
-                        </div>
+
+                            {archiveBoundaryId === message.chatMessage.id && (
+                                <div className="agent-archive-divider" role="separator" aria-label="Memory boundary">
+                                    <div className="agent-archive-divider-line" />
+                                    <span className="agent-archive-divider-label">Memory boundary</span>
+                                    <div className="agent-archive-divider-line" />
+                                </div>
+                            )}
+                        </React.Fragment>
                     );
                 })}
 

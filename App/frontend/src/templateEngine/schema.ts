@@ -133,6 +133,35 @@ export const UNIFIED_SCHEMA = {
   agent: {
     mode: { desc: "Agent mode", example: "storyObject" as "storyObject" | "novelEditor" },
     contextObjectIds: { desc: "IDs of objects to include in context", example: ["char-1", "loc-1"] as string[] },
+    previousSummary: {
+      desc: "Rolling memory summaries (latest is last)",
+      example: ["Facts: ...\nDecisions: ...\nOpen Questions: ..."] as string[],
+    },
+    relevantChats: {
+      desc: "Retrieved relevant chat messages from long-term memory",
+      example: [{
+        role: "assistant",
+        content: "Previously you decided the protagonist is allergic to magic...",
+        messageId: "msg-123",
+        createdAt: "2026-01-01T00:00:00Z",
+        distance: 0.123,
+      }] as Array<{ role: string; content: string; messageId: string; createdAt?: string; distance?: number | null }>,
+    },
+  },
+
+  memorySummary: {
+    previousSummary: { desc: "Previous rolling summary text", example: "Facts: ...\nDecisions: ..." },
+    messages: {
+      desc: "Messages being archived and summarized",
+      example: [{
+        role: "user",
+        content: "Let's make the main character a detective.",
+        messageId: "msg-1",
+        createdAt: "2026-01-01T00:00:00Z",
+      }] as Array<{ role: string; content: string; messageId: string; createdAt?: string }>,
+    },
+    language: { desc: "Target summary language", example: "Korean" },
+    archiveUntilMessageId: { desc: "Archive boundary message ID", example: "msg-100" },
   },
 
   editAssistant: {
@@ -216,7 +245,7 @@ export type PromptType = 'agent' | 'editAssistant' | 'translation' | 'objectImag
  * Maps which variable groups are available for each prompt type.
  */
 export const PROMPT_TYPE_VARIABLES: Record<PromptType, string[]> = {
-  agent: ['config', 'project', 'input', 'agent', 'variables'],
+  agent: ['config', 'project', 'input', 'agent', 'memorySummary', 'variables'],
   editAssistant: ['config', 'project', 'input', 'editAssistant', 'variables'],
   translation: ['config', 'project', 'input', 'translation', 'variables'],
   objectImagePrompt: ['config', 'project', 'input', 'imagePrompt', 'variables'],
@@ -239,6 +268,7 @@ export type AgentModeData = ExtractProps<typeof UNIFIED_SCHEMA['agent']>;
 export type EditAssistantModeData = ExtractProps<typeof UNIFIED_SCHEMA['editAssistant']>;
 export type TranslationModeData = ExtractProps<typeof UNIFIED_SCHEMA['translation']>;
 export type ImagePromptModeData = ExtractProps<typeof UNIFIED_SCHEMA['imagePrompt']>;
+export type MemorySummaryData = ExtractProps<typeof UNIFIED_SCHEMA['memorySummary']>;
 
 // Variables data type
 export type VariablesData = Record<string, string | number | boolean | null>;
@@ -249,6 +279,7 @@ export interface PromptData {
   project: ProjectData;
   input: InputData;
   agent?: AgentModeData;
+  memorySummary?: MemorySummaryData;
   editAssistant?: EditAssistantModeData;
   translation?: TranslationModeData;
   imagePrompt?: ImagePromptModeData;

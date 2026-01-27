@@ -6,11 +6,6 @@ export interface RagEmbeddingProfile {
   dimensions?: number | null;
 }
 
-export interface RagEmbeddingProfileUpdate {
-  provider: string;
-  model: string;
-}
-
 export interface RagProviderConfig {
   api_key?: string;
   base_url?: string;
@@ -81,14 +76,6 @@ export interface RagSearchResponse {
 }
 
 export const ragService = {
-  async getProfile(): Promise<RagEmbeddingProfile | null> {
-    return await apiClient.get<RagEmbeddingProfile | null>('/api/v1/rag/profile');
-  },
-
-  async updateProfile(update: RagEmbeddingProfileUpdate): Promise<RagEmbeddingProfile> {
-    return await apiClient.put<RagEmbeddingProfile>('/api/v1/rag/profile', update);
-  },
-
   async getStatus(projectId: string): Promise<RagProjectStatusResponse> {
     return await apiClient.get<RagProjectStatusResponse>(`/api/v1/projects/${projectId}/rag/status`);
   },

@@ -191,6 +191,31 @@ export const PROMPT_TREE: PromptNode[] = [
             description: 'AI response starter for Outline Manager mode'
           }
         ]
+      },
+      {
+        id: 'agent-memory',
+        label: 'Memory',
+        type: 'category',
+        children: [
+          {
+            id: 'agent-memory-summary-system',
+            label: 'Memory Summary - System Prompt',
+            type: 'prompt',
+            taskType: 'agent',
+            category: 'systemPrompt',
+            name: 'memorySummary',
+            description: 'System instructions for rolling memory summarization'
+          },
+          {
+            id: 'agent-memory-summary-user',
+            label: 'Memory Summary - User Prompt',
+            type: 'prompt',
+            taskType: 'agent',
+            category: 'userPrompt',
+            name: 'memorySummary',
+            description: 'User prompt template that includes previous summary + archived messages'
+          }
+        ]
       }
     ]
   },

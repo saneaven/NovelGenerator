@@ -11,10 +11,15 @@ export interface SettingsSyncResponse {
     imageGenConfig: Settings['imageGenConfig'];
     nativeOutputMode: boolean;
     ragSearchEnabled?: boolean;
+    embeddingConfigs?: Settings['embeddingConfigs'];
     ragSearchTopKPerQuery?: number;
     ragSearchNeighborWindow?: number;
     ragSearchMaxPrimaryChunks?: number;
     ragSearchMaxTotalChunks?: number;
+    agentMemoryTopKPerQuery?: number;
+    agentMemoryNeighborWindow?: number;
+    agentMemoryMaxPrimaryMessages?: number;
+    agentMemoryMaxTotalMessages?: number;
 }
 
 export const settingsService = {

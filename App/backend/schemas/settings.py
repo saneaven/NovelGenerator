@@ -14,12 +14,22 @@ class ProviderType(str, Enum):
     XAI = "xai"
 
 
+class EmbeddingProviderType(str, Enum):
+    """Embedding provider types (subset of ProviderType)."""
+
+    OPENAI = "openai"
+    GEMINI = "gemini"
+    OPENROUTER = "openrouter"
+    CUSTOM = "custom"
+
+
 class AITaskType(str, Enum):
     """AI task types"""
     AGENT = "agent"
     TRANSLATION = "translation"
     EDIT_ASSISTANT = "editAssistant"
     IMAGE_PROMPT = "imagePrompt"
+    SUMMARY = "summary"
 
 
 class ProviderPreference(BaseModel):
@@ -44,6 +54,7 @@ class AdvancedTaskSettings(BaseModel):
     thinkingMode: str = "off"  # 'off' | 'model' | 'custom'
     thinkingConfig: Optional[ThinkingConfig] = Field(default_factory=lambda: ThinkingConfig())
     customApiFormat: str = "openai"  # 'openai' | 'claude' | 'gemini' | 'openrouter' - for custom provider
+    tokenizerOverride: Optional[str] = None  # 'openai' | 'claude' | 'gemini' (used for token counting)
 
 
 class TaskAIConfig(BaseModel):
@@ -130,6 +141,25 @@ class ToolCallAutoApprove(BaseModel):
     search: bool = False
 
 
+# Embedding settings
+class EmbeddingProfileConfig(BaseModel):
+    """Embedding profile configuration used by RAG Search / Agent Memory."""
+
+    provider: EmbeddingProviderType = EmbeddingProviderType.OPENAI
+    model: str = Field(default="", max_length=200)
+    dimensions: Optional[int] = None
+
+    class Config:
+        use_enum_values = True
+
+
+class EmbeddingConfigs(BaseModel):
+    """Embedding profiles by feature."""
+
+    ragSearch: EmbeddingProfileConfig = Field(default_factory=EmbeddingProfileConfig)
+    agentMemory: EmbeddingProfileConfig = Field(default_factory=EmbeddingProfileConfig)
+
+
 # Image generation settings schemas
 class NaturalImageStyle(BaseModel):
     """Custom image style for natural language providers (prefix/postfix)"""
@@ -194,10 +224,15 @@ class UserSettingsResponse(BaseModel):
     imageGenConfig: ImageGenConfig = Field(default_factory=ImageGenConfig)
     nativeOutputMode: bool = False
     ragSearchEnabled: bool = False
+    embeddingConfigs: EmbeddingConfigs = Field(default_factory=EmbeddingConfigs)
     ragSearchTopKPerQuery: int = Field(default=20, ge=1, le=200)
     ragSearchNeighborWindow: int = Field(default=0, ge=0, le=20)
     ragSearchMaxPrimaryChunks: int = Field(default=20, ge=1, le=200)
     ragSearchMaxTotalChunks: int = Field(default=60, ge=1, le=500)
+    agentMemoryTopKPerQuery: int = Field(default=20, ge=1, le=200)
+    agentMemoryNeighborWindow: int = Field(default=0, ge=0, le=20)
+    agentMemoryMaxPrimaryMessages: int = Field(default=20, ge=1, le=200)
+    agentMemoryMaxTotalMessages: int = Field(default=60, ge=1, le=500)
     patchAutoRetry: bool = True
     llmLoggingEnabled: bool = False
     toolCallHistoryLimit: int = 5
@@ -221,10 +256,15 @@ class UserSettingsUpdate(BaseModel):
     imageGenConfig: Optional[ImageGenConfig] = None
     nativeOutputMode: Optional[bool] = None
     ragSearchEnabled: Optional[bool] = None
+    embeddingConfigs: Optional[EmbeddingConfigs] = None
     ragSearchTopKPerQuery: Optional[int] = Field(default=None, ge=1, le=200)
     ragSearchNeighborWindow: Optional[int] = Field(default=None, ge=0, le=20)
     ragSearchMaxPrimaryChunks: Optional[int] = Field(default=None, ge=1, le=200)
     ragSearchMaxTotalChunks: Optional[int] = Field(default=None, ge=1, le=500)
+    agentMemoryTopKPerQuery: Optional[int] = Field(default=None, ge=1, le=200)
+    agentMemoryNeighborWindow: Optional[int] = Field(default=None, ge=0, le=20)
+    agentMemoryMaxPrimaryMessages: Optional[int] = Field(default=None, ge=1, le=200)
+    agentMemoryMaxTotalMessages: Optional[int] = Field(default=None, ge=1, le=500)
     patchAutoRetry: Optional[bool] = None
     llmLoggingEnabled: Optional[bool] = None
     toolCallHistoryLimit: Optional[int] = None

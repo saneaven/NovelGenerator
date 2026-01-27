@@ -1,18 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ProviderCredentials, ProviderType } from '../../store/settingsStore';
-import type { RagEmbeddingProfile } from '../../api/ragService';
+import type { EmbeddingProfileConfig } from '../../store/settingsStore';
 import ModelBrowser from './ModelBrowser';
 import { TextButton } from '../TextButton';
 import { CustomSelect } from '../ui/CustomSelect';
 import ToggleSwitch from '../common/ToggleSwitch';
 import { Toggle } from '../icons';
 
+type RagSubTab = 'ragSearch' | 'agentMemory';
+
 interface RagSearchPanelProps {
   enabled: boolean;
   onEnabledChange: (enabled: boolean) => void;
-  profile: { provider: ProviderType; model: string };
-  savedProfile: RagEmbeddingProfile | null;
+  ragSearchProfile: EmbeddingProfileConfig;
+  onRagSearchProfileChange: (next: EmbeddingProfileConfig) => void;
+  agentMemoryProfile: EmbeddingProfileConfig;
+  onAgentMemoryProfileChange: (next: EmbeddingProfileConfig) => void;
   credentials: ProviderCredentials;
   mainLanguage: string;
   topKPerQuery: number;
@@ -23,16 +27,23 @@ interface RagSearchPanelProps {
   onMaxPrimaryChunksChange: (value: number) => void;
   maxTotalChunks: number;
   onMaxTotalChunksChange: (value: number) => void;
-  loading?: boolean;
-  loadError?: string | null;
-  onChange: (next: { provider: ProviderType; model: string }) => void;
+  agentMemoryTopKPerQuery: number;
+  onAgentMemoryTopKPerQueryChange: (value: number) => void;
+  agentMemoryNeighborWindow: number;
+  onAgentMemoryNeighborWindowChange: (value: number) => void;
+  agentMemoryMaxPrimaryMessages: number;
+  onAgentMemoryMaxPrimaryMessagesChange: (value: number) => void;
+  agentMemoryMaxTotalMessages: number;
+  onAgentMemoryMaxTotalMessagesChange: (value: number) => void;
 }
 
 const RagSearchPanel: React.FC<RagSearchPanelProps> = ({
   enabled,
   onEnabledChange,
-  profile,
-  savedProfile,
+  ragSearchProfile,
+  onRagSearchProfileChange,
+  agentMemoryProfile,
+  onAgentMemoryProfileChange,
   credentials,
   mainLanguage,
   topKPerQuery,
@@ -43,12 +54,19 @@ const RagSearchPanel: React.FC<RagSearchPanelProps> = ({
   onMaxPrimaryChunksChange,
   maxTotalChunks,
   onMaxTotalChunksChange,
-  loading,
-  loadError,
-  onChange,
+  agentMemoryTopKPerQuery,
+  onAgentMemoryTopKPerQueryChange,
+  agentMemoryNeighborWindow,
+  onAgentMemoryNeighborWindowChange,
+  agentMemoryMaxPrimaryMessages,
+  onAgentMemoryMaxPrimaryMessagesChange,
+  agentMemoryMaxTotalMessages,
+  onAgentMemoryMaxTotalMessagesChange,
 }) => {
   const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState<RagSubTab>('ragSearch');
   const [showModelBrowser, setShowModelBrowser] = useState(false);
+  const [activeModelBrowser, setActiveModelBrowser] = useState<RagSubTab>('ragSearch');
 
   useEffect(() => {
     if (!enabled) {
@@ -56,22 +74,36 @@ const RagSearchPanel: React.FC<RagSearchPanelProps> = ({
     }
   }, [enabled]);
 
-  const dimensions = useMemo(() => {
-    if (!savedProfile) return null;
-    if (savedProfile.provider !== profile.provider) return null;
-    if (savedProfile.model !== profile.model) return null;
-    return savedProfile.dimensions ?? null;
-  }, [profile.model, profile.provider, savedProfile]);
+  useEffect(() => {
+    setShowModelBrowser(false);
+  }, [activeTab]);
 
-  const handleProviderChange = (provider: ProviderType) => {
+  const ragDimensions = useMemo(() => {
+    return ragSearchProfile.dimensions ?? null;
+  }, [ragSearchProfile.dimensions]);
+
+  const memDimensions = useMemo(() => {
+    return agentMemoryProfile.dimensions ?? null;
+  }, [agentMemoryProfile.dimensions]);
+
+  const handleRagProviderChange = (provider: ProviderType) => {
     if (!enabled) return;
     setShowModelBrowser(false);
-    onChange({ provider, model: '' });
+    onRagSearchProfileChange({ provider, model: '', dimensions: null });
   };
 
-  const handleModelChange = (model: string) => {
+  const handleRagModelChange = (model: string) => {
     if (!enabled) return;
-    onChange({ ...profile, model });
+    onRagSearchProfileChange({ ...ragSearchProfile, model, dimensions: null });
+  };
+
+  const handleMemProviderChange = (provider: ProviderType) => {
+    setShowModelBrowser(false);
+    onAgentMemoryProfileChange({ provider, model: '', dimensions: null });
+  };
+
+  const handleMemModelChange = (model: string) => {
+    onAgentMemoryProfileChange({ ...agentMemoryProfile, model, dimensions: null });
   };
 
   const clampInt = (value: number, min: number, max: number): number => {
@@ -79,29 +111,13 @@ const RagSearchPanel: React.FC<RagSearchPanelProps> = ({
     return Math.max(min, Math.min(max, Math.trunc(value)));
   };
 
-  if (loading) {
-    return <div className="loading-state">{t('common.loading')}</div>;
-  }
-
-  if (loadError) {
-    return (
-      <div className="settings-panel-card">
-        <div className="validation-warning validation-error">
-          <div className="validation-warning-icon">!</div>
-          <div>
-            <div>{t('settings.ragSearch.loadErrorTitle')}</div>
-            <div className="field-hint">{loadError}</div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="rag-search-panel">
       <div className="panel-header">
-        <h3>{t('settings.ragSearch.title')}</h3>
-        <p className="panel-description">{t('settings.ragSearch.description')}</p>
+        <h3>{activeTab === 'ragSearch' ? t('settings.ragSearch.title') : t('settings.agentMemory.title')}</h3>
+        <p className="panel-description">
+          {activeTab === 'ragSearch' ? t('settings.ragSearch.description') : t('settings.agentMemory.description')}
+        </p>
       </div>
 
       <div className="settings-panel-card">
@@ -109,17 +125,38 @@ const RagSearchPanel: React.FC<RagSearchPanelProps> = ({
           <ToggleSwitch
             checked={enabled}
             onChange={onEnabledChange}
-            label={t('settings.ragSearch.enableLabel')}
+            label={t('settings.embeddings.enableLabel')}
             icon={<Toggle size="sm" />}
           />
-          <p className="field-hint">{t('settings.ragSearch.enableHint')}</p>
+          <p className="field-hint">{t('settings.embeddings.enableHint')}</p>
         </div>
+      </div>
 
+      <div className="task-selector">
+        <button
+          className={`task-tab ${activeTab === 'ragSearch' ? 'active' : ''}`}
+          onClick={() => setActiveTab('ragSearch')}
+          type="button"
+        >
+          {t('settings.tabs.ragSearch')}
+        </button>
+        <button
+          className={`task-tab ${activeTab === 'agentMemory' ? 'active' : ''}`}
+          onClick={() => setActiveTab('agentMemory')}
+          type="button"
+        >
+          {t('settings.tabs.agentMemory')}
+        </button>
+      </div>
+
+      {activeTab === 'ragSearch' && (
+      <>
+      <div className="settings-panel-card">
         <div className="form-field">
           <label>{t('settings.ragSearch.provider')}</label>
           <CustomSelect
-            value={profile.provider}
-            onChange={(value) => handleProviderChange(value as ProviderType)}
+            value={ragSearchProfile.provider}
+            onChange={(value) => handleRagProviderChange(value as ProviderType)}
             options={[
               { value: 'openai', label: 'OpenAI' },
               { value: 'gemini', label: 'Gemini' },
@@ -136,8 +173,8 @@ const RagSearchPanel: React.FC<RagSearchPanelProps> = ({
           <div className="model-input-row">
             <input
               type="text"
-              value={profile.model}
-              onChange={(e) => handleModelChange(e.target.value)}
+              value={ragSearchProfile.model}
+              onChange={(e) => handleRagModelChange(e.target.value)}
               placeholder={t('settings.ragSearch.modelPlaceholder')}
               className="config-input"
               disabled={!enabled}
@@ -146,7 +183,10 @@ const RagSearchPanel: React.FC<RagSearchPanelProps> = ({
               variant={showModelBrowser ? 'primary' : 'secondary'}
               size="sm"
               type="button"
-              onClick={() => setShowModelBrowser(!showModelBrowser)}
+              onClick={() => {
+                setActiveModelBrowser('ragSearch');
+                setShowModelBrowser(!showModelBrowser);
+              }}
               title={t('settings.ragSearch.browse')}
               disabled={!enabled}
             >
@@ -155,16 +195,16 @@ const RagSearchPanel: React.FC<RagSearchPanelProps> = ({
           </div>
           <p className="field-hint">{t('settings.ragSearch.modelHint')}</p>
 
-          {enabled && showModelBrowser && (
+          {enabled && showModelBrowser && activeModelBrowser === 'ragSearch' && (
             <ModelBrowser
-              key={profile.provider}
+              key={`ragSearch:${ragSearchProfile.provider}`}
               autoExpand={true}
-              provider={profile.provider}
+              provider={ragSearchProfile.provider}
               mode="embedding"
-              currentModel={profile.model}
+              currentModel={ragSearchProfile.model}
               credentials={credentials}
               onSelectModel={(m) => {
-                handleModelChange(m);
+                handleRagModelChange(m);
                 setShowModelBrowser(false);
               }}
               onUpdateProviderPreference={() => {
@@ -184,7 +224,7 @@ const RagSearchPanel: React.FC<RagSearchPanelProps> = ({
           <label>{t('settings.ragSearch.dimensions')}</label>
           <input
             type="text"
-            value={dimensions != null ? String(dimensions) : t('settings.ragSearch.dimensionsUnknown')}
+            value={ragDimensions != null ? String(ragDimensions) : t('settings.ragSearch.dimensionsUnknown')}
             disabled
           />
           <p className="field-hint">{t('settings.ragSearch.dimensionsHint')}</p>
@@ -269,6 +309,152 @@ const RagSearchPanel: React.FC<RagSearchPanelProps> = ({
           <li>{t('settings.ragSearch.rules.reindexRequired')}</li>
         </ul>
       </div>
+      </>
+      )}
+
+      {activeTab === 'agentMemory' && (
+        <div className="settings-panel-card">
+          <div className="form-field">
+            <label>{t('settings.agentMemory.provider')}</label>
+            <CustomSelect
+              value={agentMemoryProfile.provider}
+              onChange={(value) => handleMemProviderChange(value as ProviderType)}
+              options={[
+                { value: 'openai', label: 'OpenAI' },
+                { value: 'gemini', label: 'Gemini' },
+                { value: 'openrouter', label: 'OpenRouter' },
+                { value: 'custom', label: t('settings.credentials.custom.title') },
+              ]}
+              disabled={!enabled}
+            />
+            <p className="field-hint">{t('settings.agentMemory.providerHint')}</p>
+          </div>
+
+          <div className="form-field">
+            <label>{t('settings.agentMemory.model')}</label>
+            <div className="model-input-row">
+              <input
+                type="text"
+                value={agentMemoryProfile.model}
+                onChange={(e) => handleMemModelChange(e.target.value)}
+                placeholder={t('settings.agentMemory.modelPlaceholder')}
+                className="config-input"
+                disabled={!enabled}
+              />
+              <TextButton
+                variant={showModelBrowser && activeModelBrowser === 'agentMemory' ? 'primary' : 'secondary'}
+                size="sm"
+                type="button"
+                onClick={() => {
+                  setActiveModelBrowser('agentMemory');
+                  setShowModelBrowser(!showModelBrowser);
+                }}
+                title={t('settings.agentMemory.browse')}
+                disabled={!enabled}
+              >
+                {showModelBrowser && activeModelBrowser === 'agentMemory' ? t('common.hide') : t('common.browse')}
+              </TextButton>
+            </div>
+            <p className="field-hint">{t('settings.agentMemory.modelHint')}</p>
+
+            {showModelBrowser && activeModelBrowser === 'agentMemory' && (
+              <ModelBrowser
+                key={`agentMemory:${agentMemoryProfile.provider}`}
+                autoExpand={true}
+                provider={agentMemoryProfile.provider}
+                mode="embedding"
+                currentModel={agentMemoryProfile.model}
+                credentials={credentials}
+                onSelectModel={(m) => {
+                  handleMemModelChange(m);
+                  setShowModelBrowser(false);
+                }}
+                onUpdateProviderPreference={() => {
+                  // not used for embedding profile
+                }}
+              />
+            )}
+          </div>
+
+          <div className="form-field">
+            <label>{t('settings.agentMemory.dimensions')}</label>
+            <input
+              type="text"
+              value={memDimensions != null ? String(memDimensions) : t('settings.agentMemory.dimensionsUnknown')}
+              disabled
+            />
+            <p className="field-hint">{t('settings.agentMemory.dimensionsHint')}</p>
+          </div>
+
+          <div className="form-field">
+            <label>{t('settings.agentMemory.topKPerQuery')}</label>
+            <input
+              type="number"
+              value={agentMemoryTopKPerQuery}
+              min={1}
+              max={200}
+              onChange={(e) => {
+                const n = Number.parseInt(e.target.value, 10);
+                if (Number.isNaN(n)) return;
+                onAgentMemoryTopKPerQueryChange(clampInt(n, 1, 200));
+              }}
+              className="config-input"
+            />
+            <p className="field-hint">{t('settings.agentMemory.topKPerQueryHint')}</p>
+          </div>
+
+          <div className="form-field">
+            <label>{t('settings.agentMemory.neighborWindow')}</label>
+            <input
+              type="number"
+              value={agentMemoryNeighborWindow}
+              min={0}
+              max={20}
+              onChange={(e) => {
+                const n = Number.parseInt(e.target.value, 10);
+                if (Number.isNaN(n)) return;
+                onAgentMemoryNeighborWindowChange(clampInt(n, 0, 20));
+              }}
+              className="config-input"
+            />
+            <p className="field-hint">{t('settings.agentMemory.neighborWindowHint')}</p>
+          </div>
+
+          <div className="form-field">
+            <label>{t('settings.agentMemory.maxPrimaryMessages')}</label>
+            <input
+              type="number"
+              value={agentMemoryMaxPrimaryMessages}
+              min={1}
+              max={200}
+              onChange={(e) => {
+                const n = Number.parseInt(e.target.value, 10);
+                if (Number.isNaN(n)) return;
+                onAgentMemoryMaxPrimaryMessagesChange(clampInt(n, 1, 200));
+              }}
+              className="config-input"
+            />
+            <p className="field-hint">{t('settings.agentMemory.maxPrimaryMessagesHint')}</p>
+          </div>
+
+          <div className="form-field">
+            <label>{t('settings.agentMemory.maxTotalMessages')}</label>
+            <input
+              type="number"
+              value={agentMemoryMaxTotalMessages}
+              min={1}
+              max={500}
+              onChange={(e) => {
+                const n = Number.parseInt(e.target.value, 10);
+                if (Number.isNaN(n)) return;
+                onAgentMemoryMaxTotalMessagesChange(clampInt(n, 1, 500));
+              }}
+              className="config-input"
+            />
+            <p className="field-hint">{t('settings.agentMemory.maxTotalMessagesHint')}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

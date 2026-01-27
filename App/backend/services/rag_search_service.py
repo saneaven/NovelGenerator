@@ -7,8 +7,9 @@ from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session
 
 from ..models.rag_models import RagSource
+from .embedding_config_service import get_embedding_profile
 from .rag_embedding_service import embed_many
-from .rag_index_service import get_active_profile, get_main_language
+from .rag_index_service import get_main_language
 
 
 def _vec_to_pg(vec: List[float]) -> str:
@@ -25,15 +26,15 @@ async def search_project(
     top_k_per_query: int = 20,
     neighbor_window: int = 0,
 ) -> List[Dict[str, Any]]:
-    profile = get_active_profile(db, user_id=user_id)
+    profile = get_embedding_profile(db, user_id=user_id, feature="ragSearch")
     if not profile:
         raise ValueError("RAG embedding profile is not configured")
 
     language = get_main_language(db, user_id=user_id)
 
     query_vectors = await embed_many(
-        provider=profile.provider,
-        model=profile.model,
+        provider=profile["provider"],
+        model=profile["model"],
         inputs=queries,
         config=provider_config,
         purpose="query",

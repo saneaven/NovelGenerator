@@ -38,7 +38,7 @@ export function mapTaskTypeToSchemaType(
 }
 
 // All valid schema groups
-const SCHEMA_GROUPS = ['config', 'project', 'input', 'agent', 'editAssistant', 'translation', 'imagePrompt', 'feedback', 'variables'] as const;
+const SCHEMA_GROUPS = ['config', 'project', 'input', 'agent', 'memorySummary', 'editAssistant', 'translation', 'imagePrompt', 'feedback', 'variables'] as const;
 type SchemaGroup = typeof SCHEMA_GROUPS[number];
 
 /**

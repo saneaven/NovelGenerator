@@ -54,6 +54,9 @@ _OUTLINE_MANAGER_USER_PROMPT = _load_prompt_file('agent/outlineManager/userPromp
 _OUTLINE_MANAGER_FIRST_USER_PROMPT = _load_prompt_file('agent/outlineManager/firstUserPrompt.md')
 _OUTLINE_MANAGER_LAST_USER_PROMPT = _load_prompt_file('agent/outlineManager/lastUserPrompt.md')
 _OUTLINE_MANAGER_PREFILL = _load_prompt_file('agent/outlineManager/prefill.md')
+# Agent - Memory Summary
+_MEMORY_SUMMARY_SYSTEM_PROMPT = _load_prompt_file('agent/memorySummary/systemPrompt.md')
+_MEMORY_SUMMARY_USER_PROMPT = _load_prompt_file('agent/memorySummary/userPrompt.md')
 # Translation - Object
 _TRANSLATION_SYSTEM_PROMPT_OBJECT = _load_prompt_file('translation/object/systemPrompt.md')
 _TRANSLATION_USER_PROMPT_OBJECT = _load_prompt_file('translation/object/userPrompt.md')
@@ -109,11 +112,13 @@ DEFAULT_PROMPTS = {
             'storyObject': _STORYOBJECT_SYSTEM_PROMPT,
             'novelEditor': _NOVEL_EDITOR_SYSTEM_PROMPT,
             'outlineManager': _OUTLINE_MANAGER_SYSTEM_PROMPT,
+            'memorySummary': _MEMORY_SUMMARY_SYSTEM_PROMPT,
         },
         'userPrompt': {
             'storyObject': _STORYOBJECT_USER_PROMPT,
             'novelEditor': _NOVEL_EDITOR_USER_PROMPT,
             'outlineManager': _OUTLINE_MANAGER_USER_PROMPT,
+            'memorySummary': _MEMORY_SUMMARY_USER_PROMPT,
         },
         'firstUserPrompt': {
             'storyObject': _STORYOBJECT_FIRST_USER_PROMPT,

@@ -14,6 +14,7 @@ import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
 import { AgentExecutor } from '../AgentExecutor';
+import { AgentMemoryManager } from '../memory/AgentMemoryManager';
 import type { AgentOrchestrationConfig, AgentOrchestrationReturn, AgentHandlersReturn, ContextIdState } from './types';
 
 export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOrchestrationReturn {
@@ -132,6 +133,29 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     clearInput(projectId);
     useAgentUIStore.getState().setLoading(projectId, true);
 
+    const agentConfig = useSettingsStore.getState().getTaskConfig('agent');
+    const outputMode = useSettingsStore.getState().settings.nativeOutputMode ? 'native_tool_call' : 'tool_call';
+
+    let historyOverride: any[] | undefined;
+    let promptContextOverride: Record<string, any> | undefined;
+    try {
+      const prepared = await AgentMemoryManager.prepare({
+        projectId,
+        agentId,
+        mode,
+        userInput: input?.trim() ?? '',
+        outputLanguage: mainLanguage,
+        outputMode,
+        enablePrefill: agentConfig.advanced.enablePrefill,
+        thinkingMode: agentConfig.advanced.thinkingMode,
+        contextObjectIds: selectedContextIds,
+      });
+      historyOverride = prepared.historyForLLM;
+      promptContextOverride = prepared.memory as any;
+    } catch (error) {
+      console.warn('AgentMemoryManager.prepare failed; starting session without long-term memory', error);
+    }
+
     // Use AgentExecutor directly (no JourneyRuntime)
     // Pass callback to get sessionId immediately for stop button to work
     void AgentExecutor.start(
@@ -142,6 +166,8 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
         userInput: input?.trim() ?? '',
         outputLanguage: mainLanguage,
         contextObjectIds: selectedContextIds,
+        historyOverride,
+        promptContextOverride,
       },
       (sessionId) => setActiveSessionId(sessionId)
     );
@@ -209,6 +235,29 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
 
     useAgentUIStore.getState().setLoading(projectId, true);
 
+    const agentConfig = useSettingsStore.getState().getTaskConfig('agent');
+    const outputMode = useSettingsStore.getState().settings.nativeOutputMode ? 'native_tool_call' : 'tool_call';
+
+    let historyOverride: any[] | undefined;
+    let promptContextOverride: Record<string, any> | undefined;
+    try {
+      const prepared = await AgentMemoryManager.prepare({
+        projectId,
+        agentId,
+        mode,
+        userInput: '',
+        outputLanguage: mainLanguage,
+        outputMode,
+        enablePrefill: agentConfig.advanced.enablePrefill,
+        thinkingMode: agentConfig.advanced.thinkingMode,
+        contextObjectIds: selectedContextIds,
+      });
+      historyOverride = prepared.historyForLLM;
+      promptContextOverride = prepared.memory as any;
+    } catch (error) {
+      console.warn('AgentMemoryManager.prepare failed; starting session without long-term memory', error);
+    }
+
     // Empty userInput - tool results are already in the message history
     void AgentExecutor.start(
       {
@@ -218,6 +267,8 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
         userInput: '',
         outputLanguage: mainLanguage,
         contextObjectIds: selectedContextIds,
+        historyOverride,
+        promptContextOverride,
       },
       (sessionId) => setActiveSessionId(sessionId)
     );

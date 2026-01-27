@@ -53,7 +53,8 @@ class UserSettings(Base):
         "agent": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
         "translation": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.2, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
         "editAssistant": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "advanced": {"enablePrefill": true, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
-        "imagePrompt": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}}
+        "imagePrompt": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
+        "summary": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.2, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}}
     }""")
 
     # NEW: Provider credentials (shared across functions)
@@ -103,11 +104,24 @@ class UserSettings(Base):
     # RAG Search (embeddings + pgvector) enable toggle
     rag_search_enabled = Column(Boolean, default=False, nullable=False)
 
+    # Embedding profiles (provider/model/dimensions) by feature.
+    # Stored as JSONB to keep settings user-managed and avoid creating per-feature profile tables.
+    embedding_configs = Column(JSONB, nullable=False, server_default="""{
+        "ragSearch": {"provider": "openai", "model": "", "dimensions": null},
+        "agentMemory": {"provider": "openai", "model": "", "dimensions": null}
+    }""")
+
     # RAG Search defaults
     rag_search_top_k_per_query = Column(Integer, default=20, nullable=False)
     rag_search_neighbor_window = Column(Integer, default=0, nullable=False)
     rag_search_max_primary_chunks = Column(Integer, default=20, nullable=False)
     rag_search_max_total_chunks = Column(Integer, default=60, nullable=False)
+
+    # Agent Memory search defaults (relevantChats RAG)
+    agent_memory_top_k_per_query = Column(Integer, default=20, nullable=False)
+    agent_memory_neighbor_window = Column(Integer, default=0, nullable=False)
+    agent_memory_max_primary_messages = Column(Integer, default=20, nullable=False)
+    agent_memory_max_total_messages = Column(Integer, default=60, nullable=False)
 
     # Patch auto-retry - automatically retry with replace mode if patch fails
     patch_auto_retry = Column(Boolean, default=True, nullable=False)
@@ -569,6 +583,9 @@ class Agent(Base):
     project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
 
     name = Column(String(255), nullable=False)
+
+    # Long-term memory boundary cache (UI divider + idempotency for archive)
+    archived_until_message_id = Column(UUID(as_uuid=True), nullable=True, index=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

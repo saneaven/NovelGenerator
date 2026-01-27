@@ -64,6 +64,7 @@ class AgentResponse(BaseModel):
     id: UUID
     project_id: UUID
     name: str
+    archived_until_message_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime
     messages: List['MessageResponse'] = []

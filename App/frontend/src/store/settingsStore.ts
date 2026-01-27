@@ -7,7 +7,7 @@ import { getPromptKey } from '../types/prompts';
 
 // Types
 export type ProviderType = 'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom' | 'xai';
-export type AITaskType = 'agent' | 'translation' | 'editAssistant' | 'imagePrompt';
+export type AITaskType = 'agent' | 'translation' | 'editAssistant' | 'imagePrompt' | 'summary';
 export type ImageProviderType = 'openai' | 'gemini' | 'xai' | 'novelai';
 export type PromptType = 'natural' | 'tag_based';
 export type ThemeMode = 'light' | 'dark' | 'system';
@@ -111,6 +111,18 @@ export interface TaskAIConfig {
     advanced: AdvancedTaskSettings;
 }
 
+// Embedding profile configuration (used by RAG Search / Agent Memory)
+export interface EmbeddingProfileConfig {
+    provider: ProviderType;
+    model: string;
+    dimensions?: number | null;
+}
+
+export interface EmbeddingConfigs {
+    ragSearch: EmbeddingProfileConfig;
+    agentMemory: EmbeddingProfileConfig;
+}
+
 // Custom image style for natural language providers (prefix/postfix)
 export interface NaturalImageStyle {
     id: string;
@@ -197,11 +209,20 @@ export interface Settings {
     // RAG Search - enable embeddings-based search/indexing
     ragSearchEnabled: boolean;
 
+    // Embedding profiles by feature
+    embeddingConfigs: EmbeddingConfigs;
+
     // RAG Search defaults (tool + formatting)
     ragSearchTopKPerQuery: number;
     ragSearchNeighborWindow: number;
     ragSearchMaxPrimaryChunks: number;
     ragSearchMaxTotalChunks: number;
+
+    // Agent Memory search defaults (for relevantChats injection)
+    agentMemoryTopKPerQuery: number;
+    agentMemoryNeighborWindow: number;
+    agentMemoryMaxPrimaryMessages: number;
+    agentMemoryMaxTotalMessages: number;
 
     // LLM request logging - enable logging of LLM requests for debugging
     llmLoggingEnabled: boolean;
@@ -276,6 +297,20 @@ const defaultSettings: Settings = {
                 },
             },
         },
+
+        // Summary: Used for long-term memory summarization and other background summaries
+        summary: {
+            provider: 'openrouter',
+            model: 'gpt-4o-mini',
+            temperature: 0.2,
+            advanced: {
+                enablePrefill: false,
+                thinkingMode: 'off',
+                thinkingConfig: {
+                    effort: 'medium',
+                },
+            },
+        },
     },
 
     // Image generation defaults
@@ -330,11 +365,23 @@ const defaultSettings: Settings = {
     // RAG Search disabled by default (must be explicitly enabled)
     ragSearchEnabled: false,
 
+    // Embedding profiles by feature
+    embeddingConfigs: {
+        ragSearch: { provider: 'openai', model: '', dimensions: null },
+        agentMemory: { provider: 'openai', model: '', dimensions: null },
+    },
+
     // RAG Search defaults
     ragSearchTopKPerQuery: 20,
     ragSearchNeighborWindow: 0,
     ragSearchMaxPrimaryChunks: 20,
     ragSearchMaxTotalChunks: 60,
+
+    // Agent Memory search defaults
+    agentMemoryTopKPerQuery: 20,
+    agentMemoryNeighborWindow: 0,
+    agentMemoryMaxPrimaryMessages: 20,
+    agentMemoryMaxTotalMessages: 60,
 
     // LLM logging disabled by default
     llmLoggingEnabled: false,
@@ -428,8 +475,9 @@ const mergeWithDefaults = (stored: any): Settings => {
     const migratedFunctionConfigs: any = {};
     if (stored.taskConfigs) {
         for (const [key, config] of Object.entries(stored.taskConfigs) as [string, any][]) {
+            const defaultTask = defaultSettings.taskConfigs[key as AITaskType];
             migratedFunctionConfigs[key] = {
-                ...defaultSettings.taskConfigs[key as AITaskType],
+                ...(defaultTask ?? {}),
                 ...config,
                 advanced: migrateAdvancedSettings(config.advanced || {}),
             };
@@ -474,10 +522,28 @@ const mergeWithDefaults = (stored: any): Settings => {
         },
         nativeOutputMode: stored.nativeOutputMode ?? defaultSettings.nativeOutputMode,
         ragSearchEnabled: stored.ragSearchEnabled ?? defaultSettings.ragSearchEnabled,
+        embeddingConfigs: {
+            ragSearch: {
+                ...defaultSettings.embeddingConfigs.ragSearch,
+                ...(stored.embeddingConfigs?.ragSearch && typeof stored.embeddingConfigs.ragSearch === 'object'
+                    ? stored.embeddingConfigs.ragSearch
+                    : {}),
+            },
+            agentMemory: {
+                ...defaultSettings.embeddingConfigs.agentMemory,
+                ...(stored.embeddingConfigs?.agentMemory && typeof stored.embeddingConfigs.agentMemory === 'object'
+                    ? stored.embeddingConfigs.agentMemory
+                    : {}),
+            },
+        },
         ragSearchTopKPerQuery: stored.ragSearchTopKPerQuery ?? defaultSettings.ragSearchTopKPerQuery,
         ragSearchNeighborWindow: stored.ragSearchNeighborWindow ?? defaultSettings.ragSearchNeighborWindow,
         ragSearchMaxPrimaryChunks: stored.ragSearchMaxPrimaryChunks ?? defaultSettings.ragSearchMaxPrimaryChunks,
         ragSearchMaxTotalChunks: stored.ragSearchMaxTotalChunks ?? defaultSettings.ragSearchMaxTotalChunks,
+        agentMemoryTopKPerQuery: stored.agentMemoryTopKPerQuery ?? defaultSettings.agentMemoryTopKPerQuery,
+        agentMemoryNeighborWindow: stored.agentMemoryNeighborWindow ?? defaultSettings.agentMemoryNeighborWindow,
+        agentMemoryMaxPrimaryMessages: stored.agentMemoryMaxPrimaryMessages ?? defaultSettings.agentMemoryMaxPrimaryMessages,
+        agentMemoryMaxTotalMessages: stored.agentMemoryMaxTotalMessages ?? defaultSettings.agentMemoryMaxTotalMessages,
         llmLoggingEnabled: stored.llmLoggingEnabled ?? defaultSettings.llmLoggingEnabled,
         toolCallHistoryLimit: stored.toolCallHistoryLimit ?? defaultSettings.toolCallHistoryLimit,
         thinkingHistoryLimit: stored.thinkingHistoryLimit ?? defaultSettings.thinkingHistoryLimit,

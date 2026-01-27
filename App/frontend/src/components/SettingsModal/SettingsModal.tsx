@@ -5,8 +5,7 @@ import { BaseSidebar } from '../BaseSidebar';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useCredentialsStore } from '../../store/credentialsStore';
 import { useSidebarStore } from '../../store/sidebarStore';
-import type { ProviderCredentials, Settings, AITaskType, ProviderType } from '../../store/settingsStore';
-import { ragService, type RagEmbeddingProfile } from '../../api/ragService';
+import type { ProviderCredentials, Settings, AITaskType } from '../../store/settingsStore';
 import CredentialsPanel from './CredentialsPanel';
 import GeneralPanel from './GeneralPanel';
 import LanguagePanel from './LanguagePanel';
@@ -43,13 +42,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const credentialsStore = useCredentialsStore();
   const [localSettings, setLocalSettings] = useState<Settings>(settingsStore.settings);
   const [localCredentials, setLocalCredentials] = useState<ProviderCredentials>(credentialsStore.credentials);
-  const [savedRagProfile, setSavedRagProfile] = useState<RagEmbeddingProfile | null>(null);
-  const [localRagProfile, setLocalRagProfile] = useState<{ provider: ProviderType; model: string }>({
-    provider: 'openai',
-    model: '',
-  });
-  const [isRagProfileLoading, setIsRagProfileLoading] = useState(false);
-  const [ragProfileLoadError, setRagProfileLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [mainTab, setMainTab] = useState<MainTab>('profile');
@@ -70,66 +62,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    let cancelled = false;
-    setIsRagProfileLoading(true);
-    setRagProfileLoadError(null);
-
-    ragService
-      .getProfile()
-      .then((profile) => {
-        if (cancelled) return;
-        setSavedRagProfile(profile);
-        if (profile) {
-          setLocalRagProfile({ provider: profile.provider as ProviderType, model: profile.model });
-        } else {
-          setLocalRagProfile({ provider: 'openai', model: '' });
-        }
-      })
-      .catch((err: any) => {
-        if (cancelled) return;
-        console.error('Failed to load RAG profile:', err);
-        setSavedRagProfile(null);
-        setLocalRagProfile({ provider: 'openai', model: '' });
-        setRagProfileLoadError(String(err?.message || err || 'Failed to load profile'));
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setIsRagProfileLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen]);
-
   const handleSave = async () => {
-    const ragProvider = String(localRagProfile.provider || '').trim();
-    const ragModel = String(localRagProfile.model || '').trim();
-    const ragEnabled = Boolean(localSettings.ragSearchEnabled);
-    const ragChanged = savedRagProfile
-      ? savedRagProfile.provider !== ragProvider || savedRagProfile.model !== ragModel
-      : Boolean(ragProvider && ragModel);
-
-    if (ragEnabled && (!ragProvider || !ragModel)) {
-      alert(t('settings.ragSearch.saveValidationError'));
-      return;
-    }
-
     setIsSaving(true);
     try {
       settingsStore.updateSettings(localSettings);
       await settingsStore.saveToServer();
 
       credentialsStore.setCredentials(localCredentials);
-
-      if (ragChanged && ragProvider && ragModel) {
-        const updated = await ragService.updateProfile({ provider: ragProvider, model: ragModel });
-        setSavedRagProfile(updated);
-        setLocalRagProfile({ provider: updated.provider as ProviderType, model: updated.model });
-      }
 
       // Show success toast
       setShowSavedToast(true);
@@ -145,11 +84,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const handleCancel = () => {
     setLocalSettings(settingsStore.settings);
     setLocalCredentials(credentialsStore.credentials);
-    if (savedRagProfile) {
-      setLocalRagProfile({ provider: savedRagProfile.provider as ProviderType, model: savedRagProfile.model });
-    } else {
-      setLocalRagProfile({ provider: 'openai', model: '' });
-    }
     onClose();
   };
 
@@ -390,8 +324,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           <RagSearchPanel
             enabled={localSettings.ragSearchEnabled}
             onEnabledChange={(enabled) => setLocalSettings(prev => ({ ...prev, ragSearchEnabled: enabled }))}
-            profile={localRagProfile}
-            savedProfile={savedRagProfile}
+            ragSearchProfile={localSettings.embeddingConfigs.ragSearch}
+            onRagSearchProfileChange={(next) =>
+              setLocalSettings((prev) => ({
+                ...prev,
+                embeddingConfigs: { ...prev.embeddingConfigs, ragSearch: next },
+              }))
+            }
+            agentMemoryProfile={localSettings.embeddingConfigs.agentMemory}
+            onAgentMemoryProfileChange={(next) =>
+              setLocalSettings((prev) => ({
+                ...prev,
+                embeddingConfigs: { ...prev.embeddingConfigs, agentMemory: next },
+              }))
+            }
             credentials={localCredentials}
             mainLanguage={localSettings.mainLanguage}
             topKPerQuery={localSettings.ragSearchTopKPerQuery}
@@ -402,9 +348,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             onMaxPrimaryChunksChange={(value) => setLocalSettings(prev => ({ ...prev, ragSearchMaxPrimaryChunks: value }))}
             maxTotalChunks={localSettings.ragSearchMaxTotalChunks}
             onMaxTotalChunksChange={(value) => setLocalSettings(prev => ({ ...prev, ragSearchMaxTotalChunks: value }))}
-            loading={isRagProfileLoading}
-            loadError={ragProfileLoadError}
-            onChange={setLocalRagProfile}
+            agentMemoryTopKPerQuery={localSettings.agentMemoryTopKPerQuery}
+            onAgentMemoryTopKPerQueryChange={(value) => setLocalSettings(prev => ({ ...prev, agentMemoryTopKPerQuery: value }))}
+            agentMemoryNeighborWindow={localSettings.agentMemoryNeighborWindow}
+            onAgentMemoryNeighborWindowChange={(value) => setLocalSettings(prev => ({ ...prev, agentMemoryNeighborWindow: value }))}
+            agentMemoryMaxPrimaryMessages={localSettings.agentMemoryMaxPrimaryMessages}
+            onAgentMemoryMaxPrimaryMessagesChange={(value) => setLocalSettings(prev => ({ ...prev, agentMemoryMaxPrimaryMessages: value }))}
+            agentMemoryMaxTotalMessages={localSettings.agentMemoryMaxTotalMessages}
+            onAgentMemoryMaxTotalMessagesChange={(value) => setLocalSettings(prev => ({ ...prev, agentMemoryMaxTotalMessages: value }))}
           />
         )}
 

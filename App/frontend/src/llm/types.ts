@@ -98,6 +98,14 @@ export interface TemplateData {
     contextObjectIds?: string[];
     selectedOutlineId?: string;
     selectedActId?: string;
+    previousSummary?: string[];
+    relevantChats?: Array<{
+      role: string;
+      content: string;
+      messageId: string;
+      createdAt?: string;
+      distance?: number | null;
+    }>;
   };
   editAssistant?: {
     mode: 'manuscript' | 'storyObject';
@@ -162,6 +170,14 @@ export interface BasePromptContext {
 export interface AgentWorkspacePromptContext extends BasePromptContext {
   tools?: ToolCallSchema[];
   contextObjectIds?: string[];
+  previousSummary?: string[];
+  relevantChats?: Array<{
+    role: string;
+    content: string;
+    messageId: string;
+    createdAt?: string;
+    distance?: number | null;
+  }>;
 }
 
 /**
@@ -173,6 +189,14 @@ export interface AgentWorkspacePromptContext extends BasePromptContext {
 export interface AgentNovelEditorPromptContext extends BasePromptContext {
   tools?: ToolCallSchema[];
   contextObjectIds?: string[];
+  previousSummary?: string[];
+  relevantChats?: Array<{
+    role: string;
+    content: string;
+    messageId: string;
+    createdAt?: string;
+    distance?: number | null;
+  }>;
 }
 
 /**
@@ -184,6 +208,14 @@ export interface AgentOutlineManagerPromptContext extends BasePromptContext {
   contextObjectIds?: string[];
   selectedOutlineId?: string;
   selectedActId?: string;
+  previousSummary?: string[];
+  relevantChats?: Array<{
+    role: string;
+    content: string;
+    messageId: string;
+    createdAt?: string;
+    distance?: number | null;
+  }>;
 }
 
 /**

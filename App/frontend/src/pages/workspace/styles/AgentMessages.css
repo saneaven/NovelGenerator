@@ -16,6 +16,29 @@
     background: var(--color-surface-base);
 }
 
+/* ===== Memory Boundary Divider ===== */
+.agent-archive-divider {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    margin: var(--spacing-sm) 0;
+    opacity: 0.9;
+}
+
+.agent-archive-divider-line {
+    flex: 1;
+    height: 1px;
+    background: var(--color-border-default);
+}
+
+.agent-archive-divider-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    white-space: nowrap;
+}
+
 /* ===== Welcome Message ===== */
 .welcome-message {
     background: var(--gradient-surface);

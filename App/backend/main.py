@@ -23,6 +23,7 @@ from .services.embedding_models_service import list_embedding_models
 from .routes.auth_routes import router as auth_router
 from .routes.project_routes import router as project_router
 from .routes.agent_routes import router as agent_router
+from .routes.agent_memory_routes import router as agent_memory_router
 from .routes.settings_routes import router as settings_router
 from .routes.credentials_backup_routes import router as credentials_backup_router
 from .routes.prompt_routes import router as prompt_router
@@ -59,6 +60,7 @@ app = FastAPI(
 app.include_router(auth_router)
 app.include_router(project_router)
 app.include_router(agent_router)
+app.include_router(agent_memory_router)
 app.include_router(settings_router)
 app.include_router(credentials_backup_router)
 app.include_router(prompt_router)
@@ -87,6 +89,11 @@ app.include_router(token_router)
 storage_path = Path(__file__).parent / "storage" / "assets"
 storage_path.mkdir(parents=True, exist_ok=True)
 app.mount("/storage/assets", StaticFiles(directory=str(storage_path)), name="assets")
+
+# Mount static files for resources (landing page images, etc.)
+resources_path = Path(__file__).parent / "storage" / "resources"
+resources_path.mkdir(parents=True, exist_ok=True)
+app.mount("/storage/resources", StaticFiles(directory=str(resources_path)), name="resources")
 
 app.add_middleware(
     CORSMiddleware,

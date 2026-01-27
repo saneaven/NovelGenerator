@@ -157,8 +157,8 @@ export async function ragSearch(
   const maxTotal = Math.max(maxPrimary, settings.ragSearchMaxTotalChunks);
 
   const projectId = context.projectId;
-  const profile = await ragService.getProfile();
-  if (!profile) {
+  const profile = settings.embeddingConfigs?.ragSearch;
+  if (!profile?.provider || !profile.model) {
     return error('RAG embedding profile is not configured (Settings > RAG Search)');
   }
 

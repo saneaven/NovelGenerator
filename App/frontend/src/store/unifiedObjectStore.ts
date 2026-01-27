@@ -102,30 +102,6 @@ interface UnifiedObjectStore {
 // ============================================================================
 
 export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
-  let cachedRagProfile: any | null | undefined = undefined;
-  let cachedRagProfileAt = 0;
-  let cachedRagProfilePromise: Promise<any | null> | null = null;
-
-  const getRagProfileCached = async (): Promise<any | null> => {
-    const now = Date.now();
-    if (cachedRagProfile !== undefined && now - cachedRagProfileAt < 10_000) {
-      return cachedRagProfile;
-    }
-
-    if (!cachedRagProfilePromise) {
-      cachedRagProfilePromise = ragService
-        .getProfile()
-        .catch(() => null)
-        .finally(() => {
-          cachedRagProfilePromise = null;
-        });
-    }
-
-    cachedRagProfile = await cachedRagProfilePromise;
-    cachedRagProfileAt = Date.now();
-    return cachedRagProfile;
-  };
-
   const buildProviderConfig = (provider: string, creds: any): any | null => {
     const config: any = {};
 
@@ -154,7 +130,7 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
 
     if (objectType === 'basic_info' || objectType === 'guidelines') return;
 
-    const profile = await getRagProfileCached();
+    const profile = useSettingsStore.getState().settings.embeddingConfigs?.ragSearch;
     if (!profile?.provider || !profile?.model) return;
 
     const creds = useCredentialsStore.getState().credentials as any;
