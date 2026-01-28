@@ -260,6 +260,8 @@ async def generate_image(
                 if ref_asset:
                     try:
                         image_bytes = storage_service.read_asset_file(str(ref_asset.file_path))
+                        # Store originals as AVIF, but providers typically accept PNG/JPEG/WebP for reference inputs.
+                        image_bytes = storage_service.to_png_bytes(image_bytes)
                         reference_image_data.append(ReferenceImageData(
                             image_data=image_bytes,
                             strength=ref_img.strength
@@ -267,6 +269,11 @@ async def generate_image(
                     except FileNotFoundError:
                         # Skip missing files
                         pass
+                    except Exception as e:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Failed to decode reference image asset {ref_img.asset_id}: {str(e)}"
+                        )
 
         # Construct final prompt strings from StyledPrompt objects
         final_prompt: Optional[str] = None
@@ -558,9 +565,9 @@ async def upload_asset(
         raise HTTPException(status_code=404, detail="Project not found")
 
     # Validate file type
-    allowed_types = {"image/png", "image/jpeg", "image/gif", "image/webp"}
+    allowed_types = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"}
     if file.content_type not in allowed_types:
-        raise HTTPException(status_code=400, detail="Invalid file type. Allowed: PNG, JPEG, GIF, WebP")
+        raise HTTPException(status_code=400, detail="Invalid file type. Allowed: PNG, JPEG, GIF, WebP, AVIF")
 
     # Validate binding: require either manuscript_id (scene) OR (object_type + object_id) (object/cover)
     normalized_object_type = normalize_object_type(object_type) if object_type else None

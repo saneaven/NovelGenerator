@@ -1,8 +1,10 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import SyntaxHighlightedTextarea from '../SyntaxHighlighter/SyntaxHighlightedTextarea';
 import ValidationWarnings from './ValidationWarnings';
 import { Save } from '../../icons';
 import { Loading } from '../../common/Loading';
+import { useSettingsToast } from '../SettingsToastContext';
 import './TemplateEditor.css';
 
 interface ValidationResult {
@@ -32,9 +34,12 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({
     onSave,
     placeholder = 'Enter template...',
 }) => {
+    const { t } = useTranslation();
+    const toast = useSettingsToast();
+
     const handleSave = async () => {
         if (!validation?.valid) {
-            alert('Cannot save: template contains syntax errors');
+            toast.error(t('settings.promptEditor.toast.templateSyntaxError'));
             return;
         }
         await onSave();

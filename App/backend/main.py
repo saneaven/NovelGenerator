@@ -1,4 +1,5 @@
 import asyncio
+import mimetypes
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request, status
@@ -18,6 +19,21 @@ from .auth import get_current_user
 from .database import get_db
 from .models.db_models import User
 from .services.embedding_models_service import list_embedding_models
+
+# Ensure correct Content-Type for AVIF assets when served via StaticFiles.
+mimetypes.add_type("image/avif", ".avif")
+
+
+class CachedStaticFiles(StaticFiles):
+    def __init__(self, *args, cache_control: str, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.cache_control = cache_control
+
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code in (200, 304):
+            response.headers.setdefault("cache-control", self.cache_control)
+        return response
 
 # Import database API routes
 from .routes.auth_routes import router as auth_router
@@ -93,7 +109,11 @@ app.mount("/storage/assets", StaticFiles(directory=str(storage_path)), name="ass
 # Mount static files for resources (landing page images, etc.)
 resources_path = Path(__file__).parent / "storage" / "resources"
 resources_path.mkdir(parents=True, exist_ok=True)
-app.mount("/storage/resources", StaticFiles(directory=str(resources_path)), name="resources")
+app.mount(
+    "/storage/resources",
+    CachedStaticFiles(directory=str(resources_path), cache_control="public, max-age=1800"),
+    name="resources",
+)
 
 app.add_middleware(
     CORSMiddleware,

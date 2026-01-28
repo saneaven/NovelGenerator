@@ -48,6 +48,8 @@
       "description": "Novel Buds는 당신의 이야기에 생명을 불어넣는 지능형 글쓰기 플랫폼입니다. 강력한 AI 지원, 체계적인 스토리 관리, 원활한 번역 기능으로 가장 중요한 것인 창작에 집중할 수 있습니다."
     },
     "features": {
+      "title": "주요 기능",
+      "subtitle": "AI와 함께 기획, 집필, 번역까지 한 번에 관리하세요.",
       "ai": {
         "title": "AI 글쓰기 지원",
         "description": "지능적인 제안, 캐릭터 개발, 플롯 지원 등을 통해 AI가 스토리 개발을 도와드립니다. AI가 맥락을 이해하고 작가의 벽을 극복하도록 도와줍니다."
@@ -143,7 +145,12 @@
     },
     "embeddings": {
       "enableLabel": "임베딩 사용",
-      "enableHint": "임베딩 기반 기능 전체(RAG Search 도구 + Agent Memory 검색)를 켜고 끕니다. 비활성화하면 Agent Memory는 요약만 사용합니다."
+      "enableHint": "임베딩 기반 기능 전체(RAG Search 도구 + Agent Memory 검색)를 켜고 끕니다. 비활성화하면 Agent Memory는 요약만 사용합니다.",
+      "validation": {
+        "missingModel": "임베딩이 활성화되어 있지만 {{feature}} 임베딩 모델이 설정되어 있지 않습니다.",
+        "missingApiKey": "임베딩이 활성화되어 있지만 \"{{provider}}\" API 키가 없습니다 ({{feature}}).",
+        "missingBaseUrl": "임베딩이 활성화되어 있지만 custom provider의 baseUrl이 없습니다 ({{feature}})."
+      }
     },
     "ragSearch": {
       "title": "RAG Search",
@@ -341,6 +348,9 @@
           "label": "요약",
           "description": "백그라운드 요약(장기 기억 등 요약 작업에 사용)"
         }
+      },
+      "validation": {
+        "modelRequired": "{{task}}에 사용할 모델을 선택해주세요."
       }
     },
     "advanced": {
@@ -668,6 +678,13 @@
       "prompts": "프롬프트",
       "fragments": "프래그먼트",
       "variables": "변수",
+      "toast": {
+        "promptSaved": "프롬프트가 저장되었습니다",
+        "promptSaveFailed": "프롬프트 저장에 실패했습니다. 다시 시도해주세요.",
+        "fragmentSaved": "프래그먼트가 저장되었습니다",
+        "fragmentSaveFailed": "프래그먼트 저장에 실패했습니다. 다시 시도해주세요.",
+        "templateSyntaxError": "저장할 수 없습니다: 템플릿 문법 오류가 있습니다"
+      },
       "selectPromptToEdit": "편집할 프롬프트를 선택하세요",
       "selectFragmentToEdit": "편집할 프래그먼트를 선택하세요",
       "choosePromptHint": "사이드바에서 프롬프트를 선택하여 내용을 보고 편집하세요",

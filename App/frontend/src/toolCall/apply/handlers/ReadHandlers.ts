@@ -148,7 +148,7 @@ export async function ragSearch(
   const settings = useSettingsStore.getState().settings;
   const ragEnabled = settings.ragSearchEnabled;
   if (!ragEnabled) {
-    return error('RAG Search is disabled (Settings > RAG Search)');
+    return error('Embeddings are disabled (Settings > RAG Search)');
   }
 
   const topKPerQuery = Math.max(1, settings.ragSearchTopKPerQuery);

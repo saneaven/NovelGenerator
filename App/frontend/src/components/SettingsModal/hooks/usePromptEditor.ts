@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { promptService, type ValidationResult } from '../../../api/promptService';
 import { validateTemplate } from '../../../templateEngine/engine';
 import { mapTaskTypeToSchemaType } from '../../../templateEngine/validator';
 import type { TaskType, PromptCategory } from '../../../types/prompts';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { usePresetStore } from '../../../store/presetStore';
+import { useSettingsToast } from '../SettingsToastContext';
 
 interface UsePromptEditorResult {
     content: string;
@@ -27,6 +29,8 @@ export function usePromptEditor(
     category: PromptCategory,
     name: string
 ): UsePromptEditorResult {
+    const { t } = useTranslation();
+    const toast = useSettingsToast();
     const [content, setContent] = useState('');
     const [originalContent, setOriginalContent] = useState('');
     const [validation, setValidation] = useState<ValidationResult | null>(null);
@@ -96,7 +100,8 @@ export function usePromptEditor(
 
     const handleSave = async () => {
         if (!validation?.valid) {
-            throw new Error('Cannot save: template contains syntax errors');
+            toast.error(t('settings.promptEditor.toast.templateSyntaxError'));
+            return;
         }
 
         setIsSaving(true);
@@ -109,11 +114,10 @@ export function usePromptEditor(
             );
             invalidatePromptCache(taskType, category, name);
             setOriginalContent(content);
-            alert('Prompt saved successfully!');
+            toast.success(t('settings.promptEditor.toast.promptSaved'));
         } catch (error) {
             console.error('Failed to save prompt:', error);
-            alert('Failed to save prompt. Please try again.');
-            throw error;
+            toast.error(t('settings.promptEditor.toast.promptSaveFailed'));
         } finally {
             setIsSaving(false);
         }

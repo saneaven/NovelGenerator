@@ -7,14 +7,12 @@
 
 /* Modal-specific overrides if needed */
 
-/* Success Toast */
-.settings-saved-toast {
+/* Toast */
+.settings-toast {
   position: fixed;
   top: var(--spacing-xl);
   left: 50%;
   transform: translateX(-50%);
-  background-color: var(--color-success);
-  color: var(--color-success-dark);
   padding: var(--spacing-md) var(--spacing-xl);
   border-radius: var(--border-radius-lg);
   font-size: var(--font-size-lg);
@@ -22,6 +20,16 @@
   z-index: var(--z-max);
   animation: toast-slide-down var(--transition-fast);
   box-shadow: var(--shadow-md);
+}
+
+.settings-toast--success {
+  background-color: var(--color-success);
+  color: var(--color-success-dark);
+}
+
+.settings-toast--error {
+  background-color: var(--color-error);
+  color: var(--color-error-dark);
 }
 
 @keyframes toast-slide-down {

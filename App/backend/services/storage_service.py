@@ -6,12 +6,40 @@ import hashlib
 from pathlib import Path
 from typing import Optional, Tuple
 from datetime import datetime
-from PIL import Image
+from PIL import Image, ImageOps
 import io
+
+# Optional: registers AVIF support with Pillow when installed
+try:
+    import pillow_avif  # type: ignore  # noqa: F401
+except ImportError:  # pragma: no cover
+    pillow_avif = None  # type: ignore
 
 # Storage configuration
 STORAGE_BASE_PATH = Path(__file__).parent.parent / "storage" / "assets"
 THUMBNAIL_SIZE = (256, 256)
+AVIF_ENABLED = os.getenv("ASSET_AVIF_ENABLED", "1").lower() not in {"0", "false", "no"}
+
+
+def _int_env(name: str, default: int, *, min_value: int | None = None, max_value: int | None = None) -> int:
+    raw = os.getenv(name)
+    try:
+        value = int(raw) if raw is not None else default
+    except ValueError:
+        value = default
+
+    if min_value is not None:
+        value = max(min_value, value)
+    if max_value is not None:
+        value = min(max_value, value)
+
+    return value
+
+
+AVIF_QUALITY = _int_env("ASSET_AVIF_QUALITY", 80, min_value=0, max_value=100)
+AVIF_SPEED = _int_env("ASSET_AVIF_SPEED", 6, min_value=0, max_value=10)  # 0 (slow/best) - 10 (fast/worst)
+
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
 
 class StorageService:
@@ -43,8 +71,60 @@ class StorageService:
             ".jpeg": "image/jpeg",
             ".gif": "image/gif",
             ".webp": "image/webp",
+            ".avif": "image/avif",
         }
         return mime_types.get(ext, "image/png")
+
+    def _ensure_avif_supported(self) -> None:
+        if not AVIF_ENABLED:
+            return
+
+        # pillow-avif-plugin registers ".avif" -> "AVIF"
+        if Image.registered_extensions().get(".avif") != "AVIF":
+            raise RuntimeError(
+                "AVIF support is not available. Install 'pillow-avif-plugin' and ensure it is importable."
+            )
+
+    def _encode_avif(self, img: Image.Image) -> bytes:
+        self._ensure_avif_supported()
+
+        out = io.BytesIO()
+
+        # Ensure save-compatible mode
+        img_for_save = img
+        if img_for_save.mode == "P":
+            img_for_save = img_for_save.convert("RGBA")
+        elif img_for_save.mode == "LA":
+            img_for_save = img_for_save.convert("RGBA")
+        elif img_for_save.mode not in ("RGB", "RGBA"):
+            img_for_save = img_for_save.convert("RGBA" if "A" in img_for_save.getbands() else "RGB")
+
+        img_for_save.save(
+            out,
+            format="AVIF",
+            quality=AVIF_QUALITY,
+            speed=AVIF_SPEED,
+        )
+        return out.getvalue()
+
+    def _encode_png(self, img: Image.Image) -> bytes:
+        out = io.BytesIO()
+
+        img_for_save = img
+        if img_for_save.mode == "P":
+            img_for_save = img_for_save.convert("RGBA")
+
+        img_for_save.save(out, format="PNG", optimize=True)
+        return out.getvalue()
+
+    def to_png_bytes(self, image_bytes: bytes) -> bytes:
+        """Convert arbitrary image bytes to PNG bytes (for provider reference images)."""
+        if image_bytes.startswith(_PNG_MAGIC):
+            return image_bytes
+
+        with Image.open(io.BytesIO(image_bytes)) as img:
+            img = ImageOps.exif_transpose(img)
+            return self._encode_png(img)
 
     def save_uploaded_file(
         self,
@@ -63,26 +143,28 @@ class StorageService:
         Returns:
             Tuple of (file_path, thumbnail_path, mime_type, width, height, file_size)
         """
-        filename = self._generate_filename(original_filename, project_id)
+        output_name = f"{Path(original_filename).stem}.avif" if AVIF_ENABLED else original_filename
+        filename = self._generate_filename(output_name, project_id)
         file_path = self.base_path / "originals" / filename
 
-        # Save original file
-        file_path.write_bytes(file_content)
+        # Decode to validate image, fix orientation, and (optionally) transcode to AVIF
+        with Image.open(io.BytesIO(file_content)) as img:
+            img = ImageOps.exif_transpose(img)
+            width, height = img.size
 
-        # Get image dimensions and create thumbnail
-        width, height = 0, 0
-        thumbnail_path = ""
+            if AVIF_ENABLED:
+                encoded_bytes = self._encode_avif(img)
+            else:
+                encoded_bytes = file_content
 
-        try:
-            with Image.open(io.BytesIO(file_content)) as img:
-                width, height = img.size
-                thumbnail_path = self._create_thumbnail(img, filename)
-        except Exception:
-            # Not a valid image or can't create thumbnail
-            pass
+            # Save original file (possibly transcoded)
+            file_path.write_bytes(encoded_bytes)
+
+            # Create thumbnail from decoded image
+            thumbnail_path = self._create_thumbnail(img, filename)
 
         mime_type = self._get_mime_type(filename)
-        file_size = len(file_content)
+        file_size = len(encoded_bytes)
 
         # Return relative paths from storage base
         return (
@@ -112,28 +194,23 @@ class StorageService:
             Tuple of (file_path, thumbnail_path, mime_type, width, height, file_size)
         """
         # Decode base64
-        image_data = base64.b64decode(base64_data)
+        image_bytes = base64.b64decode(base64_data)
 
         # Generate filename
-        filename = self._generate_filename(f"generated.{format}", project_id)
+        output_ext = "avif" if AVIF_ENABLED else format
+        filename = self._generate_filename(f"generated.{output_ext}", project_id)
         file_path = self.base_path / "originals" / filename
 
-        # Save the image
-        file_path.write_bytes(image_data)
+        with Image.open(io.BytesIO(image_bytes)) as img:
+            img = ImageOps.exif_transpose(img)
+            width, height = img.size
 
-        # Get dimensions and create thumbnail
-        width, height = 0, 0
-        thumbnail_path = ""
-
-        try:
-            with Image.open(io.BytesIO(image_data)) as img:
-                width, height = img.size
-                thumbnail_path = self._create_thumbnail(img, filename)
-        except Exception:
-            pass
+            encoded_bytes = self._encode_avif(img) if AVIF_ENABLED else image_bytes
+            file_path.write_bytes(encoded_bytes)
+            thumbnail_path = self._create_thumbnail(img, filename)
 
         mime_type = self._get_mime_type(filename)
-        file_size = len(image_data)
+        file_size = len(encoded_bytes)
 
         return (
             f"originals/{filename}",
@@ -161,25 +238,20 @@ class StorageService:
         Returns:
             Tuple of (file_path, thumbnail_path, mime_type, width, height, file_size)
         """
-        filename = self._generate_filename(f"generated.{format}", project_id)
+        output_ext = "avif" if AVIF_ENABLED else format
+        filename = self._generate_filename(f"generated.{output_ext}", project_id)
         file_path = self.base_path / "originals" / filename
 
-        # Save the image
-        file_path.write_bytes(image_bytes)
+        with Image.open(io.BytesIO(image_bytes)) as img:
+            img = ImageOps.exif_transpose(img)
+            width, height = img.size
 
-        # Get dimensions and create thumbnail
-        width, height = 0, 0
-        thumbnail_path = ""
-
-        try:
-            with Image.open(io.BytesIO(image_bytes)) as img:
-                width, height = img.size
-                thumbnail_path = self._create_thumbnail(img, filename)
-        except Exception:
-            pass
+            encoded_bytes = self._encode_avif(img) if AVIF_ENABLED else image_bytes
+            file_path.write_bytes(encoded_bytes)
+            thumbnail_path = self._create_thumbnail(img, filename)
 
         mime_type = self._get_mime_type(filename)
-        file_size = len(image_bytes)
+        file_size = len(encoded_bytes)
 
         return (
             f"originals/{filename}",

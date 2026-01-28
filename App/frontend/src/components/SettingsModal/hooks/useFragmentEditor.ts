@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { fragmentService } from '../../../api/fragmentService';
 import { validateTemplate, validateFragmentReferences } from '../../../templateEngine/engine';
 import { usePresetStore } from '../../../store/presetStore';
+import { useSettingsToast } from '../SettingsToastContext';
 
 interface ValidationResult {
     valid: boolean;
@@ -39,6 +41,8 @@ export function useFragmentEditor(
         onSaved?: () => void;
     }
 ): UseFragmentEditorResult {
+    const { t } = useTranslation();
+    const toast = useSettingsToast();
     const [content, setContent] = useState('');
     const [originalContent, setOriginalContent] = useState('');
     const [description, setDescription] = useState('');
@@ -139,7 +143,8 @@ export function useFragmentEditor(
 
     const handleSave = async () => {
         if (!validation?.valid) {
-            throw new Error('Cannot save: template contains syntax errors');
+            toast.error(t('settings.promptEditor.toast.templateSyntaxError'));
+            return;
         }
 
         setIsSaving(true);
@@ -154,11 +159,10 @@ export function useFragmentEditor(
             setOriginalContent(content);
             setOriginalDescription(description);
             callbacks?.onSaved?.();
-            alert('Fragment saved successfully!');
+            toast.success(t('settings.promptEditor.toast.fragmentSaved'));
         } catch (error) {
             console.error('Failed to save fragment:', error);
-            alert('Failed to save fragment. Please try again.');
-            throw error;
+            toast.error(t('settings.promptEditor.toast.fragmentSaveFailed'));
         } finally {
             setIsSaving(false);
         }
@@ -174,8 +178,7 @@ export function useFragmentEditor(
             callbacks?.onDeleted?.();
         } catch (error) {
             console.error('Failed to delete fragment:', error);
-            alert('Failed to delete fragment. Please try again.');
-            throw error;
+            toast.error(error instanceof Error ? error.message : 'Failed to delete fragment. Please try again.');
         } finally {
             setIsDeleting(false);
         }

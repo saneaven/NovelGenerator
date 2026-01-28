@@ -6,6 +6,7 @@ import type { SelectOption, RenderOptionProps } from '../ui/CustomSelect';
 import { Plus, Copy, Edit, Trash, Check, Download, Upload } from '../icons';
 import PresetImportModal from './PresetImportModal';
 import type { PresetExportData } from '../../types/presets';
+import { useSettingsToast } from './SettingsToastContext';
 import './PresetSelector.css';
 
 interface PresetSelectorProps {
@@ -20,6 +21,7 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
   onEditPreset,
 }) => {
   const { t } = useTranslation();
+  const toast = useSettingsToast();
   const { presets, activePresetId, isLoading, setActivePreset, deletePreset, loadPresets, isInitialized, exportPreset } = usePresetStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importData, setImportData] = useState<PresetExportData | null>(null);
@@ -97,7 +99,13 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
       setImportData(data);
       setShowImportModal(true);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to read file');
+      const message =
+        err instanceof Error && err.message === 'Invalid preset file format'
+          ? t('settings.presetSelector.invalidFileFormat')
+          : err instanceof Error
+            ? err.message
+            : t('settings.presetSelector.failedToReadFile');
+      toast.error(message);
     }
 
     // Reset input

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BaseModal } from '../BaseModal';
 import { BaseSidebar } from '../BaseSidebar';
@@ -15,6 +15,7 @@ import AdvancedPanel from './AdvancedPanel';
 import ImageGenPanel from './ImageGenPanel';
 import ProfilePanel from './ProfilePanel';
 import RagSearchPanel from './RagSearchPanel';
+import { SettingsToastProvider, type SettingsToastApi, type SettingsToastKind } from './SettingsToastContext';
 import { Settings as SettingsIcon, Lock, Image, Document, Globe, Palette, Wrench, HamburgerMenu, People, List } from '../icons';
 import { TextButton } from '../TextButton';
 import './SettingsModal.css';
@@ -43,7 +44,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [localSettings, setLocalSettings] = useState<Settings>(settingsStore.settings);
   const [localCredentials, setLocalCredentials] = useState<ProviderCredentials>(credentialsStore.credentials);
   const [isSaving, setIsSaving] = useState(false);
-  const [showSavedToast, setShowSavedToast] = useState(false);
+  const [toast, setToast] = useState<{ kind: SettingsToastKind; message: string } | null>(null);
+  const toastTimeoutRef = useRef<number | null>(null);
   const [mainTab, setMainTab] = useState<MainTab>('profile');
   const [activeTask, setActiveTask] = useState<AITaskType>('agent');
 
@@ -58,24 +60,131 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       credentialsStore.fetchBackupStatus().catch(() => {
         // Ignore - status is best-effort
       });
+      setToast(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
+  const showToast = useCallback((kind: SettingsToastKind, message: string, durationMs?: number) => {
+    if (toastTimeoutRef.current) {
+      window.clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = null;
+    }
+
+    setToast({ kind, message });
+    const ms = durationMs ?? (kind === 'success' ? 2000 : 4000);
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToast(null);
+      toastTimeoutRef.current = null;
+    }, ms);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        window.clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const toastApi = useMemo<SettingsToastApi>(() => {
+    return {
+      show: showToast,
+      success: (message, durationMs) => showToast('success', message, durationMs),
+      error: (message, durationMs) => showToast('error', message, durationMs),
+    };
+  }, [showToast]);
+
+  const validateTaskModels = (): { taskType: AITaskType; message: string } | null => {
+    const taskTypes: AITaskType[] = ['agent', 'translation', 'editAssistant', 'imagePrompt', 'summary'];
+    for (const taskType of taskTypes) {
+      const cfg = localSettings.taskConfigs?.[taskType];
+      const model = (cfg as any)?.model;
+      if (typeof model !== 'string' || !model.trim()) {
+        const label = t(`settings.general.tasks.${taskType}.label`);
+        return {
+          taskType,
+          message: t('settings.general.validation.modelRequired', { task: label }),
+        };
+      }
+    }
+    return null;
+  };
+
+  const validateEmbeddings = (): { tab: MainTab; message: string } | null => {
+    if (!localSettings.ragSearchEnabled) return null;
+
+    const checks: Array<{ feature: 'ragSearch' | 'agentMemory'; label: string }> = [
+      { feature: 'ragSearch', label: t('settings.ragSearch.title') },
+      { feature: 'agentMemory', label: t('settings.agentMemory.title') },
+    ];
+
+    for (const c of checks) {
+      const profile = (localSettings.embeddingConfigs as any)?.[c.feature];
+      const provider = (profile?.provider as string | undefined) ?? '';
+      const model = (profile?.model as string | undefined) ?? '';
+
+      if (!model.trim()) {
+        return {
+          tab: 'ragSearch',
+          message: t('settings.embeddings.validation.missingModel', { feature: c.label }),
+        };
+      }
+
+      if (provider === 'custom') {
+        if (!localCredentials.custom?.apiKey?.trim()) {
+          return {
+            tab: 'credentials',
+            message: t('settings.embeddings.validation.missingApiKey', { feature: c.label, provider: 'custom' }),
+          };
+        }
+        if (!localCredentials.custom?.baseUrl?.trim()) {
+          return {
+            tab: 'credentials',
+            message: t('settings.embeddings.validation.missingBaseUrl', { feature: c.label }),
+          };
+        }
+      } else {
+        const key = (localCredentials as any)?.[provider]?.apiKey;
+        if (typeof key !== 'string' || !key.trim()) {
+          return {
+            tab: 'credentials',
+            message: t('settings.embeddings.validation.missingApiKey', { feature: c.label, provider }),
+          };
+        }
+      }
+    }
+
+    return null;
+  };
+
   const handleSave = async () => {
+    const taskModelError = validateTaskModels();
+    if (taskModelError) {
+      setMainTab('general');
+      setActiveTask(taskModelError.taskType);
+      showToast('error', taskModelError.message);
+      return;
+    }
+
+    const embeddingError = validateEmbeddings();
+    if (embeddingError) {
+      setMainTab(embeddingError.tab);
+      showToast('error', embeddingError.message);
+      return;
+    }
+
     setIsSaving(true);
     try {
       settingsStore.updateSettings(localSettings);
-      await settingsStore.saveToServer();
-
       credentialsStore.setCredentials(localCredentials);
 
-      // Show success toast
-      setShowSavedToast(true);
-      setTimeout(() => setShowSavedToast(false), 2000);
+      await settingsStore.saveToServer();
+      showToast('success', t('settings.savedSuccessfully'));
     } catch (error) {
       console.error('Failed to save settings:', error);
-      alert(t('settings.saveError'));
+      const message = error instanceof Error ? error.message : t('settings.saveError');
+      showToast('error', message);
     } finally {
       setIsSaving(false);
     }
@@ -88,29 +197,29 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   };
 
   return (
-    <BaseModal
-      isOpen={isOpen}
-      onClose={handleCancel}
-      size="full"
-      showHeader={false}
-      className="settings-modal"
-      footer={
-        <>
-          <TextButton variant="secondary" onClick={handleCancel} disabled={isSaving}>
-            {t('common.cancel')}
-          </TextButton>
-          <TextButton variant="primary" onClick={handleSave} disabled={isSaving} loading={isSaving}>
-            {isSaving ? t('settings.saving') : t('settings.saveSettings')}
-          </TextButton>
-        </>
-      }
-    >
-      {/* Success Toast */}
-      {showSavedToast && (
-        <div className="settings-saved-toast">
-          {t('settings.savedSuccessfully')}
-        </div>
-      )}
+    <SettingsToastProvider value={toastApi}>
+      <BaseModal
+        isOpen={isOpen}
+        onClose={handleCancel}
+        size="full"
+        showHeader={false}
+        className="settings-modal"
+        footer={
+          <>
+            <TextButton variant="secondary" onClick={handleCancel} disabled={isSaving}>
+              {t('common.cancel')}
+            </TextButton>
+            <TextButton variant="primary" onClick={handleSave} disabled={isSaving} loading={isSaving}>
+              {isSaving ? t('settings.saving') : t('settings.saveSettings')}
+            </TextButton>
+          </>
+        }
+      >
+        {toast && (
+          <div className={`settings-toast settings-toast--${toast.kind}`}>
+            {toast.message}
+          </div>
+        )}
 
       {/* Custom Header */}
       <div className="settings-modal-header">
@@ -460,7 +569,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         )}
         </div>
       </div>
-    </BaseModal>
+      </BaseModal>
+    </SettingsToastProvider>
   );
 };
 

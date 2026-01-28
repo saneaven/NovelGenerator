@@ -48,6 +48,8 @@
       "description": "Novel Buds is an intelligent writing platform that helps you bring your stories to life. With powerful AI assistance, organized story management, and seamless translation capabilities, you can focus on what matters most - your creativity."
     },
     "features": {
+      "title": "Key Features",
+      "subtitle": "Plan, write, and translate your novel with AI — all in one workspace.",
       "ai": {
         "title": "AI-Assisted Writing",
         "description": "Let AI help you develop your story with intelligent suggestions, character development, plot assistance, and more. Our AI understands context and helps you overcome writer's block."
@@ -143,7 +145,12 @@
     },
     "embeddings": {
       "enableLabel": "Enable embeddings",
-      "enableHint": "Turns on/off all embedding-based features (RAG Search tool + Agent Memory retrieval). When disabled, Agent Memory uses summaries only."
+      "enableHint": "Turns on/off all embedding-based features (RAG Search tool + Agent Memory retrieval). When disabled, Agent Memory uses summaries only.",
+      "validation": {
+        "missingModel": "Embeddings are enabled, but {{feature}} embedding model is not configured.",
+        "missingApiKey": "Embeddings are enabled, but API key for \"{{provider}}\" is missing ({{feature}}).",
+        "missingBaseUrl": "Embeddings are enabled, but baseUrl for the custom provider is missing ({{feature}})."
+      }
     },
     "ragSearch": {
       "title": "RAG Search",
@@ -341,6 +348,9 @@
           "label": "Summary",
           "description": "Background summarization (used by long-term memory and other summary tasks)"
         }
+      },
+      "validation": {
+        "modelRequired": "Please select a model for {{task}}."
       }
     },
     "advanced": {
@@ -668,6 +678,13 @@
       "prompts": "Prompts",
       "fragments": "Fragments",
       "variables": "Variables",
+      "toast": {
+        "promptSaved": "Prompt saved",
+        "promptSaveFailed": "Failed to save prompt. Please try again.",
+        "fragmentSaved": "Fragment saved",
+        "fragmentSaveFailed": "Failed to save fragment. Please try again.",
+        "templateSyntaxError": "Cannot save: template contains syntax errors"
+      },
       "selectPromptToEdit": "Select a prompt to edit",
       "selectFragmentToEdit": "Select a fragment to edit",
       "choosePromptHint": "Choose a prompt from the sidebar to view and edit its content",
