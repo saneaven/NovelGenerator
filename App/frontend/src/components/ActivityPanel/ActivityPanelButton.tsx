@@ -105,7 +105,7 @@ const ActivityPanelButton: React.FC<ActivityPanelButtonProps> = ({
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen, isClosing, handleClose]);
 
-  const buttonSize = position === 'mobile' ? 'sm' : 'md';
+  const buttonSize = position === 'mobile' ? 'md' : 'lg';
   const isMobile = position === 'mobile';
 
   return (

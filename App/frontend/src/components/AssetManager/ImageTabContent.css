@@ -126,13 +126,6 @@
 }
 
 /* Asset grid - fine-grained masonry (legacy, kept for reference) */
-.image-tab-content .asset-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    grid-auto-rows: 10px;
-    grid-auto-flow: dense;
-    gap: var(--spacing-sm);
-}
 
 /* Base asset item */
 .image-tab-content .asset-item {
@@ -167,14 +160,7 @@
     border-color: var(--color-border-medium);
 }
 
-.image-tab-content .asset-item.placeholder--error {
-    border-color: var(--color-feedback-error-base);
-}
 
-.image-tab-content .asset-item.placeholder--cancelled {
-    border-color: var(--color-border-default);
-    opacity: 0.9;
-}
 
 .image-tab-content .asset-item.placeholder .placeholder-skeleton {
     position: absolute;
@@ -189,11 +175,6 @@
     animation: placeholderShimmer 1.2s ease-in-out infinite;
 }
 
-.image-tab-content .asset-item.placeholder--error .placeholder-skeleton,
-.image-tab-content .asset-item.placeholder--cancelled .placeholder-skeleton {
-    animation: none;
-    background: rgba(255, 255, 255, 0.08);
-}
 
 @keyframes placeholderShimmer {
     0% {
@@ -377,67 +358,15 @@
 }
 
 /* Upload sub-tab */
-.upload-subtab {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 200px;
-}
 
-.upload-subtab .upload-area {
-    width: 100%;
-}
 
-.upload-subtab .file-input {
-    display: none;
-}
 
-.upload-subtab .upload-label {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: var(--spacing-xl);
-    border: 2px dashed var(--color-border-medium);
-    border-radius: var(--border-radius-lg);
-    cursor: pointer;
-    transition: all var(--transition-base);
-    gap: var(--spacing-sm);
-}
 
-.upload-subtab .upload-label:hover {
-    border-color: var(--color-brand-primary);
-    background: var(--color-surface-elevated);
-}
 
-.upload-subtab .upload-icon {
-    width: 48px;
-    height: 48px;
-    background: var(--color-surface-subtle);
-    border-radius: var(--border-radius-full);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: var(--font-size-2xl);
-    color: var(--color-text-tertiary);
-}
 
-.upload-subtab .upload-label span {
-    color: var(--color-text-primary);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-}
 
-.upload-subtab .upload-hint {
-    color: var(--color-text-tertiary);
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-normal);
-}
 
 /* Generate sub-tab */
-.generate-subtab {
-    padding: var(--spacing-sm) 0;
-}
 
 /* Prompt sub-tab */
 .prompt-subtab {
@@ -872,12 +801,6 @@
     min-height: 0;
 }
 
-.generate-panel-close {
-    position: absolute;
-    top: var(--spacing-sm);
-    right: var(--spacing-sm);
-    z-index: 1;
-}
 
 /* ========================================
    USAGE BADGE (Scene Mode)

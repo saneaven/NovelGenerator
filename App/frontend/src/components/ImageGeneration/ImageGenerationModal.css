@@ -360,15 +360,6 @@
    SAVED PROMPT INDICATOR
    ======================================== */
 
-.image-generation-modal .saved-prompt-indicator {
-    padding: var(--spacing-sm) var(--spacing-md);
-    background: var(--color-feedback-info-soft, rgba(99, 102, 241, 0.1));
-    border: 1px solid var(--color-brand-primary);
-    border-radius: var(--border-radius-md);
-    color: var(--color-brand-primary);
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-medium);
-}
 
 /* ========================================
    REFERENCE IMAGES SECTION

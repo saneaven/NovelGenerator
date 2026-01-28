@@ -414,44 +414,11 @@
     margin-top: var(--spacing-md);
 }
 
-.save-button,
-.cancel-button {
-    padding: var(--spacing-md) var(--spacing-xl);
-    border: none;
-    border-radius: var(--border-radius-md);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    cursor: pointer;
-    transition: all var(--transition-base);
-    box-shadow: var(--shadow-sm);
-}
 
-.save-button {
-    background: var(--gradient-secondary);
-    color: var(--color-text-inverse);
-}
 
-.save-button:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
-}
 
-.save-button:active {
-    transform: translateY(0);
-    box-shadow: var(--shadow-sm);
-}
 
-.cancel-button {
-    background: var(--color-surface-muted);
-    color: var(--color-text-tertiary);
-    border: 1px solid var(--color-border-default);
-}
 
-.cancel-button:hover {
-    background: var(--color-surface-hover);
-    color: var(--color-text-secondary);
-    border-color: var(--color-border-medium);
-}
 
 
 /* ===== Mobile Responsive ===== */
@@ -490,11 +457,6 @@
         font-size: var(--font-size-sm);
     }
 
-    .save-button,
-    .cancel-button {
-        padding: var(--spacing-sm) var(--spacing-lg);
-        font-size: var(--font-size-xs);
-    }
 }
 
 

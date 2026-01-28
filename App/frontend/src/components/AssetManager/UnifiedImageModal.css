@@ -3,9 +3,6 @@
    ======================================== */
 
 /* Force modal to maintain maximum height regardless of content */
-.unified-image-modal.base-modal--large {
-    height: 90dvh;
-}
 
 .unified-image-modal .modal-content {
     min-height: 400px;

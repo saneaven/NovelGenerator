@@ -123,13 +123,13 @@ const Home: React.FC = () => {
                 icon={<Settings size="lg" />}
                 onClick={() => setIsSettingsModalOpen(true)}
                 title={t('common.settings')}
-                size="md"
+                size="lg"
               />
               <IconButton
                 icon={<Logout size="lg" />}
                 onClick={handleLogout}
                 title={t('common.logout')}
-                size="md"
+                size="lg"
               />
             </div>
           </div>

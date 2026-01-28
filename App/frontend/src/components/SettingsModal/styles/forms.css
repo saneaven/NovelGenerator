@@ -273,15 +273,6 @@ input[type="range"]:disabled,
     border-right: none;
 }
 
-.input-with-suffix .suffix {
-    padding: var(--spacing-sm) var(--spacing-md);
-    border: 1px solid var(--color-border-default);
-    border-left: none;
-    border-radius: 0 var(--border-radius-md) var(--border-radius-md) 0;
-    background-color: var(--color-surface-subtle);
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-sm);
-}
 
 /* Section Titles */
 .config-section {

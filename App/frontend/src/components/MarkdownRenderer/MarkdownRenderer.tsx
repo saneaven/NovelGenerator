@@ -8,10 +8,10 @@ interface MarkdownRendererProps {
   className?: string;
 }
 
-export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
+export const MarkdownRenderer = React.memo(function MarkdownRenderer({
   children,
-  className = 'markdown-content'
-}) => {
+  className = 'markdown-content',
+}: MarkdownRendererProps) {
   return (
     <div className={className}>
       <Markdown remarkPlugins={[remarkGfm, remarkBreaks]}>
@@ -19,4 +19,4 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
       </Markdown>
     </div>
   );
-};
+});

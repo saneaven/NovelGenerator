@@ -1,34 +1,10 @@
 /* ===== Notification Button Wrapper ===== */
-.notification-button-wrapper {
-  position: relative;
-}
 
 
 /* ===== Notification Panel Container ===== */
-.notification-panel-container {
-  position: absolute;
-  z-index: var(--z-dropdown);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  width: 320px;
-  transition: opacity 0.15s ease;
-  pointer-events: none;
-}
 
-.notification-button-wrapper--desktop .notification-panel-container {
-  top: calc(100% + var(--spacing-sm));
-  left: 0;
-}
 
-.notification-button-wrapper--mobile .notification-panel-container {
-  bottom: calc(100% + var(--spacing-sm));
-  right: 0;
-}
 
-.notification-panel-container--closing {
-  pointer-events: none;
-}
 
 /* ===== Animations ===== */
 @keyframes notification-stack-in {
@@ -55,45 +31,10 @@
 
 
 /* ===== Notification Header (Thin Floating Card) ===== */
-.notification-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--spacing-sm) var(--spacing-md);
-  background: var(--color-surface-elevated);
-  border-radius: var(--border-radius-lg);
-  box-shadow: var(--shadow-lg);
-  border: 1px solid var(--color-border-default);
-  animation: notification-stack-in 0.2s ease-out forwards;
-  pointer-events: auto;
-}
 
-.notification-panel-container--closing .notification-header {
-  animation: notification-stack-out 0.15s ease-in forwards;
-}
 
-.notification-header-title {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-  margin: 0;
-}
 
-.notification-header-clear {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border-radius: var(--border-radius-sm);
-  transition: all var(--transition-fast);
-}
 
-.notification-header-clear:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-text-primary);
-}
 
 /* ===== Notification Items Container ===== */
 .notification-items-viewport {
@@ -111,9 +52,6 @@
   pointer-events: none;
 }
 
-.notification-button-wrapper--mobile .notification-items-viewport {
-  perspective-origin: center bottom;
-}
 
 .notification-items-viewport::-webkit-scrollbar {
   width: 0;
@@ -142,9 +80,6 @@
   pointer-events: auto;
 }
 
-.notification-panel-container--closing .notification-empty {
-  animation: notification-stack-out 0.15s ease-in forwards;
-}
 
 .notification-empty p {
   margin: 0;
@@ -241,18 +176,12 @@
   color: var(--color-text-secondary);
 }
 
-.notification-panel-container--closing .notification-item-surface {
-  animation: notification-stack-out 0.15s ease-in forwards;
-  animation-delay: 0ms;
-  opacity: 1;
-}
 
 .notification-item--clickable {
   cursor: pointer;
 }
 
 .notification-item--clickable:hover .notification-item-surface {
-  --notification-surface-fill-color: var(--color-surface-hover);
 }
 
 /* Content layout */
@@ -325,9 +254,6 @@
   margin-bottom: 2px;
 }
 
-.notification-item--error .notification-item-message {
-  color: var(--color-error);
-}
 
 .notification-item-warning {
   font-size: var(--font-size-xs);
@@ -361,8 +287,4 @@
 
 /* Mobile adjustments */
 @media (max-width: 768px) {
-  .notification-panel-container {
-    width: calc(100vw - 2rem);
-    max-width: 360px;
-  }
 }

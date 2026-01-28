@@ -46,25 +46,9 @@
   border-radius: var(--border-radius-full);
 }
 
-.llm-task-modal-status--running {
-  background: var(--color-info-light);
-  color: var(--color-info);
-}
 
-.llm-task-modal-status--success {
-  background: var(--color-success-light);
-  color: var(--color-success);
-}
 
-.llm-task-modal-status--error {
-  background: var(--color-error-light);
-  color: var(--color-error);
-}
 
-.llm-task-modal-status--cancelled {
-  background: var(--color-surface-muted);
-  color: var(--color-text-muted);
-}
 
 /* Error Container in Header */
 .llm-task-modal-error-container {
@@ -179,13 +163,6 @@
 }
 
 /* Pending Confirmation Section */
-.llm-task-modal-pending-confirmation {
-  padding: var(--spacing-md) var(--spacing-lg);
-  border-bottom: 1px solid var(--color-border-default);
-  flex-shrink: 0;
-  max-height: 400px;
-  overflow-y: auto;
-}
 
 /* Scrollable Body Container */
 .llm-task-modal-body {
@@ -337,16 +314,8 @@
 }
 
 /* User message - blue tinted content */
-.llm-task-modal-journey-message--user .llm-task-modal-journey-message-content {
-  background: color-mix(in oklch, var(--color-info) 8%, var(--color-surface-subtle));
-  border: 1px solid var(--color-border-default);
-}
 
 /* AI message - subtle brand tinted content */
-.llm-task-modal-journey-message--assistant .llm-task-modal-journey-message-content {
-  background: color-mix(in oklch, var(--color-brand-primary) 5%, var(--color-surface-subtle));
-  border: 1px solid var(--color-border-default);
-}
 
 /* Tool calls inside AI message */
 .llm-task-modal-journey-message-tool-calls {
@@ -427,12 +396,6 @@
 }
 
 /* Feedback */
-.llm-task-modal-feedback {
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--border-radius-md);
-  padding: var(--spacing-md);
-  background: var(--color-surface-subtle);
-}
 
 .llm-task-modal-feedback-textarea {
   width: 100%;

@@ -83,9 +83,6 @@
     cursor: not-allowed;
 }
 
-.format-btn.image-btn {
-    font-size: var(--font-size-base);
-}
 
 /* SVG icons in format buttons */
 .format-btn svg {
@@ -102,10 +99,6 @@
 }
 
 /* Toolbar spacer - pushes actions to the right */
-.toolbar-spacer {
-    flex: 1;
-    min-width: var(--spacing-md);
-}
 
 /* Toolbar actions container - right side */
 .toolbar-actions {
@@ -115,21 +108,6 @@
     flex-shrink: 0;
 }
 
-.toolbar-actions .action-btn {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-xs);
-    padding: var(--spacing-xs) var(--spacing-sm);
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--border-radius-md);
-    background: var(--color-surface-base);
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-medium);
-    cursor: pointer;
-    transition: all var(--transition-base);
-    white-space: nowrap;
-}
 
 
 /* ===== Heading Dropdown ===== */
@@ -153,16 +131,7 @@
 }
 
 /* Heading level badge */
-.heading-level-badge {
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-bold);
-    min-width: 10px;
-    text-align: center;
-}
 
-.heading-level-badge:empty {
-    display: none;
-}
 
 .heading-dropdown-menu {
     background: var(--color-surface-elevated);
@@ -234,54 +203,11 @@
     min-width: 160px;
 }
 
-.table-size-inputs {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-sm);
-    margin-bottom: var(--spacing-md);
-}
 
-.table-size-inputs label {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--spacing-md);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-}
 
-.table-size-inputs input {
-    width: 60px;
-    padding: var(--spacing-xs) var(--spacing-sm);
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--border-radius-sm);
-    background: var(--color-surface-base);
-    color: var(--color-text-primary);
-    font-size: var(--font-size-sm);
-    text-align: center;
-}
 
-.table-size-inputs input:focus {
-    outline: none;
-    border-color: var(--color-brand-primary);
-}
 
-.table-insert-btn {
-    width: 100%;
-    padding: var(--spacing-sm) var(--spacing-md);
-    border: none;
-    border-radius: var(--border-radius-sm);
-    background: var(--color-brand-primary);
-    color: var(--color-text-inverse);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-    cursor: pointer;
-    transition: all var(--transition-base);
-}
 
-.table-insert-btn:hover {
-    background: var(--color-brand-hover);
-}
 
 /* Table dimensions - alternative layout */
 .table-dimensions {
@@ -377,13 +303,6 @@
 }
 
 /* Placeholder */
-.tiptap-editor-content p.is-editor-empty:first-child::before {
-    content: attr(data-placeholder);
-    color: var(--color-text-muted);
-    float: left;
-    height: 0;
-    pointer-events: none;
-}
 
 /* Headings */
 .tiptap-editor-content h1,
@@ -547,15 +466,8 @@
     outline: none;
 }
 
-.ProseMirror-selectednode {
-    outline: 2px solid var(--color-brand-primary);
-    outline-offset: 2px;
-}
 
 /* Image selection */
-.novel-inline-image.ProseMirror-selectednode {
-    outline: 3px solid var(--color-brand-primary);
-}
 
 /* Responsive */
 @media (max-width: 768px) {
@@ -584,19 +496,12 @@
     }
 
     /* Hide action buttons on mobile - merge into More Actions */
-    .toolbar-actions .action-btn {
-        display: none;
-    }
 
     /* Keep only the icon-button visible on mobile */
     .toolbar-actions .icon-button {
         display: flex;
     }
 
-    .toolbar-spacer {
-        flex: 1;
-        min-width: var(--spacing-sm);
-    }
 
     .toolbar-format-tools {
         flex-shrink: 1;

@@ -230,62 +230,18 @@
    OUTLINE GROUP (Top Level)
    ============================================================================ */
 
-.outline-manager .timeline-outline-group {
-  position: relative;
-  z-index: var(--z-content);
-  overflow: visible;
-}
 
 /* Remove margin from last group */
-.outline-manager .timeline-outline-group:last-child {
-  margin-bottom: 0;
-}
 
 /* ============================================================================
    OUTLINE NODE
    ============================================================================ */
 
-.outline-manager .timeline-outline-node {
-  display: flex;
-  gap: var(--spacing-lg);
-  align-items: flex-start;
-}
 
-.outline-manager .outline-marker {
-  flex-shrink: 0;
-  width: var(--size-14, 56px);
-  height: var(--size-14, 56px);
-  background-color: var(--color-surface-base);
-  border: 3px solid var(--color-border-default);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--z-content);
-  box-shadow: 0 0 0 var(--spacing-xs) var(--color-surface-base);
-  transition: all var(--transition-base);
-  color: var(--color-text-tertiary);
-}
 
-.outline-manager .timeline-outline-group.is-expanded .outline-marker {
-  border-color: var(--color-brand-primary-border, var(--color-border-medium));
-  color: var(--color-text-primary);
-}
 
-.outline-manager .outline-index {
-  font-weight: var(--font-weight-bold);
-  font-size: var(--font-size-xl);
-  color: var(--color-text-tertiary);
-}
 
-.outline-manager .timeline-outline-group.is-expanded .outline-index {
-  color: var(--color-text-primary);
-}
 
-.outline-manager .outline-content-wrapper {
-  flex: 1;
-  padding-top: var(--spacing-xs);
-}
 
 /* Outline Card */
 .outline-manager .outline-card {
@@ -296,44 +252,11 @@
    ACT STREAM WRAPPER (Height Animation)
    ============================================================================ */
 
-.outline-manager .act-stream-wrapper {
-  display: grid;
-  grid-template-rows: 1fr;
-  transition: grid-template-rows var(--transition-slow);
-  overflow: visible;
-}
 
-.outline-manager .timeline-outline-group.is-collapsed .act-stream-wrapper {
-  grid-template-rows: 0fr;
-  transition: grid-template-rows var(--transition-base);
-}
 
-.outline-manager .timeline-act-stream {
-  min-height: 0;
-  margin-top: var(--spacing-lg);
-  margin-left: var(--spacing-xl);
-  padding-left: calc(var(--size-14, 56px) / 2);
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xl);
-  overflow: hidden;
-}
 
-.outline-manager .timeline-outline-group.is-expanded .timeline-act-stream {
-  overflow: visible;
-}
 
 /* Stream line for acts */
-.outline-manager .timeline-act-stream > .stream-line {
-  position: absolute;
-  top: calc(-1 * var(--spacing-xl));
-  bottom: var(--spacing-xl);
-  left: 0;
-  width: 2px;
-  background-color: var(--color-border-default);
-  z-index: var(--z-base);
-}
 
 /* ============================================================================
    ACT GROUP
@@ -350,11 +273,6 @@
 }
 
 /* Closing state - fade out acts */
-.outline-manager .timeline-outline-group.is-collapsed .timeline-act-group {
-  opacity: 0;
-  transform: translateY(calc(-1 * var(--spacing-sm)));
-  animation: none;
-}
 
 /* ============================================================================
    ACT NODE
@@ -827,16 +745,12 @@
   color: var(--color-text-primary);
 }
 
-.outline-manager .chapter-actions {
-  display: flex;
-  gap: var(--spacing-xs);
-}
 
 /* Chapter Expand Animation Wrapper */
 .outline-manager .chapter-expand-wrapper {
   display: grid;
   grid-template-rows: 0fr;
-  transition: all var(--transition-slow);
+  transition: grid-template-rows var(--transition-slow), padding var(--transition-slow);
   overflow: hidden;
   padding: 0 var(--spacing-md);
 }
@@ -855,15 +769,6 @@
   overflow: visible;
 }
 
-.outline-manager .chapter-description {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-relaxed);
-  margin: var(--spacing-sm) 0 0 0;
-  white-space: pre-wrap;
-  max-height: 12.5rem;
-  overflow-y: auto;
-}
 
 .outline-manager .chapter-footer-actions {
   display: flex;
@@ -890,51 +795,12 @@
 }
 
 /* Add Act Node */
-.outline-manager .add-act-node {
-  cursor: pointer;
-}
 
-.outline-manager .add-act-node .node-marker {
-  border-color: var(--color-border-default);
-  border-style: dashed;
-  color: var(--color-text-tertiary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--color-surface-base);
-}
 
-.outline-manager .add-act-card {
-  border: 1px dashed var(--color-border-default);
-  background: var(--color-surface-base);
-  padding: var(--spacing-md) var(--spacing-lg);
-  transition: all var(--transition-base);
-}
 
-.outline-manager .add-act-content {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-}
 
-.outline-manager .add-act-node:hover .node-marker {
-  border-color: var(--color-border-medium);
-  border-style: solid;
-  color: var(--color-text-secondary);
-}
 
-.outline-manager .add-act-node:hover .add-act-card {
-  border-color: var(--color-border-medium);
-  border-style: solid;
-  background: var(--color-surface-hover);
-}
 
-.outline-manager .add-act-node:hover .add-act-content {
-  color: var(--color-text-secondary);
-}
 
 /* Add Chapter Node */
 .outline-manager .add-chapter-node {
@@ -1045,10 +911,6 @@
   justify-content: space-between;
 }
 
-.outline-manager .form-actions-right {
-  display: flex;
-  gap: var(--spacing-sm);
-}
 
 .outline-manager .chapter-add-form {
   padding: var(--spacing-md);
@@ -1099,11 +961,6 @@
     left: var(--spacing-lg);
   }
 
-  .outline-manager .outline-marker {
-    width: var(--size-12);
-    height: var(--size-12);
-    font-size: var(--font-size-base);
-  }
 
   .outline-manager .node-marker {
     width: var(--spacing-2xl);
@@ -1111,10 +968,6 @@
     font-size: var(--font-size-sm);
   }
 
-  .outline-manager .timeline-act-stream {
-    margin-left: var(--spacing-lg);
-    padding-left: var(--spacing-xl);
-  }
 
   .outline-manager .timeline-chapter-stream {
     margin-left: var(--spacing-lg);

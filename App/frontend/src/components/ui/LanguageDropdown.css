@@ -194,15 +194,7 @@
 
 /* Translate button styling now comes from TextButton component */
 
-.language-dropdown-translate-icon {
-  font-size: var(--font-size-base);
-  line-height: 1;
-}
 
-.language-dropdown-translate-text {
-  flex: 1;
-  text-align: left;
-}
 
 /* ===== Responsive ===== */
 @media (max-width: 768px) {

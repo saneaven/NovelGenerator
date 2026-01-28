@@ -684,7 +684,7 @@ const PromptsTemplatesPanel: React.FC = () => {
                                         {subTab === 'fragments' && (
                                             <TextButton
                                                 variant="primary"
-                                                size="md"
+                                                size="lg"
                                                 onClick={() => handleCreateFragment(null)}
                                             >
                                                 {t('settings.promptEditor.createNewFragment')}

@@ -17,9 +17,6 @@
   color: var(--color-warning);
 }
 
-.notification-icon--info {
-  color: var(--color-info);
-}
 
 /* ===== Message Content ===== */
 .notification-message {
@@ -63,16 +60,6 @@
 }
 
 /* ===== Button Styles ===== */
-.notification-ok-btn {
-  color: white;
-  border: none;
-  padding: var(--spacing-sm) var(--spacing-xl);
-  border-radius: var(--border-radius-md);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-  transition: background-color var(--transition-base);
-}
 
 .notification-ok-btn--success {
   background: var(--color-success);

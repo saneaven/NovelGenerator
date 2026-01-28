@@ -59,7 +59,6 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   // Collapse/expand state (acts and chapters only - outlines selected from sidebar)
   const [collapsedActs, setCollapsedActs] = useState<Set<string>>(new Set());
   const [expandedChapters, setExpandedChapters] = useState<Set<string>>(new Set());
-  const [expandCount, setExpandCount] = useState<Record<string, number>>({});
 
   // RichTextEditor refs for content editing
   const outlineEditorRef = useRef<RichTextEditorRef>(null);
@@ -125,18 +124,40 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0));
   }, [store.objects, projectId]);
 
-  // Helper functions
-  const getActsForOutline = (outlineId: string): ActObject[] => {
-    return acts
-      .filter(act => act.metadata.outline_id === outlineId)
-      .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0));
-  };
+  // Build parent->children indexes to avoid O(N*M) filters during renders
+  const actsByOutlineId = useMemo(() => {
+    const map = new Map<string, ActObject[]>();
+    for (const act of acts) {
+      const outlineId = act.metadata?.outline_id as string | undefined;
+      if (!outlineId) continue;
+      const list = map.get(outlineId);
+      if (list) {
+        list.push(act);
+      } else {
+        map.set(outlineId, [act]);
+      }
+    }
+    return map;
+  }, [acts]);
 
-  const getChaptersForAct = (actId: string): ChapterObject[] => {
-    return chapters
-      .filter(chapter => chapter.metadata.act_id === actId)
-      .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0));
-  };
+  const chaptersByActId = useMemo(() => {
+    const map = new Map<string, ChapterObject[]>();
+    for (const chapter of chapters) {
+      const actId = chapter.metadata?.act_id as string | undefined;
+      if (!actId) continue;
+      const list = map.get(actId);
+      if (list) {
+        list.push(chapter);
+      } else {
+        map.set(actId, [chapter]);
+      }
+    }
+    return map;
+  }, [chapters]);
+
+  // Helper functions
+  const getActsForOutline = (outlineId: string): ActObject[] => actsByOutlineId.get(outlineId) || [];
+  const getChaptersForAct = (actId: string): ChapterObject[] => chaptersByActId.get(actId) || [];
 
   // Helper to get data for a specific language with fallback
   const getDataForLanguage = (obj: UnifiedObject, lang: string) => {
@@ -178,7 +199,6 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
       const next = new Set(prev);
       if (next.has(actId)) {
         next.delete(actId);
-        setExpandCount(prevCount => ({ ...prevCount, [actId]: (prevCount[actId] || 0) + 1 }));
       } else {
         next.add(actId);
       }
@@ -752,7 +772,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
 
                               {/* Chapter Stream */}
                               <div className="chapter-stream-wrapper">
-                                <div className="timeline-chapter-stream" key={`${act.id}-${expandCount[act.id] || 0}`}>
+                                <div className="timeline-chapter-stream">
                                   <div className="stream-line"></div>
 
                                   {actChapters.map((chapter, chapterIndex) => {

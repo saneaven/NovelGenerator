@@ -25,18 +25,6 @@
 }
 
 /* ===== Modal Overlay (Global) ===== */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: var(--overlay-dark-heavy);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: var(--z-overlay);
-}
 
 .modal {
     background: var(--color-surface-elevated);

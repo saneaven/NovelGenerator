@@ -65,6 +65,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
               icon={<Settings size="xl" />}
               onClick={onSettingsClick}
               title="Settings"
+              size="lg"
             />
             <ActivityPanelButton position="desktop" />
             {availableLanguages.length > 1 && (

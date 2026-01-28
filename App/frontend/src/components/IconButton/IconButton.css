@@ -12,8 +12,8 @@
 
 /* ===== Size Variants ===== */
 .icon-button--lg {
-  width: 3rem;
-  height: 3rem;
+  width: 2.875rem;
+  height: 2.875rem;
   border-radius: var(--border-radius-xl);
   font-size: var(--font-size-xl);
 }

@@ -350,7 +350,7 @@ const Landing: React.FC = () => {
             onClick={() => scrollToIndex(activeIndex + 1)}
             ariaLabel="Next section"
             icon={<NextIcon size="lg" />}
-            size="md"
+            size="lg"
             variant="ghost"
           />
         )}

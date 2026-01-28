@@ -123,21 +123,9 @@
 }
 
 /* Node depth variations */
-.model-tree__node--depth-0 {
-    margin-bottom: var(--spacing-sm);
-}
 
-.model-tree__node--depth-1 {
-    margin-left: 0;
-}
 
-.model-tree__node--depth-2 {
-    margin-left: 0;
-}
 
-.model-tree__node--depth-3 {
-    margin-left: 0;
-}
 
 /* Tree header (clickable folder row) */
 .model-tree__header {
@@ -160,30 +148,8 @@
 }
 
 /* Depth-based styling for headers */
-.model-tree__node--depth-0 > .model-tree__header {
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-    font-size: var(--font-size-base);
-    border-left: 3px solid var(--color-brand-primary);
-    border-radius: 0 var(--border-radius-md) var(--border-radius-md) 0;
-}
 
-.model-tree__node--depth-1 > .model-tree__header {
-    font-weight: var(--font-weight-medium);
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-sm);
-    border-left: 2px solid var(--color-border-medium);
-    border-radius: 0 var(--border-radius-md) var(--border-radius-md) 0;
-}
 
-.model-tree__node--depth-2 > .model-tree__header,
-.model-tree__node--depth-3 > .model-tree__header {
-    font-weight: var(--font-weight-normal);
-    color: var(--color-text-tertiary);
-    font-size: var(--font-size-sm);
-    border-left: 2px solid var(--color-border-subtle);
-    border-radius: 0 var(--border-radius-md) var(--border-radius-md) 0;
-}
 
 /* Toggle icon */
 .model-tree__toggle {
@@ -529,23 +495,8 @@
     text-transform: capitalize;
 }
 
-.model-card__endpoint-status--available,
-.model-card__endpoint-status--up {
-    color: var(--color-success);
-    background-color: var(--color-success-light);
-}
 
-.model-card__endpoint-status--limited,
-.model-card__endpoint-status--degraded {
-    color: var(--color-warning);
-    background-color: var(--color-warning-light);
-}
 
-.model-card__endpoint-status--unavailable,
-.model-card__endpoint-status--down {
-    color: var(--color-error);
-    background-color: var(--color-error-light);
-}
 
 .model-card__endpoint-uptime {
     font-size: var(--font-size-xs);

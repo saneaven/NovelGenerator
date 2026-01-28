@@ -25,7 +25,6 @@ REQUIRE_RE = re.compile(r"""\brequire\(\s*['"]([^'"]+)['"]\s*\)""")
 CSS_IMPORT_RE = re.compile(r"""@import\s+(?:url\()?\s*['"]([^'"]+)['"]\s*\)?\s*;""")
 
 TOKEN_RE = re.compile(r"[A-Za-z0-9_-]+")
-STRING_RE = re.compile(r"""('(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`)""", flags=re.S)
 DATA_ATTR_RE = re.compile(r"\bdata-[A-Za-z0-9_-]+\b")
 
 CLASS_RE = re.compile(r"\.([_a-zA-Z][-_a-zA-Z0-9]*)")
@@ -201,15 +200,155 @@ def extract_data_attr_selectors(selector: str) -> set[str]:
 
 def extract_used_tokens_from_code(text: str) -> set[str]:
     tokens: set[str] = set()
-    for m in STRING_RE.finditer(text):
-        inner = m.group(1)[1:-1]
-        for t in TOKEN_RE.findall(inner):
+    for s in iter_js_string_contents(text):
+        for t in TOKEN_RE.findall(s):
             tokens.add(t)
     return tokens
 
 
 def extract_data_attrs_from_code(text: str) -> set[str]:
     return set(DATA_ATTR_RE.findall(text))
+
+
+def iter_js_string_contents(text: str):
+    """Yield contents of JS/TS/TSX string literals and template literal raw parts.
+
+    This is a lightweight lexer that avoids regex mis-pairing on quotes.
+    """
+
+    n = len(text)
+
+    def skip_line_comment(i: int) -> int:
+        j = text.find("\n", i)
+        return n if j == -1 else j + 1
+
+    def skip_block_comment(i: int) -> int:
+        j = text.find("*/", i)
+        return n if j == -1 else j + 2
+
+    def consume_string(i: int, quote: str) -> tuple[str, int]:
+        # i points to the opening quote
+        i += 1
+        buf: list[str] = []
+        esc = False
+        while i < n:
+            ch = text[i]
+            if esc:
+                buf.append(ch)
+                esc = False
+                i += 1
+                continue
+            if ch == "\\":
+                esc = True
+                i += 1
+                continue
+            if ch == quote:
+                return "".join(buf), i + 1
+            buf.append(ch)
+            i += 1
+        return "".join(buf), n
+
+    def consume_template(i: int) -> tuple[list[str], list[str], int]:
+        # i points to opening backtick
+        i += 1
+        literal_buf: list[str] = []
+        literals: list[str] = []
+        expressions: list[str] = []
+
+        while i < n:
+            ch = text[i]
+            if ch == "\\":
+                # Keep escaped char as-is (best-effort)
+                if i + 1 < n:
+                    literal_buf.append(text[i + 1])
+                    i += 2
+                    continue
+                i += 1
+                continue
+
+            if ch == "`":
+                literals.append("".join(literal_buf))
+                return literals, expressions, i + 1
+
+            if ch == "$" and i + 1 < n and text[i + 1] == "{":
+                literals.append("".join(literal_buf))
+                literal_buf = []
+                expr, next_i = consume_braced_expression(i + 2)
+                expressions.append(expr)
+                i = next_i
+                continue
+
+            literal_buf.append(ch)
+            i += 1
+
+        literals.append("".join(literal_buf))
+        return literals, expressions, n
+
+    def consume_braced_expression(i: int) -> tuple[str, int]:
+        # i points to the first char *after* `${`
+        depth = 1
+        start = i
+        while i < n:
+            ch = text[i]
+            nxt = text[i + 1] if i + 1 < n else ""
+
+            if ch == "/" and nxt == "/":
+                i = skip_line_comment(i + 2)
+                continue
+            if ch == "/" and nxt == "*":
+                i = skip_block_comment(i + 2)
+                continue
+
+            if ch in ("'", '"'):
+                _, i = consume_string(i, ch)
+                continue
+
+            if ch == "`":
+                _, _, i = consume_template(i)
+                continue
+
+            if ch == "{":
+                depth += 1
+                i += 1
+                continue
+            if ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start:i], i + 1
+                i += 1
+                continue
+
+            i += 1
+        return text[start:n], n
+
+    i = 0
+    while i < n:
+        ch = text[i]
+        nxt = text[i + 1] if i + 1 < n else ""
+
+        if ch == "/" and nxt == "/":
+            i = skip_line_comment(i + 2)
+            continue
+        if ch == "/" and nxt == "*":
+            i = skip_block_comment(i + 2)
+            continue
+
+        if ch in ("'", '"'):
+            s, i = consume_string(i, ch)
+            yield s
+            continue
+
+        if ch == "`":
+            literals, expressions, i = consume_template(i)
+            for lit in literals:
+                if lit:
+                    yield lit
+            for expr in expressions:
+                for inner in iter_js_string_contents(expr):
+                    yield inner
+            continue
+
+        i += 1
 
 
 @dataclass(frozen=True)
@@ -615,23 +754,363 @@ def extract_top_level_string_props(tag_text: str, prop_names: set[str]) -> dict[
     return found
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Static CSS usage audit (no deletion).")
-    parser.add_argument(
-        "--output",
-        default=None,
-        help="Output report path (default: App/frontend/css-unused-report.md).",
-    )
-    args = parser.parse_args()
+@dataclass
+class AuditResult:
+    repo_dir: Path
+    frontend_dir: Path
+    src_dir: Path
+    css_files: list[Path]
+    reachable_css: set[Path]
+    unreachable_css_files: list[Path]
+    all_rules: list[CssRule]
+    unused_high_conf: list[RuleNote]
+    uncertain_dynamic: list[RuleNote]
+    uncertain_data_attr: list[RuleNote]
+    unknown_no_tokens: list[RuleNote]
+    keyframes_to_files: dict[str, set[Path]]
+    unused_keyframes: list[str]
+    custom_prop_to_files: dict[str, set[Path]]
+    unused_custom_props: list[str]
 
-    frontend_dir = Path(__file__).resolve().parents[1]
-    repo_dir = frontend_dir.parent.parent
+
+@dataclass
+class FixSummary:
+    css_files_changed: int = 0
+    selector_blocks_removed: int = 0
+    custom_properties_removed: int = 0
+
+
+@dataclass(frozen=True)
+class CssRuleBlock:
+    selector_text: str
+    selector_key: str
+    start: int
+    end: int
+
+
+def extract_css_rule_blocks(raw: str) -> list[CssRuleBlock]:
+    blocks: list[CssRuleBlock] = []
+
+    # Stack entries: (kind, block_index_if_recorded)
+    stack: list[tuple[str, int | None]] = []  # ('keyframes' | 'atrule' | 'rule', idx?)
+    stmt_start = 0
+    i = 0
+    n = len(raw)
+    in_str: str | None = None
+    esc = False
+    in_comment = False
+
+    def in_keyframes() -> bool:
+        return any(k == "keyframes" for k, _ in stack)
+
+    while i < n:
+        ch = raw[i]
+        nxt = raw[i + 1] if i + 1 < n else ""
+
+        if in_comment:
+            if ch == "*" and nxt == "/":
+                in_comment = False
+                i += 2
+                continue
+            i += 1
+            continue
+
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == in_str:
+                in_str = None
+            i += 1
+            continue
+
+        if ch == "/" and nxt == "*":
+            in_comment = True
+            i += 2
+            continue
+
+        if ch in ('"', "'"):
+            in_str = ch
+            i += 1
+            continue
+
+        if ch == "{":
+            seg_start = stmt_start
+            seg_end = i
+            sel_start = find_selector_start(raw, seg_start, seg_end)
+
+            header = raw[seg_start:seg_end].strip()
+            header = COMMENT_BLOCK_RE.sub("", header).strip()
+
+            if header:
+                if header.startswith("@"):
+                    if AT_KEYFRAMES_RE.match(header):
+                        stack.append(("keyframes", None))
+                    else:
+                        stack.append(("atrule", None))
+                else:
+                    block_index: int | None = None
+                    if not (in_keyframes() and PERCENT_SEL_RE.match(header)):
+                        blocks.append(
+                            CssRuleBlock(
+                                selector_text=header,
+                                selector_key=norm_one_line(header),
+                                start=sel_start,
+                                end=-1,
+                            )
+                        )
+                        block_index = len(blocks) - 1
+                    stack.append(("rule", block_index))
+            else:
+                stack.append(("rule", None))
+
+            stmt_start = i + 1
+            i += 1
+            continue
+
+        if ch == "}":
+            # Close the last opened block
+            if stack:
+                kind, block_index = stack.pop()
+                if kind == "rule" and block_index is not None and 0 <= block_index < len(blocks):
+                    b = blocks[block_index]
+                    if b.end == -1:
+                        blocks[block_index] = CssRuleBlock(
+                            selector_text=b.selector_text,
+                            selector_key=b.selector_key,
+                            start=b.start,
+                            end=i + 1,
+                        )
+
+            stmt_start = i + 1
+            i += 1
+            continue
+
+        if ch == ";" and not stack:
+            stmt_start = i + 1
+            i += 1
+            continue
+
+        i += 1
+
+    # Filter out any blocks that didn't get a closing brace
+    return [b for b in blocks if b.end != -1]
+
+
+def merge_ranges(ranges: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    if not ranges:
+        return []
+    merged: list[list[int]] = []
+    for s, e in sorted(ranges):
+        if not merged or s > merged[-1][1]:
+            merged.append([s, e])
+        else:
+            merged[-1][1] = max(merged[-1][1], e)
+    return [(s, e) for s, e in merged]
+
+
+def adjust_delete_range(text: str, start: int, end: int) -> tuple[int, int]:
+    n = len(text)
+    start = max(0, min(start, n))
+    end = max(0, min(end, n))
+    if end <= start:
+        return start, start
+
+    # If the selector starts mid-line and only whitespace precedes it, delete from the line start.
+    line_start = text.rfind("\n", 0, start) + 1
+    if text[line_start:start].strip() == "":
+        start = line_start
+
+    # Consume trailing spaces/tabs and at most one newline.
+    while end < n and text[end] in " \t":
+        end += 1
+    if end < n and text[end] == "\n":
+        end += 1
+
+    return start, end
+
+
+def remove_ranges(text: str, ranges: list[tuple[int, int]]) -> str:
+    if not ranges:
+        return text
+    merged = merge_ranges(ranges)
+    out: list[str] = []
+    last = 0
+    for s, e in merged:
+        out.append(text[last:s])
+        last = e
+    out.append(text[last:])
+    return "".join(out)
+
+
+def find_custom_prop_decl_ranges(raw: str, props_to_remove: set[str]) -> list[tuple[int, int]]:
+    if not props_to_remove:
+        return []
+
+    ranges: list[tuple[int, int]] = []
+    n = len(raw)
+
+    i = 0
+    brace_depth = 0
+    in_comment = False
+    in_str: str | None = None
+    esc = False
+
+    def skip_block_comment(j: int) -> int:
+        end = raw.find("*/", j)
+        return n if end == -1 else end + 2
+
+    def consume_string(j: int, quote: str) -> int:
+        j += 1
+        e = False
+        while j < n:
+            ch = raw[j]
+            if e:
+                e = False
+            elif ch == "\\":
+                e = True
+            elif ch == quote:
+                return j + 1
+            j += 1
+        return n
+
+    def consume_decl_value(j: int) -> int:
+        # j points to first char after ':'
+        paren = 0
+        bracket = 0
+        s: str | None = None
+        e = False
+        in_c = False
+        while j < n:
+            ch = raw[j]
+            nxt = raw[j + 1] if j + 1 < n else ""
+
+            if in_c:
+                if ch == "*" and nxt == "/":
+                    in_c = False
+                    j += 2
+                    continue
+                j += 1
+                continue
+
+            if s:
+                if e:
+                    e = False
+                elif ch == "\\":
+                    e = True
+                elif ch == s:
+                    s = None
+                j += 1
+                continue
+
+            if ch == "/" and nxt == "*":
+                in_c = True
+                j += 2
+                continue
+
+            if ch in ("'", '"'):
+                s = ch
+                j += 1
+                continue
+
+            if ch == "(":
+                paren += 1
+            elif ch == ")":
+                paren = max(0, paren - 1)
+            elif ch == "[":
+                bracket += 1
+            elif ch == "]":
+                bracket = max(0, bracket - 1)
+
+            if ch == ";" and paren == 0 and bracket == 0:
+                return j + 1
+
+            if ch == "}" and paren == 0 and bracket == 0:
+                return j
+
+            j += 1
+        return n
+
+    while i < n:
+        ch = raw[i]
+        nxt = raw[i + 1] if i + 1 < n else ""
+
+        if in_comment:
+            if ch == "*" and nxt == "/":
+                in_comment = False
+                i += 2
+                continue
+            i += 1
+            continue
+
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == in_str:
+                in_str = None
+            i += 1
+            continue
+
+        if ch == "/" and nxt == "*":
+            in_comment = True
+            i += 2
+            continue
+
+        if ch in ("'", '"'):
+            in_str = ch
+            i += 1
+            continue
+
+        if ch == "{":
+            brace_depth += 1
+            i += 1
+            continue
+
+        if ch == "}":
+            brace_depth = max(0, brace_depth - 1)
+            i += 1
+            continue
+
+        if brace_depth > 0 and ch == "-" and nxt == "-":
+            name_start = i
+            j = i + 2
+            while j < n and re.match(r"[A-Za-z0-9_-]", raw[j]):
+                j += 1
+            name = raw[name_start:j]
+            if name in props_to_remove:
+                k = j
+                while k < n and raw[k].isspace():
+                    k += 1
+                if k < n and raw[k] == ":":
+                    # Delete from the line start if only whitespace precedes the property.
+                    start = name_start
+                    line_start = raw.rfind("\n", 0, start) + 1
+                    if raw[line_start:start].strip() == "":
+                        start = line_start
+                    end = consume_decl_value(k + 1)
+                    # Consume trailing spaces/tabs and at most one newline.
+                    while end < n and raw[end] in " \t":
+                        end += 1
+                    if end < n and raw[end] == "\n":
+                        end += 1
+                    ranges.append((start, end))
+                    i = end
+                    continue
+            i = j
+            continue
+
+        i += 1
+
+    return merge_ranges(ranges)
+
+
+def compute_audit(frontend_dir: Path, repo_dir: Path) -> AuditResult:
     src_dir = frontend_dir / "src"
     entry = src_dir / "main.tsx"
     index_html = frontend_dir / "index.html"
-    output_path = Path(args.output) if args.output else (frontend_dir / "css-unused-report.md")
-    if not output_path.is_absolute():
-        output_path = (repo_dir / output_path).resolve()
 
     css_files = sorted(iter_files(src_dir, {".css"}))
 
@@ -922,7 +1401,6 @@ def main() -> int:
             continue
 
         if "uncertain_dynamic" in option_statuses:
-            # Show the original selector_text (possibly multi-selector rule) as a single note.
             details = "; ".join(n.details for n, st in zip(option_notes, option_statuses) if st == "uncertain_dynamic")
             uncertain_dynamic.append(
                 RuleNote(
@@ -936,7 +1414,9 @@ def main() -> int:
             continue
 
         if "uncertain_data_attr" in option_statuses:
-            details = "; ".join(n.details for n, st in zip(option_notes, option_statuses) if st == "uncertain_data_attr")
+            details = "; ".join(
+                n.details for n, st in zip(option_notes, option_statuses) if st == "uncertain_data_attr"
+            )
             uncertain_data_attr.append(
                 RuleNote(
                     file=rule.file,
@@ -960,9 +1440,9 @@ def main() -> int:
             )
             continue
 
-        # All options impossible -> unused high confidence
-        # Merge missing details from option_notes
-        merged_details = "; ".join(n.details for n, st in zip(option_notes, option_statuses) if st == "impossible" and n.details)
+        merged_details = "; ".join(
+            n.details for n, st in zip(option_notes, option_statuses) if st == "impossible" and n.details
+        )
         unused_high_conf.append(
             RuleNote(
                 file=rule.file,
@@ -981,15 +1461,34 @@ def main() -> int:
             unused_keyframes.append(name)
 
     # --- Unused CSS custom properties ---
-    unused_custom_props = sorted([p for p in custom_prop_to_files.keys() if p not in var_uses])
+    unused_custom_props = sorted([p for p in custom_prop_to_files.keys() if p not in var_uses and p not in used_tokens])
 
-    # --- Reporting ---
+    return AuditResult(
+        repo_dir=repo_dir,
+        frontend_dir=frontend_dir,
+        src_dir=src_dir,
+        css_files=css_files,
+        reachable_css=reachable_css,
+        unreachable_css_files=unreachable_css_files,
+        all_rules=all_rules,
+        unused_high_conf=unused_high_conf,
+        uncertain_dynamic=uncertain_dynamic,
+        uncertain_data_attr=uncertain_data_attr,
+        unknown_no_tokens=unknown_no_tokens,
+        keyframes_to_files=dict(keyframes_to_files),
+        unused_keyframes=unused_keyframes,
+        custom_prop_to_files=dict(custom_prop_to_files),
+        unused_custom_props=unused_custom_props,
+    )
+
+
+def write_report(result: AuditResult, output_path: Path) -> None:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     lines: list[str] = []
     lines.append("# CSS unused-style report")
     lines.append("")
     lines.append(f"- Generated: {now}")
-    lines.append(f"- Scope: {frontend_dir.relative_to(repo_dir)}")
+    lines.append(f"- Scope: {result.frontend_dir.relative_to(result.repo_dir)}")
     lines.append("")
     lines.append("## Method (static)")
     lines.append("- Entry module: `src/main.tsx`")
@@ -1009,24 +1508,26 @@ def main() -> int:
     lines.append("")
 
     lines.append("## Summary")
-    lines.append(f"- Total CSS files under `src`: {len(css_files)}")
-    lines.append(f"- Reachable CSS files: {len(reachable_css)}")
-    lines.append(f"- Unreachable CSS files: {len(unreachable_css_files)}")
-    lines.append(f"- Total CSS rules parsed (reachable CSS only): {len(all_rules)}")
-    lines.append(f"- Unused selectors (high confidence): {len(unused_high_conf)}")
-    lines.append(f"- Uncertain selectors (dynamic templates): {len(uncertain_dynamic)}")
-    lines.append(f"- Uncertain selectors (`data-*`): {len(uncertain_data_attr)}")
-    lines.append(f"- Unanalyzable selectors (no class/id/data-*): {len(unknown_no_tokens)}")
-    lines.append(f"- `@keyframes` defined: {len(keyframes_to_files)} (unused: {len(unused_keyframes)})")
+    lines.append(f"- Total CSS files under `src`: {len(result.css_files)}")
+    lines.append(f"- Reachable CSS files: {len(result.reachable_css)}")
+    lines.append(f"- Unreachable CSS files: {len(result.unreachable_css_files)}")
+    lines.append(f"- Total CSS rules parsed (reachable CSS only): {len(result.all_rules)}")
+    lines.append(f"- Unused selectors (high confidence): {len(result.unused_high_conf)}")
+    lines.append(f"- Uncertain selectors (dynamic templates): {len(result.uncertain_dynamic)}")
+    lines.append(f"- Uncertain selectors (`data-*`): {len(result.uncertain_data_attr)}")
+    lines.append(f"- Unanalyzable selectors (no class/id/data-*): {len(result.unknown_no_tokens)}")
     lines.append(
-        f"- Custom properties defined (`--*:`): {len(custom_prop_to_files)} (unused: {len(unused_custom_props)})"
+        f"- `@keyframes` defined: {len(result.keyframes_to_files)} (unused: {len(result.unused_keyframes)})"
+    )
+    lines.append(
+        f"- Custom properties defined (`--*:`): {len(result.custom_prop_to_files)} (unused: {len(result.unused_custom_props)})"
     )
     lines.append("")
 
     lines.append("## Unreachable CSS files (not pulled into the app bundle)")
-    if unreachable_css_files:
-        for p in unreachable_css_files:
-            lines.append(f"- `{p.relative_to(repo_dir)}`")
+    if result.unreachable_css_files:
+        for p in result.unreachable_css_files:
+            lines.append(f"- `{p.relative_to(result.repo_dir)}`")
     else:
         lines.append("- (none)")
     lines.append("")
@@ -1040,25 +1541,25 @@ def main() -> int:
         for r in rules:
             by_file[r.file].append(r)
         for f in sorted(by_file.keys(), key=lambda p: (-len(by_file[p]), str(p))):
-            rel = f.relative_to(repo_dir)
+            rel = f.relative_to(result.repo_dir)
             items = sorted(by_file[f], key=lambda r: (r.line, r.selector_text))
             lines.append(f"### `{rel}` ({len(items)})")
             for r in items:
                 lines.append(f"- `{rel}:{r.line}` {norm_one_line(r.selector_text)}  _({r.details})_")
             lines.append("")
 
-    emit_grouped_rules("## Unused selectors (high confidence)", unused_high_conf)
-    emit_grouped_rules("## Uncertain selectors (dynamic templates)", uncertain_dynamic)
-    emit_grouped_rules("## Uncertain selectors (`data-*` attributes)", uncertain_data_attr)
+    emit_grouped_rules("## Unused selectors (high confidence)", result.unused_high_conf)
+    emit_grouped_rules("## Uncertain selectors (dynamic templates)", result.uncertain_dynamic)
+    emit_grouped_rules("## Uncertain selectors (`data-*` attributes)", result.uncertain_data_attr)
 
     lines.append("## Unanalyzable selectors (no class/id/data-*)")
     lines.append("> These may be used (element selectors, pseudo-selectors, etc.).")
     lines.append("")
     by_file_unknown: dict[Path, list[RuleNote]] = defaultdict(list)
-    for r in unknown_no_tokens:
+    for r in result.unknown_no_tokens:
         by_file_unknown[r.file].append(r)
     for f in sorted(by_file_unknown.keys(), key=lambda p: (-len(by_file_unknown[p]), str(p))):
-        rel = f.relative_to(repo_dir)
+        rel = f.relative_to(result.repo_dir)
         items = sorted(by_file_unknown[f], key=lambda r: (r.line, r.selector_text))
         lines.append(f"### `{rel}` ({len(items)})")
         for r in items:
@@ -1066,9 +1567,9 @@ def main() -> int:
         lines.append("")
 
     lines.append("## Unused `@keyframes` (rough)")
-    if unused_keyframes:
-        for name in unused_keyframes:
-            files = sorted([p.relative_to(repo_dir) for p in keyframes_to_files.get(name, [])])
+    if result.unused_keyframes:
+        for name in result.unused_keyframes:
+            files = sorted([p.relative_to(result.repo_dir) for p in result.keyframes_to_files.get(name, set())])
             files_str = ", ".join(f"`{p}`" for p in files) if files else "(unknown)"
             lines.append(f"- `{name}` defined in: {files_str}")
     else:
@@ -1076,10 +1577,12 @@ def main() -> int:
     lines.append("")
 
     lines.append("## Unused CSS custom properties (`--*`)")
-    lines.append("> Marked unused when no `var(--name)` reference exists in reachable CSS or reachable code.")
-    if unused_custom_props:
-        for name in unused_custom_props:
-            files = sorted([p.relative_to(repo_dir) for p in custom_prop_to_files.get(name, [])])
+    lines.append(
+        "> Marked unused when no `var(--name)` reference exists in reachable CSS or reachable code, and the name is not referenced as a string literal in code."
+    )
+    if result.unused_custom_props:
+        for name in result.unused_custom_props:
+            files = sorted([p.relative_to(result.repo_dir) for p in result.custom_prop_to_files.get(name, set())])
             files_str = ", ".join(f"`{p}`" for p in files) if files else "(unknown)"
             lines.append(f"- `{name}` defined in: {files_str}")
     else:
@@ -1088,7 +1591,96 @@ def main() -> int:
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def apply_fixes(result: AuditResult) -> FixSummary:
+    summary = FixSummary()
+
+    # 1) Remove unused selector blocks (high confidence)
+    unused_keys_by_file: dict[Path, set[str]] = defaultdict(set)
+    for r in result.unused_high_conf:
+        unused_keys_by_file[r.file].add(norm_one_line(r.selector_text))
+
+    for css_file, keys in unused_keys_by_file.items():
+        raw = read_text(css_file)
+        blocks = extract_css_rule_blocks(raw)
+        ranges: list[tuple[int, int]] = []
+        removed = 0
+        for b in blocks:
+            if b.selector_key in keys:
+                s, e = adjust_delete_range(raw, b.start, b.end)
+                if e > s:
+                    ranges.append((s, e))
+                    removed += 1
+
+        if not ranges:
+            continue
+
+        new_raw = remove_ranges(raw, ranges)
+        if new_raw != raw:
+            css_file.write_text(new_raw, encoding="utf-8")
+            summary.css_files_changed += 1
+            summary.selector_blocks_removed += removed
+
+    # 2) Remove unused custom property declarations (exclude theme.css)
+    props_to_remove = set(result.unused_custom_props)
+    theme_css = (result.src_dir / "styles" / "theme.css").resolve()
+
+    for css_file in result.css_files:
+        if not props_to_remove:
+            break
+        if css_file.resolve() == theme_css:
+            continue
+        raw = read_text(css_file)
+        ranges = find_custom_prop_decl_ranges(raw, props_to_remove)
+        if not ranges:
+            continue
+        new_raw = remove_ranges(raw, ranges)
+        if new_raw != raw:
+            css_file.write_text(new_raw, encoding="utf-8")
+            summary.custom_properties_removed += len(ranges)
+            if css_file not in unused_keys_by_file:
+                summary.css_files_changed += 1
+
+    return summary
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Static CSS usage audit and optional pruning.")
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="Output report path (default: App/frontend/css-unused-report.md).",
+    )
+    parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="Remove unused selector blocks (high confidence) and unused custom properties (excluding src/styles/theme.css).",
+    )
+    args = parser.parse_args()
+
+    frontend_dir = Path(__file__).resolve().parents[1]
+    repo_dir = frontend_dir.parent.parent
+    output_path = Path(args.output) if args.output else (frontend_dir / "css-unused-report.md")
+    if not output_path.is_absolute():
+        output_path = (repo_dir / output_path).resolve()
+
+    result = compute_audit(frontend_dir=frontend_dir, repo_dir=repo_dir)
+
+    fix_summary: FixSummary | None = None
+    if args.fix:
+        fix_summary = apply_fixes(result)
+        # Re-audit after pruning for an updated report.
+        result = compute_audit(frontend_dir=frontend_dir, repo_dir=repo_dir)
+
+    write_report(result, output_path)
     print(f"Wrote report to {output_path.relative_to(repo_dir)}")
+    if fix_summary:
+        print(
+            f"Pruned: selector blocks removed={fix_summary.selector_blocks_removed}, "
+            f"custom properties removed={fix_summary.custom_properties_removed}, "
+            f"css files changed={fix_summary.css_files_changed}"
+        )
     return 0
 
 

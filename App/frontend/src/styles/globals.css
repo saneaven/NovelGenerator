@@ -243,14 +243,7 @@ pre {
 }
 
 /* Hidden scrollbar but still scrollable */
-.scrollbar-hidden {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
 
-.scrollbar-hidden::-webkit-scrollbar {
-  display: none;
-}
 
 /* ===== Selection ===== */
 ::selection {
@@ -266,35 +259,9 @@ pre {
 /* ===== Accessibility ===== */
 
 /* Screen reader only content */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border-width: 0;
-}
 
 /* Skip to main content link */
-.skip-to-main {
-  position: absolute;
-  top: -40px;
-  left: 0;
-  background: var(--color-surface-elevated);
-  color: var(--color-text-primary);
-  padding: var(--spacing-md) var(--spacing-lg);
-  text-decoration: none;
-  border-radius: var(--border-radius-md);
-  z-index: var(--z-modal);
-  transition: top var(--transition-fast);
-}
 
-.skip-to-main:focus {
-  top: var(--spacing-md);
-}
 
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {

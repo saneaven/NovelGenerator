@@ -23,7 +23,7 @@ const MobileFooter: React.FC<MobileFooterProps> = ({
         icon={<Settings size="xl" />}
         onClick={onSettingsClick}
         title={t('mobileFooter.settings')}
-        size="sm"
+        size="md"
       />
 
       <button

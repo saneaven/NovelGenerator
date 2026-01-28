@@ -22,15 +22,7 @@
   box-shadow: var(--shadow-md);
 }
 
-.settings-toast--success {
-  background-color: var(--color-success);
-  color: var(--color-success-dark);
-}
 
-.settings-toast--error {
-  background-color: var(--color-error);
-  color: var(--color-error-dark);
-}
 
 @keyframes toast-slide-down {
   from {

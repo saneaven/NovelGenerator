@@ -62,26 +62,8 @@
 }
 
 /* ===== Overlays ===== */
-.sidebar-overlay,
-.desktop-agent-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: var(--overlay-dark-heavy);
-  backdrop-filter: blur(4px);
-  animation: fadeIn var(--transition-base);
-}
 
-.sidebar-overlay {
-  z-index: calc(var(--z-modal) + 1);
-}
 
-.desktop-agent-overlay {
-  z-index: calc(var(--z-sticky) - 1);
-  background: var(--overlay-dark-light);
-}
 
 /* ===== Responsive Design ===== */
 @media (min-width: 769px) {
