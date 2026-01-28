@@ -11,18 +11,25 @@
 }
 
 /* ===== Size Variants ===== */
-.icon-button--md {
-  width: 2.875rem;
-  height: 2.875rem;
-  border-radius: var(--border-radius-lg);
+.icon-button--lg {
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--border-radius-xl);
   font-size: var(--font-size-xl);
 }
 
-.icon-button--sm {
+.icon-button--md {
   width: 2.5rem;
   height: 2.5rem;
-  border-radius: var(--border-radius-md);
+  border-radius: var(--border-radius-lg);
   font-size: var(--font-size-lg);
+}
+
+.icon-button--sm {
+  width: 2.0rem;
+  height: 2.0rem;
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-md);
 }
 
 .icon-button--xs {

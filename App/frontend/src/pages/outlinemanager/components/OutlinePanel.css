@@ -595,6 +595,9 @@
 
 /* Markdown Content Display */
 .outline-manager .markdown-content {
+    max-height: 400px;
+    overflow-y: auto;
+    margin: var(--spacing-lg);
   font-size: var(--font-size-base);
   line-height: var(--line-height-relaxed);
   color: var(--color-text-primary);
@@ -798,7 +801,7 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: var(--spacing-xs);
+  margin-bottom: var(--spacing-md);
 }
 
 .outline-manager .chapter-info {
@@ -833,12 +836,14 @@
 .outline-manager .chapter-expand-wrapper {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows var(--transition-slow);
+  transition: all var(--transition-slow);
   overflow: hidden;
+  padding: 0 var(--spacing-md);
 }
 
 .outline-manager .chapter-expand-wrapper.is-expanded {
   grid-template-rows: 1fr;
+  padding: var(--spacing-md);
 }
 
 .outline-manager .chapter-expand-content {

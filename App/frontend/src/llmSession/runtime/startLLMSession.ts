@@ -2,6 +2,7 @@ import type { ChatMessage, ContentPart, ToolCallProgress, ToolCallMetadata } fro
 import type { LLMTaskModeType, PromptContext } from '../../llm/types';
 import type { ProviderType, ProviderConfig, ThinkingConfig, CustomApiFormat, RetryConfig } from '../../store/settingsStore';
 import { LLMTask } from '../../llm/LLMTask';
+import { BackendError } from '../../llm/llmService';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
 import { generateTempId } from '../../utils/tempId';
 import type { TaskKind, TaskSessionState } from '../../llmTask/types';
@@ -37,6 +38,30 @@ export type LLMSessionHandle<TResult = unknown> = {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
+}
+
+function formatLLMSessionError(error: unknown): string {
+  if (error instanceof BackendError) {
+    const statusCode = error.statusCode;
+    if (statusCode === null || statusCode === undefined) {
+      return error.message;
+    }
+
+    // Keep existing formatted errors intact
+    if (error.message.startsWith('Backend Error (')) {
+      return error.message;
+    }
+
+    // Upgrade "Backend Error: ..." -> "Backend Error (CODE): ..."
+    if (error.message.startsWith('Backend Error:')) {
+      const suffix = error.message.slice('Backend Error:'.length).trimStart();
+      return `Backend Error (${statusCode}): ${suffix}`;
+    }
+
+    return `Backend Error (${statusCode}): ${error.message}`;
+  }
+
+  return error instanceof Error ? error.message : String(error);
 }
 
 export function startLLMSession<TInput = unknown, TResult = unknown>(
@@ -114,7 +139,7 @@ export function startLLMSession<TInput = unknown, TResult = unknown>(
       if (isAbortError(error) || abortController.signal.aborted) {
         store.updateSession(sessionId, { status: 'cancelled' } as any);
       } else {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = formatLLMSessionError(error);
         store.updateSession(sessionId, { status: 'error', error: message } as any);
       }
     } finally {

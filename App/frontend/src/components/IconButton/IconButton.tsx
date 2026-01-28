@@ -14,7 +14,7 @@ export interface IconButtonProps {
   showDot?: boolean;
   showSpinner?: boolean;
   className?: string;
-  size?: 'xs' | 'sm' | 'md';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
 }
 

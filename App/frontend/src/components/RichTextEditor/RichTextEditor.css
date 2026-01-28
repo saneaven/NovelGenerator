@@ -131,36 +131,6 @@
     white-space: nowrap;
 }
 
-.toolbar-actions .action-btn:hover:not(:disabled) {
-    background: var(--color-surface-hover);
-    border-color: var(--color-border-medium);
-}
-
-.toolbar-actions .action-btn:disabled {
-    opacity: var(--opacity-disabled);
-    cursor: not-allowed;
-}
-
-.toolbar-actions .action-btn.ai-edit-btn {
-    background: var(--gradient-accent);
-    color: var(--color-text-inverse);
-    border-color: var(--color-primary-main);
-}
-
-.toolbar-actions .action-btn.ai-edit-btn:hover:not(:disabled) {
-    background: linear-gradient(135deg, var(--color-primary-main), var(--color-brand-primary-active));
-}
-
-.toolbar-actions .action-btn.save-btn {
-    background: var(--gradient-secondary);
-    color: var(--color-text-inverse);
-    border-color: var(--color-brand-secondary);
-}
-
-.toolbar-actions .action-btn.save-btn:hover:not(:disabled) {
-    background: linear-gradient(135deg, var(--color-brand-secondary) 0%, var(--color-brand-secondary-hover) 100%);
-}
-
 
 /* ===== Heading Dropdown ===== */
 
