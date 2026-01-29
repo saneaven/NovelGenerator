@@ -111,7 +111,7 @@ async def get_agent_with_messages(
 
     messages = db.query(AgentMessage).filter(
         AgentMessage.agent_id == agent_id
-    ).order_by(AgentMessage.created_at).all()
+    ).order_by(AgentMessage.seq).all()
 
     return {"agent": agent, "messages": messages}
 
@@ -190,11 +190,13 @@ async def create_message(
     """Add a message to an agent"""
     project = await verify_project_access(project_id, current_user, db)
 
-    # Verify agent exists
-    agent = db.query(Agent).filter(
-        Agent.id == agent_id,
-        Agent.project_id == project_id
-    ).first()
+    # Verify agent exists (lock row for stable per-agent seq allocation)
+    agent = (
+        db.query(Agent)
+        .filter(Agent.id == agent_id, Agent.project_id == project_id)
+        .with_for_update()
+        .first()
+    )
 
     if not agent:
         raise HTTPException(
@@ -214,9 +216,13 @@ async def create_message(
     if data.thinking_details:
         message_data[data.language]['thinking_details'] = data.thinking_details
 
+    message_seq = int(getattr(agent, "next_message_seq", 1) or 1)
+    agent.next_message_seq = message_seq + 1
+
     message = AgentMessage(
         id=uuid.uuid4(),
         agent_id=agent_id,
+        seq=message_seq,
         role=data.role,
         data=message_data,
         tool_calls=jsonable_encoder(data.tool_calls) if data.tool_calls is not None else None
@@ -253,7 +259,7 @@ async def list_messages(
 
     messages = db.query(AgentMessage).filter(
         AgentMessage.agent_id == agent_id
-    ).order_by(AgentMessage.created_at).all()
+    ).order_by(AgentMessage.seq).all()
 
     return messages
 

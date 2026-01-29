@@ -6,6 +6,8 @@ import {
   type ChatMessage,
   type AgentWorkspacePromptContext,
   type AgentMemorySummaryPromptContext,
+  type ContentPart,
+  type ToolCallMetadata,
 } from '../../llm';
 import { buildConversationBlocksWithMeta } from '../../llm/conversation/buildConversationBlocks';
 import { startLLMSession } from '../../llmSession';
@@ -21,21 +23,25 @@ import { generateTempId } from '../../utils/tempId';
 type MemoryRelevantChat = {
   messageId: string;
   role: string;
-  // Raw snippet/text (do NOT include <chat> or other formatting tags here)
-  content: string;
-  source: 'hit' | 'neighbor';
-  fieldPath?: string | null;
-  chunkIndex?: number | null;
-  // Matched tool call info (only when fieldPath points to tool_calls/*)
-  toolCall?: RelevantChatToolCall | null;
-  // Optional: all tool calls on this message (summary only; raw args not included)
-  toolCalls?: RelevantChatToolCall[];
-  createdAt?: string;
-  distance?: number | null;
+  // Snippet matched by memory search (best chunk text)
+  matched_snippet?: string;
+  // Match metadata (for template branching; avoid exposing createdAt/distance)
+  match?: {
+    kind: 'content' | 'tool_call' | 'unknown';
+    fieldPath?: string | null;
+    chunkIndex?: number | null;
+  };
+  // Matched tool call (summary only; raw args not included)
+  toolCall?: RelevantChatToolCall;
+  // Original message payload (for user-defined templates; avoid pre-formatting)
+  original?: {
+    content_parts: ContentPart[];
+    tool_calls: ToolCallMetadata[];
+  };
 };
 
 export type AgentMemoryContext = {
-  previousSummary: string[];
+  previousSummaries: string[];
   relevantChats: MemoryRelevantChat[];
 };
 
@@ -135,21 +141,21 @@ function getToolCallsForPrompt(msg?: ChatMessage): RelevantChatToolCall[] | unde
 function getMatchedToolCallForPrompt(args: {
   fieldPath?: string | null;
   localMessage?: ChatMessage;
-}): RelevantChatToolCall | null {
+}): RelevantChatToolCall | undefined {
   const fieldPath = args.fieldPath || null;
-  const local = args.localMessage;
-  if (!fieldPath || !fieldPath.startsWith('tool_calls/')) return null;
-  if (!local?.toolCalls || local.toolCalls.length === 0) return null;
+  const all = getToolCallsForPrompt(args.localMessage);
+  if (!fieldPath || !fieldPath.startsWith('tool_calls/')) return undefined;
+  if (!all || all.length === 0) return undefined;
 
   const locator = parseToolCallLocatorFromFieldPath(fieldPath);
-  const toolCall =
-    locator?.kind === 'id'
-      ? local.toolCalls.find((tc) => tc.id === locator.id)
-      : locator?.kind === 'index'
-        ? local.toolCalls[locator.index]
-        : undefined;
-  if (!toolCall) return null;
-  return toRelevantChatToolCall(toolCall);
+  if (!locator) return undefined;
+
+  const matched =
+    locator.kind === 'index'
+      ? all[locator.index]
+      : all.find((tc) => tc.id && tc.id === locator.id);
+
+  return matched || undefined;
 }
 
 function formatMessageForSummary(msg: ChatMessage): string {
@@ -245,20 +251,20 @@ async function buildMemoryContext(
   activeHistory: ChatMessage[],
   options?: AgentMemoryPrepareOptions
 ): Promise<AgentMemoryContext> {
-  const previousSummary = status.lastSummaryText ? [status.lastSummaryText] : [];
+  const previousSummaries = status.lastSummaryText ? [status.lastSummaryText] : [];
 
   const lastAssistant = [...activeHistory].reverse().find((m) => m.role === 'assistant');
   const lastAssistantText = lastAssistant ? getMessageText(lastAssistant).trim() : '';
   const query = [lastAssistantText, input.userInput?.trim()].filter(Boolean).join('\n\n').trim();
 
   if (!status.hasMemory || !query) {
-    return { previousSummary, relevantChats: [] };
+    return { previousSummaries, relevantChats: [] };
   }
 
   const settings = useSettingsStore.getState().settings;
   if (!settings.ragSearchEnabled) {
     // Embeddings disabled globally: keep summary only.
-    return { previousSummary, relevantChats: [] };
+    return { previousSummaries, relevantChats: [] };
   }
 
   const topK = settings.agentMemoryTopKPerQuery ?? 20;
@@ -303,17 +309,27 @@ async function buildMemoryContext(
     const local = messageById.get(r.message_id);
     const fieldPath = r.field_path ?? null;
     const chunkIndex = r.chunk_index ?? null;
+    const matchedSnippet = String(r.content || '').trim();
+    const kind: 'content' | 'tool_call' | 'unknown' =
+      !fieldPath || fieldPath === 'content'
+        ? 'content'
+        : fieldPath.startsWith('tool_calls/')
+          ? 'tool_call'
+          : 'unknown';
     return {
       messageId: r.message_id,
       role: r.role,
-      content: String(r.content || '').trim(),
-      source: 'hit',
-      fieldPath,
-      chunkIndex,
-      toolCall: getMatchedToolCallForPrompt({ fieldPath, localMessage: local }),
-      toolCalls: getToolCallsForPrompt(local),
-      createdAt: r.created_at,
-      distance: r.distance ?? null,
+      matched_snippet: matchedSnippet,
+      match: {
+        kind,
+        fieldPath,
+        chunkIndex,
+      },
+      toolCall: kind === 'tool_call' ? getMatchedToolCallForPrompt({ fieldPath, localMessage: local }) : undefined,
+      original: {
+        content_parts: Array.isArray(local?.contentParts) ? local!.contentParts : [],
+        tool_calls: Array.isArray(local?.toolCalls) ? local!.toolCalls : [],
+      },
     };
   });
 
@@ -323,7 +339,7 @@ async function buildMemoryContext(
   const primaryChats = baseChats.slice(0, maxPrimaryClamped);
 
   if (neighborWindow <= 0 || primaryChats.length === 0) {
-    return { previousSummary, relevantChats: primaryChats.slice(0, maxTotalClamped) };
+    return { previousSummaries, relevantChats: primaryChats.slice(0, maxTotalClamped) };
   }
 
   // Expand by nearby messages in local chat history (UI keeps full history even when archived).
@@ -351,19 +367,16 @@ async function buildMemoryContext(
   for (const m of fullHistory) {
     if (!includeIds.has(m.id)) continue;
     const base = baseById.get(m.id);
-    const fallback = getMessageText(m).trim();
-    const toolCalls = getToolCallsForPrompt(m);
     expanded.push({
       messageId: m.id,
       role: m.role,
-      content: (base?.content || fallback || '').trim(),
-      source: base ? 'hit' : 'neighbor',
-      fieldPath: base?.fieldPath,
-      chunkIndex: base?.chunkIndex,
-      toolCall: base?.toolCall ?? null,
-      toolCalls,
-      createdAt: m.timestamp ? new Date(m.timestamp).toISOString() : undefined,
-      distance: base?.distance ?? null,
+      matched_snippet: base?.matched_snippet,
+      match: base?.match,
+      toolCall: base?.toolCall,
+      original: {
+        content_parts: Array.isArray(m.contentParts) ? m.contentParts : [],
+        tool_calls: Array.isArray(m.toolCalls) ? m.toolCalls : [],
+      },
     });
     if (expanded.length >= maxTotalClamped) break;
   }
@@ -377,9 +390,13 @@ async function buildMemoryContext(
   }
 
   return {
-    previousSummary,
+    previousSummaries,
     relevantChats: expanded
-      .filter((c) => (c.content || '').trim() || (c.toolCalls && c.toolCalls.length > 0))
+      .filter(
+        (c) =>
+          (c.matched_snippet || '').trim() ||
+          c.toolCall != null
+      )
       .slice(0, maxTotalClamped),
   };
 }
@@ -640,7 +657,7 @@ export const AgentMemoryManager = {
         agentId: input.agentId,
         language: input.outputLanguage,
         archiveUntilMessageId: boundary,
-        previousSummaryText: memory.previousSummary[memory.previousSummary.length - 1] || '',
+        previousSummaryText: memory.previousSummaries[memory.previousSummaries.length - 1] || '',
         messagesToArchive,
       }, options);
 
@@ -670,7 +687,7 @@ export const AgentMemoryManager = {
       agentStore.setArchivedUntilMessageId(input.projectId, input.agentId, currentBoundary ?? null);
       const nextSummary = archiveResp.summary_text ?? '';
       memory = {
-        previousSummary: nextSummary ? [nextSummary] : memory.previousSummary,
+        previousSummaries: nextSummary ? [nextSummary] : memory.previousSummaries,
         relevantChats: memory.relevantChats,
       };
 

@@ -125,6 +125,8 @@ export interface ToolCallProgress {
 
 export interface ChatMessage extends ConversationBlock {
   id: string;
+  /** Stable per-agent message order (1-based). May be absent for synthetic/local-only messages. */
+  seq?: number;
   timestamp: Date;
   toolCalls?: ToolCallMetadata[];
   thinking_details?: ThinkingDetail[];

@@ -113,6 +113,7 @@ const convertToDisplayMessage = (storedMessage: StoredAgentMessage, language: st
 const convertBackendMessage = (message: AgentMessageResponse): StoredAgentMessage => {
   return {
     id: message.id,
+    seq: message.seq,
     role: message.role as Role,
     data: message.data,
     toolCalls: message.tool_calls,
@@ -464,7 +465,14 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
     const agent = get().getAgent(projectId, agentId);
     if (!agent) return [];
 
-    return agent.messages.map((msg) => convertToDisplayMessage(msg, language));
+    const sorted = [...agent.messages].sort((a, b) => {
+      const aSeq = a.seq ?? 0;
+      const bSeq = b.seq ?? 0;
+      if (aSeq !== bSeq) return aSeq - bSeq;
+      return a.timestamp.getTime() - b.timestamp.getTime();
+    });
+
+    return sorted.map((msg) => convertToDisplayMessage(msg, language));
   },
 
   deleteMessage: async (projectId: string, agentId: string, messageId: string) => {

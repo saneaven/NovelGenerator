@@ -1,5 +1,5 @@
 """SQLAlchemy database models for Novel Buds"""
-from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, ForeignKey, Index, UniqueConstraint
+from sqlalchemy import Column, String, Integer, BigInteger, DateTime, Boolean, Text, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from datetime import datetime
@@ -587,12 +587,15 @@ class Agent(Base):
     # Long-term memory boundary cache (UI divider + idempotency for archive)
     archived_until_message_id = Column(UUID(as_uuid=True), nullable=True, index=True)
 
+    # Stable per-agent message ordering (1-based)
+    next_message_seq = Column(BigInteger, default=1, nullable=False)
+
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
     project = relationship("Project", back_populates="agents")
-    messages = relationship("AgentMessage", back_populates="agent", cascade="all, delete-orphan", order_by="AgentMessage.created_at")
+    messages = relationship("AgentMessage", back_populates="agent", cascade="all, delete-orphan", order_by="AgentMessage.seq")
 
 
 class AgentMessage(Base):
@@ -601,6 +604,7 @@ class AgentMessage(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     agent_id = Column(UUID(as_uuid=True), ForeignKey('agents.id', ondelete='CASCADE'), nullable=False, index=True)
+    seq = Column(BigInteger, nullable=False)
 
     role = Column(String(50), nullable=False)
 

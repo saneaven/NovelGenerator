@@ -133,42 +133,62 @@ export const UNIFIED_SCHEMA = {
   agent: {
     mode: { desc: "Agent mode", example: "storyObject" as "storyObject" | "novelEditor" },
     contextObjectIds: { desc: "IDs of objects to include in context", example: ["char-1", "loc-1"] as string[] },
-    previousSummary: {
+    previousSummaries: {
       desc: "Rolling memory summaries (latest is last)",
       example: ["Facts: ...\nDecisions: ...\nOpen Questions: ..."] as string[],
     },
     relevantChats: {
       desc: "Retrieved relevant chat messages from long-term memory (data-only; format in fragments/templates)",
       example: [{
-        role: "assistant",
-        content: "",
         messageId: "msg-123",
-        source: "hit",
-        fieldPath: "tool_calls/call-1",
-        chunkIndex: 0,
+        role: "assistant",
+        matched_snippet: "Created outline: The Hollow Crown - Main Storyline",
+        match: {
+          kind: "tool_call",
+          fieldPath: "tool_calls/call-1",
+          chunkIndex: 0,
+        },
         toolCall: {
           id: "call-1",
           name: "create_outline",
           status: "accepted",
           result: "Created outline: The Hollow Crown - Main Storyline",
         },
-        toolCalls: [{
-          id: "call-1",
-          name: "create_outline",
-          status: "accepted",
-          result: "Created outline: The Hollow Crown - Main Storyline",
-        }],
+        original: {
+          content_parts: [
+            { type: "thinking", text: "Planning the outline structure..." },
+            { type: "content", text: "The Hollow Crown - Main Storyline" },
+          ],
+          tool_calls: [
+            {
+              id: "call-1",
+              tool_name: "create_outline",
+              arguments: { title: "The Hollow Crown" },
+              status: "accepted",
+              result: { success: true, message: "Created outline" },
+              acceptedAt: "2026-01-29T12:34:56Z",
+            },
+          ],
+        },
       }] as Array<{
-        role: string;
-        content: string;
         messageId: string;
-        source?: "hit" | "neighbor";
-        fieldPath?: string | null;
-        chunkIndex?: number | null;
-        toolCall?: { id?: string; name: string; status: string; result: string } | null;
-        toolCalls?: Array<{ id?: string; name: string; status: string; result: string }>;
-        createdAt?: string;
-        distance?: number | null;
+        role: string;
+        matched_snippet?: string;
+        match?: { kind: "content" | "tool_call" | "unknown"; fieldPath?: string | null; chunkIndex?: number | null };
+        toolCall?: { id?: string; name: string; status: string; result: string };
+        original?: {
+          content_parts: Array<{ type: "content" | "thinking"; text: string }>;
+          tool_calls: Array<{
+            id: string;
+            tool_name: string;
+            arguments: any;
+            status: string;
+            reason?: string;
+            failureType?: string;
+            result?: { success: boolean; message: string; error?: string; objectId?: string; objectType?: string; data?: Record<string, any> };
+            acceptedAt?: string;
+          }>;
+        };
       }>,
     },
   },

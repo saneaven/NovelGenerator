@@ -241,11 +241,11 @@ async def archive_until(
             "indexed_count": 0,
         }
 
-    # Determine message range to archive (by created_at order)
+    # Determine message range to archive (by stable per-agent seq order)
     ordered_messages: List[AgentMessage] = (
         db.query(AgentMessage)
         .filter(AgentMessage.agent_id == agent.id)
-        .order_by(AgentMessage.created_at.asc())
+        .order_by(AgentMessage.seq.asc())
         .all()
     )
     ordered_ids = [m.id for m in ordered_messages]

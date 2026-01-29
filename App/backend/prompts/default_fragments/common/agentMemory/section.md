@@ -1,10 +1,10 @@
-{{#if (or (hasItems agent.previousSummary) (hasItems agent.relevantChats))}}
+{{#if (or (hasItems agent.previousSummaries) (hasItems agent.relevantChats))}}
 # Memory
 
-{{#if (hasItems agent.previousSummary)}}
+{{#if (hasItems agent.previousSummaries)}}
 ## Previous Summary
 
-{{#each agent.previousSummary}}
+{{#each agent.previousSummaries}}
 {{this}}
 
 {{/each}}
@@ -14,23 +14,16 @@
 ## Relevant Archived Chats
 
 {{#each agent.relevantChats}}
-<chat id="{{this.messageId}}" role="{{this.role}}">
-{{#if this.content}}
-{{this.content}}
-{{/if}}
-
-{{#if this.toolCall}}
-<function_call name="{{this.toolCall.name}}" status="{{this.toolCall.status}}">
-<result>{{this.toolCall.result}}</result>
+<chat id="{{messageId}}" role="{{role}}">
+{{#if (eq match.kind "tool_call")}}
+{{#if toolCall}}
+<function_call name="{{toolCall.name}}" status="{{toolCall.status}}">
+<result>{{toolCall.result}}</result>
+{{matched_snippet}}
 </function_call>
+{{/if}}
 {{else}}
-{{#if (hasItems this.toolCalls)}}
-{{#each this.toolCalls}}
-<function_call name="{{this.name}}" status="{{this.status}}">
-<result>{{this.result}}</result>
-</function_call>
-{{/each}}
-{{/if}}
+{{matched_snippet}}
 {{/if}}
 </chat>
 

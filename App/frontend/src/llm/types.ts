@@ -48,17 +48,21 @@ export type AgentRelevantChatToolCall = {
 
 // Prompt-injected memory chat (data-only; formatting should be done in prompt templates/fragments).
 export type AgentRelevantChat = {
-  role: string;
-  // Raw snippet/text (do NOT include <chat> or other formatting tags here)
-  content: string;
   messageId: string;
-  source?: 'hit' | 'neighbor';
-  fieldPath?: string | null;
-  chunkIndex?: number | null;
-  toolCall?: AgentRelevantChatToolCall | null;
-  toolCalls?: AgentRelevantChatToolCall[];
-  createdAt?: string;
-  distance?: number | null;
+  role: string;
+  // Snippet matched by memory search (best chunk text)
+  matched_snippet?: string;
+  // Match metadata for template branching
+  match?: {
+    kind: 'content' | 'tool_call' | 'unknown';
+    fieldPath?: string | null;
+    chunkIndex?: number | null;
+  };
+  toolCall?: AgentRelevantChatToolCall;
+  original?: {
+    content_parts: ContentPart[];
+    tool_calls: ToolCallMetadata[];
+  };
 };
 
 /**
@@ -121,7 +125,7 @@ export interface TemplateData {
     contextObjectIds?: string[];
     selectedOutlineId?: string;
     selectedActId?: string;
-    previousSummary?: string[];
+    previousSummaries?: string[];
     relevantChats?: AgentRelevantChat[];
   };
   memorySummary?: {
@@ -198,7 +202,7 @@ export interface BasePromptContext {
 export interface AgentWorkspacePromptContext extends BasePromptContext {
   tools?: ToolCallSchema[];
   contextObjectIds?: string[];
-  previousSummary?: string[];
+  previousSummaries?: string[];
   relevantChats?: AgentRelevantChat[];
 }
 
@@ -211,7 +215,7 @@ export interface AgentWorkspacePromptContext extends BasePromptContext {
 export interface AgentNovelEditorPromptContext extends BasePromptContext {
   tools?: ToolCallSchema[];
   contextObjectIds?: string[];
-  previousSummary?: string[];
+  previousSummaries?: string[];
   relevantChats?: AgentRelevantChat[];
 }
 
@@ -224,7 +228,7 @@ export interface AgentOutlineManagerPromptContext extends BasePromptContext {
   contextObjectIds?: string[];
   selectedOutlineId?: string;
   selectedActId?: string;
-  previousSummary?: string[];
+  previousSummaries?: string[];
   relevantChats?: AgentRelevantChat[];
 }
 

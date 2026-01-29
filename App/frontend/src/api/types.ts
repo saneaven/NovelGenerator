@@ -281,6 +281,7 @@ export interface AgentMessageUpdate {
 export interface AgentMessageResponse {
   id: string;
   agent_id: string;
+  seq: number;
   role: string;
   data: LanguageData<{
     contentParts: ContentPart[];

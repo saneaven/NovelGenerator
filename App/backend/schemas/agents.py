@@ -92,6 +92,7 @@ class MessageResponse(BaseModel):
     """Message response"""
     id: UUID
     agent_id: UUID
+    seq: int
     role: str
     data: Dict[str, Any]  # Multilingual content
     tool_calls: Optional[List[Dict[str, Any]]]

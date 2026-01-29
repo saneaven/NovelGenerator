@@ -202,7 +202,7 @@ export class PromptManager {
 
     const settings = useSettingsStore.getState().settings;
     const variables = useVariableStore.getState().getVariablesForTemplate();
-    const previousSummary = Array.isArray((context as any).previousSummary) ? (context as any).previousSummary : [];
+    const previousSummaries = Array.isArray((context as any).previousSummaries) ? (context as any).previousSummaries : [];
     const relevantChats = Array.isArray((context as any).relevantChats) ? (context as any).relevantChats : [];
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
@@ -215,7 +215,7 @@ export class PromptManager {
         contextObjectIds: context.contextObjectIds,
         selectedOutlineId: (context as any).selectedOutlineId,
         selectedActId: (context as any).selectedActId,
-        previousSummary,
+        previousSummaries,
         relevantChats,
       },
       variables,
