@@ -9,6 +9,7 @@ export const LLMTaskMode = {
   AGENT_STORYOBJECT: 'agent_storyObject',
   AGENT_NOVEL_EDITOR: 'agent_novel_editor',
   AGENT_OUTLINE_MANAGER: 'agent_outline_manager',
+  AGENT_MEMORY_SUMMARY: 'agent_memory_summary',
   EDIT_ASSISTANT_MANUSCRIPT: 'edit_assistant_manuscript',
   EDIT_ASSISTANT_STORY_OBJECT: 'edit_assistant_story_object',
   TRANSLATION: 'translation',
@@ -37,6 +38,28 @@ export type OutputMode = 'tool_call' | 'native_tool_call' | 'raw_output';
  * - custom: include custom thinking instructions in prompt
  */
 export type ThinkingMode = 'off' | 'model' | 'custom';
+
+export type AgentRelevantChatToolCall = {
+  id?: string;
+  name: string;
+  status: string;
+  result: string;
+};
+
+// Prompt-injected memory chat (data-only; formatting should be done in prompt templates/fragments).
+export type AgentRelevantChat = {
+  role: string;
+  // Raw snippet/text (do NOT include <chat> or other formatting tags here)
+  content: string;
+  messageId: string;
+  source?: 'hit' | 'neighbor';
+  fieldPath?: string | null;
+  chunkIndex?: number | null;
+  toolCall?: AgentRelevantChatToolCall | null;
+  toolCalls?: AgentRelevantChatToolCall[];
+  createdAt?: string;
+  distance?: number | null;
+};
 
 /**
  * Template data structure passed to all templates
@@ -99,13 +122,18 @@ export interface TemplateData {
     selectedOutlineId?: string;
     selectedActId?: string;
     previousSummary?: string[];
-    relevantChats?: Array<{
+    relevantChats?: AgentRelevantChat[];
+  };
+  memorySummary?: {
+    previousSummary: string;
+    messages: Array<{
       role: string;
       content: string;
       messageId: string;
       createdAt?: string;
-      distance?: number | null;
     }>;
+    language: string;
+    archiveUntilMessageId: string;
   };
   editAssistant?: {
     mode: 'manuscript' | 'storyObject';
@@ -171,13 +199,7 @@ export interface AgentWorkspacePromptContext extends BasePromptContext {
   tools?: ToolCallSchema[];
   contextObjectIds?: string[];
   previousSummary?: string[];
-  relevantChats?: Array<{
-    role: string;
-    content: string;
-    messageId: string;
-    createdAt?: string;
-    distance?: number | null;
-  }>;
+  relevantChats?: AgentRelevantChat[];
 }
 
 /**
@@ -190,13 +212,7 @@ export interface AgentNovelEditorPromptContext extends BasePromptContext {
   tools?: ToolCallSchema[];
   contextObjectIds?: string[];
   previousSummary?: string[];
-  relevantChats?: Array<{
-    role: string;
-    content: string;
-    messageId: string;
-    createdAt?: string;
-    distance?: number | null;
-  }>;
+  relevantChats?: AgentRelevantChat[];
 }
 
 /**
@@ -209,13 +225,24 @@ export interface AgentOutlineManagerPromptContext extends BasePromptContext {
   selectedOutlineId?: string;
   selectedActId?: string;
   previousSummary?: string[];
-  relevantChats?: Array<{
-    role: string;
-    content: string;
-    messageId: string;
-    createdAt?: string;
-    distance?: number | null;
-  }>;
+  relevantChats?: AgentRelevantChat[];
+}
+
+/**
+ * Context for agent long-term memory summarization (rolling summary).
+ */
+export interface AgentMemorySummaryPromptContext extends BasePromptContext {
+  memorySummary: {
+    previousSummary: string;
+    messages: Array<{
+      role: string;
+      content: string;
+      messageId: string;
+      createdAt?: string;
+    }>;
+    language: string;
+    archiveUntilMessageId: string;
+  };
 }
 
 /**
@@ -328,6 +355,7 @@ export interface CoverImagePromptContext extends BasePromptContext {
 export type PromptContext =
   | AgentWorkspacePromptContext
   | AgentNovelEditorPromptContext
+  | AgentMemorySummaryPromptContext
   | EditAssistantStoryObjectPromptContext
   | EditAssistantManuscriptPromptContext
   | StoryTranslationPromptContext

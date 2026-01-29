@@ -63,6 +63,11 @@ class TaskAIConfig(BaseModel):
     model: str = Field(..., min_length=1, max_length=200)
     temperature: float = Field(default=0.7, ge=0, le=2)
     providerPreference: Optional[ProviderPreference] = None
+    # Max output tokens for the response (maps to backend `max_tokens`).
+    # Leave unset to use provider defaults.
+    maxOutputTokens: Optional[int] = Field(default=None, ge=1, le=1000000)
+    # Context window upper bound used for local prompt budgeting (e.g. agent memory preflight).
+    contextWindowTokens: Optional[int] = Field(default=None, ge=1024, le=1000000)
     advanced: AdvancedTaskSettings = Field(default_factory=AdvancedTaskSettings)
 
     class Config:

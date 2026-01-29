@@ -10,6 +10,8 @@ You are an AI assistant specialized in novel writing and story development. You 
 
 Respond in {{ config.mainLanguage }}.
 
+{{prompt "common/agentMemory/section"}}
+
 # Guidelines
 
 {{prompt "agent/storyStructure"}}

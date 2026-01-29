@@ -66,6 +66,14 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
     onChange({ ...config, temperature });
   };
 
+  const handleMaxOutputTokensChange = (value: number | undefined) => {
+    onChange({ ...config, maxOutputTokens: value });
+  };
+
+  const handleContextWindowTokensChange = (value: number | undefined) => {
+    onChange({ ...config, contextWindowTokens: value });
+  };
+
   const handleAdvancedChange = (key: 'enablePrefill', value: boolean) => {
     onChange({
       ...config,
@@ -255,6 +263,42 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
               ? t('settings.taskConfig.temperatureGpt5Hint')
               : t('settings.taskConfig.temperatureHint')}
           </p>
+        </div>
+
+        <div className="form-field">
+          <label>{t('settings.taskConfig.tokenLimits.contextWindowTokens')}</label>
+          <input
+            type="number"
+            min="1024"
+            max="1000000"
+            value={config.contextWindowTokens ?? ''}
+            onChange={(e) =>
+              handleContextWindowTokensChange(
+                e.target.value ? parseInt(e.target.value) : undefined
+              )
+            }
+            placeholder="32000"
+            className="config-input"
+          />
+          <p className="field-hint">{t('settings.taskConfig.tokenLimits.contextWindowTokensHint')}</p>
+        </div>
+
+        <div className="form-field">
+          <label>{t('settings.taskConfig.tokenLimits.maxOutputTokens')}</label>
+          <input
+            type="number"
+            min="1"
+            max="1000000"
+            value={config.maxOutputTokens ?? ''}
+            onChange={(e) =>
+              handleMaxOutputTokensChange(
+                e.target.value ? parseInt(e.target.value) : undefined
+              )
+            }
+            placeholder={t('settings.taskConfig.tokenLimits.maxOutputTokensPlaceholder')}
+            className="config-input"
+          />
+          <p className="field-hint">{t('settings.taskConfig.tokenLimits.maxOutputTokensHint')}</p>
         </div>
       </div>
 

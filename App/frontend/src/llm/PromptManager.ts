@@ -19,6 +19,7 @@ import {
   type AgentWorkspacePromptContext,
   type AgentNovelEditorPromptContext,
   type AgentOutlineManagerPromptContext,
+  type AgentMemorySummaryPromptContext,
   type EditAssistantStoryObjectPromptContext,
   type EditAssistantManuscriptPromptContext,
   type StoryTranslationPromptContext,
@@ -129,6 +130,8 @@ export class PromptManager {
         return this.generateAgentBundle(context as AgentNovelEditorPromptContext, 'novelEditor');
       case LLMTaskMode.AGENT_OUTLINE_MANAGER:
         return this.generateAgentBundle(context as AgentOutlineManagerPromptContext, 'outlineManager');
+      case LLMTaskMode.AGENT_MEMORY_SUMMARY:
+        return this.generateAgentMemorySummaryBundle(context as AgentMemorySummaryPromptContext);
       case LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT:
         return this.generateEditAssistantBundle(context as EditAssistantStoryObjectPromptContext, 'storyObject');
       case LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT:
@@ -384,6 +387,36 @@ export class PromptManager {
       prefill: prefillTemplate && context.enablePrefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
+      templateData,
+    };
+  }
+
+  // ==================== Agent Memory Summary ====================
+
+  private static async generateAgentMemorySummaryBundle(
+    context: AgentMemorySummaryPromptContext
+  ): Promise<PromptBundle> {
+    const [systemTemplate, userTemplate] = await Promise.all([
+      this.getTemplate('agent', 'systemPrompt', 'memorySummary'),
+      this.getTemplate('agent', 'userPrompt', 'memorySummary'),
+    ]);
+
+    const settings = useSettingsStore.getState().settings;
+    const variables = useVariableStore.getState().getVariablesForTemplate();
+
+    const templateData: TemplateData = {
+      config: this.buildConfigData(context),
+      project: this.buildProjectData(context.projectId, settings.mainLanguage),
+      input: {
+        // userMessage is injected per user block in prepareMessages()
+      },
+      memorySummary: context.memorySummary,
+      variables,
+    };
+
+    return {
+      systemPrompt: renderTemplate(systemTemplate!, templateData),
+      userPrompt: userTemplate!, // NOT rendered - will be rendered per-message
       templateData,
     };
   }

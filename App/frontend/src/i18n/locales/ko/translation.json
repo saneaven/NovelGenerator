@@ -565,7 +565,14 @@
         "thinkingBudget25Hint": "지원되는 경우 사고를 효과적으로 비활성화하려면 0으로 설정하세요."
       },
       "tokenizer": "토크나이저",
-      "tokenizerHint": "토큰 수 추정에 사용할 토크나이저를 선택하세요"
+      "tokenizerHint": "토큰 수 추정에 사용할 토크나이저를 선택하세요",
+      "tokenLimits": {
+        "contextWindowTokens": "컨텍스트 윈도우 토큰 수",
+        "contextWindowTokensHint": "로컬 프롬프트 예산 계산(예: 에이전트 메모리 preflight)에 사용됩니다. 실제 모델 컨텍스트 윈도우를 변경하진 않습니다.",
+        "maxOutputTokens": "응답 최대 토큰 수 (max_tokens)",
+        "maxOutputTokensPlaceholder": "기본값(프로바이더)",
+        "maxOutputTokensHint": "응답 생성 토큰 수 상한입니다. 비워두면 프로바이더 기본값을 사용합니다."
+      }
     },
     "llmLog": {
       "enableLogging": "LLM 요청 로깅 활성화",
@@ -966,7 +973,15 @@
     "scrollToBottom": "맨 아래로 스크롤",
     "switchToLanguage": "{{language}}(으)로 전환",
     "translateTo": "{{language}}(으)로 번역",
-    "refreshTranslation": "{{language}} 번역 새로고침"
+    "refreshTranslation": "{{language}} 번역 새로고침",
+    "memory": {
+      "preflight": {
+        "summarizing": "요약중...",
+        "archiving": "기억 저장/인덱싱 중...",
+        "searching": "메모리 검색 중..."
+      },
+      "preflightFailed": "메모리 준비 실패: {{error}}"
+    }
   },
   "unifiedWorkspace": {
     "loadingProject": "프로젝트 로딩 중...",

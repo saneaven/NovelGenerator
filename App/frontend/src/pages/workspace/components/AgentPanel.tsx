@@ -190,6 +190,8 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         contextIds,
     } = useAgentOrchestration({ projectId, mode });
 
+    const preflightToast = useAgentUIStore((state) => state.preflightToastByProject[projectId] ?? null);
+
     // Destructure for easier access
     const { selectedContextIds, setSelectedContextIds: onContextIdsChange, totalObjectCount } = contextIds;
     const {
@@ -952,6 +954,14 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
             </div>
 
             <div className="agent-input-container" ref={contextDropdownRef}>
+                {preflightToast && (
+                    <div
+                        className={`agent-preflight-toast ${preflightToast.type === 'error' ? 'agent-preflight-toast--error' : ''}`}
+                        role={preflightToast.type === 'error' ? 'alert' : 'status'}
+                    >
+                        {preflightToast.message}
+                    </div>
+                )}
                 <div className={`agent-context-dropdown-menu ${isContextDropdownOpen ? '' : 'hidden'}`}>
                     <ObjectPicker
                         mode="all"

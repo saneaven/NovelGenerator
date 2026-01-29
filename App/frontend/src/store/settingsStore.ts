@@ -108,6 +108,12 @@ export interface TaskAIConfig {
     model: string;
     temperature: number;
     providerPreference?: ProviderPreference;
+    // Max output tokens for the LLM response (maps to backend `max_tokens`)
+    // If omitted, provider defaults are used.
+    maxOutputTokens?: number;
+    // Context window upper bound (used for local budgeting like agent memory preflight)
+    // If omitted, falls back to conservative defaults.
+    contextWindowTokens?: number;
     advanced: AdvancedTaskSettings;
 }
 
@@ -247,6 +253,7 @@ const defaultSettings: Settings = {
             provider: 'openrouter',
             model: 'gpt-4o-mini',
             temperature: 0.7,
+            contextWindowTokens: 32000,
             advanced: {
                 enablePrefill: false,
                 thinkingMode: 'off',
@@ -261,6 +268,7 @@ const defaultSettings: Settings = {
             provider: 'openrouter',
             model: 'gpt-4o',
             temperature: 0.2,
+            contextWindowTokens: 32000,
             advanced: {
                 enablePrefill: false,
                 thinkingMode: 'off',
@@ -275,6 +283,7 @@ const defaultSettings: Settings = {
             provider: 'openrouter',
             model: 'gpt-4o',
             temperature: 0.7,
+            contextWindowTokens: 32000,
             advanced: {
                 enablePrefill: true,
                 thinkingMode: 'off',
@@ -289,6 +298,7 @@ const defaultSettings: Settings = {
             provider: 'openrouter',
             model: 'gpt-4o-mini',
             temperature: 0.7,
+            contextWindowTokens: 32000,
             advanced: {
                 enablePrefill: false,
                 thinkingMode: 'off',
@@ -303,6 +313,7 @@ const defaultSettings: Settings = {
             provider: 'openrouter',
             model: 'gpt-4o-mini',
             temperature: 0.2,
+            contextWindowTokens: 32000,
             advanced: {
                 enablePrefill: false,
                 thinkingMode: 'off',

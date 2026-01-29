@@ -138,14 +138,38 @@ export const UNIFIED_SCHEMA = {
       example: ["Facts: ...\nDecisions: ...\nOpen Questions: ..."] as string[],
     },
     relevantChats: {
-      desc: "Retrieved relevant chat messages from long-term memory",
+      desc: "Retrieved relevant chat messages from long-term memory (data-only; format in fragments/templates)",
       example: [{
         role: "assistant",
-        content: "Previously you decided the protagonist is allergic to magic...",
+        content: "",
         messageId: "msg-123",
-        createdAt: "2026-01-01T00:00:00Z",
-        distance: 0.123,
-      }] as Array<{ role: string; content: string; messageId: string; createdAt?: string; distance?: number | null }>,
+        source: "hit",
+        fieldPath: "tool_calls/call-1",
+        chunkIndex: 0,
+        toolCall: {
+          id: "call-1",
+          name: "create_outline",
+          status: "accepted",
+          result: "Created outline: The Hollow Crown - Main Storyline",
+        },
+        toolCalls: [{
+          id: "call-1",
+          name: "create_outline",
+          status: "accepted",
+          result: "Created outline: The Hollow Crown - Main Storyline",
+        }],
+      }] as Array<{
+        role: string;
+        content: string;
+        messageId: string;
+        source?: "hit" | "neighbor";
+        fieldPath?: string | null;
+        chunkIndex?: number | null;
+        toolCall?: { id?: string; name: string; status: string; result: string } | null;
+        toolCalls?: Array<{ id?: string; name: string; status: string; result: string }>;
+        createdAt?: string;
+        distance?: number | null;
+      }>,
     },
   },
 

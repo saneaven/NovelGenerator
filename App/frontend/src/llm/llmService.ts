@@ -43,6 +43,7 @@ export async function* streamLLM(
         signal?: AbortSignal;
         temperature?: number;
         model?: string;
+        maxTokens?: number;
         tools?: any[];
         toolChoice?: 'auto' | 'required' | 'none';
         providerPreference?: ProviderPreference;
@@ -69,6 +70,10 @@ export async function* streamLLM(
         temperature: opts?.temperature ?? 0.7,
         config: backendConfig
     };
+
+    if (typeof opts?.maxTokens === 'number') {
+        requestBody.max_tokens = opts.maxTokens;
+    }
 
     if (opts?.tools)
     {

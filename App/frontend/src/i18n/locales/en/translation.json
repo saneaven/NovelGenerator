@@ -565,7 +565,14 @@
         "thinkingBudget25Hint": "Set 0 to effectively disable thinking where supported."
       },
       "tokenizer": "Tokenizer",
-      "tokenizerHint": "Select which tokenizer to use for token counting estimates"
+      "tokenizerHint": "Select which tokenizer to use for token counting estimates",
+      "tokenLimits": {
+        "contextWindowTokens": "Context Window Tokens",
+        "contextWindowTokensHint": "Used for local prompt budgeting (e.g. agent memory preflight). Does not change the model's actual context window.",
+        "maxOutputTokens": "Max Output Tokens (max_tokens)",
+        "maxOutputTokensPlaceholder": "Default (provider)",
+        "maxOutputTokensHint": "Limits the maximum tokens generated in the response. Leave empty to use the provider default."
+      }
     },
     "llmLog": {
       "enableLogging": "Enable LLM Request Logging",
@@ -966,7 +973,15 @@
     "scrollToBottom": "Scroll to bottom",
     "switchToLanguage": "Switch to {{language}}",
     "translateTo": "Translate to {{language}}",
-    "refreshTranslation": "Refresh {{language}}"
+    "refreshTranslation": "Refresh {{language}}",
+    "memory": {
+      "preflight": {
+        "summarizing": "Summarizing…",
+        "archiving": "Saving memory / indexing…",
+        "searching": "Searching memory…"
+      },
+      "preflightFailed": "Memory preflight failed: {{error}}"
+    }
   },
   "unifiedWorkspace": {
     "loadingProject": "Loading project...",

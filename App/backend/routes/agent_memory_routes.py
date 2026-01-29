@@ -70,8 +70,8 @@ async def agent_memory_archive(
             agent=agent,
             language=request.language,
             archive_until_message_id=request.archive_until_message_id,
-            summary_messages=[m.model_dump() for m in request.summary_messages],
-            summary_provider_request_config=request.summary_config.model_dump(),
+            summary_text=request.summary_text,
+            archived_messages=[m.model_dump() for m in request.archived_messages],
             embedding_provider_request_config=request.embedding_config.model_dump(),
         )
         return AgentMemoryArchiveResponse(
@@ -117,6 +117,8 @@ async def agent_memory_search(
                 content=r["content"],
                 created_at=r["created_at"],
                 distance=r.get("distance"),
+                field_path=r.get("field_path"),
+                chunk_index=r.get("chunk_index"),
             )
             for r in results
         ]

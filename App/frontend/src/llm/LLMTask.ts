@@ -30,6 +30,7 @@ const MODE_TO_TASK_TYPE: Record<LLMTaskModeType, AITaskType> = {
   [LLMTaskMode.AGENT_STORYOBJECT]: 'agent',
   [LLMTaskMode.AGENT_NOVEL_EDITOR]: 'agent',
   [LLMTaskMode.AGENT_OUTLINE_MANAGER]: 'agent',
+  [LLMTaskMode.AGENT_MEMORY_SUMMARY]: 'summary',
   [LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT]: 'editAssistant',
   [LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT]: 'editAssistant',
   [LLMTaskMode.TRANSLATION]: 'translation',
@@ -102,6 +103,7 @@ export class LLMTask {
       const providerConfig = this.config.providerConfig ?? credentialsStore.getProviderConfigForBackend(provider);
       const model = this.config.model ?? taskConfig.model;
       const temperature = this.config.temperature ?? taskConfig.temperature;
+      const maxTokens = taskConfig.maxOutputTokens;
       const thinkingMode = this.config.thinkingMode ?? taskConfig.advanced.thinkingMode;
       const thinkingConfig = this.config.thinkingConfig ?? taskConfig.advanced.thinkingConfig;
       const customApiFormat = this.config.customApiFormat ?? taskConfig.advanced.customApiFormat;
@@ -229,6 +231,7 @@ export class LLMTask {
           tools,
           model,
           temperature,
+          maxTokens,
           thinkingConfig: thinkingMode === 'model' ? thinkingConfig : undefined,
           thinkingMode,
           customApiFormat,

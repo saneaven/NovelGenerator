@@ -7,7 +7,8 @@ export type TaskKind =
   | 'agent'
   | 'imagePrompt'
   | 'sceneImage'
-  | 'agentTranslation';
+  | 'agentTranslation'
+  | 'agentMemorySummary';
 
 export type TaskSessionStatus =
   | 'idle'

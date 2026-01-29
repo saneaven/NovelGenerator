@@ -15,6 +15,7 @@ export {
   type AgentWorkspacePromptContext,
   type AgentNovelEditorPromptContext,
   type AgentOutlineManagerPromptContext,
+  type AgentMemorySummaryPromptContext,
   type EditAssistantStoryObjectPromptContext,
   type EditAssistantManuscriptPromptContext,
   type StoryTranslationPromptContext,

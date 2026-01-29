@@ -20,6 +20,11 @@ export type AgentMode = 'storyObject' | 'outlineManager' | 'novelEditor';
 
 const AGENT_MODES: AgentMode[] = ['storyObject', 'outlineManager', 'novelEditor'];
 
+export type AgentPreflightToast = {
+  type: 'info' | 'error';
+  message: string;
+};
+
 interface EditingState {
   messageId: string | null;
   language: string | null;
@@ -38,6 +43,9 @@ interface AgentUIState {
 
   // Per-project editing state
   editingByProject: Record<string, EditingState>;
+
+  // Per-project preflight toast (memory summary/archive/search)
+  preflightToastByProject: Record<string, AgentPreflightToast | undefined>;
 
   // Per-project agent mode
   modeByProject: Record<string, AgentMode>;
@@ -68,6 +76,10 @@ interface AgentUIActions {
   getEditing: (projectId: string) => EditingState;
   isEditing: (projectId: string) => boolean;
 
+  // Preflight toast
+  setPreflightToast: (projectId: string, toast: AgentPreflightToast | null) => void;
+  getPreflightToast: (projectId: string) => AgentPreflightToast | null;
+
   // Agent mode
   setMode: (projectId: string, mode: AgentMode) => void;
   getMode: (projectId: string, defaultMode?: AgentMode) => AgentMode;
@@ -94,6 +106,7 @@ const initialState: AgentUIState = {
   loadingByProject: {},
   inputByProject: {},
   editingByProject: {},
+  preflightToastByProject: {},
   modeByProject: {},
   detailSessionId: null,
 };
@@ -203,6 +216,20 @@ export const useAgentUIStore = create<AgentUIStore>()((set, get) => ({
     return get().editingByProject[projectId]?.messageId !== null;
   },
 
+  // Preflight toast
+  setPreflightToast: (projectId: string, toast: AgentPreflightToast | null) => {
+    set((state) => ({
+      preflightToastByProject: {
+        ...state.preflightToastByProject,
+        [projectId]: toast ?? undefined,
+      },
+    }));
+  },
+
+  getPreflightToast: (projectId: string) => {
+    return get().preflightToastByProject[projectId] ?? null;
+  },
+
   // Agent mode
   setMode: (projectId: string, mode: AgentMode) => {
     set((state) => ({
@@ -232,6 +259,7 @@ export const useAgentUIStore = create<AgentUIStore>()((set, get) => ({
       delete newState.loadingByProject[projectId];
       delete newState.inputByProject[projectId];
       delete newState.editingByProject[projectId];
+      delete newState.preflightToastByProject[projectId];
       delete newState.modeByProject[projectId];
       return newState;
     });
