@@ -8,6 +8,7 @@ from .base import BaseProvider
 from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .registry import ProviderRegistry
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
+from ..utils.outbound_http import validate_outbound_base_url
 
 
 @ProviderRegistry.register
@@ -17,6 +18,11 @@ class GeminiProvider(BaseProvider):
     def __init__(self, config: Dict):
         super().__init__(config)
         self._client: Optional[genai.Client] = None
+        raw_base_url = ((self.config or {}).get("base_url") or "").strip()
+        allow_base_url_override = self.name.startswith("custom_")
+        self._base_url: Optional[str] = (
+            validate_outbound_base_url(raw_base_url) if (allow_base_url_override and raw_base_url) else None
+        )
         if self.validate_config():
             self._client = self._build_client()
 
@@ -37,7 +43,7 @@ class GeminiProvider(BaseProvider):
 
     @property
     def base_url(self) -> Optional[str]:
-        return (self.config or {}).get("base_url")
+        return self._base_url
 
     def validate_config(self) -> bool:
         return bool(self.api_key)

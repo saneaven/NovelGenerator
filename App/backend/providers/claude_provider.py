@@ -7,6 +7,7 @@ from .base import BaseProvider
 from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .registry import ProviderRegistry
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
+from ..utils.outbound_http import validate_outbound_base_url
 
 
 @ProviderRegistry.register
@@ -16,7 +17,9 @@ class ClaudeProvider(BaseProvider):
     def __init__(self, config: Dict):
         super().__init__(config)
         self._client: Optional[AsyncAnthropic] = None
-        self._base_url = (config.get("base_url") or "").strip() or None
+        raw_base_url = (config.get("base_url") or "").strip()
+        allow_base_url_override = self.name.startswith("custom_")
+        self._base_url = validate_outbound_base_url(raw_base_url) if (allow_base_url_override and raw_base_url) else None
         if self.validate_config():
             self._client = self._build_client()
 

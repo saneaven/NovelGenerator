@@ -374,10 +374,10 @@
         "503": "서비스 사용 불가",
         "504": "게이트웨이 시간 초과"
       },
-      "serverVault": {
-        "title": "서버 자격 증명 백업",
-        "backupTitle": "서버 자격 증명 백업",
-        "backupHint": "API 키를 종단 간 암호화된 블롭으로 서버에 백업합니다 (서버는 복호화할 수 없음). 복원에는 계정 비밀번호가 필요합니다.",
+      "credentialsBackup": {
+        "title": "E2E 자격 증명 백업",
+        "backupTitle": "E2E 자격 증명 백업",
+        "backupHint": "API 키를 종단 간 암호화된 블롭으로 서버에 백업합니다 (서버는 복호화할 수 없고, 키를 자동으로 주입/사용하지도 않습니다). 복원에는 계정 비밀번호가 필요합니다.",
         "refreshStatus": "상태 새로고침",
         "refreshBackupStatus": "상태 새로고침",
         "statusHasBackup": "서버에 백업이 있습니다",

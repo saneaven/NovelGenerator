@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 from ..models.agent_memory_models import AgentMemorySummary, AgentRagChunk, AgentRagSource
 from ..models.db_models import Agent, AgentMessage, User
 from .embedding_config_service import get_embedding_profile, set_embedding_dimensions
-from .credential_resolver import resolve_provider_config
 from .rag_embedding_service import embed_many
 from .rag_chunker import merge_blocks_by_length, split_plaintext_blocks
 
@@ -287,12 +286,7 @@ async def archive_until(
     if not profile:
         raise ValueError("Missing agent-memory embedding profile")
 
-    embedding_provider_cfg: Dict[str, Any] = resolve_provider_config(
-        provider=profile["provider"],
-        request_config=embedding_provider_request_config,
-        current_user=current_user,
-        db=db,
-    )
+    embedding_provider_cfg: Dict[str, Any] = dict(embedding_provider_request_config or {})
 
     indexed_count = 0
 
@@ -470,12 +464,7 @@ async def search_memory(
     if not profile:
         return []
 
-    provider_config: Dict[str, Any] = resolve_provider_config(
-        provider=profile["provider"],
-        request_config=provider_request_config,
-        current_user=current_user,
-        db=db,
-    )
+    provider_config: Dict[str, Any] = dict(provider_request_config or {})
 
     query_vectors = await embed_many(
         provider=profile["provider"],

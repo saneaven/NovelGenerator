@@ -38,6 +38,7 @@ from ..schemas.assets import (
     StyledPrompt
 )
 from ..services.storage_service import storage_service
+from ..services.deletion_service import delete_assets_with_files
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
 from ..image_providers.registry import ImageProviderRegistry
 from ..image_providers.base import ReferenceImageData
@@ -727,11 +728,8 @@ async def delete_asset(
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
-    # Delete files from storage
-    storage_service.delete_asset_files(asset.file_path, asset.thumbnail_path)
-
-    # Delete from database (cascades to story_object_assets and manuscript_images)
-    db.delete(asset)
+    # Delete from storage + DB, and scrub stale generation_reference_images pointers.
+    delete_assets_with_files(db, assets=[asset], scrub_references_in_project_id=project_id)
     db.commit()
 
     return {"success": True}
@@ -1275,66 +1273,14 @@ async def add_manuscript_image(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Add an image to a manuscript"""
-    # Verify project ownership
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.user_id == current_user.id
-    ).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    """Add an image to a manuscript (deprecated).
 
-    manuscript = db.query(Manuscript).filter(
-        Manuscript.id == manuscript_id
-    ).first()
-    if not manuscript:
-        raise HTTPException(status_code=404, detail="Manuscript not found")
-
-    # Validate source
-    asset = None
-    if request.source_type == "asset":
-        if not request.asset_id:
-            raise HTTPException(status_code=400, detail="asset_id required for source_type 'asset'")
-        asset_model = db.query(Asset).filter(
-            Asset.id == UUID(request.asset_id),
-            Asset.project_id == project_id
-        ).first()
-        if not asset_model:
-            raise HTTPException(status_code=404, detail="Asset not found")
-        asset = _asset_to_response(asset_model)
-
-    img = ManuscriptImage(
-        id=uuid4(),
-        manuscript_id=manuscript_id,
-        language=request.language,
-        position=request.position,
-        source_type=request.source_type,
-        asset_id=UUID(request.asset_id) if request.asset_id else None,
-        story_object_type=request.story_object_type,
-        story_object_id=UUID(request.story_object_id) if request.story_object_id else None,
-        generation_prompt=request.generation_prompt,
-        display_width=request.display_width,
-        caption=request.caption
-    )
-    db.add(img)
-    db.commit()
-    db.refresh(img)
-
-    return ManuscriptImageResponse(
-        id=str(img.id),
-        manuscript_id=str(img.manuscript_id),
-        language=cast(Optional[str], img.language),
-        position=img.position,
-        source_type=img.source_type,
-        asset_id=str(img.asset_id) if img.asset_id else None,
-        story_object_type=img.story_object_type,
-        story_object_id=str(img.story_object_id) if img.story_object_id else None,
-        generation_prompt=img.generation_prompt,
-        display_width=img.display_width,
-        caption=img.caption,
-        created_at=img.created_at,
-        updated_at=img.updated_at,
-        asset=asset
+    The manuscript_images table is a derived index rebuilt from TipTap doc JSON
+    on manuscript save. Manually editing it creates drift and stale references.
+    """
+    raise HTTPException(
+        status_code=410,
+        detail="manuscript_images is a derived index. Edit the manuscript doc and save to rebuild.",
     )
 
 
@@ -1347,54 +1293,13 @@ async def update_manuscript_image(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Update a manuscript image"""
-    # Verify project ownership
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.user_id == current_user.id
-    ).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    """Update a manuscript image (deprecated).
 
-    img = db.query(ManuscriptImage).filter(
-        ManuscriptImage.id == image_id,
-        ManuscriptImage.manuscript_id == manuscript_id
-    ).first()
-    if not img:
-        raise HTTPException(status_code=404, detail="Image not found")
-
-    if request.position is not None:
-        img.position = request.position
-    if request.display_width is not None:
-        img.display_width = request.display_width
-    if request.caption is not None:
-        img.caption = request.caption
-
-    img.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(img)
-
-    asset = None
-    if img.asset_id:
-        asset_model = db.query(Asset).filter(Asset.id == img.asset_id).first()
-        if asset_model:
-            asset = _asset_to_response(asset_model)
-
-    return ManuscriptImageResponse(
-        id=str(img.id),
-        manuscript_id=str(img.manuscript_id),
-        language=cast(Optional[str], img.language),
-        position=img.position,
-        source_type=img.source_type,
-        asset_id=str(img.asset_id) if img.asset_id else None,
-        story_object_type=img.story_object_type,
-        story_object_id=str(img.story_object_id) if img.story_object_id else None,
-        generation_prompt=img.generation_prompt,
-        display_width=img.display_width,
-        caption=img.caption,
-        created_at=img.created_at,
-        updated_at=img.updated_at,
-        asset=asset
+    manuscript_images is rebuilt from manuscript doc JSON; manual edits are disallowed.
+    """
+    raise HTTPException(
+        status_code=410,
+        detail="manuscript_images is a derived index. Edit the manuscript doc and save to rebuild.",
     )
 
 
@@ -1406,23 +1311,11 @@ async def delete_manuscript_image(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Delete a manuscript image"""
-    # Verify project ownership
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.user_id == current_user.id
-    ).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    """Delete a manuscript image (deprecated).
 
-    img = db.query(ManuscriptImage).filter(
-        ManuscriptImage.id == image_id,
-        ManuscriptImage.manuscript_id == manuscript_id
-    ).first()
-    if not img:
-        raise HTTPException(status_code=404, detail="Image not found")
-
-    db.delete(img)
-    db.commit()
-
-    return {"success": True}
+    manuscript_images is rebuilt from manuscript doc JSON; manual edits are disallowed.
+    """
+    raise HTTPException(
+        status_code=410,
+        detail="manuscript_images is a derived index. Edit the manuscript doc and save to rebuild.",
+    )

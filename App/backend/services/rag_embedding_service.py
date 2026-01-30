@@ -4,6 +4,8 @@ from typing import Any, Dict, List, Literal, Optional
 
 import httpx
 
+from ..utils.outbound_http import filter_additional_headers, validate_outbound_base_url
+
 
 def _default_base_url_for_provider(provider: str) -> str:
     if provider == "openai":
@@ -38,8 +40,8 @@ async def embed_many(
         return []
 
     api_key = (config.get("api_key") or "").strip()
-    base_url = (config.get("base_url") or "").strip()
-    additional_headers: Optional[Dict[str, str]] = config.get("additional_headers")
+    base_url_raw = (config.get("base_url") or "").strip()
+    additional_headers = filter_additional_headers(config.get("additional_headers"))
 
     if not api_key:
         raise ValueError(f"Missing api_key for provider '{provider}'")
@@ -50,7 +52,8 @@ async def embed_many(
         from google import genai
         from google.genai import types
 
-        http_options = types.HttpOptions(baseUrl=_normalize_base_url(base_url)) if base_url else None
+        # Do not allow user-controlled base_url for official providers (SSRF hardening).
+        http_options = None
         client = genai.Client(api_key=api_key, http_options=http_options)
 
         max_batch = 64
@@ -74,16 +77,22 @@ async def embed_many(
 
         return vectors
 
-    base_url = _normalize_base_url(base_url or _default_base_url_for_provider(provider))
-    if not base_url:
-        raise ValueError(f"Missing base_url for provider '{provider}'")
+    if provider == "custom":
+        if not base_url_raw:
+            raise ValueError("Missing base_url for provider 'custom'")
+        base_url = _normalize_base_url(validate_outbound_base_url(base_url_raw))
+    else:
+        # Official providers: ignore user-supplied base_url.
+        base_url = _normalize_base_url(_default_base_url_for_provider(provider))
+        if not base_url:
+            raise ValueError(f"Unsupported provider '{provider}'")
 
     headers: Dict[str, str] = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    if additional_headers:
-        headers.update({k: v for k, v in additional_headers.items() if isinstance(v, str)})
+    if provider == "custom" and additional_headers:
+        headers.update(additional_headers)
 
     # Simple batching to avoid provider limits (conservative default)
     max_batch = 64

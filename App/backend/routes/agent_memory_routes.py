@@ -98,16 +98,21 @@ async def agent_memory_search(
     _get_project_or_404(db, user_id=current_user.id, project_id=project_id)
     _get_agent_or_404(db, project_id=project_id, agent_id=agent_id)
 
-    results = await search_memory(
-        db,
-        current_user=current_user,
-        project_id=project_id,
-        agent_id=agent_id,
-        language=request.language,
-        queries=request.queries,
-        top_k_per_query=request.top_k_per_query,
-        provider_request_config=request.config.model_dump(),
-    )
+    try:
+        results = await search_memory(
+            db,
+            current_user=current_user,
+            project_id=project_id,
+            agent_id=agent_id,
+            language=request.language,
+            queries=request.queries,
+            top_k_per_query=request.top_k_per_query,
+            provider_request_config=request.config.model_dump(),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
     return AgentMemorySearchResponse(
         results=[

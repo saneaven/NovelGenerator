@@ -10,6 +10,7 @@
 import { getEncoding, type Tiktoken } from 'js-tiktoken';
 import { tokenService } from '../api/tokenService';
 import type { ProviderType } from '../store/settingsStore';
+import { useCredentialsStore } from '../store/credentialsStore';
 
 export type TokenizerType = 'openai' | 'claude' | 'gemini';
 
@@ -141,11 +142,31 @@ export async function countTokens(
 
   // Remote counting via API (Claude/Gemini)
   try {
+    const creds = useCredentialsStore.getState().credentials as any;
+    const config =
+      effectiveTokenizer === 'claude'
+        ? { api_key: creds?.claude?.apiKey || undefined }
+        : effectiveTokenizer === 'gemini'
+          ? { api_key: creds?.gemini?.apiKey || undefined }
+          : {};
+
+    // If we don't have a key, skip network call and fall back to estimate.
+    if (!config.api_key) {
+      const count = countTokensLocal(text, model);
+      return {
+        tokenCount: count,
+        provider: 'tiktoken (fallback)',
+        isEstimate: true,
+        error: `Missing API key for '${effectiveTokenizer}' token counting (Settings > Credentials).`,
+      };
+    }
+
     const response = await tokenService.countTokens(
       {
         provider: effectiveTokenizer,
         model,
         text,
+        config,
       },
       { signal }
     );

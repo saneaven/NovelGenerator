@@ -374,10 +374,10 @@
         "503": "Service Unavailable",
         "504": "Gateway Timeout"
       },
-      "serverVault": {
-        "title": "Server Credentials Backup",
-        "backupTitle": "Server Credentials Backup",
-        "backupHint": "Back up API keys to the server as an end-to-end encrypted blob (the server cannot decrypt). Restore requires your account password.",
+      "credentialsBackup": {
+        "title": "E2E Credentials Backup",
+        "backupTitle": "E2E Credentials Backup",
+        "backupHint": "Back up API keys to the server as an end-to-end encrypted blob (the server cannot decrypt and never auto-uses the keys). Restore requires your account password.",
         "refreshStatus": "Refresh status",
         "refreshBackupStatus": "Refresh status",
         "statusHasBackup": "Backup found on server",

@@ -57,17 +57,6 @@ class UserSettings(Base):
         "summary": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.2, "maxOutputTokens": null, "contextWindowTokens": 32000, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}}
     }""")
 
-    # NEW: Provider credentials (shared across functions)
-    provider_credentials = Column(JSONB, nullable=False, server_default="""{
-        "openai": {"apiKey": ""},
-        "gemini": {"apiKey": ""},
-        "claude": {"apiKey": ""},
-        "openrouter": {"apiKey": ""},
-        "custom": {"baseUrl": "", "apiKey": ""},
-        "xai": {"apiKey": ""},
-        "novelai": {"apiKey": ""}
-    }""")
-
     # Language settings
     main_language = Column(String(50), default='English', nullable=False)
     sub_languages = Column(JSONB, server_default='[]')  # Array of strings
@@ -167,7 +156,7 @@ class UserSettings(Base):
 
 
 # ============================================================================
-# USER CREDENTIAL VAULT (ENCRYPTED)
+# USER CREDENTIALS BACKUP (E2E-ENCRYPTED BLOB)
 # ============================================================================
 
 class UserCredentials(Base):
@@ -712,7 +701,7 @@ class ManuscriptImage(Base):
 
     # Image source - either direct asset or story object reference
     source_type = Column(String(20), nullable=False)  # 'asset' or 'story_object'
-    asset_id = Column(UUID(as_uuid=True), ForeignKey('assets.id', ondelete='SET NULL'), nullable=True)
+    asset_id = Column(UUID(as_uuid=True), ForeignKey('assets.id', ondelete='CASCADE'), nullable=True)
 
     # If source_type is 'story_object', reference the object
     story_object_type = Column(String(50), nullable=True)  # 'character', 'location'

@@ -34,7 +34,6 @@ from ..schemas.rag import (
     RagSearchResponse,
     RagSearchResult,
 )
-from ..services.credential_resolver import resolve_provider_config
 from ..services.embedding_config_service import get_embedding_profile
 from ..services.rag_index_service import (
     delete_object_index,
@@ -141,12 +140,7 @@ async def rag_index_object(
     if not profile:
         raise HTTPException(status_code=400, detail="RAG embedding profile is not configured")
 
-    cfg: Dict[str, Any] = resolve_provider_config(
-        provider=profile["provider"],
-        request_config=request.config.model_dump(),
-        current_user=current_user,
-        db=db,
-    )
+    cfg: Dict[str, Any] = request.config.model_dump()
 
     try:
         result = await index_object(
@@ -198,12 +192,7 @@ async def rag_reindex_project(
     if not profile:
         raise HTTPException(status_code=400, detail="RAG embedding profile is not configured")
 
-    cfg: Dict[str, Any] = resolve_provider_config(
-        provider=profile["provider"],
-        request_config=request.config.model_dump(),
-        current_user=current_user,
-        db=db,
-    )
+    cfg: Dict[str, Any] = request.config.model_dump()
 
     try:
         summary = await reindex_project(
@@ -234,12 +223,7 @@ async def rag_search(
     if not profile:
         raise HTTPException(status_code=400, detail="RAG embedding profile is not configured")
 
-    cfg: Dict[str, Any] = resolve_provider_config(
-        provider=profile["provider"],
-        request_config=request.config.model_dump(),
-        current_user=current_user,
-        db=db,
-    )
+    cfg: Dict[str, Any] = request.config.model_dump()
 
     try:
         results = await search_project(

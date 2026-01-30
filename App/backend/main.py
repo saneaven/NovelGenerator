@@ -186,8 +186,13 @@ async def get_models(
         models_data = await provider_instance.get_models()
         return models_data
 
+    except HTTPException:
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        message = str(e)
+        if message.startswith("Unknown provider"):
+            raise HTTPException(status_code=404, detail=message)
+        raise HTTPException(status_code=400, detail=message)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -214,8 +219,13 @@ async def get_embedding_models(
             )
 
         return await list_embedding_models(provider=provider, config=config.model_dump())
+    except HTTPException:
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        message = str(e)
+        if message.startswith("Unknown provider"):
+            raise HTTPException(status_code=404, detail=message)
+        raise HTTPException(status_code=400, detail=message)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -318,8 +328,13 @@ async def stream_chat(
             }
         )
 
+    except HTTPException:
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        message = str(e)
+        if message.startswith("Unknown provider"):
+            raise HTTPException(status_code=404, detail=message)
+        raise HTTPException(status_code=400, detail=message)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

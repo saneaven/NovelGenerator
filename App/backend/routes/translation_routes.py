@@ -16,7 +16,7 @@ from uuid import UUID
 
 from ..database import get_db
 from ..auth import get_current_user
-from ..models.db_models import User
+from ..models.db_models import User, Project
 from ..models.translation_models import ObjectVersion
 from ..utils.object_type_aliases import normalize_object_type, externalize_object_type
 
@@ -80,6 +80,10 @@ async def get_project_translation_status(
     Get translation status for all objects in a project.
     Shows which objects have translations in which languages.
     """
+    project = db.query(Project).filter(Project.id == project_id, Project.user_id == current_user.id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
     # Get all object types for this project
     from ..models.db_models import (
         BasicInfo, Character, Organization, Location, LorebookEntry,
@@ -160,6 +164,10 @@ async def get_language_coverage(
     Get language coverage statistics for a project.
     Shows how many objects have translations in each language.
     """
+    project = db.query(Project).filter(Project.id == project_id, Project.user_id == current_user.id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
     # Get all object IDs in the project
     from ..models.db_models import (
         BasicInfo, Character, Organization, Location, LorebookEntry,
@@ -259,12 +267,17 @@ async def batch_delete_translations(
     Delete translations for a specific language across multiple objects.
     WARNING: This cannot be undone!
     """
+    from ..routes.unified_object_routes import get_object_or_404
+
     object_type = normalize_object_type(object_type)
     deleted_count = 0
 
     for object_id_str in object_ids:
         try:
             object_id = UUID(object_id_str)
+
+            # Verify object exists and belongs to the current user.
+            get_object_or_404(db, object_type, object_id, user_id=current_user.id)
 
             # Remove from latest version data only
             latest_version = db.query(ObjectVersion).filter(
@@ -322,7 +335,7 @@ async def add_translations(
             object_id = UUID(translation_data.object_id)
 
             # Verify object exists
-            get_object_or_404(db, object_type, object_id)
+            get_object_or_404(db, object_type, object_id, user_id=current_user.id)
 
             # Create or update version with new language (in-place, don't create new version)
             # If target_version_number is provided, update that specific version instead of latest
@@ -358,6 +371,9 @@ async def add_translations(
             "objects": updated_objects
         }
 
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         # Rollback on any error
         db.rollback()
@@ -377,7 +393,10 @@ async def get_object_languages(
     """
     Get list of available languages for a specific object.
     """
+    from ..routes.unified_object_routes import get_object_or_404
+
     object_type = normalize_object_type(object_type)
+    get_object_or_404(db, object_type, object_id, user_id=current_user.id)
 
     latest_version = db.query(ObjectVersion).filter(
         ObjectVersion.object_type == object_type,
@@ -406,7 +425,10 @@ async def delete_translation(
     Delete a specific language translation for an object.
     WARNING: Cannot delete if it's the only language!
     """
+    from ..routes.unified_object_routes import get_object_or_404
+
     object_type = normalize_object_type(object_type)
+    get_object_or_404(db, object_type, object_id, user_id=current_user.id)
 
     latest_version = db.query(ObjectVersion).filter(
         ObjectVersion.object_type == object_type,

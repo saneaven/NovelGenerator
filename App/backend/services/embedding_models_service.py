@@ -4,6 +4,8 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from ..utils.outbound_http import filter_additional_headers, validate_outbound_base_url
+
 _OPENROUTER_DEFAULT_HEADERS: Dict[str, str] = {
     "HTTP-Referer": "https://novelbuds.local",
     "X-Title": "Novel Buds",
@@ -46,25 +48,25 @@ def _filter_models_by_substring(models: List[Dict[str, Any]], *, needles: List[s
 async def list_embedding_models(*, provider: str, config: Dict[str, Any]) -> Dict[str, Any]:
     provider = (provider or "").strip().lower()
     api_key = (config.get("api_key") or "").strip()
-    base_url = _normalize_base_url((config.get("base_url") or "").strip())
-    additional_headers: Optional[Dict[str, str]] = config.get("additional_headers")
+    base_url_raw = (config.get("base_url") or "").strip()
+    additional_headers = filter_additional_headers(config.get("additional_headers"))
 
     headers: Dict[str, str] = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     if additional_headers:
-        headers.update({k: v for k, v in additional_headers.items() if isinstance(k, str) and isinstance(v, str)})
+        headers.update(additional_headers)
 
     if provider == "openrouter":
-        url = f"{base_url or 'https://openrouter.ai/api/v1'}/embeddings/models"
+        url = "https://openrouter.ai/api/v1/embeddings/models"
         # Keep parity with existing OpenRouter provider defaults.
         headers = {**headers, **_OPENROUTER_DEFAULT_HEADERS}
         if additional_headers:
-            headers.update({k: v for k, v in additional_headers.items() if isinstance(k, str) and isinstance(v, str)})
+            headers.update(additional_headers)
         return await _http_get_json(url=url, headers=headers)
 
     if provider == "openai":
-        url = f"{base_url or 'https://api.openai.com/v1'}/models"
+        url = "https://api.openai.com/v1/models"
         data = await _http_get_json(url=url, headers=headers)
         items = data.get("data")
         if not isinstance(items, list):
@@ -82,10 +84,11 @@ async def list_embedding_models(*, provider: str, config: Dict[str, Any]) -> Dic
         return {"data": [{"id": "gemini-embedding-001", "name": "Gemini: Embedding 001"}]}
 
     if provider == "custom":
-        if not base_url:
+        if not base_url_raw:
             raise ValueError("Missing base_url for provider 'custom'")
 
-        url = f"{base_url}/models"
+        base_url = validate_outbound_base_url(base_url_raw)
+        url = f"{_normalize_base_url(base_url)}/models"
         try:
             data = await _http_get_json(url=url, headers=headers)
         except Exception:

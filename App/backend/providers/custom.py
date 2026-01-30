@@ -9,6 +9,7 @@ from typing import AsyncGenerator, Dict, List, Optional
 
 from .base import BaseProvider
 from .registry import ProviderRegistry
+from ..utils.outbound_http import filter_additional_headers, validate_outbound_base_url
 
 
 # Import providers lazily to avoid circular imports
@@ -119,9 +120,10 @@ class CustomProvider(BaseProvider):
 
     def __init__(self, config: Dict):
         super().__init__(config)
-        self._base_url = (config.get("base_url") or "").strip()
+        raw_base_url = (config.get("base_url") or "").strip()
+        self._base_url = validate_outbound_base_url(raw_base_url) if raw_base_url else ""
         self._api_key = config.get("api_key")
-        self._additional_headers = config.get("additional_headers") or {}
+        self._additional_headers = filter_additional_headers(config.get("additional_headers"))
         # Lazy-initialized delegate providers
         self._delegates: Dict[str, BaseProvider] = {}
 

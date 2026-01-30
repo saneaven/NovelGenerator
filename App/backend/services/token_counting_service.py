@@ -11,6 +11,8 @@ from anthropic import AsyncAnthropic
 from google import genai
 from google.genai import types
 
+from ..utils.outbound_http import validate_outbound_base_url
+
 
 async def count_tokens_claude(
     text: str,
@@ -31,7 +33,7 @@ async def count_tokens_claude(
     """
     kwargs = {"api_key": api_key}
     if base_url:
-        kwargs["base_url"] = base_url
+        kwargs["base_url"] = validate_outbound_base_url(base_url)
 
     client = AsyncAnthropic(**kwargs)
 
@@ -69,7 +71,7 @@ async def count_tokens_gemini(
     """
     http_options = None
     if base_url:
-        http_options = types.HttpOptions(baseUrl=base_url)
+        http_options = types.HttpOptions(baseUrl=validate_outbound_base_url(base_url))
 
     client = genai.Client(api_key=api_key, http_options=http_options)
 

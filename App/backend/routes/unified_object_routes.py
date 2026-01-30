@@ -20,14 +20,24 @@ from datetime import datetime
 from ..database import get_db
 from ..auth import get_current_user
 from ..models.db_models import (
-    User, BasicInfo, Guidelines, Character, Organization, Location, LorebookEntry,
+    User, Project, BasicInfo, Guidelines, Character, Organization, Location, LorebookEntry,
     Act, Chapter, Manuscript, Outline, Asset, StoryObjectAsset
 )
 from ..schemas.story_objects import ImagePromptUpdate
 from ..models.translation_models import ObjectVersion
 from ..utils.object_type_aliases import normalize_object_type, externalize_object_type
-from ..services.storage_service import storage_service
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
+from ..services.deletion_service import (
+    collect_act_subtree_object_ids,
+    collect_chapter_subtree_object_ids,
+    collect_outline_subtree_object_ids,
+    delete_assets_with_files,
+    delete_object_versions_bulk,
+    delete_rag_sources_bulk,
+    delete_removed_manuscript_assets,
+    delete_story_object_assets_with_files,
+    get_manuscript_indexed_asset_ids,
+)
 
 LOREBOOK_TYPE = normalize_object_type('lorebook')
 
@@ -127,11 +137,47 @@ def get_object_model_class(object_type: str):
     return type_map[object_type]
 
 
-def get_object_or_404(db: Session, object_type: str, object_id: UUID) -> Any:
-    """Get object by type and ID or raise 404"""
+def require_project_owner(db: Session, *, user_id: UUID, project_id: UUID) -> Project:
+    """Verify the user owns the project or raise 404."""
+    project = db.query(Project).filter(Project.id == project_id, Project.user_id == user_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+def get_object_or_404(db: Session, object_type: str, object_id: UUID, *, user_id: UUID) -> Any:
+    """Get object by type and ID for user or raise 404."""
     object_type = normalize_object_type(object_type)
     model_class = get_object_model_class(object_type)
-    obj = db.query(model_class).filter(model_class.id == object_id).first()
+
+    query = db.query(model_class)
+
+    # Enforce ownership via Project.user_id.
+    if object_type in {"basic_info", "guidelines", "character", "organization", "location", LOREBOOK_TYPE, "outline"}:
+        query = query.join(Project, Project.id == model_class.project_id).filter(Project.user_id == user_id)
+    elif object_type == "act":
+        query = (
+            query.join(Outline, model_class.outline_id == Outline.id)
+            .join(Project, Project.id == Outline.project_id)
+            .filter(Project.user_id == user_id)
+        )
+    elif object_type == "chapter":
+        query = (
+            query.join(Act, model_class.act_id == Act.id)
+            .join(Outline, Act.outline_id == Outline.id)
+            .join(Project, Outline.project_id == Project.id)
+            .filter(Project.user_id == user_id)
+        )
+    elif object_type == "manuscript":
+        query = (
+            query.join(Chapter, model_class.chapter_id == Chapter.id)
+            .join(Act, Chapter.act_id == Act.id)
+            .join(Outline, Act.outline_id == Outline.id)
+            .join(Project, Outline.project_id == Project.id)
+            .filter(Project.user_id == user_id)
+        )
+
+    obj = query.filter(model_class.id == object_id).first()
 
     if not obj:
         raise HTTPException(status_code=404, detail=f"{object_type} not found")
@@ -343,7 +389,7 @@ async def get_object(
     object_type = normalize_object_type(object_type)
 
     # Verify object exists
-    obj = get_object_or_404(db, object_type, object_id)
+    obj = get_object_or_404(db, object_type, object_id, user_id=current_user.id)
 
     # Get metadata
     metadata = get_object_metadata(obj, object_type, db)
@@ -548,7 +594,7 @@ async def update_object(
     object_type = normalize_object_type(object_type)
 
     # Verify object exists
-    obj = get_object_or_404(db, object_type, object_id)
+    obj = get_object_or_404(db, object_type, object_id, user_id=current_user.id)
 
     # Manuscript data validation (doc-only)
     if object_type == "manuscript":
@@ -592,6 +638,7 @@ async def update_object(
     )
 
     # Rebuild manuscript image index (manual save only)
+    # Policy: when an image is removed from the manuscript, delete the underlying manuscript-owned asset too.
     if object_type == "manuscript" and request.create_new_version:
         doc = request.data.get("doc")
         if isinstance(doc, dict):
@@ -600,12 +647,23 @@ async def update_object(
             outline = getattr(act, "outline", None) if act else None
             project_id = getattr(outline, "project_id", None) if outline else None
             if project_id:
+                before_asset_ids = get_manuscript_indexed_asset_ids(db, manuscript_id=object_id)
+
                 rebuild_manuscript_images_for_language(
                     db=db,
                     project_id=project_id,
                     manuscript_id=object_id,
                     language=request.language,
                     doc=doc,
+                )
+
+                after_asset_ids = get_manuscript_indexed_asset_ids(db, manuscript_id=object_id)
+                removed_asset_ids = before_asset_ids - after_asset_ids
+                delete_removed_manuscript_assets(
+                    db,
+                    project_id=project_id,
+                    manuscript_id=object_id,
+                    removed_asset_ids=removed_asset_ids,
                 )
 
     db.commit()
@@ -631,7 +689,7 @@ async def add_translation(
     object_type = normalize_object_type(object_type)
 
     # Verify object exists
-    obj = get_object_or_404(db, object_type, object_id)
+    obj = get_object_or_404(db, object_type, object_id, user_id=current_user.id)
 
     # Check if translation already exists in the latest version
     latest_version = get_latest_version(db, object_type, object_id)
@@ -673,7 +731,7 @@ async def get_versions(
     object_type = normalize_object_type(object_type)
 
     # Verify object exists
-    obj = get_object_or_404(db, object_type, object_id)
+    obj = get_object_or_404(db, object_type, object_id, user_id=current_user.id)
 
     # Get all versions
     versions = db.query(ObjectVersion).filter(
@@ -709,7 +767,7 @@ async def restore_version(
     object_type = normalize_object_type(object_type)
 
     # Verify object exists
-    obj = get_object_or_404(db, object_type, object_id)
+    obj = get_object_or_404(db, object_type, object_id, user_id=current_user.id)
 
     # Verify version to restore exists
     version_to_restore = db.query(ObjectVersion).filter(
@@ -778,6 +836,9 @@ async def list_objects(
     """
     object_type = normalize_object_type(object_type)
     response_type = externalize_object_type(object_type)
+
+    # Verify project access.
+    require_project_owner(db, user_id=current_user.id, project_id=project_id)
 
     # Get model class
     model_class = get_object_model_class(object_type)
@@ -907,6 +968,9 @@ async def create_object(
     Creates core object, initial version, translation cache, and active version pointer.
     """
     object_type = normalize_object_type(object_type)
+
+    # Verify project access.
+    require_project_owner(db, user_id=current_user.id, project_id=project_id)
 
     # Manuscript data validation (doc-only)
     if object_type == "manuscript":
@@ -1123,80 +1187,81 @@ async def delete_object(
     object_type = normalize_object_type(object_type)
 
     # Get core object
-    obj = get_object_or_404(db, object_type, object_id)
+    obj = get_object_or_404(db, object_type, object_id, user_id=current_user.id)
 
-    # Verify user has access (check project ownership)
-    # Different object types have different parent relationships
-    if object_type in ['basic_info', 'character', 'organization', 'location', LOREBOOK_TYPE]:
-        from ..models.db_models import Project
-        project = db.query(Project).filter(
-            Project.id == obj.project_id,
-            Project.user_id == current_user.id
-        ).first()
-        if not project:
-            raise HTTPException(status_code=403, detail="Access denied")
-    elif object_type == 'act':
-        from ..models.db_models import Project
-        outline = db.query(Outline).filter(Outline.id == obj.outline_id).first()
-        if not outline:
-            raise HTTPException(status_code=404, detail="Outline not found")
-        project = db.query(Project).filter(
-            Project.id == outline.project_id,
-            Project.user_id == current_user.id
-        ).first()
-        if not project:
-            raise HTTPException(status_code=403, detail="Access denied")
-    elif object_type == 'manuscript':
-        from ..models.db_models import Project
-        project = (
-            db.query(Project)
-            .join(Outline, Outline.project_id == Project.id)
+    # Resolve project_id for cleanup (assets/files, RAG, object_versions).
+    project_id: Optional[UUID] = None
+    if hasattr(obj, "project_id"):
+        project_id = getattr(obj, "project_id", None)
+    elif object_type == "act":
+        project_id = db.query(Outline.project_id).filter(Outline.id == obj.outline_id).scalar()
+    elif object_type == "chapter":
+        project_id = (
+            db.query(Outline.project_id)
+            .join(Act, Act.outline_id == Outline.id)
+            .join(Chapter, Chapter.act_id == Act.id)
+            .filter(Chapter.id == object_id)
+            .scalar()
+        )
+    elif object_type == "manuscript":
+        project_id = (
+            db.query(Outline.project_id)
             .join(Act, Act.outline_id == Outline.id)
             .join(Chapter, Chapter.act_id == Act.id)
             .join(Manuscript, Manuscript.chapter_id == Chapter.id)
-            .filter(Manuscript.id == object_id, Project.user_id == current_user.id)
-            .first()
+            .filter(Manuscript.id == object_id)
+            .scalar()
         )
-        if not project:
-            raise HTTPException(status_code=403, detail="Access denied")
-    # Add more cases for other types as needed
 
-    # Delete owned/bound assets before deleting object (so we can delete files deterministically)
-    if object_type in ['basic_info', 'character', 'organization', 'location', LOREBOOK_TYPE]:
-        assets_to_delete = (
-            db.query(Asset)
-            .join(StoryObjectAsset, StoryObjectAsset.asset_id == Asset.id)
-            .filter(
-                StoryObjectAsset.object_type == object_type,
-                StoryObjectAsset.object_id == object_id
+    if not isinstance(project_id, UUID):
+        raise HTTPException(status_code=500, detail="Could not resolve project_id for deletion")
+
+    # Build deletion scope (root + descendants) for non-FK tables.
+    ids_by_type: Dict[str, List[UUID]] = {object_type: [object_id]}
+
+    if object_type == "outline":
+        subtree = collect_outline_subtree_object_ids(db, outline_id=object_id)
+        for t, ids in subtree.items():
+            ids_by_type.setdefault(t, []).extend(ids)
+    elif object_type == "act":
+        subtree = collect_act_subtree_object_ids(db, act_id=object_id)
+        for t, ids in subtree.items():
+            ids_by_type.setdefault(t, []).extend(ids)
+    elif object_type == "chapter":
+        subtree = collect_chapter_subtree_object_ids(db, chapter_id=object_id)
+        for t, ids in subtree.items():
+            ids_by_type.setdefault(t, []).extend(ids)
+
+    # Delete assets/files deterministically before core cascade deletes.
+    if object_type in {"basic_info", "character", "organization", "location", LOREBOOK_TYPE}:
+        delete_story_object_assets_with_files(
+            db,
+            project_id=project_id,
+            object_type=object_type,
+            object_id=object_id,
+        )
+    elif object_type == "manuscript":
+        owned_assets = db.query(Asset).filter(Asset.project_id == project_id, Asset.manuscript_id == object_id).all()
+        delete_assets_with_files(db, assets=owned_assets, scrub_references_in_project_id=project_id)
+    elif object_type in {"outline", "act", "chapter"}:
+        manuscript_ids = ids_by_type.get("manuscript") or []
+        if manuscript_ids:
+            owned_assets = (
+                db.query(Asset)
+                .filter(Asset.project_id == project_id, Asset.manuscript_id.in_(list(manuscript_ids)))
+                .all()
             )
-            .all()
-        )
-        for asset in assets_to_delete:
-            storage_service.delete_asset_files(asset.file_path, asset.thumbnail_path)
-            db.delete(asset)
-    elif object_type == 'manuscript':
-        owned_assets = db.query(Asset).filter(Asset.manuscript_id == object_id).all()
-        for asset in owned_assets:
-            storage_service.delete_asset_files(asset.file_path, asset.thumbnail_path)
-            db.delete(asset)
+            delete_assets_with_files(db, assets=owned_assets, scrub_references_in_project_id=project_id)
 
-    # Delete all related data (order matters due to foreign keys)
-    # 1. Delete versions
-    db.query(ObjectVersion).filter(
-        ObjectVersion.object_type == object_type,
-        ObjectVersion.object_id == object_id
-    ).delete()
+    # Delete derived/stale data that does not have FKs.
+    delete_rag_sources_bulk(db, user_id=current_user.id, project_id=project_id, ids_by_type=ids_by_type)
+    delete_object_versions_bulk(db, ids_by_type=ids_by_type)
 
-    # 2. Delete core object
+    # Delete core object (DB cascades handle child core rows).
     db.delete(obj)
-
     db.commit()
 
-    return {
-        "success": True,
-        "message": f"{object_type.replace('_', ' ').title()} deleted successfully"
-    }
+    return {"success": True, "message": f"{object_type.replace('_', ' ').title()} deleted successfully"}
 
 
 # ============================================================================
@@ -1227,7 +1292,7 @@ async def update_image_prompt(
         )
 
     # Get object
-    obj = get_object_or_404(db, object_type, object_id)
+    obj = get_object_or_404(db, object_type, object_id, user_id=current_user.id)
 
     # Update image prompt fields (empty string clears the field)
     if request.image_prompt is not None:

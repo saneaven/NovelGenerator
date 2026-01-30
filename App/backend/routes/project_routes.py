@@ -20,6 +20,12 @@ from ..schemas.project_transfer import (
 )
 from ..auth import get_current_user
 from ..services.project_transfer_service import ProjectTransferService
+from ..services.deletion_service import (
+    collect_project_object_ids,
+    delete_object_versions_bulk,
+    delete_project_assets_with_files,
+    delete_rag_sources_for_project,
+)
 
 
 def _get_cover_asset(db: Session, project: Project) -> dict | None:
@@ -263,6 +269,18 @@ async def delete_project(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found"
         )
+
+    # Pre-collect IDs for non-FK tables (object_versions) before core rows are cascaded.
+    object_ids_by_type = collect_project_object_ids(db, project_id=project_id)
+
+    # Delete project assets (files + rows) to avoid orphan files.
+    delete_project_assets_with_files(db, project_id=project_id)
+
+    # Delete RAG sources/chunks for the project (avoid stale search results).
+    delete_rag_sources_for_project(db, user_id=current_user.id, project_id=project_id)
+
+    # Delete version history rows for all project objects (object_versions has no FK).
+    delete_object_versions_bulk(db, ids_by_type=object_ids_by_type)
 
     db.delete(project)
     db.commit()

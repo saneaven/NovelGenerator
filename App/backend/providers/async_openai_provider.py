@@ -15,6 +15,7 @@ from openai import (
 from .base import BaseProvider
 from .native_tool_calls_parser import NativeToolCallsStreamParser
 from .thinking_parser import ThinkingStreamParser, has_unclosed_thinking_tag
+from ..utils.outbound_http import validate_outbound_base_url
 
 
 class AsyncOpenAIProvider(BaseProvider):
@@ -35,8 +36,10 @@ class AsyncOpenAIProvider(BaseProvider):
 
     @property
     def base_url(self) -> str:
-        url = self.config.get("base_url") or "https://api.openai.com/v1"
-        return url.rstrip("/")
+        url = (self.config.get("base_url") or "").strip()
+        if url:
+            return validate_outbound_base_url(url).rstrip("/")
+        return "https://api.openai.com/v1"
 
     @property
     def default_headers(self) -> Dict[str, str]:

@@ -12,7 +12,7 @@
 
 1. Create env file:
    - Copy `.env.dev.example` -> `.env.dev`
-   - Fill `POSTGRES_PASSWORD`, `JWT_SECRET_KEY`, `CREDENTIALS_ENCRYPTION_KEY`
+   - Fill `POSTGRES_PASSWORD`, `JWT_SECRET_KEY`
 
 2. Start:
    - `docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml up -d --build`

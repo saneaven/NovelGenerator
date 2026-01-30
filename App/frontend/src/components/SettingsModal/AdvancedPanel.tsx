@@ -228,14 +228,14 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                 </ul>
             </div>
 
-            {/* Server Credentials Backup (E2E) */}
+            {/* Credentials Backup (E2E) */}
             <div className="settings-panel-card">
-                <h3>{t('settings.advanced.serverVault.backupTitle')}</h3>
+                <h3>{t('settings.advanced.credentialsBackup.backupTitle')}</h3>
                 <div className="form-field">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <Lock size="sm" />
                         <p className="field-hint" style={{ margin: 0 }}>
-                            {t('settings.advanced.serverVault.backupHint')}
+                            {t('settings.advanced.credentialsBackup.backupHint')}
                         </p>
                     </div>
                 </div>
@@ -249,7 +249,7 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                             onClick={onBackupRefresh}
                             disabled={backupSyncing}
                         >
-                            {t('settings.advanced.serverVault.refreshBackupStatus')}
+                            {t('settings.advanced.credentialsBackup.refreshBackupStatus')}
                         </TextButton>
                         <TextButton
                             variant="secondary"
@@ -257,15 +257,15 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                             type="button"
                             onClick={() =>
                                 openPasswordModal({
-                                    title: t('settings.advanced.serverVault.backupActionTitle'),
-                                    description: t('settings.advanced.serverVault.backupActionDescription'),
-                                    confirmLabel: t('settings.advanced.serverVault.backupActionConfirm'),
+                                    title: t('settings.advanced.credentialsBackup.backupActionTitle'),
+                                    description: t('settings.advanced.credentialsBackup.backupActionDescription'),
+                                    confirmLabel: t('settings.advanced.credentialsBackup.backupActionConfirm'),
                                     action: onBackupUpload,
                                 })
                             }
                             disabled={backupSyncing}
                         >
-                            {t('settings.advanced.serverVault.backupActionConfirm')}
+                            {t('settings.advanced.credentialsBackup.backupActionConfirm')}
                         </TextButton>
                         <TextButton
                             variant="secondary"
@@ -273,15 +273,15 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                             type="button"
                             onClick={() =>
                                 openPasswordModal({
-                                    title: t('settings.advanced.serverVault.restoreActionTitle'),
-                                    description: t('settings.advanced.serverVault.restoreActionDescription'),
-                                    confirmLabel: t('settings.advanced.serverVault.restoreActionConfirm'),
+                                    title: t('settings.advanced.credentialsBackup.restoreActionTitle'),
+                                    description: t('settings.advanced.credentialsBackup.restoreActionDescription'),
+                                    confirmLabel: t('settings.advanced.credentialsBackup.restoreActionConfirm'),
                                     action: onBackupRestore,
                                 })
                             }
                             disabled={backupSyncing || !backupStatus?.hasBackup}
                         >
-                            {t('settings.advanced.serverVault.restoreActionConfirm')}
+                            {t('settings.advanced.credentialsBackup.restoreActionConfirm')}
                         </TextButton>
                         <TextButton
                             variant="secondary"
@@ -289,20 +289,20 @@ const AdvancedPanel: React.FC<AdvancedPanelProps> = ({
                             type="button"
                             onClick={() =>
                                 openPasswordModal({
-                                    title: t('settings.advanced.serverVault.deleteActionTitle'),
-                                    description: t('settings.advanced.serverVault.deleteActionDescription'),
-                                    confirmLabel: t('settings.advanced.serverVault.deleteActionConfirm'),
+                                    title: t('settings.advanced.credentialsBackup.deleteActionTitle'),
+                                    description: t('settings.advanced.credentialsBackup.deleteActionDescription'),
+                                    confirmLabel: t('settings.advanced.credentialsBackup.deleteActionConfirm'),
                                     action: onBackupDelete,
                                 })
                             }
                             disabled={backupSyncing || !backupStatus?.hasBackup}
                         >
-                            {t('settings.advanced.serverVault.deleteActionConfirm')}
+                            {t('settings.advanced.credentialsBackup.deleteActionConfirm')}
                         </TextButton>
                     </div>
                     {backupStatus && (
                         <p className="field-hint" style={{ marginTop: 8 }}>
-                            {backupStatus.hasBackup ? t('settings.advanced.serverVault.statusHasBackup') : t('settings.advanced.serverVault.statusNoBackup')}
+                            {backupStatus.hasBackup ? t('settings.advanced.credentialsBackup.statusHasBackup') : t('settings.advanced.credentialsBackup.statusNoBackup')}
                             {backupStatus.updatedAt ? ` (${backupStatus.updatedAt})` : ''}
                         </p>
                     )}
