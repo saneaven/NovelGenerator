@@ -611,7 +611,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
                   )}
                   <img
                     className="workspace-config-thumb"
-                    src={getAssetUrl(a, 'thumbnail') || ''}
+                    src={getAssetUrl(a) || ''}
                     alt={a.name}
                     loading="lazy"
                   />
@@ -778,7 +778,7 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
                   />
                   <img
                     className="workspace-config-thumb"
-                    src={getAssetUrl(c, 'thumbnail') || ''}
+                    src={getAssetUrl(c) || ''}
                     alt={c.name}
                     loading="lazy"
                   />

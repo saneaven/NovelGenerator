@@ -80,44 +80,6 @@ export const TOOL_VALIDATORS: Record<string, Validator[]> = {
   ],
 
   // -------------------------------------------------------------------------
-  // Translation Set Operations
-  // -------------------------------------------------------------------------
-  set_basic_info_translation: [validateRequiredId, validateObjectExists],
-  set_object_translation: [validateTypeMapping, validateRequiredId, validateObjectExists],
-  set_chapter_outline_translation: [validateTypeMapping, validateRequiredId, validateObjectExists],
-  set_manuscript_translation: [validateRequiredId, validateObjectExists],
-
-  // -------------------------------------------------------------------------
-  // Translation Patch Operations
-  // -------------------------------------------------------------------------
-  patch_basic_info_translation: [
-    validateRequiredId,
-    validatePatchRequiredFields,
-    validateObjectExists,
-    validatePatchApplicable,
-  ],
-  patch_object_translation: [
-    validateTypeMapping,
-    validateRequiredId,
-    validatePatchRequiredFields,
-    validateObjectExists,
-    validatePatchApplicable,
-  ],
-  patch_chapter_outline_translation: [
-    validateTypeMapping,
-    validateRequiredId,
-    validatePatchRequiredFields,
-    validateObjectExists,
-    validatePatchApplicable,
-  ],
-  patch_manuscript_translation: [
-    validateRequiredId,
-    validatePatchRequiredFields,
-    validateObjectExists,
-    validatePatchApplicable,
-  ],
-
-  // -------------------------------------------------------------------------
   // Read Operations
   // -------------------------------------------------------------------------
   read_story_object: [validateTypeMapping, validateRequiredId, validateObjectExists],

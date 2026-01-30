@@ -27,7 +27,6 @@ export interface ProjectExportPreviewAssetItem {
   asset_type?: string | null;
   file_size?: number | null;
   file_url: string;
-  thumbnail_url?: string | null;
   used: boolean;
   reasons: string[];
 }

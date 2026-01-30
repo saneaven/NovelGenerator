@@ -228,7 +228,7 @@ def delete_assets_with_files(
         scrub_generation_reference_images(db, project_id=scrub_references_in_project_id, deleted_asset_ids=deleted_ids)
 
     for asset in assets:
-        storage_service.delete_asset_files(asset.file_path, asset.thumbnail_path)
+        storage_service.delete_asset_files(asset.file_path)
         db.delete(asset)
 
     return deleted_ids

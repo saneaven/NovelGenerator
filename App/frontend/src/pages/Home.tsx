@@ -198,7 +198,7 @@ const Home: React.FC = () => {
               >
                 <div className="project-card-image-wrapper">
                   {project.cover_asset ? (
-                    <img src={getAssetUrl(project.cover_asset, 'original') || ''} alt={project.name} loading="lazy" />
+                    <img src={getAssetUrl(project.cover_asset) || ''} alt={project.name} loading="lazy" />
                   ) : (
                     <div className="placeholder-cover" style={{ backgroundColor: 'var(--color-surface-muted)' }}>
                       <span className="project-initial">{project.name.charAt(0)}</span>

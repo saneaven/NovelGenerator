@@ -131,10 +131,6 @@ const StoryObjectPanel: React.FC<StoryObjectPanelProps> = ({
 
   return (
     <div className="story-object-panel">
-      <div className="story-object-header">
-        <h2><Clipboard size="2xl" /> {t('storyObjectPanel.title')}</h2>
-      </div>
-
       <div className="story-object-tabs-container">
         <button
           className={`story-object-tab-nav-button left ${showLeftButton ? 'visible' : ''}`}

@@ -43,28 +43,26 @@
 
 /* Size Variants */
 .base-modal--small {
-  max-width: 25dvw;
-  max-height: 80dvh;
+  width: 25dvw;
+  height: 80dvh;
 }
 
 .base-modal--medium {
-  max-width: 40dvw;
-  max-height: 85dvh;
+  width: 40dvw;
+  height: 85dvh;
 }
 
 .base-modal--large {
-  max-width: 50dvw;
-  max-height: 90dvh;
+  width: 50dvw;
+  height: 90dvh;
 }
 
 .base-modal--xlarge {
-  max-width: 75dvw;
-  max-height: 90dvh;
+  width: 75dvw;
+  height: 90dvh;
 }
 
 .base-modal--full {
-  max-width: 90dvw;
-  max-height: 95dvh;
   width: 90dvw;
   height: 95dvh;
 }

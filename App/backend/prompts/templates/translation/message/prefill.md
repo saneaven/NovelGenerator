@@ -1,1 +1,1 @@
-I'll translate the agent message from {{ translation.sourceLanguage }} to {{ translation.targetLanguage }} and return the result using `set_message_translation`.
+I'll translate the agent message from {{ translation.sourceLanguage }} to {{ translation.targetLanguage }}.

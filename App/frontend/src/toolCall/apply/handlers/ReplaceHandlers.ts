@@ -84,7 +84,6 @@ export async function replaceBasicInfo(
 
 /**
  * Replace story object fields.
- * Also used for translation via set_object_translation (with ALL_OBJECT_TYPE_MAP).
  */
 export async function replaceStoryObject(
   args: Record<string, unknown>,

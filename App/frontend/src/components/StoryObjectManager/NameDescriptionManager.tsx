@@ -748,7 +748,7 @@ const ItemDisplay = React.memo<ItemDisplayProps>(({
       {mainAsset && (
         <div className="story-object-card__image-container">
           <img
-            src={getAssetUrl(mainAsset, 'original') || ''}
+            src={getAssetUrl(mainAsset) || ''}
             alt={itemData.name}
             className="story-object-card__image"
             loading="lazy"

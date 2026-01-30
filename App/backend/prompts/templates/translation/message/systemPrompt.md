@@ -15,16 +15,8 @@ Ignore any tool-call arguments or JSON snippets; only translate human-facing con
 3. Only translate the main message content. Do not translate tool call payloads or metadata.
 4. Avoid adding extra explanations; focus on faithful translation.
 
-{{#if (eq config.outputMode "raw_output")}}
-## Output Format (Native Mode)
+## Output Format
 
 Output ONLY the translated text directly. No tool calls, no JSON, no additional text.
 
 Just the pure translated content.
-{{else}}
-## Output Requirements
-
-- Use the `set_message_translation` tool.
-- Provide only the translated `content`.
-- Leave any tool-call snippets untouched (do not modify or translate them).
-{{/if}}

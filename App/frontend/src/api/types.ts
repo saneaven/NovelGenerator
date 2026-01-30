@@ -316,3 +316,24 @@ export interface UserSettingsUpdate {
   primary_language?: string;
   secondary_language?: string;
 }
+
+// ============================================================================
+// ACCOUNT STORAGE
+// ============================================================================
+
+export interface ProjectStorageBreakdown {
+  project_id: string;
+  project_name: string;
+  asset_count: number;
+  used_bytes: number;
+}
+
+export interface AccountStorageResponse {
+  user_id: string;
+  used_bytes: number;
+  quota_bytes: number;
+  remaining_bytes: number;
+  percent_used: number;
+  by_project: ProjectStorageBreakdown[];
+  computed_at: string;
+}

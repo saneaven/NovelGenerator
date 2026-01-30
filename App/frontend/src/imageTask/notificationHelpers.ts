@@ -44,9 +44,7 @@ function getMessage(session: ImageTaskSession): string {
 
 export function registerImageTaskNotification(session: ImageTaskSession, handlers: NotificationHandlers): void {
   const existing = useNotificationStore.getState().getNotification(session.id);
-  const thumbnailUrl = session.status === 'success'
-    ? getAssetUrl(session.result?.asset, 'thumbnail') ?? undefined
-    : undefined;
+  const previewUrl = session.status === 'success' ? getAssetUrl(session.result?.asset) ?? undefined : undefined;
 
   useNotificationStore.getState().register(
     {
@@ -59,8 +57,8 @@ export function registerImageTaskNotification(session: ImageTaskSession, handler
       isRead: existing?.isRead ?? false,
       progress: toNotificationProgress(session),
       source: SOURCE,
-      customSlot: thumbnailUrl
-        ? { type: 'thumbnail', url: thumbnailUrl, alt: 'Generated image' }
+      customSlot: previewUrl
+        ? { type: 'image', url: previewUrl, alt: 'Generated image' }
         : { type: 'none' },
     },
     handlers
@@ -68,17 +66,15 @@ export function registerImageTaskNotification(session: ImageTaskSession, handler
 }
 
 export function updateImageTaskNotification(session: ImageTaskSession): void {
-  const thumbnailUrl = session.status === 'success'
-    ? getAssetUrl(session.result?.asset, 'thumbnail') ?? undefined
-    : undefined;
+  const previewUrl = session.status === 'success' ? getAssetUrl(session.result?.asset) ?? undefined : undefined;
 
   useNotificationStore.getState().update(session.id, {
     message: getMessage(session),
     status: mapStatus(session.status),
     updatedAt: session.updatedAt,
     progress: toNotificationProgress(session),
-    customSlot: thumbnailUrl
-      ? { type: 'thumbnail', url: thumbnailUrl, alt: 'Generated image' }
+    customSlot: previewUrl
+      ? { type: 'image', url: previewUrl, alt: 'Generated image' }
       : { type: 'none' },
   });
 }
@@ -101,4 +97,3 @@ export function registerImageTaskModals(): void {
       .registerModalRenderer(SOURCE, () => React.createElement(ImageTaskModals));
   });
 }
-

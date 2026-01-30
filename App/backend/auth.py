@@ -109,3 +109,10 @@ async def get_current_active_user(
             detail="Inactive user"
         )
     return current_user
+
+
+async def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Require the current user to be an admin."""
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin privileges required")
+    return current_user

@@ -32,7 +32,7 @@ import './ImageGenerationModal.css';
 // Reference image item
 interface ReferenceImageItem {
     assetId: string;
-    thumbnailUrl: string;
+    previewUrl: string;
     strength: number;
     missing?: boolean;
 }
@@ -167,12 +167,12 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     const showNovelaiRefSettings = provider === 'novelai' && referenceImages.length > 0;
 
     // Add reference image handler
-    const handleImageSelected = useCallback((assetId: string, thumbnailUrl: string) => {
+    const handleImageSelected = useCallback((assetId: string, previewUrl: string) => {
         if (referenceImages.some(img => img.assetId === assetId)) {
             setShowImagePicker(false);
             return;
         }
-        setReferenceImages(prev => [...prev, { assetId, thumbnailUrl, strength: 0.7 }]);
+        setReferenceImages(prev => [...prev, { assetId, previewUrl, strength: 0.7 }]);
         setShowImagePicker(false);
     }, [referenceImages]);
 
@@ -292,7 +292,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
             refs.map((r) => ({
                 assetId: r.assetId,
                 strength: r.strength,
-                thumbnailUrl: '',
+                previewUrl: '',
                 missing: true,
             }))
         );
@@ -303,15 +303,15 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                 refs.map(async (r) => {
                     try {
                         const a = await assetService.getAsset(currentProjectId, r.assetId);
-                        const url = getAssetUrl(a, 'thumbnail');
+                        const url = getAssetUrl(a);
                         return {
                             assetId: r.assetId,
                             strength: r.strength,
-                            thumbnailUrl: url || '',
+                            previewUrl: url || '',
                             missing: !url,
                         };
                     } catch {
-                        return { assetId: r.assetId, strength: r.strength, thumbnailUrl: '', missing: true };
+                        return { assetId: r.assetId, strength: r.strength, previewUrl: '', missing: true };
                     }
                 })
             );
@@ -929,8 +929,8 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                             <div className="reference-images-grid">
                                 {referenceImages.map(img => (
                                     <div key={img.assetId} className="reference-image-item">
-                                        {img.thumbnailUrl && !img.missing ? (
-                                            <img src={img.thumbnailUrl} alt="Reference" />
+                                        {img.previewUrl && !img.missing ? (
+                                            <img src={img.previewUrl} alt="Reference" />
                                         ) : (
                                             <div className="reference-image-missing">Missing</div>
                                         )}
@@ -1151,7 +1151,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
                     isOpen={showImagePicker}
                     onClose={() => setShowImagePicker(false)}
                     onSelect={(asset: Asset) => {
-                        handleImageSelected(asset.id, getAssetUrl(asset, 'thumbnail') || '');
+                        handleImageSelected(asset.id, getAssetUrl(asset) || '');
                     }}
                     title="Select Reference Image"
                 />

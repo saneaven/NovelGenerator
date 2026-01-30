@@ -2,8 +2,7 @@
  * Schema Registry - Single Source of Truth
  *
  * All tool call schemas are defined and registered here.
- * This replaces the scattered definitions in chatTools.ts, editTools.ts,
- * and translationTools.ts.
+ * This replaces the scattered definitions in chatTools.ts and editTools.ts.
  */
 
 import type { ToolSchema, ToolCategory, TargetType, ExecutionMode } from '../types';

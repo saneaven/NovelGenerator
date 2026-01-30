@@ -261,7 +261,15 @@
       "passwordChangeFailed": "Failed to change password",
       "changingPassword": "Changing...",
       "passwordChangeBackupWarning": "Changing your password will delete your server backup of API keys.",
-      "passwordChangeBackupConfirm": "Changing your password will delete your server backup of API keys. Continue?"
+      "passwordChangeBackupConfirm": "Changing your password will delete your server backup of API keys. Continue?",
+      "storage": "Storage",
+      "storageUsed": "Used",
+      "storageRemaining": "Remaining",
+      "storageQuota": "Quota",
+      "storageLoading": "Loading...",
+      "storageLoadFailed": "Failed to load storage info",
+      "storageByProject": "By project",
+      "storageImages": "{{count}} images"
     },
     "theme": {
       "title": "Theme Settings",
@@ -1021,7 +1029,7 @@
     },
     "projectExport": {
       "title": "Project Export (.nbproj)",
-      "hint": "Exports include the latest server-saved state. Thumbnails are regenerated on import to save space.",
+      "hint": "Exports include the latest server-saved state.",
       "includeImages": "Include original images",
       "imageScope": "Image Scope",
       "imageScopeHint": "Manual selection starts from the used set (manuscripts + story objects) and can be adjusted.",

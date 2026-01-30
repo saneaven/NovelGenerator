@@ -40,6 +40,7 @@ from ..schemas.assets import (
 from ..services.storage_service import storage_service
 from ..services.deletion_service import delete_assets_with_files
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
+from ..services.storage_quota_service import StorageQuotaExceededError, enforce_user_asset_quota
 from ..image_providers.registry import ImageProviderRegistry
 from ..image_providers.base import ReferenceImageData
 from ..utils.object_type_aliases import normalize_object_type
@@ -79,7 +80,6 @@ def _asset_to_response(asset: Asset) -> AssetResponse:
         project_id=str(asset.project_id),
         name=cast(str, asset.name),
         file_path=cast(str, asset.file_path),
-        thumbnail_path=cast(Optional[str], asset.thumbnail_path),
         mime_type=cast(str, asset.mime_type),
         asset_type=cast(Optional[str], asset.asset_type),
         manuscript_id=str(asset.manuscript_id) if asset.manuscript_id is not None else None,
@@ -97,7 +97,6 @@ def _asset_to_response(asset: Asset) -> AssetResponse:
         created_at=cast(datetime, asset.created_at),
         updated_at=cast(datetime, asset.updated_at),
         file_url=f"/storage/assets/{cast(str, asset.file_path)}",
-        thumbnail_url=f"/storage/assets/{cast(str, asset.thumbnail_path)}" if asset.thumbnail_path is not None else None
     )
 
 
@@ -108,7 +107,6 @@ def _asset_to_scene_response(asset: Asset, used_in_manuscripts: List[ManuscriptI
         project_id=str(asset.project_id),
         name=cast(str, asset.name),
         file_path=cast(str, asset.file_path),
-        thumbnail_path=cast(Optional[str], asset.thumbnail_path),
         mime_type=cast(str, asset.mime_type),
         asset_type=cast(Optional[str], asset.asset_type),
         manuscript_id=str(asset.manuscript_id) if asset.manuscript_id is not None else None,
@@ -123,7 +121,6 @@ def _asset_to_scene_response(asset: Asset, used_in_manuscripts: List[ManuscriptI
         created_at=cast(datetime, asset.created_at),
         updated_at=cast(datetime, asset.updated_at),
         file_url=f"/storage/assets/{cast(str, asset.file_path)}",
-        thumbnail_url=f"/storage/assets/{cast(str, asset.thumbnail_path)}" if asset.thumbnail_path is not None else None,
         used_in_manuscripts=used_in_manuscripts,
         usage_count=len(used_in_manuscripts)
     )
@@ -315,13 +312,13 @@ async def generate_image(
         # Save to storage
         if result.image_b64:
             import base64
-            file_path, thumb_path, mime_type, width, height, file_size = storage_service.save_generated_image(
+            file_path, mime_type, width, height, file_size = storage_service.save_generated_image(
                 base64_data=result.image_b64,
                 project_id=project_id,
                 format=result.format
             )
         elif result.image_data:
-            file_path, thumb_path, mime_type, width, height, file_size = storage_service.save_generated_image_from_url(
+            file_path, mime_type, width, height, file_size = storage_service.save_generated_image_from_url(
                 image_bytes=result.image_data,
                 project_id=project_id,
                 format=result.format
@@ -352,13 +349,23 @@ async def generate_image(
                 for obj in request.reference_objects
             ]
 
+        # Enforce user storage quota after we know actual sizes.
+        try:
+            enforce_user_asset_quota(
+                db,
+                user_id=current_user.id,
+                additional_bytes=int(file_size or 0),
+            )
+        except StorageQuotaExceededError:
+            storage_service.delete_asset_files(file_path)
+            raise HTTPException(status_code=413, detail="Storage quota exceeded")
+
         asset = Asset(
             id=uuid4(),
             project_id=project_id,
             manuscript_id=manuscript_id,  # Ownership for scene assets
             name=f"Generated Image {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
             file_path=file_path,
-            thumbnail_path=thumb_path,
             mime_type=mime_type,
             asset_type=asset_type,
             # Store StyledPrompt as JSONB dicts
@@ -372,7 +379,7 @@ async def generate_image(
             generation_reference_objects=ref_objects_data,  # Story objects used during generation
             width=width or result.width,
             height=height or result.height,
-            file_size=file_size
+            file_size=file_size,
         )
         db.add(asset)
 
@@ -397,7 +404,7 @@ async def generate_image(
         except Exception:
             db.rollback()
             # Prevent orphan files if DB commit fails
-            storage_service.delete_asset_files(file_path, thumb_path)
+            storage_service.delete_asset_files(file_path)
             raise
 
         db.refresh(asset)
@@ -421,11 +428,12 @@ async def generate_image(
             success=True,
             asset_id=str(asset.id),
             file_path=f"/storage/assets/{file_path}",
-            thumbnail_path=f"/storage/assets/{thumb_path}" if thumb_path else None,
             revised_prompt=result.revised_prompt,
             object_link=object_link
         )
 
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -616,13 +624,23 @@ async def upload_asset(
     content = await file.read()
 
     # Save to storage
-    file_path, thumb_path, mime_type, width, height, file_size = storage_service.save_uploaded_file(
+    file_path, mime_type, width, height, file_size = storage_service.save_uploaded_file(
         file_content=content,
         original_filename=file.filename or "upload.png",
         project_id=project_id
     )
 
     try:
+        # Enforce user storage quota after we know actual sizes.
+        try:
+            enforce_user_asset_quota(
+                db,
+                user_id=current_user.id,
+                additional_bytes=int(file_size or 0),
+            )
+        except StorageQuotaExceededError:
+            raise HTTPException(status_code=413, detail="Storage quota exceeded")
+
         # Create asset record
         asset = Asset(
             id=uuid4(),
@@ -630,12 +648,11 @@ async def upload_asset(
             manuscript_id=manuscript_id,
             name=name or file.filename or "Uploaded Image",
             file_path=file_path,
-            thumbnail_path=thumb_path,
             mime_type=mime_type,
             asset_type=asset_type,
             width=width,
             height=height,
-            file_size=file_size
+            file_size=file_size,
         )
         db.add(asset)
 
@@ -660,7 +677,7 @@ async def upload_asset(
     except Exception:
         db.rollback()
         # Prevent orphan files if DB commit fails
-        storage_service.delete_asset_files(file_path, thumb_path)
+        storage_service.delete_asset_files(file_path)
         raise
 
     return _asset_to_response(asset)
@@ -865,7 +882,6 @@ async def preview_image_cleanup(
                 created_at=cast(datetime, asset.created_at),
                 file_size=cast(Optional[int], asset.file_size),
                 file_url=f"/storage/assets/{cast(str, asset.file_path)}",
-                thumbnail_url=f"/storage/assets/{cast(str, asset.thumbnail_path)}" if asset.thumbnail_path else None,
                 reasons=reasons,
                 referenced_by_count=referenced_by_count,
             )
@@ -1022,16 +1038,16 @@ async def execute_image_cleanup(
                 src.updated_at = datetime.utcnow()
 
     # Delete DB rows first (files are best-effort after commit)
-    file_deletions: List[tuple[str, Optional[str]]] = []
+    file_deletions: List[str] = []
     for asset in to_delete:
-        file_deletions.append((cast(str, asset.file_path), cast(Optional[str], asset.thumbnail_path)))
+        file_deletions.append(cast(str, asset.file_path))
         db.delete(asset)
         deleted.append(str(asset.id))
 
     db.commit()
 
-    for file_path, thumb_path in file_deletions:
-        storage_service.delete_asset_files(file_path, thumb_path)
+    for file_path in file_deletions:
+        storage_service.delete_asset_files(file_path)
 
     return ImageCleanupExecuteResponse(
         deleted=deleted,

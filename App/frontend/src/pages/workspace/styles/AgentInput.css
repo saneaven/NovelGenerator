@@ -6,7 +6,7 @@
 /* ===== Input Container ===== */
 .agent-input-container {
   padding: var(--spacing-md) var(--spacing-xl) var(--spacing-xl) var(--spacing-xl);
-  background: var(--color-surface-elevated);
+  background: var(--color-surface-subtle);
   flex-shrink: 0;
   box-shadow: var(--shadow-md);
   position: relative;
@@ -133,7 +133,7 @@
 /* ===== Mobile Responsive ===== */
 @media (max-width: 768px) {
   .agent-input-container {
-    padding: var(--spacing-sm) var(--spacing-lg) var(--spacing-lg) var(--spacing-lg);
+    padding: var(--spacing-md) var(--spacing-lg) var(--spacing-3xl) var(--spacing-lg);
   }
 
   .agent-preflight-toast {

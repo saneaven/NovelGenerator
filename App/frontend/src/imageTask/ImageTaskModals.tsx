@@ -104,7 +104,7 @@ export const ImageTaskModals: React.FC = () => {
           {session.status === 'success' && session.result?.asset && (
             <div style={{ display: 'grid', gap: 12 }}>
               <img
-                src={getAssetUrl(session.result.asset, 'original') || ''}
+                src={getAssetUrl(session.result.asset) || ''}
                 alt={session.result.asset.name}
                 style={{ width: '100%', maxHeight: 520, objectFit: 'contain', borderRadius: 8 }}
               />

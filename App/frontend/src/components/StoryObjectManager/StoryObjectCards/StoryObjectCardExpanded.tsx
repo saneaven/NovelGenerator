@@ -276,7 +276,7 @@ const StoryObjectCardExpanded: React.FC<StoryObjectCardExpandedProps> = ({
             {hasImage && mainAsset && (
                 <div className="expanded-image-section">
                     <img
-                        src={getAssetUrl(mainAsset, 'original') || ''}
+                        src={getAssetUrl(mainAsset) || ''}
                         alt={itemData.name}
                         className="expanded-image"
                     />

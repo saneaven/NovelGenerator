@@ -25,7 +25,6 @@ type AssetLike = {
     width?: number | null;
     height?: number | null;
     file_url: string;
-    thumbnail_url?: string | null;
     file_size?: number | null;
     created_at: string;
     generation_provider?: string | null;
@@ -801,7 +800,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                         <div className="success-modal-body">
                             <div className="success-image-preview">
                                 <img
-                                    src={getAssetUrl(successModalAsset, 'thumbnail') || ''}
+                                    src={getAssetUrl(successModalAsset) || ''}
                                     alt="Preview"
                                 />
                             </div>
@@ -838,7 +837,7 @@ const ImageTabContent: React.FC<ImageTabContentProps> = ({
                         <div className="asset-detail-body">
                             <div className="asset-detail-image">
                                 <img
-                                    src={getAssetUrl(detailAsset, 'original') || ''}
+                                    src={getAssetUrl(detailAsset) || ''}
                                     alt={detailAsset.name}
                                 />
                             </div>

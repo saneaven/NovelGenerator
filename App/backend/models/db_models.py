@@ -31,6 +31,8 @@ class User(Base):
 
     is_active = Column(Boolean, default=True, nullable=False)
     is_verified = Column(Boolean, default=False, nullable=False)
+    is_admin = Column(Boolean, default=False, nullable=False)
+    asset_quota_bytes = Column(BigInteger, nullable=True)
 
     # Relationships
     projects = relationship("Project", back_populates="user", cascade="all, delete-orphan")
@@ -623,7 +625,6 @@ class Asset(Base):
 
     name = Column(String(255), nullable=False)
     file_path = Column(String(500), nullable=False)  # Local storage path
-    thumbnail_path = Column(String(500), nullable=True)
     mime_type = Column(String(50), default='image/png', nullable=False)
 
     # Asset type for categorization

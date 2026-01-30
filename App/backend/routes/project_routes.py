@@ -26,6 +26,7 @@ from ..services.deletion_service import (
     delete_project_assets_with_files,
     delete_rag_sources_for_project,
 )
+from ..services.storage_quota_service import StorageQuotaExceededError
 
 
 def _get_cover_asset(db: Session, project: Project) -> dict | None:
@@ -44,7 +45,6 @@ def _get_cover_asset(db: Session, project: Project) -> dict | None:
                     "project_id": str(asset.project_id),
                     "name": asset.name,
                     "file_path": asset.file_path,
-                    "thumbnail_path": asset.thumbnail_path,
                     "mime_type": asset.mime_type,
                     "asset_type": asset.asset_type,
                     "manuscript_id": str(asset.manuscript_id) if asset.manuscript_id is not None else None,
@@ -54,7 +54,6 @@ def _get_cover_asset(db: Session, project: Project) -> dict | None:
                     "created_at": asset.created_at,
                     "updated_at": asset.updated_at,
                     "file_url": f"/storage/assets/{asset.file_path}",
-                    "thumbnail_url": f"/storage/assets/{asset.thumbnail_path}" if asset.thumbnail_path is not None else None,
                 }
     return None
 
@@ -378,6 +377,8 @@ async def import_project(
     try:
         data = await file.read()
         new_project_id = ProjectTransferService.import_nbproj(db=db, user_id=current_user.id, nbproj_bytes=data)
+    except StorageQuotaExceededError:
+        raise HTTPException(status_code=413, detail="Storage quota exceeded")
     except zipfile.BadZipFile:
         raise HTTPException(status_code=400, detail="Invalid .nbproj file (bad zip)")
     except KeyError as e:

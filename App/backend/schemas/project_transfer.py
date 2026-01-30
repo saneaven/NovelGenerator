@@ -31,7 +31,6 @@ class ProjectExportPreviewAssetItem(BaseModel):
     asset_type: Optional[str] = None
     file_size: Optional[int] = None
     file_url: str
-    thumbnail_url: Optional[str] = None
     used: bool = False
     reasons: List[str] = []
 
@@ -61,4 +60,3 @@ class ProjectImportReport(BaseModel):
     imported_at: datetime
     assets_imported: int = 0
     objects_imported: int = 0
-

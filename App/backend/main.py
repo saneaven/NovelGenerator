@@ -64,6 +64,10 @@ from .routes.preset_routes import router as preset_router
 # Token counting routes
 from .routes.token_routes import router as token_router
 
+# Account / Admin routes
+from .routes.account_routes import router as account_router
+from .routes.admin_routes import router as admin_router
+
 load_dotenv()
 
 app = FastAPI(
@@ -100,6 +104,10 @@ app.include_router(preset_router)
 
 # Include token counting router
 app.include_router(token_router)
+
+# Account / Admin
+app.include_router(account_router)
+app.include_router(admin_router)
 
 # Mount static files for asset storage
 storage_path = Path(__file__).parent / "storage" / "assets"

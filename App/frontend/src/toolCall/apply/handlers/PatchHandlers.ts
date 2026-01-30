@@ -99,7 +99,6 @@ export async function patchBasicInfo(
 
 /**
  * Patch a story object field using search and replace.
- * Also used for translation via patch_object_translation (with ALL_OBJECT_TYPE_MAP).
  */
 export async function patchStoryObject(
   args: Record<string, unknown>,

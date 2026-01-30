@@ -185,7 +185,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   const renderCustomSlot = () => {
     if (!customSlot || customSlot.type === 'none') return null;
 
-    if (customSlot.type === 'thumbnail') {
+    if (customSlot.type === 'image') {
       return (
         <div className="notification-item-thumbnail">
           <img src={customSlot.url} alt={customSlot.alt || 'Preview'} />

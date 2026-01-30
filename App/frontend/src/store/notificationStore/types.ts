@@ -13,10 +13,10 @@ export type NotificationStatus =
   | 'cancelled';
 
 /**
- * Custom slot for consumer-specific rendering (e.g., thumbnails)
+ * Custom slot for consumer-specific rendering (e.g., image previews)
  */
 export type NotificationCustomSlot =
-  | { type: 'thumbnail'; url: string; alt?: string }
+  | { type: 'image'; url: string; alt?: string }
   | { type: 'component'; render: ComponentType<{ notification: NotificationData }> }
   | { type: 'none' };
 
@@ -54,7 +54,7 @@ export interface NotificationData {
   // Consumer identification (e.g., 'llm', 'image', 'export')
   source: string;
 
-  // Custom rendering slot (for thumbnails, extra UI elements)
+  // Custom rendering slot (for image previews, extra UI elements)
   customSlot?: NotificationCustomSlot;
 
   // Warning message (optional)

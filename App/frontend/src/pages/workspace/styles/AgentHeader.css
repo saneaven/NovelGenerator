@@ -6,7 +6,7 @@
 .agent-header {
     padding: var(--spacing-lg) var(--spacing-xl);
     border-bottom: 1px solid var(--color-border-default);
-    background: var(--color-surface-elevated);
+    background: var(--color-surface-base);
     display: flex;
     justify-content: space-between;
     align-items: center;

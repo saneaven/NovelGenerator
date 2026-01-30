@@ -62,7 +62,6 @@ class ImageGenerationResponse(BaseModel):
     success: bool
     asset_id: Optional[str] = None
     file_path: Optional[str] = None
-    thumbnail_path: Optional[str] = None
     revised_prompt: Optional[str] = None
     object_link: Optional["StoryObjectAssetResponse"] = None  # Present when object binding is used
     error: Optional[str] = None
@@ -111,7 +110,6 @@ class AssetResponse(BaseModel):
     project_id: str
     name: str
     file_path: str
-    thumbnail_path: Optional[str] = None
     mime_type: str
     asset_type: Optional[str] = None  # 'scene', 'object', or null
     manuscript_id: Optional[str] = None  # Ownership for scene assets
@@ -131,7 +129,6 @@ class AssetResponse(BaseModel):
     updated_at: datetime
     # URL for frontend access
     file_url: str
-    thumbnail_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -247,7 +244,6 @@ class SceneAssetResponse(BaseModel):
     project_id: str
     name: str
     file_path: str
-    thumbnail_path: Optional[str] = None
     mime_type: str
     asset_type: Optional[str] = None
     manuscript_id: Optional[str] = None  # Ownership - which manuscript this belongs to
@@ -263,7 +259,6 @@ class SceneAssetResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     file_url: str
-    thumbnail_url: Optional[str] = None
     # Manuscript usage info
     used_in_manuscripts: List[ManuscriptInfo] = []
     usage_count: int = 0
@@ -301,7 +296,6 @@ class ImageCleanupPreviewItem(BaseModel):
     created_at: datetime
     file_size: Optional[int] = None
     file_url: str
-    thumbnail_url: Optional[str] = None
     reasons: List[str] = []
     referenced_by_count: int = 0
 

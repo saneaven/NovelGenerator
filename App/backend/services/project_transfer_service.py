@@ -33,11 +33,17 @@ from ..models.db_models import (
     Outline,
     Project,
     StoryObjectAsset,
+    User,
 )
 from ..models.translation_models import ObjectVersion
 from ..schemas.project_transfer import ProjectExportOptions
 from ..services.manuscript_image_index_service import rebuild_manuscript_images_for_language
 from ..services.storage_service import storage_service
+from ..services.storage_quota_service import (
+    StorageQuotaExceededError,
+    get_user_asset_used_bytes,
+    resolve_user_asset_quota_bytes,
+)
 from ..utils.object_type_aliases import externalize_object_type, normalize_object_type
 
 
@@ -280,7 +286,6 @@ class ProjectTransferService:
                 "asset_type": asset.asset_type,
                 "file_size": asset.file_size,
                 "file_url": f"/storage/assets/{asset.file_path}",
-                "thumbnail_url": f"/storage/assets/{asset.thumbnail_path}" if asset.thumbnail_path else None,
                 "used": asset.id in used_ids,
                 "reasons": sorted(reasons.get(asset.id, set())),
             }
@@ -613,9 +618,17 @@ class ProjectTransferService:
         Import a .nbproj archive for the given user.
 
         Creates a NEW project and preserves created_at/updated_at timestamps.
-        Generates thumbnails on import (thumbnails are not included in the archive).
+        Saves imported images on import.
         """
-        created_files: List[Tuple[str, Optional[str]]] = []
+        created_files: List[str] = []
+
+        # Serialize asset allocation per user to avoid quota races across concurrent uploads/imports.
+        user = db.query(User).filter(User.id == user_id).with_for_update().first()
+        if not user:
+            raise ValueError("User not found")
+
+        quota_bytes = resolve_user_asset_quota_bytes(user)
+        used_bytes = get_user_asset_used_bytes(db, user_id=user_id)
 
         try:
             with zipfile.ZipFile(io.BytesIO(nbproj_bytes), "r") as zf:
@@ -646,14 +659,16 @@ class ProjectTransferService:
                     links_data=links_data,
                     assets_data=assets_data,
                     created_files=created_files,
+                    asset_quota_bytes=quota_bytes,
+                    asset_used_bytes=used_bytes,
                 )
 
             db.commit()
             return new_project_id
         except Exception:
             db.rollback()
-            for file_path, thumb_path in created_files:
-                storage_service.delete_asset_files(file_path, thumb_path)
+            for file_path in created_files:
+                storage_service.delete_asset_files(file_path)
             raise
 
     @staticmethod
@@ -666,9 +681,12 @@ class ProjectTransferService:
         objects_data: dict,
         links_data: dict,
         assets_data: Optional[dict],
-        created_files: List[Tuple[str, Optional[str]]],
+        created_files: List[str],
+        asset_quota_bytes: int,
+        asset_used_bytes: int,
     ) -> UUID:
         now = datetime.utcnow()
+        imported_bytes = 0
 
         object_items = objects_data.get("objects") if isinstance(objects_data, dict) else None
         if not isinstance(object_items, list):
@@ -751,12 +769,22 @@ class ProjectTransferService:
                 except KeyError:
                     raise ValueError(f"Missing image file in archive: {arc_path}")
 
-                file_path, thumb_path, mime_type, width, height, file_size = storage_service.save_uploaded_file(
+                file_path, mime_type, width, height, file_size = storage_service.save_uploaded_file(
                     file_content=image_bytes,
                     original_filename=f"{export_id}{ext}",
                     project_id=new_project_id,
                 )
-                created_files.append((file_path, thumb_path or None))
+                created_files.append(file_path)
+
+                added = int(file_size or 0)
+                next_total = asset_used_bytes + imported_bytes + added
+                if asset_quota_bytes >= 0 and next_total > asset_quota_bytes:
+                    raise StorageQuotaExceededError(
+                        used_bytes=asset_used_bytes + imported_bytes,
+                        quota_bytes=asset_quota_bytes,
+                        additional_bytes=added,
+                    )
+                imported_bytes += added
 
                 export_manuscript_id = a.get("manuscript_id")
                 new_manuscript_id: Optional[UUID] = None
@@ -812,7 +840,6 @@ class ProjectTransferService:
                         manuscript_id=new_manuscript_id,
                         name=str(a.get("name") or "Imported Image"),
                         file_path=file_path,
-                        thumbnail_path=thumb_path or None,
                         mime_type=mime_type,
                         asset_type=a.get("asset_type"),
                         generation_prompt=gen.get("prompt"),

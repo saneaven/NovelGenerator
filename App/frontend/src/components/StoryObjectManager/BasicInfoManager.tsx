@@ -180,7 +180,7 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
   // Get cover image from asset store using the cover_image_id
   const { fetchStoryObjectAssets, getMainAsset } = useAssetStore();
   const coverAsset = basicInfoId ? getMainAsset('basic_info', basicInfoId) : null;
-  const coverImageUrl = getAssetUrl(coverAsset, 'original');
+  const coverImageUrl = getAssetUrl(coverAsset);
 
   // Fetch assets when basicInfoId is available
   useEffect(() => {

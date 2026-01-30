@@ -35,7 +35,6 @@ export interface Asset {
     manuscript_id: string | null;  // Ownership for scene assets
     name: string;
     file_path: string;
-    thumbnail_path: string | null;
     mime_type: string;
     asset_type: AssetType;  // 'scene', 'object', or null
     // Prompts stored separately by provider type (StyledPrompt with prefix/content/postfix)
@@ -53,7 +52,6 @@ export interface Asset {
     created_at: string;
     updated_at: string;
     file_url: string;
-    thumbnail_url: string | null;
 }
 
 export interface AssetListResponse {
@@ -111,7 +109,6 @@ export interface ImageCleanupPreviewItem {
     created_at: string;
     file_size: number | null;
     file_url: string;
-    thumbnail_url: string | null;
     reasons: string[];
     referenced_by_count: number;
 }

@@ -17,8 +17,6 @@ except ImportError:  # pragma: no cover
 
 # Storage configuration
 STORAGE_BASE_PATH = Path(__file__).parent.parent / "storage" / "assets"
-THUMBNAIL_SIZE = (256, 256)
-AVIF_ENABLED = os.getenv("ASSET_AVIF_ENABLED", "1").lower() not in {"0", "false", "no"}
 
 
 def _int_env(name: str, default: int, *, min_value: int | None = None, max_value: int | None = None) -> int:
@@ -53,7 +51,6 @@ class StorageService:
         """Create storage directories if they don't exist"""
         self.base_path.mkdir(parents=True, exist_ok=True)
         (self.base_path / "originals").mkdir(exist_ok=True)
-        (self.base_path / "thumbnails").mkdir(exist_ok=True)
 
     def _generate_filename(self, original_name: str, project_id: uuid.UUID) -> str:
         """Generate a unique filename preserving the original extension"""
@@ -76,9 +73,6 @@ class StorageService:
         return mime_types.get(ext, "image/png")
 
     def _ensure_avif_supported(self) -> None:
-        if not AVIF_ENABLED:
-            return
-
         # pillow-avif-plugin registers ".avif" -> "AVIF"
         if Image.registered_extensions().get(".avif") != "AVIF":
             raise RuntimeError(
@@ -131,7 +125,7 @@ class StorageService:
         file_content: bytes,
         original_filename: str,
         project_id: uuid.UUID
-    ) -> Tuple[str, str, str, int, int, int]:
+    ) -> Tuple[str, str, int, int, int]:
         """
         Save an uploaded file to storage.
 
@@ -141,9 +135,9 @@ class StorageService:
             project_id: Project UUID
 
         Returns:
-            Tuple of (file_path, thumbnail_path, mime_type, width, height, file_size)
+            Tuple of (file_path, mime_type, width, height, file_size)
         """
-        output_name = f"{Path(original_filename).stem}.avif" if AVIF_ENABLED else original_filename
+        output_name = f"{Path(original_filename).stem}.avif"
         filename = self._generate_filename(output_name, project_id)
         file_path = self.base_path / "originals" / filename
 
@@ -152,16 +146,10 @@ class StorageService:
             img = ImageOps.exif_transpose(img)
             width, height = img.size
 
-            if AVIF_ENABLED:
-                encoded_bytes = self._encode_avif(img)
-            else:
-                encoded_bytes = file_content
+            encoded_bytes = self._encode_avif(img)
 
             # Save original file (possibly transcoded)
             file_path.write_bytes(encoded_bytes)
-
-            # Create thumbnail from decoded image
-            thumbnail_path = self._create_thumbnail(img, filename)
 
         mime_type = self._get_mime_type(filename)
         file_size = len(encoded_bytes)
@@ -169,11 +157,10 @@ class StorageService:
         # Return relative paths from storage base
         return (
             f"originals/{filename}",
-            thumbnail_path,
             mime_type,
             width,
             height,
-            file_size
+            file_size,
         )
 
     def save_generated_image(
@@ -181,7 +168,7 @@ class StorageService:
         base64_data: str,
         project_id: uuid.UUID,
         format: str = "png"
-    ) -> Tuple[str, str, str, int, int, int]:
+    ) -> Tuple[str, str, int, int, int]:
         """
         Save an AI-generated image from base64 data.
 
@@ -191,13 +178,13 @@ class StorageService:
             format: Image format (png, jpg, webp)
 
         Returns:
-            Tuple of (file_path, thumbnail_path, mime_type, width, height, file_size)
+            Tuple of (file_path, mime_type, width, height, file_size)
         """
         # Decode base64
         image_bytes = base64.b64decode(base64_data)
 
         # Generate filename
-        output_ext = "avif" if AVIF_ENABLED else format
+        output_ext = "avif"
         filename = self._generate_filename(f"generated.{output_ext}", project_id)
         file_path = self.base_path / "originals" / filename
 
@@ -205,20 +192,18 @@ class StorageService:
             img = ImageOps.exif_transpose(img)
             width, height = img.size
 
-            encoded_bytes = self._encode_avif(img) if AVIF_ENABLED else image_bytes
+            encoded_bytes = self._encode_avif(img)
             file_path.write_bytes(encoded_bytes)
-            thumbnail_path = self._create_thumbnail(img, filename)
 
         mime_type = self._get_mime_type(filename)
         file_size = len(encoded_bytes)
 
         return (
             f"originals/{filename}",
-            thumbnail_path,
             mime_type,
             width,
             height,
-            file_size
+            file_size,
         )
 
     def save_generated_image_from_url(
@@ -226,7 +211,7 @@ class StorageService:
         image_bytes: bytes,
         project_id: uuid.UUID,
         format: str = "png"
-    ) -> Tuple[str, str, str, int, int, int]:
+    ) -> Tuple[str, str, int, int, int]:
         """
         Save an AI-generated image from raw bytes (downloaded from URL).
 
@@ -236,9 +221,9 @@ class StorageService:
             format: Image format (png, jpg, webp)
 
         Returns:
-            Tuple of (file_path, thumbnail_path, mime_type, width, height, file_size)
+            Tuple of (file_path, mime_type, width, height, file_size)
         """
-        output_ext = "avif" if AVIF_ENABLED else format
+        output_ext = "avif"
         filename = self._generate_filename(f"generated.{output_ext}", project_id)
         file_path = self.base_path / "originals" / filename
 
@@ -246,42 +231,19 @@ class StorageService:
             img = ImageOps.exif_transpose(img)
             width, height = img.size
 
-            encoded_bytes = self._encode_avif(img) if AVIF_ENABLED else image_bytes
+            encoded_bytes = self._encode_avif(img)
             file_path.write_bytes(encoded_bytes)
-            thumbnail_path = self._create_thumbnail(img, filename)
 
         mime_type = self._get_mime_type(filename)
         file_size = len(encoded_bytes)
 
         return (
             f"originals/{filename}",
-            thumbnail_path,
             mime_type,
             width,
             height,
-            file_size
+            file_size,
         )
-
-    def _create_thumbnail(self, img: Image.Image, filename: str) -> str:
-        """Create a thumbnail for an image"""
-        thumb_filename = f"thumb_{Path(filename).stem}.png"
-        thumb_path = self.base_path / "thumbnails" / thumb_filename
-
-        # Create thumbnail preserving aspect ratio
-        img_copy = img.copy()
-        img_copy.thumbnail(THUMBNAIL_SIZE, Image.Resampling.LANCZOS)
-
-        # Convert to RGB if necessary (for RGBA images)
-        if img_copy.mode in ('RGBA', 'LA', 'P'):
-            background = Image.new('RGB', img_copy.size, (255, 255, 255))
-            if img_copy.mode == 'P':
-                img_copy = img_copy.convert('RGBA')
-            background.paste(img_copy, mask=img_copy.split()[-1] if img_copy.mode == 'RGBA' else None)
-            img_copy = background
-
-        img_copy.save(thumb_path, "PNG", optimize=True)
-
-        return f"thumbnails/{thumb_filename}"
 
     def get_file_path(self, relative_path: str) -> Path:
         """Get the full file path for a relative storage path"""
@@ -313,11 +275,9 @@ class StorageService:
             return True
         return False
 
-    def delete_asset_files(self, file_path: str, thumbnail_path: Optional[str]) -> None:
-        """Delete both original and thumbnail files for an asset"""
+    def delete_asset_files(self, file_path: str) -> None:
+        """Delete the stored file for an asset"""
         self.delete_file(file_path)
-        if thumbnail_path:
-            self.delete_file(thumbnail_path)
 
     def file_exists(self, relative_path: str) -> bool:
         """Check if a file exists in storage"""

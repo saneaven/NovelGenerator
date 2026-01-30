@@ -25,7 +25,7 @@ services:
       DB_PORT: 5432
       DB_NAME: ${POSTGRES_DB:?set in .env.dev/.env.prod}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set in .env.dev/.env.prod}
-      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:?set in .env.dev/.env.prod}
+      DEFAULT_ASSET_QUOTA_BYTES: ${DEFAULT_ASSET_QUOTA_BYTES:?set in .env.dev/.env.prod}
     depends_on:
       db:
         condition: service_healthy

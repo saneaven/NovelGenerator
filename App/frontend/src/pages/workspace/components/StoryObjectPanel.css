@@ -13,32 +13,9 @@
     overflow: hidden;
 }
 
-.story-object-header {
-    padding: var(--spacing-xl);
-    border-bottom: 1px solid var(--color-border-default);
-    background: var(--color-surface-elevated);
-    flex-shrink: 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--spacing-md);
-    flex-wrap: wrap;
-}
-
-.story-object-header h2 {
-    margin: 0;
-    font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
-    letter-spacing: -0.015em;
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-}
-
 /* ===== Story Object Tabs ===== */
 .story-object-tabs-container {
-    padding-top: var(--spacing-sm);
+    padding-top: var(--spacing-lg);
     position: relative;
     background: var(--color-surface-subtle);
     flex-shrink: 0;
@@ -111,6 +88,7 @@
     align-items: center;
     gap: var(--spacing-sm);
     padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
     border: none;
     background: transparent;
     cursor: pointer;
@@ -127,7 +105,6 @@
 .story-object-tab-button:hover {
     color: var(--color-text-secondary);
     background: var(--color-surface-hover);
-    border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
 }
 
 .story-object-tab-button.active {
@@ -179,10 +156,6 @@
 @media (max-width: 768px) {
     /* Hide tabs container on mobile - use sidebar instead */
     .story-object-tabs-container {
-        display: none;
-    }
-
-    .story-object-header {
         display: none;
     }
 

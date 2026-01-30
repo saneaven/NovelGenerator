@@ -182,10 +182,10 @@ export const ImageGridItem = memo<ImageGridItemProps>(({
 
             <div className="asset-thumbnail">
                 <img
-                    src={getAssetUrl(item.asset, 'original') || ''}
+                    src={getAssetUrl(item.asset) || ''}
                     alt={item.asset.name}
                     loading="lazy"
-                />
+                  />
             </div>
 
             <div className="asset-info">
