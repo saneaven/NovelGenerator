@@ -201,6 +201,17 @@
   gap: var(--spacing-xl);
 }
 
+.projects-grid-loading {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-6xl) var(--spacing-xl);
+  background-color: var(--color-surface-subtle);
+  border-radius: var(--border-radius-xl);
+  border: 1px solid var(--color-border-subtle);
+}
+
 /* Empty State */
 .empty-state {
   grid-column: 1 / -1;

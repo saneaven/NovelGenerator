@@ -26,6 +26,7 @@ def upgrade() -> None:
     from models import db_models  # noqa: F401,E402
     from models import translation_models  # noqa: F401,E402
     from models import rag_models  # noqa: F401,E402
+    from models import agent_memory_models  # noqa: F401,E402
 
     Base.metadata.create_all(bind=bind)
 
@@ -37,6 +38,7 @@ def downgrade() -> None:
     from models import db_models  # noqa: F401,E402
     from models import translation_models  # noqa: F401,E402
     from models import rag_models  # noqa: F401,E402
+    from models import agent_memory_models  # noqa: F401,E402
 
     Base.metadata.drop_all(bind=bind)
     op.execute("DROP EXTENSION IF EXISTS vector")

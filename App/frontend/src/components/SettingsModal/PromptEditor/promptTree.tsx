@@ -199,7 +199,7 @@ export const PROMPT_TREE: PromptNode[] = [
         children: [
           {
             id: 'agent-memory-summary-system',
-            label: 'Memory Summary - System Prompt',
+            label: 'System Prompt',
             type: 'prompt',
             taskType: 'agent',
             category: 'systemPrompt',
@@ -208,7 +208,7 @@ export const PROMPT_TREE: PromptNode[] = [
           },
           {
             id: 'agent-memory-summary-user',
-            label: 'Memory Summary - User Prompt',
+            label: 'User Prompt',
             type: 'prompt',
             taskType: 'agent',
             category: 'userPrompt',

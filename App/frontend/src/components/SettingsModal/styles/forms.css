@@ -349,7 +349,6 @@ input[type="range"]:disabled,
 
 /* Task Config Form */
 .task-config-form {
-    max-width: 600px;
     margin: auto;
 }
 

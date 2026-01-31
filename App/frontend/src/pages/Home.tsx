@@ -105,14 +105,6 @@ const Home: React.FC = () => {
     }
   };
 
-  if (isLoading && projects.length === 0) {
-    return (
-      <div className="home-layout loading">
-        <Loading fullPage text={t('home.loadingLibrary')} />
-      </div>
-    );
-  }
-
   return (
     <div className="home-layout">
       <header className="home-header">
@@ -176,7 +168,11 @@ const Home: React.FC = () => {
         </div>
 
         <div className="projects-grid">
-          {projects.length === 0 ? (
+          {isLoading && projects.length === 0 ? (
+            <div className="projects-grid-loading">
+              <Loading text={t('home.loadingLibrary')} />
+            </div>
+          ) : projects.length === 0 ? (
             <div className="empty-state">
               <div className="empty-state-content">
                 <h3>{t('home.emptyLibrary')}</h3>
