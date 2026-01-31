@@ -86,16 +86,18 @@ async def get_project_translation_status(
 
     # Get all object types for this project
     from ..models.db_models import (
-        BasicInfo, Character, Organization, Location, LorebookEntry,
+        BasicInfo, Guidelines, Character, Organization, Location, LorebookEntry,
         Act, Chapter, Manuscript, Outline
     )
 
     object_types = {
         'basic_info': BasicInfo,
+        'guidelines': Guidelines,
         'character': Character,
         'organization': Organization,
         'location': Location,
         LOREBOOK_TYPE: LorebookEntry,
+        'outline': Outline,
         'act': Act,
         'chapter': Chapter,
         'manuscript': Manuscript,
@@ -108,13 +110,10 @@ async def get_project_translation_status(
         query = db.query(model_class)
 
         # Filter by project_id (different field names for different types)
-        if object_type == 'basic_info':
-            query = query.filter(model_class.project_id == project_id)
-        elif object_type in ['character', 'organization', 'location', LOREBOOK_TYPE]:
+        if object_type in ['basic_info', 'guidelines', 'character', 'organization', 'location', LOREBOOK_TYPE, 'outline']:
             query = query.filter(model_class.project_id == project_id)
         elif object_type == 'act':
             # Acts belong to outlines which belong to projects
-            from ..models.db_models import Outline
             query = query.join(Outline).filter(Outline.project_id == project_id)
         elif object_type == 'chapter':
             # Chapters belong to acts which belong to outlines which belong to projects

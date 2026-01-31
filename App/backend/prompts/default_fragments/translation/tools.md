@@ -9,6 +9,7 @@ These overwrite the target-language fields for the object.
 | Tool | Use Case | Notes |
 |------|----------|-------|
 | `replace_basic_info` | Project basic info (title, logline, genre) | No `id` needed; updates/creates the project's basic info |
+| `replace_guidelines` | Project guidelines (author note) | Requires `id` |
 | `replace_story_object` | Story objects (character/location/organization/lorebook) | Requires `id` and `type` |
 | `replace_outline` | Outline root | Requires `id` |
 | `replace_outline_act` | Outline act | Requires `id` |
@@ -22,6 +23,7 @@ Each patch call applies a single search-replace operation.
 | Tool | Use Case | Notes |
 |------|----------|-------|
 | `patch_basic_info` | Fix basic info via search-replace | Requires `field` (title/logline/genre), `old`, `new` |
+| `patch_guidelines` | Fix guidelines via search-replace | Requires `id`, `field` (authorNote), `old`, `new` |
 | `patch_story_object` | Fix story objects via search-replace | Requires `id`, `type`, `field`, `old`, `new` |
 | `patch_outline` | Fix outline root via search-replace | Requires `id`, `field`, `old`, `new` |
 | `patch_outline_act` | Fix act via search-replace | Requires `id`, `field`, `old`, `new` |

@@ -170,6 +170,22 @@ const REPLACE_BASIC_INFO: ToolSchema = {
   },
 };
 
+const REPLACE_GUIDELINES: ToolSchema = {
+  name: 'replace_guidelines',
+  description: 'Replace guidelines author note.',
+  category: 'replace',
+  target: 'guidelines',
+  idParam: 'id',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: idProperty,
+      authorNote: { type: 'string', description: 'New guidelines author note' },
+    },
+    required: ['id', 'authorNote'],
+  },
+};
+
 const REPLACE_STORY_OBJECT: ToolSchema = {
   name: 'replace_story_object',
   description: 'Replace story object fields. Only include fields you want to change.',
@@ -293,6 +309,34 @@ const PATCH_BASIC_INFO: ToolSchema = {
       },
     },
     required: ['field', 'old', 'new'],
+  },
+};
+
+const PATCH_GUIDELINES: ToolSchema = {
+  name: 'patch_guidelines',
+  description: 'Patch guidelines author note using search and replace. For multiple edits, call this function multiple times.',
+  category: 'patch',
+  target: 'guidelines',
+  idParam: 'id',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: idProperty,
+      field: {
+        type: 'string',
+        enum: ['authorNote'],
+        description: 'Field to patch',
+      },
+      old: {
+        type: 'string',
+        description: 'Text to find. Include surrounding context to ensure uniqueness.',
+      },
+      new: {
+        type: 'string',
+        description: 'Replacement text',
+      },
+    },
+    required: ['id', 'field', 'old', 'new'],
   },
 };
 
@@ -551,6 +595,7 @@ class SchemaRegistryClass {
 
     // Replace - Basic
     this.register(REPLACE_BASIC_INFO);
+    this.register(REPLACE_GUIDELINES);
     this.register(REPLACE_STORY_OBJECT);
     this.register(REPLACE_MANUSCRIPT);
 
@@ -561,6 +606,7 @@ class SchemaRegistryClass {
 
     // Patch - Basic
     this.register(PATCH_BASIC_INFO);
+    this.register(PATCH_GUIDELINES);
     this.register(PATCH_STORY_OBJECT);
     this.register(PATCH_MANUSCRIPT);
 
@@ -662,6 +708,7 @@ export const CRUD_TOOL_NAMES = new Set([
 /** All tool names that perform replace operations */
 export const REPLACE_TOOL_NAMES = new Set([
   'replace_basic_info',
+  'replace_guidelines',
   'replace_story_object',
   'replace_manuscript',
   'replace_outline',
@@ -672,6 +719,7 @@ export const REPLACE_TOOL_NAMES = new Set([
 /** All tool names that perform patch operations */
 export const PATCH_TOOL_NAMES = new Set([
   'patch_basic_info',
+  'patch_guidelines',
   'patch_story_object',
   'patch_manuscript',
   'patch_outline',
@@ -718,9 +766,11 @@ export const STORY_OBJECT_EDIT_TOOLS = [
   CREATE_OUTLINE_CHAPTER,
   DELETE_OUTLINE_CHAPTER,
   REPLACE_BASIC_INFO,
+  REPLACE_GUIDELINES,
   REPLACE_STORY_OBJECT,
   REPLACE_OUTLINE_CHAPTER,
   PATCH_BASIC_INFO,
+  PATCH_GUIDELINES,
   PATCH_STORY_OBJECT,
   PATCH_OUTLINE_CHAPTER,
 ].map(s => ({ name: s.name, description: s.description, parameters: s.parameters }));
@@ -765,6 +815,7 @@ export const AGENT_TOOLS = [
   DELETE_OUTLINE_CHAPTER,
   // Replace
   REPLACE_BASIC_INFO,
+  REPLACE_GUIDELINES,
   REPLACE_STORY_OBJECT,
   REPLACE_MANUSCRIPT,
   REPLACE_OUTLINE,
@@ -772,6 +823,7 @@ export const AGENT_TOOLS = [
   REPLACE_OUTLINE_CHAPTER,
   // Patch
   PATCH_BASIC_INFO,
+  PATCH_GUIDELINES,
   PATCH_STORY_OBJECT,
   PATCH_MANUSCRIPT,
   PATCH_OUTLINE,
@@ -800,17 +852,17 @@ const TOOL_SET_SCHEMAS: Record<ToolSetName, ToolSchema[]> = {
     CREATE_STORY_OBJECT, DELETE_STORY_OBJECT,
     CREATE_OUTLINE, DELETE_OUTLINE, CREATE_OUTLINE_ACT, DELETE_OUTLINE_ACT,
     CREATE_OUTLINE_CHAPTER, DELETE_OUTLINE_CHAPTER,
-    REPLACE_BASIC_INFO, REPLACE_STORY_OBJECT, REPLACE_MANUSCRIPT,
+    REPLACE_BASIC_INFO, REPLACE_GUIDELINES, REPLACE_STORY_OBJECT, REPLACE_MANUSCRIPT,
     REPLACE_OUTLINE, REPLACE_OUTLINE_ACT, REPLACE_OUTLINE_CHAPTER,
-    PATCH_BASIC_INFO, PATCH_STORY_OBJECT, PATCH_MANUSCRIPT,
+    PATCH_BASIC_INFO, PATCH_GUIDELINES, PATCH_STORY_OBJECT, PATCH_MANUSCRIPT,
     PATCH_OUTLINE, PATCH_OUTLINE_ACT, PATCH_OUTLINE_CHAPTER,
     READ_STORY_OBJECT, READ_OUTLINE, READ_MANUSCRIPT, RAG_SEARCH,
   ],
   manuscript: [REPLACE_MANUSCRIPT, PATCH_MANUSCRIPT],
   storyObject: [
     CREATE_STORY_OBJECT, DELETE_STORY_OBJECT,
-    REPLACE_BASIC_INFO, REPLACE_STORY_OBJECT,
-    PATCH_BASIC_INFO, PATCH_STORY_OBJECT,
+    REPLACE_BASIC_INFO, REPLACE_GUIDELINES, REPLACE_STORY_OBJECT,
+    PATCH_BASIC_INFO, PATCH_GUIDELINES, PATCH_STORY_OBJECT,
   ],
   outline: [
     CREATE_OUTLINE, DELETE_OUTLINE, CREATE_OUTLINE_ACT, DELETE_OUTLINE_ACT,
@@ -821,7 +873,8 @@ const TOOL_SET_SCHEMAS: Record<ToolSetName, ToolSchema[]> = {
   translateObjects: [
     REPLACE_BASIC_INFO, REPLACE_STORY_OBJECT, REPLACE_MANUSCRIPT,
     REPLACE_OUTLINE, REPLACE_OUTLINE_ACT, REPLACE_OUTLINE_CHAPTER,
-    PATCH_BASIC_INFO, PATCH_STORY_OBJECT, PATCH_MANUSCRIPT,
+    REPLACE_GUIDELINES,
+    PATCH_BASIC_INFO, PATCH_GUIDELINES, PATCH_STORY_OBJECT, PATCH_MANUSCRIPT,
     PATCH_OUTLINE, PATCH_OUTLINE_ACT, PATCH_OUTLINE_CHAPTER,
   ],
 };

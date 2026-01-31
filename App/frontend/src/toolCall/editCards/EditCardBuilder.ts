@@ -64,6 +64,12 @@ const TOOL_META: Record<string, ToolMeta> = {
       return fields.length > 0 ? fields.join(', ') : 'basic info';
     },
   },
+  replace_guidelines: {
+    editType: 'edit',
+    title: 'Update Guidelines',
+    description: 'Replace guidelines author note',
+    summary: (args) => (args.id as string) || 'guidelines',
+  },
   replace_story_object: {
     editType: 'edit',
     title: 'Update Object',
@@ -90,6 +96,12 @@ const TOOL_META: Record<string, ToolMeta> = {
       const replacements = args.replacements as unknown[];
       return `${replacements?.length ?? 0} replacements`;
     },
+  },
+  patch_guidelines: {
+    editType: 'edit',
+    title: 'Patch Guidelines',
+    description: 'Search-replace in guidelines',
+    summary: (args) => `${args.id}`,
   },
   patch_story_object: {
     editType: 'edit',

@@ -52,6 +52,10 @@ function getTypesForMode(mode: ObjectPickerMode, excludeTypes: ObjectType[]): Ob
       // All unique types (storyObjectTypes already has outline/act/chapter, just add manuscript)
       types = [...storyObjectTypes, 'manuscript'];
       break;
+    case 'translation':
+      // Full set of translatable objects (includes project meta)
+      types = ['basic_info', 'guidelines', ...storyObjectTypes, 'manuscript'];
+      break;
   }
 
   return types.filter(t => !excludeTypes.includes(t));
@@ -62,12 +66,31 @@ function getTypesForMode(mode: ObjectPickerMode, excludeTypes: ObjectType[]): Ob
  */
 function objectToItem(obj: UnifiedObject, language: string): ObjectPickerItem {
   const data = getObjectDataForLanguage(obj, language);
+  const fallbackName = OBJECT_TYPE_CONFIG[obj.type]?.label || obj.id;
+
+  let name = (data.name as string) || (data.title as string) || fallbackName;
+  let description = (data.description as string) || (data.logline as string) || undefined;
+  let content = (data.content as string) || undefined;
+
+  if (obj.type === 'basic_info') {
+    const title = (data as any).title ?? '';
+    const logline = (data as any).logline ?? '';
+    const genre = (data as any).genre ?? '';
+    name = title || fallbackName;
+    description = logline || undefined;
+    const summary = `Title: ${title}\nLogline: ${logline}\nGenre: ${genre}`.trim();
+    content = summary || undefined;
+  } else if (obj.type === 'guidelines') {
+    const authorNote = (data as any).authorNote as string | undefined;
+    name = fallbackName;
+    content = authorNote || undefined;
+  }
 
   return {
     id: obj.id,
-    name: (data.name as string) || (data.title as string) || obj.id,
-    description: (data.description as string) || (data.logline as string) || undefined,
-    content: (data.content as string) || undefined,
+    name,
+    description,
+    content,
     type: obj.type,
     parentId: (obj.metadata?.act_id as string) || (obj.metadata?.chapter_id as string) || undefined,
     order: obj.metadata?.order as number | undefined,
@@ -87,7 +110,23 @@ function buildGroups(
   const availableTypes: ObjectType[] = [];
 
   // Group story objects by type
-  if (mode === 'story-objects' || mode === 'all') {
+  if (mode === 'translation') {
+    const metaTypes: ObjectType[] = ['basic_info', 'guidelines'];
+    metaTypes.forEach(type => {
+      const typeObjects = objects.filter(obj => obj.type === type);
+      if (typeObjects.length > 0) {
+        availableTypes.push(type);
+        groups.push({
+          id: `group-${type}`,
+          label: OBJECT_TYPE_CONFIG[type]?.label || type,
+          type,
+          items: typeObjects.map(obj => objectToItem(obj, language)),
+        });
+      }
+    });
+  }
+
+  if (mode === 'story-objects' || mode === 'all' || mode === 'translation') {
     // Flat groups for basic story objects
     const flatStoryTypes: ObjectType[] = ['character', 'organization', 'location', 'lorebook'];
 
@@ -181,7 +220,7 @@ function buildGroups(
   }
 
   // Group manuscripts by outline hierarchy: Outline > Act > Chapter > Manuscript
-  if (mode === 'manuscript' || mode === 'all') {
+  if (mode === 'manuscript' || mode === 'all' || mode === 'translation') {
     const outlines = objects
       .filter(obj => obj.type === 'outline')
       .sort((a, b) => (a.metadata?.order || 0) - (b.metadata?.order || 0));

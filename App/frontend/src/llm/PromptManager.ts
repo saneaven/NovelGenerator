@@ -962,12 +962,14 @@ export class PromptManager {
     // Build guidelines
     const guidelines: TemplateData['project']['guidelines'] = guidelinesList.length > 0
       ? (() => {
-          const data = this.getObjectDataForLanguage(guidelinesList[0], language) as { authorNote?: string };
+          const obj = guidelinesList[0];
+          const data = this.getObjectDataForLanguage(obj, language) as { authorNote?: string };
           return {
+            id: obj.id,
             authorNote: data?.authorNote || '',
           };
         })()
-      : { authorNote: '' };
+      : { id: '', authorNote: '' };
 
     return {
       basicInfo,

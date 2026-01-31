@@ -98,6 +98,51 @@ export async function patchBasicInfo(
 }
 
 /**
+ * Patch guidelines author note using search and replace.
+ */
+export async function patchGuidelines(
+  args: Record<string, unknown>,
+  context: HandlerContext
+): Promise<ApplicationResult> {
+  const { id, field, old: oldText, new: newText } = args as {
+    id?: string;
+    field?: string;
+    old?: string;
+    new?: string;
+  };
+
+  if (!id || !field || !oldText || newText === undefined) {
+    return error('Missing required fields (id, field, old, new) for patch_guidelines', id, 'guidelines');
+  }
+
+  const validFields = ['authorNote'];
+  if (!validFields.includes(field)) {
+    return error(`Invalid field "${field}" for patch_guidelines. Valid fields: ${validFields.join(', ')}`, id, 'guidelines');
+  }
+
+  const { store, language } = context;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = context.options;
+
+  const object = await ensureObject(store, 'guidelines', id);
+  const currentData = getObjectData(object, language);
+  const currentValue = (currentData.authorNote as string) ?? '';
+
+  const result = applySingleReplacement(currentValue, oldText, newText);
+  if (!result.success) {
+    return error(`[${field}] ${result.error}`, id, 'guidelines');
+  }
+
+  await store.updateObject('guidelines', id, {
+    data: { ...currentData, authorNote: result.value },
+    language,
+    create_new_version: createNewVersion,
+    user_request: userRequest,
+  });
+
+  return ok('Updated guidelines', { id, field });
+}
+
+/**
  * Patch a story object field using search and replace.
  */
 export async function patchStoryObject(
@@ -319,6 +364,7 @@ export async function patchOutlineChapter(
 export const PATCH_HANDLERS = {
   // Basic handlers
   patch_basic_info: patchBasicInfo,
+  patch_guidelines: patchGuidelines,
   patch_story_object: patchStoryObject,
   // Outline handlers
   patch_outline: patchOutline,

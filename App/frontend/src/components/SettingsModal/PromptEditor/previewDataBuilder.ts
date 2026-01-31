@@ -105,6 +105,7 @@ export function buildMinimalProjectData(): TemplateData['project'] {
     }],
     languages: {},
     guidelines: {
+      id: '[ placeholder-guidelines-id ]',
       authorNote: '[ Placeholder for author note / guidelines ]',
     },
   };

@@ -9,6 +9,7 @@ import { useUnifiedObjectStore, type SimplifiedStoryObjects } from '../../store/
 import { useNovelEditorStore } from '../../store/novelEditorStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useErrorStore } from '../../store/errorStore';
+import { translationService } from '../../api/unifiedObjectService';
 
 import ErrorModal from '../../components/Modal/ErrorModal';
 import SettingsModal from '../../components/SettingsModal/SettingsModal';
@@ -41,14 +42,6 @@ const tabLabelKeys: Record<string, string> = {
   locations: 'storyObjectPanel.tabs.locations',
   lorebook: 'storyObjectPanel.tabs.lorebook',
   guidelines: 'storyObjectPanel.tabs.guidelines',
-};
-
-// Translation types per sub-page
-const TRANSLATION_TYPES: Record<SubPageType, string[]> = {
-  'story-object': ['character', 'organization', 'location', 'lorebook', 'act', 'chapter'],
-  'outline-manager': ['outline', 'act', 'chapter'],
-  'novel-editor': ['manuscript'],
-  'config': ['character', 'organization', 'location', 'lorebook', 'outline', 'act', 'chapter', 'manuscript'],
 };
 
 // Get agent mode from sub-page
@@ -88,7 +81,6 @@ const UnifiedWorkspace: React.FC = () => {
   const { fetchAgents } = useAgentStore();
   const unifiedObjects = useUnifiedObjectStore(state => state.objects);
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
-  const unifiedStore = useUnifiedObjectStore();
 
   // NovelEditor specific stores
   const selectedChapterByProject = useNovelEditorStore(state => state.selectedChapterByProject);
@@ -152,6 +144,9 @@ const UnifiedWorkspace: React.FC = () => {
   // Translation modal state
   const [showTranslateModal, setShowTranslateModal] = useState(false);
 
+  // Translation count (missing any sub-language)
+  const [objectsNeedingTranslation, setObjectsNeedingTranslation] = useState(0);
+
   // NovelEditor story objects state
   const [storyObjects, setStoryObjects] = useState<SimplifiedStoryObjects>({
     basicInfo: null,
@@ -174,32 +169,32 @@ const UnifiedWorkspace: React.FC = () => {
 
   const currentDisplayLanguage = displayLanguage || mainLanguage;
 
-  // Get translation types for current sub-page
-  const translationTypes = TRANSLATION_TYPES[currentSubPage];
+  // Calculate count of objects needing translation (not tied to current sub-page)
+  useEffect(() => {
+    if (!projectId || !subLanguages || subLanguages.length === 0) {
+      setObjectsNeedingTranslation(0);
+      return;
+    }
 
-  // Calculate count of objects needing translation
-  const objectsNeedingTranslation = useMemo(() => {
-    if (!subLanguages || subLanguages.length === 0 || !projectId) return 0;
+    let cancelled = false;
 
-    const allObjects = Object.values(unifiedStore.objects);
-    let count = 0;
+    void translationService.getProjectTranslationStatus(projectId, subLanguages)
+      .then((result) => {
+        if (cancelled) return;
+        const count = result.translation_status.filter(s => s.missing_languages.length > 0).length;
+        setObjectsNeedingTranslation(count);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch translation status:', err);
+        if (!cancelled) {
+          setObjectsNeedingTranslation(0);
+        }
+      });
 
-    allObjects.forEach((obj: any) => {
-      if (obj.metadata?.project_id !== projectId) return;
-      if (!translationTypes.includes(obj.type)) return;
-
-      const availableLangs = Object.keys(obj.data || {});
-      const needsAnyTranslation = subLanguages.some(
-        (subLang: string) => !availableLangs.includes(subLang)
-      );
-
-      if (needsAnyTranslation) {
-        count++;
-      }
-    });
-
-    return count;
-  }, [unifiedStore.objects, projectId, subLanguages, translationTypes]);
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, subLanguages]);
 
   // Selected chapter for novel-editor
   const selectedChapterId = selectedChapterByProject[projectId ?? '']
@@ -534,7 +529,6 @@ const UnifiedWorkspace: React.FC = () => {
         isOpen={showTranslateModal}
         onClose={() => setShowTranslateModal(false)}
         projectId={projectId || ''}
-        allowedObjectTypes={translationTypes}
       />
 
       <ErrorModal

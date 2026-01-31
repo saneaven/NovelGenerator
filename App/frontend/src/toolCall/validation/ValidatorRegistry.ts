@@ -42,6 +42,7 @@ export const TOOL_VALIDATORS: Record<string, Validator[]> = {
   // Replace Operations
   // -------------------------------------------------------------------------
   replace_basic_info: [],
+  replace_guidelines: [validateRequiredId, validateObjectExists],
   replace_story_object: [validateTypeMapping, validateRequiredId, validateObjectExists],
   replace_manuscript: [validateRequiredId, validateObjectExists],
   replace_outline: [validateRequiredId, validateObjectExists],
@@ -52,6 +53,12 @@ export const TOOL_VALIDATORS: Record<string, Validator[]> = {
   // Patch Operations
   // -------------------------------------------------------------------------
   patch_basic_info: [validatePatchRequiredFields, validateObjectExists, validatePatchApplicable],
+  patch_guidelines: [
+    validateRequiredId,
+    validatePatchRequiredFields,
+    validateObjectExists,
+    validatePatchApplicable,
+  ],
   patch_story_object: [
     validateTypeMapping,
     validateRequiredId,

@@ -15,10 +15,21 @@
   transition: opacity 0.15s ease;
 }
 
+.activity-panel-button-wrapper--desktop .activity-panel-container {
+  top: calc(100% + var(--spacing-sm));
+  left: 0;
+}
 
+.activity-panel-button-wrapper--mobile .activity-panel-container {
+  bottom: calc(100% + var(--spacing-sm));
+  right: 0;
+  flex-direction: column-reverse;
+}
 
 /* Mobile perspective for 3D stack */
-
+.activity-panel-button-wrapper--mobile .notification-items-viewport {
+  perspective-origin: center bottom;
+}
 .activity-panel-container--closing {
   pointer-events: none;
 }
@@ -118,6 +129,10 @@
 }
 
 /* Mobile: Keep notifications view at bottom during fade-out */
+.activity-panel-button-wrapper--mobile .activity-panel-view--notifications[data-active="false"] {
+  top: auto;
+  bottom: 0;
+}
 
 /* ===== Variables View ===== */
 .activity-panel-view--variables {
@@ -136,6 +151,10 @@
 }
 
 /* Mobile: Keep variables view at bottom during fade-out */
+.activity-panel-button-wrapper--mobile .activity-panel-view--variables[data-active="false"] {
+  top: auto;
+  bottom: 0;
+}
 
 /* ===== Variables Island ===== */
 .activity-panel-variables-island {

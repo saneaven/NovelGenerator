@@ -103,8 +103,9 @@ export const UNIFIED_SCHEMA = {
     guidelines: {
       desc: "Project guidelines for AI",
       example: {
+        id: "guidelines-1",
         authorNote: "Focus on character development. Use formal tone."
-      } as { authorNote: string }
+      } as { id: string; authorNote: string }
     },
   },
 

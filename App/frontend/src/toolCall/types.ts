@@ -15,7 +15,7 @@ import type { ObjectType, UnifiedObject } from '../types/unifiedObject';
 export type ToolCategory = 'crud' | 'replace' | 'patch' | 'translation' | 'read';
 
 /** Target types for tool operations */
-export type TargetType = 'basic_info' | 'story_object' | 'outline' | 'chapter' | 'manuscript';
+export type TargetType = 'basic_info' | 'guidelines' | 'story_object' | 'outline' | 'chapter' | 'manuscript';
 
 /** Story object subtypes (used in tool arguments) */
 export type StoryObjectSubtype =

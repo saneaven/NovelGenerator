@@ -9,7 +9,7 @@ import type { ObjectType } from '../../types/unifiedObject';
 // ============================================================================
 
 /** Display modes for the ObjectPicker */
-export type ObjectPickerMode = 'story-objects' | 'manuscript' | 'all';
+export type ObjectPickerMode = 'story-objects' | 'manuscript' | 'all' | 'translation';
 
 /** Selection modes */
 export type SelectionMode = 'single' | 'multi';

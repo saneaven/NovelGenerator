@@ -128,6 +128,17 @@ function buildCurrentTranslatedContents(params: {
       continue;
     }
 
+    if (obj.type === 'guidelines') {
+      const authorNote = (data as any).authorNote ?? '';
+      results.push({
+        id,
+        type: obj.type,
+        name: 'Guidelines',
+        translatedContent: authorNote,
+      });
+      continue;
+    }
+
     const name = (data as any).name ?? '';
     const description = (data as any).description ?? '';
     results.push({
@@ -305,7 +316,7 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
     const currentData = obj.data[targets.language] || {};
     await unifiedStore.updateObject(obj.type, targets.targetId, {
       language: targets.language,
-      data: { ...currentData, description: text },
+      data: { ...currentData, content: text ?? '' },
       user_request: input.userRequest ?? '',
     });
   },
@@ -397,7 +408,7 @@ const translateObjectsSpec: JourneySpec<TranslateObjectsInput> = {
     } else {
       await unifiedStore.updateObject(obj.type, targetId, {
         language: lang,
-        data: { ...currentData, description: text },
+        data: { ...currentData, content: text ?? '' },
         create_new_version: false,
       });
     }

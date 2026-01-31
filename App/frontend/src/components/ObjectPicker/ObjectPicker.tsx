@@ -5,7 +5,8 @@
  * Supports three modes:
  * - story-objects: Characters, Locations, Organizations, Lorebook
  * - manuscript: Acts and Chapters (manuscripts)
- * - all: Both story objects and manuscripts
+ * - all: All context objects (excludes project meta)
+ * - translation: Full object list for translation (includes basic_info, guidelines)
  */
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';

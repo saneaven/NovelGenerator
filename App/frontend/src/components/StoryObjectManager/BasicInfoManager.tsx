@@ -416,7 +416,6 @@ const BasicInfoManager: React.FC<BasicInfoManagerProps> = ({ globalDisplayLangua
           isOpen={showRetranslateModal}
           onClose={() => setShowRetranslateModal(false)}
           projectId={projectId}
-          allowedObjectTypes={['basic_info']}
           preSelectedObjectIds={[basicInfoId]}
           defaultSourceLanguage={settings.mainLanguage}
           defaultTargetLanguage={globalDisplayLanguage}

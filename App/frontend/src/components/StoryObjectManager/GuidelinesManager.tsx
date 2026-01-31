@@ -361,7 +361,6 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
           isOpen={showRetranslateModal}
           onClose={() => setShowRetranslateModal(false)}
           projectId={projectId}
-          allowedObjectTypes={['guidelines']}
           preSelectedObjectIds={[guidelinesId]}
           defaultSourceLanguage={settings.mainLanguage}
           defaultTargetLanguage={globalDisplayLanguage}

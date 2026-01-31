@@ -18,7 +18,6 @@ interface TranslationModalProps {
   isOpen: boolean;
   onClose: () => void;
   projectId: string;
-  allowedObjectTypes?: string[];  // If provided, only show these types and hide type selector
   defaultSourceLanguage?: string;
   defaultTargetLanguage?: string;
   defaultUserInput?: string;
@@ -36,7 +35,6 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   isOpen,
   onClose,
   projectId,
-  allowedObjectTypes,
   defaultSourceLanguage,
   defaultTargetLanguage,
   defaultUserInput,
@@ -60,7 +58,30 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   const hasInitializedSelectionRef = useRef(false);
   // Use selector to only subscribe to objects, preventing re-renders from unrelated store changes
   const objects = useUnifiedObjectStore(useShallow(state => state.objects));
+  const listObjects = useUnifiedObjectStore(state => state.listObjects);
   const settings = useSettingsStore((state) => state.settings);
+
+  // Ensure all object types are available in store for translation selection (tab-independent)
+  useEffect(() => {
+    if (!isOpen || !projectId) return;
+
+    const types: ObjectType[] = [
+      'basic_info',
+      'guidelines',
+      'character',
+      'organization',
+      'location',
+      'lorebook',
+      'outline',
+      'act',
+      'chapter',
+      'manuscript',
+    ];
+
+    void Promise.all(types.map(type => listObjects(type, projectId))).catch((err) => {
+      console.error('Failed to preload objects for translation:', err);
+    });
+  }, [isOpen, projectId, listObjects]);
 
   // Build available languages list
   const availableLanguages = useMemo(() => {
@@ -151,15 +172,11 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
 
       const objType = obj.type;
 
-      // basic_info is always included in prompts and is not selectable via ObjectPicker.
-      // Still allow re-translation when explicitly pre-selected.
-      if (!preSelectedSet && objType === 'basic_info') return;
-
-      // If allowedObjectTypes is specified, only include those types
-      if (allowedObjectTypes && !allowedObjectTypes.includes(objType)) return;
-
       const sourceData = obj.data[sourceLanguage] || obj.data[Object.keys(obj.data)[0]] || {};
       let label = sourceData.name || sourceData.title || obj.id;
+      if (objType === 'guidelines') {
+        label = OBJECT_TYPE_CONFIG[objType]?.label || label;
+      }
 
       // Calculate hierarchical order for proper sorting
       let order = obj.metadata.order ?? 0;
@@ -203,7 +220,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
       const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
       return orderA - orderB;
     });
-  }, [objects, projectId, targetLanguage, sourceLanguage, allowedObjectTypes, preSelectedObjectIds]);
+  }, [objects, projectId, targetLanguage, sourceLanguage, preSelectedObjectIds]);
 
   // Get IDs of objects that need translation
   const availableObjectIds = useMemo(() => {
@@ -243,7 +260,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   const canUseRawMode = useMemo(() => {
     if (objectsToTranslate.length !== 1) return false;
     const obj = objectsToTranslate[0];
-    return obj.objectType !== 'basic_info';
+    return obj.objectType !== 'basic_info' && obj.objectType !== 'guidelines';
   }, [objectsToTranslate]);
 
   // Reset rawMode when canUseRawMode becomes false
@@ -388,7 +405,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
             }}
           >
             <ObjectPicker
-              mode="all"
+              mode="translation"
               selectionMode="multi"
               selectedIds={Array.from(selectedIds)}
               onChange={handleSelectionChange}
@@ -445,7 +462,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
             }}
           >
             <ObjectPicker
-              mode="story-objects"
+              mode="translation"
               selectionMode="multi"
               selectedIds={Array.from(selectedContextIds)}
               onChange={(ids) => {

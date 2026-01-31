@@ -83,6 +83,38 @@ export async function replaceBasicInfo(
 }
 
 /**
+ * Replace guidelines author note.
+ */
+export async function replaceGuidelines(
+  args: Record<string, unknown>,
+  context: HandlerContext
+): Promise<ApplicationResult> {
+  const { id, authorNote } = args as {
+    id?: string;
+    authorNote?: string;
+  };
+
+  if (!id || authorNote === undefined) {
+    return error('Missing id or authorNote for replace_guidelines');
+  }
+
+  const { store, language } = context;
+  const { createNewVersion = true, userRequest = 'AI Edit' } = context.options;
+
+  const object = await ensureObject(store, 'guidelines', id);
+  const currentData = getObjectData(object, language);
+
+  await store.updateObject('guidelines', id, {
+    data: { ...currentData, authorNote },
+    language,
+    create_new_version: createNewVersion,
+    user_request: userRequest,
+  });
+
+  return ok('Updated guidelines', { id });
+}
+
+/**
  * Replace story object fields.
  */
 export async function replaceStoryObject(
@@ -276,6 +308,7 @@ export async function replaceOutlineChapter(
 export const REPLACE_HANDLERS = {
   // Basic handlers
   replace_basic_info: replaceBasicInfo,
+  replace_guidelines: replaceGuidelines,
   replace_story_object: replaceStoryObject,
   // Outline handlers
   replace_outline: replaceOutline,

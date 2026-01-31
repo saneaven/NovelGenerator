@@ -109,6 +109,7 @@ export interface TemplateData {
     manuscripts: Array<{ id: string; chapterId: string; chapterName: string; content: string; wordCount: number }>;
     languages: Record<string, any>;
     guidelines: {
+      id: string;
       authorNote: string;
     };
   };

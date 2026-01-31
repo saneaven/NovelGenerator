@@ -878,7 +878,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
           isOpen={showRetranslateModal}
           onClose={() => setShowRetranslateModal(false)}
           projectId={projectId}
-          allowedObjectTypes={['manuscript']}
           preSelectedObjectIds={[manuscriptId]}
           defaultSourceLanguage={
             isMissingTranslation && availableSourceLanguages.length > 0

@@ -173,7 +173,7 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
             icon={<Document size="sm" />}
           />
           <p className="field-hint">
-            Output text directly without tool calls. Replaces description (story objects) or content (manuscripts).
+            Output text directly without tool calls. Replaces content (story objects) or full chapter text (manuscripts).
           </p>
         </div>
 

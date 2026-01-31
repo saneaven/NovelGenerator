@@ -11,6 +11,22 @@
     - params.[1]: Array of IDs to filter (object IDs or manuscript IDs)
 --}}
 
+{{#with (lookup project.languages params.[0]) as |langProject|}}
+{{#if (and langProject.basicInfo (includes params.[1] langProject.basicInfo.id))}}
+<basic_info id="{{ langProject.basicInfo.id }}">
+<title>{{ langProject.basicInfo.title }}</title>
+<logline>{{ langProject.basicInfo.logline }}</logline>
+<genre>{{ langProject.basicInfo.genre }}</genre>
+</basic_info>
+{{/if}}
+{{/with}}
+
+{{#if (and project.guidelines.id (includes params.[1] project.guidelines.id))}}
+<guidelines id="{{ project.guidelines.id }}">
+<authorNote>{{ project.guidelines.authorNote }}</authorNote>
+</guidelines>
+{{/if}}
+
 {{#with (getObjectsOfLanguage project params.[0] params.[1]) as |filteredObjects|}}
 {{#if (hasItems (filterByType filteredObjects "character"))}}
 <characters>

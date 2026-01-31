@@ -68,6 +68,11 @@ export function resolveObjectType(
     return 'basic_info';
   }
 
+  // Guidelines
+  if (toolName.includes('guidelines')) {
+    return 'guidelines';
+  }
+
   // Manuscript
   if (toolName.includes('manuscript')) {
     return 'manuscript';
