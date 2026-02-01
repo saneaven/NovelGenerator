@@ -31,12 +31,14 @@ const TRANSLATION_FIELDS: PromptTypeField[] = [
 
 // Image Prompt prompts
 const IMAGE_PROMPT_FIELDS: PromptTypeField[] = [
-  { path: 'imagePrompt.objectType', label: 'Object Type', type: 'dropdown', options: ['character', 'location', 'organization', 'lorebook'] },
-  { path: 'imagePrompt.objectInfo', label: 'Object Info', type: 'textarea', placeholder: 'Character: Name - Description...' },
   { path: 'imagePrompt.promptMode', label: 'Prompt Mode', type: 'dropdown', options: ['natural', 'positive', 'negative'] },
-  { path: 'imagePrompt.currentPrompt', label: 'Current Prompt', type: 'textarea', placeholder: 'A tall warrior with long hair...' },
-  { path: 'imagePrompt.currentPromptPositive', label: 'Positive Tags', type: 'text', placeholder: 'warrior, long hair, armor' },
-  { path: 'imagePrompt.currentPromptNegative', label: 'Negative Tags', type: 'text', placeholder: 'blurry, low quality' },
+  { path: 'imagePrompt.currentObject.type', label: 'Current Object Type', type: 'dropdown', options: ['basic_info', 'character', 'location', 'organization', 'lorebook'] },
+  { path: 'imagePrompt.currentObject.name', label: 'Current Object Name', type: 'text', placeholder: 'Uhtred of Bebbanburg' },
+  { path: 'imagePrompt.currentObject.description', label: 'Current Object Description', type: 'textarea', placeholder: 'A Saxon lord raised by Danes...' },
+  { path: 'imagePrompt.currentObject.content', label: 'Current Object Content', type: 'textarea', placeholder: 'Tall, battle-scarred warrior...' },
+  { path: 'imagePrompt.currentObject.image_prompt', label: 'Saved Image Prompt (Natural)', type: 'textarea', placeholder: 'A rugged warrior with long dark hair...' },
+  { path: 'imagePrompt.currentObject.image_prompt_positive', label: 'Saved Positive Tags', type: 'text', placeholder: 'warrior, long hair, armor' },
+  { path: 'imagePrompt.currentObject.image_prompt_negative', label: 'Saved Negative Tags', type: 'text', placeholder: 'blurry, low quality' },
   { path: 'imagePrompt.scenePreContext', label: 'Scene Pre-Context', type: 'textarea', placeholder: 'The hero enters the cave...' },
   { path: 'imagePrompt.scenePostContext', label: 'Scene Post-Context', type: 'textarea', placeholder: 'He finds the treasure...' },
 ];

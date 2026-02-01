@@ -4,7 +4,7 @@ import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useErrorStore } from '../../store/errorStore';
 import type { ObjectType } from '../../types/unifiedObject';
-import { docToPlainText, normalizeDoc } from '../../editor/manuscript/doc';
+import { docToMarkdown } from '../../editor/manuscript/convert';
 import { Scroll, Loading, Mailbox, Check, Globe, Clock, SpeechBubble, DocumentAlt } from '../icons';
 import { TextButton } from '../TextButton';
 import './VersionHistoryModal.css';
@@ -199,7 +199,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     if (type === 'manuscript') {
       const rawDoc = (data as any).doc;
       const preview = typeof rawDoc === 'object' && rawDoc
-        ? docToPlainText(normalizeDoc(rawDoc))
+        ? docToMarkdown(rawDoc)
         : '';
 
       return (

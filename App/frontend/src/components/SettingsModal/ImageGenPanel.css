@@ -18,6 +18,23 @@
     gap: var(--spacing-sm);
 }
 
+.style-select-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+}
+
+.style-select-row .custom-select {
+    flex: 1;
+    min-width: 200px;
+}
+
+.style-select-row .text-button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
 .setting-label {
     display: flex;
     flex-direction: column;

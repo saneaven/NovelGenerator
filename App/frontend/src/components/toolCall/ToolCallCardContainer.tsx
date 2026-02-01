@@ -157,31 +157,69 @@ export const ToolCallCardContainer: React.FC<ToolCallCardContainerProps> = ({
     toggleSelection,
   } = useCardSelection(cards, selectionDisabled);
 
-  // Auto-expand the most recently updated streaming operation.
+  // In streaming mode, treat the "last" tool call as the one with the highest draft.index.
   const activeStreamingId = useMemo(() => {
     if (!isStreaming || streamingProgress.length === 0) return null;
+
     let best = streamingProgress[0];
+    let bestIndex = typeof best?.draft?.index === 'number' ? best.draft.index : Number.NEGATIVE_INFINITY;
     for (const p of streamingProgress) {
-      if ((p.updatedAt ?? 0) > (best.updatedAt ?? 0)) {
+      const pIndex = typeof p?.draft?.index === 'number' ? p.draft.index : Number.NEGATIVE_INFINITY;
+      if (pIndex > bestIndex) {
+        best = p;
+        bestIndex = pIndex;
+      } else if (
+        pIndex === bestIndex &&
+        (p.updatedAt ?? 0) > (best.updatedAt ?? 0)
+      ) {
         best = p;
       }
     }
     return best?.draft?.id ?? null;
   }, [isStreaming, streamingProgress]);
 
+  const prevActiveStreamingIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (isStreaming) {
-      setExpandedId(activeStreamingId);
+    if (!isStreaming) {
+      prevActiveStreamingIdRef.current = null;
       return;
     }
-    // Reset when leaving streaming or changing modes
+
+    const nextActiveId = activeStreamingId;
+    if (!nextActiveId) {
+      prevActiveStreamingIdRef.current = null;
+      return;
+    }
+
+    const prevActiveId = prevActiveStreamingIdRef.current;
+
+    setExpandedId((prevExpandedId) => {
+      // Initial streaming: default to expanding the active tool call.
+      if (prevExpandedId === null) {
+        return prevActiveId ? null : nextActiveId;
+      }
+
+      // If the user was viewing the previous "last" tool call, follow the new "last" tool call.
+      if (prevActiveId && prevExpandedId === prevActiveId && prevActiveId !== nextActiveId) {
+        return nextActiveId;
+      }
+
+      // Otherwise, respect user selection.
+      return prevExpandedId;
+    });
+
+    prevActiveStreamingIdRef.current = nextActiveId;
+  }, [isStreaming, activeStreamingId]);
+
+  // Reset when leaving streaming or changing modes
+  useEffect(() => {
+    if (isStreaming) return;
     setExpandedId(null);
-  }, [isStreaming, activeStreamingId, mode]);
+  }, [isStreaming, mode]);
 
   const handleToggleExpanded = useCallback((id: string) => {
-    if (isStreaming) return;
     setExpandedId(prev => (prev === id ? null : id));
-  }, [isStreaming]);
+  }, []);
 
   const handleConfirm = useCallback(async () => {
     if (!onConfirm || isConfirming || !isPending) return;
@@ -290,6 +328,7 @@ export const ToolCallCardContainer: React.FC<ToolCallCardContainerProps> = ({
               type={type}
               status={p.status as any}
               isExpanded={expandedId === p.draft.id}
+              onToggle={() => handleToggleExpanded(p.draft.id)}
               detailsData={p.preview}
               rawText={p.rawPreview}
               errorMessage={p.error}

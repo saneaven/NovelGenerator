@@ -5,7 +5,7 @@ export type StoryObjectTabType = 'basicInfo' | 'guidelines' | 'characters' | 'or
 
 export const OBJECT_TYPE_CONFIG: Record<ObjectType, { label: string; order: number }> = {
   basic_info: { label: 'Basic Info', order: 0 },
-  guidelines: { label: 'Guidelines', order: 9 },
+  guidelines: { label: 'Guidelines', order: 0.5 },
   character: { label: 'Characters', order: 1 },
   organization: { label: 'Organizations', order: 2 },
   location: { label: 'Locations', order: 3 },
@@ -15,4 +15,3 @@ export const OBJECT_TYPE_CONFIG: Record<ObjectType, { label: string; order: numb
   chapter: { label: 'Chapters', order: 7 },
   manuscript: { label: 'Manuscripts', order: 8 },
 };
-

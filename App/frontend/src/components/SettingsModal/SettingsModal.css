@@ -22,6 +22,18 @@
   box-shadow: var(--shadow-md);
 }
 
+.settings-toast--success {
+  background: var(--color-success-light);
+  color: var(--color-success-dark);
+  border: 1px solid var(--color-success);
+}
+
+.settings-toast--error {
+  background: var(--color-feedback-errorsoft);
+  color: var(--color-feedback-error-contrast);
+  border: 1px solid var(--color-feedback-error-base);
+}
+
 
 
 @keyframes toast-slide-down {

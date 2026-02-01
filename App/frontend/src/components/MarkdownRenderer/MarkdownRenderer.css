@@ -1,0 +1,24 @@
+.markdown-content {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.markdown-content pre {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.markdown-content .md-x-scroll {
+  max-width: 100%;
+}
+
+.markdown-content .md-x-scroll--table {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.markdown-content .md-x-scroll--table > table {
+  width: max-content;
+  min-width: 100%;
+}

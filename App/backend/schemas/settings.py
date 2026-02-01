@@ -53,7 +53,7 @@ class AdvancedTaskSettings(BaseModel):
     enablePrefill: bool = False
     thinkingMode: str = "off"  # 'off' | 'model' | 'custom'
     thinkingConfig: Optional[ThinkingConfig] = Field(default_factory=lambda: ThinkingConfig())
-    customApiFormat: str = "openai"  # 'openai' | 'claude' | 'gemini' | 'openrouter' - for custom provider
+    customApiFormat: str = "openai"  # 'openai' | 'claude' | 'gemini' - for custom provider
     tokenizerOverride: Optional[str] = None  # 'openai' | 'claude' | 'gemini' (used for token counting)
 
 

@@ -24,24 +24,24 @@ Generate **negative tags** (comma-separated keywords for NovelAI describing what
 {{ input.userMessage }}
 {{/if}}
 
-{{#if imagePrompt.currentPrompt}}
+{{#if imagePrompt.currentObject.image_prompt}}
 ## Current Image Prompt
 
 The following prompt already exists. Use it as reference or build upon it:
 
-{{ imagePrompt.currentPrompt }}
+{{ imagePrompt.currentObject.image_prompt }}
 {{/if}}
 
-{{#if imagePrompt.currentPromptPositive}}
+{{#if imagePrompt.currentObject.image_prompt_positive}}
 ## Current Positive Tags
 
-{{ imagePrompt.currentPromptPositive }}
+{{ imagePrompt.currentObject.image_prompt_positive }}
 {{/if}}
 
-{{#if imagePrompt.currentPromptNegative}}
+{{#if imagePrompt.currentObject.image_prompt_negative}}
 ## Current Negative Tags
 
-{{ imagePrompt.currentPromptNegative }}
+{{ imagePrompt.currentObject.image_prompt_negative }}
 {{/if}}
 
 {{#if (hasItems imagePrompt.selectedObjectIds)}}

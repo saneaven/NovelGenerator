@@ -83,6 +83,6 @@ class ChatCompletionRequest(BaseModel):
     provider_preference: Optional[ProviderPreference] = None
     thinking_mode: Optional[Literal["off", "custom", "model"]] = "off"
     thinking_config: Optional[ThinkingConfig] = None
-    custom_api_format: Optional[Literal["openai", "claude", "gemini", "openrouter"]] = None  # For custom provider
+    custom_api_format: Optional[Literal["openai", "claude", "gemini"]] = None  # For custom provider
     retry_config: Optional[RetryConfig] = None
     native_tool_call: bool = False

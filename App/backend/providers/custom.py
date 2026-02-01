@@ -113,7 +113,7 @@ class CustomProvider(BaseProvider):
 
     Based on the selected custom_api_format, this provider routes requests to
     the appropriate native SDK:
-    - 'openai' or 'openrouter' -> OpenAI SDK with custom base_url
+    - 'openai' -> OpenAI SDK with custom base_url
     - 'claude' -> Anthropic SDK with custom base_url
     - 'gemini' -> Google GenAI SDK with custom base_url
     """
@@ -150,7 +150,7 @@ class CustomProvider(BaseProvider):
         """Get or create a delegate provider for the specified format.
 
         Args:
-            api_format: The API format ('openai', 'claude', 'gemini', 'openrouter')
+            api_format: The API format ('openai', 'claude', 'gemini')
 
         Returns:
             A delegate provider instance configured with custom base_url
@@ -158,7 +158,7 @@ class CustomProvider(BaseProvider):
         if api_format not in self._delegates:
             config = self._get_delegate_config()
 
-            if api_format in ("openai", "openrouter"):
+            if api_format == "openai":
                 self._delegates[api_format] = _create_openai_delegate(config)
             elif api_format == "claude":
                 self._delegates[api_format] = _create_claude_delegate(config)
@@ -197,7 +197,7 @@ class CustomProvider(BaseProvider):
             provider_preference: Provider-specific preferences
             thinking_config: Thinking configuration
             thinking_mode: Thinking mode ('off', 'custom', 'model')
-            custom_api_format: API format ('openai', 'claude', 'gemini', 'openrouter')
+            custom_api_format: API format ('openai', 'claude', 'gemini')
             retry_config: Retry configuration
 
         Yields:

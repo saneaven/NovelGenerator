@@ -253,12 +253,27 @@ export const UNIFIED_SCHEMA = {
   },
 
   imagePrompt: {
-    objectType: { desc: "Object type", example: "character" as "character" | "location" | "organization" | "lorebook" },
-    objectInfo: { desc: "Object name and description", example: "Character: Uhtred - A Saxon lord raised by Danes..." },
     promptMode: { desc: "Prompt mode", example: "natural" as "natural" | "positive" | "negative" },
-    currentPrompt: { desc: "Current natural language prompt", example: "A tall warrior with long dark hair..." },
-    currentPromptPositive: { desc: "Current positive tags", example: "warrior, long hair, armor, sword" },
-    currentPromptNegative: { desc: "Current negative tags", example: "blurry, low quality, deformed" },
+    currentObject: {
+      desc: "Current object context for image prompt generation",
+      example: {
+        type: "character",
+        name: "Uhtred of Bebbanburg",
+        description: "A Saxon lord raised by Danes...",
+        content: "Tall, battle-scarred warrior. Wears worn leather and a wolfskin cloak...",
+        image_prompt: "A rugged warrior with long dark hair, battle-worn leather armor...",
+        image_prompt_positive: "warrior, long hair, leather armor, wolfskin cloak",
+        image_prompt_negative: "blurry, low quality, deformed",
+      } as {
+        type?: string;
+        name: string;
+        description: string;
+        content: string;
+        image_prompt: string | null;
+        image_prompt_positive: string | null;
+        image_prompt_negative: string | null;
+      }
+    },
     scenePreContext: { desc: "Scene pre-context (for scene mode)", example: "The hero enters the dark cave..." },
     scenePostContext: { desc: "Scene post-context (for scene mode)", example: "He finds the treasure chest." },
     selectedObjectIds: { desc: "IDs of selected reference objects", example: ["char-1", "loc-1"] as string[] },

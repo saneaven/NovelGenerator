@@ -444,12 +444,8 @@ export class PromptManager {
         // userMessage is injected per user block in prepareMessages()
       },
       imagePrompt: {
-        objectType: context.objectType,
-        objectInfo: context.objectInfo,
         promptMode: context.promptMode,
-        currentPrompt: context.currentPrompt ?? undefined,
-        currentPromptPositive: context.currentPromptPositive ?? undefined,
-        currentPromptNegative: context.currentPromptNegative ?? undefined,
+        currentObject: context.currentObject,
       },
       variables,
     };
@@ -536,9 +532,7 @@ export class PromptManager {
       imagePrompt: {
         promptMode: context.promptMode,
         selectedObjectIds: context.selectedObjects.map(o => o.id),
-        currentPrompt: context.currentPrompt ?? undefined,
-        currentPromptPositive: context.currentPromptPositive ?? undefined,
-        currentPromptNegative: context.currentPromptNegative ?? undefined,
+        currentObject: context.currentObject,
         coverImage: {
           title: context.basicInfo.title,
           logline: context.basicInfo.logline,

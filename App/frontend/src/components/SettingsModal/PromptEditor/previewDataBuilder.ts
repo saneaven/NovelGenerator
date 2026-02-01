@@ -228,12 +228,16 @@ export function buildModeSpecificData(
     case 'imagePrompt':
       modeData = {
         imagePrompt: {
-          objectType: 'character',
-          objectInfo: '[ Placeholder for object info (name + description) ]',
           promptMode: 'natural',
-          currentPrompt: '[ Placeholder for current natural language prompt ]',
-          currentPromptPositive: '[ Placeholder for positive tags ]',
-          currentPromptNegative: '[ Placeholder for negative tags ]',
+          currentObject: {
+            type: 'character',
+            name: '[ Placeholder for current object name ]',
+            description: '[ Placeholder for current object description ]',
+            content: '[ Placeholder for current object content ]',
+            image_prompt: '[ Placeholder for saved natural language prompt ]',
+            image_prompt_positive: '[ Placeholder for saved positive tags ]',
+            image_prompt_negative: '[ Placeholder for saved negative tags ]',
+          },
           scenePreContext: '[ Placeholder for scene pre-context ]',
           scenePostContext: '[ Placeholder for scene post-context ]',
           selectedObjectIds: filteredIds.selectedObjectIds,

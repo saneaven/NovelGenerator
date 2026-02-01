@@ -440,22 +440,23 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                             <span className="label-text">{t('settings.imageGen.naturalStyles.defaultStyle')}</span>
                             <span className="label-hint">{t('settings.imageGen.naturalStyles.defaultStyleHint')}</span>
                         </label>
-                        <CustomSelect
-                            value={config.selectedNaturalStyleId || ''}
-                            onChange={(value) => onChange({ ...config, selectedNaturalStyleId: value || null })}
-                            options={[
-                                { value: '', label: t('settings.imageGen.naturalStyles.none') },
-                                ...config.naturalStyles.map((s) => ({
-                                    value: s.id,
-                                    label: s.name,
-                                })),
-                            ]}
-                        />
+                        <div className="style-select-row">
+                            <CustomSelect
+                                value={config.selectedNaturalStyleId || ''}
+                                onChange={(value) => onChange({ ...config, selectedNaturalStyleId: value || null })}
+                                options={[
+                                    { value: '', label: t('settings.imageGen.naturalStyles.none') },
+                                    ...config.naturalStyles.map((s) => ({
+                                        value: s.id,
+                                        label: s.name,
+                                    })),
+                                ]}
+                            />
+                            <TextButton variant="secondary" size="sm" onClick={handleAddNaturalStyle}>
+                                {t('settings.imageGen.naturalStyles.addNew')}
+                            </TextButton>
+                        </div>
                     </div>
-
-                    <TextButton variant="secondary" size="sm" onClick={handleAddNaturalStyle}>
-                        {t('settings.imageGen.naturalStyles.addNew')}
-                    </TextButton>
 
                     {config.naturalStyles.length > 0 && (
                         <div className="custom-styles-list">
@@ -527,22 +528,23 @@ const ImageGenPanel: React.FC<ImageGenPanelProps> = ({ config, onChange }) => {
                             <span className="label-text">{t('settings.imageGen.naturalStyles.defaultStyle')}</span>
                             <span className="label-hint">{t('settings.imageGen.naturalStyles.defaultStyleHint')}</span>
                         </label>
-                        <CustomSelect
-                            value={config.selectedTagBasedStyleId || ''}
-                            onChange={(value) => onChange({ ...config, selectedTagBasedStyleId: value || null })}
-                            options={[
-                                { value: '', label: t('settings.imageGen.naturalStyles.none') },
-                                ...config.tagBasedStyles.map((s) => ({
-                                    value: s.id,
-                                    label: s.name,
-                                })),
-                            ]}
-                        />
+                        <div className="style-select-row">
+                            <CustomSelect
+                                value={config.selectedTagBasedStyleId || ''}
+                                onChange={(value) => onChange({ ...config, selectedTagBasedStyleId: value || null })}
+                                options={[
+                                    { value: '', label: t('settings.imageGen.naturalStyles.none') },
+                                    ...config.tagBasedStyles.map((s) => ({
+                                        value: s.id,
+                                        label: s.name,
+                                    })),
+                                ]}
+                            />
+                            <TextButton variant="secondary" size="sm" onClick={handleAddTagBasedStyle}>
+                                {t('settings.imageGen.naturalStyles.addNew')}
+                            </TextButton>
+                        </div>
                     </div>
-
-                    <TextButton variant="secondary" size="sm" onClick={handleAddTagBasedStyle}>
-                        {t('settings.imageGen.naturalStyles.addNew')}
-                    </TextButton>
 
                     {config.tagBasedStyles.length > 0 && (
                         <div className="custom-styles-list">

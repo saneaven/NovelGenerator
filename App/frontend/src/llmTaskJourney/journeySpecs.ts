@@ -11,8 +11,8 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import type { ObjectType } from '../types/unifiedObject';
 import type { JourneySpec, EditingTargets } from './types';
-import { docToPlainText, docWordCount, normalizeDoc } from '../editor/manuscript/doc';
-import { markdownToDoc } from '../editor/manuscript/convert';
+import { docWordCount, normalizeDoc } from '../editor/manuscript/doc';
+import { docToMarkdown, markdownToDoc } from '../editor/manuscript/convert';
 
 // =====================================================================
 // Input Types
@@ -86,6 +86,15 @@ function getObjectLabel(obj: any, language: string): { name: string; description
   return {
     name: (data as any).name || (data as any).title || '',
     description: (data as any).description || (data as any).logline || '',
+  };
+}
+
+function getObjectTextFields(obj: any, language: string): { name: string; description: string; content: string } {
+  const data = obj?.data?.[language] || (obj?.data ? Object.values(obj.data)[0] : {}) || {};
+  return {
+    name: (data as any).name || (data as any).title || '',
+    description: (data as any).description || (data as any).logline || '',
+    content: (data as any).content || '',
   };
 }
 
@@ -235,7 +244,7 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
 
       const manuscriptData = manuscriptObj.data[mainLanguage] || Object.values(manuscriptObj.data)[0] || {};
       const currentDoc = normalizeDoc((manuscriptData as any)?.doc);
-      const currentContent = docToPlainText(currentDoc);
+      const currentContent = docToMarkdown(currentDoc);
 
       const promptContext: EditAssistantManuscriptPromptContext = {
         projectId: input.projectId,
@@ -453,15 +462,27 @@ const imagePromptSpec: JourneySpec<ImagePromptInput, ImagePromptResult> = {
       }
 
       const data = basicInfoObj.data[mainLanguage] || Object.values(basicInfoObj.data)[0] || {};
+      const title = (data as any).title || '';
+      const logline = (data as any).logline || '';
+      const genre = (data as any).genre || '';
       const promptContext: CoverImagePromptContext = {
         projectId: input.projectId,
         promptMode: input.promptMode,
         basicInfo: {
-          title: (data as any).title || '',
-          logline: (data as any).logline || '',
-          genre: (data as any).genre || '',
+          title,
+          logline,
+          genre,
         },
         selectedObjects: [],
+        currentObject: {
+          type: 'basic_info',
+          name: title,
+          description: logline,
+          content: '',
+          image_prompt: basicInfoObj.metadata?.image_prompt ?? null,
+          image_prompt_positive: basicInfoObj.metadata?.image_prompt_positive ?? null,
+          image_prompt_negative: basicInfoObj.metadata?.image_prompt_negative ?? null,
+        },
         outputMode,
         outputLanguage: mainLanguage,
         enablePrefill: imagePromptConfig.advanced.enablePrefill,
@@ -523,21 +544,20 @@ const imagePromptSpec: JourneySpec<ImagePromptInput, ImagePromptResult> = {
       throw new Error('Object not found.');
     }
 
-    const data = getObjectLabel(obj, mainLanguage);
-    const savedPrompts = {
-      natural: obj.metadata?.image_prompt || null,
-      positive: obj.metadata?.image_prompt_positive || null,
-      negative: obj.metadata?.image_prompt_negative || null,
-    };
+    const data = getObjectTextFields(obj, mainLanguage);
 
     const promptContext: ObjectImagePromptContext = {
       projectId: input.projectId,
       promptMode: input.promptMode,
-      objectType: input.objectType,
-      objectInfo: `${data.name}\n\n${data.description}`.trim(),
-      currentPrompt: savedPrompts.natural,
-      currentPromptPositive: savedPrompts.positive,
-      currentPromptNegative: savedPrompts.negative,
+      currentObject: {
+        type: input.objectType,
+        name: data.name,
+        description: data.description,
+        content: data.content,
+        image_prompt: obj.metadata?.image_prompt ?? null,
+        image_prompt_positive: obj.metadata?.image_prompt_positive ?? null,
+        image_prompt_negative: obj.metadata?.image_prompt_negative ?? null,
+      },
       outputMode,
       outputLanguage: mainLanguage,
       enablePrefill: imagePromptConfig.advanced.enablePrefill,

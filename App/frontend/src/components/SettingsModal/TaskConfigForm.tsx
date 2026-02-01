@@ -171,7 +171,6 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                 { value: 'openai', label: 'OpenAI' },
                 { value: 'claude', label: 'Claude' },
                 { value: 'gemini', label: 'Gemini' },
-                { value: 'openrouter', label: 'OpenRouter' },
               ]}
             />
             <p className="field-hint">
@@ -533,42 +532,6 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
                       </div>
                     )}
 
-                    {/* OpenRouter format options */}
-                    {config.advanced.customApiFormat === 'openrouter' && (
-                      <>
-                        <div className="form-field">
-                          <label>{t('settings.taskConfig.thinkingConfig.effortLevel')}</label>
-                          <CustomSelect
-                            value={config.advanced.thinkingConfig?.effort || 'medium'}
-                            onChange={(value) => handleThinkingConfigChange('effort', value)}
-                            options={[
-                              { value: 'low', label: t('settings.taskConfig.thinkingConfig.effortOptions.low') },
-                              { value: 'medium', label: t('settings.taskConfig.thinkingConfig.effortOptions.medium') },
-                              { value: 'high', label: t('settings.taskConfig.thinkingConfig.effortOptions.high') },
-                            ]}
-                          />
-                          <p className="field-hint">{t('settings.taskConfig.thinkingConfig.effortHintGeneric')}</p>
-                        </div>
-                        <div className="form-field">
-                          <label>{t('settings.taskConfig.thinkingConfig.maxThinkingTokens')}</label>
-                          <input
-                            type="number"
-                            min="1024"
-                            max="32000"
-                            value={config.advanced.thinkingConfig?.maxTokens || ''}
-                            onChange={(e) =>
-                              handleThinkingConfigChange(
-                                'maxTokens',
-                                e.target.value ? parseInt(e.target.value) : undefined
-                              )
-                            }
-                            placeholder={t('settings.taskConfig.thinkingConfig.maxThinkingTokensPlaceholder')}
-                            className="config-input"
-                          />
-                          <p className="field-hint">{t('settings.taskConfig.thinkingConfig.maxThinkingTokensHint')}</p>
-                        </div>
-                      </>
-                    )}
                   </>
                 )}
 

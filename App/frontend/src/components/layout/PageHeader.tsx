@@ -137,10 +137,10 @@ const PageHeader: React.FC<PageHeaderProps> = ({
 
           {showHamburger && (
             <IconButton
-              icon={<HamburgerMenu size="md" />}
+              icon={<HamburgerMenu size="lg" />}
               onClick={onHamburgerClick}
               title="Menu"
-              size="sm"
+              size="md"
             />
           )}
         </div>

@@ -165,12 +165,16 @@ export interface TemplateData {
     messages?: Array<{ id: string; content: string }>;
   };
   imagePrompt?: {
-    objectType?: string;
-    objectInfo?: string;
     promptMode: 'natural' | 'positive' | 'negative';
-    currentPrompt?: string;
-    currentPromptPositive?: string;
-    currentPromptNegative?: string;
+    currentObject?: {
+      type?: string;
+      name: string;
+      description: string;
+      content: string;
+      image_prompt: string | null;
+      image_prompt_positive: string | null;
+      image_prompt_negative: string | null;
+    };
     scenePreContext?: string;
     scenePostContext?: string;
     selectedObjectIds?: string[];
@@ -309,11 +313,15 @@ export interface AgentTranslationPromptContext extends BasePromptContext {
  */
 export interface ObjectImagePromptContext extends BasePromptContext {
   promptMode: 'natural' | 'positive' | 'negative';
-  objectType: 'character' | 'location' | 'organization' | 'lorebook';
-  objectInfo: string;
-  currentPrompt?: string | null;
-  currentPromptPositive?: string | null;
-  currentPromptNegative?: string | null;
+  currentObject: {
+    type: 'character' | 'location' | 'organization' | 'lorebook';
+    name: string;
+    description: string;
+    content: string;
+    image_prompt: string | null;
+    image_prompt_positive: string | null;
+    image_prompt_negative: string | null;
+  };
 }
 
 /**
@@ -349,9 +357,15 @@ export interface CoverImagePromptContext extends BasePromptContext {
     genre: string;
   };
   selectedObjects: SelectedObjectContext[];
-  currentPrompt?: string | null;
-  currentPromptPositive?: string | null;
-  currentPromptNegative?: string | null;
+  currentObject: {
+    type: 'basic_info';
+    name: string;
+    description: string;
+    content: string;
+    image_prompt: string | null;
+    image_prompt_positive: string | null;
+    image_prompt_negative: string | null;
+  };
 }
 
 /**

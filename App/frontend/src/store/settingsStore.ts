@@ -60,7 +60,7 @@ export interface ProviderPreference {
 }
 
 // Custom API format for custom endpoints (controls both thinking and tool calling)
-export type CustomApiFormat = 'openai' | 'claude' | 'gemini' | 'openrouter';
+export type CustomApiFormat = 'openai' | 'claude' | 'gemini';
 
 // Thinking configuration for model-native thinking
 export interface ThinkingConfig {
@@ -474,7 +474,13 @@ const migrateAdvancedSettings = (advanced: any): AdvancedTaskSettings => ({
     enablePrefill: advanced.enablePrefill ?? false,
     thinkingMode: advanced.thinkingMode ?? 'off',
     thinkingConfig: advanced.thinkingConfig ?? { effort: 'medium' },
-    customApiFormat: advanced.customApiFormat ?? 'openai',
+    // NOTE: Legacy values may include unsupported formats (e.g. "openrouter"); normalize here.
+    customApiFormat:
+        advanced.customApiFormat === 'claude' ||
+        advanced.customApiFormat === 'gemini' ||
+        advanced.customApiFormat === 'openai'
+            ? advanced.customApiFormat
+            : 'openai',
 });
 
 // Helper to merge stored settings with defaults

@@ -17,6 +17,10 @@
    The direct children of the grid need to handle the sizing and spanning.
    ======================================== */
 
+.story-object-cards-grid > div {
+  min-width: 0;
+}
+
 /* Span: Horizontal - only span 2 columns when there's room */
 .story-object-cards-grid > div[data-span="horizontal"] {
   grid-column: span min(2, var(--grid-columns, 2));
@@ -172,6 +176,7 @@
 
 .story-object-card[data-has-image="false"] .story-object-card__content {
   height: 100%;
+  width: 100%;
   display: flex;
   flex-direction: column;
   justify-content: center;

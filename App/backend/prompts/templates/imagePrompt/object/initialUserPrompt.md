@@ -10,13 +10,23 @@ Generate **positive tags** (comma-separated keywords for NovelAI describing what
 Generate **negative tags** (comma-separated keywords for NovelAI describing what to AVOID)
 {{/if}}
 
-## Object Type
+## Current Object
 
-{{ imagePrompt.objectType }}
+{{#if imagePrompt.currentObject.type}}
+**Type:** {{ imagePrompt.currentObject.type }}
+{{/if}}
 
-## Object Information
+**Name:** {{ imagePrompt.currentObject.name }}
 
-{{ imagePrompt.objectInfo }}
+{{#if imagePrompt.currentObject.description}}
+**Description:** {{ imagePrompt.currentObject.description }}
+{{/if}}
+
+{{#if imagePrompt.currentObject.content}}
+## Content
+
+{{ imagePrompt.currentObject.content }}
+{{/if}}
 
 {{#if input.userMessage}}
 ## User Request
@@ -24,17 +34,17 @@ Generate **negative tags** (comma-separated keywords for NovelAI describing what
 {{ input.userMessage }}
 {{/if}}
 
-{{#if (or imagePrompt.currentPrompt imagePrompt.currentPromptPositive imagePrompt.currentPromptNegative)}}
+{{#if (or imagePrompt.currentObject.image_prompt imagePrompt.currentObject.image_prompt_positive imagePrompt.currentObject.image_prompt_negative)}}
 ## Current Saved Prompts (for reference)
 
-{{#if imagePrompt.currentPrompt}}
-**Natural Language:** {{ imagePrompt.currentPrompt }}
+{{#if imagePrompt.currentObject.image_prompt}}
+**Natural Language:** {{ imagePrompt.currentObject.image_prompt }}
 {{/if}}
-{{#if imagePrompt.currentPromptPositive}}
-**Positive Tags:** {{ imagePrompt.currentPromptPositive }}
+{{#if imagePrompt.currentObject.image_prompt_positive}}
+**Positive Tags:** {{ imagePrompt.currentObject.image_prompt_positive }}
 {{/if}}
-{{#if imagePrompt.currentPromptNegative}}
-**Negative Tags:** {{ imagePrompt.currentPromptNegative }}
+{{#if imagePrompt.currentObject.image_prompt_negative}}
+**Negative Tags:** {{ imagePrompt.currentObject.image_prompt_negative }}
 {{/if}}
 
 You may use these as a starting point or create something entirely new based on the user's request.
