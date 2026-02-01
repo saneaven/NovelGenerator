@@ -136,13 +136,6 @@
   justify-content: flex-end;
 }
 
-/* Desktop Only */
-@media (max-width: 768px) {
-  .outline-panel-header .desktop-only {
-    display: none;
-  }
-}
-
 .outline-panel-content {
   flex: 1 1 auto;
   overflow-y: auto;
@@ -954,6 +947,9 @@
    ============================================================================ */
 
 @media (max-width: 768px) {
+    .outline-panel-header {
+        padding: var(--spacing-lg);
+    }
   .outline-manager .timeline-container {
     padding: var(--spacing-md);
   }
@@ -961,7 +957,6 @@
   .outline-manager .timeline-track::before {
     left: var(--spacing-lg);
   }
-
 
   .outline-manager .node-marker {
     width: var(--spacing-2xl);
@@ -980,7 +975,7 @@
   }
 
   /* Prevent last content from being hidden behind fixed MobileFooter */
-  .outline-panel-content::after {
+  .outline-manager::after {
     content: '';
     display: block;
     height: var(--size-mobile-footer-height);

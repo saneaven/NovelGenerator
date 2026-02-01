@@ -355,6 +355,26 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                         <Globe size="xs" />
                         {Object.keys(version.data || {}).join(', ') || 'No data'}
                       </span>
+
+                      <div className="version-actions">
+                        <TextButton
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleExpandVersion(version.id)}
+                        >
+                        {expandedVersions.has(version.id) ? 'Collapse' : 'Details'}
+                        </TextButton>
+
+                        {!isCurrentVersion && (
+                        <TextButton
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handleRestoreStoryVersion(version.id)}
+                        >
+                            Restore
+                        </TextButton>
+                        )}
+                      </div>
                     </div>
                     
                     <div className="version-meta-row">
@@ -369,26 +389,6 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                         </span>
                       )}
                     </div>
-                  </div>
-
-                  <div className="version-actions">
-                    <TextButton
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleExpandVersion(version.id)}
-                    >
-                      {expandedVersions.has(version.id) ? 'Collapse' : 'Details'}
-                    </TextButton>
-
-                    {!isCurrentVersion && (
-                      <TextButton
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => handleRestoreStoryVersion(version.id)}
-                      >
-                        Restore
-                      </TextButton>
-                    )}
                   </div>
                 </div>
 

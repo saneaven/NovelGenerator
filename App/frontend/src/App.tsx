@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from './store/settingsStore';
 import { useTheme } from './hooks/useTheme';
 import { NotificationModals } from './components/Notification';
+import { NotificationToastManager } from './components/ActivityPanel/NotificationToastManager';
 import { registerLLMModals } from './llmTask/notificationHelpers';
 import { registerJourneyModals } from './llmTaskJourney/notificationHelpers';
 import { registerImageTaskModals } from './imageTask';
@@ -53,6 +54,7 @@ function App() {
         <Outlet />
       </main>
       <NotificationModals />
+      <NotificationToastManager />
     </div>
   );
 }

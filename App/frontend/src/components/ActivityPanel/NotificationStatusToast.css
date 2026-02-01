@@ -1,0 +1,81 @@
+.notification-status-toast {
+  position: absolute;
+  z-index: var(--z-dropdown);
+  pointer-events: auto;
+  width: 320px;
+  animation: notification-stack-in 0.2s ease-out forwards;
+}
+
+.activity-panel-button-wrapper--desktop .notification-status-toast {
+  top: calc(100% + var(--spacing-sm));
+  left: 0;
+}
+
+.activity-panel-button-wrapper--mobile .notification-status-toast {
+  bottom: calc(100% + var(--spacing-sm));
+  right: 0;
+  width: calc(100vw - 2rem);
+}
+
+.notification-status-toast__button {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-default);
+  box-shadow: var(--shadow-lg);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-align: left;
+}
+
+.notification-status-toast__button:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-medium);
+}
+
+.notification-status-toast__button:active {
+  transform: scale(0.995);
+}
+
+.notification-status-toast__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--border-radius-full);
+  background: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.notification-status-toast__dot--running {
+  background: var(--color-brand-primary);
+}
+
+.notification-status-toast__dot--pending {
+  background: var(--color-warning);
+}
+
+.notification-status-toast__dot--success {
+  background: var(--color-success);
+}
+
+.notification-status-toast__dot--error {
+  background: var(--color-error);
+}
+
+.notification-status-toast__dot--cancelled,
+.notification-status-toast__dot--idle {
+  background: var(--color-text-muted);
+}
+
+.notification-status-toast__text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+

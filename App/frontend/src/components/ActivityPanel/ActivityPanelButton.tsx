@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNotificationStore } from '../../store/notificationStore';
+import { useNotificationToastStore } from '../../store/notificationToastStore';
 import { Bell } from '../icons';
 import { IconButton } from '../IconButton';
 import ActivityPanelContainer, { type ActivityView } from './ActivityPanelContainer';
+import NotificationStatusToast from './NotificationStatusToast';
 import './ActivityPanel.css';
 import '../Notification/Notification.css';
 
@@ -41,32 +43,36 @@ const ActivityPanelButton: React.FC<ActivityPanelButtonProps> = ({
     [notificationsMap]
   );
 
-  const handleToggle = useCallback(() => {
-    if (!isOpen) {
-      // Opening the panel - mark all as read
-      markAllAsRead();
-      setIsOpen(true);
-      setActiveView('notifications'); // Reset to notifications on open
-    } else {
-      // Closing with animation
-      setIsClosing(true);
-      setTimeout(() => {
-        setIsOpen(false);
-        setIsClosing(false);
-      }, 150);
-    }
-  }, [isOpen, markAllAsRead]);
-
   const handleClose = useCallback(() => {
     setIsClosing(true);
     setTimeout(() => {
       setIsOpen(false);
       setIsClosing(false);
+      useNotificationToastStore.getState().setActivityPanelOpen(false);
     }, 150);
   }, []);
 
+  const handleToggle = useCallback(() => {
+    if (!isOpen) {
+      // Opening the panel - mark all as read
+      markAllAsRead();
+      useNotificationToastStore.getState().setActivityPanelOpen(true);
+      setIsOpen(true);
+      setActiveView('notifications'); // Reset to notifications on open
+    } else {
+      handleClose();
+    }
+  }, [isOpen, markAllAsRead, handleClose]);
+
   const handleViewChange = useCallback((view: ActivityView) => {
     setActiveView(view);
+  }, []);
+
+  // Safety: ensure toast suppression doesn't stick if this component unmounts while open.
+  useEffect(() => {
+    return () => {
+      useNotificationToastStore.getState().setActivityPanelOpen(false);
+    };
   }, []);
 
   // Close on click outside
@@ -122,6 +128,8 @@ const ActivityPanelButton: React.FC<ActivityPanelButtonProps> = ({
         showDot={hasUnread && !hasRunning}
         size={buttonSize}
       />
+
+      <NotificationStatusToast />
 
       {isOpen && (
         <div
