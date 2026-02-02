@@ -247,6 +247,12 @@ const TOOL_META: Record<string, ToolMeta> = {
       return 'queries';
     },
   },
+  call_sub_agent: {
+    editType: 'init',
+    title: 'Call Sub Agent',
+    description: 'Run a configured Sub Agent and return its full output',
+    summary: (args) => `id: ${args.subAgentId}`,
+  },
 };
 
 // ============================================================================

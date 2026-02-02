@@ -17,7 +17,8 @@ import { CRUD_HANDLERS } from '../../toolCall/apply/handlers/CrudHandlers';
 import { PATCH_HANDLERS } from '../../toolCall/apply/handlers/PatchHandlers';
 import { REPLACE_HANDLERS } from '../../toolCall/apply/handlers/ReplaceHandlers';
 import { READ_HANDLERS } from '../../toolCall/apply/handlers/ReadHandlers';
-import { ToolCallBatchStore } from './ToolCallBatchStore';
+import { SUB_AGENT_HANDLERS } from '../../toolCall/apply/handlers/SubAgentHandlers';
+import { ToolCallBatchSharedState, ToolCallBatchStore } from './ToolCallBatchStore';
 import { ManuscriptBatch } from './manuscriptBatch';
 
 function stripCallbacks(card: EditCard): StoredEditCard {
@@ -85,17 +86,18 @@ const HANDLERS: Record<string, Handler> = {
   ...PATCH_HANDLERS,
   ...REPLACE_HANDLERS,
   ...READ_HANDLERS,
+  ...SUB_AGENT_HANDLERS,
 };
 
 async function applyToolCall(params: {
   toolCall: RawToolCall;
-  context: Omit<HandlerContext, 'store'>;
+  context: Omit<HandlerContext, 'store' | 'callId'>;
   store: ToolCallBatchStore;
   manuscriptBatch: ManuscriptBatch;
 }): Promise<ApplicationResult> {
   const { toolCall, context, store, manuscriptBatch } = params;
   const normalized = normalizeToolCall(toolCall);
-  const handlerContext: HandlerContext = { ...context, store, options: context.options };
+  const handlerContext: HandlerContext = { ...context, callId: normalized.id, store, options: context.options };
 
   try {
     if (normalized.toolName === 'patch_manuscript') {
@@ -191,8 +193,9 @@ export async function applySessionEdits(params: {
   language: string;
   selections: Record<string, boolean>;
   options: HandlerOptions;
+  executionMode?: 'storyObject' | 'novelEditor' | 'outlineManager' | 'subAgent';
 }): Promise<void> {
-  const { sessionId, projectId, language, selections, options } = params;
+  const { sessionId, projectId, language, selections, options, executionMode } = params;
   const store = useLLMSessionStore.getState();
   const session = store.getSessionById(sessionId);
   if (!session?.editCards || session.editCards.length === 0) return;
@@ -200,11 +203,29 @@ export async function applySessionEdits(params: {
   store.updateSession(sessionId, { status: 'applying' });
 
   const baseStore = createBaseStore();
-  const batchStore = new ToolCallBatchStore({ baseStore });
+  const shared = new ToolCallBatchSharedState();
+  const flushStore = new ToolCallBatchStore({ baseStore, shared });
   const manuscriptBatch = new ManuscriptBatch();
 
-  const nextCards: StoredEditCard[] = [];
-  for (const card of session.editCards) {
+  // Mark selected tool calls as running so the UI shows progress for long-running calls (e.g. call_sub_agent).
+  store.updateSession(sessionId, {
+    editCards: session.editCards.map((card) => {
+      const isSelected = selections[card.id] ?? true;
+      const isValidationFailed =
+        card.toolCall.status === 'failed' && card.toolCall.failureType === 'validation';
+      if (!isSelected || isValidationFailed) return card;
+      if (card.toolCall.status !== 'pending' && card.toolCall.status !== 'validating') return card;
+      return {
+        ...card,
+        toolCall: {
+          ...card.toolCall,
+          status: 'running',
+        },
+      };
+    }),
+  });
+
+  const nextCards = await Promise.all(session.editCards.map(async (card): Promise<StoredEditCard> => {
     const normalized: NormalizedToolCall = {
       id: card.toolCall.id,
       toolName: card.toolCall.toolName,
@@ -213,13 +234,12 @@ export async function applySessionEdits(params: {
 
     // Skip validation failures
     if (card.toolCall.status === 'failed' && card.toolCall.failureType === 'validation') {
-      nextCards.push(card);
-      continue;
+      return card;
     }
 
     const isSelected = selections[card.id] ?? true;
     if (!isSelected) {
-      nextCards.push({
+      return {
         ...card,
         toolCall: {
           ...card.toolCall,
@@ -227,8 +247,7 @@ export async function applySessionEdits(params: {
           reason: 'User rejected',
           failureType: undefined,
         },
-      });
-      continue;
+      };
     }
 
     const rawToolCall: RawToolCall = {
@@ -238,15 +257,16 @@ export async function applySessionEdits(params: {
     };
 
     try {
-      batchStore.beginCall(rawToolCall.id);
+      const callStore = new ToolCallBatchStore({ baseStore, shared });
+      callStore.beginCall(rawToolCall.id);
       const result = await applyToolCall({
         toolCall: rawToolCall,
-        context: { projectId, language, options },
-        store: batchStore,
+        context: { projectId, language, options, executionMode },
+        store: callStore,
         manuscriptBatch,
       });
       if (result.success) {
-        nextCards.push({
+        return {
           ...card,
           toolCall: {
             ...card.toolCall,
@@ -256,9 +276,9 @@ export async function applySessionEdits(params: {
             result,
             acceptedAt: new Date(),
           },
-        });
+        };
       } else {
-        nextCards.push({
+        return {
           ...card,
           toolCall: {
             ...card.toolCall,
@@ -267,11 +287,11 @@ export async function applySessionEdits(params: {
             reason: result.error || result.message,
             result,
           },
-        });
+        };
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      nextCards.push({
+      return {
         ...card,
         toolCall: {
           ...card.toolCall,
@@ -279,24 +299,19 @@ export async function applySessionEdits(params: {
           failureType: 'execution',
           reason: errorMessage,
         },
-      });
-    } finally {
-      batchStore.endCall();
-      await yieldToUI();
+      };
     }
-  }
+  }));
 
-  await yieldToUI();
-
-  await manuscriptBatch.stageAll({ store: batchStore, yieldToUI });
-  const flushResults = await batchStore.flush(yieldToUI);
+  await manuscriptBatch.stageAll({ store: flushStore, yieldToUI });
+  const flushResults = await flushStore.flush(yieldToUI);
   const finalizedCards =
     flushResults.size === 0
       ? nextCards
       : nextCards.map((card): StoredEditCard => {
         if (card.toolCall.status !== 'accepted') return card;
 
-        const touched = batchStore.getUpdateKeysForCall(card.toolCall.id);
+        const touched = flushStore.getUpdateKeysForCall(card.toolCall.id);
         if (touched.size === 0) return card;
 
         for (const key of touched) {
@@ -379,36 +394,34 @@ export async function applyToolCallsDirect(params: {
   toolCalls: ToolCallMetadata[];
   selections: Record<string, boolean>;
   options: HandlerOptions;
+  executionMode?: 'storyObject' | 'novelEditor' | 'outlineManager' | 'subAgent';
 }): Promise<ToolCallMetadata[]> {
-  const { projectId, language, toolCalls, selections, options } = params;
+  const { projectId, language, toolCalls, selections, options, executionMode } = params;
 
   const baseStore = createBaseStore();
-  const batchStore = new ToolCallBatchStore({ baseStore });
+  const shared = new ToolCallBatchSharedState();
+  const flushStore = new ToolCallBatchStore({ baseStore, shared });
   const manuscriptBatch = new ManuscriptBatch();
 
-  const nextCalls: ToolCallMetadata[] = [];
-  for (const tc of toolCalls) {
+  const nextCalls = await Promise.all(toolCalls.map(async (tc): Promise<ToolCallMetadata> => {
     const status = (tc.status ?? 'pending') as ToolCallStatus;
 
     if (status === 'failed' && tc.failureType === 'validation') {
-      nextCalls.push(tc);
-      continue;
+      return tc;
     }
 
     if (status !== 'pending' && status !== 'validating') {
-      nextCalls.push(tc);
-      continue;
+      return tc;
     }
 
     const isSelected = selections[tc.id] ?? true;
     if (!isSelected) {
-      nextCalls.push({
+      return {
         ...tc,
         status: 'rejected',
         reason: 'User rejected',
         failureType: undefined,
-      });
-      continue;
+      };
     }
 
     const rawToolCall: RawToolCall = {
@@ -418,55 +431,51 @@ export async function applyToolCallsDirect(params: {
     };
 
     try {
-      batchStore.beginCall(rawToolCall.id);
+      const callStore = new ToolCallBatchStore({ baseStore, shared });
+      callStore.beginCall(rawToolCall.id);
       const result = await applyToolCall({
         toolCall: rawToolCall,
-        context: { projectId, language, options },
-        store: batchStore,
+        context: { projectId, language, options, executionMode },
+        store: callStore,
         manuscriptBatch,
       });
       if (result.success) {
-        nextCalls.push({
+        return {
           ...tc,
           status: 'accepted',
           reason: undefined,
           failureType: undefined,
           result,
           acceptedAt: new Date(),
-        });
+        };
       } else {
-        nextCalls.push({
+        return {
           ...tc,
           status: 'failed',
           reason: result.error || result.message,
           failureType: getFailureTypeFromResult({ toolName: tc.tool_name, result }),
           result,
-        });
+        };
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      nextCalls.push({
+      return {
         ...tc,
         status: 'failed',
         reason: errorMessage,
         failureType: 'execution',
-      });
-    } finally {
-      batchStore.endCall();
-      await yieldToUI();
+      };
     }
-  }
+  }));
 
-  await yieldToUI();
-
-  await manuscriptBatch.stageAll({ store: batchStore, yieldToUI });
-  const flushResults = await batchStore.flush(yieldToUI);
+  await manuscriptBatch.stageAll({ store: flushStore, yieldToUI });
+  const flushResults = await flushStore.flush(yieldToUI);
   if (flushResults.size === 0) return nextCalls;
 
   return nextCalls.map((tc) => {
     if (tc.status !== 'accepted') return tc;
 
-    const touched = batchStore.getUpdateKeysForCall(tc.id);
+    const touched = flushStore.getUpdateKeysForCall(tc.id);
     if (touched.size === 0) return tc;
 
     for (const key of touched) {

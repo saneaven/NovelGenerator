@@ -17,6 +17,7 @@ export const LLMTaskMode = {
   OBJECT_IMAGE_PROMPT: 'object_image_prompt',
   SCENE_IMAGE_PROMPT: 'scene_image_prompt',
   COVER_IMAGE_PROMPT: 'cover_image_prompt',
+  SUB_AGENT: 'sub_agent',
 } as const;
 
 export type LLMTaskModeType = typeof LLMTaskMode[keyof typeof LLMTaskMode];
@@ -116,6 +117,8 @@ export interface TemplateData {
   input: {
     // userMessage is injected per user block in prepareMessages()
     userMessage?: string;
+    // Sub Agent input payload (for subAgent task)
+    subagent?: any;
   };
   feedback?: {
     editingObjectIds: string[];
@@ -209,6 +212,15 @@ export interface AgentWorkspacePromptContext extends BasePromptContext {
   contextObjectIds?: string[];
   previousSummaries?: string[];
   relevantChats?: AgentRelevantChat[];
+}
+
+/**
+ * Context for Sub Agent execution
+ */
+export interface SubAgentPromptContext extends BasePromptContext {
+  tools?: ToolCallSchema[];
+  subAgentId: string;
+  subagent: any;
 }
 
 /**
@@ -381,7 +393,8 @@ export type PromptContext =
   | AgentTranslationPromptContext
   | ObjectImagePromptContext
   | SceneImagePromptContext
-  | CoverImagePromptContext;
+  | CoverImagePromptContext
+  | SubAgentPromptContext;
 
 /**
  * LLM Task configuration

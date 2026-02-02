@@ -5,6 +5,7 @@ export type TaskKind =
   | 'aiEdit'
   | 'translateObjects'
   | 'agent'
+  | 'subAgent'
   | 'imagePrompt'
   | 'sceneImage'
   | 'agentTranslation'

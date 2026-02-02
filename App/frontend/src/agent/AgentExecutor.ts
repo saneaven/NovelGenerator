@@ -16,7 +16,7 @@ import { useLLMSessionStore } from '../store/llmSessionStore';
 import { startLLMSession } from '../llmSession';
 import { LLMTaskMode, type AgentWorkspacePromptContext, type AgentTranslationPromptContext, createEmptyUserHistory } from '../llm';
 import type { OutputMode } from '../llm/types';
-import type { ContentPart } from '../llm/requestTypes';
+import type { ChatMessage, ContentPart } from '../llm/requestTypes';
 import { getToolsForSet } from '../toolCall';
 import {
   stageSessionEdits,
@@ -381,6 +381,7 @@ export async function executeAgentToolCalls(params: {
   language: string;
   selections: Record<string, boolean>;
   options: HandlerOptions;
+  executionMode?: 'storyObject' | 'novelEditor' | 'outlineManager' | 'subAgent';
 }): Promise<{ hasAcceptedReads: boolean }> {
   await applySessionEdits(params);
   await syncAgentToolCalls(params.sessionId);

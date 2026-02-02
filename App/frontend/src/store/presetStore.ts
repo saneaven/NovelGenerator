@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { presetService } from '../api/presetService';
 import { useSettingsStore } from './settingsStore';
 import { useVariableStore } from './variableStore';
+import { useSubAgentStore } from './subAgentStore';
 import { PromptManager } from '../llm/PromptManager';
 import type {
   PresetListItem,
@@ -102,6 +103,9 @@ export const usePresetStore = create<PresetStore>()((set, get) => ({
 
       // 5. Reload variables for new preset
       await useVariableStore.getState().loadVariables();
+
+      // 6. Reload sub agents for new preset
+      await useSubAgentStore.getState().loadSubAgents();
 
     } catch (error) {
       set({

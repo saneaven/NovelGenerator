@@ -4,6 +4,8 @@ from typing import List, Optional, Union, Dict, Any
 
 from pydantic import BaseModel, Field
 
+from .sub_agents import SubAgentDefinition
+
 
 class PresetCreate(BaseModel):
     """Create new preset"""
@@ -109,6 +111,7 @@ class PresetExportData(BaseModel):
     prompts: Dict[str, Any]
     fragments: Dict[str, Dict[str, ExportFragmentData]]
     variables: List[ExportVariableData]
+    sub_agents: List[SubAgentDefinition]
     exported_at: str
 
 

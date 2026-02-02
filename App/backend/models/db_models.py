@@ -203,6 +203,7 @@ class PromptPreset(Base):
     prompts = relationship("PromptVersion", back_populates="preset", cascade="all, delete-orphan")
     fragments = relationship("PromptFragment", back_populates="preset", cascade="all, delete-orphan")
     variables = relationship("PromptVariable", back_populates="preset", cascade="all, delete-orphan")
+    sub_agents = relationship("SubAgentDefinitionModel", back_populates="preset", cascade="all, delete-orphan")
 
     __table_args__ = (
         UniqueConstraint('user_id', 'name', name='uq_preset_user_name'),
@@ -239,6 +240,44 @@ class PromptVersion(Base):
     # Relationships
     user = relationship("User")
     preset = relationship("PromptPreset", back_populates="prompts")
+
+
+# ============================================================================
+# SUB AGENTS (PER PRESET)
+# ============================================================================
+
+class SubAgentDefinitionModel(Base):
+    """Sub Agent definition stored per prompt preset."""
+    __tablename__ = "sub_agent_definitions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    preset_id = Column(UUID(as_uuid=True), ForeignKey("prompt_presets.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Stable key used as PromptVersion.prompt_name (subAgentId)
+    sub_agent_id = Column(String(50), nullable=False)
+
+    display_name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    enabled = Column(Boolean, default=True, nullable=False)
+
+    # Stored as JSON arrays
+    allowed_agent_modes = Column(JSONB, nullable=False)
+    allowed_tool_names = Column(JSONB, nullable=False)
+
+    # TaskAIConfig-like payload (provider/model/temp/thinking settings etc.)
+    llm_config = Column(JSONB, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    user = relationship("User")
+    preset = relationship("PromptPreset", back_populates="sub_agents")
+
+    __table_args__ = (
+        UniqueConstraint("preset_id", "sub_agent_id", name="uq_sub_agent_per_preset"),
+        Index("idx_sub_agent_preset", "preset_id"),
+    )
 
 
 # ============================================================================

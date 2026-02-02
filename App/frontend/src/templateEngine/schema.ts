@@ -20,12 +20,12 @@ type VariableDef<T> = {
  */
 export const UNIFIED_SCHEMA = {
   config: {
-    mainLanguage: { desc: "Primary language", example: "Korean" },
-    displayLanguage: { desc: "Current display language", example: "English" },
-    today: { desc: "Current date (YYYY-MM-DD)", example: "2025-01-15" },
-    thinkingMode: { desc: "Thinking mode ('off' | 'model' | 'custom')", example: "off" },
-    isPrefillEnabled: { desc: "Prefill enabled", example: true },
-    outputMode: { desc: "LLM output mode ('tool_call' | 'native_tool_call' | 'raw_output')", example: "tool_call" },
+    mainLanguage: { desc: "Primary language", example: "Korean" as string },
+    displayLanguage: { desc: "Current display language", example: "English" as string },
+    today: { desc: "Current date (YYYY-MM-DD)", example: "2025-01-15" as string },
+    thinkingMode: { desc: "Thinking mode ('off' | 'model' | 'custom')", example: "off" as 'off' | 'model' | 'custom' },
+    isPrefillEnabled: { desc: "Prefill enabled", example: true as boolean },
+    outputMode: { desc: "LLM output mode ('tool_call' | 'native_tool_call' | 'raw_output')", example: "tool_call" as 'tool_call' | 'native_tool_call' | 'raw_output' },
   },
 
   project: {
@@ -110,7 +110,11 @@ export const UNIFIED_SCHEMA = {
   },
 
   input: {
-    userMessage: { desc: "User's input message", example: "Help me write a scene where..." },
+    userMessage: { desc: "User's input message", example: "Help me write a scene where..." as string },
+    subagent: {
+      desc: "Sub Agent input payload (passed via call_sub_agent)",
+      example: { topic: "Collect character setting details", objectIds: ["char-1"] } as Record<string, any>
+    },
     toolResults: {
       desc: "Previous tool call results",
       example: [{
@@ -299,7 +303,7 @@ export const UNIFIED_SCHEMA = {
 /**
  * Prompt types
  */
-export type PromptType = 'agent' | 'editAssistant' | 'translation' | 'objectImagePrompt' | 'sceneImagePrompt' | 'coverImagePrompt';
+export type PromptType = 'agent' | 'editAssistant' | 'translation' | 'objectImagePrompt' | 'sceneImagePrompt' | 'coverImagePrompt' | 'subAgent';
 
 /**
  * Maps which variable groups are available for each prompt type.
@@ -311,10 +315,15 @@ export const PROMPT_TYPE_VARIABLES: Record<PromptType, string[]> = {
   objectImagePrompt: ['config', 'project', 'input', 'imagePrompt', 'variables'],
   sceneImagePrompt: ['config', 'project', 'input', 'imagePrompt', 'variables'],
   coverImagePrompt: ['config', 'project', 'input', 'imagePrompt', 'variables'],
+  subAgent: ['config', 'project', 'input', 'variables'],
 };
 
 // Type extraction helpers
-type ExtractExample<T> = T extends VariableDef<infer V> ? V : T extends { example: infer E } ? E : never;
+type ExtractExample<T> = T extends VariableDef<infer V>
+  ? V
+  : T extends { example: infer E }
+    ? E
+    : never;
 
 type ExtractProps<T> = {
   [K in keyof T]: ExtractExample<T[K]>;

@@ -28,6 +28,8 @@ export function mapTaskTypeToSchemaType(
       return 'translation';
     case 'editAssistant':
       return 'editAssistant';
+    case 'subAgent':
+      return 'subAgent';
     case 'imagePrompt':
       if (name === 'scene') return 'sceneImagePrompt';
       if (name === 'coverImage') return 'coverImagePrompt';

@@ -16,6 +16,7 @@ import { DefaultDisplayProcessor } from '../../../agent/processors/DisplayProces
 import type { ChatMessage } from '../../../llm/requestTypes';
 import ThinkingDisplay from '../../../components/common/ThinkingDisplay';
 import { ToolCallCard } from '../../../components/toolCall';
+import SubAgentInvocationCard from '../../../components/SubAgent/SubAgentInvocationCard';
 import { TextButton } from '../../../components/TextButton';
 import { IconButton } from '../../../components/IconButton';
 import AgentModeToggle from '../../../components/ui/AgentModeToggle';
@@ -770,6 +771,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                         language: mainLanguage,
                                                                         selections,
                                                                         options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
+                                                                        executionMode: mode,
                                                                     });
                                                                     // Auto-continue: trigger next LLM turn with tool results
                                                                     await triggerAutoContinue();
@@ -780,12 +782,33 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
 
                                                                 setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: true }));
                                                                 try {
+                                                                    // Optimistically mark selected operations as running so the UI reflects long-running calls.
+                                                                    const runningToolCalls = storedToolCalls.map((tc: any) => {
+                                                                        const status = (tc.status ?? 'pending') as string;
+                                                                        const isSelected = selections[tc.id] ?? true;
+                                                                        if (!isSelected) return tc;
+                                                                        if (status !== 'pending' && status !== 'validating') return tc;
+                                                                        return {
+                                                                            ...tc,
+                                                                            status: 'running',
+                                                                            reason: undefined,
+                                                                            failureType: undefined,
+                                                                        };
+                                                                    });
+                                                                    await useAgentStore.getState().updateMessageToolCalls(
+                                                                        projectId,
+                                                                        selectedAgentId,
+                                                                        message.chatMessage.id,
+                                                                        runningToolCalls
+                                                                    );
+
                                                                     const nextToolCalls = await applyToolCallsDirect({
                                                                         projectId,
                                                                         language: mainLanguage,
                                                                         toolCalls: storedToolCalls,
                                                                         selections,
                                                                         options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
+                                                                        executionMode: mode,
                                                                     });
 
                                                                     await useAgentStore.getState().updateMessageToolCalls(
@@ -817,6 +840,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                         language: mainLanguage,
                                                                         selections,
                                                                         options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
+                                                                        executionMode: mode,
                                                                     });
                                                                     return;
                                                                 }
@@ -825,12 +849,33 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
 
                                                                 setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: true }));
                                                                 try {
+                                                                    // Optimistically mark selected operations as running so the UI reflects long-running calls.
+                                                                    const runningToolCalls = storedToolCalls.map((tc: any) => {
+                                                                        const status = (tc.status ?? 'pending') as string;
+                                                                        const isSelected = selections[tc.id] ?? true;
+                                                                        if (!isSelected) return tc;
+                                                                        if (status !== 'pending' && status !== 'validating') return tc;
+                                                                        return {
+                                                                            ...tc,
+                                                                            status: 'running',
+                                                                            reason: undefined,
+                                                                            failureType: undefined,
+                                                                        };
+                                                                    });
+                                                                    await useAgentStore.getState().updateMessageToolCalls(
+                                                                        projectId,
+                                                                        selectedAgentId,
+                                                                        message.chatMessage.id,
+                                                                        runningToolCalls
+                                                                    );
+
                                                                     const nextToolCalls = await applyToolCallsDirect({
                                                                         projectId,
                                                                         language: mainLanguage,
                                                                         toolCalls: storedToolCalls,
                                                                         selections,
                                                                         options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
+                                                                        executionMode: mode,
                                                                     });
 
                                                                     await useAgentStore.getState().updateMessageToolCalls(
@@ -855,6 +900,14 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                 : undefined
                                                     }
                                                 />
+                                                {cardsToRender
+                                                    .filter((card: any) => card?.toolCall?.toolName === 'call_sub_agent')
+                                                    .map((card: any) => (
+                                                        <SubAgentInvocationCard
+                                                            key={card.toolCall.id}
+                                                            parentToolCallId={card.toolCall.id}
+                                                        />
+                                                    ))}
                                             </div>
                                         )}
                                                                                 <div className="message-actions">

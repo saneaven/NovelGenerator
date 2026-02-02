@@ -35,6 +35,13 @@ function mergeMetadata(
   return { ...(base ?? {}), ...(next ?? {}) };
 }
 
+export class ToolCallBatchSharedState {
+  readonly cacheById = new Map<string, UnifiedObject>();
+  readonly stagedByKey = new Map<UpdateKey, StagedUpdate>();
+  readonly keysByCallId = new Map<string, Set<UpdateKey>>();
+  readonly lockByKey = new Map<UpdateKey, Promise<void>>();
+}
+
 /**
  * StoreActions wrapper that stages updateObject() calls and applies them at flush().
  *
@@ -45,15 +52,13 @@ function mergeMetadata(
  */
 export class ToolCallBatchStore implements StoreActions {
   private readonly baseStore: StoreActions;
-
-  private readonly cacheById = new Map<string, UnifiedObject>();
-  private readonly stagedByKey = new Map<UpdateKey, StagedUpdate>();
-  private readonly keysByCallId = new Map<string, Set<UpdateKey>>();
+  private readonly shared: ToolCallBatchSharedState;
 
   private activeCallId: string | null = null;
 
-  constructor(params: { baseStore: StoreActions }) {
+  constructor(params: { baseStore: StoreActions; shared?: ToolCallBatchSharedState }) {
     this.baseStore = params.baseStore;
+    this.shared = params.shared ?? new ToolCallBatchSharedState();
   }
 
   beginCall(callId: string): void {
@@ -65,20 +70,20 @@ export class ToolCallBatchStore implements StoreActions {
   }
 
   getUpdateKeysForCall(callId: string): ReadonlySet<UpdateKey> {
-    return this.keysByCallId.get(callId) ?? new Set();
+    return this.shared.keysByCallId.get(callId) ?? new Set();
   }
 
   private trackUpdateKey(callId: string, key: UpdateKey): void {
-    const existing = this.keysByCallId.get(callId);
+    const existing = this.shared.keysByCallId.get(callId);
     if (existing) {
       existing.add(key);
       return;
     }
-    this.keysByCallId.set(callId, new Set([key]));
+    this.shared.keysByCallId.set(callId, new Set([key]));
   }
 
   private getObjectFromAny(id: string): UnifiedObject | null {
-    return this.cacheById.get(id) ?? this.baseStore.getObject(id);
+    return this.shared.cacheById.get(id) ?? this.baseStore.getObject(id);
   }
 
   getObject(id: string): UnifiedObject | null {
@@ -87,13 +92,13 @@ export class ToolCallBatchStore implements StoreActions {
 
   async fetchObject(type: ObjectType, id: string): Promise<void> {
     // If we already have a cached (possibly staged) object, don't overwrite it.
-    if (this.cacheById.has(id)) return;
+    if (this.shared.cacheById.has(id)) return;
     await this.baseStore.fetchObject(type, id);
   }
 
   async listObjects(type: ObjectType, projectId: string): Promise<UnifiedObject[]> {
     const objects = await this.baseStore.listObjects(type, projectId);
-    return objects.map((obj) => this.cacheById.get(obj.id) ?? obj);
+    return objects.map((obj) => this.shared.cacheById.get(obj.id) ?? obj);
   }
 
   async createObject(
@@ -106,8 +111,27 @@ export class ToolCallBatchStore implements StoreActions {
   ): Promise<UnifiedObject> {
     const created = await this.baseStore.createObject(type, projectId, data, language, metadata, userRequest);
     // Clear any stale staged state for the new object ID (shouldn't happen, but safe).
-    this.cacheById.delete(created.id);
+    this.shared.cacheById.delete(created.id);
     return created;
+  }
+
+  private async withKeyLock<T>(key: UpdateKey, fn: () => Promise<T>): Promise<T> {
+    const prev = this.shared.lockByKey.get(key) ?? Promise.resolve();
+    let release!: () => void;
+    const next = new Promise<void>((r) => (release = r));
+    const tail = prev.then(() => next);
+    this.shared.lockByKey.set(key, tail);
+
+    await prev;
+    try {
+      return await fn();
+    } finally {
+      release();
+      // Cleanup when nothing else is queued behind us.
+      if (this.shared.lockByKey.get(key) === tail) {
+        this.shared.lockByKey.delete(key);
+      }
+    }
   }
 
   async updateObject(type: ObjectType, id: string, request: UpdateObjectRequest): Promise<void> {
@@ -115,67 +139,69 @@ export class ToolCallBatchStore implements StoreActions {
     const createNewVersion = normalizeCreateNewVersion(request.create_new_version);
     const key = buildUpdateKey({ type, id, language, createNewVersion });
 
-    const callId = this.activeCallId;
-    if (callId) this.trackUpdateKey(callId, key);
+    await this.withKeyLock(key, async () => {
+      const callId = this.activeCallId;
+      if (callId) this.trackUpdateKey(callId, key);
 
-    // Ensure we have an object to apply staged data onto.
-    let current = this.getObjectFromAny(id);
-    if (!current) {
-      await this.baseStore.fetchObject(type, id);
-      current = this.baseStore.getObject(id);
-    }
-    if (!current) {
-      throw new Error(`${type} with id ${id} not found`);
-    }
+      // Ensure we have an object to apply staged data onto.
+      let current = this.getObjectFromAny(id);
+      if (!current) {
+        await this.baseStore.fetchObject(type, id);
+        current = this.baseStore.getObject(id);
+      }
+      if (!current) {
+        throw new Error(`${type} with id ${id} not found`);
+      }
 
-    const existing = this.stagedByKey.get(key);
-    if (existing) {
-      existing.request = {
-        ...existing.request,
-        // Always take latest computed data; merge with previously staged metadata.
-        data: request.data,
-        metadata: mergeMetadata(existing.request.metadata, request.metadata),
-        user_request: request.user_request ?? existing.request.user_request,
-        create_new_version: createNewVersion,
-        language,
-      };
-      if (callId) existing.callIds.add(callId);
-    } else {
-      this.stagedByKey.set(key, {
-        key,
-        type,
-        id,
-        request: {
-          ...request,
+      const existing = this.shared.stagedByKey.get(key);
+      if (existing) {
+        existing.request = {
+          ...existing.request,
+          // Always take latest computed data; merge with previously staged metadata.
+          data: request.data,
+          metadata: mergeMetadata(existing.request.metadata, request.metadata),
+          user_request: request.user_request ?? existing.request.user_request,
           create_new_version: createNewVersion,
-        },
-        callIds: callId ? new Set([callId]) : new Set(),
+          language,
+        };
+        if (callId) existing.callIds.add(callId);
+      } else {
+        this.shared.stagedByKey.set(key, {
+          key,
+          type,
+          id,
+          request: {
+            ...request,
+            create_new_version: createNewVersion,
+          },
+          callIds: callId ? new Set([callId]) : new Set(),
+        });
+      }
+
+      // Apply staged changes to our local cache so later calls in the same batch see updated state.
+      const prevLangData = (current.data?.[language] ?? {}) as Record<string, unknown>;
+      const nextLangData = { ...prevLangData, ...(request.data as any) };
+      const nextMetadata = request.metadata ? { ...(current.metadata as any), ...(request.metadata as any) } : current.metadata;
+
+      this.shared.cacheById.set(id, {
+        ...current,
+        metadata: nextMetadata,
+        data: { ...(current.data ?? {}), [language]: nextLangData },
       });
-    }
-
-    // Apply staged changes to our local cache so later calls in the same batch see updated state.
-    const prevLangData = (current.data?.[language] ?? {}) as Record<string, unknown>;
-    const nextLangData = { ...prevLangData, ...(request.data as any) };
-    const nextMetadata = request.metadata ? { ...(current.metadata as any), ...(request.metadata as any) } : current.metadata;
-
-    this.cacheById.set(id, {
-      ...current,
-      metadata: nextMetadata,
-      data: { ...(current.data ?? {}), [language]: nextLangData },
     });
   }
 
   async deleteObject(type: ObjectType, id: string): Promise<void> {
     // If the object is deleted, any staged updates for it are invalid.
     this.clearStagedForObject(id);
-    this.cacheById.delete(id);
+    this.shared.cacheById.delete(id);
     await this.baseStore.deleteObject(type, id);
   }
 
   async flush(yieldToUI?: () => Promise<void>): Promise<Map<UpdateKey, FlushStatus>> {
     const results = new Map<UpdateKey, FlushStatus>();
 
-    for (const [key, staged] of this.stagedByKey.entries()) {
+    for (const [key, staged] of this.shared.stagedByKey.entries()) {
       try {
         await this.baseStore.updateObject(staged.type, staged.id, staged.request);
         results.set(key, { success: true });
@@ -186,21 +212,21 @@ export class ToolCallBatchStore implements StoreActions {
       if (yieldToUI) await yieldToUI();
     }
 
-    this.stagedByKey.clear();
-    this.cacheById.clear();
+    this.shared.stagedByKey.clear();
+    this.shared.cacheById.clear();
     return results;
   }
 
   private clearStagedForObject(objectId: string): void {
-    for (const [key, staged] of this.stagedByKey.entries()) {
+    for (const [key, staged] of this.shared.stagedByKey.entries()) {
       if (staged.id !== objectId) continue;
 
-      this.stagedByKey.delete(key);
+      this.shared.stagedByKey.delete(key);
       for (const callId of staged.callIds) {
-        const keys = this.keysByCallId.get(callId);
+        const keys = this.shared.keysByCallId.get(callId);
         if (!keys) continue;
         keys.delete(key);
-        if (keys.size === 0) this.keysByCallId.delete(callId);
+        if (keys.size === 0) this.shared.keysByCallId.delete(callId);
       }
     }
   }

@@ -31,6 +31,7 @@
     "false": "False",
     "refresh": "Refresh",
     "enabled": "Enabled",
+    "disabled": "Disabled",
     "copied": "Copied {{value}}",
     "copyFailed": "Copy failed"
   },
@@ -693,6 +694,57 @@
       "prompts": "Prompts",
       "fragments": "Fragments",
       "variables": "Variables",
+      "subAgents": "Sub Agents",
+      "addSubAgent": "Add Sub Agent",
+      "subAgentsEmpty": "No sub agents defined yet.",
+      "subAgentsEmptyHint": "Create sub agents to let your Agent call specialized assistants via tool calls.",
+      "subAgentSelectToEdit": "Select a sub agent to edit",
+      "subAgentSelectToEditHint": "Choose a sub agent from the sidebar to edit its prompts and settings.",
+      "subAgentCreate": {
+        "title": "Create Sub Agent",
+        "create": "Create Sub Agent",
+        "id": "Sub Agent ID *",
+        "idPlaceholder": "e.g., researchCollector",
+        "idHint": "Letters, numbers, dashes and underscores only. Max 50 chars.",
+        "name": "Display Name *",
+        "namePlaceholder": "e.g., Research Collector",
+        "description": "Description (optional)",
+        "descriptionPlaceholder": "What this sub agent does...",
+        "idRequired": "Sub Agent ID is required",
+        "idTooLong": "Sub Agent ID must be 50 characters or less",
+        "invalidId": "ID can only contain letters, numbers, dashes, and underscores",
+        "nameRequired": "Display name is required",
+        "createFailed": "Failed to create sub agent"
+      },
+      "subAgentSettings": {
+        "title": "Settings",
+        "displayName": "Display Name",
+        "enabled": "Enabled",
+        "description": "Description",
+        "allowedModes": "Allowed Caller Modes",
+        "allowedTools": "Allowed Tools",
+        "toolFilterPlaceholder": "Filter tools…",
+        "llmConfig": "LLM Config"
+      },
+      "subAgentModes": {
+        "storyObject": "Story Object",
+        "novelEditor": "Novel Editor",
+        "outlineManager": "Outline Manager",
+        "subAgent": "Sub Agent"
+      },
+      "subAgentPrompts": {
+        "system": "System",
+        "user": "User",
+        "prefill": "Prefill"
+      },
+      "subAgentSave": {
+        "nameRequired": "Display name is required",
+        "saveFailed": "Failed to save sub agent"
+      },
+      "subAgentDelete": {
+        "confirm": "Delete sub agent \"{{name}}\"? This cannot be undone.",
+        "deleteFailed": "Failed to delete sub agent"
+      },
       "toast": {
         "promptSaved": "Prompt saved",
         "promptSaveFailed": "Failed to save prompt. Please try again.",
@@ -920,6 +972,7 @@
     "ready": "Ready",
     "error": "Error",
     "pending": "Pending",
+    "running": "Running",
     "applied": "Applied",
     "skipped": "Skipped",
     "failed": "Failed"

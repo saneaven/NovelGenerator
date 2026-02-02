@@ -5,6 +5,9 @@ import FragmentTreeNav from './FragmentTreeNav';
 import VariableListNav from './VariableListNav';
 import VariableEditor from './VariableEditor';
 import CreateVariableModal from './CreateVariableModal';
+import SubAgentListNav from './SubAgentListNav';
+import SubAgentEditor from './SubAgentEditor';
+import CreateSubAgentModal from './CreateSubAgentModal';
 import TemplateEditor from './TemplateEditor';
 import VersionHistoryModal from '../../Modal/VersionHistoryModal';
 import PresetSelector from '../PresetSelector';
@@ -24,7 +27,7 @@ import TemplateSyntaxHint from './TemplateSyntaxHint';
 import PromptPreviewModal from './PromptPreviewModal';
 import type { PresetListItem } from '../../../types/presets';
 
-type SubTab = 'prompts' | 'fragments' | 'variables';
+type SubTab = 'prompts' | 'fragments' | 'variables' | 'subAgents';
 
 interface SelectedFragment {
     folderPath: string | null;
@@ -308,9 +311,11 @@ const PromptsTemplatesPanel: React.FC = () => {
     const [selectedPrompt, setSelectedPrompt] = useState<PromptNode | null>(null);
     const [selectedFragment, setSelectedFragment] = useState<SelectedFragment | null>(null);
     const [selectedVariableId, setSelectedVariableId] = useState<string | null>(null);
+    const [selectedSubAgentId, setSelectedSubAgentId] = useState<string | null>(null);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showCreateVariableModal, setShowCreateVariableModal] = useState(false);
+    const [showCreateSubAgentModal, setShowCreateSubAgentModal] = useState(false);
     const [createFolderPath, setCreateFolderPath] = useState<string | null>(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
@@ -398,12 +403,19 @@ const PromptsTemplatesPanel: React.FC = () => {
         if (newTab === 'prompts') {
             setSelectedFragment(null);
             setSelectedVariableId(null);
+            setSelectedSubAgentId(null);
         } else if (newTab === 'fragments') {
             setSelectedPrompt(null);
+            setSelectedVariableId(null);
+            setSelectedSubAgentId(null);
+        } else if (newTab === 'subAgents') {
+            setSelectedPrompt(null);
+            setSelectedFragment(null);
             setSelectedVariableId(null);
         } else {
             setSelectedPrompt(null);
             setSelectedFragment(null);
+            setSelectedSubAgentId(null);
         }
     };
 
@@ -498,7 +510,8 @@ const PromptsTemplatesPanel: React.FC = () => {
 
     const hasSelection = (subTab === 'prompts' && selectedPrompt) ||
         (subTab === 'fragments' && selectedFragment) ||
-        (subTab === 'variables');
+        (subTab === 'variables') ||
+        (subTab === 'subAgents');
 
     return (
         <div className="prompts-templates-panel">
@@ -518,7 +531,7 @@ const PromptsTemplatesPanel: React.FC = () => {
                     <main className="panel-editor__main">
                         <div className="editor-wrapper">
                             {/* Header - always visible for prompts/fragments tabs, hidden for variables tab as VariableEditor has its own */}
-                            {subTab !== 'variables' && (
+                            {subTab !== 'variables' && subTab !== 'subAgents' && (
                             <header className="editor-wrapper__header">
                                 {/* Title group - only shown when something is selected */}
                                 {hasSelection && (
@@ -669,6 +682,15 @@ const PromptsTemplatesPanel: React.FC = () => {
                                         onToggleSidebar={toggleSidebar}
                                     />
                                 )}
+                                {subTab === 'subAgents' && (
+                                    <SubAgentEditor
+                                        key={selectedSubAgentId}
+                                        selectedId={selectedSubAgentId}
+                                        onDeleted={() => setSelectedSubAgentId(null)}
+                                        isSidebarCollapsed={isSidebarCollapsed}
+                                        onToggleSidebar={toggleSidebar}
+                                    />
+                                )}
                                 {/* Empty state for prompts/fragments when nothing is selected */}
                                 {!hasSelection && (
                                     <div className="empty-state">
@@ -725,6 +747,12 @@ const PromptsTemplatesPanel: React.FC = () => {
                             >
                                 {t('settings.promptEditor.variables')}
                             </button>
+                            <button
+                                className={`sidebar-toggle__btn ${subTab === 'subAgents' ? 'sidebar-toggle__btn--active' : ''}`}
+                                onClick={() => handleSubTabChange('subAgents')}
+                            >
+                                {t('settings.promptEditor.subAgents')}
+                            </button>
                         </div>
 
                         {/* Tree Navigation */}
@@ -750,6 +778,14 @@ const PromptsTemplatesPanel: React.FC = () => {
                                 selectedId={selectedVariableId}
                                 onVariableSelect={handleVariableSelect}
                                 onCreateVariable={() => setShowCreateVariableModal(true)}
+                                onClose={() => setIsSidebarCollapsed(true)}
+                            />
+                        )}
+                        {subTab === 'subAgents' && (
+                            <SubAgentListNav
+                                selectedId={selectedSubAgentId}
+                                onSelect={(id) => setSelectedSubAgentId(id)}
+                                onCreate={() => setShowCreateSubAgentModal(true)}
                                 onClose={() => setIsSidebarCollapsed(true)}
                             />
                         )}
@@ -790,6 +826,17 @@ const PromptsTemplatesPanel: React.FC = () => {
                 isOpen={showCreateVariableModal}
                 onClose={() => setShowCreateVariableModal(false)}
                 onCreate={handleVariableCreated}
+            />
+
+            {/* Create sub agent modal */}
+            <CreateSubAgentModal
+                isOpen={showCreateSubAgentModal}
+                onClose={() => setShowCreateSubAgentModal(false)}
+                onCreated={(id) => {
+                    setSelectedSubAgentId(id);
+                    setShowCreateSubAgentModal(false);
+                    setSubTab('subAgents');
+                }}
             />
 
             {/* Preset modal */}

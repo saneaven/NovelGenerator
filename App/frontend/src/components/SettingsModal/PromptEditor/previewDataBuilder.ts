@@ -367,6 +367,6 @@ export function getUserVariables(): Array<{
     name: v.name,
     value: v.value,
     type: v.var_type as 'string' | 'number' | 'boolean' | 'select',
-    options: v.select_options,
+    options: v.select_options ?? undefined,
   }));
 }

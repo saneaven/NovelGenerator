@@ -31,6 +31,7 @@
     "false": "거짓",
     "refresh": "새로고침",
     "enabled": "활성화됨",
+    "disabled": "비활성화됨",
     "copied": "{{value}} 복사됨",
     "copyFailed": "복사 실패"
   },
@@ -693,6 +694,57 @@
       "prompts": "프롬프트",
       "fragments": "프래그먼트",
       "variables": "변수",
+      "subAgents": "서브 에이전트",
+      "addSubAgent": "서브 에이전트 추가",
+      "subAgentsEmpty": "서브 에이전트가 아직 없습니다.",
+      "subAgentsEmptyHint": "tool call로 호출할 수 있는 전문 서브 에이전트를 만들어 보세요.",
+      "subAgentSelectToEdit": "편집할 서브 에이전트를 선택하세요",
+      "subAgentSelectToEditHint": "사이드바에서 서브 에이전트를 선택해 프롬프트와 설정을 편집하세요.",
+      "subAgentCreate": {
+        "title": "서브 에이전트 생성",
+        "create": "서브 에이전트 생성",
+        "id": "서브 에이전트 ID *",
+        "idPlaceholder": "예: researchCollector",
+        "idHint": "영문/숫자/대시/언더스코어만 사용(최대 50자).",
+        "name": "표시 이름 *",
+        "namePlaceholder": "예: 자료 수집기",
+        "description": "설명 (선택사항)",
+        "descriptionPlaceholder": "이 서브 에이전트가 하는 일...",
+        "idRequired": "서브 에이전트 ID는 필수입니다",
+        "idTooLong": "서브 에이전트 ID는 50자 이하여야 합니다",
+        "invalidId": "ID는 영문, 숫자, 대시(-), 언더스코어(_)만 사용할 수 있습니다",
+        "nameRequired": "표시 이름은 필수입니다",
+        "createFailed": "서브 에이전트 생성에 실패했습니다"
+      },
+      "subAgentSettings": {
+        "title": "설정",
+        "displayName": "표시 이름",
+        "enabled": "사용",
+        "description": "설명",
+        "allowedModes": "호출 가능 모드",
+        "allowedTools": "허용 툴",
+        "toolFilterPlaceholder": "툴 필터…",
+        "llmConfig": "LLM 설정"
+      },
+      "subAgentModes": {
+        "storyObject": "스토리 오브젝트",
+        "novelEditor": "소설 편집기",
+        "outlineManager": "아웃라인 관리",
+        "subAgent": "서브 에이전트"
+      },
+      "subAgentPrompts": {
+        "system": "시스템",
+        "user": "유저",
+        "prefill": "프리필"
+      },
+      "subAgentSave": {
+        "nameRequired": "표시 이름은 필수입니다",
+        "saveFailed": "서브 에이전트 저장에 실패했습니다"
+      },
+      "subAgentDelete": {
+        "confirm": "서브 에이전트 \"{{name}}\"를(을) 삭제할까요? 이 작업은 되돌릴 수 없습니다.",
+        "deleteFailed": "서브 에이전트 삭제에 실패했습니다"
+      },
       "toast": {
         "promptSaved": "프롬프트가 저장되었습니다",
         "promptSaveFailed": "프롬프트 저장에 실패했습니다. 다시 시도해주세요.",

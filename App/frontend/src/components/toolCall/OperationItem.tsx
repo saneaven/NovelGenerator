@@ -7,7 +7,7 @@ import type { CardMode } from './types';
 import type { ApplicationResult } from '../../toolCall/types';
 
 type StreamingStatus = 'collecting' | 'validating' | 'ready' | 'error';
-type CallStatus = 'validating' | 'pending' | 'failed' | 'accepted' | 'rejected';
+type CallStatus = 'validating' | 'pending' | 'running' | 'failed' | 'accepted' | 'rejected';
 
 type StatusVariant = StreamingStatus | CallStatus;
 
@@ -17,6 +17,7 @@ const STATUS_LABEL_KEYS: Record<StatusVariant, string> = {
   ready: 'operationStatus.ready',
   error: 'operationStatus.error',
   pending: 'operationStatus.pending',
+  running: 'operationStatus.running',
   accepted: 'operationStatus.applied',
   rejected: 'operationStatus.skipped',
   failed: 'operationStatus.failed',
@@ -69,7 +70,10 @@ export const OperationItem: React.FC<OperationItemProps> = ({
 
   const getStatusLabel = (variant: StatusVariant): string => {
     const key = STATUS_LABEL_KEYS[variant];
-    return key ? t(key) : variant;
+    if (!key) return variant;
+    const translated = t(key);
+    // Fallback: when i18n key is missing, i18next typically returns the key itself.
+    return translated === key ? variant : translated;
   };
 
   const handleHeaderClick = useCallback(() => {

@@ -38,6 +38,7 @@ const MODE_TO_TASK_TYPE: Record<LLMTaskModeType, AITaskType> = {
   [LLMTaskMode.OBJECT_IMAGE_PROMPT]: 'imagePrompt',
   [LLMTaskMode.SCENE_IMAGE_PROMPT]: 'imagePrompt',
   [LLMTaskMode.COVER_IMAGE_PROMPT]: 'imagePrompt',
+  [LLMTaskMode.SUB_AGENT]: 'agent',
 };
 
 /**

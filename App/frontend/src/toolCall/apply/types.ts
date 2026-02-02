@@ -50,6 +50,10 @@ export interface StoreActions {
  * Translation uses `create_new_version: false` while CRUD uses `true`.
  */
 export interface HandlerContext extends ExecutionContext {
+  /** Tool call ID (stable per call within a message/session) */
+  callId: string;
+  /** Execution mode of the caller (used for sub-agent allowlists, etc.) */
+  executionMode?: 'storyObject' | 'novelEditor' | 'outlineManager' | 'subAgent';
   store: StoreActions;
   options: HandlerOptions;
 }

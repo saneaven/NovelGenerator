@@ -5,7 +5,14 @@ from typing import Optional, List
 from datetime import datetime
 import uuid
 
-from ..models.db_models import PromptPreset, PromptVersion, PromptFragment, PromptVariable, UserSettings
+from ..models.db_models import (
+    PromptPreset,
+    PromptVersion,
+    PromptFragment,
+    PromptVariable,
+    UserSettings,
+    SubAgentDefinitionModel,
+)
 from ..schemas.presets import (
     PresetListItem,
     PresetResponse,
@@ -13,15 +20,6 @@ from ..schemas.presets import (
     ActivePresetResponse
 )
 from ..prompts import get_default_prompts, get_default_fragments
-
-
-DEFAULT_PROMPT_NAME = "__default__"
-
-EXPECTED_PROMPT_NAMES_BY_TASK: dict[str, list[str]] = {
-    "agent": ["storyObject", "novelEditor", "outlineManager"],
-    "editAssistant": ["manuscript", "storyObject"],
-    "imagePrompt": ["object", "scene", "coverImage"],
-}
 
 
 class PresetService:
@@ -208,32 +206,18 @@ class PresetService:
 
         for task_type, categories in default_prompts.items():
             for category, prompts in categories.items():
-                if isinstance(prompts, dict):
-                    for name, content in prompts.items():
-                        prompt = PromptVersion(
-                            id=uuid.uuid4(),
-                            user_id=user_id,
-                            preset_id=preset_id,
-                            task_type=task_type,
-                            prompt_category=category,
-                            prompt_name=name,
-                            content=content,
-                            version_number=1,
-                            is_default=True,
-                            note="System default",
-                            created_at=now
-                        )
-                        db.add(prompt)
-                        count += 1
-                else:
+                if not isinstance(prompts, dict):
+                    raise ValueError("Default prompts must be nested by name (no legacy category-level prompts).")
+
+                for name, content in prompts.items():
                     prompt = PromptVersion(
                         id=uuid.uuid4(),
                         user_id=user_id,
                         preset_id=preset_id,
                         task_type=task_type,
                         prompt_category=category,
-                        prompt_name=DEFAULT_PROMPT_NAME,
-                        content=prompts,
+                        prompt_name=name,
+                        content=content,
                         version_number=1,
                         is_default=True,
                         note="System default",
@@ -337,6 +321,9 @@ class PresetService:
 
         # Copy variables
         variable_count = PresetService._copy_variables(db, user_id, source_preset_id, new_preset.id)
+
+        # Copy sub agents (definitions only; prompts are already duplicated above)
+        PresetService._copy_sub_agents(db, user_id, source_preset_id, new_preset.id)
 
         db.commit()
         db.refresh(new_preset)
@@ -483,6 +470,40 @@ class PresetService:
             count += 1
 
         return count
+
+    @staticmethod
+    def _copy_sub_agents(
+        db: Session,
+        user_id: uuid.UUID,
+        source_preset_id: uuid.UUID,
+        target_preset_id: uuid.UUID
+    ) -> int:
+        """Copy sub agent definitions to target preset (prompts are copied separately)."""
+        subs = db.query(SubAgentDefinitionModel).filter(
+            and_(
+                SubAgentDefinitionModel.user_id == user_id,
+                SubAgentDefinitionModel.preset_id == source_preset_id,
+            )
+        ).all()
+
+        now = datetime.utcnow()
+        for s in subs:
+            db.add(SubAgentDefinitionModel(
+                id=uuid.uuid4(),
+                user_id=user_id,
+                preset_id=target_preset_id,
+                sub_agent_id=s.sub_agent_id,
+                display_name=s.display_name,
+                description=s.description,
+                enabled=s.enabled,
+                allowed_agent_modes=s.allowed_agent_modes,
+                allowed_tool_names=s.allowed_tool_names,
+                llm_config=s.llm_config,
+                created_at=now,
+                updated_at=now,
+            ))
+
+        return len(subs)
 
     @staticmethod
     def update_preset(
@@ -747,7 +768,6 @@ class PresetService:
         ).filter(PromptVersion.preset_id == preset_id).distinct().all()
 
         for func_type, category, name in unique_prompts:
-            prompt_name = name or DEFAULT_PROMPT_NAME
             latest = db.query(PromptVersion).filter(
                 and_(
                     PromptVersion.preset_id == preset_id,
@@ -758,7 +778,7 @@ class PresetService:
             ).order_by(PromptVersion.version_number.desc()).first()
 
             if latest:
-                prompts_dict.setdefault(func_type, {}).setdefault(category, {})[prompt_name] = {
+                prompts_dict.setdefault(func_type, {}).setdefault(category, {})[name] = {
                     "content": latest.content
                 }
 
@@ -805,6 +825,27 @@ class PresetService:
             for v in variables
         ]
 
+        # 4.5 Get sub agents for this preset
+        sub_agents = db.query(SubAgentDefinitionModel).filter(
+            and_(
+                SubAgentDefinitionModel.user_id == user_id,
+                SubAgentDefinitionModel.preset_id == preset_id,
+            )
+        ).order_by(SubAgentDefinitionModel.sub_agent_id.asc()).all()
+
+        sub_agents_list = [
+            {
+                "sub_agent_id": s.sub_agent_id,
+                "display_name": s.display_name,
+                "description": s.description,
+                "enabled": s.enabled,
+                "allowed_agent_modes": s.allowed_agent_modes,
+                "allowed_tool_names": s.allowed_tool_names,
+                "llm_config": s.llm_config,
+            }
+            for s in sub_agents
+        ]
+
         # 5. Build export structure
         return {
             "format_version": "1.0",
@@ -815,6 +856,7 @@ class PresetService:
             "prompts": prompts_dict,
             "fragments": fragments_dict,
             "variables": variables_list,
+            "sub_agents": sub_agents_list,
             "exported_at": datetime.utcnow().isoformat() + "Z"
         }
 
@@ -834,6 +876,10 @@ class PresetService:
         if data.get("format_version") != "1.0":
             raise ValueError(f"Unsupported format version: {data.get('format_version')}")
 
+        # 1.1 Require sub_agents key (can be empty list)
+        if "sub_agents" not in data or not isinstance(data.get("sub_agents"), list):
+            raise ValueError("Invalid preset file: missing sub_agents")
+
         now = datetime.utcnow()
 
         # 2. Create preset
@@ -852,66 +898,37 @@ class PresetService:
         fragment_count = 0
         variable_count = 0
 
-        # 3. Create prompts from nested structure
+        # 3. Create prompts from nested structure (named prompts only, no legacy backfill)
         prompts_data = data.get("prompts", {})
-        for func_type, categories in prompts_data.items():
-            for category, content_or_names in categories.items():
-                if isinstance(content_or_names, dict) and "content" in content_or_names:
-                    # Category-level prompt
-                    content = content_or_names["content"]
+        if not isinstance(prompts_data, dict):
+            raise ValueError("Invalid preset file: prompts must be an object")
 
-                    # Preserve legacy category-level prompt under a reserved name
-                    prompt = PromptVersion(
+        for task_type, categories in prompts_data.items():
+            if not isinstance(categories, dict):
+                raise ValueError("Invalid preset file: prompts categories must be an object")
+
+            for category, names in categories.items():
+                if not isinstance(names, dict):
+                    raise ValueError("Invalid preset file: prompts must be nested by name")
+
+                for prompt_name, prompt_data in names.items():
+                    if not isinstance(prompt_data, dict) or "content" not in prompt_data:
+                        raise ValueError("Invalid preset file: prompt must have content")
+
+                    db.add(PromptVersion(
                         id=uuid.uuid4(),
                         user_id=user_id,
                         preset_id=preset.id,
-                        task_type=func_type,
-                        prompt_category=category,
-                        prompt_name=DEFAULT_PROMPT_NAME,
-                        content=content,
+                        task_type=str(task_type),
+                        prompt_category=str(category),
+                        prompt_name=str(prompt_name),
+                        content=str(prompt_data["content"]),
                         version_number=1,
                         is_default=False,
                         note="Imported",
-                        created_at=now
-                    )
-                    db.add(prompt)
+                        created_at=now,
+                    ))
                     prompt_count += 1
-
-                    # Backfill expected named prompts for known function types to keep the app usable
-                    for expected_name in EXPECTED_PROMPT_NAMES_BY_TASK.get(func_type, []):
-                        prompt = PromptVersion(
-                            id=uuid.uuid4(),
-                            user_id=user_id,
-                            preset_id=preset.id,
-                            task_type=func_type,
-                            prompt_category=category,
-                            prompt_name=expected_name,
-                            content=content,
-                            version_number=1,
-                            is_default=False,
-                            note=f"Imported (migrated from {DEFAULT_PROMPT_NAME})",
-                            created_at=now
-                        )
-                        db.add(prompt)
-                        prompt_count += 1
-                else:
-                    # Named prompts (workspace, novelEditor, etc.)
-                    for prompt_name, prompt_data in content_or_names.items():
-                        prompt = PromptVersion(
-                            id=uuid.uuid4(),
-                            user_id=user_id,
-                            preset_id=preset.id,
-                            task_type=func_type,
-                            prompt_category=category,
-                            prompt_name=prompt_name,
-                            content=prompt_data["content"],
-                            version_number=1,
-                            is_default=False,
-                            note="Imported",
-                            created_at=now
-                        )
-                        db.add(prompt)
-                        prompt_count += 1
 
         # 4. Create fragments from nested structure
         fragments_data = data.get("fragments", {})
@@ -954,6 +971,31 @@ class PresetService:
             )
             db.add(variable)
             variable_count += 1
+
+        # 6. Create sub agents (definitions)
+        for sa_data in data.get("sub_agents", []):
+            if not isinstance(sa_data, dict):
+                raise ValueError("Invalid preset file: sub_agents entries must be objects")
+
+            required = ["sub_agent_id", "display_name", "allowed_agent_modes", "allowed_tool_names", "llm_config", "enabled"]
+            missing = [k for k in required if k not in sa_data]
+            if missing:
+                raise ValueError(f"Invalid preset file: sub_agents missing fields: {', '.join(missing)}")
+
+            db.add(SubAgentDefinitionModel(
+                id=uuid.uuid4(),
+                user_id=user_id,
+                preset_id=preset.id,
+                sub_agent_id=str(sa_data["sub_agent_id"]),
+                display_name=str(sa_data["display_name"]),
+                description=sa_data.get("description"),
+                enabled=bool(sa_data.get("enabled", True)),
+                allowed_agent_modes=sa_data.get("allowed_agent_modes", []),
+                allowed_tool_names=sa_data.get("allowed_tool_names", []),
+                llm_config=sa_data.get("llm_config", {}),
+                created_at=now,
+                updated_at=now,
+            ))
 
         db.commit()
         db.refresh(preset)

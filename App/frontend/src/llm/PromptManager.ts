@@ -27,6 +27,7 @@ import {
   type ObjectImagePromptContext,
   type SceneImagePromptContext,
   type CoverImagePromptContext,
+  type SubAgentPromptContext,
 } from './types';
 
 /**
@@ -89,7 +90,7 @@ export class PromptManager {
    * Load a prompt template from store or fallback to bundled default
    */
   private static async getTemplate(
-    functionType: 'agent' | 'translation' | 'editAssistant' | 'imagePrompt',
+    functionType: 'agent' | 'translation' | 'editAssistant' | 'imagePrompt' | 'subAgent',
     category: 'systemPrompt' | 'prefill' | 'userPrompt' | 'initialUserPrompt' | 'firstUserPrompt' | 'lastUserPrompt',
     name: string
   ): Promise<string | null> {
@@ -130,6 +131,8 @@ export class PromptManager {
         return this.generateAgentBundle(context as AgentNovelEditorPromptContext, 'novelEditor');
       case LLMTaskMode.AGENT_OUTLINE_MANAGER:
         return this.generateAgentBundle(context as AgentOutlineManagerPromptContext, 'outlineManager');
+      case LLMTaskMode.SUB_AGENT:
+        return this.generateSubAgentBundle(context as SubAgentPromptContext);
       case LLMTaskMode.AGENT_MEMORY_SUMMARY:
         return this.generateAgentMemorySummaryBundle(context as AgentMemorySummaryPromptContext);
       case LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT:
@@ -167,6 +170,8 @@ export class PromptManager {
       case LLMTaskMode.AGENT_NOVEL_EDITOR:
       case LLMTaskMode.AGENT_OUTLINE_MANAGER:
         return (context as AgentWorkspacePromptContext).tools;
+      case LLMTaskMode.SUB_AGENT:
+        return (context as SubAgentPromptContext).tools;
       case LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT:
         return this.getEditAssistantTools('storyObject');
       case LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT:
@@ -226,6 +231,41 @@ export class PromptManager {
       userPrompt: userTemplate!,                     // Default template for user messages
       firstUserPrompt: firstTemplate ?? undefined,   // Optional template for first message
       lastUserPrompt: lastTemplate ?? undefined,     // Optional template for last message
+      prefill: prefillTemplate && context.enablePrefill
+        ? renderTemplate(prefillTemplate, templateData)
+        : undefined,
+      templateData,
+    };
+  }
+
+  // ==================== Sub Agent ====================
+
+  private static async generateSubAgentBundle(
+    context: SubAgentPromptContext
+  ): Promise<PromptBundle> {
+    const subAgentId = context.subAgentId;
+
+    const [systemTemplate, userTemplate, prefillTemplate] = await Promise.all([
+      this.getTemplate('subAgent', 'systemPrompt', subAgentId),
+      this.getTemplate('subAgent', 'userPrompt', subAgentId),
+      this.getTemplate('subAgent', 'prefill', subAgentId),
+    ]);
+
+    const settings = useSettingsStore.getState().settings;
+    const variables = useVariableStore.getState().getVariablesForTemplate();
+
+    const templateData: TemplateData = {
+      config: this.buildConfigData(context),
+      project: this.buildProjectData(context.projectId, settings.mainLanguage),
+      input: {
+        subagent: context.subagent,
+      },
+      variables,
+    };
+
+    return {
+      systemPrompt: renderTemplate(systemTemplate!, templateData),
+      userPrompt: userTemplate!,
       prefill: prefillTemplate && context.enablePrefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,

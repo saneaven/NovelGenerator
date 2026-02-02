@@ -15,7 +15,7 @@ import type { ObjectType, UnifiedObject } from '../types/unifiedObject';
 export type ToolCategory = 'crud' | 'replace' | 'patch' | 'translation' | 'read';
 
 /** Target types for tool operations */
-export type TargetType = 'basic_info' | 'guidelines' | 'story_object' | 'outline' | 'chapter' | 'manuscript';
+export type TargetType = 'basic_info' | 'guidelines' | 'story_object' | 'outline' | 'chapter' | 'manuscript' | 'sub_agent';
 
 /** Story object subtypes (used in tool arguments) */
 export type StoryObjectSubtype =
@@ -35,11 +35,12 @@ export type ExecutionMode = 'storyObject' | 'novelEditor' | 'translation' | 'edi
  * Status of a tool call
  * - validating: Async validation in progress (post-streaming)
  * - pending: Validation passed, awaiting Apply
+ * - running: Apply in progress (long-running tool call)
  * - failed: Validation or execution failed
  * - accepted: Apply completed successfully
  * - rejected: User rejected the tool call
  */
-export type ToolCallStatus = 'validating' | 'pending' | 'failed' | 'accepted' | 'rejected';
+export type ToolCallStatus = 'validating' | 'pending' | 'running' | 'failed' | 'accepted' | 'rejected';
 
 /** Type of failure when status is 'failed' */
 export type ToolCallFailureType = 'validation' | 'execution' | 'partial';

@@ -83,7 +83,7 @@ export function buildConversationBlocksWithMeta(
 
       const rendered = PromptManager.renderTemplate(template, {
         ...promptBundle.templateData,
-        input: { userMessage: getMessageText(msg) },
+        input: { ...promptBundle.templateData.input, userMessage: getMessageText(msg) },
       });
 
       messages.push({
@@ -136,7 +136,7 @@ export function buildConversationBlocksWithMeta(
       // Add tool_results message if this assistant message had tool_calls with results
       if (block.tool_calls && block.tool_calls.length > 0 && msg.toolCalls) {
         const toolResults = msg.toolCalls
-          .filter((fc) => fc.status !== 'pending')
+          .filter((fc) => fc.status !== 'pending' && fc.status !== 'running')
           .map((fc) => {
             let content: string;
             switch (fc.status) {

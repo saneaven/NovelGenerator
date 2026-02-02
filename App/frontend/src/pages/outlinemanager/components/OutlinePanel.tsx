@@ -647,43 +647,43 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
             {selectedOutline && selectedOutlineActs.length > 0 && (
               <div className="timeline-track">
                 {selectedOutlineActs.map((act, actIndex) => {
-                          const actChapters = getChaptersForAct(act.id);
-                          const { effectiveLanguage: actLang, isFallback: actFallback } = getEffectiveLanguage(act);
-                          const actData = getDataForLanguage(act, actLang);
-                          const isActExpanded = !collapsedActs.has(act.id);
+                  const actChapters = getChaptersForAct(act.id);
+                  const { effectiveLanguage: actLang, isFallback: actFallback } = getEffectiveLanguage(act);
+                  const actData = getDataForLanguage(act, actLang);
+                  const isActExpanded = !collapsedActs.has(act.id);
 
-                          return (
-                            <div key={act.id} className={`timeline-act-group ${isActExpanded ? 'is-expanded' : 'is-collapsed'}`}>
-                              {/* Act Node */}
-                              <div className="timeline-act-node" style={{ '--act-index': actIndex } as React.CSSProperties}>
-                                <div className="node-marker">
-                                  <span className="act-index">{actIndex + 1}</span>
+                  return (
+                    <div key={act.id} className={`timeline-act-group ${isActExpanded ? 'is-expanded' : 'is-collapsed'}`}>
+                      {/* Act Node */}
+                      <div className="timeline-act-node" style={{ '--act-index': actIndex } as React.CSSProperties}>
+                        <div className="node-marker">
+                          <span className="act-index">{actIndex + 1}</span>
+                        </div>
+
+                        <div className="act-content-wrapper">
+                          <div className={`content-card act-card ${editingAct === act.id ? 'is-editing' : ''}`}>
+                            <div className="card-header">
+                              {editingAct === act.id ? (
+                                <div className="card-title-section" style={{ flex: 1 }}>
+                                  <input
+                                    type="text"
+                                    className="inline-title-input"
+                                    value={editActData.name}
+                                    onChange={(e) => setEditActData(prev => ({ ...prev, name: e.target.value }))}
+                                    placeholder="Act Title"
+                                    autoFocus
+                                  />
                                 </div>
-
-                                <div className="act-content-wrapper">
-                                  <div className={`content-card act-card ${editingAct === act.id ? 'is-editing' : ''}`}>
-                                    <div className="card-header">
-                                      {editingAct === act.id ? (
-                                        <div className="card-title-section" style={{ flex: 1 }}>
-                                          <input
-                                            type="text"
-                                            className="inline-title-input"
-                                            value={editActData.name}
-                                            onChange={(e) => setEditActData(prev => ({ ...prev, name: e.target.value }))}
-                                            placeholder="Act Title"
-                                            autoFocus
-                                          />
-                                        </div>
-                                      ) : (
-                                        <div className="card-title-section" onClick={() => toggleActExpand(act.id)}>
-                                          <div className="title-row">
-                                            <h4>{actData.name || 'Untitled Act'}</h4>
-                                            {actFallback && <span className="fallback-badge" title="Translation missing"><Warning size="xs" /></span>}
-                                          </div>
-                                          <span className="card-meta">{actChapters.length} Chapters</span>
-                                        </div>
-                                      )}
-                                    </div>
+                              ) : (
+                                <div className="card-title-section" onClick={() => toggleActExpand(act.id)}>
+                                  <div className="title-row">
+                                    <h4>{actData.name || 'Untitled Act'}</h4>
+                                    {actFallback && <span className="fallback-badge" title="Translation missing"><Warning size="xs" /></span>}
+                                  </div>
+                                  <span className="card-meta">{actChapters.length} Chapters</span>
+                                </div>
+                              )}
+                            </div>
 
                                     {editingAct === act.id ? (
                                       <div className="card-body-wrapper is-expanded">
@@ -927,7 +927,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                 </div>
                               </div>
                             </div>
-                          );
+                  );
                 })}
               </div>
             )}

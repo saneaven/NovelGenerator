@@ -1,0 +1,104 @@
+.sub-agent-card {
+  margin-top: var(--spacing-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.sub-agent-card__header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--color-surface-muted);
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sub-agent-card__header-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sub-agent-card__name {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.sub-agent-card__id {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.sub-agent-card__body {
+  padding: var(--spacing-lg);
+}
+
+.sub-agent-card__actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: flex-end;
+  margin-top: var(--spacing-md);
+}
+
+.sub-agent-messages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.sub-agent-message {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-md);
+  background: var(--color-surface);
+}
+
+.sub-agent-message__meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.sub-agent-message__role {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sub-agent-message__content {
+  white-space: pre-wrap;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+
+.sub-agent-final {
+  margin-top: var(--spacing-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-md);
+  background: var(--color-surface-muted);
+  white-space: pre-wrap;
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+
+.sub-agent-error {
+  margin-bottom: var(--spacing-md);
+  padding: var(--spacing-md);
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-feedback-error-base);
+  background: var(--color-feedback-error-soft);
+  color: var(--color-feedback-error-strong);
+}
+

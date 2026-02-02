@@ -51,6 +51,25 @@ async function ensureManuscript(store: ToolCallBatchStore, manuscriptId: string)
 
 export class ManuscriptBatch {
   private readonly byKey = new Map<ManuscriptBatchKey, ManuscriptBatchState>();
+  private readonly lockByKey = new Map<ManuscriptBatchKey, Promise<void>>();
+
+  private async withKeyLock<T>(key: ManuscriptBatchKey, fn: () => Promise<T>): Promise<T> {
+    const prev = this.lockByKey.get(key) ?? Promise.resolve();
+    let release!: () => void;
+    const next = new Promise<void>((r) => (release = r));
+    const tail = prev.then(() => next);
+    this.lockByKey.set(key, tail);
+
+    await prev;
+    try {
+      return await fn();
+    } finally {
+      release();
+      if (this.lockByKey.get(key) === tail) {
+        this.lockByKey.delete(key);
+      }
+    }
+  }
 
   async applyPatch(params: {
     callId: string;
@@ -71,34 +90,36 @@ export class ManuscriptBatch {
     }
 
     const key = buildKey({ manuscriptId: id, language, createNewVersion });
-    let state = this.byKey.get(key);
+    return this.withKeyLock(key, async () => {
+      let state = this.byKey.get(key);
 
-    if (!state) {
-      const manuscript = await ensureManuscript(store, id);
-      const currentData = getObjectData(manuscript, language);
-      const currentDoc = normalizeDoc((currentData as any).doc);
-      const currentMarkdown = docToMarkdown(currentDoc);
+      if (!state) {
+        const manuscript = await ensureManuscript(store, id);
+        const currentData = getObjectData(manuscript, language);
+        const currentDoc = normalizeDoc((currentData as any).doc);
+        const currentMarkdown = docToMarkdown(currentDoc);
 
-      state = {
-        manuscriptId: id,
-        language,
-        createNewVersion,
-        userRequest,
-        markdown: currentMarkdown,
-        callIds: new Set(),
-      };
-      this.byKey.set(key, state);
-    }
+        state = {
+          manuscriptId: id,
+          language,
+          createNewVersion,
+          userRequest,
+          markdown: currentMarkdown,
+          callIds: new Set(),
+        };
+        this.byKey.set(key, state);
+      }
 
-    const result = applySingleReplacement(state.markdown, oldText, newText);
-    if (!result.success) {
-      return error(result.error ?? 'Patch failed', id);
-    }
+      const result = applySingleReplacement(state.markdown, oldText, newText);
+      if (!result.success) {
+        return error(result.error ?? 'Patch failed', id);
+      }
 
-    state.markdown = result.value;
-    state.callIds.add(callId);
+      state.markdown = result.value;
+      state.callIds.add(callId);
 
-    return ok('Updated manuscript', { id });
+      return ok('Updated manuscript', { id });
+    });
   }
 
   async applyReplace(params: {
@@ -119,44 +140,46 @@ export class ManuscriptBatch {
       return error('Missing id or content for replace_manuscript', id);
     }
 
-    // If manuscript exists, stage via markdown buffer (convert doc only once at flush).
-    let manuscript = store.getObject(id);
-    if (!manuscript) {
-      await store.fetchObject('manuscript', id);
-      manuscript = store.getObject(id);
-    }
+    const key = buildKey({ manuscriptId: id, language, createNewVersion });
+    return this.withKeyLock(key, async () => {
+      // If manuscript exists, stage via markdown buffer (convert doc only once at flush).
+      let manuscript = store.getObject(id);
+      if (!manuscript) {
+        await store.fetchObject('manuscript', id);
+        manuscript = store.getObject(id);
+      }
 
-    if (manuscript) {
-      const key = buildKey({ manuscriptId: id, language, createNewVersion });
-      const existing = this.byKey.get(key);
-      const callIds = existing ? new Set([...existing.callIds, callId]) : new Set([callId]);
-      this.byKey.set(key, {
-        manuscriptId: id,
+      if (manuscript) {
+        const existing = this.byKey.get(key);
+        const callIds = existing ? new Set([...existing.callIds, callId]) : new Set([callId]);
+        this.byKey.set(key, {
+          manuscriptId: id,
+          language,
+          createNewVersion,
+          userRequest,
+          markdown: content,
+          callIds,
+        });
+
+        return ok('Updated manuscript', { id });
+      }
+
+      // Fallback: create a new manuscript if it doesn't exist (legacy behavior).
+      // Note: create endpoint requires TipTap JSON doc, so we must convert now.
+      const nextDoc = markdownToDoc(content);
+      const wordCount = docWordCount(nextDoc);
+
+      const created = await store.createObject(
+        'manuscript',
+        projectId,
+        { doc: nextDoc, wordCount },
         language,
-        createNewVersion,
-        userRequest,
-        markdown: content,
-        callIds,
-      });
+        { chapter_id: id },
+        userRequest
+      );
 
-      return ok('Updated manuscript', { id });
-    }
-
-    // Fallback: create a new manuscript if it doesn't exist (legacy behavior).
-    // Note: create endpoint requires TipTap JSON doc, so we must convert now.
-    const nextDoc = markdownToDoc(content);
-    const wordCount = docWordCount(nextDoc);
-
-    const created = await store.createObject(
-      'manuscript',
-      projectId,
-      { doc: nextDoc, wordCount },
-      language,
-      { chapter_id: id },
-      userRequest
-    );
-
-    return ok('Updated manuscript', { id: created.id });
+      return ok('Updated manuscript', { id: created.id });
+    });
   }
 
   /**

@@ -20,6 +20,7 @@ export const TYPE_LABELS: Record<string, string> = {
   chapter: 'Chapter',
   manuscript: 'Manuscript',
   story_object: 'Story Object',
+  sub_agent: 'Sub Agent',
 };
 
 export const STATUS_LABELS: Record<string, string> = {
