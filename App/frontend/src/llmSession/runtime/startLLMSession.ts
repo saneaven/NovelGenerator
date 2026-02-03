@@ -72,6 +72,12 @@ export function startLLMSession<TInput = unknown, TResult = unknown>(
   const store = useLLMSessionStore.getState();
   const now = Date.now();
 
+  const availableToolNames = Array.isArray((input.promptContext as any)?.tools)
+    ? ((input.promptContext as any).tools as Array<{ name?: unknown }>)
+        .map((t) => (typeof t?.name === 'string' ? t.name : null))
+        .filter((n): n is string => Boolean(n && n.trim()))
+    : undefined;
+
   // Create session immediately so UI can subscribe
   store.createSession({
     id: sessionId,
@@ -84,6 +90,7 @@ export function startLLMSession<TInput = unknown, TResult = unknown>(
     contentParts: [],
     toolCallProgress: [],
     toolCalls: [],
+    availableToolNames,
   } as any);
 
   // Register abort immediately so Stop works right away

@@ -4,6 +4,17 @@ import { type ChatMessage, type ToolCallMetadata, type ContentPart, type Role } 
 import { type LanguageData } from '../types/multilingual';
 import { type ToolCallStatus, type ToolCallFailureType, type ApplicationResult } from '../toolCall/types';
 
+const BACKEND_TOOL_CALL_STATUSES = new Set(['failed', 'pending', 'rejected', 'accepted']);
+
+function canSyncToolCalls(toolCalls?: ToolCallMetadata[] | null): boolean {
+  if (!Array.isArray(toolCalls)) return true;
+  return toolCalls.every((tc) => {
+    const status = (tc as any)?.status;
+    if (status == null) return true;
+    return BACKEND_TOOL_CALL_STATUSES.has(String(status));
+  });
+}
+
 // Language-specific content for agent messages
 export interface MessageContentData {
   contentParts: ContentPart[];
@@ -524,6 +535,8 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
       },
     }));
 
+    if (!canSyncToolCalls(toolCalls)) return;
+
     // Sync to backend
     try {
       const agent = get().getAgent(projectId, agentId);
@@ -595,6 +608,8 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
       const agent = get().getAgent(projectId, agentId);
       const message = agent?.messages.find((msg) => msg.id === messageId);
       if (!message || !message.toolCalls) return;
+
+      if (!canSyncToolCalls(message.toolCalls)) return;
 
       // Get the primary language content for this message
       const primaryLanguage = Object.keys(message.data)[0] || 'English';

@@ -20,6 +20,9 @@ export interface SubAgentInvocation {
   projectId: string;
   language: string;
 
+  /** Tool suffix (call_{agentName}) used for prompt template name. */
+  agentName: string;
+
   subAgentId: string;
   displayName: string;
   input: any;

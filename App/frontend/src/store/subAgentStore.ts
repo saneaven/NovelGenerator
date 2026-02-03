@@ -11,9 +11,10 @@ interface SubAgentState {
 interface SubAgentActions {
   loadSubAgents: () => Promise<void>;
   createSubAgent: (data: SubAgentCreate) => Promise<SubAgentDefinition>;
-  updateSubAgent: (subAgentId: string, data: SubAgentUpdate) => Promise<SubAgentDefinition>;
-  deleteSubAgent: (subAgentId: string) => Promise<void>;
-  getById: (subAgentId: string) => SubAgentDefinition | undefined;
+  updateSubAgent: (id: string, data: SubAgentUpdate) => Promise<SubAgentDefinition>;
+  deleteSubAgent: (id: string) => Promise<void>;
+  getById: (id: string) => SubAgentDefinition | undefined;
+  getByAgentName: (agentName: string) => SubAgentDefinition | undefined;
 }
 
 export const useSubAgentStore = create<SubAgentState & SubAgentActions>((set, get) => ({
@@ -40,7 +41,7 @@ export const useSubAgentStore = create<SubAgentState & SubAgentActions>((set, ge
   updateSubAgent: async (subAgentId, data) => {
     const updated = await subAgentService.update(subAgentId, data);
     set((state) => ({
-      subAgents: state.subAgents.map((s) => (s.sub_agent_id === subAgentId ? updated : s)),
+      subAgents: state.subAgents.map((s) => (s.id === subAgentId ? updated : s)),
     }));
     return updated;
   },
@@ -48,10 +49,10 @@ export const useSubAgentStore = create<SubAgentState & SubAgentActions>((set, ge
   deleteSubAgent: async (subAgentId) => {
     await subAgentService.delete(subAgentId);
     set((state) => ({
-      subAgents: state.subAgents.filter((s) => s.sub_agent_id !== subAgentId),
+      subAgents: state.subAgents.filter((s) => s.id !== subAgentId),
     }));
   },
 
-  getById: (subAgentId) => get().subAgents.find((s) => s.sub_agent_id === subAgentId),
+  getById: (subAgentId) => get().subAgents.find((s) => s.id === subAgentId),
+  getByAgentName: (agentName) => get().subAgents.find((s) => s.agent_name === agentName),
 }));
-

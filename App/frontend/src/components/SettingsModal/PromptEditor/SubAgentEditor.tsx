@@ -6,15 +6,20 @@ import type { SubAgentAllowedMode, SubAgentDefinition } from '../../../types/sub
 import TaskConfigForm from '../TaskConfigForm';
 import { IconButton } from '../../IconButton';
 import { TextButton } from '../../TextButton';
-import { ChevronLeft, ChevronRight, Trash, Save, Sliders, Clock } from '../../icons';
+import ToggleSwitch from '../../common/ToggleSwitch';
+import { ChevronLeft, ChevronRight, Trash, Save, Sliders, Clock, Eye } from '../../icons';
 import { schemaRegistry } from '../../../toolCall/schemas/schemaRegistry';
 import TemplateEditor from './TemplateEditor';
 import VersionHistoryModal from '../../Modal/VersionHistoryModal';
 import { usePromptEditor } from '../hooks/usePromptEditor';
+import { SUB_AGENT_CALL_PREFIX, isValidAgentName, toCallToolName } from '../../../subAgent/tools/SubAgentCallTools';
+import PromptPreviewModal from './PromptPreviewModal';
+import type { PromptNode } from './promptTree';
 
 import './SubAgentEditor.css';
 
 type PromptTab = 'systemPrompt' | 'userPrompt' | 'prefill';
+type SubAgentEditorTab = 'general' | 'toolCalls' | 'provider' | 'prompts';
 
 const MODE_OPTIONS: Array<{ mode: SubAgentAllowedMode; labelKey: string }> = [
   { mode: 'storyObject', labelKey: 'settings.promptEditor.subAgentModes.storyObject' },
@@ -23,35 +28,46 @@ const MODE_OPTIONS: Array<{ mode: SubAgentAllowedMode; labelKey: string }> = [
   { mode: 'subAgent', labelKey: 'settings.promptEditor.subAgentModes.subAgent' },
 ];
 
-function normalizeStringOrNull(value: string): string | null {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
+function normalizeString(value: string): string {
+  return value.trim();
 }
 
 function snapshotForChangeDetection(agent: SubAgentDefinition): string {
   return JSON.stringify({
+    agent_name: agent.agent_name,
     display_name: agent.display_name,
-    description: agent.description ?? null,
+    description: agent.description,
     enabled: agent.enabled,
     allowed_agent_modes: [...agent.allowed_agent_modes].sort(),
     allowed_tool_names: [...agent.allowed_tool_names].sort(),
+    allowed_sub_agent_ids: [...agent.allowed_sub_agent_ids].sort(),
     llm_config: agent.llm_config,
   });
 }
 
-const SubAgentPromptEditors: React.FC<{ subAgentId: string }> = ({ subAgentId }) => {
+const SubAgentPromptEditors: React.FC<{ agentName: string }> = ({ agentName }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<PromptTab>('systemPrompt');
   const [showVersions, setShowVersions] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
-  const system = usePromptEditor('subAgent', 'systemPrompt', subAgentId);
-  const user = usePromptEditor('subAgent', 'userPrompt', subAgentId);
-  const prefill = usePromptEditor('subAgent', 'prefill', subAgentId);
+  const system = usePromptEditor('subAgent', 'systemPrompt', agentName);
+  const user = usePromptEditor('subAgent', 'userPrompt', agentName);
+  const prefill = usePromptEditor('subAgent', 'prefill', agentName);
 
   const current = activeTab === 'systemPrompt' ? system : activeTab === 'userPrompt' ? user : prefill;
 
+  const previewNode: PromptNode = useMemo(() => ({
+    id: `subAgent-${agentName}-${activeTab}`,
+    label: `${agentName}/${activeTab}`,
+    type: 'prompt',
+    taskType: 'subAgent',
+    category: activeTab,
+    name: agentName,
+  }), [agentName, activeTab]);
+
   return (
-    <section className="sub-agent-editor__section">
+    <section className="sub-agent-editor__section sub-agent-editor__section--fill">
       <div className="sub-agent-editor__section-header">
         <div className="sub-agent-editor__tabs">
           <button
@@ -76,6 +92,13 @@ const SubAgentPromptEditors: React.FC<{ subAgentId: string }> = ({ subAgentId })
             {t('settings.promptEditor.subAgentPrompts.prefill')}
           </button>
         </div>
+
+        <IconButton
+          icon={<Eye size="sm" />}
+          onClick={() => setShowPreview(true)}
+          title={t('settings.promptEditor.preview.title')}
+          size="sm"
+        />
 
         <IconButton
           icon={<Clock size="sm" />}
@@ -104,6 +127,15 @@ const SubAgentPromptEditors: React.FC<{ subAgentId: string }> = ({ subAgentId })
           textVersionProps={current.versionHistoryProps}
         />
       )}
+
+      {showPreview && (
+        <PromptPreviewModal
+          isOpen={showPreview}
+          onClose={() => setShowPreview(false)}
+          templateContent={current.content}
+          promptNode={previewNode}
+        />
+      )}
     </section>
   );
 };
@@ -126,18 +158,27 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
   const { subAgents, updateSubAgent, deleteSubAgent } = useSubAgentStore();
 
   const agent = useMemo(() => {
-    return selectedId ? subAgents.find((s) => s.sub_agent_id === selectedId) : undefined;
+    return selectedId ? subAgents.find((s) => s.id === selectedId) : undefined;
   }, [selectedId, subAgents]);
 
-  const allTools = useMemo(() => schemaRegistry.getAll().map((s) => s.name).sort(), []);
+  const allStaticTools = useMemo(() => {
+    return schemaRegistry
+      .getAll()
+      .map((s) => s.name)
+      .filter((name) => !name.startsWith('call_') && name !== 'return_sub_agent_result')
+      .sort();
+  }, []);
 
+  const [editedAgentName, setEditedAgentName] = useState('');
   const [editedDisplayName, setEditedDisplayName] = useState('');
   const [editedDescription, setEditedDescription] = useState('');
   const [editedEnabled, setEditedEnabled] = useState(true);
   const [editedModes, setEditedModes] = useState<SubAgentAllowedMode[]>([]);
   const [editedTools, setEditedTools] = useState<string[]>([]);
+  const [editedAllowedSubAgentIds, setEditedAllowedSubAgentIds] = useState<string[]>([]);
   const [toolFilter, setToolFilter] = useState('');
   const [editedConfig, setEditedConfig] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<SubAgentEditorTab>('general');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -145,74 +186,122 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
 
   useEffect(() => {
     if (!agent) {
+      setEditedAgentName('');
       setEditedDisplayName('');
       setEditedDescription('');
       setEditedEnabled(true);
       setEditedModes([]);
       setEditedTools([]);
+      setEditedAllowedSubAgentIds([]);
       setEditedConfig(null);
       originalSnapshotRef.current = '';
       setError('');
       return;
     }
 
+    setEditedAgentName(agent.agent_name);
     setEditedDisplayName(agent.display_name);
-    setEditedDescription(agent.description ?? '');
+    setEditedDescription(agent.description);
     setEditedEnabled(agent.enabled);
     setEditedModes(agent.allowed_agent_modes);
-    setEditedTools(agent.allowed_tool_names);
+    setEditedTools(agent.allowed_tool_names.filter((n) => !n.startsWith('call_') && n !== 'return_sub_agent_result'));
+    setEditedAllowedSubAgentIds(agent.allowed_sub_agent_ids ?? []);
     setEditedConfig(agent.llm_config);
     originalSnapshotRef.current = snapshotForChangeDetection(agent);
     setError('');
     setToolFilter('');
-  }, [agent?.sub_agent_id]);
+  }, [agent?.id]);
 
   const currentSnapshot = useMemo(() => {
     if (!agent) return '';
     return JSON.stringify({
+      agent_name: normalizeString(editedAgentName),
       display_name: editedDisplayName,
-      description: normalizeStringOrNull(editedDescription),
+      description: normalizeString(editedDescription),
       enabled: editedEnabled,
       allowed_agent_modes: [...editedModes].sort(),
       allowed_tool_names: [...editedTools].sort(),
+      allowed_sub_agent_ids: [...editedAllowedSubAgentIds].sort(),
       llm_config: editedConfig,
     });
-  }, [agent, editedDisplayName, editedDescription, editedEnabled, editedModes, editedTools, editedConfig]);
+  }, [agent, editedAgentName, editedDisplayName, editedDescription, editedEnabled, editedModes, editedTools, editedAllowedSubAgentIds, editedConfig]);
 
   const hasChanges = Boolean(agent) && currentSnapshot !== originalSnapshotRef.current;
 
   const filteredTools = useMemo(() => {
     const q = toolFilter.trim().toLowerCase();
-    if (!q) return allTools;
-    return allTools.filter((name) => name.toLowerCase().includes(q));
-  }, [allTools, toolFilter]);
+    if (!q) return allStaticTools;
+    return allStaticTools.filter((name) => name.toLowerCase().includes(q));
+  }, [allStaticTools, toolFilter]);
 
-  const toggleMode = (mode: SubAgentAllowedMode) => {
-    setEditedModes((prev) => (prev.includes(mode) ? prev.filter((m) => m !== mode) : [...prev, mode]));
+  const setModeChecked = (mode: SubAgentAllowedMode, checked: boolean) => {
+    setEditedModes((prev) => {
+      const has = prev.includes(mode);
+      if (checked && !has) return [...prev, mode];
+      if (!checked && has) return prev.filter((m) => m !== mode);
+      return prev;
+    });
   };
 
-  const toggleTool = (toolName: string) => {
-    setEditedTools((prev) => (prev.includes(toolName) ? prev.filter((n) => n !== toolName) : [...prev, toolName]));
+  const setToolChecked = (toolName: string, checked: boolean) => {
+    setEditedTools((prev) => {
+      const has = prev.includes(toolName);
+      if (checked && !has) return [...prev, toolName];
+      if (!checked && has) return prev.filter((n) => n !== toolName);
+      return prev;
+    });
+  };
+
+  const setSubAgentAllowedChecked = (subAgentId: string, checked: boolean) => {
+    setEditedAllowedSubAgentIds((prev) => {
+      const has = prev.includes(subAgentId);
+      if (checked && !has) return [...prev, subAgentId];
+      if (!checked && has) return prev.filter((id) => id !== subAgentId);
+      return prev;
+    });
   };
 
   const handleSave = async () => {
     if (!agent) return;
 
+    let agent_name = editedAgentName.trim();
+    if (agent_name.startsWith(SUB_AGENT_CALL_PREFIX)) {
+      agent_name = agent_name.slice(SUB_AGENT_CALL_PREFIX.length);
+    }
     const name = editedDisplayName.trim();
+    const desc = editedDescription.trim();
+    if (!agent_name) {
+      setError(t('settings.promptEditor.subAgentSave.idRequired'));
+      return;
+    }
+    if (agent_name.length > 50) {
+      setError(t('settings.promptEditor.subAgentSave.idTooLong'));
+      return;
+    }
+    if (!isValidAgentName(agent_name)) {
+      setError(t('settings.promptEditor.subAgentSave.invalidId'));
+      return;
+    }
     if (!name) {
       setError(t('settings.promptEditor.subAgentSave.nameRequired'));
+      return;
+    }
+    if (!desc) {
+      setError(t('settings.promptEditor.subAgentSave.descriptionRequired'));
       return;
     }
 
     setIsSaving(true);
     setError('');
     try {
-      const updated = await updateSubAgent(agent.sub_agent_id, {
+      const updated = await updateSubAgent(agent.id, {
+        agent_name,
         display_name: name,
-        description: normalizeStringOrNull(editedDescription),
+        description: desc,
         enabled: editedEnabled,
         allowed_agent_modes: editedModes,
-        allowed_tool_names: editedTools,
+        allowed_tool_names: editedTools.filter((n) => !n.startsWith('call_') && n !== 'return_sub_agent_result'),
+        allowed_sub_agent_ids: editedAllowedSubAgentIds,
         llm_config: editedConfig,
       });
       originalSnapshotRef.current = snapshotForChangeDetection(updated);
@@ -228,7 +317,7 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
     const ok = window.confirm(t('settings.promptEditor.subAgentDelete.confirm', { name: agent.display_name }));
     if (!ok) return;
     try {
-      await deleteSubAgent(agent.sub_agent_id);
+      await deleteSubAgent(agent.id);
       onDeleted();
     } catch (err: any) {
       setError(err?.message || t('settings.promptEditor.subAgentDelete.deleteFailed'));
@@ -265,8 +354,26 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
     <div className="sub-agent-editor">
       <div className="sub-agent-editor__header">
         <div className="sub-agent-editor__title-row">
-          <h3 className="sub-agent-editor__title">{agent.display_name}</h3>
-          <span className="sub-agent-editor__id">{agent.sub_agent_id}</span>
+          <div className="sub-agent-editor__title-line">
+            <h3 className="sub-agent-editor__title">{agent.display_name}</h3>
+            <div className="sub-agent-editor__enabled-toggle">
+              <ToggleSwitch
+                checked={editedEnabled}
+                onChange={setEditedEnabled}
+                label={t('common.enabled')}
+              />
+            </div>
+          </div>
+          <div className="sub-agent-editor__id-block">
+            <div className="sub-agent-editor__id-line">
+              <span className="sub-agent-editor__id-key">{t('settings.promptEditor.subAgentIds.tool')}</span>
+              <span className="sub-agent-editor__id-value">{toCallToolName(editedAgentName || agent.agent_name)}</span>
+            </div>
+            <div className="sub-agent-editor__id-line">
+              <span className="sub-agent-editor__id-key">{t('settings.promptEditor.subAgentIds.uuid')}</span>
+              <span className="sub-agent-editor__id-value">{agent.id}</span>
+            </div>
+          </div>
         </div>
         <div className="sub-agent-editor__actions">
           {onToggleSidebar && (
@@ -297,93 +404,202 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
       </div>
 
       <div className="sub-agent-editor__content">
-        <section className="sub-agent-editor__section">
-          <h4 className="sub-agent-editor__section-title">{t('settings.promptEditor.subAgentSettings.title')}</h4>
+        <div
+          className="sub-agent-editor__main-tabs"
+          role="tablist"
+          aria-label={t('settings.promptEditor.subAgentEditorTabs.ariaLabel')}
+        >
+          <button
+            type="button"
+            id="sub-agent-editor-tab-general"
+            role="tab"
+            className={`sub-agent-editor__tab ${activeTab === 'general' ? 'is-active' : ''}`}
+            aria-selected={activeTab === 'general'}
+            aria-controls="sub-agent-editor-panel-general"
+            onClick={() => setActiveTab('general')}
+          >
+            {t('settings.promptEditor.subAgentEditorTabs.general')}
+          </button>
+          <button
+            type="button"
+            id="sub-agent-editor-tab-toolCalls"
+            role="tab"
+            className={`sub-agent-editor__tab ${activeTab === 'toolCalls' ? 'is-active' : ''}`}
+            aria-selected={activeTab === 'toolCalls'}
+            aria-controls="sub-agent-editor-panel-toolCalls"
+            onClick={() => setActiveTab('toolCalls')}
+          >
+            {t('settings.promptEditor.subAgentEditorTabs.toolCalls')}
+          </button>
+          <button
+            type="button"
+            id="sub-agent-editor-tab-provider"
+            role="tab"
+            className={`sub-agent-editor__tab ${activeTab === 'provider' ? 'is-active' : ''}`}
+            aria-selected={activeTab === 'provider'}
+            aria-controls="sub-agent-editor-panel-provider"
+            onClick={() => setActiveTab('provider')}
+          >
+            {t('settings.promptEditor.subAgentEditorTabs.provider')}
+          </button>
+          <button
+            type="button"
+            id="sub-agent-editor-tab-prompts"
+            role="tab"
+            className={`sub-agent-editor__tab ${activeTab === 'prompts' ? 'is-active' : ''}`}
+            aria-selected={activeTab === 'prompts'}
+            aria-controls="sub-agent-editor-panel-prompts"
+            onClick={() => setActiveTab('prompts')}
+          >
+            {t('settings.promptEditor.subAgentEditorTabs.prompts')}
+          </button>
+        </div>
 
-          <div className="sub-agent-editor__field-row">
-            <label className="sub-agent-editor__label">{t('settings.promptEditor.subAgentSettings.displayName')}</label>
-            <input
-              className="sub-agent-editor__input"
-              value={editedDisplayName}
-              onChange={(e) => setEditedDisplayName(e.target.value)}
-            />
-          </div>
+        <div
+          id="sub-agent-editor-panel-general"
+          className="sub-agent-editor__tab-panel"
+          role="tabpanel"
+          aria-labelledby="sub-agent-editor-tab-general"
+          hidden={activeTab !== 'general'}
+        >
+          <section className="sub-agent-editor__section">
+            <h4 className="sub-agent-editor__section-title">{t('settings.promptEditor.subAgentSettings.title')}</h4>
 
-          <div className="sub-agent-editor__field-row">
-            <label className="sub-agent-editor__label">{t('settings.promptEditor.subAgentSettings.enabled')}</label>
-            <input
-              type="checkbox"
-              checked={editedEnabled}
-              onChange={(e) => setEditedEnabled(e.target.checked)}
-            />
-          </div>
+            <div className="sub-agent-editor__field-row">
+              <label className="sub-agent-editor__label">{t('settings.promptEditor.subAgentSettings.toolId')}</label>
+              <div>
+                <div className="sub-agent-editor__agent-name-row">
+                  <span className="sub-agent-editor__agent-name-prefix">{SUB_AGENT_CALL_PREFIX}</span>
+                  <input
+                    className="sub-agent-editor__input sub-agent-editor__input--mono"
+                    value={editedAgentName}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setEditedAgentName(next.startsWith(SUB_AGENT_CALL_PREFIX) ? next.slice(SUB_AGENT_CALL_PREFIX.length) : next);
+                    }}
+                  />
+                </div>
+                <div className="sub-agent-editor__hint">{t('settings.promptEditor.subAgentSettings.toolIdHint')}</div>
+              </div>
+            </div>
 
-          <div className="sub-agent-editor__field-row sub-agent-editor__field-row--textarea">
-            <label className="sub-agent-editor__label">{t('settings.promptEditor.subAgentSettings.description')}</label>
-            <textarea
-              className="sub-agent-editor__textarea"
-              value={editedDescription}
-              onChange={(e) => setEditedDescription(e.target.value)}
-              rows={3}
-            />
-          </div>
-        </section>
+            <div className="sub-agent-editor__field-row">
+              <label className="sub-agent-editor__label">{t('settings.promptEditor.subAgentSettings.displayName')}</label>
+              <input
+                className="sub-agent-editor__input"
+                value={editedDisplayName}
+                onChange={(e) => setEditedDisplayName(e.target.value)}
+              />
+            </div>
 
-        <section className="sub-agent-editor__section">
-          <h4 className="sub-agent-editor__section-title">{t('settings.promptEditor.subAgentSettings.allowedModes')}</h4>
-          <div className="sub-agent-editor__chip-grid">
-            {MODE_OPTIONS.map((opt) => (
-              <label key={opt.mode} className="sub-agent-editor__chip">
-                <input
-                  type="checkbox"
+            <div className="sub-agent-editor__field-row sub-agent-editor__field-row--textarea">
+              <label className="sub-agent-editor__label">{t('settings.promptEditor.subAgentSettings.description')}</label>
+              <textarea
+                className="sub-agent-editor__textarea"
+                value={editedDescription}
+                onChange={(e) => setEditedDescription(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </section>
+
+          <section className="sub-agent-editor__section">
+            <h4 className="sub-agent-editor__section-title">{t('settings.promptEditor.subAgentSettings.allowedModes')}</h4>
+            <div className="sub-agent-editor__chip-grid">
+              {MODE_OPTIONS.map((opt) => (
+                <ToggleSwitch
+                  key={opt.mode}
                   checked={editedModes.includes(opt.mode)}
-                  onChange={() => toggleMode(opt.mode)}
+                  onChange={(checked) => setModeChecked(opt.mode, checked)}
+                  label={t(opt.labelKey)}
                 />
-                <span>{t(opt.labelKey)}</span>
-              </label>
-            ))}
-          </div>
-        </section>
+              ))}
+            </div>
+          </section>
+        </div>
 
-        <section className="sub-agent-editor__section">
-          <h4 className="sub-agent-editor__section-title">{t('settings.promptEditor.subAgentSettings.allowedTools')}</h4>
-          <div className="sub-agent-editor__tool-filter">
-            <Sliders size="sm" />
-            <input
-              className="sub-agent-editor__tool-filter-input"
-              value={toolFilter}
-              onChange={(e) => setToolFilter(e.target.value)}
-              placeholder={t('settings.promptEditor.subAgentSettings.toolFilterPlaceholder')}
-            />
-          </div>
+        <div
+          id="sub-agent-editor-panel-toolCalls"
+          className="sub-agent-editor__tab-panel sub-agent-editor__tab-panel--fill"
+          role="tabpanel"
+          aria-labelledby="sub-agent-editor-tab-toolCalls"
+          hidden={activeTab !== 'toolCalls'}
+        >
+          <section className="sub-agent-editor__section sub-agent-editor__section--fill">
+            <h4 className="sub-agent-editor__section-title">{t('settings.promptEditor.subAgentSettings.allowedTools')}</h4>
+            <div className="sub-agent-editor__tool-filter">
+              <Sliders size="sm" />
+              <input
+                className="sub-agent-editor__tool-filter-input"
+                value={toolFilter}
+                onChange={(e) => setToolFilter(e.target.value)}
+                placeholder={t('settings.promptEditor.subAgentSettings.toolFilterPlaceholder')}
+              />
+            </div>
 
-          <div className="sub-agent-editor__tool-grid">
-            {filteredTools.map((toolName) => (
-              <label key={toolName} className="sub-agent-editor__tool-item">
-                <input
-                  type="checkbox"
+            <div className="sub-agent-editor__tool-grid">
+              {filteredTools.map((toolName) => (
+                <ToggleSwitch
+                  key={toolName}
                   checked={editedTools.includes(toolName)}
-                  onChange={() => toggleTool(toolName)}
+                  onChange={(checked) => setToolChecked(toolName, checked)}
+                  label={toolName}
                 />
-                <span className="sub-agent-editor__tool-name">{toolName}</span>
-              </label>
-            ))}
-          </div>
-        </section>
+              ))}
+            </div>
+            <div className="sub-agent-editor__hint">
+              {t('settings.promptEditor.subAgentSettings.returnResultAlwaysAvailable')}
+            </div>
+          </section>
 
-        <section className="sub-agent-editor__section">
-          <h4 className="sub-agent-editor__section-title">{t('settings.promptEditor.subAgentSettings.llmConfig')}</h4>
-          {editedConfig && (
-            <TaskConfigForm
-              taskType="agent"
-              config={editedConfig}
-              credentials={credentials}
-              onChange={(cfg) => setEditedConfig(cfg)}
-            />
-          )}
-        </section>
+          <section className="sub-agent-editor__section">
+            <h4 className="sub-agent-editor__section-title">{t('settings.promptEditor.subAgentSettings.allowedSubAgents')}</h4>
+            <div className="sub-agent-editor__sub-agent-grid">
+              {subAgents
+                .filter((s) => s.id !== agent.id)
+                .sort((a, b) => a.display_name.localeCompare(b.display_name))
+                .map((s) => (
+                  <ToggleSwitch
+                    key={s.id}
+                    checked={editedAllowedSubAgentIds.includes(s.id)}
+                    onChange={(checked) => setSubAgentAllowedChecked(s.id, checked)}
+                    label={toCallToolName(s.agent_name)}
+                    disabled={!s.enabled}
+                  />
+                ))}
+            </div>
+          </section>
+        </div>
 
-        <SubAgentPromptEditors subAgentId={agent.sub_agent_id} />
+        <div
+          id="sub-agent-editor-panel-provider"
+          className="sub-agent-editor__tab-panel"
+          role="tabpanel"
+          aria-labelledby="sub-agent-editor-tab-provider"
+          hidden={activeTab !== 'provider'}
+        >
+          <section className="sub-agent-editor__section">
+            <h4 className="sub-agent-editor__section-title">{t('settings.promptEditor.subAgentSettings.llmConfig')}</h4>
+            {editedConfig && (
+              <TaskConfigForm
+                taskType="agent"
+                config={editedConfig}
+                credentials={credentials}
+                onChange={(cfg) => setEditedConfig(cfg)}
+              />
+            )}
+          </section>
+        </div>
+
+        <div
+          id="sub-agent-editor-panel-prompts"
+          className="sub-agent-editor__tab-panel sub-agent-editor__tab-panel--fill"
+          role="tabpanel"
+          aria-labelledby="sub-agent-editor-tab-prompts"
+          hidden={activeTab !== 'prompts'}
+        >
+          <SubAgentPromptEditors agentName={agent.agent_name} />
+        </div>
 
         {error && <div className="sub-agent-editor__error">{error}</div>}
       </div>

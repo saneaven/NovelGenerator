@@ -704,26 +704,35 @@
         "title": "Create Sub Agent",
         "create": "Create Sub Agent",
         "id": "Sub Agent ID *",
-        "idPlaceholder": "e.g., researchCollector",
-        "idHint": "Letters, numbers, dashes and underscores only. Max 50 chars.",
+        "idPlaceholder": "e.g., research_collector",
+        "idHint": "Lowercase letters, numbers, and underscores only. 1–50 chars.",
         "name": "Display Name *",
         "namePlaceholder": "e.g., Research Collector",
-        "description": "Description (optional)",
+        "description": "Description *",
         "descriptionPlaceholder": "What this sub agent does...",
         "idRequired": "Sub Agent ID is required",
         "idTooLong": "Sub Agent ID must be 50 characters or less",
-        "invalidId": "ID can only contain letters, numbers, dashes, and underscores",
+        "invalidId": "ID must start with a lowercase letter and contain only lowercase letters, numbers, and underscores",
         "nameRequired": "Display name is required",
+        "descriptionRequired": "Description is required",
         "createFailed": "Failed to create sub agent"
+      },
+      "subAgentIds": {
+        "tool": "Tool",
+        "uuid": "UUID"
       },
       "subAgentSettings": {
         "title": "Settings",
+        "toolId": "Tool ID",
         "displayName": "Display Name",
         "enabled": "Enabled",
         "description": "Description",
         "allowedModes": "Allowed Caller Modes",
         "allowedTools": "Allowed Tools",
+        "allowedSubAgents": "Allowed Sub Agents",
         "toolFilterPlaceholder": "Filter tools…",
+        "toolIdHint": "Used to generate tool name: call_{id}. Lowercase letters, numbers, and underscores only. 1–50 chars.",
+        "returnResultAlwaysAvailable": "Note: return_sub_agent_result is always available and does not need to be enabled here.",
         "llmConfig": "LLM Config"
       },
       "subAgentModes": {
@@ -737,8 +746,19 @@
         "user": "User",
         "prefill": "Prefill"
       },
+      "subAgentEditorTabs": {
+        "ariaLabel": "Sub agent editor tabs",
+        "general": "General",
+        "toolCalls": "Tool Calls",
+        "provider": "Provider Config",
+        "prompts": "Prompts"
+      },
       "subAgentSave": {
+        "idRequired": "Tool ID is required",
+        "idTooLong": "Tool ID must be 50 characters or less",
+        "invalidId": "Tool ID must start with a lowercase letter and contain only lowercase letters, numbers, and underscores",
         "nameRequired": "Display name is required",
+        "descriptionRequired": "Description is required",
         "saveFailed": "Failed to save sub agent"
       },
       "subAgentDelete": {
@@ -1207,6 +1227,9 @@
     "untitled": "Untitled",
     "noChapters": "No chapters",
     "noDescription": "No description available."
+  },
+  "subAgent": {
+    "parentAgent": "Parent Agent"
   },
   "manuscriptEditor": {
     "toolbar": {

@@ -254,16 +254,19 @@ class SubAgentDefinitionModel(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     preset_id = Column(UUID(as_uuid=True), ForeignKey("prompt_presets.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    # Stable key used as PromptVersion.prompt_name (subAgentId)
-    sub_agent_id = Column(String(50), nullable=False)
+    # Stable key used as PromptVersion.prompt_name (agent_name). Also the suffix for call_{agent_name}.
+    agent_name = Column(String(50), nullable=False)
 
     display_name = Column(String(200), nullable=False)
-    description = Column(Text, nullable=True)
+    description = Column(Text, nullable=False)
     enabled = Column(Boolean, default=True, nullable=False)
 
     # Stored as JSON arrays
     allowed_agent_modes = Column(JSONB, nullable=False)
+    # Static tool names only (create_*/read_*/patch_*/replace_* etc). Never store call_* here.
     allowed_tool_names = Column(JSONB, nullable=False)
+    # UUID list of sub_agent_definitions.id that this Sub Agent is allowed to call.
+    allowed_sub_agent_ids = Column(JSONB, nullable=False)
 
     # TaskAIConfig-like payload (provider/model/temp/thinking settings etc.)
     llm_config = Column(JSONB, nullable=False)
@@ -275,7 +278,7 @@ class SubAgentDefinitionModel(Base):
     preset = relationship("PromptPreset", back_populates="sub_agents")
 
     __table_args__ = (
-        UniqueConstraint("preset_id", "sub_agent_id", name="uq_sub_agent_per_preset"),
+        UniqueConstraint("preset_id", "agent_name", name="uq_sub_agent_per_preset"),
         Index("idx_sub_agent_preset", "preset_id"),
     )
 

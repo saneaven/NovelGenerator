@@ -1,7 +1,7 @@
 """Preset service for managing prompt presets"""
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
 import uuid
 
@@ -486,18 +486,33 @@ class PresetService:
             )
         ).all()
 
+        if not subs:
+            return 0
+
+        id_map = {s.id: uuid.uuid4() for s in subs}
         now = datetime.utcnow()
+
         for s in subs:
+            mapped_allowed: List[str] = []
+            for raw in s.allowed_sub_agent_ids or []:
+                try:
+                    ref = uuid.UUID(str(raw))
+                except ValueError:
+                    continue
+                if ref in id_map:
+                    mapped_allowed.append(str(id_map[ref]))
+
             db.add(SubAgentDefinitionModel(
-                id=uuid.uuid4(),
+                id=id_map[s.id],
                 user_id=user_id,
                 preset_id=target_preset_id,
-                sub_agent_id=s.sub_agent_id,
+                agent_name=s.agent_name,
                 display_name=s.display_name,
-                description=s.description,
+                description=(s.description or s.display_name).strip(),
                 enabled=s.enabled,
                 allowed_agent_modes=s.allowed_agent_modes,
                 allowed_tool_names=s.allowed_tool_names,
+                allowed_sub_agent_ids=mapped_allowed,
                 llm_config=s.llm_config,
                 created_at=now,
                 updated_at=now,
@@ -831,16 +846,18 @@ class PresetService:
                 SubAgentDefinitionModel.user_id == user_id,
                 SubAgentDefinitionModel.preset_id == preset_id,
             )
-        ).order_by(SubAgentDefinitionModel.sub_agent_id.asc()).all()
+        ).order_by(SubAgentDefinitionModel.agent_name.asc()).all()
 
         sub_agents_list = [
             {
-                "sub_agent_id": s.sub_agent_id,
+                "id": str(s.id),
+                "agent_name": s.agent_name,
                 "display_name": s.display_name,
-                "description": s.description,
+                "description": (s.description or s.display_name).strip(),
                 "enabled": s.enabled,
                 "allowed_agent_modes": s.allowed_agent_modes,
                 "allowed_tool_names": s.allowed_tool_names,
+                "allowed_sub_agent_ids": s.allowed_sub_agent_ids,
                 "llm_config": s.llm_config,
             }
             for s in sub_agents
@@ -973,25 +990,59 @@ class PresetService:
             variable_count += 1
 
         # 6. Create sub agents (definitions)
-        for sa_data in data.get("sub_agents", []):
+        sub_agents_data = data.get("sub_agents", [])
+
+        id_map: Dict[uuid.UUID, uuid.UUID] = {}
+        for sa_data in sub_agents_data:
             if not isinstance(sa_data, dict):
                 raise ValueError("Invalid preset file: sub_agents entries must be objects")
 
-            required = ["sub_agent_id", "display_name", "allowed_agent_modes", "allowed_tool_names", "llm_config", "enabled"]
+            required = [
+                "id",
+                "agent_name",
+                "display_name",
+                "description",
+                "allowed_agent_modes",
+                "allowed_tool_names",
+                "allowed_sub_agent_ids",
+                "llm_config",
+                "enabled",
+            ]
             missing = [k for k in required if k not in sa_data]
             if missing:
                 raise ValueError(f"Invalid preset file: sub_agents missing fields: {', '.join(missing)}")
 
+            old_id = uuid.UUID(str(sa_data["id"]))
+            id_map[old_id] = uuid.uuid4()
+
+        for sa_data in sub_agents_data:
+            old_id = uuid.UUID(str(sa_data["id"]))
+            new_id = id_map[old_id]
+
+            mapped_allowed: List[str] = []
+            for raw in sa_data.get("allowed_sub_agent_ids", []) or []:
+                try:
+                    ref = uuid.UUID(str(raw))
+                except ValueError:
+                    continue
+                if ref in id_map:
+                    mapped_allowed.append(str(id_map[ref]))
+
+            description = str(sa_data["description"]).strip()
+            if not description:
+                raise ValueError("Invalid preset file: sub_agents.description is required")
+
             db.add(SubAgentDefinitionModel(
-                id=uuid.uuid4(),
+                id=new_id,
                 user_id=user_id,
                 preset_id=preset.id,
-                sub_agent_id=str(sa_data["sub_agent_id"]),
+                agent_name=str(sa_data["agent_name"]),
                 display_name=str(sa_data["display_name"]),
-                description=sa_data.get("description"),
+                description=description,
                 enabled=bool(sa_data.get("enabled", True)),
                 allowed_agent_modes=sa_data.get("allowed_agent_modes", []),
                 allowed_tool_names=sa_data.get("allowed_tool_names", []),
+                allowed_sub_agent_ids=mapped_allowed,
                 llm_config=sa_data.get("llm_config", {}),
                 created_at=now,
                 updated_at=now,

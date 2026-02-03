@@ -117,8 +117,8 @@ export interface TemplateData {
   input: {
     // userMessage is injected per user block in prepareMessages()
     userMessage?: string;
-    // Sub Agent input payload (for subAgent task)
-    subagent?: any;
+    // Message passed from the parent Agent into a Sub Agent invocation (call_{agent_name} args.input)
+    agentMessage?: string;
   };
   feedback?: {
     editingObjectIds: string[];
@@ -219,8 +219,8 @@ export interface AgentWorkspacePromptContext extends BasePromptContext {
  */
 export interface SubAgentPromptContext extends BasePromptContext {
   tools?: ToolCallSchema[];
-  subAgentId: string;
-  subagent: any;
+  /** Prompt template key (also the tool suffix for call_{agent_name}). */
+  agentName: string;
 }
 
 /**
@@ -454,6 +454,12 @@ export interface PromptBundle {
   initialUserPrompt?: string;      // Template for single user message case (rich context)
   firstUserPrompt?: string;        // Template for first user message in multi-turn
   lastUserPrompt?: string;         // Template for last user message in multi-turn
+  /**
+   * Which `input.*` field should receive the current message text when rendering `role=user` blocks.
+   * - Most tasks: `userMessage`
+   * - Sub Agent: `agentMessage` (parent Agent -> Sub Agent messages)
+   */
+  messageInputKey: 'userMessage' | 'agentMessage';
   prefill?: string;
   templateData: TemplateData;
 }

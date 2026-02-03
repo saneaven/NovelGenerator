@@ -231,6 +231,7 @@ export class PromptManager {
       userPrompt: userTemplate!,                     // Default template for user messages
       firstUserPrompt: firstTemplate ?? undefined,   // Optional template for first message
       lastUserPrompt: lastTemplate ?? undefined,     // Optional template for last message
+      messageInputKey: 'userMessage',
       prefill: prefillTemplate && context.enablePrefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
@@ -243,12 +244,12 @@ export class PromptManager {
   private static async generateSubAgentBundle(
     context: SubAgentPromptContext
   ): Promise<PromptBundle> {
-    const subAgentId = context.subAgentId;
+    const agentName = context.agentName;
 
     const [systemTemplate, userTemplate, prefillTemplate] = await Promise.all([
-      this.getTemplate('subAgent', 'systemPrompt', subAgentId),
-      this.getTemplate('subAgent', 'userPrompt', subAgentId),
-      this.getTemplate('subAgent', 'prefill', subAgentId),
+      this.getTemplate('subAgent', 'systemPrompt', agentName),
+      this.getTemplate('subAgent', 'userPrompt', agentName),
+      this.getTemplate('subAgent', 'prefill', agentName),
     ]);
 
     const settings = useSettingsStore.getState().settings;
@@ -257,15 +258,14 @@ export class PromptManager {
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
       project: this.buildProjectData(context.projectId, settings.mainLanguage),
-      input: {
-        subagent: context.subagent,
-      },
+      input: {},
       variables,
     };
 
     return {
       systemPrompt: renderTemplate(systemTemplate!, templateData),
       userPrompt: userTemplate!,
+      messageInputKey: 'agentMessage',
       prefill: prefillTemplate && context.enablePrefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
@@ -337,6 +337,7 @@ export class PromptManager {
       initialUserPrompt: initialTemplate ?? undefined,
       firstUserPrompt: firstTemplate ?? undefined,
       lastUserPrompt: lastTemplate ?? undefined,
+      messageInputKey: 'userMessage',
       prefill: prefillTemplate && context.enablePrefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
@@ -388,6 +389,7 @@ export class PromptManager {
       initialUserPrompt: initialTemplate ?? undefined,
       firstUserPrompt: firstTemplate ?? undefined,
       lastUserPrompt: lastTemplate ?? undefined,
+      messageInputKey: 'userMessage',
       prefill: prefillTemplate && context.enablePrefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
@@ -424,6 +426,7 @@ export class PromptManager {
     return {
       systemPrompt: renderTemplate(systemTemplate!, templateData),
       userPrompt: renderTemplate(userTemplate!, templateData),
+      messageInputKey: 'userMessage',
       prefill: prefillTemplate && context.enablePrefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
@@ -457,6 +460,7 @@ export class PromptManager {
     return {
       systemPrompt: renderTemplate(systemTemplate!, templateData),
       userPrompt: userTemplate!, // NOT rendered - will be rendered per-message
+      messageInputKey: 'userMessage',
       templateData,
     };
   }
@@ -496,6 +500,7 @@ export class PromptManager {
       initialUserPrompt: initialTemplate ?? undefined,
       firstUserPrompt: firstTemplate ?? undefined,
       lastUserPrompt: lastTemplate ?? undefined,
+      messageInputKey: 'userMessage',
       prefill: prefillTemplate && context.enablePrefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
@@ -540,6 +545,7 @@ export class PromptManager {
       initialUserPrompt: initialTemplate ?? undefined,
       firstUserPrompt: firstTemplate ?? undefined,
       lastUserPrompt: lastTemplate ?? undefined,
+      messageInputKey: 'userMessage',
       prefill: prefillTemplate && context.enablePrefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,
@@ -588,6 +594,7 @@ export class PromptManager {
       initialUserPrompt: initialTemplate ?? undefined,
       firstUserPrompt: firstTemplate ?? undefined,
       lastUserPrompt: lastTemplate ?? undefined,
+      messageInputKey: 'userMessage',
       prefill: prefillTemplate && context.enablePrefill
         ? renderTemplate(prefillTemplate, templateData)
         : undefined,

@@ -11,6 +11,7 @@ import type { NormalizedToolCall } from '../types';
 import type { ValidationContext, ValidationResult } from './types';
 import { validResult } from './types';
 import { getValidators } from './ValidatorRegistry';
+import { validateSubAgentCallInput, validateToolAllowedInSession, validateToolSchema } from './validators';
 
 /**
  * Validate multiple tool calls in parallel.
@@ -26,10 +27,11 @@ export async function validate(
 
   await Promise.all(
     toolCalls.map(async (tc) => {
+      const globalValidators = [validateToolSchema, validateToolAllowedInSession, validateSubAgentCallInput];
       const validators = getValidators(tc.toolName);
 
       // Run validators in sequence (first failure stops chain)
-      for (const validator of validators) {
+      for (const validator of [...globalValidators, ...validators]) {
         try {
           const result = await validator(tc.arguments, tc.toolName, context);
           if (!result.valid) {

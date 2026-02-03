@@ -704,26 +704,35 @@
         "title": "서브 에이전트 생성",
         "create": "서브 에이전트 생성",
         "id": "서브 에이전트 ID *",
-        "idPlaceholder": "예: researchCollector",
-        "idHint": "영문/숫자/대시/언더스코어만 사용(최대 50자).",
+        "idPlaceholder": "예: research_collector",
+        "idHint": "소문자 영문/숫자/언더스코어(_)만 사용(1~50자).",
         "name": "표시 이름 *",
         "namePlaceholder": "예: 자료 수집기",
-        "description": "설명 (선택사항)",
+        "description": "설명 *",
         "descriptionPlaceholder": "이 서브 에이전트가 하는 일...",
         "idRequired": "서브 에이전트 ID는 필수입니다",
         "idTooLong": "서브 에이전트 ID는 50자 이하여야 합니다",
-        "invalidId": "ID는 영문, 숫자, 대시(-), 언더스코어(_)만 사용할 수 있습니다",
+        "invalidId": "ID는 소문자 영문으로 시작하고 소문자 영문/숫자/언더스코어(_)만 사용할 수 있습니다",
         "nameRequired": "표시 이름은 필수입니다",
+        "descriptionRequired": "설명은 필수입니다",
         "createFailed": "서브 에이전트 생성에 실패했습니다"
+      },
+      "subAgentIds": {
+        "tool": "툴",
+        "uuid": "UUID"
       },
       "subAgentSettings": {
         "title": "설정",
+        "toolId": "툴 ID",
         "displayName": "표시 이름",
         "enabled": "사용",
         "description": "설명",
         "allowedModes": "호출 가능 모드",
         "allowedTools": "허용 툴",
+        "allowedSubAgents": "허용 서브 에이전트",
         "toolFilterPlaceholder": "툴 필터…",
+        "toolIdHint": "툴 이름은 call_{id}로 생성됩니다. 소문자 영문/숫자/언더스코어(_)만 사용(1~50자).",
+        "returnResultAlwaysAvailable": "참고: return_sub_agent_result는 항상 사용 가능하며 여기에서 활성화할 필요가 없습니다.",
         "llmConfig": "LLM 설정"
       },
       "subAgentModes": {
@@ -737,8 +746,19 @@
         "user": "유저",
         "prefill": "프리필"
       },
+      "subAgentEditorTabs": {
+        "ariaLabel": "서브 에이전트 편집 탭",
+        "general": "일반",
+        "toolCalls": "툴 호출",
+        "provider": "프로바이더 설정",
+        "prompts": "프롬프트"
+      },
       "subAgentSave": {
+        "idRequired": "툴 ID는 필수입니다",
+        "idTooLong": "툴 ID는 50자 이하여야 합니다",
+        "invalidId": "툴 ID는 소문자 영문으로 시작하고 소문자 영문/숫자/언더스코어(_)만 사용할 수 있습니다",
         "nameRequired": "표시 이름은 필수입니다",
+        "descriptionRequired": "설명은 필수입니다",
         "saveFailed": "서브 에이전트 저장에 실패했습니다"
       },
       "subAgentDelete": {
@@ -1206,6 +1226,9 @@
     "untitled": "제목 없음",
     "noChapters": "챕터 없음",
     "noDescription": "설명이 없습니다."
+  },
+  "subAgent": {
+    "parentAgent": "부모 에이전트"
   },
   "manuscriptEditor": {
     "toolbar": {

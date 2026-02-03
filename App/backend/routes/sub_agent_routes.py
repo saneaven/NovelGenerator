@@ -56,7 +56,7 @@ async def create_sub_agent(
     status_code=status.HTTP_200_OK,
 )
 async def update_sub_agent(
-    sub_agent_id: str = Path(..., description="Sub agent ID (prompt_name key)"),
+    sub_agent_id: uuid.UUID = Path(..., description="Sub agent UUID id"),
     data: SubAgentUpdate = ...,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -71,7 +71,10 @@ async def update_sub_agent(
             data=data,
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        detail = str(e)
+        if detail.startswith("Sub agent not found:"):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
 
 @router.delete(
@@ -79,7 +82,7 @@ async def update_sub_agent(
     status_code=status.HTTP_200_OK,
 )
 async def delete_sub_agent(
-    sub_agent_id: str = Path(..., description="Sub agent ID (prompt_name key)"),
+    sub_agent_id: uuid.UUID = Path(..., description="Sub agent UUID id"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):

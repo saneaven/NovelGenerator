@@ -5,15 +5,12 @@ import { TextButton } from '../../TextButton';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useSubAgentStore } from '../../../store/subAgentStore';
 import type { SubAgentCreate, SubAgentAllowedMode } from '../../../types/subAgents';
+import { SUB_AGENT_CALL_PREFIX, isValidAgentName } from '../../../subAgent/tools/SubAgentCallTools';
 
 interface CreateSubAgentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreated: (subAgentId: string) => void;
-}
-
-function isValidSubAgentId(id: string): boolean {
-  return /^[a-zA-Z0-9_-]+$/.test(id);
+  onCreated: (id: string) => void;
 }
 
 const DEFAULT_ALLOWED_MODES: SubAgentAllowedMode[] = ['storyObject', 'novelEditor', 'outlineManager', 'subAgent'];
@@ -25,14 +22,14 @@ const CreateSubAgentModal: React.FC<CreateSubAgentModalProps> = ({ isOpen, onClo
 
   const defaultConfig = useMemo(() => getTaskConfig('agent'), [getTaskConfig]);
 
-  const [subAgentId, setSubAgentId] = useState('');
+  const [agentName, setAgentName] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [description, setDescription] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState('');
 
   const reset = () => {
-    setSubAgentId('');
+    setAgentName('');
     setDisplayName('');
     setDescription('');
     setError('');
@@ -47,19 +44,22 @@ const CreateSubAgentModal: React.FC<CreateSubAgentModalProps> = ({ isOpen, onClo
   };
 
   const handleCreate = async () => {
-    const id = subAgentId.trim();
+    let agent_name = agentName.trim();
+    if (agent_name.startsWith(SUB_AGENT_CALL_PREFIX)) {
+      agent_name = agent_name.slice(SUB_AGENT_CALL_PREFIX.length);
+    }
     const name = displayName.trim();
     const desc = description.trim();
 
-    if (!id) {
+    if (!agent_name) {
       setError(t('settings.promptEditor.subAgentCreate.idRequired'));
       return;
     }
-    if (id.length > 50) {
+    if (agent_name.length > 50) {
       setError(t('settings.promptEditor.subAgentCreate.idTooLong'));
       return;
     }
-    if (!isValidSubAgentId(id)) {
+    if (!isValidAgentName(agent_name)) {
       setError(t('settings.promptEditor.subAgentCreate.invalidId'));
       return;
     }
@@ -67,23 +67,28 @@ const CreateSubAgentModal: React.FC<CreateSubAgentModalProps> = ({ isOpen, onClo
       setError(t('settings.promptEditor.subAgentCreate.nameRequired'));
       return;
     }
+    if (!desc) {
+      setError(t('settings.promptEditor.subAgentCreate.descriptionRequired'));
+      return;
+    }
 
     setIsCreating(true);
     setError('');
 
     const payload: SubAgentCreate = {
-      sub_agent_id: id,
+      agent_name,
       display_name: name,
-      description: desc ? desc : null,
+      description: desc,
       enabled: true,
       allowed_agent_modes: DEFAULT_ALLOWED_MODES,
       allowed_tool_names: [],
+      allowed_sub_agent_ids: [],
       llm_config: defaultConfig,
     };
 
     try {
       const created = await createSubAgent(payload);
-      onCreated(created.sub_agent_id);
+      onCreated(created.id);
       reset();
       onClose();
     } catch (err: any) {
@@ -108,7 +113,7 @@ const CreateSubAgentModal: React.FC<CreateSubAgentModalProps> = ({ isOpen, onClo
           <TextButton
             variant="primary"
             onClick={handleCreate}
-            disabled={isCreating || !subAgentId.trim() || !displayName.trim()}
+            disabled={isCreating || !agentName.trim() || !displayName.trim() || !description.trim()}
             loading={isCreating}
           >
             {t('settings.promptEditor.subAgentCreate.create')}
@@ -120,15 +125,21 @@ const CreateSubAgentModal: React.FC<CreateSubAgentModalProps> = ({ isOpen, onClo
         <label className="form-label" htmlFor="sub-agent-id">
           {t('settings.promptEditor.subAgentCreate.id')}
         </label>
-        <input
-          id="sub-agent-id"
-          className="form-input"
-          type="text"
-          value={subAgentId}
-          onChange={(e) => setSubAgentId(e.target.value)}
-          placeholder={t('settings.promptEditor.subAgentCreate.idPlaceholder')}
-          autoFocus
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ opacity: 0.8, fontFamily: 'monospace' }}>call_</span>
+            <input
+              id="sub-agent-id"
+              className="form-input"
+              type="text"
+              value={agentName}
+              onChange={(e) => {
+                const next = e.target.value;
+                setAgentName(next.startsWith(SUB_AGENT_CALL_PREFIX) ? next.slice(SUB_AGENT_CALL_PREFIX.length) : next);
+              }}
+              placeholder={t('settings.promptEditor.subAgentCreate.idPlaceholder')}
+              autoFocus
+            />
+        </div>
         <small className="form-hint">{t('settings.promptEditor.subAgentCreate.idHint')}</small>
       </div>
 

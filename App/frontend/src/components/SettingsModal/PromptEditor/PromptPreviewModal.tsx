@@ -63,6 +63,7 @@ const PromptPreviewModal: React.FC<PromptPreviewModalProps> = ({
     templateContent,
     taskType,
     promptName: promptNode.name || '',
+    promptCategory: promptNode.category || 'userPrompt',
   });
 
   // Get fields for the current prompt type

@@ -111,9 +111,9 @@ export const UNIFIED_SCHEMA = {
 
   input: {
     userMessage: { desc: "User's input message", example: "Help me write a scene where..." as string },
-    subagent: {
-      desc: "Sub Agent input payload (passed via call_sub_agent)",
-      example: { topic: "Collect character setting details", objectIds: ["char-1"] } as Record<string, any>
+    agentMessage: {
+      desc: "Agent message passed into a Sub Agent (call_{agent_name} args.input)",
+      example: "Collect character setting details for character char-1." as string
     },
     toolResults: {
       desc: "Previous tool call results",

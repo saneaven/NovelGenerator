@@ -10,7 +10,7 @@ import { useVariableStore } from '../../../store/variableStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useTokenCount } from '../../../hooks/useTokenCount';
 import type { ConfigData } from '../../../templateEngine/schema';
-import type { TaskType } from '../../../types/prompts';
+import type { PromptCategory, TaskType } from '../../../types/prompts';
 import type { PromptVariable } from '../../../types/variables';
 import { buildPreviewData } from '../PromptEditor/previewDataBuilder';
 
@@ -18,6 +18,7 @@ export interface UsePromptPreviewOptions {
   templateContent: string;
   taskType: TaskType;
   promptName: string;
+  promptCategory: PromptCategory;
 }
 
 export interface UsePromptPreviewResult {
@@ -64,7 +65,7 @@ export interface UsePromptPreviewResult {
 const DEBOUNCE_DELAY = 300;
 
 export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPreviewResult {
-  const { templateContent, taskType, promptName } = options;
+  const { templateContent, taskType, promptName, promptCategory } = options;
 
   // Store access
   const currentProjectId = useProjectStore(state => state.currentProjectId);
@@ -100,6 +101,7 @@ export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPre
       const previewData = buildPreviewData({
         taskType,
         promptName,
+        promptCategory,
         showProjectContext,
         includeAllFilteredIds,
         projectId: currentProjectId,
@@ -125,7 +127,7 @@ export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPre
     } finally {
       setIsLoading(false);
     }
-  }, [templateContent, taskType, promptName, showProjectContext, includeAllFilteredIds, currentProjectId, configOverrides, promptTypeOverrides, variableOverrides]);
+  }, [templateContent, taskType, promptName, promptCategory, showProjectContext, includeAllFilteredIds, currentProjectId, configOverrides, promptTypeOverrides, variableOverrides]);
 
   // Debounced render effect
   useEffect(() => {

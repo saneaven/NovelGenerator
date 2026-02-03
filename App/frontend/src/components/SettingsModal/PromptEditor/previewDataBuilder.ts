@@ -10,12 +10,13 @@ import { useVariableStore } from '../../../store/variableStore';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { type PromptType, type ConfigData, type VariablesData } from '../../../templateEngine/schema';
 import type { TemplateData } from '../../../llm/types';
-import type { TaskType } from '../../../types/prompts';
+import type { PromptCategory, TaskType } from '../../../types/prompts';
 import { setNestedValue } from './promptTypeFields';
 
 export interface PreviewDataOptions {
   taskType: TaskType;
   promptName: string;
+  promptCategory: PromptCategory;
   showProjectContext: boolean;
   includeAllFilteredIds: boolean;
   projectId: string | null;
@@ -289,6 +290,7 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
   const {
     taskType,
     promptName,
+    promptCategory,
     showProjectContext,
     includeAllFilteredIds,
     projectId,
@@ -316,11 +318,18 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
     project = buildMinimalProjectData();
   }
 
-  // Build input data with placeholder
-  const input = {
-    userMessage: '[ Placeholder for user message ]',
-    toolResults: [],
-  };
+  // Build input data with placeholders (match runtime injection model)
+  const messageCategories: PromptCategory[] = ['userPrompt', 'initialUserPrompt', 'firstUserPrompt', 'lastUserPrompt'];
+  const shouldInjectMessage = messageCategories.includes(promptCategory);
+
+  const input: Record<string, any> = { toolResults: [] };
+  if (shouldInjectMessage) {
+    if (taskType === 'subAgent') {
+      input.agentMessage = '[ Placeholder for agent message ]';
+    } else {
+      input.userMessage = '[ Placeholder for user message ]';
+    }
+  }
 
   // Build variables from store with overrides
   const storeVariables = useVariableStore.getState().getVariablesForTemplate();

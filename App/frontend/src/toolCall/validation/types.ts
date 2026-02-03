@@ -10,6 +10,8 @@
 export interface ValidationContext {
   projectId: string;
   language: string;
+  /** Tool names that were provided to the model for this session (if available). */
+  allowedToolNames?: string[];
 }
 
 /**

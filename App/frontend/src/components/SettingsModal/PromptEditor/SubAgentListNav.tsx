@@ -8,7 +8,7 @@ import './SubAgentListNav.css';
 
 interface SubAgentListNavProps {
   selectedId: string | null;
-  onSelect: (subAgentId: string) => void;
+  onSelect: (id: string) => void;
   onCreate: () => void;
   onClose?: () => void;
 }
@@ -52,10 +52,10 @@ const SubAgentListNav: React.FC<SubAgentListNavProps> = ({
         ) : (
           sorted.map((agent) => (
             <button
-              key={agent.sub_agent_id}
+              key={agent.id}
               type="button"
-              className={`sub-agent-item ${selectedId === agent.sub_agent_id ? 'sub-agent-item--selected' : ''}`}
-              onClick={() => onSelect(agent.sub_agent_id)}
+              className={`sub-agent-item ${selectedId === agent.id ? 'sub-agent-item--selected' : ''}`}
+              onClick={() => onSelect(agent.id)}
             >
               <span className="sub-agent-item__icon">
                 <SpeechBubble size="sm" />
@@ -64,7 +64,7 @@ const SubAgentListNav: React.FC<SubAgentListNavProps> = ({
                 {agent.display_name}
                 {!agent.enabled && <span className="sub-agent-item__disabled">{t('common.disabled')}</span>}
               </span>
-              <span className="sub-agent-item__id">{agent.sub_agent_id}</span>
+              <span className="sub-agent-item__id">{`call_${agent.agent_name}`}</span>
             </button>
           ))
         )}

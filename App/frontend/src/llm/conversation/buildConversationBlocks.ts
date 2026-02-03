@@ -81,9 +81,11 @@ export function buildConversationBlocksWithMeta(
         template = promptBundle.userPrompt;
       }
 
+      const injectedKey = promptBundle.messageInputKey;
+      const injectedText = getMessageText(msg);
       const rendered = PromptManager.renderTemplate(template, {
         ...promptBundle.templateData,
-        input: { ...promptBundle.templateData.input, userMessage: getMessageText(msg) },
+        input: { ...promptBundle.templateData.input, [injectedKey]: injectedText },
       });
 
       messages.push({

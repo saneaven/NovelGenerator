@@ -18,7 +18,7 @@ function contentText(parts: Array<{ type: string; text: string }>): string {
 }
 
 function formatRole(role: string, t: (key: string) => string): string {
-  if (role === 'user') return t('agent.you');
+  if (role === 'user') return t('subAgent.parentAgent');
   if (role === 'assistant') return t('agent.ai');
   return role;
 }
@@ -164,7 +164,7 @@ export const SubAgentInvocationCard: React.FC<SubAgentInvocationCardProps> = ({ 
 
                       {/* Nested Sub Agent sessions (recursion) */}
                       {toolCalls
-                        .filter((tc) => tc.tool_name === 'call_sub_agent')
+                        .filter((tc) => typeof tc.tool_name === 'string' && tc.tool_name.startsWith('call_'))
                         .map((tc) => (
                           <SubAgentInvocationCard
                             key={tc.id}

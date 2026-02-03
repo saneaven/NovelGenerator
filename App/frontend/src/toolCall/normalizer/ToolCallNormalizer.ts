@@ -12,7 +12,7 @@ import type {
   NormalizedToolCall,
   ValidationResult,
 } from '../types';
-import { schemaRegistry } from '../schemas';
+import { toolSchemaResolver } from '../schemas/toolSchemaResolver';
 
 /**
  * Parse tool call arguments
@@ -37,7 +37,7 @@ export function validateToolCall(
   toolName: string,
   args: Record<string, unknown>
 ): ValidationResult {
-  const schema = schemaRegistry.get(toolName);
+  const schema = toolSchemaResolver.get(toolName);
 
   if (!schema) {
     return {
@@ -114,7 +114,7 @@ export function normalizeAndValidate(
  * Check if a tool name is known
  */
 export function isKnownTool(toolName: string): boolean {
-  return schemaRegistry.has(toolName);
+  return toolSchemaResolver.has(toolName);
 }
 
 /**
@@ -122,7 +122,7 @@ export function isKnownTool(toolName: string): boolean {
  * Different tools use different parameter names for the target ID
  */
 export function getIdFromArgs(toolName: string, args: Record<string, unknown>): string | undefined {
-  const schema = schemaRegistry.get(toolName);
+  const schema = toolSchemaResolver.get(toolName);
   if (!schema?.idParam) {
     return undefined;
   }

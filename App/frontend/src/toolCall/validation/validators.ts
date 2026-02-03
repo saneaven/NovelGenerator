@@ -15,6 +15,7 @@ import { applySingleReplacement } from '../../utils/patchUtils';
 import { getObjectData } from '../types';
 import { docToMarkdown } from '../../editor/manuscript/convert';
 import { normalizeDoc } from '../../editor/manuscript/doc';
+import { toolSchemaResolver } from '../schemas/toolSchemaResolver';
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -89,6 +90,72 @@ export function resolveObjectType(
 // ============================================================================
 // SYNC VALIDATORS
 // ============================================================================
+
+/**
+ * Validate tool call against its schema (known tool + required args + enums).
+ *
+ * This runs for every tool call (including dynamic call_{agent_name} tools).
+ */
+export const validateToolSchema: Validator = (args, toolName, _context) => {
+  const schema = toolSchemaResolver.get(toolName);
+  if (!schema) {
+    return invalidResult(`Unknown tool: ${toolName}`);
+  }
+
+  const errors: string[] = [];
+  const required = Array.isArray((schema.parameters as any)?.required) ? (schema.parameters as any).required : [];
+  const properties = (schema.parameters as any)?.properties ?? {};
+
+  for (const param of required) {
+    const value = (args as any)[param];
+    if (value === undefined || value === null) {
+      errors.push(`Missing required parameter: ${param}`);
+      continue;
+    }
+    if (typeof value === 'string' && !value.trim()) {
+      errors.push(`Required parameter cannot be empty: ${param}`);
+    }
+  }
+
+  for (const [key, value] of Object.entries(args)) {
+    const propSchema = properties?.[key] as Record<string, unknown> | undefined;
+    const enumValues = propSchema?.enum;
+    if (Array.isArray(enumValues) && !enumValues.includes(value)) {
+      errors.push(`Invalid value for ${key}: ${String(value)}. Expected one of: ${enumValues.join(', ')}`);
+    }
+  }
+
+  if (errors.length > 0) {
+    return invalidResult(errors.join(', '));
+  }
+
+  return validResult();
+};
+
+/**
+ * Validate that the tool was actually provided to the model for this session.
+ * (Prevents the model from calling tools outside the current allowlist.)
+ */
+export const validateToolAllowedInSession: Validator = (_args, toolName, context) => {
+  const allowed = context.allowedToolNames;
+  if (!allowed || allowed.length === 0) return validResult();
+  if (allowed.includes(toolName)) return validResult();
+  return invalidResult(`Tool not available in this session: ${toolName}`);
+};
+
+/**
+ * Validate dynamic Sub Agent call tools: call_{agent_name}({ input: string }).
+ */
+export const validateSubAgentCallInput: Validator = (args, toolName, _context) => {
+  if (!toolName.startsWith('call_')) return validResult();
+
+  const input = (args as any).input;
+  if (typeof input !== 'string' || !input.trim()) {
+    return invalidResult('call_* tools require a non-empty string field "input".');
+  }
+
+  return validResult();
+};
 
 /**
  * Validate that the type argument maps to a valid ObjectType
@@ -172,6 +239,26 @@ export const validateRagSearchEnabled: Validator = (_args, toolName, _context) =
   const enabled = useSettingsStore.getState().settings.ragSearchEnabled;
   if (!enabled) {
     return invalidResult('Embeddings are disabled (Settings > RAG Search)');
+  }
+
+  return validResult();
+};
+
+/**
+ * Validate that Sub Agent return result contains a non-empty string payload.
+ *
+ * Note: This only validates arguments. Cross-tool rules (e.g., "must be last and alone")
+ * are enforced at the Sub Agent orchestration layer.
+ */
+export const validateReturnSubAgentResultArgs: Validator = (args, toolName, _context) => {
+  if (toolName !== 'return_sub_agent_result') return validResult();
+
+  const result = args.result;
+  if (typeof result !== 'string' || !result.trim()) {
+    return invalidResult(
+      'return_sub_agent_result requires a non-empty string field "result". ' +
+      'Call it exactly once, and only as the final, standalone tool call in the Sub Agent invocation.'
+    );
   }
 
   return validResult();

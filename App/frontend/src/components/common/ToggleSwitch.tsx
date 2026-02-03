@@ -1,6 +1,5 @@
 import React from 'react';
 import './ToggleSwitch.css';
-import { Clipboard } from '../icons';
 
 interface ToggleSwitchProps {
   checked: boolean;
@@ -14,7 +13,7 @@ const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
   checked,
   onChange,
   label,
-  icon = <Clipboard size="sm" />,
+  icon,
   disabled = false,
 }) => {
   return (
@@ -27,7 +26,7 @@ const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
       />
       <div className="toggle-switch-content">
         <div className="toggle-switch-label">
-          <span className="toggle-switch-icon">{icon}</span>
+          {icon != null && <span className="toggle-switch-icon">{icon}</span>}
           <span className="toggle-switch-text">{label}</span>
         </div>
         <div className="toggle-switch-track">

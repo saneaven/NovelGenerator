@@ -901,7 +901,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                     }
                                                 />
                                                 {cardsToRender
-                                                    .filter((card: any) => card?.toolCall?.toolName === 'call_sub_agent')
+                                                    .filter((card: any) => typeof card?.toolCall?.toolName === 'string' && card.toolCall.toolName.startsWith('call_'))
                                                     .map((card: any) => (
                                                         <SubAgentInvocationCard
                                                             key={card.toolCall.id}

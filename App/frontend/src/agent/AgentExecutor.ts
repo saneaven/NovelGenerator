@@ -13,11 +13,13 @@ import { useAgentUIStore } from '../store/agentUIStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useCredentialsStore } from '../store/credentialsStore';
 import { useLLMSessionStore } from '../store/llmSessionStore';
+import { useSubAgentStore } from '../store/subAgentStore';
 import { startLLMSession } from '../llmSession';
 import { LLMTaskMode, type AgentWorkspacePromptContext, type AgentTranslationPromptContext, createEmptyUserHistory } from '../llm';
 import type { OutputMode } from '../llm/types';
 import type { ChatMessage, ContentPart } from '../llm/requestTypes';
 import { getToolsForSet } from '../toolCall';
+import { buildCallToolSchema } from '../subAgent/tools/SubAgentCallTools';
 import {
   stageSessionEdits,
   applySessionEdits,
@@ -148,13 +150,33 @@ export const AgentExecutor = {
           ? LLMTaskMode.AGENT_OUTLINE_MANAGER
           : LLMTaskMode.AGENT_NOVEL_EDITOR;
 
-      const promptContext: AgentWorkspacePromptContext = {
+    const baseTools =
+      outputMode === 'tool_call'
+        ? getToolsForSet('agent', { ragSearchEnabled: settings.ragSearchEnabled })
+        : undefined;
+
+    let tools = baseTools;
+    if (outputMode === 'tool_call') {
+      const subAgentStore = useSubAgentStore.getState();
+      if (subAgentStore.subAgents.length === 0 && !subAgentStore.isLoading) {
+        await subAgentStore.loadSubAgents();
+      }
+
+      const dynamicSubAgentTools = subAgentStore.subAgents
+        .filter((s) => s.enabled && s.allowed_agent_modes.includes(input.mode as any))
+        .sort((a, b) => a.display_name.localeCompare(b.display_name))
+        .map(buildCallToolSchema);
+
+      tools = [...(baseTools ?? []), ...dynamicSubAgentTools];
+    }
+
+    const promptContext: AgentWorkspacePromptContext = {
       projectId: input.projectId,
       outputLanguage: language,
       outputMode,
       enablePrefill: agentConfig.advanced.enablePrefill,
       thinkingMode: agentConfig.advanced.thinkingMode,
-      tools: outputMode === 'tool_call' ? getToolsForSet('agent', { ragSearchEnabled: settings.ragSearchEnabled }) : undefined,
+      tools,
       contextObjectIds: input.contextObjectIds,
     };
     const mergedPromptContext: AgentWorkspacePromptContext = {

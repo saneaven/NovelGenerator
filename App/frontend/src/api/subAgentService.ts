@@ -15,12 +15,11 @@ export const subAgentService = {
     return await apiClient.post<SubAgentDefinition>(BASE_PATH, data);
   },
 
-  async update(subAgentId: string, data: SubAgentUpdate): Promise<SubAgentDefinition> {
-    return await apiClient.put<SubAgentDefinition>(`${BASE_PATH}/${encodeURIComponent(subAgentId)}`, data);
+  async update(id: string, data: SubAgentUpdate): Promise<SubAgentDefinition> {
+    return await apiClient.put<SubAgentDefinition>(`${BASE_PATH}/${encodeURIComponent(id)}`, data);
   },
 
-  async delete(subAgentId: string): Promise<void> {
-    await apiClient.delete(`${BASE_PATH}/${encodeURIComponent(subAgentId)}`);
+  async delete(id: string): Promise<void> {
+    await apiClient.delete(`${BASE_PATH}/${encodeURIComponent(id)}`);
   },
 };
-

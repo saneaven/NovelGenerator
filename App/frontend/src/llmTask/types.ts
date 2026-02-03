@@ -41,6 +41,9 @@ export interface TaskSessionState<TInput = unknown, TResult = unknown> {
   toolCalls: ToolCallMetadata[];
   thinkingDetails?: any[];
 
+  /** Tool names provided to the model for this session (used for validation). */
+  availableToolNames?: string[];
+
   editCards?: StoredEditCard[];
 
   result?: TResult;

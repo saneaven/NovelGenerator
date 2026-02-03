@@ -14,6 +14,8 @@ import type {
 import { normalizeToolCall, validateToolCall } from '../normalizer';
 import type { ValidationResult } from '../validation';
 import type { ToolCallMetadata } from '../../llm/requestTypes';
+import { useSubAgentStore } from '../../store/subAgentStore';
+import { agentNameFromCallToolName, isCallToolName } from '../../subAgent/tools/SubAgentCallTools';
 
 // ============================================================================
 // EDIT TYPES
@@ -247,11 +249,15 @@ const TOOL_META: Record<string, ToolMeta> = {
       return 'queries';
     },
   },
-  call_sub_agent: {
+  return_sub_agent_result: {
     editType: 'init',
-    title: 'Call Sub Agent',
-    description: 'Run a configured Sub Agent and return its full output',
-    summary: (args) => `id: ${args.subAgentId}`,
+    title: 'Return Result',
+    description: 'Return final Sub Agent output',
+    summary: (args) => {
+      const result = args.result as unknown;
+      if (typeof result === 'string') return `len: ${result.length}`;
+      return 'result';
+    },
   },
 };
 
@@ -263,6 +269,7 @@ const TOOL_META: Record<string, ToolMeta> = {
  * Get edit type for a tool
  */
 export function getEditType(toolName: string): EditType {
+  if (isCallToolName(toolName)) return 'init';
   return TOOL_META[toolName]?.editType ?? 'edit';
 }
 
@@ -270,6 +277,12 @@ export function getEditType(toolName: string): EditType {
  * Get display title for a tool
  */
 export function getToolTitle(toolName: string): string {
+  if (isCallToolName(toolName)) {
+    const agentName = agentNameFromCallToolName(toolName);
+    const def = agentName ? useSubAgentStore.getState().getByAgentName(agentName) : undefined;
+    const label = def?.display_name ?? agentName ?? toolName;
+    return `Call Sub Agent: ${label}`;
+  }
   return TOOL_META[toolName]?.title ?? `Tool: ${toolName}`;
 }
 
@@ -277,6 +290,12 @@ export function getToolTitle(toolName: string): string {
  * Get display description for a tool
  */
 export function getToolDescription(toolName: string): string {
+  if (isCallToolName(toolName)) {
+    const agentName = agentNameFromCallToolName(toolName);
+    const def = agentName ? useSubAgentStore.getState().getByAgentName(agentName) : undefined;
+    if (def?.description?.trim()) return def.description.trim();
+    return 'Run a configured Sub Agent and return its full output';
+  }
   return TOOL_META[toolName]?.description ?? 'Tool call';
 }
 
@@ -294,6 +313,14 @@ export function generateToolSummary(
   toolName: string,
   args: Record<string, unknown>
 ): string {
+  if (isCallToolName(toolName)) {
+    const agentName = agentNameFromCallToolName(toolName);
+    const def = agentName ? useSubAgentStore.getState().getByAgentName(agentName) : undefined;
+    const display = def?.display_name ?? agentName ?? toolName;
+    const input = (args as any).input;
+    const len = typeof input === 'string' ? input.length : 0;
+    return `Call Sub Agent "${display}": input len ${len}`;
+  }
   const meta = TOOL_META[toolName];
   if (!meta) return 'Tool call';
 

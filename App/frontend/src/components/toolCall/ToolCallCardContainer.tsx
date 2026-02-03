@@ -14,7 +14,8 @@ type AutoApproveOperation = keyof ToolCallAutoApproveConfig;
 function getAutoApproveOperation(toolName: string): AutoApproveOperation | null {
   if (!toolName) return null;
   if (toolName === 'rag_search') return 'search';
-  if (toolName === 'call_sub_agent') return 'read';
+  if (toolName.startsWith('call_')) return 'read';
+  if (toolName === 'return_sub_agent_result') return 'read';
   if (toolName.startsWith('read_')) return 'read';
   if (toolName.startsWith('create_')) return 'create';
   if (toolName.startsWith('delete_')) return 'delete';
@@ -26,7 +27,8 @@ function getAutoApproveOperation(toolName: string): AutoApproveOperation | null 
 function getAction(toolName: string): string | undefined {
   if (!toolName) return undefined;
   if (toolName === 'rag_search') return 'search';
-  if (toolName === 'call_sub_agent') return 'read';
+  if (toolName.startsWith('call_')) return 'read';
+  if (toolName === 'return_sub_agent_result') return 'read';
   if (toolName.startsWith('create_')) return 'create';
   if (toolName.startsWith('delete_')) return 'delete';
   if (toolName.startsWith('replace_')) return 'replace';
@@ -41,7 +43,8 @@ function getType(toolName: string, args: Record<string, unknown> | undefined): s
   if (typeof argType === 'string' && argType.trim()) return argType;
 
   if (toolName === 'rag_search') return 'rag';
-  if (toolName === 'call_sub_agent') return 'sub_agent';
+  if (toolName.startsWith('call_')) return 'sub_agent';
+  if (toolName === 'return_sub_agent_result') return 'sub_agent';
   if (toolName.includes('basic_info')) return 'basic_info';
   if (toolName.includes('manuscript')) return 'manuscript';
   if (toolName.includes('outline_act')) return 'act';

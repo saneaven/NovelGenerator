@@ -573,18 +573,20 @@ const RAG_SEARCH: ToolSchema = {
 // SUB AGENT
 // ============================================================================
 
-const CALL_SUB_AGENT: ToolSchema = {
-  name: 'call_sub_agent',
-  description: 'Call a configured Sub Agent by ID with an input payload and return its full output.',
+const RETURN_SUB_AGENT_RESULT: ToolSchema = {
+  name: 'return_sub_agent_result',
+  description: 'Return the final Sub Agent output and finish the current Sub Agent invocation.',
   category: 'read',
   target: 'sub_agent',
   parameters: {
     type: 'object',
     properties: {
-      subAgentId: { type: 'string', description: 'Sub Agent ID (stable key). Must exist in the active prompt preset.' },
-      input: { type: 'object', description: 'Input payload for the Sub Agent (available as input.subagent in templates).' },
+      result: {
+        type: 'string',
+        description: 'Final Sub Agent output (no summarization; return the full output).',
+      },
     },
-    required: ['subAgentId', 'input'],
+    required: ['result'],
   },
 };
 
@@ -641,7 +643,7 @@ class SchemaRegistryClass {
     this.register(RAG_SEARCH);
 
     // Sub Agent
-    this.register(CALL_SUB_AGENT);
+    this.register(RETURN_SUB_AGENT_RESULT);
   }
 
   register(schema: ToolSchema): void {
@@ -770,12 +772,11 @@ export const READ_TOOL_NAMES = new Set([
   'read_outline',
   'read_manuscript',
   'rag_search',
-  'call_sub_agent',
 ]);
 
 /** Check if a tool name is a read tool */
 export function isReadTool(name: string): boolean {
-  return READ_TOOL_NAMES.has(name);
+  return READ_TOOL_NAMES.has(name) || name.startsWith('call_');
 }
 
 // ============================================================================
@@ -857,7 +858,6 @@ export const AGENT_TOOLS = [
   READ_OUTLINE,
   READ_MANUSCRIPT,
   RAG_SEARCH,
-  CALL_SUB_AGENT,
 ].map(s => ({ name: s.name, description: s.description, parameters: s.parameters }));
 
 /** All agent tool names for validation */
@@ -881,7 +881,6 @@ const TOOL_SET_SCHEMAS: Record<ToolSetName, ToolSchema[]> = {
     PATCH_BASIC_INFO, PATCH_GUIDELINES, PATCH_STORY_OBJECT, PATCH_MANUSCRIPT,
     PATCH_OUTLINE, PATCH_OUTLINE_ACT, PATCH_OUTLINE_CHAPTER,
     READ_STORY_OBJECT, READ_OUTLINE, READ_MANUSCRIPT, RAG_SEARCH,
-    CALL_SUB_AGENT,
   ],
   manuscript: [REPLACE_MANUSCRIPT, PATCH_MANUSCRIPT],
   storyObject: [

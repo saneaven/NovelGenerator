@@ -1,6 +1,7 @@
 import type { ToolCallMetadata } from '../../llm/requestTypes';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
+import { useSubAgentStore } from '../../store/subAgentStore';
 import {
   buildEditCards,
   applyValidationResults,
@@ -20,6 +21,8 @@ import { READ_HANDLERS } from '../../toolCall/apply/handlers/ReadHandlers';
 import { SUB_AGENT_HANDLERS } from '../../toolCall/apply/handlers/SubAgentHandlers';
 import { ToolCallBatchSharedState, ToolCallBatchStore } from './ToolCallBatchStore';
 import { ManuscriptBatch } from './manuscriptBatch';
+import { SubAgentManager } from '../../subAgent/runtime/SubAgentManager';
+import { agentNameFromCallToolName, isCallToolName } from '../../subAgent/tools/SubAgentCallTools';
 
 function stripCallbacks(card: EditCard): StoredEditCard {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -121,6 +124,61 @@ async function applyToolCall(params: {
       });
     }
 
+    if (isCallToolName(normalized.toolName)) {
+      const agentName = agentNameFromCallToolName(normalized.toolName);
+      if (!agentName) {
+        return {
+          success: false,
+          message: 'Invalid Sub Agent tool name',
+          error: `Invalid Sub Agent tool name: ${normalized.toolName}`,
+        };
+      }
+
+      const callerMode = context.executionMode;
+      if (!callerMode) {
+        return {
+          success: false,
+          message: 'Missing executionMode for Sub Agent call',
+          error: 'Missing executionMode for Sub Agent call',
+        };
+      }
+
+      const input = (normalized.arguments as any).input;
+      if (typeof input !== 'string' || !input.trim()) {
+        return {
+          success: false,
+          message: 'Invalid input for Sub Agent call',
+          error: 'call_* tools require a non-empty string field "input".',
+        };
+      }
+
+      const subAgentStore = useSubAgentStore.getState();
+      if (subAgentStore.subAgents.length === 0 && !subAgentStore.isLoading) {
+        await subAgentStore.loadSubAgents();
+      }
+
+      const def = subAgentStore.getByAgentName(agentName);
+      if (!def) {
+        return {
+          success: false,
+          message: 'Sub Agent not found',
+          error: `Sub Agent not found: ${agentName}`,
+        };
+      }
+
+      const output = await SubAgentManager.invoke({
+        projectId: context.projectId,
+        language: context.language,
+        parentToolCallId: normalized.id,
+        callerMode: callerMode as any,
+        subAgentId: def.id,
+        input,
+        handlerOptions: { ...context.options, userRequest: 'SubAgent' },
+      });
+
+      return { success: true, message: output, data: { subAgentId: def.id, agentName } };
+    }
+
     const handler = HANDLERS[normalized.toolName];
     if (!handler) {
       return {
@@ -149,6 +207,8 @@ export async function stageSessionEdits(params: {
 }): Promise<void> {
   const { sessionId, projectId, language, toolCalls } = params;
   const store = useLLMSessionStore.getState();
+  const existingSession = store.getSessionById(sessionId);
+  const allowedToolNames = existingSession?.availableToolNames;
 
   const rawCalls: RawToolCall[] = toolCalls.map(tc => ({
     id: tc.id,
@@ -160,7 +220,7 @@ export async function stageSessionEdits(params: {
   store.updateSession(sessionId, { editCards: validatingCards.map(stripCallbacks) });
 
   const normalized: NormalizedToolCall[] = rawCalls.map(rc => normalizeToolCall(rc));
-  const validationResults = await validate(normalized, { projectId, language });
+  const validationResults = await validate(normalized, { projectId, language, allowedToolNames });
   const finalCards = applyValidationResults(validatingCards, validationResults);
 
   store.updateSession(sessionId, { editCards: finalCards.map(stripCallbacks) });
@@ -173,15 +233,17 @@ export async function stageSessionEdits(params: {
 
   if (finalCards.length === 0) {
     store.updateSession(sessionId, {
-      status: 'error',
-      error: 'AI response did not include any applicable actions.',
+      status: 'success',
+      warning: 'AI response did not include any applicable actions.',
+      error: undefined,
     });
     return;
   }
 
   store.updateSession(sessionId, {
-    status: 'error',
-    error: 'All proposed actions failed validation.',
+    status: 'success',
+    warning: 'All proposed actions failed validation.',
+    error: undefined,
   });
 
   console.warn('[stageSessionEdits] All validation failed', { sessionId, projectId, language });
@@ -207,7 +269,7 @@ export async function applySessionEdits(params: {
   const flushStore = new ToolCallBatchStore({ baseStore, shared });
   const manuscriptBatch = new ManuscriptBatch();
 
-  // Mark selected tool calls as running so the UI shows progress for long-running calls (e.g. call_sub_agent).
+  // Mark selected tool calls as running so the UI shows progress for long-running calls (e.g. call_*).
   store.updateSession(sessionId, {
     editCards: session.editCards.map((card) => {
       const isSelected = selections[card.id] ?? true;
@@ -350,23 +412,44 @@ export async function applySessionEdits(params: {
 
   store.updateSession(sessionId, { editCards: finalizedCards });
 
-  const acceptedCount = finalizedCards.filter(c => c.toolCall.status === 'accepted').length;
-  const failedCount = finalizedCards.filter(c => c.toolCall.status === 'failed').length;
+  const acceptedCount = finalizedCards.filter((c) => c.toolCall.status === 'accepted').length;
+  const rejectedCount = finalizedCards.filter((c) => c.toolCall.status === 'rejected').length;
+  const failedValidationCount = finalizedCards.filter(
+    (c) => c.toolCall.status === 'failed' && c.toolCall.failureType === 'validation'
+  ).length;
+  const failedApplyCount = finalizedCards.filter(
+    (c) => c.toolCall.status === 'failed' && c.toolCall.failureType !== 'validation'
+  ).length;
 
-  if (acceptedCount === 0 && failedCount === 0) {
+  if (acceptedCount === 0 && failedApplyCount === 0 && rejectedCount > 0 && failedValidationCount === 0) {
     store.updateSession(sessionId, { status: 'cancelled' });
     return;
   }
 
-  if (failedCount > 0) {
+  if (failedApplyCount > 0) {
     store.updateSession(sessionId, {
       status: 'error',
-      error: `${failedCount} action(s) failed to apply.`,
+      error: `${failedApplyCount} action(s) failed to apply.`,
+      warning: failedValidationCount > 0 ? `${failedValidationCount} action(s) failed validation.` : undefined,
     });
     return;
   }
 
-  store.updateSession(sessionId, { status: 'success' });
+  if (failedValidationCount > 0) {
+    store.updateSession(sessionId, {
+      status: acceptedCount > 0 ? 'success' : rejectedCount > 0 ? 'cancelled' : 'success',
+      warning: `${failedValidationCount} action(s) failed validation.`,
+      error: undefined,
+    });
+    return;
+  }
+
+  if (acceptedCount === 0) {
+    store.updateSession(sessionId, { status: 'cancelled' });
+    return;
+  }
+
+  store.updateSession(sessionId, { status: 'success', warning: undefined, error: undefined });
 }
 
 export function rejectAllSessionEdits(params: { sessionId: string; reason?: string }): void {

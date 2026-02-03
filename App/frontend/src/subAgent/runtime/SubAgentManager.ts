@@ -12,7 +12,9 @@ import type { TaskAIConfig } from '../../store/settingsStore';
 import { stageSessionEdits, applySessionEdits, toToolCallMetadata } from '../../llmTask/toolCalls/toolCallEngine';
 import type { HandlerOptions } from '../../toolCall/apply/types';
 import { generateTempId } from '../../utils/tempId';
-import type { SubAgentAllowedMode } from '../../types/subAgents';
+import type { SubAgentAllowedMode, SubAgentDefinition } from '../../types/subAgents';
+import type { StoredEditCard } from '../../llmTask/uiTypes';
+import { buildCallToolSchema } from '../tools/SubAgentCallTools';
 
 type Completion = { resolve: (output: string) => void; reject: (error: Error) => void };
 
@@ -22,20 +24,18 @@ type InvocationConfig = {
   parentToolCallId: string;
   callerMode: SubAgentAllowedMode;
   subAgentId: string;
-  input: any;
+  input: string;
   handlerOptions: HandlerOptions;
 };
 
 const completions = new Map<string, Completion>();
+const RETURN_RESULT_TOOL_NAME = 'return_sub_agent_result';
+const RETURN_RESULT_RULE_REASON =
+  'return_sub_agent_result must be called exactly once and must be the ONLY tool call in the final message of the Sub Agent invocation. ' +
+  'Do other tool calls first. When finished, call return_sub_agent_result alone with a non-empty string field "result".';
 
-function stringifyInputForUserMessage(input: any): string {
-  if (input === null || input === undefined) return '';
-  if (typeof input === 'string') return input;
-  try {
-    return JSON.stringify(input, null, 2);
-  } catch {
-    return String(input);
-  }
+function stringifyInputForUserMessage(input: string): string {
+  return (input ?? '').trim();
 }
 
 function contentText(parts: Array<{ type: string; text: string }>): string {
@@ -82,16 +82,85 @@ async function loadDefinitionOrThrow(subAgentId: string) {
   return found;
 }
 
-function buildToolSchemas(allowedToolNames: string[]): ToolCallSchema[] {
+async function buildToolSchemas(definition: SubAgentDefinition): Promise<ToolCallSchema[]> {
   const schemas: ToolCallSchema[] = [];
-  for (const name of allowedToolNames) {
+
+  // Static tools (no call_*).
+  for (const name of definition.allowed_tool_names) {
+    if (name.startsWith('call_')) {
+      throw new Error(`allowed_tool_names must not contain call_* tools (found: ${name})`);
+    }
+    if (name === RETURN_RESULT_TOOL_NAME) continue;
     const schema = schemaRegistry.get(name);
     if (!schema) {
       throw new Error(`Unsupported tool in allowlist: ${name}`);
     }
     schemas.push({ name: schema.name, description: schema.description, parameters: schema.parameters });
   }
+
+  // Dynamic Sub Agent call tools.
+  const store = useSubAgentStore.getState();
+  if (store.subAgents.length === 0 && !store.isLoading) {
+    await store.loadSubAgents();
+  }
+
+  for (const subAgentId of definition.allowed_sub_agent_ids ?? []) {
+    if (subAgentId === definition.id) continue;
+    const target = store.getById(subAgentId);
+    if (!target) {
+      throw new Error(`Allowed Sub Agent not found: ${subAgentId}`);
+    }
+    if (!target.enabled) {
+      continue;
+    }
+    schemas.push(buildCallToolSchema(target));
+  }
+
+  // Always include return_sub_agent_result.
+  const returnSchema = schemaRegistry.get(RETURN_RESULT_TOOL_NAME);
+  if (!returnSchema) {
+    throw new Error(`Missing schema: ${RETURN_RESULT_TOOL_NAME}`);
+  }
+  schemas.push({
+    name: returnSchema.name,
+    description: returnSchema.description,
+    parameters: returnSchema.parameters,
+  });
+
   return schemas;
+}
+
+function applyReturnResultBatchRules(cards: StoredEditCard[]): StoredEditCard[] {
+  const returnCards = cards.filter((c) => c.toolCall.toolName === RETURN_RESULT_TOOL_NAME);
+  if (returnCards.length === 0) return cards;
+
+  const hasOtherTools = cards.some((c) => c.toolCall.toolName !== RETURN_RESULT_TOOL_NAME);
+  const hasMultipleReturns = returnCards.length > 1;
+
+  let changed = false;
+  const next = cards.map((card) => {
+    if (card.toolCall.toolName !== RETURN_RESULT_TOOL_NAME) return card;
+
+    const result = (card.toolCall.arguments as any)?.result;
+    const invalidResult = typeof result !== 'string' || !result.trim();
+    const violatesRules = hasOtherTools || hasMultipleReturns || invalidResult;
+    if (!violatesRules) return card;
+
+    changed = true;
+    return {
+      ...card,
+      toolCall: {
+        ...card.toolCall,
+        status: 'failed',
+        failureType: 'validation',
+        reason: RETURN_RESULT_RULE_REASON,
+        result: undefined,
+        acceptedAt: undefined,
+      },
+    };
+  });
+
+  return changed ? next : cards;
 }
 
 async function runTurn(parentToolCallId: string): Promise<void> {
@@ -119,8 +188,7 @@ async function runTurn(parentToolCallId: string): Promise<void> {
     enablePrefill: invocation.llmConfig.advanced.enablePrefill,
     thinkingMode: invocation.llmConfig.advanced.thinkingMode,
     tools: invocation.tools,
-    subAgentId: invocation.subAgentId,
-    subagent: invocation.input,
+    agentName: invocation.agentName,
   };
 
   const handle = startLLMSession<any, any>({
@@ -198,8 +266,14 @@ async function runTurn(parentToolCallId: string): Promise<void> {
     return;
   }
 
+  // Sub Agent batch rules (non-fatal validation): mark invalid return_sub_agent_result as failed so the reason is sent via tool_results.
+  const adjustedCards = applyReturnResultBatchRules(staged.editCards as StoredEditCard[]);
+  if (adjustedCards !== staged.editCards) {
+    sessionStore.updateSession(handle.sessionId, { editCards: adjustedCards } as any);
+  }
+
   // Sync validated statuses into invocation history
-  const updatedToolCalls = toToolCallMetadata(staged.editCards);
+  const updatedToolCalls = toToolCallMetadata(adjustedCards);
   const updatedAssistant: ChatMessage = {
     ...assistantMessage,
     toolCalls: updatedToolCalls,
@@ -227,7 +301,7 @@ export const SubAgentManager = {
       throw new Error(`Sub Agent not allowed from mode: ${callerMode}`);
     }
 
-    const tools = buildToolSchemas(definition.allowed_tool_names);
+    const tools = await buildToolSchemas(definition);
     const llmConfig = definition.llm_config as TaskAIConfig;
 
     const runtime = useSubAgentRuntimeStore.getState();
@@ -246,7 +320,8 @@ export const SubAgentManager = {
         parentToolCallId,
         projectId,
         language,
-        subAgentId: definition.sub_agent_id,
+        agentName: definition.agent_name,
+        subAgentId: definition.id,
         displayName: definition.display_name,
         input,
         llmConfig,
@@ -299,6 +374,23 @@ export const SubAgentManager = {
         history[lastIdx] = { ...history[lastIdx], toolCalls: updatedToolCalls } as any;
         runtime.replaceHistory(parentToolCallId, history);
       }
+    }
+
+    // If Sub Agent returned a final result, complete immediately (do not continue to next turn).
+    const acceptedReturn = cards?.find(
+      (c) => c.toolCall.toolName === RETURN_RESULT_TOOL_NAME && c.toolCall.status === 'accepted'
+    );
+    if (acceptedReturn) {
+      const output = acceptedReturn.toolCall.result?.message ?? '';
+      runtime.updateInvocation(parentToolCallId, {
+        status: 'completed',
+        finalOutput: output,
+        error: undefined,
+      });
+      const completion = completions.get(parentToolCallId);
+      completion?.resolve(output);
+      completions.delete(parentToolCallId);
+      return;
     }
 
     if (!autoContinue) {
