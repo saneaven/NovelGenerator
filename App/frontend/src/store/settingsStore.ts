@@ -273,7 +273,7 @@ export interface SettingsStore {
     promptCache: Map<string, string>;
 
     // Helpers
-    getSettingsOrThrow: () => Settings;
+    getSettings: () => Settings;
     clearSettings: () => void;
 
     // Sync methods
@@ -329,7 +329,7 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
     lastSyncedAt: null,
     promptCache: new Map<string, string>(),
 
-    getSettingsOrThrow: () => requireSettings(get().settings),
+    getSettings: () => requireSettings(get().settings),
     clearSettings: () => {
         set({
             settings: null,
@@ -384,7 +384,7 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
 
     saveToServer: async () => {
         try {
-            const settings = get().getSettingsOrThrow();
+            const settings = get().getSettings();
             const saved = await settingsService.updateSettings(settings);
             set({ settings: saved, lastSyncedAt: new Date().toISOString() });
         } catch (error) {
@@ -509,7 +509,7 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
 
     // Getters
     getTaskConfig: (functionType) => {
-        return get().getSettingsOrThrow().taskConfigs[functionType];
+        return get().getSettings().taskConfigs[functionType];
     },
 
     // Image generation config

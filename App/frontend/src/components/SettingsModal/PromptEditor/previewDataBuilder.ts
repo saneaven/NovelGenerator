@@ -270,7 +270,7 @@ export function buildModeSpecificData(
  */
 function buildConfigData(overrides?: Partial<ConfigData>): ConfigData {
   const store = useSettingsStore.getState();
-  const settings = store.getSettingsOrThrow();
+  const settings = store.getSettings();
   const preferredDisplayLanguage = useDisplayLanguageStore.getState().preferredDisplayLanguage;
   const allowedDisplayLanguages = new Set([settings.mainLanguage, ...settings.subLanguages].filter(Boolean));
   const displayLanguage =
@@ -314,7 +314,7 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
 
   if (showProjectContext && projectId) {
     try {
-      const settings = useSettingsStore.getState().getSettingsOrThrow();
+      const settings = useSettingsStore.getState().getSettings();
       project = PromptManager.buildProjectData(projectId, settings.mainLanguage);
     } catch (error) {
       // Fall back to minimal if project data fails to load

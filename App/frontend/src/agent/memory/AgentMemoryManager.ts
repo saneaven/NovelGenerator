@@ -261,7 +261,7 @@ async function buildMemoryContext(
     return { previousSummaries, relevantChats: [] };
   }
 
-  const settings = useSettingsStore.getState().getSettingsOrThrow();
+  const settings = useSettingsStore.getState().getSettings();
   if (!settings.ragSearchEnabled) {
     // Embeddings disabled globally: keep summary only.
     return { previousSummaries, relevantChats: [] };
@@ -460,7 +460,7 @@ async function runMemorySummarySession(args: {
     temperature: summaryConfig.temperature,
     thinkingMode: summaryConfig.advanced.thinkingMode as any,
     thinkingConfig: summaryConfig.advanced.thinkingConfig,
-    retryConfig: settingsStore.getSettingsOrThrow().retryConfig,
+    retryConfig: settingsStore.getSettings().retryConfig,
     history: createEmptyUserHistory(),
   });
 
@@ -511,7 +511,7 @@ export const AgentMemoryManager = {
   async prepare(input: PreSessionInput, options?: AgentMemoryPrepareOptions): Promise<PreSessionOutput> {
     const agentStore = useAgentStore.getState();
     const settingsStore = useSettingsStore.getState();
-    const settings = settingsStore.getSettingsOrThrow();
+    const settings = settingsStore.getSettings();
 
     options?.onStageChange?.('checking');
     throwIfAborted(options?.signal);

@@ -85,10 +85,10 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
 
   // Story mode helpers
   const currentObject = mode === 'story' ? store.objects[objectId!] : null;
-  const settings = useSettingsStore.getState();
+  const mainLanguage = useSettingsStore((state) => state.getSettings().mainLanguage);
   const availableLangs = currentObject?.data ? Object.keys(currentObject.data) : [];
-  const currentLanguage = availableLangs.includes(settings.settings.mainLanguage)
-    ? settings.settings.mainLanguage
+  const currentLanguage = availableLangs.includes(mainLanguage)
+    ? mainLanguage
     : (availableLangs[0] || 'en');
 
   const getTypeDisplayName = (type: ObjectType): string => {

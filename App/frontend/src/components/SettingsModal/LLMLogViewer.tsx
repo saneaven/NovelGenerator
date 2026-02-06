@@ -9,7 +9,7 @@ import './LLMLogViewer.css';
 const LLMLogViewer: React.FC = () => {
     const { t } = useTranslation();
     const { logs, clearLogs } = useLLMLogStore();
-    const llmLoggingEnabled = useSettingsStore((state) => state.getSettingsOrThrow().llmLoggingEnabled);
+    const llmLoggingEnabled = useSettingsStore((state) => state.getSettings().llmLoggingEnabled);
     const setLLMLoggingEnabled = useSettingsStore((state) => state.setLLMLoggingEnabled);
     const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
 

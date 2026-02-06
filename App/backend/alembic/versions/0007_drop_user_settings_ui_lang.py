@@ -14,7 +14,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = "0007_drop_user_settings_display_language"
+revision = "0007_drop_user_settings_ui_lang"
 down_revision = "0006_add_rag_keyword_page_size"
 branch_labels = None
 depends_on = None
@@ -36,4 +36,3 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Irreversible cleanup (display language is now client-only).
     return
-

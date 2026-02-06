@@ -33,7 +33,7 @@ const OutlineSidebar: React.FC<OutlineSidebarProps> = ({
 }) => {
   const store = useUnifiedObjectStore();
   const closeSidebar = useSidebarStore((state) => state.closeSidebar);
-  const mainLanguage = useSettingsStore((state) => state.getSettingsOrThrow().mainLanguage);
+  const mainLanguage = useSettingsStore((state) => state.getSettings().mainLanguage);
   const { showError } = useErrorStore();
 
   // Add form state

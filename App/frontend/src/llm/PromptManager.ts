@@ -206,7 +206,7 @@ export class PromptManager {
       this.getTemplate('agent', 'prefill', mode),
     ]);
 
-    const settings = useSettingsStore.getState().getSettingsOrThrow();
+    const settings = useSettingsStore.getState().getSettings();
     const variables = useVariableStore.getState().getVariablesForTemplate();
     const previousSummaries = Array.isArray((context as any).previousSummaries) ? (context as any).previousSummaries : [];
     const relevantChats = Array.isArray((context as any).relevantChats) ? (context as any).relevantChats : [];
@@ -253,7 +253,7 @@ export class PromptManager {
       this.getTemplate('subAgent', 'prefill', agentName),
     ]);
 
-    const settings = useSettingsStore.getState().getSettingsOrThrow();
+    const settings = useSettingsStore.getState().getSettings();
     const variables = useVariableStore.getState().getVariablesForTemplate();
 
     const templateData: TemplateData = {
@@ -289,7 +289,7 @@ export class PromptManager {
       this.getTemplate('editAssistant', 'prefill', mode),
     ]);
 
-    const settings = useSettingsStore.getState().getSettingsOrThrow();
+    const settings = useSettingsStore.getState().getSettings();
     const variables = useVariableStore.getState().getVariablesForTemplate();
     let templateData: TemplateData;
 
@@ -445,7 +445,7 @@ export class PromptManager {
       this.getTemplate('agent', 'userPrompt', 'memorySummary'),
     ]);
 
-    const settings = useSettingsStore.getState().getSettingsOrThrow();
+    const settings = useSettingsStore.getState().getSettings();
     const variables = useVariableStore.getState().getVariablesForTemplate();
 
     const templateData: TemplateData = {
@@ -480,7 +480,7 @@ export class PromptManager {
       this.getTemplate('imagePrompt', 'prefill', 'object'),
     ]);
 
-    const settings = useSettingsStore.getState().getSettingsOrThrow();
+    const settings = useSettingsStore.getState().getSettings();
     const variables = useVariableStore.getState().getVariablesForTemplate();
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
@@ -523,7 +523,7 @@ export class PromptManager {
       this.getTemplate('imagePrompt', 'prefill', 'scene'),
     ]);
 
-    const settings = useSettingsStore.getState().getSettingsOrThrow();
+    const settings = useSettingsStore.getState().getSettings();
     const variables = useVariableStore.getState().getVariablesForTemplate();
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
@@ -568,7 +568,7 @@ export class PromptManager {
       this.getTemplate('imagePrompt', 'prefill', 'coverImage'),
     ]);
 
-    const settings = useSettingsStore.getState().getSettingsOrThrow();
+    const settings = useSettingsStore.getState().getSettings();
     const variables = useVariableStore.getState().getVariablesForTemplate();
     const templateData: TemplateData = {
       config: this.buildConfigData(context),

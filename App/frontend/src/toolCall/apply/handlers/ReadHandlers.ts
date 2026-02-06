@@ -145,7 +145,7 @@ export async function ragSearch(
     return error('Invalid queries for rag_search (expected non-empty string[])');
   }
 
-  const settings = useSettingsStore.getState().getSettingsOrThrow();
+  const settings = useSettingsStore.getState().getSettings();
   const ragEnabled = settings.ragSearchEnabled;
   if (!ragEnabled) {
     return error('Embeddings are disabled (Settings > Search & Memory)');

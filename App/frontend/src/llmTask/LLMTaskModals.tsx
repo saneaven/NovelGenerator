@@ -33,7 +33,7 @@ export const LLMTaskModals: React.FC = () => {
     detailSessionId ? s.sessions[detailSessionId] : null
   );
   const cancelSession = useLLMSessionStore((s) => s.cancelSession);
-  const mainLanguage = useSettingsStore((s) => s.getSettingsOrThrow().mainLanguage);
+  const mainLanguage = useSettingsStore((s) => s.getSettings().mainLanguage);
 
   const [outputExpanded, setOutputExpanded] = useState(false);
   const [errorExpanded, setErrorExpanded] = useState(false);

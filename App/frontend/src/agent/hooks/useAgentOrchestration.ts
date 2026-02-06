@@ -144,7 +144,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     useAgentUIStore.getState().setPreflightToast(projectId, null);
 
     const agentConfig = useSettingsStore.getState().getTaskConfig('agent');
-    const outputMode = useSettingsStore.getState().getSettingsOrThrow().nativeOutputMode ? 'native_tool_call' : 'tool_call';
+    const outputMode = useSettingsStore.getState().getSettings().nativeOutputMode ? 'native_tool_call' : 'tool_call';
 
     let historyOverride: any[] | undefined;
     let promptContextOverride: Record<string, any> | undefined;
@@ -290,7 +290,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     useAgentUIStore.getState().setPreflightToast(projectId, null);
 
     const agentConfig = useSettingsStore.getState().getTaskConfig('agent');
-    const outputMode = useSettingsStore.getState().getSettingsOrThrow().nativeOutputMode ? 'native_tool_call' : 'tool_call';
+    const outputMode = useSettingsStore.getState().getSettings().nativeOutputMode ? 'native_tool_call' : 'tool_call';
 
     let historyOverride: any[] | undefined;
     let promptContextOverride: Record<string, any> | undefined;

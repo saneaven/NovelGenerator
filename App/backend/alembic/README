@@ -2,6 +2,10 @@ Generic single-database configuration for Alembic migrations.
 
 This directory contains database migration scripts for the Novel Buds application.
 
+Note: `alembic_version.version_num` is `VARCHAR(32)` by default. If you use custom `--rev-id`,
+keep the revision id at 32 characters or less (otherwise `alembic upgrade` can fail with
+`StringDataRightTruncation`).
+
 ## Common Commands
 
 # Create a new migration (auto-generate from model changes)

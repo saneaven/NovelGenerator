@@ -72,7 +72,7 @@ export function usePromptPreview(options: UsePromptPreviewOptions): UsePromptPre
   const userVariables = useVariableStore(state => state.variables);
 
   // Get task config for token counting
-  const taskConfigs = useSettingsStore((state) => state.getSettingsOrThrow().taskConfigs);
+  const taskConfigs = useSettingsStore((state) => state.getSettings().taskConfigs);
   const taskConfig = taskConfigs[taskType as keyof typeof taskConfigs];
 
   // State

@@ -46,7 +46,7 @@ interface LLMLogStore {
 }
 
 // Note: isLoggingEnabled is now in settingsStore (llmLoggingEnabled)
-// Use `useSettingsStore((s) => s.getSettingsOrThrow().llmLoggingEnabled)` (or `useSettings()`) to check if logging is enabled.
+// Use `useSettingsStore((s) => s.getSettings().llmLoggingEnabled)` (or `useSettings()`) to check if logging is enabled.
 
 export const useLLMLogStore = create<LLMLogStore>((set, get) => ({
   logs: [],
