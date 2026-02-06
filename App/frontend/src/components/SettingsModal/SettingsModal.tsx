@@ -9,7 +9,7 @@ import type { ProviderCredentials, Settings, AITaskType } from '../../store/sett
 import CredentialsPanel from './CredentialsPanel';
 import GeneralPanel from './GeneralPanel';
 import LanguagePanel from './LanguagePanel';
-import PromptsTemplatesPanel from './PromptEditor/PromptsTemplatesPanel';
+import PromptsTemplatesPanel, { type PromptsTemplatesPanelHandle } from './PromptEditor/PromptsTemplatesPanel';
 import ThemePanel from './ThemePanel';
 import AdvancedPanel from './AdvancedPanel';
 import ImageGenPanel from './ImageGenPanel';
@@ -45,10 +45,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [localSettings, setLocalSettings] = useState<Settings>(settings);
   const [localCredentials, setLocalCredentials] = useState<ProviderCredentials>(credentialsStore.credentials);
   const [isSaving, setIsSaving] = useState(false);
+  const [promptUnsavedCount, setPromptUnsavedCount] = useState(0);
+  const [hasMountedPromptsPanel, setHasMountedPromptsPanel] = useState(false);
   const [toast, setToast] = useState<{ kind: SettingsToastKind; message: string } | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
   const [mainTab, setMainTab] = useState<MainTab>('profile');
   const [activeTask, setActiveTask] = useState<AITaskType>('agent');
+  const promptsPanelRef = useRef<PromptsTemplatesPanelHandle | null>(null);
+  const settingsSnapshotRef = useRef<string>('');
+  const credentialsSnapshotRef = useRef<string>('');
 
   // Mobile sidebar state from store
   const openSidebar = useSidebarStore((state) => state.openSidebar);
@@ -58,6 +63,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     if (isOpen) {
       setLocalSettings(settings);
       setLocalCredentials(credentialsStore.credentials);
+      settingsSnapshotRef.current = JSON.stringify(settings);
+      credentialsSnapshotRef.current = JSON.stringify(credentialsStore.credentials);
+      setPromptUnsavedCount(0);
+      setHasMountedPromptsPanel(mainTab === 'prompts');
       credentialsStore.fetchBackupStatus().catch(() => {
         // Ignore - status is best-effort
       });
@@ -160,58 +169,146 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   };
 
   const handleSave = async () => {
-    const taskModelError = validateTaskModels();
-    if (taskModelError) {
-      setMainTab('general');
-      setActiveTask(taskModelError.taskType);
-      showToast('error', taskModelError.message);
-      return;
-    }
-
-    const embeddingError = validateEmbeddings();
-    if (embeddingError) {
-      setMainTab(embeddingError.tab);
-      showToast('error', embeddingError.message);
-      return;
-    }
+    if (isSaving) return;
 
     setIsSaving(true);
     try {
-      settingsStore.updateSettings(localSettings);
-      credentialsStore.setCredentials(localCredentials);
+      const promptSavePromise =
+        promptsPanelRef.current?.saveAllDrafts?.() ??
+        Promise.resolve({ attempted: 0, saved: 0, failed: 0, failures: [] });
 
-      await settingsStore.saveToServer();
-      showToast('success', t('settings.savedSuccessfully'));
-    } catch (error) {
-      console.error('Failed to save settings:', error);
-      const message = error instanceof Error ? error.message : t('settings.saveError');
-      showToast('error', message);
+      const settingsDirty = JSON.stringify(localSettings) !== settingsSnapshotRef.current;
+      const credentialsDirty = JSON.stringify(localCredentials) !== credentialsSnapshotRef.current;
+
+      if (settingsDirty || credentialsDirty) {
+        const taskModelError = validateTaskModels();
+        if (taskModelError) {
+          setMainTab('general');
+          setActiveTask(taskModelError.taskType);
+          showToast('error', taskModelError.message);
+        } else {
+          const embeddingError = validateEmbeddings();
+          if (embeddingError) {
+            setMainTab(embeddingError.tab);
+            showToast('error', embeddingError.message);
+          } else {
+            try {
+              settingsStore.updateSettings(localSettings);
+              credentialsStore.setCredentials(localCredentials);
+
+              await settingsStore.saveToServer();
+              settingsSnapshotRef.current = JSON.stringify(localSettings);
+              credentialsSnapshotRef.current = JSON.stringify(localCredentials);
+              showToast('success', t('settings.savedSuccessfully'));
+            } catch (error) {
+              console.error('Failed to save settings:', error);
+              const message = error instanceof Error ? error.message : t('settings.saveError');
+              showToast('error', message);
+            }
+          }
+        }
+      }
+
+      const promptSummary = await promptSavePromise;
+      if (promptSummary.attempted > 0 && promptSummary.failed === 0) {
+        showToast('success', `Saved ${promptSummary.saved} prompt items`);
+      } else if (promptSummary.failed > 0) {
+        showToast('error', `Saved ${promptSummary.saved}/${promptSummary.attempted} prompt items. ${promptSummary.failed} failed.`);
+        const lines = promptSummary.failures.map((f) => `- ${f.item.label}: ${f.error}`);
+        window.alert(`Some prompt items failed to save:\n\n${lines.join('\n')}`);
+      }
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleCancel = () => {
+  const getUnsavedCount = useCallback(() => {
+    const settingsDirty = JSON.stringify(localSettings) !== settingsSnapshotRef.current;
+    const credentialsDirty = JSON.stringify(localCredentials) !== credentialsSnapshotRef.current;
+    const promptDirty = promptUnsavedCount;
+    return promptDirty + (settingsDirty ? 1 : 0) + (credentialsDirty ? 1 : 0);
+  }, [localCredentials, localSettings, promptUnsavedCount]);
+
+  const closeWithoutSaving = useCallback(() => {
     setLocalSettings(settings);
     setLocalCredentials(credentialsStore.credentials);
     onClose();
-  };
+  }, [credentialsStore.credentials, onClose, settings]);
+
+  const handleRequestClose = useCallback(() => {
+    const unsavedCount = getUnsavedCount();
+    if (unsavedCount === 0) {
+      closeWithoutSaving();
+      return;
+    }
+
+    const shouldSave = window.confirm(`You have unsaved changes (${unsavedCount}). Save before closing?`);
+    if (shouldSave) {
+      void (async () => {
+        await handleSave();
+        const remaining = getUnsavedCount();
+        if (remaining === 0) {
+          closeWithoutSaving();
+          return;
+        }
+
+        const discard = window.confirm('Some changes are still unsaved. Discard them and close anyway?');
+        if (discard) {
+          closeWithoutSaving();
+        }
+      })();
+      return;
+    }
+
+    const discard = window.confirm('Discard your unsaved changes and close?');
+    if (discard) {
+      closeWithoutSaving();
+    }
+  }, [closeWithoutSaving, getUnsavedCount, handleSave]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        void handleSave();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleSave, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (mainTab === 'prompts') {
+      setHasMountedPromptsPanel(true);
+    }
+  }, [isOpen, mainTab]);
 
   return (
     <SettingsToastProvider value={toastApi}>
       <BaseModal
         isOpen={isOpen}
-        onClose={handleCancel}
+        onClose={handleRequestClose}
         size="full"
         showHeader={false}
         className="settings-modal"
         footer={
           <>
-            <TextButton variant="secondary" onClick={handleCancel} disabled={isSaving}>
+            <TextButton variant="secondary" onClick={handleRequestClose} disabled={isSaving}>
               {t('common.cancel')}
             </TextButton>
-            <TextButton variant="primary" onClick={handleSave} disabled={isSaving} loading={isSaving}>
-              {isSaving ? t('settings.saving') : t('settings.saveSettings')}
+            <TextButton variant="primary" onClick={handleSave} disabled={isSaving || getUnsavedCount() === 0} loading={isSaving}>
+              {isSaving ? (
+                t('settings.saving')
+              ) : (
+                <>
+                  {t('settings.saveSettings')}
+                  {getUnsavedCount() > 0 && <span className="settings-save-badge">{getUnsavedCount()}</span>}
+                </>
+              )}
             </TextButton>
           </>
         }
@@ -232,7 +329,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           <HamburgerMenu size="md" />
         </button>
         <h2><SettingsIcon size="xl" /> {t('settings.title')}</h2>
-        <button className="close-button" onClick={handleCancel}>
+        <button className="close-button" onClick={handleRequestClose}>
           ×
         </button>
       </div>
@@ -531,7 +628,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           />
         )}
 
-        {mainTab === 'prompts' && <PromptsTemplatesPanel />}
+        {hasMountedPromptsPanel && (
+          <div style={{ display: mainTab === 'prompts' ? 'block' : 'none' }}>
+            <PromptsTemplatesPanel ref={promptsPanelRef} onUnsavedCountChange={setPromptUnsavedCount} />
+          </div>
+        )}
 
         {mainTab === 'advanced' && (
           <AdvancedPanel

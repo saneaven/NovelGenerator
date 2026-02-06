@@ -127,7 +127,7 @@
   },
   "settings": {
     "title": "설정",
-    "saveSettings": "설정 저장",
+    "saveSettings": "Save Changes",
     "saving": "저장 중...",
     "saveError": "서버에 설정을 저장하지 못했습니다. 변경 사항은 로컬에 저장되었습니다.",
     "savedSuccessfully": "설정이 저장되었습니다",
@@ -512,8 +512,8 @@
         "xai": "텍스트 생성을 위한 xAI Grok 모델",
         "custom": "자체 OpenAI 호환 엔드포인트 사용"
       },
-      "apiFormat": "API 형식",
-      "apiFormatHint": "커스텀 엔드포인트에서 사용할 OpenAI 호환 방언을 선택하세요",
+      "apiFormat": "사고 형식",
+      "apiFormatHint": "커스텀 엔드포인트에서 사고 설정에 사용할 방언을 선택하세요",
       "aiModel": "AI 모델",
       "browse": "찾아보기",
       "hide": "숨기기",

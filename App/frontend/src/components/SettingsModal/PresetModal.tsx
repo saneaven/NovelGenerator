@@ -11,6 +11,7 @@ interface PresetModalProps {
   onClose: () => void;
   mode: ModalMode;
   sourcePreset?: PresetListItem | null; // For duplicate/edit modes
+  beforeSwitchPreset?: (presetId: string) => Promise<boolean> | boolean;
 }
 
 const PresetModal: React.FC<PresetModalProps> = ({
@@ -18,6 +19,7 @@ const PresetModal: React.FC<PresetModalProps> = ({
   onClose,
   mode,
   sourcePreset,
+  beforeSwitchPreset,
 }) => {
   const { createPreset, duplicatePreset, updatePreset, setActivePreset } = usePresetStore();
   const [name, setName] = useState('');
@@ -61,14 +63,18 @@ const PresetModal: React.FC<PresetModalProps> = ({
           initialize_with_defaults: initializeWithDefaults,
         });
         // Switch to the new preset
-        await setActivePreset(newPreset.id);
+        if (!beforeSwitchPreset || (await beforeSwitchPreset(newPreset.id))) {
+          await setActivePreset(newPreset.id);
+        }
       } else if (mode === 'duplicate' && sourcePreset) {
         const duplicatedPreset = await duplicatePreset(sourcePreset.id, {
           new_name: name.trim(),
           new_description: description.trim() || undefined,
         });
         // Switch to the duplicated preset
-        await setActivePreset(duplicatedPreset.id);
+        if (!beforeSwitchPreset || (await beforeSwitchPreset(duplicatedPreset.id))) {
+          await setActivePreset(duplicatedPreset.id);
+        }
       } else if (mode === 'edit' && sourcePreset) {
         await updatePreset(sourcePreset.id, {
           name: name.trim(),

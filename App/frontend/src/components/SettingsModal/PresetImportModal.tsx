@@ -9,12 +9,14 @@ interface PresetImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   importData: PresetExportData;
+  beforeSwitchPreset?: (presetId: string) => Promise<boolean> | boolean;
 }
 
 const PresetImportModal: React.FC<PresetImportModalProps> = ({
   isOpen,
   onClose,
   importData,
+  beforeSwitchPreset,
 }) => {
   const { t } = useTranslation();
   const { importPreset, setActivePreset, presets } = usePresetStore();
@@ -75,6 +77,13 @@ const PresetImportModal: React.FC<PresetImportModalProps> = ({
       });
 
       // Switch to new preset
+      if (beforeSwitchPreset) {
+        const ok = await beforeSwitchPreset(imported.id);
+        if (!ok) {
+          onClose();
+          return;
+        }
+      }
       await setActivePreset(imported.id);
       onClose();
     } catch (err: any) {

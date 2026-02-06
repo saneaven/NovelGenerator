@@ -160,25 +160,6 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
           </p>
         </div>
 
-        {/* Custom endpoint - API format selector (always visible for custom provider) */}
-        {config.provider === 'custom' && (
-          <div className="form-field">
-            <label>{t('settings.taskConfig.apiFormat')}</label>
-            <CustomSelect
-              value={config.advanced.customApiFormat || 'openai'}
-              onChange={(value) => handleCustomApiFormatChange(value as CustomApiFormat)}
-              options={[
-                { value: 'openai', label: 'OpenAI' },
-                { value: 'claude', label: 'Claude' },
-                { value: 'gemini', label: 'Gemini' },
-              ]}
-            />
-            <p className="field-hint">
-              {t('settings.taskConfig.apiFormatHint')}
-            </p>
-          </div>
-        )}
-
         {/* Tokenizer selector for OpenRouter and Custom providers */}
         {(config.provider === 'openrouter' || config.provider === 'custom') && (
           <div className="form-field">
@@ -307,7 +288,26 @@ const TaskConfigForm: React.FC<TaskConfigFormProps> = ({
         <h4 className="section-title"><Advenced size="lg" />{t('settings.taskConfig.advancedSettings')}</h4>
 
         <div className="advanced-options">
-          <div className={`checkbox-field ${config.provider === 'openai' ? 'disabled' : ''}`}>
+          {/* Custom endpoint - thinking format selector */}
+          {config.provider === 'custom' && (
+            <div className="form-field">
+              <label>{t('settings.taskConfig.apiFormat')}</label>
+              <CustomSelect
+                value={config.advanced.customApiFormat || 'openai'}
+                onChange={(value) =>
+                  handleCustomApiFormatChange(value as CustomApiFormat)
+                }
+                options={[
+                  { value: 'openai', label: 'OpenAI' },
+                  { value: 'claude', label: 'Claude' },
+                  { value: 'gemini', label: 'Gemini' },
+                ]}
+              />
+              <p className="field-hint">{t('settings.taskConfig.apiFormatHint')}</p>
+            </div>
+          )}
+
+          <div className={`checkbox-field prefill-field ${config.provider === 'openai' ? 'disabled' : ''}`}>
             <label className="checkbox-label">
               <input
                 type="checkbox"

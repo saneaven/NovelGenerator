@@ -1,18 +1,24 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCredentialsStore } from '../../../store/credentialsStore';
 import { useSubAgentStore } from '../../../store/subAgentStore';
-import type { SubAgentAllowedMode, SubAgentDefinition } from '../../../types/subAgents';
+import type { SubAgentAllowedMode } from '../../../types/subAgents';
 import TaskConfigForm from '../TaskConfigForm';
 import { IconButton } from '../../IconButton';
 import { TextButton } from '../../TextButton';
 import ToggleSwitch from '../../common/ToggleSwitch';
-import { ChevronLeft, ChevronRight, Trash, Save, Sliders, Clock, Eye } from '../../icons';
+import { ChevronLeft, ChevronRight, Trash, Sliders, Clock, Eye } from '../../icons';
 import { schemaRegistry } from '../../../toolCall/schemas/schemaRegistry';
 import TemplateEditor from './TemplateEditor';
 import VersionHistoryModal from '../../Modal/VersionHistoryModal';
-import { usePromptEditor } from '../hooks/usePromptEditor';
-import { SUB_AGENT_CALL_PREFIX, isValidAgentName, toCallToolName } from '../../../subAgent/tools/SubAgentCallTools';
+import { promptService } from '../../../api/promptService';
+import { validateTemplate } from '../../../templateEngine/engine';
+import { mapTaskTypeToSchemaType } from '../../../templateEngine/validator';
+import {
+  SUB_AGENT_CALL_PREFIX,
+  isValidAgentName,
+  toCallToolName,
+} from '../../../subAgent/tools/SubAgentCallTools';
 import PromptPreviewModal from './PromptPreviewModal';
 import type { PromptNode } from './promptTree';
 
@@ -21,6 +27,31 @@ import './SubAgentEditor.css';
 type PromptTab = 'systemPrompt' | 'userPrompt' | 'prefill';
 type SubAgentEditorTab = 'general' | 'toolCalls' | 'provider' | 'prompts';
 
+interface TemplateValidationResult {
+  valid: boolean;
+  errors: Array<{ message: string; line?: number; column?: number; severity: string }>;
+  warnings: Array<{ message: string; line?: number; column?: number; severity: string }>;
+}
+
+export interface SubAgentDraftData {
+  agent_name: string;
+  display_name: string;
+  description: string;
+  enabled: boolean;
+  allowed_agent_modes: SubAgentAllowedMode[];
+  allowed_tool_names: string[];
+  allowed_sub_agent_ids: string[];
+  llm_config: any;
+}
+
+export interface SubAgentDefinitionDraft {
+  subAgentId: string;
+  original: SubAgentDraftData;
+  current: SubAgentDraftData;
+  dirty: boolean;
+  error: string;
+}
+
 const MODE_OPTIONS: Array<{ mode: SubAgentAllowedMode; labelKey: string }> = [
   { mode: 'storyObject', labelKey: 'settings.promptEditor.subAgentModes.storyObject' },
   { mode: 'novelEditor', labelKey: 'settings.promptEditor.subAgentModes.novelEditor' },
@@ -28,43 +59,134 @@ const MODE_OPTIONS: Array<{ mode: SubAgentAllowedMode; labelKey: string }> = [
   { mode: 'subAgent', labelKey: 'settings.promptEditor.subAgentModes.subAgent' },
 ];
 
-function normalizeString(value: string): string {
-  return value.trim();
+function normalizeAgentName(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.startsWith(SUB_AGENT_CALL_PREFIX) ? trimmed.slice(SUB_AGENT_CALL_PREFIX.length) : trimmed;
 }
 
-function snapshotForChangeDetection(agent: SubAgentDefinition): string {
+function snapshotForDraft(data: SubAgentDraftData): string {
   return JSON.stringify({
-    agent_name: agent.agent_name,
-    display_name: agent.display_name,
-    description: agent.description,
-    enabled: agent.enabled,
-    allowed_agent_modes: [...agent.allowed_agent_modes].sort(),
-    allowed_tool_names: [...agent.allowed_tool_names].sort(),
-    allowed_sub_agent_ids: [...agent.allowed_sub_agent_ids].sort(),
-    llm_config: agent.llm_config,
+    agent_name: normalizeAgentName(data.agent_name),
+    display_name: data.display_name,
+    description: data.description,
+    enabled: data.enabled,
+    allowed_agent_modes: [...data.allowed_agent_modes].sort(),
+    allowed_tool_names: [...data.allowed_tool_names].sort(),
+    allowed_sub_agent_ids: [...data.allowed_sub_agent_ids].sort(),
+    llm_config: data.llm_config,
   });
 }
 
-const SubAgentPromptEditors: React.FC<{ agentName: string }> = ({ agentName }) => {
+function computeSubAgentDraft(next: SubAgentDefinitionDraft): SubAgentDefinitionDraft {
+  const error = (() => {
+    const agent_name = normalizeAgentName(next.current.agent_name);
+    if (!agent_name) return 'Tool ID is required';
+    if (agent_name.length > 50) return 'Tool ID must be 50 characters or less';
+    if (!isValidAgentName(agent_name)) return 'Tool ID is invalid';
+    if (!next.current.display_name.trim()) return 'Display name is required';
+    if (!next.current.description.trim()) return 'Description is required';
+    return '';
+  })();
+
+  const dirty = snapshotForDraft(next.current) !== snapshotForDraft(next.original);
+  return { ...next, dirty, error };
+}
+
+type SubAgentPromptDraftView = {
+  content: string;
+  isLoading: boolean;
+};
+
+type SubAgentPromptDrafts = Record<PromptTab, SubAgentPromptDraftView | null>;
+
+const SubAgentPromptEditors: React.FC<{
+  agentNameForHistory: string;
+  agentNameForPreview: string;
+  promptDrafts: SubAgentPromptDrafts;
+  onContentChange: (tab: PromptTab, content: string) => void;
+  onReload: (tab: PromptTab) => Promise<void>;
+}> = ({ agentNameForHistory, agentNameForPreview, promptDrafts, onContentChange, onReload }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<PromptTab>('systemPrompt');
   const [showVersions, setShowVersions] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [validationByTab, setValidationByTab] = useState<Record<PromptTab, TemplateValidationResult | null>>({
+    systemPrompt: null,
+    userPrompt: null,
+    prefill: null,
+  });
 
-  const system = usePromptEditor('subAgent', 'systemPrompt', agentName);
-  const user = usePromptEditor('subAgent', 'userPrompt', agentName);
-  const prefill = usePromptEditor('subAgent', 'prefill', agentName);
+  useEffect(() => {
+    setValidationByTab({
+      systemPrompt: null,
+      userPrompt: null,
+      prefill: null,
+    });
+  }, [agentNameForHistory]);
 
-  const current = activeTab === 'systemPrompt' ? system : activeTab === 'userPrompt' ? user : prefill;
+  const activeDraft = promptDrafts[activeTab];
+  const activeContent = activeDraft?.content ?? '';
 
-  const previewNode: PromptNode = useMemo(() => ({
-    id: `subAgent-${agentName}-${activeTab}`,
-    label: `${agentName}/${activeTab}`,
-    type: 'prompt',
-    taskType: 'subAgent',
-    category: activeTab,
-    name: agentName,
-  }), [agentName, activeTab]);
+  useEffect(() => {
+    if (!activeDraft || activeDraft.isLoading) return;
+
+    const timer = window.setTimeout(async () => {
+      const schemaType = mapTaskTypeToSchemaType('subAgent', agentNameForPreview || agentNameForHistory);
+      const result = await validateTemplate(activeContent, schemaType || undefined);
+
+      if (!result.isValid) {
+        setValidationByTab((prev) => ({
+          ...prev,
+          [activeTab]: {
+            valid: false,
+            errors: [{ message: result.error || 'Unknown syntax error', severity: 'error' }],
+            warnings: [],
+          },
+        }));
+        return;
+      }
+
+      setValidationByTab((prev) => ({
+        ...prev,
+        [activeTab]: {
+          valid: true,
+          errors: [],
+          warnings:
+            result.warnings?.map((w) => ({
+              message: w.message,
+              line: w.line,
+              column: w.column,
+              severity: w.severity,
+            })) || [],
+        },
+      }));
+    }, 500);
+
+    return () => window.clearTimeout(timer);
+  }, [activeContent, activeDraft?.isLoading, activeTab, agentNameForHistory, agentNameForPreview]);
+
+  const previewNode: PromptNode = useMemo(
+    () => ({
+      id: `subAgent-${agentNameForPreview}-${activeTab}`,
+      label: `${toCallToolName(agentNameForPreview)}/${activeTab}`,
+      type: 'prompt',
+      taskType: 'subAgent',
+      category: activeTab,
+      name: agentNameForPreview,
+    }),
+    [activeTab, agentNameForPreview]
+  );
+
+  const currentVersionHistoryProps = useMemo(() => {
+    return {
+      title: 'Prompt Version History',
+      loadVersions: () => promptService.getVersionHistory('subAgent', activeTab, agentNameForHistory),
+      restoreVersion: async (vn: number) => {
+        await promptService.restoreVersion('subAgent', activeTab, vn, agentNameForHistory);
+        await onReload(activeTab);
+      },
+    };
+  }, [activeTab, agentNameForHistory, onReload]);
 
   return (
     <section className="sub-agent-editor__section sub-agent-editor__section--fill">
@@ -98,6 +220,7 @@ const SubAgentPromptEditors: React.FC<{ agentName: string }> = ({ agentName }) =
           onClick={() => setShowPreview(true)}
           title={t('settings.promptEditor.preview.title')}
           size="sm"
+          disabled={!activeDraft || activeDraft.isLoading}
         />
 
         <IconButton
@@ -105,17 +228,15 @@ const SubAgentPromptEditors: React.FC<{ agentName: string }> = ({ agentName }) =
           onClick={() => setShowVersions(true)}
           title={t('settings.promptEditor.versionHistory')}
           size="sm"
+          disabled={!activeDraft || activeDraft.isLoading}
         />
       </div>
 
       <TemplateEditor
-        content={current.content}
-        onContentChange={current.setContent}
-        validation={current.validation}
-        isLoading={current.isLoading}
-        isSaving={current.isSaving}
-        hasChanges={current.hasChanges}
-        onSave={current.onSave}
+        content={activeDraft?.content || ''}
+        onContentChange={(text) => onContentChange(activeTab, text)}
+        validation={validationByTab[activeTab]}
+        isLoading={!activeDraft || activeDraft.isLoading}
         placeholder={t('settings.promptEditor.enterPromptTemplate')}
       />
 
@@ -123,8 +244,8 @@ const SubAgentPromptEditors: React.FC<{ agentName: string }> = ({ agentName }) =
         <VersionHistoryModal
           isOpen={showVersions}
           onClose={() => setShowVersions(false)}
-          onRestoreVersion={() => current.reload()}
-          textVersionProps={current.versionHistoryProps}
+          onRestoreVersion={() => onReload(activeTab)}
+          textVersionProps={currentVersionHistoryProps}
         />
       )}
 
@@ -132,7 +253,7 @@ const SubAgentPromptEditors: React.FC<{ agentName: string }> = ({ agentName }) =
         <PromptPreviewModal
           isOpen={showPreview}
           onClose={() => setShowPreview(false)}
-          templateContent={current.content}
+          templateContent={activeDraft?.content || ''}
           promptNode={previewNode}
         />
       )}
@@ -142,20 +263,32 @@ const SubAgentPromptEditors: React.FC<{ agentName: string }> = ({ agentName }) =
 
 interface SubAgentEditorProps {
   selectedId: string | null;
-  onDeleted: () => void;
+  draft: SubAgentDefinitionDraft | null;
+  onDraftChange: (draft: SubAgentDefinitionDraft) => void;
+  promptIdentityName: string | null;
+  promptDrafts: SubAgentPromptDrafts;
+  onPromptContentChange: (tab: PromptTab, content: string) => void;
+  onReloadPrompt: (tab: PromptTab) => Promise<void>;
+  onDeleted?: (subAgentId: string) => void;
   isSidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
 }
 
 const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
   selectedId,
+  draft,
+  onDraftChange,
+  promptIdentityName,
+  promptDrafts,
+  onPromptContentChange,
+  onReloadPrompt,
   onDeleted,
   isSidebarCollapsed,
   onToggleSidebar,
 }) => {
   const { t } = useTranslation();
   const credentials = useCredentialsStore((s) => s.credentials);
-  const { subAgents, updateSubAgent, deleteSubAgent } = useSubAgentStore();
+  const { subAgents, deleteSubAgent } = useSubAgentStore();
 
   const agent = useMemo(() => {
     return selectedId ? subAgents.find((s) => s.id === selectedId) : undefined;
@@ -169,64 +302,13 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
       .sort();
   }, []);
 
-  const [editedAgentName, setEditedAgentName] = useState('');
-  const [editedDisplayName, setEditedDisplayName] = useState('');
-  const [editedDescription, setEditedDescription] = useState('');
-  const [editedEnabled, setEditedEnabled] = useState(true);
-  const [editedModes, setEditedModes] = useState<SubAgentAllowedMode[]>([]);
-  const [editedTools, setEditedTools] = useState<string[]>([]);
-  const [editedAllowedSubAgentIds, setEditedAllowedSubAgentIds] = useState<string[]>([]);
   const [toolFilter, setToolFilter] = useState('');
-  const [editedConfig, setEditedConfig] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<SubAgentEditorTab>('general');
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  const originalSnapshotRef = useRef<string>('');
 
   useEffect(() => {
-    if (!agent) {
-      setEditedAgentName('');
-      setEditedDisplayName('');
-      setEditedDescription('');
-      setEditedEnabled(true);
-      setEditedModes([]);
-      setEditedTools([]);
-      setEditedAllowedSubAgentIds([]);
-      setEditedConfig(null);
-      originalSnapshotRef.current = '';
-      setError('');
-      return;
-    }
-
-    setEditedAgentName(agent.agent_name);
-    setEditedDisplayName(agent.display_name);
-    setEditedDescription(agent.description);
-    setEditedEnabled(agent.enabled);
-    setEditedModes(agent.allowed_agent_modes);
-    setEditedTools(agent.allowed_tool_names.filter((n) => !n.startsWith('call_') && n !== 'return_sub_agent_result'));
-    setEditedAllowedSubAgentIds(agent.allowed_sub_agent_ids ?? []);
-    setEditedConfig(agent.llm_config);
-    originalSnapshotRef.current = snapshotForChangeDetection(agent);
-    setError('');
     setToolFilter('');
-  }, [agent?.id]);
-
-  const currentSnapshot = useMemo(() => {
-    if (!agent) return '';
-    return JSON.stringify({
-      agent_name: normalizeString(editedAgentName),
-      display_name: editedDisplayName,
-      description: normalizeString(editedDescription),
-      enabled: editedEnabled,
-      allowed_agent_modes: [...editedModes].sort(),
-      allowed_tool_names: [...editedTools].sort(),
-      allowed_sub_agent_ids: [...editedAllowedSubAgentIds].sort(),
-      llm_config: editedConfig,
-    });
-  }, [agent, editedAgentName, editedDisplayName, editedDescription, editedEnabled, editedModes, editedTools, editedAllowedSubAgentIds, editedConfig]);
-
-  const hasChanges = Boolean(agent) && currentSnapshot !== originalSnapshotRef.current;
+    setActiveTab('general');
+  }, [selectedId]);
 
   const filteredTools = useMemo(() => {
     const q = toolFilter.trim().toLowerCase();
@@ -234,97 +316,51 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
     return allStaticTools.filter((name) => name.toLowerCase().includes(q));
   }, [allStaticTools, toolFilter]);
 
+  const updateDraft = (updater: (cur: SubAgentDefinitionDraft) => SubAgentDefinitionDraft) => {
+    if (!draft) return;
+    onDraftChange(computeSubAgentDraft(updater(draft)));
+  };
+
   const setModeChecked = (mode: SubAgentAllowedMode, checked: boolean) => {
-    setEditedModes((prev) => {
+    updateDraft((cur) => {
+      const prev = cur.current.allowed_agent_modes;
       const has = prev.includes(mode);
-      if (checked && !has) return [...prev, mode];
-      if (!checked && has) return prev.filter((m) => m !== mode);
-      return prev;
+      const nextModes = checked && !has ? [...prev, mode] : !checked && has ? prev.filter((m) => m !== mode) : prev;
+      return { ...cur, current: { ...cur.current, allowed_agent_modes: nextModes } };
     });
   };
 
   const setToolChecked = (toolName: string, checked: boolean) => {
-    setEditedTools((prev) => {
+    updateDraft((cur) => {
+      const prev = cur.current.allowed_tool_names;
       const has = prev.includes(toolName);
-      if (checked && !has) return [...prev, toolName];
-      if (!checked && has) return prev.filter((n) => n !== toolName);
-      return prev;
+      const nextTools = checked && !has ? [...prev, toolName] : !checked && has ? prev.filter((n) => n !== toolName) : prev;
+      return { ...cur, current: { ...cur.current, allowed_tool_names: nextTools } };
     });
   };
 
   const setSubAgentAllowedChecked = (subAgentId: string, checked: boolean) => {
-    setEditedAllowedSubAgentIds((prev) => {
+    updateDraft((cur) => {
+      const prev = cur.current.allowed_sub_agent_ids;
       const has = prev.includes(subAgentId);
-      if (checked && !has) return [...prev, subAgentId];
-      if (!checked && has) return prev.filter((id) => id !== subAgentId);
-      return prev;
+      const nextIds = checked && !has ? [...prev, subAgentId] : !checked && has ? prev.filter((id) => id !== subAgentId) : prev;
+      return { ...cur, current: { ...cur.current, allowed_sub_agent_ids: nextIds } };
     });
   };
 
-  const handleSave = async () => {
-    if (!agent) return;
-
-    let agent_name = editedAgentName.trim();
-    if (agent_name.startsWith(SUB_AGENT_CALL_PREFIX)) {
-      agent_name = agent_name.slice(SUB_AGENT_CALL_PREFIX.length);
-    }
-    const name = editedDisplayName.trim();
-    const desc = editedDescription.trim();
-    if (!agent_name) {
-      setError(t('settings.promptEditor.subAgentSave.idRequired'));
-      return;
-    }
-    if (agent_name.length > 50) {
-      setError(t('settings.promptEditor.subAgentSave.idTooLong'));
-      return;
-    }
-    if (!isValidAgentName(agent_name)) {
-      setError(t('settings.promptEditor.subAgentSave.invalidId'));
-      return;
-    }
-    if (!name) {
-      setError(t('settings.promptEditor.subAgentSave.nameRequired'));
-      return;
-    }
-    if (!desc) {
-      setError(t('settings.promptEditor.subAgentSave.descriptionRequired'));
-      return;
-    }
-
-    setIsSaving(true);
-    setError('');
-    try {
-      const updated = await updateSubAgent(agent.id, {
-        agent_name,
-        display_name: name,
-        description: desc,
-        enabled: editedEnabled,
-        allowed_agent_modes: editedModes,
-        allowed_tool_names: editedTools.filter((n) => !n.startsWith('call_') && n !== 'return_sub_agent_result'),
-        allowed_sub_agent_ids: editedAllowedSubAgentIds,
-        llm_config: editedConfig,
-      });
-      originalSnapshotRef.current = snapshotForChangeDetection(updated);
-    } catch (err: any) {
-      setError(err?.message || t('settings.promptEditor.subAgentSave.saveFailed'));
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleDelete = async () => {
-    if (!agent) return;
-    const ok = window.confirm(t('settings.promptEditor.subAgentDelete.confirm', { name: agent.display_name }));
+    if (!draft) return;
+    const ok = window.confirm(t('settings.promptEditor.subAgentDelete.confirm', { name: draft.current.display_name }));
     if (!ok) return;
     try {
-      await deleteSubAgent(agent.id);
-      onDeleted();
+      await deleteSubAgent(draft.subAgentId);
+      onDeleted?.(draft.subAgentId);
     } catch (err: any) {
-      setError(err?.message || t('settings.promptEditor.subAgentDelete.deleteFailed'));
+      window.alert(err?.message || t('settings.promptEditor.subAgentDelete.deleteFailed'));
     }
   };
 
-  if (!agent) {
+  if (!agent || !draft) {
     return (
       <div className="sub-agent-editor sub-agent-editor--empty">
         <div className="sub-agent-editor__header">
@@ -350,16 +386,19 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
     );
   }
 
+  const agentNameForPreview =
+    normalizeAgentName(draft.current.agent_name) || normalizeAgentName(draft.original.agent_name) || agent.agent_name;
+
   return (
     <div className="sub-agent-editor">
       <div className="sub-agent-editor__header">
         <div className="sub-agent-editor__title-row">
           <div className="sub-agent-editor__title-line">
-            <h3 className="sub-agent-editor__title">{agent.display_name}</h3>
+            <h3 className="sub-agent-editor__title">{draft.current.display_name}</h3>
             <div className="sub-agent-editor__enabled-toggle">
               <ToggleSwitch
-                checked={editedEnabled}
-                onChange={setEditedEnabled}
+                checked={draft.current.enabled}
+                onChange={(checked) => updateDraft((cur) => ({ ...cur, current: { ...cur.current, enabled: checked } }))}
                 label={t('common.enabled')}
               />
             </div>
@@ -367,7 +406,7 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
           <div className="sub-agent-editor__id-block">
             <div className="sub-agent-editor__id-line">
               <span className="sub-agent-editor__id-key">{t('settings.promptEditor.subAgentIds.tool')}</span>
-              <span className="sub-agent-editor__id-value">{toCallToolName(editedAgentName || agent.agent_name)}</span>
+              <span className="sub-agent-editor__id-value">{toCallToolName(agentNameForPreview)}</span>
             </div>
             <div className="sub-agent-editor__id-line">
               <span className="sub-agent-editor__id-key">{t('settings.promptEditor.subAgentIds.uuid')}</span>
@@ -384,21 +423,8 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
               size="sm"
             />
           )}
-          <TextButton
-            iconLeft={<Trash size="sm" />}
-            variant="secondary"
-            onClick={handleDelete}
-          >
+          <TextButton iconLeft={<Trash size="sm" />} variant="secondary" onClick={handleDelete}>
             {t('common.delete')}
-          </TextButton>
-          <TextButton
-            iconLeft={<Save size="sm" />}
-            variant="primary"
-            onClick={handleSave}
-            disabled={!hasChanges || isSaving}
-            loading={isSaving}
-          >
-            {t('common.save')}
           </TextButton>
         </div>
       </div>
@@ -463,7 +489,7 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
           hidden={activeTab !== 'general'}
         >
           <section className="sub-agent-editor__section">
-            <h4 className="sub-agent-editor__section-title">{t('settings.promptEditor.subAgentSettings.title')}</h4>
+            <h4 className="sub-agent-editor__section-title">{t('settings.promptEditor.subAgentSettings.identity')}</h4>
 
             <div className="sub-agent-editor__field-row">
               <label className="sub-agent-editor__label">{t('settings.promptEditor.subAgentSettings.toolId')}</label>
@@ -472,10 +498,16 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
                   <span className="sub-agent-editor__agent-name-prefix">{SUB_AGENT_CALL_PREFIX}</span>
                   <input
                     className="sub-agent-editor__input sub-agent-editor__input--mono"
-                    value={editedAgentName}
+                    value={draft.current.agent_name}
                     onChange={(e) => {
                       const next = e.target.value;
-                      setEditedAgentName(next.startsWith(SUB_AGENT_CALL_PREFIX) ? next.slice(SUB_AGENT_CALL_PREFIX.length) : next);
+                      updateDraft((cur) => ({
+                        ...cur,
+                        current: {
+                          ...cur.current,
+                          agent_name: next.startsWith(SUB_AGENT_CALL_PREFIX) ? next.slice(SUB_AGENT_CALL_PREFIX.length) : next,
+                        },
+                      }));
                     }}
                   />
                 </div>
@@ -487,8 +519,8 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
               <label className="sub-agent-editor__label">{t('settings.promptEditor.subAgentSettings.displayName')}</label>
               <input
                 className="sub-agent-editor__input"
-                value={editedDisplayName}
-                onChange={(e) => setEditedDisplayName(e.target.value)}
+                value={draft.current.display_name}
+                onChange={(e) => updateDraft((cur) => ({ ...cur, current: { ...cur.current, display_name: e.target.value } }))}
               />
             </div>
 
@@ -496,8 +528,8 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
               <label className="sub-agent-editor__label">{t('settings.promptEditor.subAgentSettings.description')}</label>
               <textarea
                 className="sub-agent-editor__textarea"
-                value={editedDescription}
-                onChange={(e) => setEditedDescription(e.target.value)}
+                value={draft.current.description}
+                onChange={(e) => updateDraft((cur) => ({ ...cur, current: { ...cur.current, description: e.target.value } }))}
                 rows={3}
               />
             </div>
@@ -509,7 +541,7 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
               {MODE_OPTIONS.map((opt) => (
                 <ToggleSwitch
                   key={opt.mode}
-                  checked={editedModes.includes(opt.mode)}
+                  checked={draft.current.allowed_agent_modes.includes(opt.mode)}
                   onChange={(checked) => setModeChecked(opt.mode, checked)}
                   label={t(opt.labelKey)}
                 />
@@ -541,15 +573,13 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
               {filteredTools.map((toolName) => (
                 <ToggleSwitch
                   key={toolName}
-                  checked={editedTools.includes(toolName)}
+                  checked={draft.current.allowed_tool_names.includes(toolName)}
                   onChange={(checked) => setToolChecked(toolName, checked)}
                   label={toolName}
                 />
               ))}
             </div>
-            <div className="sub-agent-editor__hint">
-              {t('settings.promptEditor.subAgentSettings.returnResultAlwaysAvailable')}
-            </div>
+            <div className="sub-agent-editor__hint">{t('settings.promptEditor.subAgentSettings.returnResultAlwaysAvailable')}</div>
           </section>
 
           <section className="sub-agent-editor__section">
@@ -561,7 +591,7 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
                 .map((s) => (
                   <ToggleSwitch
                     key={s.id}
-                    checked={editedAllowedSubAgentIds.includes(s.id)}
+                    checked={draft.current.allowed_sub_agent_ids.includes(s.id)}
                     onChange={(checked) => setSubAgentAllowedChecked(s.id, checked)}
                     label={toCallToolName(s.agent_name)}
                     disabled={!s.enabled}
@@ -580,12 +610,12 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
         >
           <section className="sub-agent-editor__section">
             <h4 className="sub-agent-editor__section-title">{t('settings.promptEditor.subAgentSettings.llmConfig')}</h4>
-            {editedConfig && (
+            {draft.current.llm_config && (
               <TaskConfigForm
                 taskType="agent"
-                config={editedConfig}
+                config={draft.current.llm_config}
                 credentials={credentials}
-                onChange={(cfg) => setEditedConfig(cfg)}
+                onChange={(cfg) => updateDraft((cur) => ({ ...cur, current: { ...cur.current, llm_config: cfg } }))}
               />
             )}
           </section>
@@ -598,13 +628,26 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
           aria-labelledby="sub-agent-editor-tab-prompts"
           hidden={activeTab !== 'prompts'}
         >
-          <SubAgentPromptEditors agentName={agent.agent_name} />
+          {promptIdentityName ? (
+            <SubAgentPromptEditors
+              agentNameForHistory={promptIdentityName}
+              agentNameForPreview={agentNameForPreview}
+              promptDrafts={promptDrafts}
+              onContentChange={onPromptContentChange}
+              onReload={onReloadPrompt}
+            />
+          ) : (
+            <section className="sub-agent-editor__section">
+              <div className="sub-agent-editor__hint">Select a Sub Agent to edit prompts.</div>
+            </section>
+          )}
         </div>
 
-        {error && <div className="sub-agent-editor__error">{error}</div>}
+        {draft.error && <div className="sub-agent-editor__error">{draft.error}</div>}
       </div>
     </div>
   );
 };
 
 export default SubAgentEditor;
+

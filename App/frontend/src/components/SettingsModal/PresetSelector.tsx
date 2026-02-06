@@ -13,12 +13,14 @@ interface PresetSelectorProps {
   onCreatePreset: () => void;
   onDuplicatePreset: (presetId: string) => void;
   onEditPreset: (presetId: string) => void;
+  beforeSelectPreset?: (presetId: string) => Promise<boolean> | boolean;
 }
 
 const PresetSelector: React.FC<PresetSelectorProps> = ({
   onCreatePreset,
   onDuplicatePreset,
   onEditPreset,
+  beforeSelectPreset,
 }) => {
   const { t } = useTranslation();
   const toast = useSettingsToast();
@@ -36,6 +38,10 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
 
   const handleSelectPreset = async (presetId: string) => {
     if (presetId !== activePresetId) {
+      if (beforeSelectPreset) {
+        const ok = await beforeSelectPreset(presetId);
+        if (!ok) return;
+      }
       await setActivePreset(presetId);
     }
   };
@@ -222,6 +228,7 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
             setImportData(null);
           }}
           importData={importData}
+          beforeSwitchPreset={beforeSelectPreset}
         />
       )}
     </div>

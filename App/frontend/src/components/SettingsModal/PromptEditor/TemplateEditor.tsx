@@ -1,10 +1,7 @@
 import React from 'react';
-import { useTranslation } from 'react-i18next';
 import SyntaxHighlightedTextarea from '../SyntaxHighlighter/SyntaxHighlightedTextarea';
 import ValidationWarnings from './ValidationWarnings';
-import { Save } from '../../icons';
 import { Loading } from '../../common/Loading';
-import { useSettingsToast } from '../SettingsToastContext';
 import './TemplateEditor.css';
 
 interface ValidationResult {
@@ -18,9 +15,6 @@ export interface TemplateEditorProps {
     onContentChange: (content: string) => void;
     validation: ValidationResult | null;
     isLoading: boolean;
-    isSaving: boolean;
-    hasChanges: boolean;
-    onSave: () => Promise<void>;
     placeholder?: string;
 }
 
@@ -29,22 +23,8 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({
     onContentChange,
     validation,
     isLoading,
-    isSaving,
-    hasChanges,
-    onSave,
     placeholder = 'Enter template...',
 }) => {
-    const { t } = useTranslation();
-    const toast = useSettingsToast();
-
-    const handleSave = async () => {
-        if (!validation?.valid) {
-            toast.error(t('settings.promptEditor.toast.templateSyntaxError'));
-            return;
-        }
-        await onSave();
-    };
-
     if (isLoading) {
         return (
             <div className="template-editor template-editor--loading">
@@ -74,22 +54,6 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({
                     onChange={onContentChange}
                     placeholder={placeholder}
                 />
-
-                {/* Save FAB - hidden when syntax errors */}
-                {validation?.valid && (
-                    <button
-                        className={`template-editor__save-fab ${hasChanges ? 'template-editor__save-fab--active' : ''}`}
-                        onClick={handleSave}
-                        disabled={isSaving || !hasChanges}
-                        title="Save"
-                    >
-                        {isSaving ? (
-                            <Loading size="xs" />
-                        ) : (
-                            <Save size="md" />
-                        )}
-                    </button>
-                )}
             </div>
         </section>
     );

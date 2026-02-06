@@ -127,7 +127,7 @@
   },
   "settings": {
     "title": "Settings",
-    "saveSettings": "Save Settings",
+    "saveSettings": "Save Changes",
     "saving": "Saving...",
     "saveError": "Failed to save settings to server. Changes are saved locally.",
     "savedSuccessfully": "Settings saved",
@@ -512,8 +512,8 @@
         "xai": "xAI Grok models for text generation",
         "custom": "Use your own OpenAI-compatible endpoint"
       },
-      "apiFormat": "API Format",
-      "apiFormatHint": "Select the OpenAI-compatible dialect for your custom endpoint",
+      "apiFormat": "Thinking Format",
+      "apiFormatHint": "Select the dialect used for thinking settings on your custom endpoint",
       "aiModel": "AI Model",
       "browse": "Browse",
       "hide": "Hide",

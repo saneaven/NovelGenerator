@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useVariableStore } from '../../../store/variableStore';
-import type { NumberOptions } from '../../../types/variables';
+import type { VariableType } from '../../../types/variables';
 import { getVariableTypeLabel, isValidVariableName } from '../../../types/variables';
 import { Trash, Copy, Plus, Close, ChevronLeft, ChevronRight } from '../../icons';
 import { TextButton } from '../../TextButton';
@@ -8,200 +8,95 @@ import { IconButton } from '../../IconButton';
 import { CustomSelect } from '../../ui/CustomSelect';
 import './VariableEditor.css';
 
+export interface VariableDefinitionDraft {
+  variableId: string;
+  varType: VariableType;
+  original: {
+    name: string;
+    description: string;
+    select_options: string[];
+    number_options: { min: string; max: string; step: string; input_type: 'input' | 'slider' };
+  };
+  current: {
+    name: string;
+    description: string;
+    select_options: string[];
+    number_options: { min: string; max: string; step: string; input_type: 'input' | 'slider' };
+  };
+  dirty: boolean;
+  error: string;
+}
+
 interface VariableEditorProps {
   variableId: string | null;
-  onDelete?: () => void;
+  draft: VariableDefinitionDraft | null;
+  onDraftChange: (draft: VariableDefinitionDraft) => void;
+  onDeleted?: (variableId: string) => void;
   isSidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
 }
 
+function snapshotForDraft(varType: VariableType, data: VariableDefinitionDraft['current']): string {
+  const base: any = {
+    name: data.name,
+    description: data.description,
+    select_options: data.select_options,
+  };
+  if (varType === 'number') {
+    base.number_options = data.number_options;
+  }
+  return JSON.stringify(base);
+}
+
+function computeDraft(next: VariableDefinitionDraft): VariableDefinitionDraft {
+  const error = (() => {
+    const name = next.current.name;
+    if (!name.trim()) {
+      return 'Name is required';
+    }
+    if (name && !isValidVariableName(name)) {
+      return 'Name must start with a letter and contain only letters, numbers, and underscores';
+    }
+
+    if (next.varType === 'select' && next.current.select_options.length < 2) {
+      return 'Select type requires at least 2 options';
+    }
+
+    if (next.varType === 'number') {
+      const minVal = next.current.number_options.min !== '' ? parseFloat(next.current.number_options.min) : undefined;
+      const maxVal = next.current.number_options.max !== '' ? parseFloat(next.current.number_options.max) : undefined;
+      if (minVal !== undefined && maxVal !== undefined && minVal >= maxVal) {
+        return 'Min must be less than max';
+      }
+      if (next.current.number_options.input_type === 'slider' && (minVal === undefined || maxVal === undefined)) {
+        return 'Slider requires both min and max values';
+      }
+    }
+
+    return '';
+  })();
+
+  const dirty = snapshotForDraft(next.varType, next.current) !== snapshotForDraft(next.varType, next.original);
+  return { ...next, dirty, error };
+}
+
 const VariableEditor: React.FC<VariableEditorProps> = ({
   variableId,
-  onDelete,
+  draft,
+  onDraftChange,
+  onDeleted,
   isSidebarCollapsed,
   onToggleSidebar,
 }) => {
-  const { variables, updateDefinition, deleteVariable } = useVariableStore();
+  const { variables, deleteVariable } = useVariableStore();
   const variable = variables.find((v) => v.id === variableId);
-
-  const [editedName, setEditedName] = useState('');
-  const [editedDescription, setEditedDescription] = useState('');
-  const [editedOptions, setEditedOptions] = useState<string[]>([]);
   const [newOption, setNewOption] = useState('');
-  const [hasChanges, setHasChanges] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState('');
 
-  // Number options state
-  const [editedMin, setEditedMin] = useState<string>('');
-  const [editedMax, setEditedMax] = useState<string>('');
-  const [editedStep, setEditedStep] = useState<string>('1');
-  const [editedInputType, setEditedInputType] = useState<'input' | 'slider'>('input');
-
-  // Reset form when selecting a different variable
   useEffect(() => {
-    const currentVariable = variables.find((v) => v.id === variableId);
-    if (currentVariable) {
-      setEditedName(currentVariable.name);
-      setEditedDescription(currentVariable.description || '');
-      setEditedOptions(currentVariable.select_options || []);
-      // Reset number options
-      const numOpts = currentVariable.number_options;
-      setEditedMin(numOpts?.min !== undefined ? String(numOpts.min) : '');
-      setEditedMax(numOpts?.max !== undefined ? String(numOpts.max) : '');
-      setEditedStep(numOpts?.step !== undefined ? String(numOpts.step) : '1');
-      setEditedInputType(numOpts?.input_type || 'input');
-      setHasChanges(false);
-      setError('');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setNewOption('');
   }, [variableId]);
 
-  const handleNameChange = (value: string) => {
-    setEditedName(value);
-    setHasChanges(true);
-    if (value && !isValidVariableName(value)) {
-      setError('Name must start with a letter and contain only letters, numbers, and underscores');
-    } else {
-      setError('');
-    }
-  };
-
-  const handleDescriptionChange = (value: string) => {
-    setEditedDescription(value);
-    setHasChanges(true);
-    setError('');
-  };
-
-  const handleAddOption = () => {
-    const trimmed = newOption.trim();
-    if (trimmed && !editedOptions.includes(trimmed)) {
-      setEditedOptions([...editedOptions, trimmed]);
-      setNewOption('');
-      setHasChanges(true);
-      setError('');
-    }
-  };
-
-  const handleRemoveOption = (index: number) => {
-    const newOptions = editedOptions.filter((_, i) => i !== index);
-    setEditedOptions(newOptions);
-    setHasChanges(true);
-    setError('');
-  };
-
-  // Number options handlers
-  const handleMinChange = (value: string) => {
-    setEditedMin(value);
-    setHasChanges(true);
-    setError('');
-    // If switching to slider and min/max not both set, reset to input
-    if (editedInputType === 'slider' && (!value || !editedMax)) {
-      setEditedInputType('input');
-    }
-  };
-
-  const handleMaxChange = (value: string) => {
-    setEditedMax(value);
-    setHasChanges(true);
-    setError('');
-    // If switching to slider and min/max not both set, reset to input
-    if (editedInputType === 'slider' && (!editedMin || !value)) {
-      setEditedInputType('input');
-    }
-  };
-
-  const handleStepChange = (value: string) => {
-    setEditedStep(value);
-    setHasChanges(true);
-    setError('');
-  };
-
-  const handleInputTypeChange = (value: 'input' | 'slider') => {
-    setEditedInputType(value);
-    setHasChanges(true);
-    setError('');
-  };
-
-  // Check if slider can be enabled
-  const canUseSlider = editedMin !== '' && editedMax !== '';
-
-  const handleSave = async () => {
-    if (!variable) return;
-
-    if (editedName && !isValidVariableName(editedName)) {
-      setError('Invalid variable name');
-      return;
-    }
-
-    if (variable.var_type === 'select' && editedOptions.length < 2) {
-      setError('Select type requires at least 2 options');
-      return;
-    }
-
-    // Validate number options
-    if (variable.var_type === 'number') {
-      const minVal = editedMin !== '' ? parseFloat(editedMin) : undefined;
-      const maxVal = editedMax !== '' ? parseFloat(editedMax) : undefined;
-      if (minVal !== undefined && maxVal !== undefined && minVal >= maxVal) {
-        setError('Min must be less than max');
-        return;
-      }
-      if (editedInputType === 'slider' && (minVal === undefined || maxVal === undefined)) {
-        setError('Slider requires both min and max values');
-        return;
-      }
-    }
-
-    setIsSaving(true);
-    setError('');
-
-    try {
-      // Build number_options if this is a number type
-      let numberOptions: NumberOptions | undefined;
-      if (variable.var_type === 'number') {
-        numberOptions = {
-          min: editedMin !== '' ? parseFloat(editedMin) : undefined,
-          max: editedMax !== '' ? parseFloat(editedMax) : undefined,
-          step: editedStep !== '' ? parseFloat(editedStep) : 1,
-          input_type: editedInputType,
-        };
-      }
-
-      await updateDefinition(variable.id, {
-        name: editedName !== variable.name ? editedName : undefined,
-        description: editedDescription || undefined,
-        select_options: variable.var_type === 'select' ? editedOptions : undefined,
-        number_options: numberOptions,
-      });
-      setHasChanges(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!variable) return;
-
-    const confirmed = window.confirm(`Delete variable "${variable.name}"? This cannot be undone.`);
-    if (!confirmed) return;
-
-    try {
-      await deleteVariable(variable.id);
-      onDelete?.();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete');
-    }
-  };
-
-  const handleCopyUsage = () => {
-    if (!variable) return;
-    navigator.clipboard.writeText(`{{variables.${variable.name}}}`);
-  };
-
-  if (!variable) {
+  if (!variable || !draft) {
     return (
       <div className="variable-editor variable-editor--empty">
         {onToggleSidebar && (
@@ -229,11 +124,132 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
     );
   }
 
+  const currentName = draft.current.name;
+  const currentDescription = draft.current.description;
+  const currentOptions = draft.current.select_options;
+  const currentNumberOptions = draft.current.number_options;
+
+  const handleAddOption = () => {
+    const trimmed = newOption.trim();
+    if (!trimmed || currentOptions.includes(trimmed)) return;
+
+    onDraftChange(
+      computeDraft({
+        ...draft,
+        current: {
+          ...draft.current,
+          select_options: [...currentOptions, trimmed],
+        },
+      })
+    );
+    setNewOption('');
+  };
+
+  const handleRemoveOption = (index: number) => {
+    const newOptions = currentOptions.filter((_, i) => i !== index);
+    onDraftChange(
+      computeDraft({
+        ...draft,
+        current: {
+          ...draft.current,
+          select_options: newOptions,
+        },
+      })
+    );
+  };
+
+  // Number options handlers
+  const handleMinChange = (value: string) => {
+    const nextInputType =
+      currentNumberOptions.input_type === 'slider' && (!value || !currentNumberOptions.max) ? 'input' : currentNumberOptions.input_type;
+    onDraftChange(
+      computeDraft({
+        ...draft,
+        current: {
+          ...draft.current,
+          number_options: {
+            ...currentNumberOptions,
+            min: value,
+            input_type: nextInputType,
+          },
+        },
+      })
+    );
+  };
+
+  const handleMaxChange = (value: string) => {
+    const nextInputType =
+      currentNumberOptions.input_type === 'slider' && (!currentNumberOptions.min || !value) ? 'input' : currentNumberOptions.input_type;
+    onDraftChange(
+      computeDraft({
+        ...draft,
+        current: {
+          ...draft.current,
+          number_options: {
+            ...currentNumberOptions,
+            max: value,
+            input_type: nextInputType,
+          },
+        },
+      })
+    );
+  };
+
+  const handleStepChange = (value: string) => {
+    onDraftChange(
+      computeDraft({
+        ...draft,
+        current: {
+          ...draft.current,
+          number_options: {
+            ...currentNumberOptions,
+            step: value,
+          },
+        },
+      })
+    );
+  };
+
+  const handleInputTypeChange = (value: 'input' | 'slider') => {
+    onDraftChange(
+      computeDraft({
+        ...draft,
+        current: {
+          ...draft.current,
+          number_options: {
+            ...currentNumberOptions,
+            input_type: value,
+          },
+        },
+      })
+    );
+  };
+
+  const canUseSlider = useMemo(() => {
+    return draft.current.number_options.min !== '' && draft.current.number_options.max !== '';
+  }, [draft]);
+
+  const handleDelete = async () => {
+    const confirmed = window.confirm(`Delete variable "${variable.name}"? This cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      await deleteVariable(variable.id);
+      onDeleted?.(variable.id);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to delete');
+    }
+  };
+
+  const handleCopyUsage = () => {
+    navigator.clipboard.writeText(`{{variables.${draft.current.name}}}`);
+  };
+
   return (
     <div className="variable-editor">
       <div className="variable-editor__header">
         <div className="variable-editor__title-row">
-          <h3 className="variable-editor__title">{variable.name}</h3>
+          <h3 className="variable-editor__title">{draft.current.name}</h3>
           <span className="variable-editor__type-badge">
             {getVariableTypeLabel(variable.var_type)}
           </span>
@@ -255,7 +271,7 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
         <div className="variable-editor__usage-hint">
           <span className="variable-editor__usage-label">Usage:</span>
           <code className="variable-editor__usage-code">
-            {'{{variables.'}{variable.name}{'}}'}
+            {'{{variables.'}{draft.current.name}{'}}'}
           </code>
           <IconButton
             icon={<Copy size="sm" />}
@@ -272,8 +288,8 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
           <input
             type="text"
             className="variable-editor__input"
-            value={editedName}
-            onChange={(e) => handleNameChange(e.target.value)}
+            value={currentName}
+            onChange={(e) => onDraftChange(computeDraft({ ...draft, current: { ...draft.current, name: e.target.value } }))}
             placeholder="variableName"
           />
         </div>
@@ -283,8 +299,10 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
           <label className="variable-editor__label">Description (optional)</label>
           <textarea
             className="variable-editor__textarea"
-            value={editedDescription}
-            onChange={(e) => handleDescriptionChange(e.target.value)}
+            value={currentDescription}
+            onChange={(e) =>
+              onDraftChange(computeDraft({ ...draft, current: { ...draft.current, description: e.target.value } }))
+            }
             placeholder="Describe what this variable is for..."
             rows={2}
           />
@@ -295,7 +313,7 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
           <div className="variable-editor__field">
             <label className="variable-editor__label">Options</label>
             <div className="variable-editor__options">
-              {editedOptions.map((option, index) => (
+              {currentOptions.map((option, index) => (
                 <div key={index} className="variable-editor__option">
                   <span className="variable-editor__option-text">{option}</span>
                   <button
@@ -343,7 +361,7 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
                 <input
                   type="number"
                   className="variable-editor__number-input"
-                  value={editedMin}
+                  value={currentNumberOptions.min}
                   onChange={(e) => handleMinChange(e.target.value)}
                   placeholder="No limit"
                 />
@@ -353,7 +371,7 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
                 <input
                   type="number"
                   className="variable-editor__number-input"
-                  value={editedMax}
+                  value={currentNumberOptions.max}
                   onChange={(e) => handleMaxChange(e.target.value)}
                   placeholder="No limit"
                 />
@@ -363,7 +381,7 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
                 <input
                   type="number"
                   className="variable-editor__number-input"
-                  value={editedStep}
+                  value={currentNumberOptions.step}
                   onChange={(e) => handleStepChange(e.target.value)}
                   placeholder="1"
                   min="0.001"
@@ -374,7 +392,7 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
                 <label className="variable-editor__number-label">Display as</label>
                 <CustomSelect
                   className="variable-editor__number-select"
-                  value={editedInputType}
+                  value={currentNumberOptions.input_type}
                   onChange={(value) => handleInputTypeChange(value as 'input' | 'slider')}
                   options={[
                     { value: 'input', label: 'Input Field' },
@@ -411,8 +429,8 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
         </div>
 
         {/* Error message */}
-        {error && (
-          <div className="variable-editor__error">{error}</div>
+        {draft.error && (
+          <div className="variable-editor__error">{draft.error}</div>
         )}
       </div>
 
@@ -425,14 +443,6 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
         >
           Delete
         </TextButton>
-        {hasChanges && (
-          <TextButton
-            onClick={handleSave}
-            disabled={isSaving || !!error}
-          >
-            {isSaving ? 'Saving...' : 'Save Changes'}
-          </TextButton>
-        )}
       </div>
     </div>
   );
