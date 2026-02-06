@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { BaseModal } from '../BaseModal';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useSettings } from '../../store/settingsStore';
 import type { ObjectType, ChapterObject } from '../../types/unifiedObject';
 import { JourneyRuntime } from '../../llmTaskJourney';
 import { Document } from '../icons';
@@ -54,12 +54,12 @@ const AIEditModal: React.FC<AIEditModalProps> = ({
   const [rawMode, setRawMode] = useState(false);
 
   const unifiedStore = useUnifiedObjectStore();
-  const settingsStore = useSettingsStore();
+  const settings = useSettings();
 
   const isManuscriptMode = category === 'manuscript';
   const categoryDisplayName = getCategoryDisplayName(category);
   const editTypeText = 'Item';
-  const mainLanguage = settingsStore.settings.mainLanguage;
+  const mainLanguage = settings.mainLanguage;
 
   // Get item name for title (fetch from store)
   const itemName = useMemo(() => {

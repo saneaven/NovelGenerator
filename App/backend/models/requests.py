@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Literal
+from typing import Any, List, Optional, Dict, Literal
 
 class ProviderConfig(BaseModel):
     """Provider-specific configuration sent from frontend"""
@@ -19,7 +19,7 @@ class ThinkingConfig(BaseModel):
     Fields are optional; providers pick what they understand.
     """
     # Common - effort now includes 'none', 'minimal', 'xhigh' for GPT-5.2+
-    effort: Optional[Literal["none", "minimal", "low", "medium", "high", "xhigh"]] = "medium"
+    effort: Optional[Literal["none", "minimal", "low", "medium", "high", "xhigh"]] = None
     max_tokens: Optional[int] = Field(default=None, alias="maxTokens")
 
     # GPT-5 specific - output verbosity
@@ -55,6 +55,7 @@ class ToolCall(BaseModel):
     id: str
     type: Literal["function"] = "function"
     function: ToolCallFunction
+    extra_content: Optional[Dict[str, Any]] = None
 
 class ToolResult(BaseModel):
     """Result of a tool call execution"""

@@ -1,5 +1,4 @@
 ﻿import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import { settingsService } from '../api/settingsService';
 import { promptService } from '../api/promptService';
 import type { TaskType, PromptCategory } from '../types/prompts';
@@ -98,7 +97,7 @@ export interface AdvancedTaskSettings {
     enablePrefill: boolean;
     thinkingMode: 'off' | 'model' | 'custom';
     thinkingConfig?: ThinkingConfig;
-    customApiFormat?: CustomApiFormat;  // For custom endpoint API format (affects thinking + tool calling)
+    customApiFormat?: CustomApiFormat;  // OpenAI-compatible dialect for custom endpoints
     tokenizerOverride?: TokenizerOverride;  // For openrouter/custom providers: which tokenizer to use for token counting
 }
 
@@ -200,7 +199,6 @@ export interface Settings {
     mainLanguage: string;
     subLanguages: string[];
     defaultSubLanguage: string | null;
-    displayLanguage: string; // Currently active display language (defaults to mainLanguage)
     uiLanguage: UILanguageCode; // UI localization language (i18next)
 
     // Theme settings
@@ -223,6 +221,7 @@ export interface Settings {
     ragSearchNeighborWindow: number;
     ragSearchMaxPrimaryChunks: number;
     ragSearchMaxTotalChunks: number;
+    ragSearchKeywordPageSize: number;
 
     // Agent Memory search defaults (for relevantChats injection)
     agentMemoryTopKPerQuery: number;
@@ -245,183 +244,37 @@ export interface Settings {
     toolCallAutoApprove: ToolCallAutoApproveConfig;
 }
 
-// Default settings
-const defaultSettings: Settings = {
-    taskConfigs: {
-        // Agent: Fast and cheap for conversation
-        agent: {
-            provider: 'openrouter',
-            model: 'gpt-4o-mini',
-            temperature: 0.7,
-            contextWindowTokens: 32000,
-            advanced: {
-                enablePrefill: false,
-                thinkingMode: 'off',
-                thinkingConfig: {
-                    effort: 'medium',
-                },
-            },
-        },
+export type SettingsLoadStatus = 'idle' | 'loading' | 'ready' | 'error';
 
-        // Translation: Accurate for language translation
-        translation: {
-            provider: 'openrouter',
-            model: 'gpt-4o',
-            temperature: 0.2,
-            contextWindowTokens: 32000,
-            advanced: {
-                enablePrefill: false,
-                thinkingMode: 'off',
-                thinkingConfig: {
-                    effort: 'medium',
-                },
-            },
-        },
+const SETTINGS_NOT_LOADED_ERROR =
+    'Settings are not loaded. Make sure you are in an authenticated route and settings have been loaded from the server.';
 
-        // Edit Assistant: Unified editing for manuscripts and story objects
-        editAssistant: {
-            provider: 'openrouter',
-            model: 'gpt-4o',
-            temperature: 0.7,
-            contextWindowTokens: 32000,
-            advanced: {
-                enablePrefill: true,
-                thinkingMode: 'off',
-                thinkingConfig: {
-                    effort: 'medium',
-                },
-            },
-        },
+const getErrorMessage = (error: unknown): string => {
+    if (error instanceof Error) return error.message;
+    if (typeof error === 'string') return error;
+    return 'Unknown error';
+};
 
-        // Image Prompt: AI-assisted prompt generation for images
-        imagePrompt: {
-            provider: 'openrouter',
-            model: 'gpt-4o-mini',
-            temperature: 0.7,
-            contextWindowTokens: 32000,
-            advanced: {
-                enablePrefill: false,
-                thinkingMode: 'off',
-                thinkingConfig: {
-                    effort: 'medium',
-                },
-            },
-        },
-
-        // Summary: Used for long-term memory summarization and other background summaries
-        summary: {
-            provider: 'openrouter',
-            model: 'gpt-4o-mini',
-            temperature: 0.2,
-            contextWindowTokens: 32000,
-            advanced: {
-                enablePrefill: false,
-                thinkingMode: 'off',
-                thinkingConfig: {
-                    effort: 'medium',
-                },
-            },
-        },
-    },
-
-    // Image generation defaults
-    imageGenConfig: {
-        provider: 'openai',
-        model: 'gpt-image-1',
-        size: '1024x1024',
-
-        // Separate styles per prompt type
-        naturalStyles: [],
-        tagBasedStyles: [],
-        selectedNaturalStyleId: null,
-        selectedTagBasedStyleId: null,
-
-        // Per-provider settings
-        openaiSettings: {
-            quality: 'standard',
-            style: 'natural',
-        },
-        geminiSettings: {
-            aspect_ratio: '1:1',
-            image_resolution: '2K',
-        },
-        novelaiSettings: {
-            sampler: 'k_euler_ancestral',
-            steps: 28,
-            scale: 6,
-            noise_schedule: 'karras',
-        },
-    },
-
-    mainLanguage: 'English',
-    subLanguages: [],
-    defaultSubLanguage: null,
-    displayLanguage: 'English', // Defaults to mainLanguage
-    uiLanguage: 'en', // UI localization language
-
-    // Default to system theme preference
-    theme: 'system',
-
-    // Default retry configuration
-    retryConfig: {
-        enabled: true,
-        maxRetries: 3,
-        retryableStatusCodes: [429, 500, 502, 503, 504],
-        retryDelayMs: 1000,
-    },
-
-    // Native output mode disabled by default
-    nativeOutputMode: false,
-
-    // RAG Search disabled by default (must be explicitly enabled)
-    ragSearchEnabled: false,
-
-    // Embedding profiles by feature
-    embeddingConfigs: {
-        ragSearch: { provider: 'openai', model: '', dimensions: null },
-        agentMemory: { provider: 'openai', model: '', dimensions: null },
-    },
-
-    // RAG Search defaults
-    ragSearchTopKPerQuery: 20,
-    ragSearchNeighborWindow: 0,
-    ragSearchMaxPrimaryChunks: 20,
-    ragSearchMaxTotalChunks: 60,
-
-    // Agent Memory search defaults
-    agentMemoryTopKPerQuery: 20,
-    agentMemoryNeighborWindow: 0,
-    agentMemoryMaxPrimaryMessages: 20,
-    agentMemoryMaxTotalMessages: 60,
-
-    // LLM logging disabled by default
-    llmLoggingEnabled: false,
-
-    // Tool call history limit - include tool calls from last 5 assistant messages by default
-    toolCallHistoryLimit: 5,
-
-    // Thinking history limit - include thinking from last 5 assistant messages by default
-    thinkingHistoryLimit: 5,
-
-    // Tool call auto-approve - disabled by default
-    toolCallAutoApprove: {
-        create: false,
-        delete: false,
-        patch: false,
-        replace: false,
-        read: false,
-        search: false,
-    },
+const requireSettings = (settings: Settings | null): Settings => {
+    if (!settings) {
+        throw new Error(SETTINGS_NOT_LOADED_ERROR);
+    }
+    return settings;
 };
 
 // Store interface
-interface SettingsStore {
-    settings: Settings;
-    isLoading: boolean;
+export interface SettingsStore {
+    settings: Settings | null;
+    status: SettingsLoadStatus;
+    error: string | null;
     lastSyncedAt: string | null;
 
     // Prompt cache
     promptCache: Map<string, string>;
+
+    // Helpers
+    getSettingsOrThrow: () => Settings;
+    clearSettings: () => void;
 
     // Sync methods
     loadFromServer: () => Promise<void>;
@@ -445,7 +298,6 @@ interface SettingsStore {
     setMainLanguage: (language: string) => void;
     setSubLanguages: (languages: string[]) => void;
     setDefaultSubLanguage: (language: string | null) => void;
-    setDisplayLanguage: (language: string) => void;
     setUiLanguage: (language: UILanguageCode) => void;
     addSubLanguage: (language: string) => void;
     removeSubLanguage: (language: string) => void;
@@ -466,439 +318,385 @@ interface SettingsStore {
 
     // Other methods
     updateSettings: (updates: Partial<Settings>) => void;
-    resetToDefaults: () => void;
 }
 
-// Helper to normalize advanced settings without legacy fallbacks
-const migrateAdvancedSettings = (advanced: any): AdvancedTaskSettings => ({
-    enablePrefill: advanced.enablePrefill ?? false,
-    thinkingMode: advanced.thinkingMode ?? 'off',
-    thinkingConfig: advanced.thinkingConfig ?? { effort: 'medium' },
-    // NOTE: Legacy values may include unsupported formats (e.g. "openrouter"); normalize here.
-    customApiFormat:
-        advanced.customApiFormat === 'claude' ||
-        advanced.customApiFormat === 'gemini' ||
-        advanced.customApiFormat === 'openai'
-            ? advanced.customApiFormat
-            : 'openai',
-});
+let inFlightLoad: Promise<void> | null = null;
 
-// Helper to merge stored settings with defaults
-const mergeWithDefaults = (stored: any): Settings => {
-    if (!stored || typeof stored !== 'object') {
-        return defaultSettings;
-    }
+export const useSettingsStore = create<SettingsStore>()((set, get) => ({
+    settings: null,
+    status: 'idle',
+    error: null,
+    lastSyncedAt: null,
+    promptCache: new Map<string, string>(),
 
-    const migratedFunctionConfigs: any = {};
-    if (stored.taskConfigs) {
-        for (const [key, config] of Object.entries(stored.taskConfigs) as [string, any][]) {
-            const defaultTask = defaultSettings.taskConfigs[key as AITaskType];
-            migratedFunctionConfigs[key] = {
-                ...(defaultTask ?? {}),
-                ...config,
-                advanced: migrateAdvancedSettings(config.advanced || {}),
-            };
-        }
-    }
-
-    return {
-        taskConfigs: {
-            ...defaultSettings.taskConfigs,
-            ...migratedFunctionConfigs,
-        },
-        imageGenConfig: {
-            ...defaultSettings.imageGenConfig,
-            ...stored.imageGenConfig,
-            naturalStyles: stored.imageGenConfig?.naturalStyles ?? [],
-            tagBasedStyles: stored.imageGenConfig?.tagBasedStyles ?? [],
-            selectedNaturalStyleId: stored.imageGenConfig?.selectedNaturalStyleId ?? null,
-            selectedTagBasedStyleId: stored.imageGenConfig?.selectedTagBasedStyleId ?? null,
-            // Ensure provider settings exist
-            openaiSettings: {
-                ...defaultSettings.imageGenConfig.openaiSettings,
-                ...stored.imageGenConfig?.openaiSettings,
-            },
-            geminiSettings: {
-                ...defaultSettings.imageGenConfig.geminiSettings,
-                ...stored.imageGenConfig?.geminiSettings,
-            },
-            novelaiSettings: {
-                ...defaultSettings.imageGenConfig.novelaiSettings,
-                ...stored.imageGenConfig?.novelaiSettings,
-            },
-        },
-        mainLanguage: stored.mainLanguage ?? defaultSettings.mainLanguage,
-        subLanguages: stored.subLanguages ?? defaultSettings.subLanguages,
-        defaultSubLanguage: stored.defaultSubLanguage ?? defaultSettings.defaultSubLanguage,
-        displayLanguage: stored.displayLanguage ?? stored.mainLanguage ?? defaultSettings.mainLanguage,
-        uiLanguage: stored.uiLanguage ?? defaultSettings.uiLanguage,
-        theme: stored.theme ?? defaultSettings.theme,
-        retryConfig: {
-            ...defaultSettings.retryConfig,
-            ...stored.retryConfig,
-        },
-        nativeOutputMode: stored.nativeOutputMode ?? defaultSettings.nativeOutputMode,
-        ragSearchEnabled: stored.ragSearchEnabled ?? defaultSettings.ragSearchEnabled,
-        embeddingConfigs: {
-            ragSearch: {
-                ...defaultSettings.embeddingConfigs.ragSearch,
-                ...(stored.embeddingConfigs?.ragSearch && typeof stored.embeddingConfigs.ragSearch === 'object'
-                    ? stored.embeddingConfigs.ragSearch
-                    : {}),
-            },
-            agentMemory: {
-                ...defaultSettings.embeddingConfigs.agentMemory,
-                ...(stored.embeddingConfigs?.agentMemory && typeof stored.embeddingConfigs.agentMemory === 'object'
-                    ? stored.embeddingConfigs.agentMemory
-                    : {}),
-            },
-        },
-        ragSearchTopKPerQuery: stored.ragSearchTopKPerQuery ?? defaultSettings.ragSearchTopKPerQuery,
-        ragSearchNeighborWindow: stored.ragSearchNeighborWindow ?? defaultSettings.ragSearchNeighborWindow,
-        ragSearchMaxPrimaryChunks: stored.ragSearchMaxPrimaryChunks ?? defaultSettings.ragSearchMaxPrimaryChunks,
-        ragSearchMaxTotalChunks: stored.ragSearchMaxTotalChunks ?? defaultSettings.ragSearchMaxTotalChunks,
-        agentMemoryTopKPerQuery: stored.agentMemoryTopKPerQuery ?? defaultSettings.agentMemoryTopKPerQuery,
-        agentMemoryNeighborWindow: stored.agentMemoryNeighborWindow ?? defaultSettings.agentMemoryNeighborWindow,
-        agentMemoryMaxPrimaryMessages: stored.agentMemoryMaxPrimaryMessages ?? defaultSettings.agentMemoryMaxPrimaryMessages,
-        agentMemoryMaxTotalMessages: stored.agentMemoryMaxTotalMessages ?? defaultSettings.agentMemoryMaxTotalMessages,
-        llmLoggingEnabled: stored.llmLoggingEnabled ?? defaultSettings.llmLoggingEnabled,
-        toolCallHistoryLimit: stored.toolCallHistoryLimit ?? defaultSettings.toolCallHistoryLimit,
-        thinkingHistoryLimit: stored.thinkingHistoryLimit ?? defaultSettings.thinkingHistoryLimit,
-        toolCallAutoApprove: {
-            ...defaultSettings.toolCallAutoApprove,
-            ...(stored.toolCallAutoApprove && typeof stored.toolCallAutoApprove === 'object'
-                ? stored.toolCallAutoApprove
-                : {}),
-        },
-    };
-};
-
-export const useSettingsStore = create<SettingsStore>()(
-    persist(
-        (set, get) => ({
-            settings: defaultSettings,
-            isLoading: false,
+    getSettingsOrThrow: () => requireSettings(get().settings),
+    clearSettings: () => {
+        set({
+            settings: null,
+            status: 'idle',
+            error: null,
             lastSyncedAt: null,
             promptCache: new Map<string, string>(),
+        });
+    },
 
-            // Sync methods
-            loadFromServer: async () => {
-                set({ isLoading: true });
-                try {
-                    const serverSettings = await settingsService.getSettings();
-                    // Merge server settings with defaults to ensure new configs are included
-                    set({
-                        settings: mergeWithDefaults(serverSettings),
-                        lastSyncedAt: new Date().toISOString(),
-                        isLoading: false,
-                    });
-                } catch (error) {
-                    console.error('Failed to load settings from server:', error);
-                    set({ isLoading: false });
-                }
-            },
-
-            saveToServer: async () => {
-                try {
-                    await settingsService.updateSettings(get().settings);
-                    set({ lastSyncedAt: new Date().toISOString() });
-                } catch (error) {
-                    console.error('Failed to save settings to server:', error);
-                    throw error;
-                }
-            },
-
-            // Function configuration
-            setTaskConfig: (functionType, config) => {
-                set((state) => ({
-                    settings: {
-                        ...state.settings,
-                        taskConfigs: {
-                            ...state.settings.taskConfigs,
-                            [functionType]: config,
-                        },
-                    },
-                }));
-            },
-
-            setTaskProvider: (functionType, provider) => {
-                set((state) => ({
-                    settings: {
-                        ...state.settings,
-                        taskConfigs: {
-                            ...state.settings.taskConfigs,
-                            [functionType]: {
-                                ...state.settings.taskConfigs[functionType],
-                                provider,
-                                // Clear provider preferences if switching away from OpenRouter
-                                providerPreference: provider === 'openrouter'
-                                    ? state.settings.taskConfigs[functionType].providerPreference
-                                    : undefined,
-                            },
-                        },
-                    },
-                }));
-            },
-
-            setTaskModel: (functionType, model) => {
-                set((state) => ({
-                    settings: {
-                        ...state.settings,
-                        taskConfigs: {
-                            ...state.settings.taskConfigs,
-                            [functionType]: {
-                                ...state.settings.taskConfigs[functionType],
-                                model,
-                            },
-                        },
-                    },
-                }));
-            },
-
-            setTaskTemperature: (functionType, temperature) => {
-                set((state) => ({
-                    settings: {
-                        ...state.settings,
-                        taskConfigs: {
-                            ...state.settings.taskConfigs,
-                            [functionType]: {
-                                ...state.settings.taskConfigs[functionType],
-                                temperature,
-                            },
-                        },
-                    },
-                }));
-            },
-
-            setTaskProviderPreference: (functionType, pref) => {
-                set((state) => ({
-                    settings: {
-                        ...state.settings,
-                        taskConfigs: {
-                            ...state.settings.taskConfigs,
-                            [functionType]: {
-                                ...state.settings.taskConfigs[functionType],
-                                providerPreference: pref,
-                            },
-                        },
-                    },
-                }));
-            },
-
-            setTaskAdvanced: (functionType, advanced) => {
-                set((state) => ({
-                    settings: {
-                        ...state.settings,
-                        taskConfigs: {
-                            ...state.settings.taskConfigs,
-                            [functionType]: {
-                                ...state.settings.taskConfigs[functionType],
-                                advanced: {
-                                    ...state.settings.taskConfigs[functionType].advanced,
-                                    ...advanced,
-                                },
-                            },
-                        },
-                    },
-                }));
-            },
-
-            // Getters
-            getTaskConfig: (functionType) => {
-                return get().settings.taskConfigs[functionType];
-            },
-
-            // Image generation config
-            setImageGenConfig: (config) => {
-                set((state) => ({
-                    settings: {
-                        ...state.settings,
-                        imageGenConfig: {
-                            ...state.settings.imageGenConfig,
-                            ...config,
-                        },
-                    },
-                }));
-            },
-
-            // Language setters
-            setMainLanguage: (language: string) => {
-                set((state) => ({
-                    settings: { ...state.settings, mainLanguage: language },
-                }));
-            },
-
-            setSubLanguages: (languages: string[]) => {
-                set((state) => {
-                    // If default is no longer in the list, update it
-                    const newDefault = state.settings.defaultSubLanguage && languages.includes(state.settings.defaultSubLanguage)
-                        ? state.settings.defaultSubLanguage
-                        : languages[0] || null;
-                    return {
-                        settings: {
-                            ...state.settings,
-                            subLanguages: languages,
-                            defaultSubLanguage: newDefault,
-                        },
-                    };
-                });
-            },
-
-            setDefaultSubLanguage: (language: string | null) => {
-                set((state) => ({
-                    settings: { ...state.settings, defaultSubLanguage: language },
-                }));
-            },
-
-            setDisplayLanguage: (language: string) => {
-                set((state) => ({
-                    settings: { ...state.settings, displayLanguage: language },
-                }));
-            },
-
-            setUiLanguage: (language: UILanguageCode) => {
-                set((state) => ({
-                    settings: { ...state.settings, uiLanguage: language },
-                }));
-            },
-
-            addSubLanguage: (language: string) => {
-                set((state) => {
-                    if (state.settings.subLanguages.includes(language)) {
-                        return state; // Already exists
-                    }
-                    const newSubLanguages = [...state.settings.subLanguages, language];
-                    return {
-                        settings: {
-                            ...state.settings,
-                            subLanguages: newSubLanguages,
-                            // Set as default if it's the first one
-                            defaultSubLanguage: state.settings.defaultSubLanguage || language,
-                        },
-                    };
-                });
-            },
-
-            removeSubLanguage: (language: string) => {
-                set((state) => {
-                    const newSubLanguages = state.settings.subLanguages.filter(l => l !== language);
-                    // Update default if we removed it
-                    const newDefault = state.settings.defaultSubLanguage === language
-                        ? newSubLanguages[0] || null
-                        : state.settings.defaultSubLanguage;
-                    return {
-                        settings: {
-                            ...state.settings,
-                            subLanguages: newSubLanguages,
-                            defaultSubLanguage: newDefault,
-                        },
-                    };
-                });
-            },
-
-            // Theme setter
-            setTheme: (theme) => {
-                set((state) => ({
-                    settings: { ...state.settings, theme },
-                }));
-            },
-
-            // Native output mode setter
-            setNativeOutputMode: (enabled) => {
-                set((state) => ({
-                    settings: { ...state.settings, nativeOutputMode: enabled },
-                }));
-            },
-
-            // LLM logging setter
-            setLLMLoggingEnabled: (enabled) => {
-                set((state) => ({
-                    settings: { ...state.settings, llmLoggingEnabled: enabled },
-                }));
-            },
-
-            updateSettings: (updates) => {
-                set((state) => ({
-                    settings: {
-                        ...state.settings,
-                        ...updates,
-                    },
-                }));
-            },
-
-            resetToDefaults: () => {
-                set({ settings: { ...defaultSettings } });
-            },
-
-            // Prompt methods
-            loadPrompt: async (functionType, category, name) => {
-                const key = getPromptKey(functionType, category, name);
-
-                try {
-                    // Try to load from backend
-                    const promptData = await promptService.getPrompt(functionType, category, name);
-
-                    // Cache the content
-                    const cache = get().promptCache;
-                    cache.set(key, promptData.content);
-                    set({ promptCache: new Map(cache) });
-
-                    return promptData.content;
-                } catch (error) {
-                    console.error(`Failed to load prompt from backend: ${key}`, error);
-                    throw error;
-                }
-            },
-
-            getPromptFromCache: (functionType, category, name) => {
-                const key = getPromptKey(functionType, category, name);
-                return get().promptCache.get(key) || null;
-            },
-
-            invalidatePromptCache: (functionType?, category?, name?) => {
-                if (!functionType) {
-                    // Clear all cache
-                    set({ promptCache: new Map() });
-                    return;
-                }
-
-                if (!category || !name) {
-                    throw new Error('invalidatePromptCache requires functionType, category, and name (or no args to clear all)');
-                }
-
-                const key = getPromptKey(functionType, category, name);
-                const cache = get().promptCache;
-                cache.delete(key);
-                set({ promptCache: new Map(cache) });
-            },
-        }),
-        {
-            name: 'settings-storage',
-            storage: {
-                getItem: (name) => {
-                    const str = localStorage.getItem(name);
-                    if (!str) return null;
-                    try {
-                        return JSON.parse(str);
-                    } catch {
-                        return null;
-                    }
-                },
-                setItem: (name, value) => {
-                    localStorage.setItem(name, JSON.stringify(value));
-                },
-                removeItem: (name) => {
-                    localStorage.removeItem(name);
-                },
-            },
-            merge: (persistedState: any, currentState: SettingsStore) => {
-                // Merge persisted settings with defaults for backward compatibility
-                return {
-                    ...currentState,
-                    settings: mergeWithDefaults(persistedState?.settings),
-                    lastSyncedAt: persistedState?.lastSyncedAt ?? null,
-                };
-            },
+    // Sync methods
+    loadFromServer: async () => {
+        if (get().status === 'ready') {
+            return;
         }
-    )
-);
+
+        if (inFlightLoad) {
+            return await inFlightLoad;
+        }
+
+        const promise = (async () => {
+            set({ status: 'loading', error: null });
+            try {
+                const serverSettings = await settingsService.getSettings();
+                set({
+                    settings: serverSettings,
+                    lastSyncedAt: new Date().toISOString(),
+                    status: 'ready',
+                    error: null,
+                });
+            } catch (error) {
+                const message = getErrorMessage(error);
+                console.error('Failed to load settings from server:', error);
+                set({
+                    settings: null,
+                    status: 'error',
+                    error: message,
+                });
+                throw error;
+            }
+        })();
+
+        inFlightLoad = promise;
+        try {
+            await promise;
+        } finally {
+            if (inFlightLoad === promise) {
+                inFlightLoad = null;
+            }
+        }
+    },
+
+    saveToServer: async () => {
+        try {
+            const settings = get().getSettingsOrThrow();
+            const saved = await settingsService.updateSettings(settings);
+            set({ settings: saved, lastSyncedAt: new Date().toISOString() });
+        } catch (error) {
+            console.error('Failed to save settings to server:', error);
+            throw error;
+        }
+    },
+
+    // Function configuration
+    setTaskConfig: (functionType, config) => {
+        set((state) => {
+            const settings = requireSettings(state.settings);
+            return {
+                settings: {
+                    ...settings,
+                    taskConfigs: {
+                        ...settings.taskConfigs,
+                        [functionType]: config,
+                    },
+                },
+            };
+        });
+    },
+
+    setTaskProvider: (functionType, provider) => {
+        set((state) => {
+            const settings = requireSettings(state.settings);
+            return {
+                settings: {
+                    ...settings,
+                    taskConfigs: {
+                        ...settings.taskConfigs,
+                        [functionType]: {
+                            ...settings.taskConfigs[functionType],
+                            provider,
+                            // Clear provider preferences if switching away from OpenRouter
+                            providerPreference:
+                                provider === 'openrouter'
+                                    ? settings.taskConfigs[functionType].providerPreference
+                                    : undefined,
+                        },
+                    },
+                },
+            };
+        });
+    },
+
+    setTaskModel: (functionType, model) => {
+        set((state) => {
+            const settings = requireSettings(state.settings);
+            return {
+                settings: {
+                    ...settings,
+                    taskConfigs: {
+                        ...settings.taskConfigs,
+                        [functionType]: {
+                            ...settings.taskConfigs[functionType],
+                            model,
+                        },
+                    },
+                },
+            };
+        });
+    },
+
+    setTaskTemperature: (functionType, temperature) => {
+        set((state) => {
+            const settings = requireSettings(state.settings);
+            return {
+                settings: {
+                    ...settings,
+                    taskConfigs: {
+                        ...settings.taskConfigs,
+                        [functionType]: {
+                            ...settings.taskConfigs[functionType],
+                            temperature,
+                        },
+                    },
+                },
+            };
+        });
+    },
+
+    setTaskProviderPreference: (functionType, pref) => {
+        set((state) => {
+            const settings = requireSettings(state.settings);
+            return {
+                settings: {
+                    ...settings,
+                    taskConfigs: {
+                        ...settings.taskConfigs,
+                        [functionType]: {
+                            ...settings.taskConfigs[functionType],
+                            providerPreference: pref,
+                        },
+                    },
+                },
+            };
+        });
+    },
+
+    setTaskAdvanced: (functionType, advanced) => {
+        set((state) => {
+            const settings = requireSettings(state.settings);
+            return {
+                settings: {
+                    ...settings,
+                    taskConfigs: {
+                        ...settings.taskConfigs,
+                        [functionType]: {
+                            ...settings.taskConfigs[functionType],
+                            advanced: {
+                                ...settings.taskConfigs[functionType].advanced,
+                                ...advanced,
+                            },
+                        },
+                    },
+                },
+            };
+        });
+    },
+
+    // Getters
+    getTaskConfig: (functionType) => {
+        return get().getSettingsOrThrow().taskConfigs[functionType];
+    },
+
+    // Image generation config
+    setImageGenConfig: (config) => {
+        set((state) => {
+            const settings = requireSettings(state.settings);
+            return {
+                settings: {
+                    ...settings,
+                    imageGenConfig: {
+                        ...settings.imageGenConfig,
+                        ...config,
+                    },
+                },
+            };
+        });
+    },
+
+    // Language setters
+    setMainLanguage: (language: string) => {
+        set((state) => {
+            const settings = requireSettings(state.settings);
+            return {
+                settings: { ...settings, mainLanguage: language },
+            };
+        });
+    },
+
+    setSubLanguages: (languages: string[]) => {
+        set((state) => {
+            const settings = requireSettings(state.settings);
+            // If default is no longer in the list, update it
+            const newDefault =
+                settings.defaultSubLanguage && languages.includes(settings.defaultSubLanguage)
+                    ? settings.defaultSubLanguage
+                    : languages[0] || null;
+
+            return {
+                settings: {
+                    ...settings,
+                    subLanguages: languages,
+                    defaultSubLanguage: newDefault,
+                },
+            };
+        });
+    },
+
+    setDefaultSubLanguage: (language: string | null) => {
+        set((state) => {
+            const settings = requireSettings(state.settings);
+            return {
+                settings: { ...settings, defaultSubLanguage: language },
+            };
+        });
+    },
+
+    setUiLanguage: (language: UILanguageCode) => {
+        set((state) => {
+            const settings = requireSettings(state.settings);
+            return {
+                settings: { ...settings, uiLanguage: language },
+            };
+        });
+    },
+
+    addSubLanguage: (language: string) => {
+        set((state) => {
+            const settings = requireSettings(state.settings);
+            if (settings.subLanguages.includes(language)) {
+                return {};
+            }
+            const newSubLanguages = [...settings.subLanguages, language];
+            return {
+                settings: {
+                    ...settings,
+                    subLanguages: newSubLanguages,
+                    // Set as default if it's the first one
+                    defaultSubLanguage: settings.defaultSubLanguage || language,
+                },
+            };
+        });
+    },
+
+    removeSubLanguage: (language: string) => {
+        set((state) => {
+            const settings = requireSettings(state.settings);
+            const newSubLanguages = settings.subLanguages.filter((l) => l !== language);
+            // Update default if we removed it
+            const newDefault =
+                settings.defaultSubLanguage === language
+                    ? newSubLanguages[0] || null
+                    : settings.defaultSubLanguage;
+            return {
+                settings: {
+                    ...settings,
+                    subLanguages: newSubLanguages,
+                    defaultSubLanguage: newDefault,
+                },
+            };
+        });
+    },
+
+    // Theme setter
+    setTheme: (theme) => {
+        set((state) => {
+            const settings = requireSettings(state.settings);
+            return {
+                settings: { ...settings, theme },
+            };
+        });
+    },
+
+    // Native output mode setter
+    setNativeOutputMode: (enabled) => {
+        set((state) => {
+            const settings = requireSettings(state.settings);
+            return {
+                settings: { ...settings, nativeOutputMode: enabled },
+            };
+        });
+    },
+
+    // LLM logging setter
+    setLLMLoggingEnabled: (enabled) => {
+        set((state) => {
+            const settings = requireSettings(state.settings);
+            return {
+                settings: { ...settings, llmLoggingEnabled: enabled },
+            };
+        });
+    },
+
+    updateSettings: (updates) => {
+        set((state) => {
+            const settings = requireSettings(state.settings);
+            return {
+                settings: {
+                    ...settings,
+                    ...updates,
+                },
+            };
+        });
+    },
+
+    // Prompt methods
+    loadPrompt: async (functionType, category, name) => {
+        const key = getPromptKey(functionType, category, name);
+
+        try {
+            // Try to load from backend
+            const promptData = await promptService.getPrompt(functionType, category, name);
+
+            // Cache the content
+            const cache = get().promptCache;
+            cache.set(key, promptData.content);
+            set({ promptCache: new Map(cache) });
+
+            return promptData.content;
+        } catch (error) {
+            console.error(`Failed to load prompt from backend: ${key}`, error);
+            throw error;
+        }
+    },
+
+    getPromptFromCache: (functionType, category, name) => {
+        const key = getPromptKey(functionType, category, name);
+        return get().promptCache.get(key) || null;
+    },
+
+    invalidatePromptCache: (functionType?, category?, name?) => {
+        if (!functionType) {
+            // Clear all cache
+            set({ promptCache: new Map() });
+            return;
+        }
+
+        if (!category || !name) {
+            throw new Error('invalidatePromptCache requires functionType, category, and name (or no args to clear all)');
+        }
+
+        const key = getPromptKey(functionType, category, name);
+        const cache = get().promptCache;
+        cache.delete(key);
+        set({ promptCache: new Map(cache) });
+    },
+}));
+
+export const useSettings = (): Settings => {
+    return useSettingsStore((state) => requireSettings(state.settings));
+};

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useSettings } from '../../store/settingsStore';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
 import UnifiedImagePromptModal, { type PromptMode } from '../ImageGeneration/UnifiedImagePromptModal';
 import ThinkingDisplay from '../common/ThinkingDisplay';
@@ -19,7 +19,7 @@ const ImagePromptManager: React.FC<ImagePromptManagerProps> = ({
     objectType,
     objectId,
 }) => {
-    const { settings } = useSettingsStore();
+    const settings = useSettings();
     const {
         objects,
         loading,

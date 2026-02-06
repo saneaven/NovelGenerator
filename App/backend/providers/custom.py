@@ -1,131 +1,31 @@
-"""Custom endpoint provider with native SDK delegation.
+"""Custom endpoint provider using OpenAI-compatible Chat Completions only.
 
-This provider delegates to native SDK providers (OpenAI, Claude, Gemini) based on
-the selected custom_api_format, allowing users to use custom endpoints with the
-proper SDK for each API format.
+The custom provider always uses the OpenAI SDK transport and maps dialect-specific
+extensions via `custom_api_format`:
+- "openai": OpenAI-compatible fields (`reasoning_effort`)
+- "claude": Anthropic OpenAI compatibility (`extra_body.thinking`)
+- "gemini": Gemini OpenAI compatibility (`reasoning_effort` OR `extra_body.google.thinking_config`)
 """
+
+from __future__ import annotations
 
 from typing import AsyncGenerator, Dict, List, Optional
 
-from .base import BaseProvider
+from .async_openai_provider import AsyncOpenAIProvider
 from .registry import ProviderRegistry
 from ..utils.outbound_http import filter_additional_headers, validate_outbound_base_url
 
 
-# Import providers lazily to avoid circular imports
-def _create_openai_delegate(config: Dict) -> BaseProvider:
-    """Create an OpenAI SDK delegate with custom base_url."""
-    from .async_openai_provider import AsyncOpenAIProvider
-
-    class _OpenAIDelegate(AsyncOpenAIProvider):
-        """OpenAI SDK delegate with custom base_url."""
-
-        def __init__(self, cfg: Dict):
-            self._custom_base_url = (cfg.get("base_url") or "").strip()
-            self._custom_headers = cfg.get("additional_headers") or {}
-            super().__init__(cfg)
-
-        @property
-        def name(self) -> str:
-            return "custom_openai"
-
-        @property
-        def display_name(self) -> str:
-            return "Custom OpenAI"
-
-        @property
-        def base_url(self) -> str:
-            return self._custom_base_url.rstrip("/")
-
-        @property
-        def default_headers(self) -> Dict[str, str]:
-            return self._custom_headers
-
-        def validate_config(self) -> bool:
-            # For custom endpoints, we only require base_url (api_key may be optional)
-            return bool(self._custom_base_url)
-
-    return _OpenAIDelegate(config)
-
-
-def _create_claude_delegate(config: Dict) -> BaseProvider:
-    """Create a Claude SDK delegate with custom base_url."""
-    from .claude_provider import ClaudeProvider
-
-    class _ClaudeDelegate(ClaudeProvider):
-        """Claude SDK delegate with custom base_url."""
-
-        def __init__(self, cfg: Dict):
-            # Store custom config before parent init
-            self._custom_base_url = (cfg.get("base_url") or "").strip()
-            # Ensure base_url is in config for parent's _build_client
-            cfg_with_base = {**cfg, "base_url": self._custom_base_url}
-            super().__init__(cfg_with_base)
-
-        @property
-        def name(self) -> str:
-            return "custom_claude"
-
-        @property
-        def display_name(self) -> str:
-            return "Custom Claude"
-
-        def validate_config(self) -> bool:
-            # For custom Claude endpoints, require base_url
-            # API key may be optional for some self-hosted endpoints
-            return bool(self._custom_base_url)
-
-    return _ClaudeDelegate(config)  # type: ignore[abstract]
-
-
-def _create_gemini_delegate(config: Dict) -> BaseProvider:
-    """Create a Gemini SDK delegate with custom base_url."""
-    from .gemini_provider import GeminiProvider
-
-    class _GeminiDelegate(GeminiProvider):
-        """Gemini SDK delegate with custom base_url."""
-
-        def __init__(self, cfg: Dict):
-            self._custom_base_url = (cfg.get("base_url") or "").strip()
-            # Ensure base_url is in config for parent's _build_client
-            cfg_with_base = {**cfg, "base_url": self._custom_base_url}
-            super().__init__(cfg_with_base)
-
-        @property
-        def name(self) -> str:
-            return "custom_gemini"
-
-        @property
-        def display_name(self) -> str:
-            return "Custom Gemini"
-
-        def validate_config(self) -> bool:
-            # For custom Gemini endpoints, require base_url
-            # API key may be optional for some self-hosted endpoints
-            return bool(self._custom_base_url)
-
-    return _GeminiDelegate(config)  # type: ignore[abstract]
-
-
 @ProviderRegistry.register
-class CustomProvider(BaseProvider):
-    """Custom endpoint provider that delegates to native SDK providers.
-
-    Based on the selected custom_api_format, this provider routes requests to
-    the appropriate native SDK:
-    - 'openai' -> OpenAI SDK with custom base_url
-    - 'claude' -> Anthropic SDK with custom base_url
-    - 'gemini' -> Google GenAI SDK with custom base_url
-    """
+class CustomProvider(AsyncOpenAIProvider):
+    """Custom OpenAI-compatible endpoint provider."""
 
     def __init__(self, config: Dict):
-        super().__init__(config)
+        self._api_key = config.get("api_key")
         raw_base_url = (config.get("base_url") or "").strip()
         self._base_url = validate_outbound_base_url(raw_base_url) if raw_base_url else ""
-        self._api_key = config.get("api_key")
         self._additional_headers = filter_additional_headers(config.get("additional_headers"))
-        # Lazy-initialized delegate providers
-        self._delegates: Dict[str, BaseProvider] = {}
+        super().__init__(config)
 
     @property
     def name(self) -> str:
@@ -136,39 +36,110 @@ class CustomProvider(BaseProvider):
         return "Custom Endpoint"
 
     def validate_config(self) -> bool:
+        # Custom endpoint requires base URL; API key is optional for self-hosted setups.
         return bool(self._base_url)
 
-    def _get_delegate_config(self) -> Dict:
-        """Build config dict for delegate providers."""
-        return {
-            "api_key": self._api_key,
-            "base_url": self._base_url,
-            "additional_headers": self._additional_headers,
-        }
+    @property
+    def api_key(self) -> Optional[str]:
+        return self._api_key
 
-    def _get_delegate(self, api_format: str) -> BaseProvider:
-        """Get or create a delegate provider for the specified format.
+    @property
+    def base_url(self) -> str:
+        return self._base_url.rstrip("/")
 
-        Args:
-            api_format: The API format ('openai', 'claude', 'gemini')
+    @property
+    def default_headers(self) -> Dict[str, str]:
+        return self._additional_headers
 
-        Returns:
-            A delegate provider instance configured with custom base_url
-        """
-        if api_format not in self._delegates:
-            config = self._get_delegate_config()
+    @staticmethod
+    def _normalize_custom_format(custom_api_format: Optional[str]) -> str:
+        fmt = (custom_api_format or "openai").strip().lower()
+        if fmt not in {"openai", "claude", "gemini"}:
+            raise ValueError("custom_api_format must be one of: openai, claude, gemini")
+        return fmt
 
-            if api_format == "openai":
-                self._delegates[api_format] = _create_openai_delegate(config)
-            elif api_format == "claude":
-                self._delegates[api_format] = _create_claude_delegate(config)
-            elif api_format == "gemini":
-                self._delegates[api_format] = _create_gemini_delegate(config)
-            else:
-                # Default to OpenAI format for unknown formats
-                self._delegates[api_format] = _create_openai_delegate(config)
+    @staticmethod
+    def _coerce_extra_body(request: Dict[str, object]) -> Dict[str, object]:
+        existing = request.get("extra_body")
+        return dict(existing) if isinstance(existing, dict) else {}
 
-        return self._delegates[api_format]
+    def _prepare_request_kwargs(
+        self,
+        messages: List[Dict],
+        model: str,
+        temperature: float,
+        tools: Optional[List[Dict]],
+        tool_choice: Optional[str],
+        max_tokens: Optional[int],
+        provider_preference: Optional[Dict],
+        thinking_config: Optional[Dict],
+        custom_api_format: Optional[str] = None,
+    ) -> Dict[str, object]:
+        fmt = self._normalize_custom_format(custom_api_format)
+        request = super()._prepare_request_kwargs(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            tools=tools,
+            tool_choice=tool_choice,
+            max_tokens=max_tokens,
+            provider_preference=provider_preference,
+            thinking_config=thinking_config,
+            custom_api_format=custom_api_format,
+        )
+
+        cfg = thinking_config or {}
+        effort = cfg.get("effort")
+        claude_budget = cfg.get("claude_budget_tokens")
+        gemini_level = cfg.get("gemini_thinking_level")
+        gemini_budget = cfg.get("gemini_budget_tokens")
+
+        if fmt == "openai":
+            if effort is not None:
+                request["reasoning_effort"] = effort
+            return request
+
+        if fmt == "claude":
+            extra_body = self._coerce_extra_body(request)
+            thinking_payload: Dict[str, object] = {"type": "enabled"}
+            if claude_budget is not None:
+                thinking_payload["budget_tokens"] = claude_budget
+            extra_body["thinking"] = thinking_payload
+            request["extra_body"] = extra_body
+            return request
+
+        # fmt == "gemini"
+        has_reasoning_effort = effort is not None
+        has_gemini_thinking_config = gemini_level is not None or gemini_budget is not None
+
+        if has_reasoning_effort and has_gemini_thinking_config:
+            raise ValueError(
+                "custom_api_format=gemini requires choosing either reasoning_effort "
+                "or google.thinking_config (thinking_level/thinking_budget), not both."
+            )
+
+        if has_reasoning_effort:
+            if effort not in {"none", "low", "medium", "high"}:
+                raise ValueError(
+                    "custom_api_format=gemini supports reasoning_effort values: none, low, medium, high."
+                )
+            request["reasoning_effort"] = effort
+            return request
+
+        if has_gemini_thinking_config:
+            extra_body = self._coerce_extra_body(request)
+            google_body = dict(extra_body.get("google") or {})
+            thinking_payload: Dict[str, object] = {"include_thoughts": True}
+            if gemini_level is not None:
+                thinking_payload["thinking_level"] = gemini_level
+            if gemini_budget is not None:
+                thinking_payload["thinking_budget"] = gemini_budget
+            google_body["thinking_config"] = thinking_payload
+            extra_body["google"] = google_body
+            request["extra_body"] = extra_body
+            return request
+
+        return request
 
     async def stream_chat(
         self,
@@ -185,29 +156,9 @@ class CustomProvider(BaseProvider):
         retry_config: Optional[Dict] = None,
         native_tool_call: bool = False,
     ) -> AsyncGenerator[bytes, None]:
-        """Stream chat completions by delegating to the appropriate native SDK provider.
-
-        Args:
-            messages: List of message dicts
-            model: Model identifier
-            temperature: Temperature for generation
-            tools: Optional tool calling schemas
-            tool_choice: Tool choice mode
-            max_tokens: Maximum tokens to generate
-            provider_preference: Provider-specific preferences
-            thinking_config: Thinking configuration
-            thinking_mode: Thinking mode ('off', 'custom', 'model')
-            custom_api_format: API format ('openai', 'claude', 'gemini')
-            retry_config: Retry configuration
-
-        Yields:
-            SSE-formatted bytes from the delegate provider
-        """
-        api_format = custom_api_format or "openai"
-        delegate = self._get_delegate(api_format)
-
-        # Delegate to the native provider's stream_chat
-        async for chunk in delegate.stream_chat(
+        # Custom dialect-specific thinking fields are only sent in model thinking mode.
+        effective_thinking_config = thinking_config if thinking_mode == "model" else None
+        async for chunk in super().stream_chat(
             messages=messages,
             model=model,
             temperature=temperature,
@@ -215,22 +166,10 @@ class CustomProvider(BaseProvider):
             tool_choice=tool_choice,
             max_tokens=max_tokens,
             provider_preference=provider_preference,
-            thinking_config=thinking_config,
+            thinking_config=effective_thinking_config,
             thinking_mode=thinking_mode,
             custom_api_format=custom_api_format,
             retry_config=retry_config,
             native_tool_call=native_tool_call,
         ):
             yield chunk
-
-    async def get_models(self) -> Dict:
-        """Get available models from the custom endpoint.
-
-        Uses the OpenAI delegate by default since most custom endpoints
-        use OpenAI-compatible model listing.
-
-        Returns:
-            Dict with model information
-        """
-        delegate = self._get_delegate("openai")
-        return await delegate.get_models()

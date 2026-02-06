@@ -122,6 +122,7 @@ export function buildConversationBlocksWithMeta(
         block.tool_calls = msg.toolCalls.map((fc) => ({
           id: fc.id,
           type: 'function' as const,
+          extra_content: fc.extra_content,
           function: {
             name: fc.tool_name,
             arguments:

@@ -145,6 +145,7 @@ async def get_user_settings(
         ragSearchNeighborWindow=getattr(settings, "rag_search_neighbor_window", 0),
         ragSearchMaxPrimaryChunks=getattr(settings, "rag_search_max_primary_chunks", 20),
         ragSearchMaxTotalChunks=getattr(settings, "rag_search_max_total_chunks", 60),
+        ragSearchKeywordPageSize=getattr(settings, "rag_search_keyword_page_size", 20),
         agentMemoryTopKPerQuery=getattr(settings, "agent_memory_top_k_per_query", 20),
         agentMemoryNeighborWindow=getattr(settings, "agent_memory_neighbor_window", 0),
         agentMemoryMaxPrimaryMessages=getattr(settings, "agent_memory_max_primary_messages", 20),
@@ -154,7 +155,6 @@ async def get_user_settings(
         toolCallHistoryLimit=getattr(settings, 'tool_call_history_limit', 5),
         thinkingHistoryLimit=getattr(settings, 'thinking_history_limit', 5),
         toolCallAutoApprove=tool_call_auto_approve_dict,
-        displayLanguage=getattr(settings, 'display_language', 'English'),
         uiLanguage=getattr(settings, 'ui_language', 'en')
     )
 
@@ -247,6 +247,9 @@ async def update_user_settings(
     if update_data.ragSearchMaxTotalChunks is not None:
         settings.rag_search_max_total_chunks = update_data.ragSearchMaxTotalChunks  # type: ignore
 
+    if update_data.ragSearchKeywordPageSize is not None:
+        settings.rag_search_keyword_page_size = update_data.ragSearchKeywordPageSize  # type: ignore
+
     if update_data.agentMemoryTopKPerQuery is not None:
         settings.agent_memory_top_k_per_query = update_data.agentMemoryTopKPerQuery  # type: ignore
 
@@ -273,9 +276,6 @@ async def update_user_settings(
 
     if update_data.toolCallAutoApprove is not None:
         settings.tool_call_auto_approve = update_data.toolCallAutoApprove.model_dump()  # type: ignore
-
-    if update_data.displayLanguage is not None:
-        settings.display_language = update_data.displayLanguage  # type: ignore
 
     if update_data.uiLanguage is not None:
         settings.ui_language = update_data.uiLanguage  # type: ignore
@@ -331,6 +331,7 @@ async def update_user_settings(
         ragSearchNeighborWindow=getattr(settings, "rag_search_neighbor_window", 0),
         ragSearchMaxPrimaryChunks=getattr(settings, "rag_search_max_primary_chunks", 20),
         ragSearchMaxTotalChunks=getattr(settings, "rag_search_max_total_chunks", 60),
+        ragSearchKeywordPageSize=getattr(settings, "rag_search_keyword_page_size", 20),
         agentMemoryTopKPerQuery=getattr(settings, "agent_memory_top_k_per_query", 20),
         agentMemoryNeighborWindow=getattr(settings, "agent_memory_neighbor_window", 0),
         agentMemoryMaxPrimaryMessages=getattr(settings, "agent_memory_max_primary_messages", 20),
@@ -340,7 +341,6 @@ async def update_user_settings(
         toolCallHistoryLimit=getattr(settings, 'tool_call_history_limit', 5),
         thinkingHistoryLimit=getattr(settings, 'thinking_history_limit', 5),
         toolCallAutoApprove=tool_call_auto_approve_dict,
-        displayLanguage=getattr(settings, 'display_language', 'English'),
         uiLanguage=getattr(settings, 'ui_language', 'en')
     )
 
@@ -420,6 +420,7 @@ async def update_task_config(
         ragSearchNeighborWindow=getattr(settings, "rag_search_neighbor_window", 0),
         ragSearchMaxPrimaryChunks=getattr(settings, "rag_search_max_primary_chunks", 20),
         ragSearchMaxTotalChunks=getattr(settings, "rag_search_max_total_chunks", 60),
+        ragSearchKeywordPageSize=getattr(settings, "rag_search_keyword_page_size", 20),
         agentMemoryTopKPerQuery=getattr(settings, "agent_memory_top_k_per_query", 20),
         agentMemoryNeighborWindow=getattr(settings, "agent_memory_neighbor_window", 0),
         agentMemoryMaxPrimaryMessages=getattr(settings, "agent_memory_max_primary_messages", 20),
@@ -429,7 +430,6 @@ async def update_task_config(
         toolCallHistoryLimit=getattr(settings, 'tool_call_history_limit', 5),
         thinkingHistoryLimit=getattr(settings, 'thinking_history_limit', 5),
         toolCallAutoApprove=tool_call_auto_approve_dict,
-        displayLanguage=getattr(settings, 'display_language', 'English'),
         uiLanguage=getattr(settings, 'ui_language', 'en')
     )
 
@@ -491,6 +491,7 @@ async def sync_settings_from_client(
             rag_search_neighbor_window=client_settings.get('ragSearchNeighborWindow', 0),
             rag_search_max_primary_chunks=client_settings.get('ragSearchMaxPrimaryChunks', 20),
             rag_search_max_total_chunks=client_settings.get('ragSearchMaxTotalChunks', 60),
+            rag_search_keyword_page_size=client_settings.get('ragSearchKeywordPageSize', 20),
             agent_memory_top_k_per_query=client_settings.get('agentMemoryTopKPerQuery', 20),
             agent_memory_neighbor_window=client_settings.get('agentMemoryNeighborWindow', 0),
             agent_memory_max_primary_messages=client_settings.get('agentMemoryMaxPrimaryMessages', 20),
@@ -507,7 +508,6 @@ async def sync_settings_from_client(
                 "read": False,
                 "search": False,
             }),
-            display_language=client_settings.get('displayLanguage', 'English'),
             ui_language=client_settings.get('uiLanguage', 'en')
         )
         db.add(settings)
@@ -526,6 +526,7 @@ async def sync_settings_from_client(
         settings.rag_search_neighbor_window = client_settings.get('ragSearchNeighborWindow', getattr(settings, 'rag_search_neighbor_window', 0))  # type: ignore
         settings.rag_search_max_primary_chunks = client_settings.get('ragSearchMaxPrimaryChunks', getattr(settings, 'rag_search_max_primary_chunks', 20))  # type: ignore
         settings.rag_search_max_total_chunks = client_settings.get('ragSearchMaxTotalChunks', getattr(settings, 'rag_search_max_total_chunks', 60))  # type: ignore
+        settings.rag_search_keyword_page_size = client_settings.get('ragSearchKeywordPageSize', getattr(settings, 'rag_search_keyword_page_size', 20))  # type: ignore
         settings.agent_memory_top_k_per_query = client_settings.get('agentMemoryTopKPerQuery', getattr(settings, 'agent_memory_top_k_per_query', 20))  # type: ignore
         settings.agent_memory_neighbor_window = client_settings.get('agentMemoryNeighborWindow', getattr(settings, 'agent_memory_neighbor_window', 0))  # type: ignore
         settings.agent_memory_max_primary_messages = client_settings.get('agentMemoryMaxPrimaryMessages', getattr(settings, 'agent_memory_max_primary_messages', 20))  # type: ignore
@@ -542,7 +543,6 @@ async def sync_settings_from_client(
             "read": False,
             "search": False,
         }))  # type: ignore
-        settings.display_language = client_settings.get('displayLanguage', getattr(settings, 'display_language', 'English'))  # type: ignore
         settings.ui_language = client_settings.get('uiLanguage', getattr(settings, 'ui_language', 'en'))  # type: ignore
 
         if "embeddingConfigs" in client_settings:

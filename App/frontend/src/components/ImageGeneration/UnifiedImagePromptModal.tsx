@@ -6,7 +6,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { BaseModal } from '../BaseModal';
 import { useProjectStore } from '../../store/projectStore';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useSettings } from '../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useJourneyStore } from '../../store/journeyStore';
 import { JourneyRuntime } from '../../llmTaskJourney';
@@ -69,7 +69,7 @@ const UnifiedImagePromptModal: React.FC<UnifiedImagePromptModalProps> = ({
   defaultSelectedObjectIds,
 }) => {
   const { currentProjectId } = useProjectStore();
-  const { settings } = useSettingsStore();
+  const settings = useSettings();
   const unifiedStore = useUnifiedObjectStore();
 
   const [userRequest, setUserRequest] = useState(defaultUserRequest || '');

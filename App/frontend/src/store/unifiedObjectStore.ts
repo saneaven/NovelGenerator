@@ -125,12 +125,12 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     const { projectId, objectType, objectId } = args;
     if (!projectId) return;
 
-    const ragEnabled = useSettingsStore.getState().settings.ragSearchEnabled;
+    const ragEnabled = useSettingsStore.getState().getSettingsOrThrow().ragSearchEnabled;
     if (!ragEnabled) return;
 
     if (objectType === 'basic_info' || objectType === 'guidelines') return;
 
-    const profile = useSettingsStore.getState().settings.embeddingConfigs?.ragSearch;
+    const profile = useSettingsStore.getState().getSettingsOrThrow().embeddingConfigs?.ragSearch;
     if (!profile?.provider || !profile?.model) return;
 
     const creds = useCredentialsStore.getState().credentials as any;
@@ -152,7 +152,7 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
     const { projectId, objectType, objectId } = args;
     if (!projectId) return;
 
-    const ragEnabled = useSettingsStore.getState().settings.ragSearchEnabled;
+    const ragEnabled = useSettingsStore.getState().getSettingsOrThrow().ragSearchEnabled;
     if (!ragEnabled) return;
 
     if (objectType === 'basic_info' || objectType === 'guidelines') return;

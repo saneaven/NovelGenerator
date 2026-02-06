@@ -107,6 +107,7 @@ class UserSettings(Base):
     rag_search_neighbor_window = Column(Integer, default=0, nullable=False)
     rag_search_max_primary_chunks = Column(Integer, default=20, nullable=False)
     rag_search_max_total_chunks = Column(Integer, default=60, nullable=False)
+    rag_search_keyword_page_size = Column(Integer, default=20, nullable=False)
 
     # Agent Memory search defaults (relevantChats RAG)
     agent_memory_top_k_per_query = Column(Integer, default=20, nullable=False)
@@ -139,9 +140,6 @@ class UserSettings(Base):
             "search": False,
         },
     )
-
-    # Display language for UI (content display language)
-    display_language = Column(String(50), default='English', nullable=False)
 
     # UI Language for interface localization (i18next)
     ui_language = Column(String(10), default='en', nullable=False)

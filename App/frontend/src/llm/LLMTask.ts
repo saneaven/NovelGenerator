@@ -87,13 +87,13 @@ export class LLMTask {
     // Initialize logging variables outside try block for catch block access
     const logStore = useLLMLogStore.getState();
     const settingsStore = useSettingsStore.getState();
-    const isLoggingEnabled = settingsStore.settings.llmLoggingEnabled;
+    const isLoggingEnabled = settingsStore.getSettingsOrThrow().llmLoggingEnabled;
     let logEntryId: string | undefined;
     const requestStartTime = Date.now();
 
     try {
       // 1. Get provider/model config (from settings or overrides)
-      const { settings } = settingsStore;
+      const settings = settingsStore.getSettingsOrThrow();
       const credentialsStore = useCredentialsStore.getState();
 
       // Get task type for this mode to lookup settings
@@ -358,6 +358,7 @@ export class LLMTask {
         id: fc.id,
         tool_name: fc.function?.name ?? '',
         arguments: this.parseArguments(fc.function?.arguments),
+        extra_content: fc.extra_content,
         status: 'pending',
       }));
 

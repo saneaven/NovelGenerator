@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { BaseModal } from '../BaseModal';
 import './TranslationModal.css';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useSettings } from '../../store/settingsStore';
 import type { UnifiedObject, ObjectType } from '../../types/unifiedObject';
 import { JourneyRuntime } from '../../llmTaskJourney';
 import { Globe, Swap, Document } from '../icons';
@@ -59,7 +59,7 @@ const TranslationModal: React.FC<TranslationModalProps> = ({
   // Use selector to only subscribe to objects, preventing re-renders from unrelated store changes
   const objects = useUnifiedObjectStore(useShallow(state => state.objects));
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
-  const settings = useSettingsStore((state) => state.settings);
+  const settings = useSettings();
 
   // Ensure all object types are available in store for translation selection (tab-independent)
   useEffect(() => {

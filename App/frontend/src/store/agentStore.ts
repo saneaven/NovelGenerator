@@ -36,6 +36,36 @@ export interface Agent {
   updated_at: string;
 }
 
+export function getAgentLastActivityAt(agent: Agent): Date {
+  const lastMessage = agent.messages?.[agent.messages.length - 1];
+  const lastTimestamp = lastMessage?.timestamp instanceof Date
+    ? lastMessage.timestamp
+    : lastMessage?.timestamp
+      ? new Date(lastMessage.timestamp as any)
+      : null;
+
+  if (lastTimestamp && !Number.isNaN(lastTimestamp.getTime())) return lastTimestamp;
+
+  const createdAt = new Date(agent.created_at);
+  if (!Number.isNaN(createdAt.getTime())) return createdAt;
+
+  return new Date(0);
+}
+
+function sortAgentsByLastActivity(agents: Agent[]): Agent[] {
+  return [...agents].sort((a, b) => {
+    const aLast = getAgentLastActivityAt(a).getTime();
+    const bLast = getAgentLastActivityAt(b).getTime();
+    if (aLast !== bLast) return bLast - aLast;
+
+    const aCreated = new Date(a.created_at).getTime();
+    const bCreated = new Date(b.created_at).getTime();
+    if (aCreated !== bCreated) return bCreated - aCreated;
+
+    return a.id.localeCompare(b.id);
+  });
+}
+
 interface AgentStore {
   agentsByProject: Record<string, Agent[]>; // projectId -> Agent[]
   selectedAgentByProject: Record<string, string | undefined>; // projectId -> agentId
@@ -156,7 +186,8 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const backendAgents = await agentService.listAgents(projectId);
-      const agents = Array.isArray(backendAgents) ? backendAgents.map(convertBackendAgent) : [];
+      const unsortedAgents = Array.isArray(backendAgents) ? backendAgents.map(convertBackendAgent) : [];
+      const agents = sortAgentsByLastActivity(unsortedAgents);
 
       // Restore selected agent from localStorage
       const storedAgentId = localStorage.getItem(`selectedAgent_${projectId}`);
@@ -208,7 +239,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
       set((state) => ({
         agentsByProject: {
           ...state.agentsByProject,
-          [projectId]: [...(state.agentsByProject[projectId] || []), agent],
+          [projectId]: sortAgentsByLastActivity([...(state.agentsByProject[projectId] || []), agent]),
         },
         selectedAgentByProject: {
           ...state.selectedAgentByProject,
@@ -328,16 +359,20 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
       const backendAgent = await agentService.getAgent(projectId, agentId);
       const messages = backendAgent.messages?.map(convertBackendMessage) || [];
 
-      set((state) => ({
-        agentsByProject: {
-          ...state.agentsByProject,
-          [projectId]:
-            state.agentsByProject[projectId]?.map((agent) =>
-              agent.id === agentId ? { ...agent, messages } : agent
-            ) || [],
-        },
-        isLoading: false,
-      }));
+      set((state) => {
+        const nextAgents =
+          state.agentsByProject[projectId]?.map((agent) =>
+            agent.id === agentId ? { ...agent, messages } : agent
+          ) || [];
+
+        return {
+          agentsByProject: {
+            ...state.agentsByProject,
+            [projectId]: sortAgentsByLastActivity(nextAgents),
+          },
+          isLoading: false,
+        };
+      });
     } catch (error) {
       set({
         isLoading: false,
@@ -366,18 +401,22 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
       const backendMessage = await agentService.addMessage(projectId, agentId, payload);
       const storedMessage = convertBackendMessage(backendMessage);
 
-      set((state) => ({
-        agentsByProject: {
-          ...state.agentsByProject,
-          [projectId]:
-            state.agentsByProject[projectId]?.map((agent) =>
-              agent.id === agentId
-                ? { ...agent, messages: [...agent.messages, storedMessage] }
-                : agent
-            ) || [],
-        },
-        isLoading: false,
-      }));
+      set((state) => {
+        const nextAgents =
+          state.agentsByProject[projectId]?.map((agent) =>
+            agent.id === agentId
+              ? { ...agent, messages: [...agent.messages, storedMessage] }
+              : agent
+          ) || [];
+
+        return {
+          agentsByProject: {
+            ...state.agentsByProject,
+            [projectId]: sortAgentsByLastActivity(nextAgents),
+          },
+          isLoading: false,
+        };
+      });
 
       return storedMessage.id;
     } catch (error) {
@@ -491,21 +530,25 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
     try {
       await agentService.deleteMessage(projectId, agentId, messageId);
 
-      set((state) => ({
-        agentsByProject: {
-          ...state.agentsByProject,
-          [projectId]:
-            state.agentsByProject[projectId]?.map((agent) =>
-              agent.id === agentId
-                ? {
-                    ...agent,
-                    messages: agent.messages.filter((msg) => msg.id !== messageId),
-                  }
-                : agent
-            ) || [],
-        },
-        isLoading: false,
-      }));
+      set((state) => {
+        const nextAgents =
+          state.agentsByProject[projectId]?.map((agent) =>
+            agent.id === agentId
+              ? {
+                  ...agent,
+                  messages: agent.messages.filter((msg) => msg.id !== messageId),
+                }
+              : agent
+          ) || [];
+
+        return {
+          agentsByProject: {
+            ...state.agentsByProject,
+            [projectId]: sortAgentsByLastActivity(nextAgents),
+          },
+          isLoading: false,
+        };
+      });
     } catch (error) {
       set({
         isLoading: false,

@@ -204,7 +204,7 @@ async function runTurn(parentToolCallId: string): Promise<void> {
     temperature: invocation.llmConfig.temperature,
     thinkingMode: invocation.llmConfig.advanced.thinkingMode as any,
     thinkingConfig: invocation.llmConfig.advanced.thinkingConfig,
-    retryConfig: settingsStore.settings.retryConfig,
+    retryConfig: settingsStore.getSettingsOrThrow().retryConfig,
     history: invocation.history,
   });
 

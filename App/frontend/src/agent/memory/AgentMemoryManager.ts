@@ -261,7 +261,7 @@ async function buildMemoryContext(
     return { previousSummaries, relevantChats: [] };
   }
 
-  const settings = useSettingsStore.getState().settings;
+  const settings = useSettingsStore.getState().getSettingsOrThrow();
   if (!settings.ragSearchEnabled) {
     // Embeddings disabled globally: keep summary only.
     return { previousSummaries, relevantChats: [] };
@@ -273,7 +273,7 @@ async function buildMemoryContext(
   const maxTotal = settings.agentMemoryMaxTotalMessages ?? 60;
   const profile = settings.embeddingConfigs?.agentMemory;
   if (!profile?.provider || !profile.model) {
-    throw new Error('Missing agent-memory embedding profile (Settings > Embeddings > Agent Memory).');
+    throw new Error('Missing agent-memory embedding profile (Settings > Search & Memory > Agent Memory).');
   }
 
   const creds = useCredentialsStore.getState().credentials as any;
@@ -460,7 +460,7 @@ async function runMemorySummarySession(args: {
     temperature: summaryConfig.temperature,
     thinkingMode: summaryConfig.advanced.thinkingMode as any,
     thinkingConfig: summaryConfig.advanced.thinkingConfig,
-    retryConfig: settingsStore.settings.retryConfig,
+    retryConfig: settingsStore.getSettingsOrThrow().retryConfig,
     history: createEmptyUserHistory(),
   });
 
@@ -511,7 +511,7 @@ export const AgentMemoryManager = {
   async prepare(input: PreSessionInput, options?: AgentMemoryPrepareOptions): Promise<PreSessionOutput> {
     const agentStore = useAgentStore.getState();
     const settingsStore = useSettingsStore.getState();
-    const settings = settingsStore.settings;
+    const settings = settingsStore.getSettingsOrThrow();
 
     options?.onStageChange?.('checking');
     throwIfAborted(options?.signal);
@@ -624,12 +624,12 @@ export const AgentMemoryManager = {
 
       // Validate embedding config before doing a blocking summary.
       if (!settings.ragSearchEnabled) {
-        throw new Error('Embeddings are disabled (Settings > RAG Search). Enable embeddings to use agent memory.');
+        throw new Error('Embeddings are disabled (Settings > Search & Memory). Enable embeddings to use agent memory.');
       }
 
       const profile = settings.embeddingConfigs?.agentMemory;
       if (!profile?.provider || !profile.model) {
-        throw new Error('Missing agent-memory embedding profile (Settings > Embeddings > Agent Memory).');
+        throw new Error('Missing agent-memory embedding profile (Settings > Search & Memory > Agent Memory).');
       }
 
       const creds = useCredentialsStore.getState().credentials as any;

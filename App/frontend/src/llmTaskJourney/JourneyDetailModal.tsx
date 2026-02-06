@@ -58,7 +58,7 @@ export const JourneyDetailModal: React.FC = () => {
     journey?.activeSessionId ? s.sessions[journey.activeSessionId] : undefined
   );
 
-  const mainLanguage = useSettingsStore((s) => s.settings.mainLanguage);
+  const mainLanguage = useSettingsStore((s) => s.getSettingsOrThrow().mainLanguage);
 
   const [errorExpanded, setErrorExpanded] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);

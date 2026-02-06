@@ -16,6 +16,7 @@ export interface ToolCall {
     name: string;
     arguments: string;
   };
+  extra_content?: Record<string, any>;
 }
 
 /**
@@ -54,6 +55,7 @@ export interface ToolCallMetadata {
   id: string;
   tool_name: string;
   arguments: any;
+  extra_content?: Record<string, any>;
   /** Current status of the tool call */
   status: ToolCallStatus;
   /** Error message (when failed) or user-provided reason (when rejected) */
@@ -74,6 +76,7 @@ export interface ToolCallDraft {
   toolName: string;
   rawArguments: string;
   parsedArguments: any | null;
+  extraContent?: Record<string, any>;
 }
 
 export interface ToolCallOperationFieldPreview {

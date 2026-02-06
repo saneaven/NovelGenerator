@@ -25,7 +25,11 @@ from database import Base
 class ObjectVersion(Base):
     """
     Immutable version history - THE single source of truth.
-    Each version contains ALL languages at that point in time.
+    Each version stores language-keyed data for an object.
+
+    Note: User edits may create a new version containing only the edited language
+    (other languages become stale until re-translated). Translation endpoints
+    typically update the latest version in-place to add missing languages.
 
     Example data structure:
     {

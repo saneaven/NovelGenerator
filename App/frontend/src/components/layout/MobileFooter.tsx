@@ -24,6 +24,7 @@ const MobileFooter: React.FC<MobileFooterProps> = ({
         onClick={onSettingsClick}
         title={t('mobileFooter.settings')}
         size="md"
+        className="footer-settings-btn"
       />
 
       <button

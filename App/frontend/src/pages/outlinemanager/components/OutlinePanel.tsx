@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
-import { useSettingsStore } from '../../../store/settingsStore';
+import { useSettings } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import AIEditModal from '../../../components/Modal/AIEditModal';
@@ -26,7 +26,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   const { projectId } = useParams<{ projectId: string }>();
   const store = useUnifiedObjectStore();
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
-  const settings = useSettingsStore();
+  const settings = useSettings();
   const { showError } = useErrorStore();
   const openSidebar = useSidebarStore((state) => state.openSidebar);
 
@@ -331,7 +331,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
         'act',
         projectId,
         { name: name.trim(), description: description.trim(), content: content.trim() },
-        settings.settings.mainLanguage,
+        settings.mainLanguage,
         { outline_id: outlineId, order: actOrder }
       );
       setShowAddActForm(null);
@@ -404,7 +404,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
         'chapter',
         projectId,
         { name: name.trim(), description: description.trim(), content: content.trim() },
-        settings.settings.mainLanguage,
+        settings.mainLanguage,
         { act_id: actId, order: chapterOrder }
       );
       setShowAddChapterForm(null);

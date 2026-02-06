@@ -207,7 +207,7 @@ const ObjectPicker: React.FC<ObjectPickerProps> = ({
   const { t } = useTranslation();
 
   // Get settings for token counting
-  const taskConfigs = useSettingsStore(state => state.settings.taskConfigs);
+  const taskConfigs = useSettingsStore((state) => state.getSettingsOrThrow().taskConfigs);
   const agentConfig = taskConfigs.agent;
   // Internal state
   const [searchQuery, setSearchQuery] = useState('');

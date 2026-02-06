@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../store/projectStore';
 import './Home.css';
 import { useAuthStore } from '../store/authStore';
-import { useSettingsStore } from '../store/settingsStore';
+import { useSettings } from '../store/settingsStore';
 import { getAssetUrl } from '../utils/assetUrl';
 import SettingsModal from '../components/SettingsModal/SettingsModal';
 import { IconButton } from '../components/IconButton';
@@ -17,7 +17,7 @@ const Home: React.FC = () => {
   const { projects, createProject, importProject, deleteProject, setCurrentProject, fetchProjects, isLoading, error } =
     useProjectStore();
   const { logout, user } = useAuthStore();
-  const { settings } = useSettingsStore();
+  const settings = useSettings();
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [projectName, setProjectName] = useState('');
   const [projectDescription, setProjectDescription] = useState('');

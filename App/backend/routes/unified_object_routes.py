@@ -588,8 +588,12 @@ async def update_object(
     Update object in specified language.
     Creates new version (or updates latest when create_new_version=false).
 
-    Edit Restriction: If creating a new version, the language being edited
-    must exist in the latest version. Otherwise, return 400 error.
+    Notes:
+    - When create_new_version=true: a new version is created for the requested language,
+      even if that language does not exist in the latest version. The new version contains
+      only the edited language (other languages become stale until re-translated).
+    - When create_new_version=false: updates the latest version in-place and preserves
+      other languages (used by translation flows and continuous editing).
     """
     object_type = normalize_object_type(object_type)
 
@@ -606,15 +610,6 @@ async def update_object(
 
     # Get the latest version
     latest_version = get_latest_version(db, object_type, object_id)
-
-    # Edit restriction check: if creating new version, language must be in latest version
-    if request.create_new_version and latest_version:
-        version_data = latest_version.data or {}
-        if request.language not in version_data:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Cannot edit. Language '{request.language}' is not in the latest version (v{latest_version.version_number}). Translate first."
-            )
 
     # Update object's updated_at timestamp
     obj.updated_at = datetime.utcnow()

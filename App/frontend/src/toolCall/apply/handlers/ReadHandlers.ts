@@ -145,10 +145,10 @@ export async function ragSearch(
     return error('Invalid queries for rag_search (expected non-empty string[])');
   }
 
-  const settings = useSettingsStore.getState().settings;
+  const settings = useSettingsStore.getState().getSettingsOrThrow();
   const ragEnabled = settings.ragSearchEnabled;
   if (!ragEnabled) {
-    return error('Embeddings are disabled (Settings > RAG Search)');
+    return error('Embeddings are disabled (Settings > Search & Memory)');
   }
 
   const topKPerQuery = Math.max(1, settings.ragSearchTopKPerQuery);
@@ -159,7 +159,7 @@ export async function ragSearch(
   const projectId = context.projectId;
   const profile = settings.embeddingConfigs?.ragSearch;
   if (!profile?.provider || !profile.model) {
-    return error('RAG embedding profile is not configured (Settings > RAG Search)');
+    return error('RAG embedding profile is not configured (Settings > Search & Memory)');
   }
 
   const provider = profile.provider;
@@ -285,6 +285,88 @@ export async function ragSearch(
   return ok(lines.join('\n'), { count: all.length, returned_chunks: selected.length, returned_objects: groups.length });
 }
 
+/**
+ * Keyword search over already-indexed RAG chunks (no embeddings).
+ */
+export async function keywordSearch(
+  args: Record<string, unknown>,
+  context: HandlerContext
+): Promise<ApplicationResult> {
+  const keyword = args.keyword;
+  const rawPage = args.page;
+
+  if (typeof keyword !== 'string' || !keyword.trim()) {
+    return error('Invalid keyword for keyword_search (expected non-empty string)');
+  }
+
+  const pageNumRaw = Number(rawPage ?? 1);
+  const page = Number.isFinite(pageNumRaw) ? Math.max(1, Math.trunc(pageNumRaw)) : 1;
+
+  const projectId = context.projectId;
+  const res = await ragService.keywordSearch(projectId, keyword.trim(), page);
+
+  const all = (Array.isArray(res.results) ? res.results : []) as ApiRagSearchResult[];
+  if (all.length === 0) {
+    return ok('Keyword Search Results: 0', { total: res.total, page: res.page, page_size: res.page_size, returned_chunks: 0 });
+  }
+
+  type Group = {
+    objectType: string;
+    objectId: string;
+    items: ApiRagSearchResult[];
+  };
+
+  const groupsByObject = new Map<string, Group>();
+  for (const r of all) {
+    const key = `${r.object_type}:${r.object_id}`;
+    const existing = groupsByObject.get(key);
+    if (!existing) {
+      groupsByObject.set(key, {
+        objectType: r.object_type,
+        objectId: r.object_id,
+        items: [r],
+      });
+      continue;
+    }
+    existing.items.push(r);
+  }
+
+  const groups = Array.from(groupsByObject.values());
+
+  const lines: string[] = [];
+  lines.push('Keyword Search Results:');
+  lines.push(`keyword: ${keyword.trim()}`);
+  lines.push(`page: ${res.page} (page_size: ${res.page_size}, total: ${res.total}, returned: ${all.length})`);
+
+  for (const g of groups) {
+    const obj = context.store.getObject(g.objectId);
+    let displayName = g.objectId;
+    if (obj) {
+      const data = getObjectData(obj, context.language);
+      displayName = String((data as any).name ?? g.objectId);
+    }
+
+    g.items.sort((a, b) => {
+      const ai = a.chunk_index ?? 0;
+      const bi = b.chunk_index ?? 0;
+      if (ai !== bi) return ai - bi;
+      return String(a.field_path ?? '').localeCompare(String(b.field_path ?? ''));
+    });
+
+    lines.push('');
+    lines.push(`<object type="${g.objectType}" id="${g.objectId}">`);
+    lines.push(`${displayName}`);
+    for (const item of g.items) {
+      lines.push('<result>');
+      lines.push(item.text);
+      lines.push('</result>');
+    }
+    lines.push('</object>');
+  }
+
+  return ok(lines.join('\n'), { total: res.total, page: res.page, page_size: res.page_size, returned_chunks: all.length, returned_objects: groups.length });
+}
+
 // ============================================================================
 // HANDLER REGISTRY
 // ============================================================================
@@ -293,5 +375,6 @@ export const READ_HANDLERS: Record<string, Handler> = {
   read_story_object: readStoryObject,
   read_outline: readOutline,
   read_manuscript: readManuscript,
+  keyword_search: keywordSearch,
   rag_search: ragSearch,
 };

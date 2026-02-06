@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { authService, type UserResponse, type ProfileUpdate } from '../api';
 import { useCredentialsStore } from './credentialsStore';
+import { useSettingsStore } from './settingsStore';
 
 interface AuthStore {
   user: UserResponse | null;
@@ -74,6 +75,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
 
   logout: () => {
     authService.logout();
+    useSettingsStore.getState().clearSettings();
     set({
       user: null,
       isAuthenticated: false,

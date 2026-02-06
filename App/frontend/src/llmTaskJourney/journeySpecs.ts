@@ -78,7 +78,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 function computeOutputMode(rawMode?: boolean): OutputMode {
   const settingsStore = useSettingsStore.getState();
   if (rawMode) return 'raw_output';
-  return settingsStore.settings.nativeOutputMode ? 'native_tool_call' : 'tool_call';
+  return settingsStore.getSettingsOrThrow().nativeOutputMode ? 'native_tool_call' : 'tool_call';
 }
 
 function getObjectLabel(obj: any, language: string): { name: string; description: string } {
@@ -175,7 +175,7 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
     }
 
     const store = useUnifiedObjectStore.getState();
-    const mainLanguage = useSettingsStore.getState().settings.mainLanguage;
+    const mainLanguage = useSettingsStore.getState().getSettingsOrThrow().mainLanguage;
 
     if (input.category === 'manuscript') {
       const chapter = store.getObject(input.targetId);
@@ -197,7 +197,7 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
 
   buildEditingTargets: (input) => {
     const settingsStore = useSettingsStore.getState();
-    const mainLanguage = settingsStore.settings.mainLanguage;
+    const mainLanguage = settingsStore.getSettingsOrThrow().mainLanguage;
     const targetId = (input.targetId ?? '').trim();
     if (!targetId) {
       throw new Error('aiEdit requires targetId.');
@@ -216,7 +216,7 @@ const aiEditSpec: JourneySpec<AiEditInput> = {
     const settingsStore = useSettingsStore.getState();
     const unifiedStore = useUnifiedObjectStore.getState();
 
-    const mainLanguage = settingsStore.settings.mainLanguage;
+    const mainLanguage = settingsStore.getSettingsOrThrow().mainLanguage;
     const outputMode = computeOutputMode(input.rawMode);
     const editAssistantConfig = settingsStore.getTaskConfig('editAssistant');
 
@@ -451,7 +451,7 @@ const imagePromptSpec: JourneySpec<ImagePromptInput, ImagePromptResult> = {
     const unifiedStore = useUnifiedObjectStore.getState();
 
     const imagePromptConfig = settingsStore.getTaskConfig('imagePrompt');
-    const mainLanguage = settingsStore.settings.mainLanguage;
+    const mainLanguage = settingsStore.getSettingsOrThrow().mainLanguage;
 
     const outputMode: OutputMode = 'raw_output';
 

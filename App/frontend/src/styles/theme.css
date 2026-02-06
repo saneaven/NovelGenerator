@@ -579,7 +579,7 @@
     --overlay-light-light: rgba(255, 255, 255, 0.1);
     --overlay-light-subtle: rgba(255, 255, 255, 0.08);
     --overlay-light-faint: rgba(255, 255, 255, 0.05);
-    --overlay-light-ghost: rgba(255, 255, 255, 0.03);
+    --overlay-light-ghost: rgba(255, 255, 255, 0.01);
 }
 
 

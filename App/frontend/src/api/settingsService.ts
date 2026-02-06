@@ -1,40 +1,19 @@
 import { apiClient } from './client';
 import type { Settings } from '../store/settingsStore';
 
-export interface SettingsSyncResponse {
-    taskConfigs: Settings['taskConfigs'];
-    mainLanguage: string;
-    subLanguages: string[];
-    defaultSubLanguage: string | null;
-    theme: string;
-    retryConfig: Settings['retryConfig'];
-    imageGenConfig: Settings['imageGenConfig'];
-    nativeOutputMode: boolean;
-    ragSearchEnabled?: boolean;
-    embeddingConfigs?: Settings['embeddingConfigs'];
-    ragSearchTopKPerQuery?: number;
-    ragSearchNeighborWindow?: number;
-    ragSearchMaxPrimaryChunks?: number;
-    ragSearchMaxTotalChunks?: number;
-    agentMemoryTopKPerQuery?: number;
-    agentMemoryNeighborWindow?: number;
-    agentMemoryMaxPrimaryMessages?: number;
-    agentMemoryMaxTotalMessages?: number;
-}
-
 export const settingsService = {
     /**
      * Fetch settings from server
      */
-    async getSettings(): Promise<SettingsSyncResponse> {
-        return await apiClient.get<SettingsSyncResponse>('/api/v1/settings');
+    async getSettings(): Promise<Settings> {
+        return await apiClient.get<Settings>('/api/v1/settings');
     },
 
     /**
      * Update all settings on server
      */
-    async updateSettings(settings: Partial<Settings>): Promise<SettingsSyncResponse> {
-        return await apiClient.put<SettingsSyncResponse>('/api/v1/settings', settings);
+    async updateSettings(settings: Partial<Settings>): Promise<Settings> {
+        return await apiClient.put<Settings>('/api/v1/settings', settings);
     },
 
     /**
@@ -43,8 +22,8 @@ export const settingsService = {
     async updateTaskConfig(
         taskType: 'agent' | 'translation' | 'editAssistant' | 'imagePrompt',
         config: Settings['taskConfigs']['agent']
-    ): Promise<SettingsSyncResponse> {
-        return await apiClient.patch<SettingsSyncResponse>(
+    ): Promise<Settings> {
+        return await apiClient.patch<Settings>(
             `/api/v1/settings/task/${taskType}`,
             config
         );

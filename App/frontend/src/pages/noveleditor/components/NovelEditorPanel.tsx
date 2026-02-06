@@ -27,7 +27,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
-import { useSettingsStore } from '../../../store/settingsStore';
+import { useSettings } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
@@ -63,6 +63,7 @@ interface NovelEditorPanelProps {
   selectedChapterId: string | null;
   hasChapters: boolean;
   chaptersInitialized: boolean;
+  globalDisplayLanguage: string;
   onSelectChapter: (chapterId: string) => void;
 }
 
@@ -80,6 +81,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   selectedChapterId,
   hasChapters,
   chaptersInitialized,
+  globalDisplayLanguage,
   onSelectChapter,
 }) => {
   const { t } = useTranslation();
@@ -94,7 +96,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const fetchObject = useUnifiedObjectStore.getState().fetchObject;
   const updateObject = useUnifiedObjectStore.getState().updateObject;
   const createObject = useUnifiedObjectStore.getState().createObject;
-  const { settings } = useSettingsStore();
+  const settings = useSettings();
   const { showError } = useErrorStore();
   // Get stable action references to avoid infinite loops in effects
   const setHasUnsavedChangesAction = useNovelEditorStore((state) => state.setHasUnsavedChanges);
@@ -102,10 +104,6 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   // Sidebar state from unified sidebar store
   const toggleSidebar = useSidebarStore((state) => state.toggleSidebar);
-
-  // Get display language from settings store (global)
-  const displayLanguage = useSettingsStore(state => state.settings.displayLanguage);
-  const globalDisplayLanguage = displayLanguage || settings.mainLanguage;
 
   // State
   const [manuscriptId, setManuscriptId] = useState<string | null>(null);

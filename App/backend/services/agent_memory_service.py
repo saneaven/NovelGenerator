@@ -142,7 +142,12 @@ def _build_agent_memory_chunks(*, message_req: Dict[str, Any]) -> List[Dict[str,
 
             leaves = _extract_string_leaves(tc)
             # Skip obvious non-semantic fields (tool call id is already in field_path).
-            blocks = [v for (p, v) in leaves if p not in {"id", "acceptedAt"} and v]
+            blocks = [
+                v for (p, v) in leaves
+                if p not in {"id", "acceptedAt"}
+                and not p.startswith("extra_content/")
+                and v
+            ]
             if not blocks:
                 continue
 

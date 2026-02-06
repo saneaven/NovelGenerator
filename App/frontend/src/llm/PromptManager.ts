@@ -2,6 +2,7 @@ import type { ToolCallSchema } from '../toolCall';
 import { STORY_OBJECT_EDIT_TOOLS, MANUSCRIPT_EDIT_TOOLS, getToolsForSet } from '../toolCall';
 import { renderTemplate, registerFragments, type PromptFragment } from '../templateEngine/engine';
 import { useSettingsStore } from '../store/settingsStore';
+import { useDisplayLanguageStore } from '../store/displayLanguageStore';
 import { useUnifiedObjectStore } from '../store/unifiedObjectStore';
 import { useVariableStore } from '../store/variableStore';
 import { fragmentService } from '../api/fragmentService';
@@ -205,7 +206,7 @@ export class PromptManager {
       this.getTemplate('agent', 'prefill', mode),
     ]);
 
-    const settings = useSettingsStore.getState().settings;
+    const settings = useSettingsStore.getState().getSettingsOrThrow();
     const variables = useVariableStore.getState().getVariablesForTemplate();
     const previousSummaries = Array.isArray((context as any).previousSummaries) ? (context as any).previousSummaries : [];
     const relevantChats = Array.isArray((context as any).relevantChats) ? (context as any).relevantChats : [];
@@ -252,7 +253,7 @@ export class PromptManager {
       this.getTemplate('subAgent', 'prefill', agentName),
     ]);
 
-    const settings = useSettingsStore.getState().settings;
+    const settings = useSettingsStore.getState().getSettingsOrThrow();
     const variables = useVariableStore.getState().getVariablesForTemplate();
 
     const templateData: TemplateData = {
@@ -288,7 +289,7 @@ export class PromptManager {
       this.getTemplate('editAssistant', 'prefill', mode),
     ]);
 
-    const settings = useSettingsStore.getState().settings;
+    const settings = useSettingsStore.getState().getSettingsOrThrow();
     const variables = useVariableStore.getState().getVariablesForTemplate();
     let templateData: TemplateData;
 
@@ -444,7 +445,7 @@ export class PromptManager {
       this.getTemplate('agent', 'userPrompt', 'memorySummary'),
     ]);
 
-    const settings = useSettingsStore.getState().settings;
+    const settings = useSettingsStore.getState().getSettingsOrThrow();
     const variables = useVariableStore.getState().getVariablesForTemplate();
 
     const templateData: TemplateData = {
@@ -479,7 +480,7 @@ export class PromptManager {
       this.getTemplate('imagePrompt', 'prefill', 'object'),
     ]);
 
-    const settings = useSettingsStore.getState().settings;
+    const settings = useSettingsStore.getState().getSettingsOrThrow();
     const variables = useVariableStore.getState().getVariablesForTemplate();
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
@@ -522,7 +523,7 @@ export class PromptManager {
       this.getTemplate('imagePrompt', 'prefill', 'scene'),
     ]);
 
-    const settings = useSettingsStore.getState().settings;
+    const settings = useSettingsStore.getState().getSettingsOrThrow();
     const variables = useVariableStore.getState().getVariablesForTemplate();
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
@@ -567,7 +568,7 @@ export class PromptManager {
       this.getTemplate('imagePrompt', 'prefill', 'coverImage'),
     ]);
 
-    const settings = useSettingsStore.getState().settings;
+    const settings = useSettingsStore.getState().getSettingsOrThrow();
     const variables = useVariableStore.getState().getVariablesForTemplate();
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
@@ -611,11 +612,17 @@ export class PromptManager {
   }): TemplateData['config'] {
     const store = useSettingsStore.getState();
     const settings = store.settings;
+    const preferredDisplayLanguage = useDisplayLanguageStore.getState().preferredDisplayLanguage;
+    const allowedDisplayLanguages = new Set([settings.mainLanguage, ...settings.subLanguages].filter(Boolean));
+    const displayLanguage =
+      preferredDisplayLanguage && allowedDisplayLanguages.has(preferredDisplayLanguage)
+        ? preferredDisplayLanguage
+        : settings.mainLanguage;
     const outputMode = this.resolveOutputMode(context);
 
     return {
       mainLanguage: settings.mainLanguage,
-      displayLanguage: settings.displayLanguage || settings.mainLanguage,
+      displayLanguage,
       today: new Date().toISOString().split('T')[0],
       thinkingMode: context.thinkingMode ?? 'off',
       isPrefillEnabled: context.enablePrefill ?? false,

@@ -569,6 +569,27 @@ const RAG_SEARCH: ToolSchema = {
   },
 };
 
+const KEYWORD_SEARCH: ToolSchema = {
+  name: 'keyword_search',
+  description: 'Search project knowledge base by keyword over indexed chunks (no embeddings). Results are returned in story order.',
+  category: 'read',
+  target: 'story_object',
+  parameters: {
+    type: 'object',
+    properties: {
+      keyword: {
+        type: 'string',
+        description: 'Keyword to search for (case-insensitive substring match).',
+      },
+      page: {
+        type: 'integer',
+        description: 'Page number (1-based). Optional; defaults to 1.',
+      },
+    },
+    required: ['keyword'],
+  },
+};
+
 // ============================================================================
 // SUB AGENT
 // ============================================================================
@@ -640,6 +661,7 @@ class SchemaRegistryClass {
     this.register(READ_STORY_OBJECT);
     this.register(READ_OUTLINE);
     this.register(READ_MANUSCRIPT);
+    this.register(KEYWORD_SEARCH);
     this.register(RAG_SEARCH);
 
     // Sub Agent
@@ -857,6 +879,7 @@ export const AGENT_TOOLS = [
   READ_STORY_OBJECT,
   READ_OUTLINE,
   READ_MANUSCRIPT,
+  KEYWORD_SEARCH,
   RAG_SEARCH,
 ].map(s => ({ name: s.name, description: s.description, parameters: s.parameters }));
 
@@ -872,16 +895,16 @@ export type ToolSetName = 'agent' | 'manuscript' | 'storyObject' | 'outline' | '
 
 /** Tool set definitions */
 const TOOL_SET_SCHEMAS: Record<ToolSetName, ToolSchema[]> = {
-  agent: [
-    CREATE_STORY_OBJECT, DELETE_STORY_OBJECT,
-    CREATE_OUTLINE, DELETE_OUTLINE, CREATE_OUTLINE_ACT, DELETE_OUTLINE_ACT,
-    CREATE_OUTLINE_CHAPTER, DELETE_OUTLINE_CHAPTER,
-    REPLACE_BASIC_INFO, REPLACE_GUIDELINES, REPLACE_STORY_OBJECT, REPLACE_MANUSCRIPT,
-    REPLACE_OUTLINE, REPLACE_OUTLINE_ACT, REPLACE_OUTLINE_CHAPTER,
-    PATCH_BASIC_INFO, PATCH_GUIDELINES, PATCH_STORY_OBJECT, PATCH_MANUSCRIPT,
-    PATCH_OUTLINE, PATCH_OUTLINE_ACT, PATCH_OUTLINE_CHAPTER,
-    READ_STORY_OBJECT, READ_OUTLINE, READ_MANUSCRIPT, RAG_SEARCH,
-  ],
+	  agent: [
+	    CREATE_STORY_OBJECT, DELETE_STORY_OBJECT,
+	    CREATE_OUTLINE, DELETE_OUTLINE, CREATE_OUTLINE_ACT, DELETE_OUTLINE_ACT,
+	    CREATE_OUTLINE_CHAPTER, DELETE_OUTLINE_CHAPTER,
+	    REPLACE_BASIC_INFO, REPLACE_GUIDELINES, REPLACE_STORY_OBJECT, REPLACE_MANUSCRIPT,
+	    REPLACE_OUTLINE, REPLACE_OUTLINE_ACT, REPLACE_OUTLINE_CHAPTER,
+	    PATCH_BASIC_INFO, PATCH_GUIDELINES, PATCH_STORY_OBJECT, PATCH_MANUSCRIPT,
+	    PATCH_OUTLINE, PATCH_OUTLINE_ACT, PATCH_OUTLINE_CHAPTER,
+	    READ_STORY_OBJECT, READ_OUTLINE, READ_MANUSCRIPT, KEYWORD_SEARCH, RAG_SEARCH,
+	  ],
   manuscript: [REPLACE_MANUSCRIPT, PATCH_MANUSCRIPT],
   storyObject: [
     CREATE_STORY_OBJECT, DELETE_STORY_OBJECT,

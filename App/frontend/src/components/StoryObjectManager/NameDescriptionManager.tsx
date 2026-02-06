@@ -33,7 +33,7 @@ import {
 } from '@dnd-kit/sortable';
 import { SortableStoryObjectCard } from './StoryObjectCards/SortableStoryObjectCard';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useSettings } from '../../store/settingsStore';
 import { useErrorStore } from '../../store/errorStore';
 import { useAssetStore } from '../../store/assetStore';
 import AIEditModal from '../Modal/AIEditModal';
@@ -79,7 +79,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
   const { projectId } = useParams<{ projectId: string }>();
   const store = useUnifiedObjectStore();
   const listObjects = useUnifiedObjectStore(state => state.listObjects);
-  const { settings } = useSettingsStore();
+  const settings = useSettings();
   const { showError } = useErrorStore();
 
   const objects = store.objects;

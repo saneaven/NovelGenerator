@@ -12,7 +12,7 @@ import { useAgentStore } from '../../store/agentStore';
 import { useAgentUIStore } from '../../store/agentUIStore';
 import { useSidebarStore } from '../../store/sidebarStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useSettings, useSettingsStore } from '../../store/settingsStore';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
 import { AgentExecutor } from '../AgentExecutor';
 import { AgentMemoryManager } from '../memory/AgentMemoryManager';
@@ -35,7 +35,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
   } = useAgentStore();
 
   const unifiedStore = useUnifiedObjectStore();
-  const settings = useSettingsStore(state => state.settings);
+  const settings = useSettings();
   const mainLanguage = settings.mainLanguage;
 
   const clearInput = useAgentUIStore(state => state.clearInput);
@@ -144,7 +144,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     useAgentUIStore.getState().setPreflightToast(projectId, null);
 
     const agentConfig = useSettingsStore.getState().getTaskConfig('agent');
-    const outputMode = useSettingsStore.getState().settings.nativeOutputMode ? 'native_tool_call' : 'tool_call';
+    const outputMode = useSettingsStore.getState().getSettingsOrThrow().nativeOutputMode ? 'native_tool_call' : 'tool_call';
 
     let historyOverride: any[] | undefined;
     let promptContextOverride: Record<string, any> | undefined;
@@ -290,7 +290,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     useAgentUIStore.getState().setPreflightToast(projectId, null);
 
     const agentConfig = useSettingsStore.getState().getTaskConfig('agent');
-    const outputMode = useSettingsStore.getState().settings.nativeOutputMode ? 'native_tool_call' : 'tool_call';
+    const outputMode = useSettingsStore.getState().getSettingsOrThrow().nativeOutputMode ? 'native_tool_call' : 'tool_call';
 
     let historyOverride: any[] | undefined;
     let promptContextOverride: Record<string, any> | undefined;

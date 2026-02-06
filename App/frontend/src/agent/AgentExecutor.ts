@@ -82,7 +82,7 @@ export const AgentExecutor = {
     const credentialsStore = useCredentialsStore.getState();
     const sessionStore = useLLMSessionStore.getState();
 
-    const settings = settingsStore.settings;
+    const settings = settingsStore.getSettingsOrThrow();
     const agentConfig = settingsStore.getTaskConfig('agent');
     const providerConfig = credentialsStore.getProviderConfigForBackend(agentConfig.provider);
 
@@ -296,7 +296,7 @@ export const AgentExecutor = {
       temperature: translationConfig.temperature,
       thinkingMode: translationConfig.advanced.thinkingMode as any,
       thinkingConfig: translationConfig.advanced.thinkingConfig,
-      retryConfig: settingsStore.settings.retryConfig,
+      retryConfig: settingsStore.getSettingsOrThrow().retryConfig,
       history: createEmptyUserHistory(),
     });
 

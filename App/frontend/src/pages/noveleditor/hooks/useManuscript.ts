@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
-import { useSettingsStore } from '../../../store/settingsStore';
+import { useSettings } from '../../../store/settingsStore';
 import type { ManuscriptObject } from '../../../types/unifiedObject';
 import type { TipTapDoc } from '../../../types/tiptap';
 import { emptyDoc, normalizeDoc, docWordCount } from '../../../editor/manuscript/doc';
@@ -11,7 +11,7 @@ import { emptyDoc, normalizeDoc, docWordCount } from '../../../editor/manuscript
  */
 export function useManuscript(projectId: string | undefined, chapterId: string | undefined) {
   const store = useUnifiedObjectStore();
-  const { settings } = useSettingsStore();
+  const settings = useSettings();
 
   // Get the manuscript for the current chapter
   const manuscript = useMemo<ManuscriptObject | null>(() => {

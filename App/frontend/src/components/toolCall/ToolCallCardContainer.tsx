@@ -133,8 +133,8 @@ export const ToolCallCardContainer: React.FC<ToolCallCardContainerProps> = ({
   isApplyDisabled = false,
   applyDisabledReason,
 }) => {
-  const mainLanguage = useSettingsStore((state) => state.settings.mainLanguage);
-  const toolCallAutoApprove = useSettingsStore((state) => state.settings.toolCallAutoApprove);
+  const mainLanguage = useSettingsStore((state) => state.getSettingsOrThrow().mainLanguage);
+  const toolCallAutoApprove = useSettingsStore((state) => state.getSettingsOrThrow().toolCallAutoApprove);
   const storyObjects = useStoryObjects(projectId, mainLanguage);
 
   const isStreaming = mode === 'streaming';

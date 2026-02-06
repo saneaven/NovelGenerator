@@ -366,13 +366,13 @@ const WorkspaceConfigPanel: React.FC<WorkspaceConfigPanelProps> = ({ projectId }
 
     try {
       if (!ragStatus?.enabled) {
-        showError('RAG', 'RAG Search is disabled. Enable it in Settings > RAG Search.');
+        showError('RAG', 'RAG Search is disabled. Enable it in Settings > Search & Memory.');
         return;
       }
 
       const profile = ragStatus?.profile;
       if (!profile) {
-        showError('RAG', 'Embedding profile is not configured. Set it in Settings > RAG Search.');
+        showError('RAG', 'Embedding profile is not configured. Set it in Settings > Search & Memory.');
         return;
       }
 

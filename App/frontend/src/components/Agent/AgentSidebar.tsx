@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useAgentStore, type Agent } from '../../store/agentStore';
+import { useAgentStore, type Agent, getAgentLastActivityAt } from '../../store/agentStore';
 import { useSidebarStore } from '../../store/sidebarStore';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useSettings } from '../../store/settingsStore';
 import { useErrorStore } from '../../store/errorStore';
 import { getBestLanguageData } from '../../utils/languageData';
 import { BaseSidebar } from '../BaseSidebar';
@@ -27,7 +27,7 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
     renameAgent,
     deleteAgent,
   } = useAgentStore();
-  const { settings } = useSettingsStore();
+  const settings = useSettings();
   const { showError } = useErrorStore();
 
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
@@ -204,7 +204,7 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
                     <>
                       <div className="agent-name">{agent.name}</div>
                       <div className="agent-preview">{resolvePreviewContent(agent)}</div>
-                      <div className="agent-time">{formatTime(agent.updated_at)}</div>
+                      <div className="agent-time">{formatTime(getAgentLastActivityAt(agent))}</div>
                     </>
                   )}
                 </div>

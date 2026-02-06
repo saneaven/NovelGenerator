@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next';
 import { BaseModal } from '../BaseModal';
 import { BaseSidebar } from '../BaseSidebar';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useSettings, useSettingsStore } from '../../store/settingsStore';
 import { useCredentialsStore } from '../../store/credentialsStore';
 import { useSidebarStore } from '../../store/sidebarStore';
 import type { ProviderCredentials, Settings, AITaskType } from '../../store/settingsStore';
@@ -14,7 +14,7 @@ import ThemePanel from './ThemePanel';
 import AdvancedPanel from './AdvancedPanel';
 import ImageGenPanel from './ImageGenPanel';
 import ProfilePanel from './ProfilePanel';
-import RagSearchPanel from './RagSearchPanel';
+import SearchMemoryPanel from './SearchMemoryPanel';
 import { SettingsToastProvider, type SettingsToastApi, type SettingsToastKind } from './SettingsToastContext';
 import { Settings as SettingsIcon, Lock, Image, Document, Globe, Palette, Wrench, HamburgerMenu, People, List } from '../icons';
 import { TextButton } from '../TextButton';
@@ -29,7 +29,7 @@ interface SettingsModalProps {
 type MainTab =
   | 'profile'
   | 'credentials'
-  | 'ragSearch'
+  | 'searchMemory'
   | 'general'
   | 'imageGen'
   | 'prompts'
@@ -40,8 +40,9 @@ type MainTab =
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const { t } = useTranslation();
   const settingsStore = useSettingsStore();
+  const settings = useSettings();
   const credentialsStore = useCredentialsStore();
-  const [localSettings, setLocalSettings] = useState<Settings>(settingsStore.settings);
+  const [localSettings, setLocalSettings] = useState<Settings>(settings);
   const [localCredentials, setLocalCredentials] = useState<ProviderCredentials>(credentialsStore.credentials);
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState<{ kind: SettingsToastKind; message: string } | null>(null);
@@ -55,7 +56,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
   useEffect(() => {
     if (isOpen) {
-      setLocalSettings(settingsStore.settings);
+      setLocalSettings(settings);
       setLocalCredentials(credentialsStore.credentials);
       credentialsStore.fetchBackupStatus().catch(() => {
         // Ignore - status is best-effort
@@ -126,7 +127,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
       if (!model.trim()) {
         return {
-          tab: 'ragSearch',
+          tab: 'searchMemory',
           message: t('settings.embeddings.validation.missingModel', { feature: c.label }),
         };
       }
@@ -191,7 +192,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   };
 
   const handleCancel = () => {
-    setLocalSettings(settingsStore.settings);
+    setLocalSettings(settings);
     setLocalCredentials(credentialsStore.credentials);
     onClose();
   };
@@ -274,11 +275,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           </li>
           <li>
             <button
-              className={`settings-mobile-sidebar-item ${mainTab === 'ragSearch' ? 'active' : ''}`}
-              onClick={() => { setMainTab('ragSearch'); closeSidebar('__global__'); }}
+              className={`settings-mobile-sidebar-item ${mainTab === 'searchMemory' ? 'active' : ''}`}
+              onClick={() => { setMainTab('searchMemory'); closeSidebar('__global__'); }}
             >
               <List size="md" />
-              <span>{t('settings.tabs.ragSearch')}</span>
+              <span>{t('settings.tabs.searchMemory')}</span>
             </button>
           </li>
           <li>
@@ -363,11 +364,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             </li>
             <li>
               <button
-                className={`settings-desktop-sidebar-item ${mainTab === 'ragSearch' ? 'active' : ''}`}
-                onClick={() => setMainTab('ragSearch')}
+                className={`settings-desktop-sidebar-item ${mainTab === 'searchMemory' ? 'active' : ''}`}
+                onClick={() => setMainTab('searchMemory')}
               >
                 <List size="md" />
-                <span>{t('settings.tabs.ragSearch')}</span>
+                <span>{t('settings.tabs.searchMemory')}</span>
               </button>
             </li>
             <li>
@@ -429,8 +430,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           />
         )}
 
-        {mainTab === 'ragSearch' && (
-          <RagSearchPanel
+        {mainTab === 'searchMemory' && (
+          <SearchMemoryPanel
             enabled={localSettings.ragSearchEnabled}
             onEnabledChange={(enabled) => setLocalSettings(prev => ({ ...prev, ragSearchEnabled: enabled }))}
             ragSearchProfile={localSettings.embeddingConfigs.ragSearch}
@@ -447,6 +448,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 embeddingConfigs: { ...prev.embeddingConfigs, agentMemory: next },
               }))
             }
+            keywordPageSize={localSettings.ragSearchKeywordPageSize}
+            onKeywordPageSizeChange={(value) => setLocalSettings(prev => ({ ...prev, ragSearchKeywordPageSize: value }))}
             credentials={localCredentials}
             mainLanguage={localSettings.mainLanguage}
             topKPerQuery={localSettings.ragSearchTopKPerQuery}

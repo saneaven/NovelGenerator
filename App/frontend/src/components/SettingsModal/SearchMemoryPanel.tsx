@@ -8,15 +8,18 @@ import { CustomSelect } from '../ui/CustomSelect';
 import ToggleSwitch from '../common/ToggleSwitch';
 import { Toggle } from '../icons';
 
-type RagSubTab = 'ragSearch' | 'agentMemory';
+type SearchSubTab = 'keywordSearch' | 'ragSearch' | 'agentMemory';
+type ModelBrowserTarget = 'ragSearch' | 'agentMemory';
 
-interface RagSearchPanelProps {
+interface SearchMemoryPanelProps {
   enabled: boolean;
   onEnabledChange: (enabled: boolean) => void;
   ragSearchProfile: EmbeddingProfileConfig;
   onRagSearchProfileChange: (next: EmbeddingProfileConfig) => void;
   agentMemoryProfile: EmbeddingProfileConfig;
   onAgentMemoryProfileChange: (next: EmbeddingProfileConfig) => void;
+  keywordPageSize: number;
+  onKeywordPageSizeChange: (value: number) => void;
   credentials: ProviderCredentials;
   mainLanguage: string;
   topKPerQuery: number;
@@ -37,13 +40,15 @@ interface RagSearchPanelProps {
   onAgentMemoryMaxTotalMessagesChange: (value: number) => void;
 }
 
-const RagSearchPanel: React.FC<RagSearchPanelProps> = ({
+const SearchMemoryPanel: React.FC<SearchMemoryPanelProps> = ({
   enabled,
   onEnabledChange,
   ragSearchProfile,
   onRagSearchProfileChange,
   agentMemoryProfile,
   onAgentMemoryProfileChange,
+  keywordPageSize,
+  onKeywordPageSizeChange,
   credentials,
   mainLanguage,
   topKPerQuery,
@@ -64,9 +69,9 @@ const RagSearchPanel: React.FC<RagSearchPanelProps> = ({
   onAgentMemoryMaxTotalMessagesChange,
 }) => {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<RagSubTab>('ragSearch');
+  const [activeTab, setActiveTab] = useState<SearchSubTab>('keywordSearch');
   const [showModelBrowser, setShowModelBrowser] = useState(false);
-  const [activeModelBrowser, setActiveModelBrowser] = useState<RagSubTab>('ragSearch');
+  const [activeModelBrowser, setActiveModelBrowser] = useState<ModelBrowserTarget>('ragSearch');
 
   useEffect(() => {
     if (!enabled) {
@@ -111,13 +116,23 @@ const RagSearchPanel: React.FC<RagSearchPanelProps> = ({
     return Math.max(min, Math.min(max, Math.trunc(value)));
   };
 
+  const title = useMemo(() => {
+    if (activeTab === 'keywordSearch') return t('settings.keywordSearch.title');
+    if (activeTab === 'ragSearch') return t('settings.ragSearch.title');
+    return t('settings.agentMemory.title');
+  }, [activeTab, t]);
+
+  const description = useMemo(() => {
+    if (activeTab === 'keywordSearch') return t('settings.keywordSearch.description');
+    if (activeTab === 'ragSearch') return t('settings.ragSearch.description');
+    return t('settings.agentMemory.description');
+  }, [activeTab, t]);
+
   return (
     <div className="rag-search-panel">
       <div className="panel-header">
-        <h3>{activeTab === 'ragSearch' ? t('settings.ragSearch.title') : t('settings.agentMemory.title')}</h3>
-        <p className="panel-description">
-          {activeTab === 'ragSearch' ? t('settings.ragSearch.description') : t('settings.agentMemory.description')}
-        </p>
+        <h3>{title}</h3>
+        <p className="panel-description">{description}</p>
       </div>
 
       <div className="settings-panel-card">
@@ -134,12 +149,21 @@ const RagSearchPanel: React.FC<RagSearchPanelProps> = ({
 
       <div className="task-selector">
         <button
+          className={`task-tab ${activeTab === 'keywordSearch' ? 'active' : ''}`}
+          onClick={() => setActiveTab('keywordSearch')}
+          type="button"
+        >
+          {t('settings.tabs.keywordSearch')}
+        </button>
+
+        <button
           className={`task-tab ${activeTab === 'ragSearch' ? 'active' : ''}`}
           onClick={() => setActiveTab('ragSearch')}
           type="button"
         >
           {t('settings.tabs.ragSearch')}
         </button>
+
         <button
           className={`task-tab ${activeTab === 'agentMemory' ? 'active' : ''}`}
           onClick={() => setActiveTab('agentMemory')}
@@ -149,167 +173,187 @@ const RagSearchPanel: React.FC<RagSearchPanelProps> = ({
         </button>
       </div>
 
-      {activeTab === 'ragSearch' && (
-      <>
-      <div className="settings-panel-card">
-        <div className="form-field">
-          <label>{t('settings.ragSearch.provider')}</label>
-          <CustomSelect
-            value={ragSearchProfile.provider}
-            onChange={(value) => handleRagProviderChange(value as ProviderType)}
-            options={[
-              { value: 'openai', label: 'OpenAI' },
-              { value: 'gemini', label: 'Gemini' },
-              { value: 'openrouter', label: 'OpenRouter' },
-              { value: 'custom', label: t('settings.credentials.custom.title') },
-            ]}
-            disabled={!enabled}
-          />
-          <p className="field-hint">{t('settings.ragSearch.providerHint')}</p>
-        </div>
-
-        <div className="form-field">
-          <label>{t('settings.ragSearch.model')}</label>
-          <div className="model-input-row">
+      {activeTab === 'keywordSearch' && (
+        <div className="settings-panel-card">
+          <div className="form-field">
+            <label>{t('settings.keywordSearch.pageSize')}</label>
             <input
-              type="text"
-              value={ragSearchProfile.model}
-              onChange={(e) => handleRagModelChange(e.target.value)}
-              placeholder={t('settings.ragSearch.modelPlaceholder')}
+              type="number"
+              value={keywordPageSize}
+              min={1}
+              max={200}
+              onChange={(e) => {
+                const n = Number.parseInt(e.target.value, 10);
+                if (Number.isNaN(n)) return;
+                onKeywordPageSizeChange(clampInt(n, 1, 200));
+              }}
               className="config-input"
-              disabled={!enabled}
             />
-            <TextButton
-              variant={showModelBrowser ? 'primary' : 'secondary'}
-              size="sm"
-              type="button"
-              onClick={() => {
-                setActiveModelBrowser('ragSearch');
-                setShowModelBrowser(!showModelBrowser);
-              }}
-              title={t('settings.ragSearch.browse')}
-              disabled={!enabled}
-            >
-              {showModelBrowser ? t('common.hide') : t('common.browse')}
-            </TextButton>
+            <p className="field-hint">{t('settings.keywordSearch.pageSizeHint')}</p>
           </div>
-          <p className="field-hint">{t('settings.ragSearch.modelHint')}</p>
-
-          {enabled && showModelBrowser && activeModelBrowser === 'ragSearch' && (
-            <ModelBrowser
-              key={`ragSearch:${ragSearchProfile.provider}`}
-              autoExpand={true}
-              provider={ragSearchProfile.provider}
-              mode="embedding"
-              currentModel={ragSearchProfile.model}
-              credentials={credentials}
-              onSelectModel={(m) => {
-                handleRagModelChange(m);
-                setShowModelBrowser(false);
-              }}
-              onUpdateProviderPreference={() => {
-                // not used for embedding profile
-              }}
-            />
-          )}
         </div>
+      )}
 
-        <div className="form-field">
-          <label>{t('settings.ragSearch.indexLanguage')}</label>
-          <input type="text" value={mainLanguage} disabled />
-          <p className="field-hint">{t('settings.ragSearch.indexLanguageHint')}</p>
-        </div>
+      {activeTab === 'ragSearch' && (
+        <>
+          <div className="settings-panel-card">
+            <div className="form-field">
+              <label>{t('settings.ragSearch.provider')}</label>
+              <CustomSelect
+                value={ragSearchProfile.provider}
+                onChange={(value) => handleRagProviderChange(value as ProviderType)}
+                options={[
+                  { value: 'openai', label: 'OpenAI' },
+                  { value: 'gemini', label: 'Gemini' },
+                  { value: 'openrouter', label: 'OpenRouter' },
+                  { value: 'custom', label: t('settings.credentials.custom.title') },
+                ]}
+                disabled={!enabled}
+              />
+              <p className="field-hint">{t('settings.ragSearch.providerHint')}</p>
+            </div>
 
-        <div className="form-field">
-          <label>{t('settings.ragSearch.dimensions')}</label>
-          <input
-            type="text"
-            value={ragDimensions != null ? String(ragDimensions) : t('settings.ragSearch.dimensionsUnknown')}
-            disabled
-          />
-          <p className="field-hint">{t('settings.ragSearch.dimensionsHint')}</p>
-        </div>
+            <div className="form-field">
+              <label>{t('settings.ragSearch.model')}</label>
+              <div className="model-input-row">
+                <input
+                  type="text"
+                  value={ragSearchProfile.model}
+                  onChange={(e) => handleRagModelChange(e.target.value)}
+                  placeholder={t('settings.ragSearch.modelPlaceholder')}
+                  className="config-input"
+                  disabled={!enabled}
+                />
+                <TextButton
+                  variant={showModelBrowser && activeModelBrowser === 'ragSearch' ? 'primary' : 'secondary'}
+                  size="sm"
+                  type="button"
+                  onClick={() => {
+                    setActiveModelBrowser('ragSearch');
+                    setShowModelBrowser(!showModelBrowser);
+                  }}
+                  title={t('settings.ragSearch.browse')}
+                  disabled={!enabled}
+                >
+                  {showModelBrowser && activeModelBrowser === 'ragSearch' ? t('common.hide') : t('common.browse')}
+                </TextButton>
+              </div>
+              <p className="field-hint">{t('settings.ragSearch.modelHint')}</p>
 
-        <div className="form-field">
-          <label>{t('settings.ragSearch.topKPerQuery')}</label>
-          <input
-            type="number"
-            value={topKPerQuery}
-            min={1}
-            max={200}
-            onChange={(e) => {
-              const n = Number.parseInt(e.target.value, 10);
-              if (Number.isNaN(n)) return;
-              onTopKPerQueryChange(clampInt(n, 1, 200));
-            }}
-            className="config-input"
-          />
-          <p className="field-hint">{t('settings.ragSearch.topKPerQueryHint')}</p>
-        </div>
+              {enabled && showModelBrowser && activeModelBrowser === 'ragSearch' && (
+                <ModelBrowser
+                  key={`ragSearch:${ragSearchProfile.provider}`}
+                  autoExpand={true}
+                  provider={ragSearchProfile.provider}
+                  mode="embedding"
+                  currentModel={ragSearchProfile.model}
+                  credentials={credentials}
+                  onSelectModel={(m) => {
+                    handleRagModelChange(m);
+                    setShowModelBrowser(false);
+                  }}
+                  onUpdateProviderPreference={() => {
+                    // not used for embedding profile
+                  }}
+                />
+              )}
+            </div>
 
-        <div className="form-field">
-          <label>{t('settings.ragSearch.neighborWindow')}</label>
-          <input
-            type="number"
-            value={neighborWindow}
-            min={0}
-            max={20}
-            onChange={(e) => {
-              const n = Number.parseInt(e.target.value, 10);
-              if (Number.isNaN(n)) return;
-              onNeighborWindowChange(clampInt(n, 0, 20));
-            }}
-            className="config-input"
-          />
-          <p className="field-hint">{t('settings.ragSearch.neighborWindowHint')}</p>
-        </div>
+            <div className="form-field">
+              <label>{t('settings.ragSearch.indexLanguage')}</label>
+              <input type="text" value={mainLanguage} disabled />
+              <p className="field-hint">{t('settings.ragSearch.indexLanguageHint')}</p>
+            </div>
 
-        <div className="form-field">
-          <label>{t('settings.ragSearch.maxPrimaryChunks')}</label>
-          <input
-            type="number"
-            value={maxPrimaryChunks}
-            min={1}
-            max={200}
-            onChange={(e) => {
-              const n = Number.parseInt(e.target.value, 10);
-              if (Number.isNaN(n)) return;
-              onMaxPrimaryChunksChange(clampInt(n, 1, 200));
-            }}
-            className="config-input"
-          />
-          <p className="field-hint">{t('settings.ragSearch.maxPrimaryChunksHint')}</p>
-        </div>
+            <div className="form-field">
+              <label>{t('settings.ragSearch.dimensions')}</label>
+              <input
+                type="text"
+                value={ragDimensions != null ? String(ragDimensions) : t('settings.ragSearch.dimensionsUnknown')}
+                disabled
+              />
+              <p className="field-hint">{t('settings.ragSearch.dimensionsHint')}</p>
+            </div>
 
-        <div className="form-field">
-          <label>{t('settings.ragSearch.maxTotalChunks')}</label>
-          <input
-            type="number"
-            value={maxTotalChunks}
-            min={1}
-            max={500}
-            onChange={(e) => {
-              const n = Number.parseInt(e.target.value, 10);
-              if (Number.isNaN(n)) return;
-              onMaxTotalChunksChange(clampInt(n, 1, 500));
-            }}
-            className="config-input"
-          />
-          <p className="field-hint">{t('settings.ragSearch.maxTotalChunksHint')}</p>
-        </div>
+            <div className="form-field">
+              <label>{t('settings.ragSearch.topKPerQuery')}</label>
+              <input
+                type="number"
+                value={topKPerQuery}
+                min={1}
+                max={200}
+                onChange={(e) => {
+                  const n = Number.parseInt(e.target.value, 10);
+                  if (Number.isNaN(n)) return;
+                  onTopKPerQueryChange(clampInt(n, 1, 200));
+                }}
+                className="config-input"
+              />
+              <p className="field-hint">{t('settings.ragSearch.topKPerQueryHint')}</p>
+            </div>
 
-      </div>
+            <div className="form-field">
+              <label>{t('settings.ragSearch.neighborWindow')}</label>
+              <input
+                type="number"
+                value={neighborWindow}
+                min={0}
+                max={20}
+                onChange={(e) => {
+                  const n = Number.parseInt(e.target.value, 10);
+                  if (Number.isNaN(n)) return;
+                  onNeighborWindowChange(clampInt(n, 0, 20));
+                }}
+                className="config-input"
+              />
+              <p className="field-hint">{t('settings.ragSearch.neighborWindowHint')}</p>
+            </div>
 
-      <div className="info-box">
-        <h4>{t('settings.ragSearch.rulesTitle')}</h4>
-        <ul>
-          <li>{t('settings.ragSearch.rules.mainLanguageOnly')}</li>
-          <li>{t('settings.ragSearch.rules.excludesMarkdownAssets')}</li>
-          <li>{t('settings.ragSearch.rules.orderedResults')}</li>
-          <li>{t('settings.ragSearch.rules.reindexRequired')}</li>
-        </ul>
-      </div>
-      </>
+            <div className="form-field">
+              <label>{t('settings.ragSearch.maxPrimaryChunks')}</label>
+              <input
+                type="number"
+                value={maxPrimaryChunks}
+                min={1}
+                max={200}
+                onChange={(e) => {
+                  const n = Number.parseInt(e.target.value, 10);
+                  if (Number.isNaN(n)) return;
+                  onMaxPrimaryChunksChange(clampInt(n, 1, 200));
+                }}
+                className="config-input"
+              />
+              <p className="field-hint">{t('settings.ragSearch.maxPrimaryChunksHint')}</p>
+            </div>
+
+            <div className="form-field">
+              <label>{t('settings.ragSearch.maxTotalChunks')}</label>
+              <input
+                type="number"
+                value={maxTotalChunks}
+                min={1}
+                max={500}
+                onChange={(e) => {
+                  const n = Number.parseInt(e.target.value, 10);
+                  if (Number.isNaN(n)) return;
+                  onMaxTotalChunksChange(clampInt(n, 1, 500));
+                }}
+                className="config-input"
+              />
+              <p className="field-hint">{t('settings.ragSearch.maxTotalChunksHint')}</p>
+            </div>
+          </div>
+
+          <div className="info-box">
+            <h4>{t('settings.ragSearch.rulesTitle')}</h4>
+            <ul>
+              <li>{t('settings.ragSearch.rules.mainLanguageOnly')}</li>
+              <li>{t('settings.ragSearch.rules.excludesMarkdownAssets')}</li>
+              <li>{t('settings.ragSearch.rules.orderedResults')}</li>
+              <li>{t('settings.ragSearch.rules.reindexRequired')}</li>
+            </ul>
+          </div>
+        </>
       )}
 
       {activeTab === 'agentMemory' && (
@@ -459,4 +503,5 @@ const RagSearchPanel: React.FC<RagSearchPanelProps> = ({
   );
 };
 
-export default RagSearchPanel;
+export default SearchMemoryPanel;
+

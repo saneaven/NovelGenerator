@@ -185,7 +185,7 @@ function getJourneyLanguage(journey: Journey): string {
   const t = journey.editingTargets;
   if (t.kind === 'translateObjects') return t.targetLanguage;
   if (t.kind === 'aiEdit') return t.language;
-  return useSettingsStore.getState().settings.mainLanguage;
+  return useSettingsStore.getState().getSettingsOrThrow().mainLanguage;
 }
 
 /**

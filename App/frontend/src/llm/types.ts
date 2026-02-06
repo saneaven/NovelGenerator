@@ -413,7 +413,7 @@ export interface LLMTaskConfig {
   temperature?: number;
   thinkingMode?: 'off' | 'model' | 'custom';
   thinkingConfig?: ThinkingConfig;
-  customApiFormat?: CustomApiFormat;  // For custom provider API format
+  customApiFormat?: CustomApiFormat;  // OpenAI-compatible dialect for custom provider
   retryConfig?: RetryConfig;
 }
 

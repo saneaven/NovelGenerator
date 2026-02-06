@@ -36,7 +36,7 @@ class BaseProvider(ABC):
             provider_preference: Provider-specific preferences (e.g., OpenRouter only/ignore)
             thinking_config: Thinking configuration for model-native thinking (mapped to provider-native thinking field)
             thinking_mode: Thinking mode ('off', 'custom', 'model')
-            custom_api_format: API format for custom provider ('openai', 'claude', 'gemini')
+            custom_api_format: OpenAI-compatible dialect for custom provider ('openai', 'claude', 'gemini')
             retry_config: Retry configuration for error handling
             native_tool_call: If true, provider should parse <tool_calls> tags from text and emit tool_calls deltas.
 

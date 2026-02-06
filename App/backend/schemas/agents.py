@@ -36,6 +36,7 @@ class ToolCallSchema(BaseModel):
     id: str
     tool_name: str
     arguments: Any
+    extra_content: Optional[Dict[str, Any]] = None
     status: ToolCallStatus = ToolCallStatus.PENDING
     reason: Optional[str] = None
     failureType: Optional[ToolCallFailureType] = None

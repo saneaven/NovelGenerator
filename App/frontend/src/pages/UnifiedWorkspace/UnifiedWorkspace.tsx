@@ -7,7 +7,8 @@ import { useSidebarStore } from '../../store/sidebarStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore, type SimplifiedStoryObjects } from '../../store/unifiedObjectStore';
 import { useNovelEditorStore } from '../../store/novelEditorStore';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useSettings } from '../../store/settingsStore';
+import { useDisplayLanguageStore } from '../../store/displayLanguageStore';
 import { useErrorStore } from '../../store/errorStore';
 import { translationService } from '../../api/unifiedObjectService';
 
@@ -90,10 +91,10 @@ const UnifiedWorkspace: React.FC = () => {
   const selectChapter = useNovelEditorStore(state => state.selectChapter);
 
   // Settings
-  const settings = useSettingsStore(state => state.settings);
+  const settings = useSettings();
   const mainLanguage = settings.mainLanguage;
-  const displayLanguage = settings.displayLanguage;
-  const setDisplayLanguage = useSettingsStore(state => state.setDisplayLanguage);
+  const preferredDisplayLanguage = useDisplayLanguageStore((state) => state.preferredDisplayLanguage);
+  const setPreferredDisplayLanguage = useDisplayLanguageStore((state) => state.setPreferredDisplayLanguage);
   const subLanguages = settings.subLanguages;
 
   // Error handling
@@ -167,7 +168,12 @@ const UnifiedWorkspace: React.FC = () => {
     return [...new Set(languages)].filter(Boolean);
   }, [mainLanguage, subLanguages]);
 
-  const currentDisplayLanguage = displayLanguage || mainLanguage;
+  const currentDisplayLanguage = useMemo(() => {
+    if (preferredDisplayLanguage && availableLanguages.includes(preferredDisplayLanguage)) {
+      return preferredDisplayLanguage;
+    }
+    return mainLanguage;
+  }, [preferredDisplayLanguage, availableLanguages, mainLanguage]);
 
   // Calculate count of objects needing translation (not tied to current sub-page)
   useEffect(() => {
@@ -449,7 +455,7 @@ const UnifiedWorkspace: React.FC = () => {
         onSubPageChange={navigateToSubPage}
         availableLanguages={availableLanguages}
         currentLanguage={currentDisplayLanguage}
-        onLanguageChange={setDisplayLanguage}
+        onLanguageChange={(lang) => setPreferredDisplayLanguage(lang === mainLanguage ? null : lang)}
         showTranslateAll={subLanguages && subLanguages.length > 0 && objectsNeedingTranslation > 0}
         translateCount={objectsNeedingTranslation}
         onTranslateAllClick={() => setShowTranslateModal(true)}
@@ -494,6 +500,7 @@ const UnifiedWorkspace: React.FC = () => {
             selectedChapterId={selectedChapterId || null}
             hasChapters={hasChapters}
             chaptersInitialized={isOutlineInitialized}
+            globalDisplayLanguage={currentDisplayLanguage}
             onSelectChapter={(chapterId) => selectChapter(projectId ?? '', chapterId)}
           />
         )}

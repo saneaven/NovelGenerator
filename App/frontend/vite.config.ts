@@ -12,5 +12,6 @@ export default defineConfig({
     fs: {
       allow: [path.resolve(__dirname, '..')],
     },
+    allowedHosts: ["192.168.50.169.sslip.io"],
   },
 });

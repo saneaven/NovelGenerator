@@ -6,7 +6,7 @@ import { useAgentStore, type StoredAgentMessage } from '../../../store/agentStor
 import { useAgentUIStore } from '../../../store/agentUIStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import { useProjectStore } from '../../../store/projectStore';
-import { useSettingsStore } from '../../../store/settingsStore';
+import { useSettings } from '../../../store/settingsStore';
 import { useErrorStore } from '../../../store/errorStore';
 import { useNovelEditorStore } from '../../../store/novelEditorStore';
 import { useLLMSessionStore } from '../../../store/llmSessionStore';
@@ -231,7 +231,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     const isAgentVisible = isDesktop ? true : agentVisibleState;
 
     const { getCurrentProject } = useProjectStore();
-    const { settings } = useSettingsStore();
+    const settings = useSettings();
     const { showError } = useErrorStore();
     const novelEditorStore = useNovelEditorStore();
 

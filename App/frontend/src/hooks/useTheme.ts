@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react';
-import { useSettingsStore } from '../store/settingsStore';
+import { useSettings, useSettingsStore } from '../store/settingsStore';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -8,7 +8,7 @@ export type ThemeMode = 'light' | 'dark' | 'system';
  * Handles theme detection, application, and system preference sync
  */
 export function useTheme() {
-  const theme = useSettingsStore((state) => state.settings.theme);
+  const { theme } = useSettings();
   const setTheme = useSettingsStore((state) => state.setTheme);
 
   /**

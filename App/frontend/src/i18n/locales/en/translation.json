@@ -132,16 +132,18 @@
     "saveError": "Failed to save settings to server. Changes are saved locally.",
     "savedSuccessfully": "Settings saved",
     "openNavigation": "Open navigation menu",
-    "tabs": {
-      "profile": "Profile",
-      "language": "Language",
-      "general": "General",
-      "credentials": "Credentials",
-      "ragSearch": "RAG Search",
-      "agentMemory": "Agent Memory",
-      "theme": "Theme",
-      "imageGen": "Image Generation",
-      "advanced": "Advanced",
+	    "tabs": {
+	      "profile": "Profile",
+	      "language": "Language",
+	      "general": "General",
+	      "credentials": "Credentials",
+	      "searchMemory": "Search & Memory",
+	      "keywordSearch": "Keyword Search",
+	      "ragSearch": "RAG Search",
+	      "agentMemory": "Agent Memory",
+	      "theme": "Theme",
+	      "imageGen": "Image Generation",
+	      "advanced": "Advanced",
       "prompts": "Prompts & Templates"
     },
     "embeddings": {
@@ -184,13 +186,19 @@
         "orderedResults": "Search results are returned by relevance (embedding distance)",
         "reindexRequired": "Changing provider/model wipes existing vectors; reindex per project"
       },
-      "loadErrorTitle": "Failed to load RAG profile",
-      "saveValidationError": "Please set provider and model for RAG Search."
-    },
-    "agentMemory": {
-      "title": "Agent Memory",
-      "description": "Configure embedding provider/model and retrieval settings for archived chat memory.",
-      "provider": "Provider",
+	      "loadErrorTitle": "Failed to load RAG profile",
+	      "saveValidationError": "Please set provider and model for RAG Search."
+	    },
+	    "keywordSearch": {
+	      "title": "Keyword Search",
+	      "description": "Configure keyword-based search over indexed chunks (no embeddings).",
+	      "pageSize": "Results per page",
+	      "pageSizeHint": "Number of chunks returned per page for keyword_search."
+	    },
+	    "agentMemory": {
+	      "title": "Agent Memory",
+	      "description": "Configure embedding provider/model and retrieval settings for archived chat memory.",
+	      "provider": "Provider",
       "providerHint": "Uses the same credentials you set in Settings > Credentials.",
       "model": "Embedding Model",
       "modelPlaceholder": "e.g. text-embedding-3-large",
@@ -505,7 +513,7 @@
         "custom": "Use your own OpenAI-compatible endpoint"
       },
       "apiFormat": "API Format",
-      "apiFormatHint": "Select the API format - uses native SDK for each provider",
+      "apiFormatHint": "Select the OpenAI-compatible dialect for your custom endpoint",
       "aiModel": "AI Model",
       "browse": "Browse",
       "hide": "Hide",
@@ -571,7 +579,9 @@
         "thinkingLevelGemini3Hint": "Controls depth of reasoning for Gemini 3 models.",
         "thinkingBudget25": "Thinking Budget (tokens) for 2.5",
         "thinkingBudget25Placeholder": "Set 0 to disable",
-        "thinkingBudget25Hint": "Set 0 to effectively disable thinking where supported."
+        "thinkingBudget25Hint": "Set 0 to effectively disable thinking where supported.",
+        "geminiCompatEffortHint": "Use Reasoning Effort OR Gemini thinking config fields below.",
+        "geminiCompatConflictHint": "Do not combine Reasoning Effort with Thinking Level/Budget in Gemini format."
       },
       "tokenizer": "Tokenizer",
       "tokenizerHint": "Select which tokenizer to use for token counting estimates",
@@ -1087,8 +1097,8 @@
     "rag": {
       "title": "RAG Index",
       "hint": "Indexes main language only (excludes images/tables/code blocks). Results are ordered by type and chapter order.",
-      "disabled": "RAG Search is disabled. Enable it in Settings > RAG Search.",
-      "profileMissing": "Embedding profile is not configured. Set it in Settings > RAG Search.",
+      "disabled": "RAG Search is disabled. Enable it in Settings > Search & Memory.",
+      "profileMissing": "Embedding profile is not configured. Set it in Settings > Search & Memory.",
       "statusUnavailable": "RAG status is unavailable.",
       "profile": "Profile:",
       "dimensions": "Dimensions:",

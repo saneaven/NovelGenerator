@@ -27,7 +27,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
   const { t } = useTranslation();
   const store = useUnifiedObjectStore();
   const closeSidebar = useSidebarStore((state) => state.closeSidebar);
-  const mainLanguage = useSettingsStore((state) => state.settings.mainLanguage);
+  const mainLanguage = useSettingsStore((state) => state.getSettingsOrThrow().mainLanguage);
   const { selectOutline, getSelectedOutlineId, syncOutlineFromStorage } = useNovelEditorStore();
 
   // Sync outline selection from localStorage on mount (avoids setState during render)

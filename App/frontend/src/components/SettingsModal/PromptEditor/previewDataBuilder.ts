@@ -5,6 +5,7 @@
 
 import { PromptManager } from '../../../llm/PromptManager';
 import { useSettingsStore } from '../../../store/settingsStore';
+import { useDisplayLanguageStore } from '../../../store/displayLanguageStore';
 import { useProjectStore } from '../../../store/projectStore';
 import { useVariableStore } from '../../../store/variableStore';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
@@ -269,11 +270,17 @@ export function buildModeSpecificData(
  */
 function buildConfigData(overrides?: Partial<ConfigData>): ConfigData {
   const store = useSettingsStore.getState();
-  const settings = store.settings;
+  const settings = store.getSettingsOrThrow();
+  const preferredDisplayLanguage = useDisplayLanguageStore.getState().preferredDisplayLanguage;
+  const allowedDisplayLanguages = new Set([settings.mainLanguage, ...settings.subLanguages].filter(Boolean));
+  const displayLanguage =
+    preferredDisplayLanguage && allowedDisplayLanguages.has(preferredDisplayLanguage)
+      ? preferredDisplayLanguage
+      : settings.mainLanguage || 'English';
 
   const baseConfig: ConfigData = {
     mainLanguage: settings.mainLanguage || 'English',
-    displayLanguage: settings.displayLanguage || settings.mainLanguage || 'English',
+    displayLanguage,
     today: new Date().toISOString().split('T')[0],
     thinkingMode: 'off',
     isPrefillEnabled: false,
@@ -307,7 +314,7 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
 
   if (showProjectContext && projectId) {
     try {
-      const settings = useSettingsStore.getState().settings;
+      const settings = useSettingsStore.getState().getSettingsOrThrow();
       project = PromptManager.buildProjectData(projectId, settings.mainLanguage);
     } catch (error) {
       // Fall back to minimal if project data fails to load

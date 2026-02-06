@@ -40,7 +40,7 @@ class ProviderPreference(BaseModel):
 
 class ThinkingConfig(BaseModel):
     """Thinking configuration for model-native thinking"""
-    effort: Optional[str] = "medium"  # legacy OpenRouter-style effort
+    effort: Optional[str] = None  # legacy OpenRouter-style effort
     maxTokens: Optional[int] = None
     verbosity: Optional[str] = None  # GPT-5 output verbosity: 'low' | 'medium' | 'high'
     claudeBudgetTokens: Optional[int] = None
@@ -53,7 +53,7 @@ class AdvancedTaskSettings(BaseModel):
     enablePrefill: bool = False
     thinkingMode: str = "off"  # 'off' | 'model' | 'custom'
     thinkingConfig: Optional[ThinkingConfig] = Field(default_factory=lambda: ThinkingConfig())
-    customApiFormat: str = "openai"  # 'openai' | 'claude' | 'gemini' - for custom provider
+    customApiFormat: str = "openai"  # OpenAI-compatible dialect: 'openai' | 'claude' | 'gemini'
     tokenizerOverride: Optional[str] = None  # 'openai' | 'claude' | 'gemini' (used for token counting)
 
 
@@ -234,6 +234,7 @@ class UserSettingsResponse(BaseModel):
     ragSearchNeighborWindow: int = Field(default=0, ge=0, le=20)
     ragSearchMaxPrimaryChunks: int = Field(default=20, ge=1, le=200)
     ragSearchMaxTotalChunks: int = Field(default=60, ge=1, le=500)
+    ragSearchKeywordPageSize: int = Field(default=20, ge=1, le=200)
     agentMemoryTopKPerQuery: int = Field(default=20, ge=1, le=200)
     agentMemoryNeighborWindow: int = Field(default=0, ge=0, le=20)
     agentMemoryMaxPrimaryMessages: int = Field(default=20, ge=1, le=200)
@@ -243,7 +244,6 @@ class UserSettingsResponse(BaseModel):
     toolCallHistoryLimit: int = 5
     thinkingHistoryLimit: int = 5
     toolCallAutoApprove: ToolCallAutoApprove = Field(default_factory=ToolCallAutoApprove)
-    displayLanguage: str = "English"
     uiLanguage: str = "en"
 
     class Config:
@@ -266,6 +266,7 @@ class UserSettingsUpdate(BaseModel):
     ragSearchNeighborWindow: Optional[int] = Field(default=None, ge=0, le=20)
     ragSearchMaxPrimaryChunks: Optional[int] = Field(default=None, ge=1, le=200)
     ragSearchMaxTotalChunks: Optional[int] = Field(default=None, ge=1, le=500)
+    ragSearchKeywordPageSize: Optional[int] = Field(default=None, ge=1, le=200)
     agentMemoryTopKPerQuery: Optional[int] = Field(default=None, ge=1, le=200)
     agentMemoryNeighborWindow: Optional[int] = Field(default=None, ge=0, le=20)
     agentMemoryMaxPrimaryMessages: Optional[int] = Field(default=None, ge=1, le=200)
@@ -275,5 +276,4 @@ class UserSettingsUpdate(BaseModel):
     toolCallHistoryLimit: Optional[int] = None
     thinkingHistoryLimit: Optional[int] = None
     toolCallAutoApprove: Optional[ToolCallAutoApprove] = None
-    displayLanguage: Optional[str] = None
     uiLanguage: Optional[str] = None

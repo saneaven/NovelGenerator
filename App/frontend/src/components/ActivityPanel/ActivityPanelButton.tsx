@@ -127,6 +127,7 @@ const ActivityPanelButton: React.FC<ActivityPanelButtonProps> = ({
         showSpinner={hasRunning}
         showDot={hasUnread && !hasRunning}
         size={buttonSize}
+        className={"activity-panel-button"}
       />
 
       <NotificationStatusToast />

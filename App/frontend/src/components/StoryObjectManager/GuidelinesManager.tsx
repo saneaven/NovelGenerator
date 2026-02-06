@@ -9,7 +9,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import './GuidelinesManager.css';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useSettings } from '../../store/settingsStore';
 import { useErrorStore } from '../../store/errorStore';
 import AIEditModal from '../Modal/AIEditModal';
 import VersionHistoryModal from '../Modal/VersionHistoryModal';
@@ -33,7 +33,7 @@ const GuidelinesManager: React.FC<GuidelinesManagerProps> = ({ globalDisplayLang
   const fetchObject = useUnifiedObjectStore((state) => state.fetchObject);
   const updateObject = useUnifiedObjectStore((state) => state.updateObject);
   const listObjects = useUnifiedObjectStore((state) => state.listObjects);
-  const { settings } = useSettingsStore();
+  const settings = useSettings();
   const { showError } = useErrorStore();
 
   // Get guidelines from unified store

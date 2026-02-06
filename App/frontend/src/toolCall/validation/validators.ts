@@ -236,9 +236,9 @@ export const validatePatchRequiredFields: Validator = (args, toolName, _context)
 export const validateRagSearchEnabled: Validator = (_args, toolName, _context) => {
   if (toolName !== 'rag_search') return validResult();
 
-  const enabled = useSettingsStore.getState().settings.ragSearchEnabled;
+  const enabled = useSettingsStore.getState().getSettingsOrThrow().ragSearchEnabled;
   if (!enabled) {
-    return invalidResult('Embeddings are disabled (Settings > RAG Search)');
+    return invalidResult('Embeddings are disabled (Settings > Search & Memory)');
   }
 
   return validResult();

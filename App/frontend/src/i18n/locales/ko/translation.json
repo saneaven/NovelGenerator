@@ -132,13 +132,15 @@
     "saveError": "서버에 설정을 저장하지 못했습니다. 변경 사항은 로컬에 저장되었습니다.",
     "savedSuccessfully": "설정이 저장되었습니다",
     "openNavigation": "탐색 메뉴 열기",
-    "tabs": {
-      "ragSearch": "RAG Search",
-      "agentMemory": "Agent Memory",
-      "profile": "프로필",
-      "language": "언어",
-      "general": "일반",
-      "credentials": "자격 증명",
+	    "tabs": {
+	      "ragSearch": "RAG Search",
+	      "agentMemory": "Agent Memory",
+	      "searchMemory": "검색 & 메모리",
+	      "keywordSearch": "키워드 검색",
+	      "profile": "프로필",
+	      "language": "언어",
+	      "general": "일반",
+	      "credentials": "자격 증명",
       "theme": "테마",
       "imageGen": "이미지 생성",
       "advanced": "고급",
@@ -184,13 +186,19 @@
         "orderedResults": "Search results are returned by relevance (embedding distance)",
         "reindexRequired": "Changing provider/model wipes existing vectors; reindex per project"
       },
-      "loadErrorTitle": "Failed to load RAG profile",
-      "saveValidationError": "Please set provider and model for RAG Search."
-    },
-    "agentMemory": {
-      "title": "Agent Memory",
-      "description": "Configure embedding provider/model and retrieval settings for archived chat memory.",
-      "provider": "Provider",
+	      "loadErrorTitle": "Failed to load RAG profile",
+	      "saveValidationError": "Please set provider and model for RAG Search."
+	    },
+	    "keywordSearch": {
+	      "title": "키워드 검색",
+	      "description": "인덱싱된 chunk를 키워드로 검색합니다 (임베딩 불필요).",
+	      "pageSize": "페이지당 결과 수",
+	      "pageSizeHint": "keyword_search에서 페이지당 반환할 chunk 개수입니다."
+	    },
+	    "agentMemory": {
+	      "title": "Agent Memory",
+	      "description": "Configure embedding provider/model and retrieval settings for archived chat memory.",
+	      "provider": "Provider",
       "providerHint": "Uses the same credentials you set in Settings > Credentials.",
       "model": "Embedding Model",
       "modelPlaceholder": "e.g. text-embedding-3-large",
@@ -505,7 +513,7 @@
         "custom": "자체 OpenAI 호환 엔드포인트 사용"
       },
       "apiFormat": "API 형식",
-      "apiFormatHint": "API 형식 선택 - 각 제공자별 네이티브 SDK 사용",
+      "apiFormatHint": "커스텀 엔드포인트에서 사용할 OpenAI 호환 방언을 선택하세요",
       "aiModel": "AI 모델",
       "browse": "찾아보기",
       "hide": "숨기기",
@@ -571,7 +579,9 @@
         "thinkingLevelGemini3Hint": "Gemini 3 모델의 추론 깊이를 제어합니다.",
         "thinkingBudget25": "사고 예산 (토큰) 2.5용",
         "thinkingBudget25Placeholder": "비활성화하려면 0으로 설정",
-        "thinkingBudget25Hint": "지원되는 경우 사고를 효과적으로 비활성화하려면 0으로 설정하세요."
+        "thinkingBudget25Hint": "지원되는 경우 사고를 효과적으로 비활성화하려면 0으로 설정하세요.",
+        "geminiCompatEffortHint": "추론 노력 또는 아래 Gemini 사고 설정 중 하나만 사용하세요.",
+        "geminiCompatConflictHint": "Gemini 형식에서는 추론 노력과 사고 수준/예산을 함께 설정하면 안 됩니다."
       },
       "tokenizer": "토크나이저",
       "tokenizerHint": "토큰 수 추정에 사용할 토크나이저를 선택하세요",
@@ -1086,8 +1096,8 @@
     "rag": {
       "title": "RAG Index",
       "hint": "Indexes main language only (excludes images/tables/code blocks). Results are ordered by type and chapter order.",
-      "disabled": "RAG Search가 비활성화되어 있습니다. 설정 > RAG Search에서 활성화하세요.",
-      "profileMissing": "Embedding profile is not configured. Set it in Settings > RAG Search.",
+      "disabled": "RAG Search가 비활성화되어 있습니다. 설정 > 검색 & 메모리에서 활성화하세요.",
+      "profileMissing": "Embedding profile is not configured. Set it in Settings > Search & Memory.",
       "statusUnavailable": "RAG status is unavailable.",
       "profile": "Profile:",
       "dimensions": "Dimensions:",

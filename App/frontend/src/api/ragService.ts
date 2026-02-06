@@ -75,6 +75,14 @@ export interface RagSearchResponse {
   results: RagSearchResult[];
 }
 
+export interface RagKeywordSearchResponse {
+  keyword: string;
+  page: number;
+  page_size: number;
+  total: number;
+  results: RagSearchResult[];
+}
+
 export const ragService = {
   async getStatus(projectId: string): Promise<RagProjectStatusResponse> {
     return await apiClient.get<RagProjectStatusResponse>(`/api/v1/projects/${projectId}/rag/status`);
@@ -94,5 +102,12 @@ export const ragService = {
 
   async search(projectId: string, request: RagSearchRequest): Promise<RagSearchResponse> {
     return await apiClient.post<RagSearchResponse>(`/api/v1/projects/${projectId}/rag/search`, request);
+  },
+
+  async keywordSearch(projectId: string, keyword: string, page: number): Promise<RagKeywordSearchResponse> {
+    const params = new URLSearchParams({ keyword, page: String(page) });
+    return await apiClient.get<RagKeywordSearchResponse>(
+      `/api/v1/projects/${projectId}/rag/keyword-search?${params.toString()}`
+    );
   },
 };

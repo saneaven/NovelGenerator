@@ -78,3 +78,11 @@ class RagSearchResult(BaseModel):
 
 class RagSearchResponse(BaseModel):
     results: List[RagSearchResult]
+
+
+class RagKeywordSearchResponse(BaseModel):
+    keyword: str = Field(..., min_length=1)
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=200)
+    total: int = Field(default=0, ge=0)
+    results: List[RagSearchResult]

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useSettings } from '../../store/settingsStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
@@ -61,7 +61,7 @@ const ImageGenerationModal: React.FC<ImageGenerationModalProps> = ({
     assetType = 'object',
 }) => {
     const { currentProjectId } = useProjectStore();
-    const { settings } = useSettingsStore();
+    const settings = useSettings();
     const { objects, getObject } = useUnifiedObjectStore();
 
     const [taskId, setTaskId] = useState<string | null>(null);

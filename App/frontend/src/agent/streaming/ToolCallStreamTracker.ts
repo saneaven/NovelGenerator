@@ -8,6 +8,7 @@ import type {
 type ToolCallDelta = {
   index?: number;
   id?: string;
+  extra_content?: Record<string, unknown>;
   function?: {
     name?: string;
     arguments?: string;
@@ -106,6 +107,13 @@ export class ToolCallStreamTracker {
         state.draft.id = delta.id;
       }
 
+      if (delta.extra_content && typeof delta.extra_content === 'object') {
+        state.draft.extraContent = {
+          ...(state.draft.extraContent ?? {}),
+          ...(delta.extra_content as Record<string, any>),
+        };
+      }
+
       if (delta.function?.name) {
         state.draft.toolName = delta.function.name;
       }
@@ -132,6 +140,7 @@ export class ToolCallStreamTracker {
     return Array.from(this.drafts.values()).map((state) => ({
       id: state.draft.id,
       type: 'function',
+      extra_content: state.draft.extraContent,
       function: {
         name: state.draft.toolName,
         arguments: state.draft.rawArguments,
@@ -167,6 +176,7 @@ export class ToolCallStreamTracker {
           toolName: '',
           rawArguments: '',
           parsedArguments: null,
+          extraContent: undefined,
         },
         status: 'collecting',
         updatedAt: now,

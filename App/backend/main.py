@@ -276,7 +276,7 @@ async def stream_chat(
             }
             # Include tool_calls for assistant messages if present
             if msg.tool_calls:
-                message_dict["tool_calls"] = [tc.model_dump() for tc in msg.tool_calls]
+                message_dict["tool_calls"] = [tc.model_dump(exclude_none=True) for tc in msg.tool_calls]
             # Include tool_results for tool_results role messages
             if msg.tool_results:
                 message_dict["tool_results"] = [tr.model_dump() for tr in msg.tool_results]
