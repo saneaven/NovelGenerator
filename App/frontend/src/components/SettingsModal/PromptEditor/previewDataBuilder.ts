@@ -171,7 +171,7 @@ export function buildModeSpecificData(
     case 'agent':
       modeData = {
         agent: {
-          mode: promptName as 'storyObject' | 'novelEditor',
+          mode: promptName as 'storyObject' | 'novelEditor' | 'outlineManager',
           contextObjectIds: filteredIds.contextObjectIds,
         },
       };
@@ -356,6 +356,42 @@ export function buildPreviewData(options: PreviewDataOptions): TemplateData {
     variables,
     ...modeData,
   };
+
+  // Provide richer agent-memory preview data for Memory Prompt templates
+  if (taskType === 'agent' && promptCategory === 'memoryPrompt' && templateData.agent) {
+    templateData.agent.previousSummaries = [
+      [
+        '- Project: [Placeholder Project]',
+        '- Characters: [Placeholder]',
+        '- Current arc: [Placeholder]',
+      ].join('\n'),
+    ];
+    templateData.agent.relevantChats = [
+      {
+        messageId: '[placeholder-message-id-1]',
+        role: 'user',
+        matched_snippet: 'We decided the protagonist is afraid of water after the incident at the river.',
+        match: { kind: 'content', fieldPath: 'content', chunkIndex: 0 },
+      },
+      {
+        messageId: '[placeholder-message-id-2]',
+        role: 'assistant',
+        matched_snippet: 'Drafted a scene outline for Act 2, Chapter 3 with rising tension and a reveal.',
+        match: { kind: 'content', fieldPath: 'content', chunkIndex: 1 },
+      },
+      {
+        messageId: '[placeholder-message-id-3]',
+        role: 'assistant',
+        matched_snippet: 'Tool call: create_character(name="Ari", role="antagonist")',
+        match: { kind: 'tool_call', fieldPath: 'tool_calls/index/0', chunkIndex: 2 },
+        toolCall: {
+          name: 'create_character',
+          status: 'accepted',
+          result: 'Applied successfully',
+        },
+      },
+    ];
+  }
 
   return templateData;
 }

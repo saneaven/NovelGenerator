@@ -92,7 +92,14 @@ export class PromptManager {
    */
   private static async getTemplate(
     functionType: 'agent' | 'translation' | 'editAssistant' | 'imagePrompt' | 'subAgent',
-    category: 'systemPrompt' | 'prefill' | 'userPrompt' | 'initialUserPrompt' | 'firstUserPrompt' | 'lastUserPrompt',
+    category:
+      | 'systemPrompt'
+      | 'prefill'
+      | 'userPrompt'
+      | 'memoryPrompt'
+      | 'initialUserPrompt'
+      | 'firstUserPrompt'
+      | 'lastUserPrompt',
     name: string
   ): Promise<string | null> {
     const store = useSettingsStore.getState();
@@ -198,8 +205,9 @@ export class PromptManager {
     context: AgentWorkspacePromptContext | AgentNovelEditorPromptContext | AgentOutlineManagerPromptContext,
     mode: 'storyObject' | 'novelEditor' | 'outlineManager'
   ): Promise<PromptBundle> {
-    const [systemTemplate, userTemplate, firstTemplate, lastTemplate, prefillTemplate] = await Promise.all([
+    const [systemTemplate, memoryTemplate, userTemplate, firstTemplate, lastTemplate, prefillTemplate] = await Promise.all([
       this.getTemplate('agent', 'systemPrompt', mode),
+      this.getTemplate('agent', 'memoryPrompt', mode),
       this.getTemplate('agent', 'userPrompt', mode),
       this.getTemplate('agent', 'firstUserPrompt', mode),
       this.getTemplate('agent', 'lastUserPrompt', mode),
@@ -229,6 +237,7 @@ export class PromptManager {
 
     return {
       systemPrompt: renderTemplate(systemTemplate!, templateData),
+      memoryPrompt: renderTemplate(memoryTemplate!, templateData),
       userPrompt: userTemplate!,                     // Default template for user messages
       firstUserPrompt: firstTemplate ?? undefined,   // Optional template for first message
       lastUserPrompt: lastTemplate ?? undefined,     // Optional template for last message
@@ -265,6 +274,7 @@ export class PromptManager {
 
     return {
       systemPrompt: renderTemplate(systemTemplate!, templateData),
+      memoryPrompt: '',
       userPrompt: userTemplate!,
       messageInputKey: 'agentMessage',
       prefill: prefillTemplate && context.enablePrefill
@@ -334,6 +344,7 @@ export class PromptManager {
 
     return {
       systemPrompt: renderTemplate(systemTemplate!, templateData),
+      memoryPrompt: '',
       userPrompt: userTemplate!,  // NOT rendered - will be rendered per-message
       initialUserPrompt: initialTemplate ?? undefined,
       firstUserPrompt: firstTemplate ?? undefined,
@@ -386,6 +397,7 @@ export class PromptManager {
 
     return {
       systemPrompt: renderTemplate(systemTemplate!, templateData),
+      memoryPrompt: '',
       userPrompt: userTemplate!,  // NOT rendered - will be rendered per-message
       initialUserPrompt: initialTemplate ?? undefined,
       firstUserPrompt: firstTemplate ?? undefined,
@@ -426,6 +438,7 @@ export class PromptManager {
 
     return {
       systemPrompt: renderTemplate(systemTemplate!, templateData),
+      memoryPrompt: '',
       userPrompt: renderTemplate(userTemplate!, templateData),
       messageInputKey: 'userMessage',
       prefill: prefillTemplate && context.enablePrefill
@@ -460,6 +473,7 @@ export class PromptManager {
 
     return {
       systemPrompt: renderTemplate(systemTemplate!, templateData),
+      memoryPrompt: '',
       userPrompt: userTemplate!, // NOT rendered - will be rendered per-message
       messageInputKey: 'userMessage',
       templateData,
@@ -497,6 +511,7 @@ export class PromptManager {
 
     return {
       systemPrompt: renderTemplate(systemTemplate!, templateData),
+      memoryPrompt: '',
       userPrompt: userTemplate!,  // NOT rendered - will be rendered per-message
       initialUserPrompt: initialTemplate ?? undefined,
       firstUserPrompt: firstTemplate ?? undefined,
@@ -542,6 +557,7 @@ export class PromptManager {
 
     return {
       systemPrompt: renderTemplate(systemTemplate!, templateData),
+      memoryPrompt: '',
       userPrompt: userTemplate!,  // NOT rendered - will be rendered per-message
       initialUserPrompt: initialTemplate ?? undefined,
       firstUserPrompt: firstTemplate ?? undefined,
@@ -591,6 +607,7 @@ export class PromptManager {
 
     return {
       systemPrompt: renderTemplate(systemTemplate!, templateData),
+      memoryPrompt: '',
       userPrompt: userTemplate!,  // NOT rendered - will be rendered per-message
       initialUserPrompt: initialTemplate ?? undefined,
       firstUserPrompt: firstTemplate ?? undefined,

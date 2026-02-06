@@ -42,6 +42,22 @@ export function buildConversationBlocksWithMeta(
     meta: { kind: 'system' },
   });
 
+  // 1.5. Agent memory prompt (synthetic user message)
+  const agentMemory = promptBundle.templateData.agent;
+  const hasMemory = Boolean(
+    agentMemory &&
+      ((agentMemory.previousSummaries?.length ?? 0) > 0 || (agentMemory.relevantChats?.length ?? 0) > 0)
+  );
+  if (hasMemory && promptBundle.memoryPrompt.trim()) {
+    messages.push({
+      block: {
+        role: 'user',
+        contentParts: [{ type: 'content', text: promptBundle.memoryPrompt }],
+      },
+      meta: { kind: 'user' },
+    });
+  }
+
   // 2. Count assistant messages to determine which ones should include tool calls / thinking
   const assistantIndices: number[] = [];
   for (let i = 0; i < history.length; i++) {

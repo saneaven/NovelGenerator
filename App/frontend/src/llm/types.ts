@@ -450,6 +450,8 @@ export interface LLMTaskCallbacks {
  */
 export interface PromptBundle {
   systemPrompt: string;
+  /** Synthetic user message inserted after system prompt when agent memory is available. */
+  memoryPrompt: string;
   userPrompt: string;              // Default template for middle user messages in multi-turn
   initialUserPrompt?: string;      // Template for single user message case (rich context)
   firstUserPrompt?: string;        // Template for first user message in multi-turn

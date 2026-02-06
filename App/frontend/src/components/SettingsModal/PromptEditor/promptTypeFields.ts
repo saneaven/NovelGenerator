@@ -15,7 +15,7 @@ export interface PromptTypeField {
 
 // Agent prompts
 const AGENT_FIELDS: PromptTypeField[] = [
-  { path: 'agent.mode', label: 'Mode', type: 'dropdown', options: ['storyObject', 'novelEditor'] },
+  { path: 'agent.mode', label: 'Mode', type: 'dropdown', options: ['storyObject', 'novelEditor', 'outlineManager'] },
 ];
 
 // Edit Assistant prompts

@@ -38,18 +38,21 @@ def _load_prompt_file(relative_path: str) -> str:
 # Load all prompts from files
 # Agent - Story Object
 _STORYOBJECT_SYSTEM_PROMPT = _load_prompt_file('agent/storyObject/systemPrompt.md')
+_STORYOBJECT_MEMORY_PROMPT = _load_prompt_file('agent/storyObject/memoryPrompt.md')
 _STORYOBJECT_USER_PROMPT = _load_prompt_file('agent/storyObject/userPrompt.md')
 _STORYOBJECT_FIRST_USER_PROMPT = _load_prompt_file('agent/storyObject/firstUserPrompt.md')
 _STORYOBJECT_LAST_USER_PROMPT = _load_prompt_file('agent/storyObject/lastUserPrompt.md')
 _STORYOBJECT_PREFILL = _load_prompt_file('agent/storyObject/prefill.md')
 # Agent - Novel Editor
 _NOVEL_EDITOR_SYSTEM_PROMPT = _load_prompt_file('agent/novelEditor/systemPrompt.md')
+_NOVEL_EDITOR_MEMORY_PROMPT = _load_prompt_file('agent/novelEditor/memoryPrompt.md')
 _NOVEL_EDITOR_USER_PROMPT = _load_prompt_file('agent/novelEditor/userPrompt.md')
 _NOVEL_EDITOR_FIRST_USER_PROMPT = _load_prompt_file('agent/novelEditor/firstUserPrompt.md')
 _NOVEL_EDITOR_LAST_USER_PROMPT = _load_prompt_file('agent/novelEditor/lastUserPrompt.md')
 _NOVEL_EDITOR_PREFILL = _load_prompt_file('agent/novelEditor/prefill.md')
 # Agent - Outline Manager
 _OUTLINE_MANAGER_SYSTEM_PROMPT = _load_prompt_file('agent/outlineManager/systemPrompt.md')
+_OUTLINE_MANAGER_MEMORY_PROMPT = _load_prompt_file('agent/outlineManager/memoryPrompt.md')
 _OUTLINE_MANAGER_USER_PROMPT = _load_prompt_file('agent/outlineManager/userPrompt.md')
 _OUTLINE_MANAGER_FIRST_USER_PROMPT = _load_prompt_file('agent/outlineManager/firstUserPrompt.md')
 _OUTLINE_MANAGER_LAST_USER_PROMPT = _load_prompt_file('agent/outlineManager/lastUserPrompt.md')
@@ -113,6 +116,11 @@ DEFAULT_PROMPTS = {
             'novelEditor': _NOVEL_EDITOR_SYSTEM_PROMPT,
             'outlineManager': _OUTLINE_MANAGER_SYSTEM_PROMPT,
             'memorySummary': _MEMORY_SUMMARY_SYSTEM_PROMPT,
+        },
+        'memoryPrompt': {
+            'storyObject': _STORYOBJECT_MEMORY_PROMPT,
+            'novelEditor': _NOVEL_EDITOR_MEMORY_PROMPT,
+            'outlineManager': _OUTLINE_MANAGER_MEMORY_PROMPT,
         },
         'userPrompt': {
             'storyObject': _STORYOBJECT_USER_PROMPT,

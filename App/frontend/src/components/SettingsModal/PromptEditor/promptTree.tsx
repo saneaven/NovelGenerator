@@ -51,6 +51,15 @@ export const PROMPT_TREE: PromptNode[] = [
             description: 'Main AI behavior for Story Object conversations'
           },
           {
+            id: 'agent-storyobject-memory',
+            label: 'Memory Prompt',
+            type: 'prompt',
+            taskType: 'agent',
+            category: 'memoryPrompt',
+            name: 'storyObject',
+            description: 'Injected memory context (summary + relevant chats) as a synthetic user message'
+          },
+          {
             id: 'agent-storyobject-user',
             label: 'User Prompt',
             type: 'prompt',
@@ -103,6 +112,15 @@ export const PROMPT_TREE: PromptNode[] = [
             description: 'Main AI behavior for Novel Editor conversations'
           },
           {
+            id: 'agent-noveleditor-memory',
+            label: 'Memory Prompt',
+            type: 'prompt',
+            taskType: 'agent',
+            category: 'memoryPrompt',
+            name: 'novelEditor',
+            description: 'Injected memory context (summary + relevant chats) as a synthetic user message'
+          },
+          {
             id: 'agent-noveleditor-user',
             label: 'User Prompt',
             type: 'prompt',
@@ -153,6 +171,15 @@ export const PROMPT_TREE: PromptNode[] = [
             category: 'systemPrompt',
             name: 'outlineManager',
             description: 'Main AI behavior for Outline Manager conversations'
+          },
+          {
+            id: 'agent-outlinemanager-memory',
+            label: 'Memory Prompt',
+            type: 'prompt',
+            taskType: 'agent',
+            category: 'memoryPrompt',
+            name: 'outlineManager',
+            description: 'Injected memory context (summary + relevant chats) as a synthetic user message'
           },
           {
             id: 'agent-outlinemanager-user',

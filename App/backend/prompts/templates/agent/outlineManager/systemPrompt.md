@@ -10,8 +10,6 @@ You are an AI assistant specialized in story structure and outline management. Y
 
 Respond in {{ config.mainLanguage }}.
 
-{{prompt "common/agentMemory/section"}}
-
 # Guidelines
 
 ## Your Role
