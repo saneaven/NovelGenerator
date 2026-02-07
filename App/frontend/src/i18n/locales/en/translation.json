@@ -58,7 +58,15 @@
     },
     "translation": {
       "title": "Multi-language Support",
-      "description": "Have your agent write in another language to naturally infuse cultural nuances into your project. Then translate it into your own language for comfortable reading — all within the same workspace."
+      "description": "Have your agent write in another language to naturally infuse cultural nuances into your project. Then translate it into your own language for comfortable reading — all within the same workspace.",
+      "anim": {
+        "sourceText": "月明かりが古い図書館の窓から差し込み、埃っぽい本棚に長い影を落としていた。エレノアは静かに通路を歩きながら、指先で革の背表紙をなぞった。",
+        "sourceLang": "ja",
+        "targetText": "Moonlight streamed through the old library windows, casting long shadows across the dusty shelves. Eleanor walked quietly down the aisle, her fingertips tracing the leather spines as she passed.",
+        "sourceCode": "JA",
+        "targetCode": "EN",
+        "buttonLabel": "Translate to English"
+      }
     },
     "promptEditor": {
       "title": "Prompt Editor",
@@ -364,6 +372,10 @@
         "summary": {
           "label": "Summary",
           "description": "Background summarization (used by long-term memory and other summary tasks)"
+        },
+        "subAgent": {
+          "label": "Sub Agents",
+          "description": "Default model configuration for Sub Agent tool calls"
         }
       },
       "validation": {
@@ -743,7 +755,10 @@
         "toolFilterPlaceholder": "Filter tools…",
         "toolIdHint": "Used to generate tool name: call_{id}. Lowercase letters, numbers, and underscores only. 1–50 chars.",
         "returnResultAlwaysAvailable": "Note: return_sub_agent_result is always available and does not need to be enabled here.",
-        "llmConfig": "LLM Config"
+        "llmConfig": "LLM Config",
+        "useCustomLlmConfig": "Override global Sub Agents config",
+        "useCustomLlmConfigHint": "When disabled, this Sub Agent inherits Settings > General > Sub Agents.",
+        "globalLlmConfigSummary": "Inheriting global: {{provider}} / {{model}} (temp {{temperature}})"
       },
       "subAgentModes": {
         "planMode": "Plan Mode",

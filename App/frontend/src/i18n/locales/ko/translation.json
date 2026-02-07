@@ -58,7 +58,15 @@
     },
     "translation": {
       "title": "다국어 지원",
-      "description": "에이전트에게 다른 나라의 언어를 사용하게 하여 자연스럽게 그 나라의 문화가 프로젝트에 묻어나게 할 수 있습니다. 그리고 자신의 언어로 번역하여 편하게 읽을 수 있습니다."
+      "description": "에이전트에게 다른 나라의 언어를 사용하게 하여 자연스럽게 그 나라의 문화가 프로젝트에 묻어나게 할 수 있습니다. 그리고 자신의 언어로 번역하여 편하게 읽을 수 있습니다.",
+      "anim": {
+        "sourceText": "Moonlight streamed through the old library windows, casting long shadows across the dusty shelves. Eleanor walked quietly down the aisle, her fingertips tracing the leather spines as she passed.",
+        "sourceLang": "en",
+        "targetText": "달빛이 오래된 도서관 창문 사이로 스며들어, 먼지 쌓인 책장 위에 긴 그림자를 드리우고 있었다. 엘레노어는 조용히 통로를 걸으며, 손끝으로 가죽 책등을 더듬었다.",
+        "sourceCode": "EN",
+        "targetCode": "KO",
+        "buttonLabel": "한국어로 번역"
+      }
     },
     "promptEditor": {
       "title": "프롬프트 에디터",
@@ -364,6 +372,10 @@
         "summary": {
           "label": "요약",
           "description": "백그라운드 요약(장기 기억 등 요약 작업에 사용)"
+        },
+        "subAgent": {
+          "label": "서브 에이전트",
+          "description": "서브 에이전트 tool call에 사용할 기본 모델 설정"
         }
       },
       "validation": {
@@ -743,7 +755,10 @@
         "toolFilterPlaceholder": "툴 필터…",
         "toolIdHint": "툴 이름은 call_{id}로 생성됩니다. 소문자 영문/숫자/언더스코어(_)만 사용(1~50자).",
         "returnResultAlwaysAvailable": "참고: return_sub_agent_result는 항상 사용 가능하며 여기에서 활성화할 필요가 없습니다.",
-        "llmConfig": "LLM 설정"
+        "llmConfig": "LLM 설정",
+        "useCustomLlmConfig": "전역 서브 에이전트 설정 덮어쓰기",
+        "useCustomLlmConfigHint": "비활성화하면 Settings > General > Sub Agents의 전역 설정을 상속합니다.",
+        "globalLlmConfigSummary": "전역 설정 사용 중: {{provider}} / {{model}} (온도 {{temperature}})"
       },
       "subAgentModes": {
         "planMode": "플랜 모드",

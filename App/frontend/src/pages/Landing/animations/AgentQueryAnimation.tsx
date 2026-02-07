@@ -1,5 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { motion, useAnimate, AnimatePresence } from 'motion/react';
+import React, { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { TypingText } from './TypingText';
+import { Search, People, Lightning, Document } from '../../../components/icons';
 import './LandingAnimations.css';
 
 interface AgentQueryAnimationProps {
@@ -8,113 +10,71 @@ interface AgentQueryAnimationProps {
 
 const SPRING = { type: 'spring' as const, stiffness: 400, damping: 30 };
 
+const USER_MSG = 'What conflicts exist between Eleanor and the Council?';
+
 const SEARCH_ITEMS = [
-  { icon: '👤', label: 'Eleanor Voss — Character Profile' },
-  { icon: '⚔️', label: 'Council Confrontation — Event' },
-  { icon: '📝', label: 'Chapter 2: The Tribunal — Scene' },
+  { icon: <People size="sm" />, label: 'Eleanor Voss — Character Profile' },
+  { icon: <Lightning size="sm" />, label: 'Council Confrontation — Event' },
+  { icon: <Document size="sm" />, label: 'Chapter 2: The Tribunal — Scene' },
 ];
 
 const REFERENCE_CHIPS = ['Ch.2', 'Eleanor', 'Council'];
 
-export const AgentQueryAnimation: React.FC<AgentQueryAnimationProps> = ({ isActive }) => {
-  const [scope, animate] = useAnimate();
-  const hasPlayed = useRef(false);
-  const abortRef = useRef<AbortController | null>(null);
-  const [showSearch, setShowSearch] = useState(false);
-  const [highlightIndex, setHighlightIndex] = useState(-1);
+const ANSWER =
+  "Eleanor's primary conflict with the Council stems from her refusal to surrender the Archive's forbidden texts. In Chapter 2, the Tribunal demanded she relinquish access, but she invoked the Keeper's Oath — an ancient clause the Council had long forgotten.";
+
+type Phase = 'userTyping' | 'searching' | 'scan0' | 'scan1' | 'scan2' | 'refs' | 'answerTyping' | 'done';
+
+const AgentQueryContent: React.FC = () => {
+  const [phase, setPhase] = useState<Phase>('userTyping');
 
   useEffect(() => {
-    if (!isActive) {
-      hasPlayed.current = false;
-      abortRef.current?.abort();
-      abortRef.current = null;
-      setShowSearch(false);
-      setHighlightIndex(-1);
-      return;
+    let t: ReturnType<typeof setTimeout>;
+    switch (phase) {
+      case 'searching':
+        t = setTimeout(() => setPhase('scan0'), 300);
+        break;
+      case 'scan0':
+        t = setTimeout(() => setPhase('scan1'), 400);
+        break;
+      case 'scan1':
+        t = setTimeout(() => setPhase('scan2'), 400);
+        break;
+      case 'scan2':
+        t = setTimeout(() => setPhase('refs'), 500);
+        break;
+      case 'refs':
+        t = setTimeout(() => setPhase('answerTyping'), 600);
+        break;
+      default:
+        return;
     }
+    return () => clearTimeout(t);
+  }, [phase]);
 
-    if (hasPlayed.current) return;
-    hasPlayed.current = true;
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    const delay = (ms: number) =>
-      new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(resolve, ms);
-        controller.signal.addEventListener('abort', () => {
-          clearTimeout(timer);
-          reject(new DOMException('Aborted', 'AbortError'));
-        });
-      });
-
-    const run = async () => {
-      try {
-        // 1. User bubble slides in
-        await animate(
-          '[data-anim="user-bubble"]',
-          { opacity: 1, x: 0 },
-          { duration: 0.4, ...SPRING, signal: controller.signal }
-        );
-
-        // 2. Show search panel
-        setShowSearch(true);
-        await delay(300);
-
-        // 3. Highlight items one by one (scanning effect)
-        for (let i = 0; i < SEARCH_ITEMS.length; i++) {
-          setHighlightIndex(i);
-          await delay(400);
-        }
-        setHighlightIndex(-1);
-        await delay(200);
-
-        // 4. Hide search panel
-        setShowSearch(false);
-        await delay(300);
-
-        // 5. Reference chips slide in
-        for (let i = 0; i < REFERENCE_CHIPS.length; i++) {
-          await animate(
-            `[data-anim="ref-${i}"]`,
-            { opacity: 1, x: 0 },
-            { duration: 0.2, ...SPRING, signal: controller.signal }
-          );
-        }
-
-        // 6. Assistant bubble appears
-        await animate(
-          '[data-anim="assistant-bubble"]',
-          { opacity: 1, y: 0 },
-          { duration: 0.3, ...SPRING, signal: controller.signal }
-        );
-      } catch {
-        // Animation aborted
-      }
-    };
-
-    run();
-
-    return () => {
-      controller.abort();
-    };
-  }, [isActive, animate]);
+  const showSearch =
+    phase === 'searching' || phase === 'scan0' || phase === 'scan1' || phase === 'scan2';
+  const highlightIndex =
+    phase === 'scan0' ? 0 : phase === 'scan1' ? 1 : phase === 'scan2' ? 2 : -1;
+  const showRefs =
+    phase === 'refs' || phase === 'answerTyping' || phase === 'done';
+  const showAnswer = phase === 'answerTyping' || phase === 'done';
 
   return (
-    <motion.div
-      ref={scope}
-      className="landing-anim-frame"
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={isActive ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.98 }}
-      transition={{ duration: 0.4 }}
-    >
+    <>
       {/* User message */}
       <motion.div
-        data-anim="user-bubble"
         className="landing-anim-bubble landing-anim-bubble--user"
         initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.3, ...SPRING }}
       >
-        What conflicts exist between Eleanor and the Council?
+        <TypingText
+          text={USER_MSG}
+          active
+          speed={22}
+          onComplete={() => setPhase('searching')}
+        />
       </motion.div>
 
       {/* Search panel */}
@@ -128,7 +88,7 @@ export const AgentQueryAnimation: React.FC<AgentQueryAnimationProps> = ({ isActi
             transition={{ duration: 0.25 }}
           >
             <div className="landing-anim-search-header">
-              🔍 Searching story database...
+              <Search size="sm" /> Searching story database...
             </div>
             {SEARCH_ITEMS.map((item, i) => (
               <div
@@ -144,30 +104,53 @@ export const AgentQueryAnimation: React.FC<AgentQueryAnimationProps> = ({ isActi
       </AnimatePresence>
 
       {/* Reference chips */}
-      <div className="landing-anim-chips">
-        {REFERENCE_CHIPS.map((chip, i) => (
-          <motion.span
-            key={chip}
-            data-anim={`ref-${i}`}
-            className="landing-anim-ref-badge"
-            initial={{ opacity: 0, x: -8 }}
-          >
-            {chip}
-          </motion.span>
-        ))}
-      </div>
+      {showRefs && (
+        <div className="landing-anim-chips">
+          {REFERENCE_CHIPS.map((chip, i) => (
+            <motion.span
+              key={chip}
+              className="landing-anim-ref-badge"
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.1, duration: 0.2, ...SPRING }}
+            >
+              {chip}
+            </motion.span>
+          ))}
+        </div>
+      )}
 
-      {/* Assistant bubble */}
-      <motion.div
-        data-anim="assistant-bubble"
-        className="landing-anim-bubble landing-anim-bubble--assistant"
-        initial={{ opacity: 0, y: 12 }}
-      >
-        Eleanor's primary conflict with the Council stems from her refusal to surrender the Archive's forbidden texts.
-        In <span className="landing-anim-ref-badge">Ch.2</span>, the Tribunal demanded she relinquish access, but she
-        invoked the Keeper's Oath — an ancient clause the <span className="landing-anim-ref-badge">Council</span> had
-        long forgotten.
-      </motion.div>
+      {/* Assistant answer */}
+      {showAnswer && (
+        <motion.div
+          className="landing-anim-bubble landing-anim-bubble--assistant"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ...SPRING }}
+          onAnimationComplete={() => setPhase('done')}
+        >
+          {ANSWER}
+        </motion.div>
+      )}
+    </>
+  );
+};
+
+export const AgentQueryAnimation: React.FC<AgentQueryAnimationProps> = ({ isActive }) => {
+  const [playKey, setPlayKey] = useState(0);
+
+  useEffect(() => {
+    if (isActive) setPlayKey((k) => k + 1);
+  }, [isActive]);
+
+  return (
+    <motion.div
+      className="landing-anim-frame"
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={isActive ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.98 }}
+      transition={{ duration: 0.4 }}
+    >
+      {isActive && <AgentQueryContent key={playKey} />}
     </motion.div>
   );
 };

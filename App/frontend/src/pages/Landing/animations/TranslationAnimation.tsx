@@ -1,5 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { motion, useAnimate, AnimatePresence } from 'motion/react';
+import React, { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { useTranslation } from 'react-i18next';
+import { Globe, ArrowRight } from '../../../components/icons';
 import './LandingAnimations.css';
 
 interface TranslationAnimationProps {
@@ -8,163 +10,97 @@ interface TranslationAnimationProps {
 
 const SPRING = { type: 'spring' as const, stiffness: 400, damping: 30 };
 
-const JAPANESE_TEXT =
-  '月明かりが古い図書館の窓から差し込み、埃っぽい本棚に長い影を落としていた。エレノアは静かに通路を歩きながら、指先で革の背表紙をなぞった。';
+type Phase = 'source' | 'action' | 'click' | 'thinking' | 'target' | 'badge' | 'done';
 
-const ENGLISH_TEXT =
-  'Moonlight streamed through the old library windows, casting long shadows across the dusty shelves. Eleanor walked quietly down the aisle, her fingertips tracing the leather spines as she passed.';
+const TranslationContent: React.FC = () => {
+  const { t } = useTranslation();
+  const [phase, setPhase] = useState<Phase>('source');
 
-export const TranslationAnimation: React.FC<TranslationAnimationProps> = ({ isActive }) => {
-  const [scope, animate] = useAnimate();
-  const hasPlayed = useRef(false);
-  const abortRef = useRef<AbortController | null>(null);
-  const [showTranslation, setShowTranslation] = useState(false);
-  const [showBadge, setShowBadge] = useState(false);
+  const sourceText = t('landing.translation.anim.sourceText');
+  const sourceLang = t('landing.translation.anim.sourceLang');
+  const targetText = t('landing.translation.anim.targetText');
+  const sourceCode = t('landing.translation.anim.sourceCode');
+  const targetCode = t('landing.translation.anim.targetCode');
+  const buttonLabel = t('landing.translation.anim.buttonLabel');
 
   useEffect(() => {
-    if (!isActive) {
-      hasPlayed.current = false;
-      abortRef.current?.abort();
-      abortRef.current = null;
-      setShowTranslation(false);
-      setShowBadge(false);
-      return;
+    let timer: ReturnType<typeof setTimeout>;
+    switch (phase) {
+      case 'action':
+        timer = setTimeout(() => setPhase('click'), 500);
+        break;
+      case 'click':
+        timer = setTimeout(() => setPhase('thinking'), 200);
+        break;
+      case 'thinking':
+        timer = setTimeout(() => setPhase('target'), 700);
+        break;
+      default:
+        return;
     }
+    return () => clearTimeout(timer);
+  }, [phase]);
 
-    if (hasPlayed.current) return;
-    hasPlayed.current = true;
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    const delay = (ms: number) =>
-      new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(resolve, ms);
-        controller.signal.addEventListener('abort', () => {
-          clearTimeout(timer);
-          reject(new DOMException('Aborted', 'AbortError'));
-        });
-      });
-
-    const run = async () => {
-      try {
-        // 1. Japanese bubble slides in
-        await animate(
-          '[data-anim="ja-bubble"]',
-          { opacity: 1, y: 0 },
-          { duration: 0.4, ...SPRING, signal: controller.signal }
-        );
-
-        // 2. Action bar fades in
-        await animate(
-          '[data-anim="action-bar"]',
-          { opacity: 1 },
-          { duration: 0.3, signal: controller.signal }
-        );
-
-        // 3. Globe button pulses (simulated click)
-        await delay(400);
-        await animate(
-          '[data-anim="globe-btn"]',
-          { scale: 0.92 },
-          { duration: 0.1, signal: controller.signal }
-        );
-        await animate(
-          '[data-anim="globe-btn"]',
-          { scale: 1 },
-          { duration: 0.15, ...SPRING, signal: controller.signal }
-        );
-
-        // 4. Typing indicator
-        await animate(
-          '[data-anim="typing"]',
-          { opacity: 1 },
-          { duration: 0.2, signal: controller.signal }
-        );
-        await delay(600);
-        await animate(
-          '[data-anim="typing"]',
-          { opacity: 0 },
-          { duration: 0.15, signal: controller.signal }
-        );
-
-        // 5. Translation appears
-        setShowTranslation(true);
-        await delay(400);
-
-        // 6. Language badge
-        setShowBadge(true);
-      } catch {
-        // Animation aborted
-      }
-    };
-
-    run();
-
-    return () => {
-      controller.abort();
-    };
-  }, [isActive, animate]);
+  const showAction = phase !== 'source';
+  const showTyping = phase === 'thinking';
+  const showTarget = phase === 'target' || phase === 'badge' || phase === 'done';
+  const showBadge = phase === 'badge' || phase === 'done';
 
   return (
-    <motion.div
-      ref={scope}
-      className="landing-anim-frame"
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={isActive ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.98 }}
-      transition={{ duration: 0.4 }}
-    >
-      {/* Japanese text bubble */}
+    <>
+      {/* Source text bubble */}
       <motion.div
-        data-anim="ja-bubble"
         className="landing-anim-bubble landing-anim-bubble--assistant"
         initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ...SPRING }}
+        onAnimationComplete={() => setPhase('action')}
       >
-        <div className="landing-anim-prose" lang="ja">
-          {JAPANESE_TEXT}
-        </div>
+        <span className="landing-anim-prose" lang={sourceLang}>{sourceText}</span>
       </motion.div>
 
       {/* Action bar */}
-      <motion.div
-        data-anim="action-bar"
-        className="landing-anim-action-bar"
-        initial={{ opacity: 0 }}
-      >
-        <motion.button
-          data-anim="globe-btn"
-          className="landing-anim-action-btn"
-          type="button"
-          tabIndex={-1}
-          initial={{ scale: 1 }}
+      {showAction && (
+        <motion.div
+          className="landing-anim-action-bar"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
         >
-          🌐 Translate to English
-        </motion.button>
-      </motion.div>
+          <motion.button
+            className="landing-anim-action-btn"
+            type="button"
+            tabIndex={-1}
+            animate={phase === 'click' ? { scale: [1, 0.92, 1] } : {}}
+            transition={{ duration: 0.25 }}
+          >
+            <Globe size="sm" /> {buttonLabel}
+          </motion.button>
+        </motion.div>
+      )}
 
       {/* Typing indicator */}
       <motion.div
-        data-anim="typing"
         className="landing-anim-typing"
-        initial={{ opacity: 0 }}
+        animate={{ opacity: showTyping ? 1 : 0 }}
+        transition={{ duration: 0.15 }}
       >
         <div className="landing-anim-typing-track">
           <div className="landing-anim-typing-bar" />
         </div>
       </motion.div>
 
-      {/* Translation result */}
+      {/* Target translation */}
       <AnimatePresence>
-        {showTranslation && (
+        {showTarget && (
           <motion.div
             className="landing-anim-bubble landing-anim-bubble--assistant"
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, ...SPRING }}
+            transition={{ duration: 0.4, ...SPRING }}
+            onAnimationComplete={() => setPhase('badge')}
           >
-            <div className="landing-anim-prose">
-              {ENGLISH_TEXT}
-            </div>
+            <span className="landing-anim-prose">{targetText}</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -178,10 +114,29 @@ export const TranslationAnimation: React.FC<TranslationAnimationProps> = ({ isAc
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2, ...SPRING }}
           >
-            JA → EN
+            {sourceCode} <ArrowRight size="xs" /> {targetCode}
           </motion.div>
         )}
       </AnimatePresence>
+    </>
+  );
+};
+
+export const TranslationAnimation: React.FC<TranslationAnimationProps> = ({ isActive }) => {
+  const [playKey, setPlayKey] = useState(0);
+
+  useEffect(() => {
+    if (isActive) setPlayKey((k) => k + 1);
+  }, [isActive]);
+
+  return (
+    <motion.div
+      className="landing-anim-frame"
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={isActive ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.98 }}
+      transition={{ duration: 0.4 }}
+    >
+      {isActive && <TranslationContent key={playKey} />}
     </motion.div>
   );
 };
