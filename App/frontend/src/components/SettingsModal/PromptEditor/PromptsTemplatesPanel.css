@@ -3,13 +3,16 @@
 .prompts-templates-panel {
     display: flex;
     flex-direction: column;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .prompts-layout__content {
     display: flex;
     flex: 1;
-    min-height: 400px;
+    min-height: 0;
+    overflow: hidden;
 }
 
 /* Panel Split Layout */

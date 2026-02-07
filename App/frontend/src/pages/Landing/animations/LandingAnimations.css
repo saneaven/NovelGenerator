@@ -1,0 +1,401 @@
+/* ===== Shared Frame (mini agent panel) ===== */
+.landing-anim-frame {
+  width: 100%;
+  max-height: 400px;
+  background: var(--color-surface-base);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-xl);
+  box-shadow: var(--shadow-md);
+  padding: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  overflow: hidden;
+  color: var(--color-text-primary);
+}
+
+/* ===== Mock Chat Bubbles (matching AgentMessages.css) ===== */
+.landing-anim-bubble {
+  padding: var(--spacing-md) var(--spacing-lg);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  word-wrap: break-word;
+}
+
+.landing-anim-bubble--user {
+  background: var(--color-surface-subtle);
+  color: var(--color-text-primary);
+  border-radius: var(--border-radius-xl) var(--border-radius-xl) var(--border-radius-sm) var(--border-radius-xl);
+  box-shadow: var(--shadow-sm);
+  align-self: flex-end;
+  max-width: 85%;
+}
+
+.landing-anim-bubble--assistant {
+  background: var(--color-surface-elevated);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-sm);
+  width: 100%;
+}
+
+/* ===== Typing Indicator ===== */
+.landing-anim-typing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin: var(--spacing-xs) 0;
+}
+
+.landing-anim-typing-track {
+  width: 95%;
+  height: 3px;
+  background: var(--color-surface-muted);
+  border-radius: var(--border-radius-full);
+  position: relative;
+  overflow: hidden;
+}
+
+.landing-anim-typing-bar {
+  position: absolute;
+  width: 40%;
+  height: 100%;
+  background: var(--color-text-tertiary);
+  border-radius: var(--border-radius-full);
+  animation: landing-anim-slide 2s ease-in-out infinite;
+}
+
+@keyframes landing-anim-slide {
+  0% { left: 0; }
+  50% { left: 60%; }
+  100% { left: 0; }
+}
+
+/* ===== Mock Avatar ===== */
+.landing-anim-avatar {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: var(--gradient-accent);
+  color: var(--color-text-inverse);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ===== Context Chips ===== */
+.landing-anim-chips {
+  display: flex;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+}
+
+.landing-anim-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+/* ===== Reference Badge (inline) ===== */
+.landing-anim-ref-badge {
+  display: inline;
+  padding: 0.1em 0.4em;
+  background: var(--color-primary-100);
+  color: var(--color-primary-700);
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ===== Prose (serif for novel content) ===== */
+.landing-anim-prose {
+  font-family: var(--font-family-content);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text-primary);
+}
+
+/* ===== Mock Code Editor ===== */
+.landing-anim-editor {
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-md);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text-secondary);
+}
+
+/* ===== Character Card ===== */
+.landing-anim-char-card {
+  display: flex;
+  gap: var(--spacing-md);
+  align-items: flex-start;
+  padding: var(--spacing-md);
+  background: var(--color-surface-base);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-lg);
+}
+
+.landing-anim-char-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.landing-anim-char-name {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+
+.landing-anim-char-role {
+  display: inline-block;
+  padding: 0.1em 0.5em;
+  background: var(--color-primary-100);
+  color: var(--color-primary-700);
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  width: fit-content;
+}
+
+.landing-anim-char-desc {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-normal);
+}
+
+/* ===== Search Panel ===== */
+.landing-anim-search {
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+}
+
+.landing-anim-search-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding-bottom: var(--spacing-xs);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.landing-anim-search-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  color: var(--color-text-secondary);
+  border-radius: var(--border-radius-sm);
+  transition: background-color 200ms ease;
+}
+
+.landing-anim-search-item--highlight {
+  background: var(--color-primary-100);
+}
+
+/* ===== Action Bar ===== */
+.landing-anim-action-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.landing-anim-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-border-default);
+  background: var(--color-surface-base);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  cursor: default;
+}
+
+/* ===== Language Badge ===== */
+.landing-anim-lang-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ===== Divider ===== */
+.landing-anim-divider {
+  width: 100%;
+  height: 1px;
+  background: var(--color-border-default);
+  margin: var(--spacing-xs) 0;
+}
+
+/* ===== Blinking Cursor ===== */
+.landing-anim-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--color-text-primary);
+  animation: landing-anim-blink 1s step-end infinite;
+  vertical-align: text-bottom;
+}
+
+@keyframes landing-anim-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ================================================================
+   INVERSE TONE — dark section backgrounds
+   Scoped via parent .landing-section[data-tone="inverse"]
+   ================================================================ */
+
+.landing-section[data-tone="inverse"] .landing-anim-frame {
+  background: var(--color-surface-inverse);
+  border-color: var(--color-border-contrast-soft);
+  color: var(--color-text-inverse);
+  box-shadow: var(--shadow-lg);
+}
+
+.landing-section[data-tone="inverse"] .landing-anim-bubble--user {
+  background: var(--color-surface-inverse-muted);
+  color: var(--color-text-inverse);
+}
+
+.landing-section[data-tone="inverse"] .landing-anim-bubble--assistant {
+  background: var(--color-surface-inverse-elevated);
+}
+
+.landing-section[data-tone="inverse"] .landing-anim-typing-track {
+  background: var(--color-surface-inverse-muted);
+}
+
+.landing-section[data-tone="inverse"] .landing-anim-typing-bar {
+  background: var(--color-text-inverse-tertiary);
+}
+
+.landing-section[data-tone="inverse"] .landing-anim-chip {
+  background: var(--color-surface-inverse-elevated);
+  border-color: var(--color-border-contrast-soft);
+  color: var(--color-text-inverse-secondary);
+}
+
+.landing-section[data-tone="inverse"] .landing-anim-ref-badge {
+  background: var(--color-primary-800);
+  color: var(--color-primary-200);
+}
+
+.landing-section[data-tone="inverse"] .landing-anim-prose {
+  color: var(--color-text-inverse);
+}
+
+.landing-section[data-tone="inverse"] .landing-anim-editor {
+  background: var(--color-surface-inverse-elevated);
+  border-color: var(--color-border-contrast-soft);
+  color: var(--color-text-inverse-secondary);
+}
+
+.landing-section[data-tone="inverse"] .landing-anim-char-card {
+  background: var(--color-surface-inverse);
+  border-color: var(--color-border-contrast-soft);
+}
+
+.landing-section[data-tone="inverse"] .landing-anim-char-name {
+  color: var(--color-text-inverse);
+}
+
+.landing-section[data-tone="inverse"] .landing-anim-char-role {
+  background: var(--color-primary-800);
+  color: var(--color-primary-200);
+}
+
+.landing-section[data-tone="inverse"] .landing-anim-char-desc {
+  color: var(--color-text-inverse-secondary);
+}
+
+.landing-section[data-tone="inverse"] .landing-anim-search {
+  background: var(--color-surface-inverse-elevated);
+  border-color: var(--color-border-contrast-soft);
+}
+
+.landing-section[data-tone="inverse"] .landing-anim-search-header {
+  color: var(--color-text-inverse-muted);
+}
+
+.landing-section[data-tone="inverse"] .landing-anim-search-item {
+  color: var(--color-text-inverse-secondary);
+}
+
+.landing-section[data-tone="inverse"] .landing-anim-search-item--highlight {
+  background: var(--color-primary-800);
+}
+
+.landing-section[data-tone="inverse"] .landing-anim-action-btn {
+  background: var(--color-surface-inverse);
+  border-color: var(--color-border-contrast-soft);
+  color: var(--color-text-inverse-secondary);
+}
+
+.landing-section[data-tone="inverse"] .landing-anim-lang-badge {
+  background: var(--color-surface-inverse-elevated);
+  border-color: var(--color-border-contrast-soft);
+  color: var(--color-text-inverse-secondary);
+}
+
+.landing-section[data-tone="inverse"] .landing-anim-cursor {
+  background: var(--color-text-inverse);
+}
+
+/* ===== Mobile Responsive ===== */
+@media (max-width: 768px) {
+  .landing-anim-frame {
+    max-height: 320px;
+  }
+
+  .landing-anim-bubble {
+    font-size: var(--font-size-xs);
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  .landing-anim-avatar {
+    width: 2rem;
+    height: 2rem;
+  }
+}
+
+/* ===== Reduced Motion ===== */
+@media (prefers-reduced-motion: reduce) {
+  .landing-anim-typing-bar {
+    animation: none;
+    left: 30%;
+  }
+
+  .landing-anim-cursor {
+    animation: none;
+    opacity: 1;
+  }
+}

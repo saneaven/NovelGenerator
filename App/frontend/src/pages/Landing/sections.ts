@@ -1,6 +1,11 @@
 import type React from 'react';
 import type { IconProps } from '../../components/icons';
-import { ChevronDown, DocumentAlt, Globe, Lightning, Scroll } from '../../components/icons';
+import { ChevronDown } from '../../components/icons';
+import { AboutAnimation } from './animations/AboutAnimation';
+import { AgentWritingAnimation } from './animations/AgentWritingAnimation';
+import { AgentQueryAnimation } from './animations/AgentQueryAnimation';
+import { TranslationAnimation } from './animations/TranslationAnimation';
+import { PromptEditorAnimation } from './animations/PromptEditorAnimation';
 
 export type LandingTone = 'base' | 'inverse' | 'onImage';
 
@@ -24,7 +29,8 @@ export type LandingFeatureCardConfig = {
 
 export type LandingRightContentConfig =
   | { type: 'icon'; icon: React.FC<IconProps> }
-  | { type: 'featureCards'; cards: LandingFeatureCardConfig[] };
+  | { type: 'featureCards'; cards: LandingFeatureCardConfig[] }
+  | { type: 'animation'; component: React.FC<{ isActive: boolean }> };
 
 export type LandingSectionConfig =
   | {
@@ -83,25 +89,51 @@ export const LANDING_SECTIONS: LandingSectionConfig[] = [
       titleKey: 'landing.about.title',
       bodyKey: 'landing.about.description',
     },
-    right: { type: 'icon', icon: DocumentAlt },
+    right: { type: 'animation', component: AboutAnimation },
   },
   {
-    id: 'features',
+    id: 'agentWriting',
     layout: 'split',
     tone: 'inverse',
     background: { type: 'surface', cssVar: '--color-surface-inverse' },
     left: {
-      titleKey: 'landing.features.title',
-      bodyKey: 'landing.features.subtitle',
+      titleKey: 'landing.agentWriting.title',
+      bodyKey: 'landing.agentWriting.description',
     },
-    right: {
-      type: 'featureCards',
-      cards: [
-        { icon: Lightning, titleKey: 'landing.features.ai.title', descriptionKey: 'landing.features.ai.description' },
-        { icon: Scroll, titleKey: 'landing.features.organize.title', descriptionKey: 'landing.features.organize.description' },
-        { icon: Globe, titleKey: 'landing.features.language.title', descriptionKey: 'landing.features.language.description' },
-      ],
+    right: { type: 'animation', component: AgentWritingAnimation },
+  },
+  {
+    id: 'agentQuery',
+    layout: 'split',
+    tone: 'base',
+    background: { type: 'surface', cssVar: '--color-surface-base' },
+    left: {
+      titleKey: 'landing.agentQuery.title',
+      bodyKey: 'landing.agentQuery.description',
     },
+    right: { type: 'animation', component: AgentQueryAnimation },
+  },
+  {
+    id: 'translation',
+    layout: 'split',
+    tone: 'inverse',
+    background: { type: 'surface', cssVar: '--color-surface-inverse' },
+    left: {
+      titleKey: 'landing.translation.title',
+      bodyKey: 'landing.translation.description',
+    },
+    right: { type: 'animation', component: TranslationAnimation },
+  },
+  {
+    id: 'promptEditor',
+    layout: 'split',
+    tone: 'base',
+    background: { type: 'surface', cssVar: '--color-surface-base' },
+    left: {
+      titleKey: 'landing.promptEditor.title',
+      bodyKey: 'landing.promptEditor.description',
+    },
+    right: { type: 'animation', component: PromptEditorAnimation },
   },
   {
     id: 'cta',

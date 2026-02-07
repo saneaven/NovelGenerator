@@ -297,6 +297,12 @@ const Landing: React.FC = () => {
                             ))}
                           </div>
                         )}
+
+                        {section.right.type === 'animation' && (
+                          <div className="landing-right-animation">
+                            <section.right.component isActive={index === activeIndex} />
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}

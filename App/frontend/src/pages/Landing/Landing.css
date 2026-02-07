@@ -235,6 +235,13 @@
   border: 1px solid var(--color-border-default);
 }
 
+.landing-right-animation {
+  width: min(440px, 42vw);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
 .landing-section[data-tone="inverse"] .landing-right-icon,
 .landing-section[data-tone="onImage"] .landing-right-icon {
   background-color: var(--color-surface-inverse-elevated);
@@ -423,7 +430,8 @@
   }
 
   .landing-right-icon,
-  .landing-feature-grid {
+  .landing-feature-grid,
+  .landing-right-animation {
     width: 100%;
     max-width: 520px;
   }

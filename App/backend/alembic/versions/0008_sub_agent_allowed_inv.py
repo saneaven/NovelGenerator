@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = "0008_sub_agent_allowed_invocation_modes"
+revision = "0008_sub_agent_allowed_inv"
 down_revision = "0007_drop_user_settings_ui_lang"
 branch_labels = None
 depends_on = None

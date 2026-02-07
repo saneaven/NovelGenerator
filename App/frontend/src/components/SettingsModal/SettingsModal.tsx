@@ -517,7 +517,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         </aside>
 
         {/* Panel Content */}
-        <div className="settings-panel-content">
+        <div className={`settings-panel-content${mainTab === 'prompts' ? ' settings-panel-content--fill' : ''}`}>
         {mainTab === 'profile' && <ProfilePanel />}
 
         {mainTab === 'credentials' && (
@@ -629,7 +629,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         )}
 
         {hasMountedPromptsPanel && (
-          <div style={{ display: mainTab === 'prompts' ? 'block' : 'none' }}>
+          <div
+            style={{
+              display: mainTab === 'prompts' ? 'flex' : 'none',
+              flex: 1,
+              minHeight: 0,
+            }}
+          >
             <PromptsTemplatesPanel ref={promptsPanelRef} onUnsavedCountChange={setPromptUnsavedCount} />
           </div>
         )}
