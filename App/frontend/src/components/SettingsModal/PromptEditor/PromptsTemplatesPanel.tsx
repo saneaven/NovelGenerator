@@ -667,7 +667,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
           ...d,
           current: {
             ...d.original,
-            allowed_agent_modes: [...d.original.allowed_agent_modes],
+            allowed_invocation_modes: [...d.original.allowed_invocation_modes],
             allowed_tool_names: [...d.original.allowed_tool_names],
             allowed_sub_agent_ids: [...d.original.allowed_sub_agent_ids],
           },
@@ -749,7 +749,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
             display_name: d.current.display_name.trim(),
             description: d.current.description.trim(),
             enabled: d.current.enabled,
-            allowed_agent_modes: d.current.allowed_agent_modes,
+            allowed_invocation_modes: d.current.allowed_invocation_modes,
             allowed_tool_names: d.current.allowed_tool_names.filter(
               (n) => !n.startsWith('call_') && n !== 'return_sub_agent_result'
             ),
@@ -774,7 +774,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
               display_name: updated.display_name,
               description: updated.description,
               enabled: updated.enabled,
-              allowed_agent_modes: [...updated.allowed_agent_modes],
+              allowed_invocation_modes: [...updated.allowed_invocation_modes],
               allowed_tool_names: [...updated.allowed_tool_names],
               allowed_sub_agent_ids: [...updated.allowed_sub_agent_ids],
               llm_config: updated.llm_config,
@@ -787,7 +787,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                 original: base,
                 current: {
                   ...base,
-                  allowed_agent_modes: [...base.allowed_agent_modes],
+                  allowed_invocation_modes: [...base.allowed_invocation_modes],
                   allowed_tool_names: [...base.allowed_tool_names],
                   allowed_sub_agent_ids: [...base.allowed_sub_agent_ids],
                 },
@@ -1202,7 +1202,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
         display_name: agent.display_name,
         description: agent.description,
         enabled: agent.enabled,
-        allowed_agent_modes: [...agent.allowed_agent_modes],
+        allowed_invocation_modes: [...agent.allowed_invocation_modes],
         allowed_tool_names: [...agent.allowed_tool_names],
         allowed_sub_agent_ids: [...agent.allowed_sub_agent_ids],
         llm_config: agent.llm_config,
@@ -1213,7 +1213,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
         original: base,
         current: {
           ...base,
-          allowed_agent_modes: [...base.allowed_agent_modes],
+          allowed_invocation_modes: [...base.allowed_invocation_modes],
           allowed_tool_names: [...base.allowed_tool_names],
           allowed_sub_agent_ids: [...base.allowed_sub_agent_ids],
         },

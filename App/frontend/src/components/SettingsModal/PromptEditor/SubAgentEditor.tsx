@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCredentialsStore } from '../../../store/credentialsStore';
 import { useSubAgentStore } from '../../../store/subAgentStore';
-import type { SubAgentAllowedMode } from '../../../types/subAgents';
+import type { SubAgentAllowedInvocation } from '../../../types/subAgents';
 import TaskConfigForm from '../TaskConfigForm';
 import { IconButton } from '../../IconButton';
 import { TextButton } from '../../TextButton';
@@ -38,7 +38,7 @@ export interface SubAgentDraftData {
   display_name: string;
   description: string;
   enabled: boolean;
-  allowed_agent_modes: SubAgentAllowedMode[];
+  allowed_invocation_modes: SubAgentAllowedInvocation[];
   allowed_tool_names: string[];
   allowed_sub_agent_ids: string[];
   llm_config: any;
@@ -52,10 +52,9 @@ export interface SubAgentDefinitionDraft {
   error: string;
 }
 
-const MODE_OPTIONS: Array<{ mode: SubAgentAllowedMode; labelKey: string }> = [
-  { mode: 'storyObject', labelKey: 'settings.promptEditor.subAgentModes.storyObject' },
-  { mode: 'novelEditor', labelKey: 'settings.promptEditor.subAgentModes.novelEditor' },
-  { mode: 'outlineManager', labelKey: 'settings.promptEditor.subAgentModes.outlineManager' },
+const MODE_OPTIONS: Array<{ mode: SubAgentAllowedInvocation; labelKey: string }> = [
+  { mode: 'planMode', labelKey: 'settings.promptEditor.subAgentModes.planMode' },
+  { mode: 'agentMode', labelKey: 'settings.promptEditor.subAgentModes.agentMode' },
   { mode: 'subAgent', labelKey: 'settings.promptEditor.subAgentModes.subAgent' },
 ];
 
@@ -70,7 +69,7 @@ function snapshotForDraft(data: SubAgentDraftData): string {
     display_name: data.display_name,
     description: data.description,
     enabled: data.enabled,
-    allowed_agent_modes: [...data.allowed_agent_modes].sort(),
+    allowed_invocation_modes: [...data.allowed_invocation_modes].sort(),
     allowed_tool_names: [...data.allowed_tool_names].sort(),
     allowed_sub_agent_ids: [...data.allowed_sub_agent_ids].sort(),
     llm_config: data.llm_config,
@@ -321,12 +320,12 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
     onDraftChange(computeSubAgentDraft(updater(draft)));
   };
 
-  const setModeChecked = (mode: SubAgentAllowedMode, checked: boolean) => {
+  const setModeChecked = (mode: SubAgentAllowedInvocation, checked: boolean) => {
     updateDraft((cur) => {
-      const prev = cur.current.allowed_agent_modes;
+      const prev = cur.current.allowed_invocation_modes;
       const has = prev.includes(mode);
       const nextModes = checked && !has ? [...prev, mode] : !checked && has ? prev.filter((m) => m !== mode) : prev;
-      return { ...cur, current: { ...cur.current, allowed_agent_modes: nextModes } };
+      return { ...cur, current: { ...cur.current, allowed_invocation_modes: nextModes } };
     });
   };
 
@@ -541,7 +540,7 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
               {MODE_OPTIONS.map((opt) => (
                 <ToggleSwitch
                   key={opt.mode}
-                  checked={draft.current.allowed_agent_modes.includes(opt.mode)}
+                  checked={draft.current.allowed_invocation_modes.includes(opt.mode)}
                   onChange={(checked) => setModeChecked(opt.mode, checked)}
                   label={t(opt.labelKey)}
                 />
@@ -650,4 +649,3 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
 };
 
 export default SubAgentEditor;
-

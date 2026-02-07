@@ -12,9 +12,10 @@ import type { TaskAIConfig } from '../../store/settingsStore';
 import { stageSessionEdits, applySessionEdits, toToolCallMetadata } from '../../llmTask/toolCalls/toolCallEngine';
 import type { HandlerOptions } from '../../toolCall/apply/types';
 import { generateTempId } from '../../utils/tempId';
-import type { SubAgentAllowedMode, SubAgentDefinition } from '../../types/subAgents';
+import type { SubAgentDefinition } from '../../types/subAgents';
 import type { StoredEditCard } from '../../llmTask/uiTypes';
 import { buildCallToolSchema } from '../tools/SubAgentCallTools';
+import type { InvocationCaller } from '../../types/agentRuntime';
 
 type Completion = { resolve: (output: string) => void; reject: (error: Error) => void };
 
@@ -22,7 +23,7 @@ type InvocationConfig = {
   projectId: string;
   language: string;
   parentToolCallId: string;
-  callerMode: SubAgentAllowedMode;
+  caller: InvocationCaller;
   subAgentId: string;
   input: string;
   handlerOptions: HandlerOptions;
@@ -291,14 +292,14 @@ export const SubAgentManager = {
    * The invocation UI is rendered under the parent tool call card (parentToolCallId).
    */
   async invoke(params: InvocationConfig): Promise<string> {
-    const { projectId, language, parentToolCallId, callerMode, subAgentId, input, handlerOptions } = params;
+    const { projectId, language, parentToolCallId, caller, subAgentId, input, handlerOptions } = params;
 
     const definition = await loadDefinitionOrThrow(subAgentId);
     if (!definition.enabled) {
       throw new Error(`Sub Agent is disabled: ${subAgentId}`);
     }
-    if (!definition.allowed_agent_modes.includes(callerMode)) {
-      throw new Error(`Sub Agent not allowed from mode: ${callerMode}`);
+    if (!definition.allowed_invocation_modes.includes(caller)) {
+      throw new Error(`Sub Agent not allowed from caller: ${caller}`);
     }
 
     const tools = await buildToolSchemas(definition);
@@ -360,7 +361,7 @@ export const SubAgentManager = {
       language: invocation.language,
       selections,
       options: { ...invocation.handlerOptions, userRequest: invocation.handlerOptions.userRequest ?? 'SubAgent' },
-      executionMode: 'subAgent',
+      invocationCaller: 'subAgent',
     });
 
     // Sync applied statuses back into invocation history

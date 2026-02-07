@@ -746,9 +746,8 @@
         "llmConfig": "LLM Config"
       },
       "subAgentModes": {
-        "storyObject": "Story Object",
-        "novelEditor": "Novel Editor",
-        "outlineManager": "Outline Manager",
+        "planMode": "Plan Mode",
+        "agentMode": "Agent Mode",
         "subAgent": "Sub Agent"
       },
       "subAgentPrompts": {
@@ -968,10 +967,9 @@
     "translate": "Translate ({{count}})",
     "translateObjects": "Translate {{count}} objects"
   },
-  "agentModeToggle": {
-    "storyObjects": "Story Objects",
-    "outline": "Outline",
-    "editor": "Editor",
+  "agentRunModeToggle": {
+    "plan": "Plan",
+    "agent": "Agent",
     "currentMode": "Current mode: {{mode}}. Click to switch."
   },
   "activity": {

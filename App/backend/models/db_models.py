@@ -260,7 +260,7 @@ class SubAgentDefinitionModel(Base):
     enabled = Column(Boolean, default=True, nullable=False)
 
     # Stored as JSON arrays
-    allowed_agent_modes = Column(JSONB, nullable=False)
+    allowed_invocation_modes = Column(JSONB, nullable=False)
     # Static tool names only (create_*/read_*/patch_*/replace_* etc). Never store call_* here.
     allowed_tool_names = Column(JSONB, nullable=False)
     # UUID list of sub_agent_definitions.id that this Sub Agent is allowed to call.

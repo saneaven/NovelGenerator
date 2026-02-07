@@ -36,27 +36,20 @@ def _load_prompt_file(relative_path: str) -> str:
 
 
 # Load all prompts from files
-# Agent - Story Object
-_STORYOBJECT_SYSTEM_PROMPT = _load_prompt_file('agent/storyObject/systemPrompt.md')
-_STORYOBJECT_MEMORY_PROMPT = _load_prompt_file('agent/storyObject/memoryPrompt.md')
-_STORYOBJECT_USER_PROMPT = _load_prompt_file('agent/storyObject/userPrompt.md')
-_STORYOBJECT_FIRST_USER_PROMPT = _load_prompt_file('agent/storyObject/firstUserPrompt.md')
-_STORYOBJECT_LAST_USER_PROMPT = _load_prompt_file('agent/storyObject/lastUserPrompt.md')
-_STORYOBJECT_PREFILL = _load_prompt_file('agent/storyObject/prefill.md')
-# Agent - Novel Editor
-_NOVEL_EDITOR_SYSTEM_PROMPT = _load_prompt_file('agent/novelEditor/systemPrompt.md')
-_NOVEL_EDITOR_MEMORY_PROMPT = _load_prompt_file('agent/novelEditor/memoryPrompt.md')
-_NOVEL_EDITOR_USER_PROMPT = _load_prompt_file('agent/novelEditor/userPrompt.md')
-_NOVEL_EDITOR_FIRST_USER_PROMPT = _load_prompt_file('agent/novelEditor/firstUserPrompt.md')
-_NOVEL_EDITOR_LAST_USER_PROMPT = _load_prompt_file('agent/novelEditor/lastUserPrompt.md')
-_NOVEL_EDITOR_PREFILL = _load_prompt_file('agent/novelEditor/prefill.md')
-# Agent - Outline Manager
-_OUTLINE_MANAGER_SYSTEM_PROMPT = _load_prompt_file('agent/outlineManager/systemPrompt.md')
-_OUTLINE_MANAGER_MEMORY_PROMPT = _load_prompt_file('agent/outlineManager/memoryPrompt.md')
-_OUTLINE_MANAGER_USER_PROMPT = _load_prompt_file('agent/outlineManager/userPrompt.md')
-_OUTLINE_MANAGER_FIRST_USER_PROMPT = _load_prompt_file('agent/outlineManager/firstUserPrompt.md')
-_OUTLINE_MANAGER_LAST_USER_PROMPT = _load_prompt_file('agent/outlineManager/lastUserPrompt.md')
-_OUTLINE_MANAGER_PREFILL = _load_prompt_file('agent/outlineManager/prefill.md')
+# Agent - Plan Mode
+_PLAN_MODE_SYSTEM_PROMPT = _load_prompt_file('agent/planMode/systemPrompt.md')
+_PLAN_MODE_MEMORY_PROMPT = _load_prompt_file('agent/planMode/memoryPrompt.md')
+_PLAN_MODE_USER_PROMPT = _load_prompt_file('agent/planMode/userPrompt.md')
+_PLAN_MODE_FIRST_USER_PROMPT = _load_prompt_file('agent/planMode/firstUserPrompt.md')
+_PLAN_MODE_LAST_USER_PROMPT = _load_prompt_file('agent/planMode/lastUserPrompt.md')
+_PLAN_MODE_PREFILL = _load_prompt_file('agent/planMode/prefill.md')
+# Agent - Agent Mode
+_AGENT_MODE_SYSTEM_PROMPT = _load_prompt_file('agent/agentMode/systemPrompt.md')
+_AGENT_MODE_MEMORY_PROMPT = _load_prompt_file('agent/agentMode/memoryPrompt.md')
+_AGENT_MODE_USER_PROMPT = _load_prompt_file('agent/agentMode/userPrompt.md')
+_AGENT_MODE_FIRST_USER_PROMPT = _load_prompt_file('agent/agentMode/firstUserPrompt.md')
+_AGENT_MODE_LAST_USER_PROMPT = _load_prompt_file('agent/agentMode/lastUserPrompt.md')
+_AGENT_MODE_PREFILL = _load_prompt_file('agent/agentMode/prefill.md')
 # Agent - Memory Summary
 _MEMORY_SUMMARY_SYSTEM_PROMPT = _load_prompt_file('agent/memorySummary/systemPrompt.md')
 _MEMORY_SUMMARY_USER_PROMPT = _load_prompt_file('agent/memorySummary/userPrompt.md')
@@ -112,36 +105,30 @@ _COVER_IMAGE_PROMPT_PREFILL = _load_prompt_file('imagePrompt/coverImage/prefill.
 DEFAULT_PROMPTS = {
     'agent': {
         'systemPrompt': {
-            'storyObject': _STORYOBJECT_SYSTEM_PROMPT,
-            'novelEditor': _NOVEL_EDITOR_SYSTEM_PROMPT,
-            'outlineManager': _OUTLINE_MANAGER_SYSTEM_PROMPT,
+            'planMode': _PLAN_MODE_SYSTEM_PROMPT,
+            'agentMode': _AGENT_MODE_SYSTEM_PROMPT,
             'memorySummary': _MEMORY_SUMMARY_SYSTEM_PROMPT,
         },
         'memoryPrompt': {
-            'storyObject': _STORYOBJECT_MEMORY_PROMPT,
-            'novelEditor': _NOVEL_EDITOR_MEMORY_PROMPT,
-            'outlineManager': _OUTLINE_MANAGER_MEMORY_PROMPT,
+            'planMode': _PLAN_MODE_MEMORY_PROMPT,
+            'agentMode': _AGENT_MODE_MEMORY_PROMPT,
         },
         'userPrompt': {
-            'storyObject': _STORYOBJECT_USER_PROMPT,
-            'novelEditor': _NOVEL_EDITOR_USER_PROMPT,
-            'outlineManager': _OUTLINE_MANAGER_USER_PROMPT,
+            'planMode': _PLAN_MODE_USER_PROMPT,
+            'agentMode': _AGENT_MODE_USER_PROMPT,
             'memorySummary': _MEMORY_SUMMARY_USER_PROMPT,
         },
         'firstUserPrompt': {
-            'storyObject': _STORYOBJECT_FIRST_USER_PROMPT,
-            'novelEditor': _NOVEL_EDITOR_FIRST_USER_PROMPT,
-            'outlineManager': _OUTLINE_MANAGER_FIRST_USER_PROMPT,
+            'planMode': _PLAN_MODE_FIRST_USER_PROMPT,
+            'agentMode': _AGENT_MODE_FIRST_USER_PROMPT,
         },
         'lastUserPrompt': {
-            'storyObject': _STORYOBJECT_LAST_USER_PROMPT,
-            'novelEditor': _NOVEL_EDITOR_LAST_USER_PROMPT,
-            'outlineManager': _OUTLINE_MANAGER_LAST_USER_PROMPT,
+            'planMode': _PLAN_MODE_LAST_USER_PROMPT,
+            'agentMode': _AGENT_MODE_LAST_USER_PROMPT,
         },
         'prefill': {
-            'storyObject': _STORYOBJECT_PREFILL,
-            'novelEditor': _NOVEL_EDITOR_PREFILL,
-            'outlineManager': _OUTLINE_MANAGER_PREFILL,
+            'planMode': _PLAN_MODE_PREFILL,
+            'agentMode': _AGENT_MODE_PREFILL,
         },
     },
     'translation': {

@@ -23,6 +23,7 @@ import { ToolCallBatchSharedState, ToolCallBatchStore } from './ToolCallBatchSto
 import { ManuscriptBatch } from './manuscriptBatch';
 import { SubAgentManager } from '../../subAgent/runtime/SubAgentManager';
 import { agentNameFromCallToolName, isCallToolName } from '../../subAgent/tools/SubAgentCallTools';
+import type { InvocationCaller } from '../../types/agentRuntime';
 
 function stripCallbacks(card: EditCard): StoredEditCard {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -134,12 +135,12 @@ async function applyToolCall(params: {
         };
       }
 
-      const callerMode = context.executionMode;
-      if (!callerMode) {
+      const caller = context.invocationCaller;
+      if (!caller) {
         return {
           success: false,
-          message: 'Missing executionMode for Sub Agent call',
-          error: 'Missing executionMode for Sub Agent call',
+          message: 'Missing invocationCaller for Sub Agent call',
+          error: 'Missing invocationCaller for Sub Agent call',
         };
       }
 
@@ -170,7 +171,7 @@ async function applyToolCall(params: {
         projectId: context.projectId,
         language: context.language,
         parentToolCallId: normalized.id,
-        callerMode: callerMode as any,
+        caller,
         subAgentId: def.id,
         input,
         handlerOptions: { ...context.options, userRequest: 'SubAgent' },
@@ -255,9 +256,9 @@ export async function applySessionEdits(params: {
   language: string;
   selections: Record<string, boolean>;
   options: HandlerOptions;
-  executionMode?: 'storyObject' | 'novelEditor' | 'outlineManager' | 'subAgent';
+  invocationCaller?: InvocationCaller;
 }): Promise<void> {
-  const { sessionId, projectId, language, selections, options, executionMode } = params;
+  const { sessionId, projectId, language, selections, options, invocationCaller } = params;
   const store = useLLMSessionStore.getState();
   const session = store.getSessionById(sessionId);
   if (!session?.editCards || session.editCards.length === 0) return;
@@ -323,7 +324,7 @@ export async function applySessionEdits(params: {
       callStore.beginCall(rawToolCall.id);
       const result = await applyToolCall({
         toolCall: rawToolCall,
-        context: { projectId, language, options, executionMode },
+        context: { projectId, language, options, invocationCaller },
         store: callStore,
         manuscriptBatch,
       });
@@ -477,9 +478,9 @@ export async function applyToolCallsDirect(params: {
   toolCalls: ToolCallMetadata[];
   selections: Record<string, boolean>;
   options: HandlerOptions;
-  executionMode?: 'storyObject' | 'novelEditor' | 'outlineManager' | 'subAgent';
+  invocationCaller?: InvocationCaller;
 }): Promise<ToolCallMetadata[]> {
-  const { projectId, language, toolCalls, selections, options, executionMode } = params;
+  const { projectId, language, toolCalls, selections, options, invocationCaller } = params;
 
   const baseStore = createBaseStore();
   const shared = new ToolCallBatchSharedState();
@@ -518,7 +519,7 @@ export async function applyToolCallsDirect(params: {
       callStore.beginCall(rawToolCall.id);
       const result = await applyToolCall({
         toolCall: rawToolCall,
-        context: { projectId, language, options, executionMode },
+        context: { projectId, language, options, invocationCaller },
         store: callStore,
         manuscriptBatch,
       });

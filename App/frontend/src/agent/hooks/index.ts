@@ -9,7 +9,6 @@ export { useAgentOrchestration } from './useAgentOrchestration';
 
 // Types
 export type {
-  AgentMode,
   AgentOrchestrationConfig,
   AgentOrchestrationReturn,
   ContextIdState,

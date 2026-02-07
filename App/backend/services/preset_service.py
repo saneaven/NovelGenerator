@@ -20,6 +20,7 @@ from ..schemas.presets import (
     ActivePresetResponse
 )
 from ..prompts import get_default_prompts, get_default_fragments
+from .sub_agent_seed_service import seed_default_sub_agents
 
 
 class PresetService:
@@ -178,6 +179,9 @@ class PresetService:
             fragment_count = PresetService._initialize_fragments_for_preset(
                 db, user_id, preset.id, default_fragments
             )
+
+            # Seed default Sub Agents (user-editable, per preset)
+            seed_default_sub_agents(db, user_id=user_id, preset_id=preset.id)
 
         db.commit()
         db.refresh(preset)
@@ -510,7 +514,7 @@ class PresetService:
                 display_name=s.display_name,
                 description=(s.description or s.display_name).strip(),
                 enabled=s.enabled,
-                allowed_agent_modes=s.allowed_agent_modes,
+                allowed_invocation_modes=s.allowed_invocation_modes,
                 allowed_tool_names=s.allowed_tool_names,
                 allowed_sub_agent_ids=mapped_allowed,
                 llm_config=s.llm_config,
@@ -855,7 +859,7 @@ class PresetService:
                 "display_name": s.display_name,
                 "description": (s.description or s.display_name).strip(),
                 "enabled": s.enabled,
-                "allowed_agent_modes": s.allowed_agent_modes,
+                "allowed_invocation_modes": s.allowed_invocation_modes,
                 "allowed_tool_names": s.allowed_tool_names,
                 "allowed_sub_agent_ids": s.allowed_sub_agent_ids,
                 "llm_config": s.llm_config,
@@ -865,7 +869,7 @@ class PresetService:
 
         # 5. Build export structure
         return {
-            "format_version": "1.0",
+            "format_version": 1,
             "preset": {
                 "name": preset.name,
                 "description": preset.description
@@ -889,8 +893,8 @@ class PresetService:
         Import a preset from export data.
         Creates new preset with all prompts, fragments, and variables.
         """
-        # 1. Validate format version
-        if data.get("format_version") != "1.0":
+        # 1. Validate format version (single current format; no legacy parsing / migrations)
+        if data.get("format_version") != 1:
             raise ValueError(f"Unsupported format version: {data.get('format_version')}")
 
         # 1.1 Require sub_agents key (can be empty list)
@@ -1002,7 +1006,7 @@ class PresetService:
                 "agent_name",
                 "display_name",
                 "description",
-                "allowed_agent_modes",
+                "allowed_invocation_modes",
                 "allowed_tool_names",
                 "allowed_sub_agent_ids",
                 "llm_config",
@@ -1040,7 +1044,7 @@ class PresetService:
                 display_name=str(sa_data["display_name"]),
                 description=description,
                 enabled=bool(sa_data.get("enabled", True)),
-                allowed_agent_modes=sa_data.get("allowed_agent_modes", []),
+                allowed_invocation_modes=sa_data.get("allowed_invocation_modes", []),
                 allowed_tool_names=sa_data.get("allowed_tool_names", []),
                 allowed_sub_agent_ids=mapped_allowed,
                 llm_config=sa_data.get("llm_config", {}),

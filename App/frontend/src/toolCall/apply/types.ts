@@ -6,6 +6,7 @@
 
 import type { ObjectType, UnifiedObject, UpdateObjectRequest } from '../../types/unifiedObject';
 import type { ExecutionContext, ApplicationResult } from '../types';
+import type { InvocationCaller } from '../../types/agentRuntime';
 
 // ============================================================================
 // STORE ACTIONS INTERFACE
@@ -52,8 +53,8 @@ export interface StoreActions {
 export interface HandlerContext extends ExecutionContext {
   /** Tool call ID (stable per call within a message/session) */
   callId: string;
-  /** Execution mode of the caller (used for sub-agent allowlists, etc.) */
-  executionMode?: 'storyObject' | 'novelEditor' | 'outlineManager' | 'subAgent';
+  /** Who initiated this tool-call batch (root planMode/agentMode, or subAgent). */
+  invocationCaller?: InvocationCaller;
   store: StoreActions;
   options: HandlerOptions;
 }

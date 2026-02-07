@@ -1,4 +1,5 @@
 import type { ChatMessage, ContentPart } from '../llm/requestTypes';
+import type { WorkspaceSurface } from '../types/agentRuntime';
 
 
 /**
@@ -22,7 +23,7 @@ export interface DisplayProcessingResult {
  */
 export interface LLMRequestPipelineContext {
   projectId: string;
-  mode: 'novelEditor' | 'storyObject';
+  surface: WorkspaceSurface;
 }
 
 /**

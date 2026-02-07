@@ -136,7 +136,11 @@ export const UNIFIED_SCHEMA = {
   },
 
   agent: {
-    mode: { desc: "Agent mode", example: "storyObject" as "storyObject" | "novelEditor" },
+    runMode: { desc: "Agent run mode", example: "planMode" as "planMode" | "agentMode" },
+    surface: {
+      desc: "Current workspace surface (right-side panel)",
+      example: "story-object" as "story-object" | "outline-manager" | "novel-editor" | "config",
+    },
     contextObjectIds: { desc: "IDs of objects to include in context", example: ["char-1", "loc-1"] as string[] },
     previousSummaries: {
       desc: "Rolling memory summaries (latest is last)",

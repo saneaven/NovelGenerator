@@ -36,186 +36,125 @@ export const PROMPT_TREE: PromptNode[] = [
     defaultExpanded: true,
     children: [
       {
-        id: 'agent-storyobject',
-        label: 'Story Object Mode',
+        id: 'agent-planMode',
+        label: 'Plan Mode',
         type: 'category',
         defaultExpanded: true,
         children: [
           {
-            id: 'agent-storyobject-system',
+            id: 'agent-planMode-system',
             label: 'System Prompt',
             type: 'prompt',
             taskType: 'agent',
             category: 'systemPrompt',
-            name: 'storyObject',
-            description: 'Main AI behavior for Story Object conversations'
+            name: 'planMode',
+            description: 'Main AI behavior for Plan mode'
           },
           {
-            id: 'agent-storyobject-memory',
+            id: 'agent-planMode-memory',
             label: 'Memory Prompt',
             type: 'prompt',
             taskType: 'agent',
             category: 'memoryPrompt',
-            name: 'storyObject',
+            name: 'planMode',
             description: 'Injected memory context (summary + relevant chats) as a synthetic user message'
           },
           {
-            id: 'agent-storyobject-user',
+            id: 'agent-planMode-user',
             label: 'User Prompt',
             type: 'prompt',
             taskType: 'agent',
             category: 'userPrompt',
-            name: 'storyObject',
+            name: 'planMode',
             description: 'Default template for user messages (middle messages in multi-turn)'
           },
           {
-            id: 'agent-storyobject-first',
+            id: 'agent-planMode-first',
             label: 'First User Prompt',
             type: 'prompt',
             taskType: 'agent',
             category: 'firstUserPrompt',
-            name: 'storyObject',
+            name: 'planMode',
             description: 'Template for the first user message in conversation'
           },
           {
-            id: 'agent-storyobject-last',
+            id: 'agent-planMode-last',
             label: 'Last User Prompt',
             type: 'prompt',
             taskType: 'agent',
             category: 'lastUserPrompt',
-            name: 'storyObject',
+            name: 'planMode',
             description: 'Template for the last (current) user message in agent'
           },
           {
-            id: 'agent-storyobject-prefill',
+            id: 'agent-planMode-prefill',
             label: 'Prefill Template',
             type: 'prompt',
             taskType: 'agent',
             category: 'prefill',
-            name: 'storyObject',
-            description: 'AI response starter for Story Object mode'
+            name: 'planMode',
+            description: 'AI response starter for Plan mode'
           }
         ]
       },
       {
-        id: 'agent-noveleditor',
-        label: 'Novel Editor Mode',
+        id: 'agent-agentMode',
+        label: 'Agent Mode',
         type: 'category',
         children: [
           {
-            id: 'agent-noveleditor-system',
+            id: 'agent-agentMode-system',
             label: 'System Prompt',
             type: 'prompt',
             taskType: 'agent',
             category: 'systemPrompt',
-            name: 'novelEditor',
-            description: 'Main AI behavior for Novel Editor conversations'
+            name: 'agentMode',
+            description: 'Main AI behavior for Agent mode'
           },
           {
-            id: 'agent-noveleditor-memory',
+            id: 'agent-agentMode-memory',
             label: 'Memory Prompt',
             type: 'prompt',
             taskType: 'agent',
             category: 'memoryPrompt',
-            name: 'novelEditor',
+            name: 'agentMode',
             description: 'Injected memory context (summary + relevant chats) as a synthetic user message'
           },
           {
-            id: 'agent-noveleditor-user',
+            id: 'agent-agentMode-user',
             label: 'User Prompt',
             type: 'prompt',
             taskType: 'agent',
             category: 'userPrompt',
-            name: 'novelEditor',
+            name: 'agentMode',
             description: 'Default template for user messages (middle messages in multi-turn)'
           },
           {
-            id: 'agent-noveleditor-first',
+            id: 'agent-agentMode-first',
             label: 'First User Prompt',
             type: 'prompt',
             taskType: 'agent',
             category: 'firstUserPrompt',
-            name: 'novelEditor',
-            description: 'Template for the first user message in novel editor conversation'
+            name: 'agentMode',
+            description: 'Template for the first user message in conversation'
           },
           {
-            id: 'agent-noveleditor-last',
+            id: 'agent-agentMode-last',
             label: 'Last User Prompt',
             type: 'prompt',
             taskType: 'agent',
             category: 'lastUserPrompt',
-            name: 'novelEditor',
-            description: 'Template for the last (current) user message in novel editor agent'
+            name: 'agentMode',
+            description: 'Template for the last (current) user message in agent'
           },
           {
-            id: 'agent-noveleditor-prefill',
+            id: 'agent-agentMode-prefill',
             label: 'Prefill Template',
             type: 'prompt',
             taskType: 'agent',
             category: 'prefill',
-            name: 'novelEditor',
-            description: 'AI response starter for Novel Editor mode'
-          }
-        ]
-      },
-      {
-        id: 'agent-outlinemanager',
-        label: 'Outline Manager Mode',
-        type: 'category',
-        children: [
-          {
-            id: 'agent-outlinemanager-system',
-            label: 'System Prompt',
-            type: 'prompt',
-            taskType: 'agent',
-            category: 'systemPrompt',
-            name: 'outlineManager',
-            description: 'Main AI behavior for Outline Manager conversations'
-          },
-          {
-            id: 'agent-outlinemanager-memory',
-            label: 'Memory Prompt',
-            type: 'prompt',
-            taskType: 'agent',
-            category: 'memoryPrompt',
-            name: 'outlineManager',
-            description: 'Injected memory context (summary + relevant chats) as a synthetic user message'
-          },
-          {
-            id: 'agent-outlinemanager-user',
-            label: 'User Prompt',
-            type: 'prompt',
-            taskType: 'agent',
-            category: 'userPrompt',
-            name: 'outlineManager',
-            description: 'Default template for user messages (middle messages in multi-turn)'
-          },
-          {
-            id: 'agent-outlinemanager-first',
-            label: 'First User Prompt',
-            type: 'prompt',
-            taskType: 'agent',
-            category: 'firstUserPrompt',
-            name: 'outlineManager',
-            description: 'Template for the first user message in outline manager conversation'
-          },
-          {
-            id: 'agent-outlinemanager-last',
-            label: 'Last User Prompt',
-            type: 'prompt',
-            taskType: 'agent',
-            category: 'lastUserPrompt',
-            name: 'outlineManager',
-            description: 'Template for the last (current) user message in outline manager agent'
-          },
-          {
-            id: 'agent-outlinemanager-prefill',
-            label: 'Prefill Template',
-            type: 'prompt',
-            taskType: 'agent',
-            category: 'prefill',
-            name: 'outlineManager',
-            description: 'AI response starter for Outline Manager mode'
+            name: 'agentMode',
+            description: 'AI response starter for Agent mode'
           }
         ]
       },

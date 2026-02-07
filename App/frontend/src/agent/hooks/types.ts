@@ -6,11 +6,7 @@
  */
 
 import type { MutableRefObject } from 'react';
-
-/**
- * Agent mode - only affects systemPrompt template selection
- */
-export type AgentMode = 'storyObject' | 'novelEditor' | 'outlineManager';
+import type { AgentRunMode, WorkspaceSurface } from '../../types/agentRuntime';
 
 /**
  * Configuration for the agent orchestration hook
@@ -18,8 +14,10 @@ export type AgentMode = 'storyObject' | 'novelEditor' | 'outlineManager';
 export interface AgentOrchestrationConfig {
   /** Project ID */
   projectId: string | undefined;
-  /** Agent mode - only affects systemPrompt template selection */
-  mode: AgentMode;
+  /** Main agent run mode (Plan vs Agent) */
+  runMode: AgentRunMode;
+  /** Right-side workspace surface (context only) */
+  surface: WorkspaceSurface;
 }
 
 /**

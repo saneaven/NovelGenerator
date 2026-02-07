@@ -15,11 +15,12 @@ import { useCredentialsStore } from '../store/credentialsStore';
 import { useLLMSessionStore } from '../store/llmSessionStore';
 import { useSubAgentStore } from '../store/subAgentStore';
 import { startLLMSession } from '../llmSession';
-import { LLMTaskMode, type AgentWorkspacePromptContext, type AgentTranslationPromptContext, createEmptyUserHistory } from '../llm';
+import { LLMTaskMode, type AgentPromptContext, type AgentTranslationPromptContext, createEmptyUserHistory } from '../llm';
 import type { OutputMode } from '../llm/types';
 import type { ChatMessage, ContentPart } from '../llm/requestTypes';
 import { getToolsForSet } from '../toolCall';
 import { buildCallToolSchema } from '../subAgent/tools/SubAgentCallTools';
+import type { AgentRunMode, WorkspaceSurface, InvocationCaller } from '../types/agentRuntime';
 import {
   stageSessionEdits,
   applySessionEdits,
@@ -33,12 +34,13 @@ import { registerSessionNotification, updateSessionNotification } from '../llmTa
 export interface AgentExecutorInput {
   projectId: string;
   agentId: string;
-  mode: 'novelEditor' | 'storyObject' | 'outlineManager';
+  runMode: AgentRunMode;
+  surface: WorkspaceSurface;
   userInput: string;
   outputLanguage: string;
   contextObjectIds?: string[];
   historyOverride?: ChatMessage[]; // LLM history base (excludes current userInput)
-  promptContextOverride?: Partial<AgentWorkspacePromptContext>;
+  promptContextOverride?: Partial<AgentPromptContext>;
 }
 
 export interface AgentExecutorResult {
@@ -144,15 +146,15 @@ export const AgentExecutor = {
     }
 
     const llmMode =
-      input.mode === 'storyObject'
-        ? LLMTaskMode.AGENT_STORYOBJECT
-        : input.mode === 'outlineManager'
-          ? LLMTaskMode.AGENT_OUTLINE_MANAGER
-          : LLMTaskMode.AGENT_NOVEL_EDITOR;
+      input.runMode === 'planMode'
+        ? LLMTaskMode.AGENT_PLAN_MODE
+        : LLMTaskMode.AGENT_AGENT_MODE;
+
+    const toolSet = input.runMode === 'planMode' ? 'agent_plan_mode' : 'agent_agent_mode';
 
     const baseTools =
       outputMode === 'tool_call'
-        ? getToolsForSet('agent', { ragSearchEnabled: settings.ragSearchEnabled })
+        ? getToolsForSet(toolSet, { ragSearchEnabled: settings.ragSearchEnabled })
         : undefined;
 
     let tools = baseTools;
@@ -163,23 +165,25 @@ export const AgentExecutor = {
       }
 
       const dynamicSubAgentTools = subAgentStore.subAgents
-        .filter((s) => s.enabled && s.allowed_agent_modes.includes(input.mode as any))
+        .filter((s) => s.enabled && s.allowed_invocation_modes.includes(input.runMode))
         .sort((a, b) => a.display_name.localeCompare(b.display_name))
         .map(buildCallToolSchema);
 
       tools = [...(baseTools ?? []), ...dynamicSubAgentTools];
     }
 
-    const promptContext: AgentWorkspacePromptContext = {
+    const promptContext: AgentPromptContext = {
       projectId: input.projectId,
       outputLanguage: language,
       outputMode,
       enablePrefill: agentConfig.advanced.enablePrefill,
       thinkingMode: agentConfig.advanced.thinkingMode,
       tools,
+      runMode: input.runMode,
+      surface: input.surface,
       contextObjectIds: input.contextObjectIds,
     };
-    const mergedPromptContext: AgentWorkspacePromptContext = {
+    const mergedPromptContext: AgentPromptContext = {
       ...promptContext,
       ...(input.promptContextOverride ?? {}),
     };
@@ -403,7 +407,7 @@ export async function executeAgentToolCalls(params: {
   language: string;
   selections: Record<string, boolean>;
   options: HandlerOptions;
-  executionMode?: 'storyObject' | 'novelEditor' | 'outlineManager' | 'subAgent';
+  invocationCaller?: InvocationCaller;
 }): Promise<{ hasAcceptedReads: boolean }> {
   await applySessionEdits(params);
   await syncAgentToolCalls(params.sessionId);

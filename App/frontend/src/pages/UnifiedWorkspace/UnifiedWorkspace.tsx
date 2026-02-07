@@ -45,20 +45,6 @@ const tabLabelKeys: Record<string, string> = {
   guidelines: 'storyObjectPanel.tabs.guidelines',
 };
 
-// Get agent mode from sub-page
-function getAgentMode(subPage: SubPageType): 'storyObject' | 'outlineManager' | 'novelEditor' {
-  switch (subPage) {
-    case 'story-object':
-      return 'storyObject';
-    case 'outline-manager':
-      return 'outlineManager';
-    case 'novel-editor':
-      return 'novelEditor';
-    case 'config':
-      return 'storyObject';
-  }
-}
-
 // Get sidebar type from sub-page
 function getSidebarType(subPage: SubPageType): string {
   switch (subPage) {
@@ -124,16 +110,10 @@ const UnifiedWorkspace: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Sync agent mode when sub-page changes
-  useEffect(() => {
-    if (projectId) {
-      useAgentUIStore.getState().setMode(projectId, getAgentMode(currentSubPage));
-    }
-  }, [projectId, currentSubPage]);
-
-  // Get current agent mode from store (subscribe to changes)
-  const currentAgentMode = useAgentUIStore(
-    (state) => state.modeByProject[projectId ?? ''] ?? getAgentMode(currentSubPage)
+  // Get current agent run mode from store (subscribe to changes).
+  // IMPORTANT: surface changes must not alter agent run mode.
+  const currentRunMode = useAgentUIStore(
+    (state) => state.runModeByProject[projectId ?? ''] ?? 'agentMode'
   );
 
   // Settings modal state
@@ -478,7 +458,8 @@ const UnifiedWorkspace: React.FC = () => {
       <div className={`unified-workspace-content ${isAgentVisible ? 'agent-visible' : ''}`}>
         <AgentPanel
           projectId={projectId ?? ''}
-          mode={currentAgentMode}
+          runMode={currentRunMode}
+          surface={currentSubPage}
         />
 
         {currentSubPage === 'story-object' && (

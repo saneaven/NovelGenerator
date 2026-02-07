@@ -21,6 +21,7 @@ import {
   applyAgentEdits,
   rejectAllAgentEdits,
 } from '../agent';
+import type { InvocationCaller } from '../types/agentRuntime';
 import { CRUD_OPTIONS } from '../toolCall/apply/types';
 import './LLMTaskModals.css';
 
@@ -130,12 +131,17 @@ export const LLMTaskModals: React.FC = () => {
 
   const handleConfirm = useCallback(async (selections: Record<string, boolean>) => {
     if (!projectId || !session) return;
+    const invocationCaller: InvocationCaller | undefined =
+      session.kind === 'agent'
+        ? (session.input as AgentExecutorInput).runMode
+        : undefined;
     await applyAgentEdits({
       sessionId: session.id,
       projectId,
       language: mainLanguage,
       selections,
       options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
+      invocationCaller,
     });
   }, [projectId, session?.id, mainLanguage]);
 

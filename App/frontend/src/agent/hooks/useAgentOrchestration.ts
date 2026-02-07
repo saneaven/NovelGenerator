@@ -23,7 +23,7 @@ function isAbortError(error: unknown): boolean {
 }
 
 export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOrchestrationReturn {
-  const { projectId, mode } = config;
+  const { projectId, runMode, surface } = config;
   const { t } = useTranslation();
 
   const {
@@ -155,7 +155,8 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
       const prepared = await AgentMemoryManager.prepare({
         projectId,
         agentId,
-        mode,
+        runMode,
+        surface,
         userInput: userInput?.trim() ?? '',
         outputLanguage: mainLanguage,
         outputMode,
@@ -210,7 +211,8 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
       {
         projectId,
         agentId,
-        mode,
+        runMode,
+        surface,
         userInput: userInput?.trim() ?? '',
         outputLanguage: mainLanguage,
         contextObjectIds: selectedContextIds,
@@ -219,7 +221,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
       },
       (sessionId) => setActiveSessionId(sessionId)
     );
-  }, [projectId, getSelectedAgentId, getObjectsMissingMainLanguage, mainLanguage, clearInput, mode, selectedContextIds, t]);
+  }, [projectId, getSelectedAgentId, getObjectsMissingMainLanguage, mainLanguage, clearInput, runMode, surface, selectedContextIds, t]);
 
   const handleStop = useCallback(() => {
     const preflight = preflightAbortControllerRef.current;
@@ -301,7 +303,8 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
       const prepared = await AgentMemoryManager.prepare({
         projectId,
         agentId,
-        mode,
+        runMode,
+        surface,
         userInput: '',
         outputLanguage: mainLanguage,
         outputMode,
@@ -352,7 +355,8 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
       {
         projectId,
         agentId,
-        mode,
+        runMode,
+        surface,
         userInput: '',
         outputLanguage: mainLanguage,
         contextObjectIds: selectedContextIds,
@@ -361,7 +365,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
       },
       (sessionId) => setActiveSessionId(sessionId)
     );
-  }, [projectId, getSelectedAgentId, mode, mainLanguage, selectedContextIds, t]);
+  }, [projectId, getSelectedAgentId, runMode, surface, mainLanguage, selectedContextIds, t]);
 
   const agentHandlers: AgentHandlersReturn = {
     editTextareaRef,

@@ -891,11 +891,21 @@ export const AGENT_TOOL_NAMES = AGENT_TOOLS.map(f => f.name);
 // ============================================================================
 
 /** Available tool set names */
-export type ToolSetName = 'agent' | 'manuscript' | 'storyObject' | 'outline' | 'translateObjects';
+export type ToolSetName =
+  | 'agent_plan_mode'
+  | 'agent_agent_mode'
+  | 'manuscript'
+  | 'storyObject'
+  | 'outline'
+  | 'translateObjects';
 
 /** Tool set definitions */
 const TOOL_SET_SCHEMAS: Record<ToolSetName, ToolSchema[]> = {
-	  agent: [
+	  agent_plan_mode: [
+	    READ_STORY_OBJECT, READ_OUTLINE, READ_MANUSCRIPT,
+	    KEYWORD_SEARCH, RAG_SEARCH,
+	  ],
+	  agent_agent_mode: [
 	    CREATE_STORY_OBJECT, DELETE_STORY_OBJECT,
 	    CREATE_OUTLINE, DELETE_OUTLINE, CREATE_OUTLINE_ACT, DELETE_OUTLINE_ACT,
 	    CREATE_OUTLINE_CHAPTER, DELETE_OUTLINE_CHAPTER,
@@ -938,7 +948,7 @@ export function getToolsForSet(setName: ToolSetName, options?: ToolSetOptions): 
   const ragEnabled = options?.ragSearchEnabled ?? true;
 
   const filtered =
-    setName === 'agent' && !ragEnabled
+    (setName === 'agent_agent_mode' || setName === 'agent_plan_mode') && !ragEnabled
       ? schemas.filter((s) => s.name !== 'rag_search')
       : schemas;
 

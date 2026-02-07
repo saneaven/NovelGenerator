@@ -1,14 +1,14 @@
 import type { ContentPart, ToolCallMetadata, ToolCallProgress, TokenUsage } from './requestTypes';
 import type { ProviderConfig, ProviderType, ThinkingConfig, RetryConfig, CustomApiFormat } from '../store/settingsStore';
 import type { ToolCallSchema } from '../toolCall';
+import type { AgentRunMode, WorkspaceSurface } from '../types/agentRuntime';
 
 /**
  * LLM Task Mode - determines which prompts and functions to use
  */
 export const LLMTaskMode = {
-  AGENT_STORYOBJECT: 'agent_storyObject',
-  AGENT_NOVEL_EDITOR: 'agent_novel_editor',
-  AGENT_OUTLINE_MANAGER: 'agent_outline_manager',
+  AGENT_PLAN_MODE: 'agent_plan_mode',
+  AGENT_AGENT_MODE: 'agent_agent_mode',
   AGENT_MEMORY_SUMMARY: 'agent_memory_summary',
   EDIT_ASSISTANT_MANUSCRIPT: 'edit_assistant_manuscript',
   EDIT_ASSISTANT_STORY_OBJECT: 'edit_assistant_story_object',
@@ -125,10 +125,9 @@ export interface TemplateData {
   };
   // Mode-specific groups (only one should be set)
   agent?: {
-    mode: 'storyObject' | 'novelEditor' | 'outlineManager';
+    runMode: AgentRunMode;
+    surface: WorkspaceSurface;
     contextObjectIds?: string[];
-    selectedOutlineId?: string;
-    selectedActId?: string;
     previousSummaries?: string[];
     relevantChats?: AgentRelevantChat[];
   };
@@ -205,10 +204,17 @@ export interface BasePromptContext {
 }
 
 /**
- * Context for workspace agent
+ * Context for the main Agent (planMode/agentMode).
+ *
+ * The right-side "surface" is provided as context only and must not
+ * change the left Agent panel state by itself.
  */
-export interface AgentWorkspacePromptContext extends BasePromptContext {
+export interface AgentPromptContext extends BasePromptContext {
   tools?: ToolCallSchema[];
+
+  runMode: AgentRunMode;
+  surface: WorkspaceSurface;
+
   contextObjectIds?: string[];
   previousSummaries?: string[];
   relevantChats?: AgentRelevantChat[];
@@ -221,32 +227,6 @@ export interface SubAgentPromptContext extends BasePromptContext {
   tools?: ToolCallSchema[];
   /** Prompt template key (also the tool suffix for call_{agent_name}). */
   agentName: string;
-}
-
-/**
- * Context for novel editor agent
- * Note: This is now identical to AgentWorkspacePromptContext.
- * The only difference between workspace and novelEditor modes is the systemPrompt template.
- * Manuscripts are included via contextObjectIds, not a separate novelData field.
- */
-export interface AgentNovelEditorPromptContext extends BasePromptContext {
-  tools?: ToolCallSchema[];
-  contextObjectIds?: string[];
-  previousSummaries?: string[];
-  relevantChats?: AgentRelevantChat[];
-}
-
-/**
- * Context for outline manager agent
- * Used for AI-assisted story structure planning and organization.
- */
-export interface AgentOutlineManagerPromptContext extends BasePromptContext {
-  tools?: ToolCallSchema[];
-  contextObjectIds?: string[];
-  selectedOutlineId?: string;
-  selectedActId?: string;
-  previousSummaries?: string[];
-  relevantChats?: AgentRelevantChat[];
 }
 
 /**
@@ -384,8 +364,7 @@ export interface CoverImagePromptContext extends BasePromptContext {
  * Union type of all prompt contexts
  */
 export type PromptContext =
-  | AgentWorkspacePromptContext
-  | AgentNovelEditorPromptContext
+  | AgentPromptContext
   | AgentMemorySummaryPromptContext
   | EditAssistantStoryObjectPromptContext
   | EditAssistantManuscriptPromptContext

@@ -17,9 +17,7 @@ import {
   type PromptBundle,
   type PromptContext,
   type TemplateData,
-  type AgentWorkspacePromptContext,
-  type AgentNovelEditorPromptContext,
-  type AgentOutlineManagerPromptContext,
+  type AgentPromptContext,
   type AgentMemorySummaryPromptContext,
   type EditAssistantStoryObjectPromptContext,
   type EditAssistantManuscriptPromptContext,
@@ -133,12 +131,9 @@ export class PromptManager {
     await this.ensureBasicInfoLoaded(context.projectId);
 
     switch (mode) {
-      case LLMTaskMode.AGENT_STORYOBJECT:
-        return this.generateAgentBundle(context as AgentWorkspacePromptContext, 'storyObject');
-      case LLMTaskMode.AGENT_NOVEL_EDITOR:
-        return this.generateAgentBundle(context as AgentNovelEditorPromptContext, 'novelEditor');
-      case LLMTaskMode.AGENT_OUTLINE_MANAGER:
-        return this.generateAgentBundle(context as AgentOutlineManagerPromptContext, 'outlineManager');
+      case LLMTaskMode.AGENT_PLAN_MODE:
+      case LLMTaskMode.AGENT_AGENT_MODE:
+        return this.generateAgentBundle(context as AgentPromptContext);
       case LLMTaskMode.SUB_AGENT:
         return this.generateSubAgentBundle(context as SubAgentPromptContext);
       case LLMTaskMode.AGENT_MEMORY_SUMMARY:
@@ -174,10 +169,9 @@ export class PromptManager {
     if (outputMode !== 'tool_call') return undefined;
 
     switch (mode) {
-      case LLMTaskMode.AGENT_STORYOBJECT:
-      case LLMTaskMode.AGENT_NOVEL_EDITOR:
-      case LLMTaskMode.AGENT_OUTLINE_MANAGER:
-        return (context as AgentWorkspacePromptContext).tools;
+      case LLMTaskMode.AGENT_PLAN_MODE:
+      case LLMTaskMode.AGENT_AGENT_MODE:
+        return (context as AgentPromptContext).tools;
       case LLMTaskMode.SUB_AGENT:
         return (context as SubAgentPromptContext).tools;
       case LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT:
@@ -199,19 +193,19 @@ export class PromptManager {
     }
   }
 
-  // ==================== Agent (Workspace & NovelEditor) ====================
+  // ==================== Agent (Main: Plan Mode / Agent Mode) ====================
 
   private static async generateAgentBundle(
-    context: AgentWorkspacePromptContext | AgentNovelEditorPromptContext | AgentOutlineManagerPromptContext,
-    mode: 'storyObject' | 'novelEditor' | 'outlineManager'
+    context: AgentPromptContext
   ): Promise<PromptBundle> {
+    const runMode = context.runMode;
     const [systemTemplate, memoryTemplate, userTemplate, firstTemplate, lastTemplate, prefillTemplate] = await Promise.all([
-      this.getTemplate('agent', 'systemPrompt', mode),
-      this.getTemplate('agent', 'memoryPrompt', mode),
-      this.getTemplate('agent', 'userPrompt', mode),
-      this.getTemplate('agent', 'firstUserPrompt', mode),
-      this.getTemplate('agent', 'lastUserPrompt', mode),
-      this.getTemplate('agent', 'prefill', mode),
+      this.getTemplate('agent', 'systemPrompt', runMode),
+      this.getTemplate('agent', 'memoryPrompt', runMode),
+      this.getTemplate('agent', 'userPrompt', runMode),
+      this.getTemplate('agent', 'firstUserPrompt', runMode),
+      this.getTemplate('agent', 'lastUserPrompt', runMode),
+      this.getTemplate('agent', 'prefill', runMode),
     ]);
 
     const settings = useSettingsStore.getState().getSettings();
@@ -225,10 +219,9 @@ export class PromptManager {
         // userMessage is injected per user block in prepareMessages()
       },
       agent: {
-        mode,
+        runMode,
+        surface: context.surface,
         contextObjectIds: context.contextObjectIds,
-        selectedOutlineId: (context as any).selectedOutlineId,
-        selectedActId: (context as any).selectedActId,
         previousSummaries,
         relevantChats,
       },

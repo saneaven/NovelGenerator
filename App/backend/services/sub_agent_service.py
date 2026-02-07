@@ -59,7 +59,7 @@ class SubAgentService:
                 display_name=i.display_name,
                 description=(i.description or i.display_name).strip(),
                 enabled=i.enabled,
-                allowed_agent_modes=i.allowed_agent_modes,
+                allowed_invocation_modes=i.allowed_invocation_modes,
                 allowed_tool_names=i.allowed_tool_names,
                 allowed_sub_agent_ids=i.allowed_sub_agent_ids,
                 llm_config=i.llm_config,
@@ -98,7 +98,14 @@ class SubAgentService:
         ).first()
 
     @staticmethod
-    def create_sub_agent(db: Session, user_id: uuid.UUID, preset_id: uuid.UUID, data: SubAgentCreate) -> SubAgentDefinition:
+    def create_sub_agent(
+        db: Session,
+        user_id: uuid.UUID,
+        preset_id: uuid.UUID,
+        data: SubAgentCreate,
+        *,
+        commit: bool = True,
+    ) -> SubAgentDefinition:
         agent_name = data.agent_name.strip()
         if agent_name.startswith("call_"):
             agent_name = agent_name[5:]
@@ -125,7 +132,7 @@ class SubAgentService:
             display_name=data.display_name,
             description=description,
             enabled=data.enabled,
-            allowed_agent_modes=data.allowed_agent_modes,
+            allowed_invocation_modes=data.allowed_invocation_modes,
             allowed_tool_names=data.allowed_tool_names,
             allowed_sub_agent_ids=[str(x) for x in data.allowed_sub_agent_ids],
             llm_config=data.llm_config,
@@ -177,8 +184,12 @@ class SubAgentService:
             ),
         ])
 
-        db.commit()
-        db.refresh(model)
+        if commit:
+            db.commit()
+            db.refresh(model)
+        else:
+            # Ensure INSERTs are staged so subsequent operations in the same transaction can see IDs.
+            db.flush()
 
         return SubAgentDefinition(
             id=model.id,
@@ -186,7 +197,7 @@ class SubAgentService:
             display_name=model.display_name,
             description=(model.description or model.display_name).strip(),
             enabled=model.enabled,
-            allowed_agent_modes=model.allowed_agent_modes,
+            allowed_invocation_modes=model.allowed_invocation_modes,
             allowed_tool_names=model.allowed_tool_names,
             allowed_sub_agent_ids=model.allowed_sub_agent_ids,
             llm_config=model.llm_config,
@@ -243,8 +254,8 @@ class SubAgentService:
             model.description = description
         if data.enabled is not None:
             model.enabled = data.enabled
-        if data.allowed_agent_modes is not None:
-            model.allowed_agent_modes = data.allowed_agent_modes
+        if data.allowed_invocation_modes is not None:
+            model.allowed_invocation_modes = data.allowed_invocation_modes
         if data.allowed_tool_names is not None:
             model.allowed_tool_names = data.allowed_tool_names
         if data.allowed_sub_agent_ids is not None:
@@ -263,7 +274,7 @@ class SubAgentService:
             display_name=model.display_name,
             description=(model.description or model.display_name).strip(),
             enabled=model.enabled,
-            allowed_agent_modes=model.allowed_agent_modes,
+            allowed_invocation_modes=model.allowed_invocation_modes,
             allowed_tool_names=model.allowed_tool_names,
             allowed_sub_agent_ids=model.allowed_sub_agent_ids,
             llm_config=model.llm_config,

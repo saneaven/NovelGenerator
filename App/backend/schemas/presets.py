@@ -1,8 +1,8 @@
-"""Pydantic schemas for prompt preset management"""
+"""Pydantic schemas for prompt preset management."""
 from datetime import datetime
-from typing import List, Optional, Union, Dict, Any
+from typing import List, Optional, Union, Dict, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from .sub_agents import SubAgentDefinition
 
@@ -84,17 +84,20 @@ class ActivePresetResponse(BaseModel):
 
 class ExportPromptData(BaseModel):
     """Single prompt content for export"""
+    model_config = ConfigDict(extra="forbid")
     content: str
 
 
 class ExportFragmentData(BaseModel):
     """Single fragment data for export"""
+    model_config = ConfigDict(extra="forbid")
     content: str
     description: Optional[str] = None
 
 
 class ExportVariableData(BaseModel):
     """Single variable data for export"""
+    model_config = ConfigDict(extra="forbid")
     name: str
     var_type: str
     value: Union[str, int, float, bool, None]
@@ -106,7 +109,8 @@ class ExportVariableData(BaseModel):
 
 class PresetExportData(BaseModel):
     """Complete preset export structure"""
-    format_version: str
+    model_config = ConfigDict(extra="forbid")
+    format_version: Literal[1]
     preset: Dict[str, Optional[str]]
     prompts: Dict[str, Any]
     fragments: Dict[str, Dict[str, ExportFragmentData]]
@@ -117,6 +121,7 @@ class PresetExportData(BaseModel):
 
 class PresetImportData(BaseModel):
     """Request to import a preset from exported JSON"""
+    model_config = ConfigDict(extra="forbid")
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=500)
     data: PresetExportData

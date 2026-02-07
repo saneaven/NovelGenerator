@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { AgentRunMode } from '../types/agentRuntime';
 
 /**
  * AgentUIStore - UI State for Agent Components
@@ -9,16 +10,14 @@ import { create } from 'zustand';
  * - Loading states
  * - Input text
  * - Message editing state
- * - Agent mode (storyObject, outlineManager, novelEditor)
+ * - Agent run mode (planMode/agentMode)
  *
  * Note: Agent data (messages, agents) is managed by agentStore.
  * Note: Selected agent ID remains in agentStore for data operations.
  * Note: Sidebar visibility is now managed by sidebarStore.
  */
 
-export type AgentMode = 'storyObject' | 'outlineManager' | 'novelEditor';
-
-const AGENT_MODES: AgentMode[] = ['storyObject', 'outlineManager', 'novelEditor'];
+// Agent mode concepts are product-level and live in src/types/agentRuntime.ts.
 
 export type AgentPreflightToast = {
   type: 'info' | 'error';
@@ -47,8 +46,8 @@ interface AgentUIState {
   // Per-project preflight toast (memory summary/archive/search)
   preflightToastByProject: Record<string, AgentPreflightToast | undefined>;
 
-  // Per-project agent mode
-  modeByProject: Record<string, AgentMode>;
+  // Per-project agent run mode (Plan vs Agent)
+  runModeByProject: Record<string, AgentRunMode>;
 
   // Modal state for agent detail modal
   detailSessionId: string | null;
@@ -80,10 +79,10 @@ interface AgentUIActions {
   setPreflightToast: (projectId: string, toast: AgentPreflightToast | null) => void;
   getPreflightToast: (projectId: string) => AgentPreflightToast | null;
 
-  // Agent mode
-  setMode: (projectId: string, mode: AgentMode) => void;
-  getMode: (projectId: string, defaultMode?: AgentMode) => AgentMode;
-  cycleMode: (projectId: string) => void;
+  // Agent run mode
+  setRunMode: (projectId: string, runMode: AgentRunMode) => void;
+  getRunMode: (projectId: string, defaultMode?: AgentRunMode) => AgentRunMode;
+  toggleRunMode: (projectId: string) => void;
 
   // Reset
   resetProjectState: (projectId: string) => void;
@@ -107,7 +106,7 @@ const initialState: AgentUIState = {
   inputByProject: {},
   editingByProject: {},
   preflightToastByProject: {},
-  modeByProject: {},
+  runModeByProject: {},
   detailSessionId: null,
 };
 
@@ -230,25 +229,23 @@ export const useAgentUIStore = create<AgentUIStore>()((set, get) => ({
     return get().preflightToastByProject[projectId] ?? null;
   },
 
-  // Agent mode
-  setMode: (projectId: string, mode: AgentMode) => {
+  // Agent run mode
+  setRunMode: (projectId: string, runMode: AgentRunMode) => {
     set((state) => ({
-      modeByProject: {
-        ...state.modeByProject,
-        [projectId]: mode,
+      runModeByProject: {
+        ...state.runModeByProject,
+        [projectId]: runMode,
       },
     }));
   },
 
-  getMode: (projectId: string, defaultMode: AgentMode = 'storyObject') => {
-    return get().modeByProject[projectId] ?? defaultMode;
+  getRunMode: (projectId: string, defaultMode: AgentRunMode = 'agentMode') => {
+    return get().runModeByProject[projectId] ?? defaultMode;
   },
 
-  cycleMode: (projectId: string) => {
-    const current = get().getMode(projectId);
-    const currentIndex = AGENT_MODES.indexOf(current);
-    const nextIndex = (currentIndex + 1) % AGENT_MODES.length;
-    get().setMode(projectId, AGENT_MODES[nextIndex]);
+  toggleRunMode: (projectId: string) => {
+    const current = get().getRunMode(projectId);
+    get().setRunMode(projectId, current === 'planMode' ? 'agentMode' : 'planMode');
   },
 
   // Reset project state
@@ -260,7 +257,7 @@ export const useAgentUIStore = create<AgentUIStore>()((set, get) => ({
       delete newState.inputByProject[projectId];
       delete newState.editingByProject[projectId];
       delete newState.preflightToastByProject[projectId];
-      delete newState.modeByProject[projectId];
+      delete newState.runModeByProject[projectId];
       return newState;
     });
   },

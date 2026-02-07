@@ -19,7 +19,7 @@ import { ToolCallCard } from '../../../components/toolCall';
 import SubAgentInvocationCard from '../../../components/SubAgent/SubAgentInvocationCard';
 import { TextButton } from '../../../components/TextButton';
 import { IconButton } from '../../../components/IconButton';
-import AgentModeToggle from '../../../components/ui/AgentModeToggle';
+import AgentRunModeToggle from '../../../components/ui/AgentRunModeToggle';
 import { collapseContentParts } from '../../../agent/utils/contentParts';
 import { Settings, Edit, Trash, Globe, CircularArrow, ChevronDown, Send, Stop } from '../../../components/icons';
 import { useAgentOrchestration } from '../../../agent/hooks';
@@ -28,11 +28,13 @@ import { AgentExecutor, applyAgentEdits } from '../../../agent';
 import { applyToolCallsDirect } from '../../../llmTask/toolCalls/toolCallEngine';
 import { CRUD_OPTIONS } from '../../../toolCall/apply/types';
 import { buildEditCardsFromToolCallMetadata } from '../../../toolCall';
+import type { AgentRunMode, WorkspaceSurface } from '../../../types/agentRuntime';
 
 interface AgentPanelProps
 {
     projectId: string;
-    mode: 'novelEditor' | 'storyObject' | 'outlineManager';
+    runMode: AgentRunMode;
+    surface: WorkspaceSurface;
 }
 
 interface AgentContextTriggerProps {
@@ -180,7 +182,8 @@ interface DisplayMessageInfo
 
 const AgentPanel: React.FC<AgentPanelProps> = ({
     projectId,
-    mode,
+    runMode,
+    surface,
 }) =>
 {
     const { t } = useTranslation();
@@ -189,7 +192,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     const {
         agentHandlers,
         contextIds,
-    } = useAgentOrchestration({ projectId, mode });
+    } = useAgentOrchestration({ projectId, runMode, surface });
 
     const preflightToast = useAgentUIStore((state) => state.preflightToastByProject[projectId] ?? null);
 
@@ -235,8 +238,8 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     const { showError } = useErrorStore();
     const novelEditorStore = useNovelEditorStore();
 
-    // Check if editor has unsaved changes (only relevant in novelEditor mode)
-    const hasUnsavedChanges = mode === 'novelEditor'
+    // Check if editor has unsaved changes (only relevant in novel-editor surface)
+    const hasUnsavedChanges = surface === 'novel-editor'
         ? novelEditorStore.getHasUnsavedChanges(projectId)
         : false;
 
@@ -678,7 +681,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                     const isSameRoleAsPrevious = previousMessage?.chatMessage.role === message.chatMessage.role;
                     const isUser = message.chatMessage.role === 'user';
                     const isEditing = editingMessageId === message.chatMessage.id;
-                    const processingResult = displayProcessor.process(message.chatMessage as any, { projectId, mode } as any);
+                    const processingResult = displayProcessor.process(message.chatMessage as any, { projectId, surface } as any);
                     const isTranslating = Boolean(translatingMessages[message.storedMessage.id]);
                     const primaryMessage = message.storedMessage.data[mainLanguage]
                         ? convertToDisplayMessage(message.storedMessage, mainLanguage)
@@ -771,7 +774,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                         language: mainLanguage,
                                                                         selections,
                                                                         options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
-                                                                        executionMode: mode,
+                                                                        invocationCaller: runMode,
                                                                     });
                                                                     // Auto-continue: trigger next LLM turn with tool results
                                                                     await triggerAutoContinue();
@@ -808,7 +811,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                         toolCalls: storedToolCalls,
                                                                         selections,
                                                                         options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
-                                                                        executionMode: mode,
+                                                                        invocationCaller: runMode,
                                                                     });
 
                                                                     await useAgentStore.getState().updateMessageToolCalls(
@@ -840,7 +843,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                         language: mainLanguage,
                                                                         selections,
                                                                         options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
-                                                                        executionMode: mode,
+                                                                        invocationCaller: runMode,
                                                                     });
                                                                     return;
                                                                 }
@@ -875,7 +878,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                         toolCalls: storedToolCalls,
                                                                         selections,
                                                                         options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
-                                                                        executionMode: mode,
+                                                                        invocationCaller: runMode,
                                                                     });
 
                                                                     await useAgentStore.getState().updateMessageToolCalls(
@@ -1031,9 +1034,9 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                 </div>
 
                 <div className="agent-controls-row">
-                    <AgentModeToggle
-                        currentMode={mode}
-                        onModeChange={(newMode) => useAgentUIStore.getState().setMode(projectId, newMode)}
+                    <AgentRunModeToggle
+                        currentRunMode={runMode}
+                        onRunModeChange={(next) => useAgentUIStore.getState().setRunMode(projectId, next)}
                     />
                     <AgentContextTrigger
                         selectedCount={selectedContextIds.length}

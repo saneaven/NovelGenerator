@@ -746,9 +746,8 @@
         "llmConfig": "LLM 설정"
       },
       "subAgentModes": {
-        "storyObject": "스토리 오브젝트",
-        "novelEditor": "소설 편집기",
-        "outlineManager": "아웃라인 관리",
+        "planMode": "플랜 모드",
+        "agentMode": "에이전트 모드",
         "subAgent": "서브 에이전트"
       },
       "subAgentPrompts": {
@@ -968,10 +967,9 @@
     "translate": "번역 ({{count}})",
     "translateObjects": "{{count}}개 객체 번역"
   },
-  "agentModeToggle": {
-    "storyObjects": "스토리 객체",
-    "outline": "개요",
-    "editor": "에디터",
+  "agentRunModeToggle": {
+    "plan": "플랜",
+    "agent": "에이전트",
     "currentMode": "현재 모드: {{mode}}. 클릭하여 전환."
   },
   "activity": {

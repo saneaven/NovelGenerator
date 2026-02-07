@@ -98,7 +98,7 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
       const data = JSON.parse(text) as PresetExportData;
 
       // Basic validation
-      if (!data.format_version || !data.preset || !data.prompts) {
+      if (data.format_version !== 1 || !data.preset || !data.prompts || !Array.isArray((data as any).sub_agents)) {
         throw new Error('Invalid preset file format');
       }
 

@@ -4,7 +4,7 @@ import { BaseModal } from '../../BaseModal';
 import { TextButton } from '../../TextButton';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useSubAgentStore } from '../../../store/subAgentStore';
-import type { SubAgentCreate, SubAgentAllowedMode } from '../../../types/subAgents';
+import type { SubAgentCreate, SubAgentAllowedInvocation } from '../../../types/subAgents';
 import { SUB_AGENT_CALL_PREFIX, isValidAgentName } from '../../../subAgent/tools/SubAgentCallTools';
 
 interface CreateSubAgentModalProps {
@@ -13,7 +13,7 @@ interface CreateSubAgentModalProps {
   onCreated: (id: string) => void;
 }
 
-const DEFAULT_ALLOWED_MODES: SubAgentAllowedMode[] = ['storyObject', 'novelEditor', 'outlineManager', 'subAgent'];
+const DEFAULT_ALLOWED_MODES: SubAgentAllowedInvocation[] = ['planMode', 'agentMode', 'subAgent'];
 
 const CreateSubAgentModal: React.FC<CreateSubAgentModalProps> = ({ isOpen, onClose, onCreated }) => {
   const { t } = useTranslation();
@@ -80,7 +80,7 @@ const CreateSubAgentModal: React.FC<CreateSubAgentModalProps> = ({ isOpen, onClo
       display_name: name,
       description: desc,
       enabled: true,
-      allowed_agent_modes: DEFAULT_ALLOWED_MODES,
+      allowed_invocation_modes: DEFAULT_ALLOWED_MODES,
       allowed_tool_names: [],
       allowed_sub_agent_ids: [],
       llm_config: defaultConfig,

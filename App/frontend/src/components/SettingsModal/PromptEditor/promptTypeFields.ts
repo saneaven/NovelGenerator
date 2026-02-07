@@ -6,7 +6,7 @@
 import type { TaskType } from '../../../types/prompts';
 
 export interface PromptTypeField {
-  path: string;           // e.g., 'agent.mode', 'editAssistant.targetParagraphs'
+  path: string;           // e.g., 'agent.runMode', 'editAssistant.targetParagraphs'
   label: string;          // Display label
   type: 'boolean' | 'text' | 'dropdown' | 'textarea';
   options?: string[];     // For dropdown type
@@ -15,7 +15,8 @@ export interface PromptTypeField {
 
 // Agent prompts
 const AGENT_FIELDS: PromptTypeField[] = [
-  { path: 'agent.mode', label: 'Mode', type: 'dropdown', options: ['storyObject', 'novelEditor', 'outlineManager'] },
+  { path: 'agent.runMode', label: 'Run Mode', type: 'dropdown', options: ['planMode', 'agentMode'] },
+  { path: 'agent.surface', label: 'Surface', type: 'dropdown', options: ['story-object', 'outline-manager', 'novel-editor', 'config'] },
 ];
 
 // Edit Assistant prompts

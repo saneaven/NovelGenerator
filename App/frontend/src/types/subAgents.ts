@@ -1,6 +1,6 @@
 import type { TaskAIConfig } from '../store/settingsStore';
 
-export type SubAgentAllowedMode = 'storyObject' | 'outlineManager' | 'novelEditor' | 'subAgent';
+export type SubAgentAllowedInvocation = 'planMode' | 'agentMode' | 'subAgent';
 
 export interface SubAgentDefinition {
   /** Management identifier (UUID string). Used for update/delete and allowlists. */
@@ -15,7 +15,7 @@ export interface SubAgentDefinition {
   description: string;
   enabled: boolean;
 
-  allowed_agent_modes: SubAgentAllowedMode[];
+  allowed_invocation_modes: SubAgentAllowedInvocation[];
 
   /** Static tool names only (create_*/read_*/patch_*/replace_* etc). Never store call_* here. */
   allowed_tool_names: string[];

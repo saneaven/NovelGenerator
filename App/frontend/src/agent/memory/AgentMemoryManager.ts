@@ -4,11 +4,12 @@ import {
   LLMTaskMode,
   createEmptyUserHistory,
   type ChatMessage,
-  type AgentWorkspacePromptContext,
+  type AgentPromptContext,
   type AgentMemorySummaryPromptContext,
   type ContentPart,
   type ToolCallMetadata,
 } from '../../llm';
+import type { AgentRunMode, WorkspaceSurface } from '../../types/agentRuntime';
 import { buildConversationBlocksWithMeta } from '../../llm/conversation/buildConversationBlocks';
 import { startLLMSession } from '../../llmSession';
 import { useAgentStore } from '../../store/agentStore';
@@ -48,7 +49,8 @@ export type AgentMemoryContext = {
 export type PreSessionInput = {
   projectId: string;
   agentId: string;
-  mode: 'novelEditor' | 'storyObject' | 'outlineManager';
+  runMode: AgentRunMode;
+  surface: WorkspaceSurface;
   userInput: string;
   outputLanguage: string;
   outputMode: 'tool_call' | 'native_tool_call' | 'raw_output';
@@ -71,12 +73,8 @@ const DEFAULT_POLICY = {
   maxArchiveLoops: 3,
 } as const;
 
-function getLlmMode(mode: PreSessionInput['mode']): typeof LLMTaskMode[keyof typeof LLMTaskMode] {
-  return mode === 'storyObject'
-    ? LLMTaskMode.AGENT_STORYOBJECT
-    : mode === 'outlineManager'
-      ? LLMTaskMode.AGENT_OUTLINE_MANAGER
-      : LLMTaskMode.AGENT_NOVEL_EDITOR;
+function getLlmMode(runMode: PreSessionInput['runMode']): typeof LLMTaskMode[keyof typeof LLMTaskMode] {
+  return runMode === 'planMode' ? LLMTaskMode.AGENT_PLAN_MODE : LLMTaskMode.AGENT_AGENT_MODE;
 }
 
 function getMessageText(msg: ChatMessage): string {
@@ -566,13 +564,15 @@ export const AgentMemoryManager = {
 
     for (let loop = 0; loop < DEFAULT_POLICY.maxArchiveLoops; loop++) {
       throwIfAborted(options?.signal);
-      const llmMode = getLlmMode(input.mode);
-      const promptContext: AgentWorkspacePromptContext = {
+      const llmMode = getLlmMode(input.runMode);
+      const promptContext: AgentPromptContext = {
         projectId: input.projectId,
         outputLanguage: input.outputLanguage,
         outputMode: input.outputMode,
         enablePrefill: input.enablePrefill,
         thinkingMode: input.thinkingMode,
+        runMode: input.runMode,
+        surface: input.surface,
         contextObjectIds: input.contextObjectIds,
         // Memory injection (PromptManager will expose these on templateData.agent.*)
         ...(memory as any),

@@ -27,9 +27,8 @@ import { buildConversationBlocks } from './conversation/buildConversationBlocks'
  * Map LLMTaskMode to AITaskType for settings lookup
  */
 const MODE_TO_TASK_TYPE: Record<LLMTaskModeType, AITaskType> = {
-  [LLMTaskMode.AGENT_STORYOBJECT]: 'agent',
-  [LLMTaskMode.AGENT_NOVEL_EDITOR]: 'agent',
-  [LLMTaskMode.AGENT_OUTLINE_MANAGER]: 'agent',
+  [LLMTaskMode.AGENT_PLAN_MODE]: 'agent',
+  [LLMTaskMode.AGENT_AGENT_MODE]: 'agent',
   [LLMTaskMode.AGENT_MEMORY_SUMMARY]: 'summary',
   [LLMTaskMode.EDIT_ASSISTANT_STORY_OBJECT]: 'editAssistant',
   [LLMTaskMode.EDIT_ASSISTANT_MANUSCRIPT]: 'editAssistant',

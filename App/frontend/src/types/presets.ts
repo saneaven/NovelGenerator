@@ -2,6 +2,8 @@
  * Types for prompt preset management
  */
 
+import type { SubAgentDefinition } from './subAgents';
+
 /**
  * Preset list item (minimal info for list display)
  */
@@ -116,7 +118,7 @@ export interface ExportVariableData {
  * Complete preset export structure
  */
 export interface PresetExportData {
-  format_version: string;
+  format_version: 1;
   preset: {
     name: string;
     description: string | null;
@@ -124,6 +126,7 @@ export interface PresetExportData {
   prompts: Record<string, Record<string, ExportPromptData | Record<string, ExportPromptData>>>;
   fragments: Record<string, Record<string, ExportFragmentData>>;
   variables: ExportVariableData[];
+  sub_agents: SubAgentDefinition[];
   exported_at: string;
 }
 

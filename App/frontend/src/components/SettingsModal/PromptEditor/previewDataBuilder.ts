@@ -169,12 +169,29 @@ export function buildModeSpecificData(
 
   switch (taskType) {
     case 'agent':
-      modeData = {
-        agent: {
-          mode: promptName as 'storyObject' | 'novelEditor' | 'outlineManager',
-          contextObjectIds: filteredIds.contextObjectIds,
-        },
-      };
+      if (promptName === 'memorySummary') {
+        modeData = {
+          memorySummary: {
+            previousSummary: '[ Placeholder for previous summary ]',
+            messages: [{
+              role: 'user',
+              content: '[ Placeholder for archived message content ]',
+              messageId: '[ placeholder-message-id ]',
+              createdAt: new Date().toISOString(),
+            }],
+            language: '[ Placeholder language ]',
+            archiveUntilMessageId: '[ placeholder-archive-boundary-id ]',
+          },
+        };
+      } else {
+        modeData = {
+          agent: {
+            runMode: promptName === 'planMode' ? 'planMode' : 'agentMode',
+            surface: 'story-object',
+            contextObjectIds: filteredIds.contextObjectIds,
+          },
+        };
+      }
       break;
 
     case 'editAssistant':
