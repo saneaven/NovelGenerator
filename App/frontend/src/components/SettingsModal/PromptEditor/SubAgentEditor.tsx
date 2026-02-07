@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCredentialsStore } from '../../../store/credentialsStore';
+import { useSettings } from '../../../store/settingsStore';
 import { useSubAgentStore } from '../../../store/subAgentStore';
 import type { SubAgentAllowedInvocation } from '../../../types/subAgents';
+import type { TaskAIConfig } from '../../../store/settingsStore';
 import TaskConfigForm from '../TaskConfigForm';
 import { IconButton } from '../../IconButton';
 import { TextButton } from '../../TextButton';
@@ -41,7 +43,8 @@ export interface SubAgentDraftData {
   allowed_invocation_modes: SubAgentAllowedInvocation[];
   allowed_tool_names: string[];
   allowed_sub_agent_ids: string[];
-  llm_config: any;
+  use_custom_llm_config: boolean;
+  llm_config_override: TaskAIConfig | null;
 }
 
 export interface SubAgentDefinitionDraft {
@@ -72,7 +75,8 @@ function snapshotForDraft(data: SubAgentDraftData): string {
     allowed_invocation_modes: [...data.allowed_invocation_modes].sort(),
     allowed_tool_names: [...data.allowed_tool_names].sort(),
     allowed_sub_agent_ids: [...data.allowed_sub_agent_ids].sort(),
-    llm_config: data.llm_config,
+    use_custom_llm_config: data.use_custom_llm_config,
+    llm_config_override: data.llm_config_override,
   });
 }
 
@@ -287,7 +291,9 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
 }) => {
   const { t } = useTranslation();
   const credentials = useCredentialsStore((s) => s.credentials);
+  const settings = useSettings();
   const { subAgents, deleteSubAgent } = useSubAgentStore();
+  const globalSubAgentConfig = settings.taskConfigs.subAgent;
 
   const agent = useMemo(() => {
     return selectedId ? subAgents.find((s) => s.id === selectedId) : undefined;
@@ -308,6 +314,16 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
     setToolFilter('');
     setActiveTab('general');
   }, [selectedId]);
+
+  useEffect(() => {
+    if (!draft) return;
+    if (!draft.current.use_custom_llm_config) return;
+    if (draft.current.llm_config_override) return;
+    updateDraft((cur) => ({
+      ...cur,
+      current: { ...cur.current, llm_config_override: globalSubAgentConfig },
+    }));
+  }, [draft?.current.use_custom_llm_config, draft?.current.llm_config_override, globalSubAgentConfig]);
 
   const filteredTools = useMemo(() => {
     const q = toolFilter.trim().toLowerCase();
@@ -609,12 +625,42 @@ const SubAgentEditor: React.FC<SubAgentEditorProps> = ({
         >
           <section className="sub-agent-editor__section">
             <h4 className="sub-agent-editor__section-title">{t('settings.promptEditor.subAgentSettings.llmConfig')}</h4>
-            {draft.current.llm_config && (
+            <ToggleSwitch
+              checked={draft.current.use_custom_llm_config}
+              onChange={(checked) => {
+                updateDraft((cur) => ({
+                  ...cur,
+                  current: {
+                    ...cur.current,
+                    use_custom_llm_config: checked,
+                    llm_config_override:
+                      checked && !cur.current.llm_config_override ? globalSubAgentConfig : cur.current.llm_config_override,
+                  },
+                }));
+              }}
+              label={t('settings.promptEditor.subAgentSettings.useCustomLlmConfig')}
+            />
+            <div className="sub-agent-editor__hint">{t('settings.promptEditor.subAgentSettings.useCustomLlmConfigHint')}</div>
+
+            {!draft.current.use_custom_llm_config ? (
+              <div className="sub-agent-editor__hint">
+                {t('settings.promptEditor.subAgentSettings.globalLlmConfigSummary', {
+                  provider: globalSubAgentConfig.provider,
+                  model: globalSubAgentConfig.model,
+                  temperature: globalSubAgentConfig.temperature,
+                })}
+              </div>
+            ) : (
               <TaskConfigForm
-                taskType="agent"
-                config={draft.current.llm_config}
+                taskType="subAgent"
+                config={draft.current.llm_config_override ?? globalSubAgentConfig}
                 credentials={credentials}
-                onChange={(cfg) => updateDraft((cur) => ({ ...cur, current: { ...cur.current, llm_config: cfg } }))}
+                onChange={(cfg) =>
+                  updateDraft((cur) => ({
+                    ...cur,
+                    current: { ...cur.current, llm_config_override: cfg },
+                  }))
+                }
               />
             )}
           </section>

@@ -2,17 +2,11 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AITaskType, TaskAIConfig, ProviderCredentials } from '../../store/settingsStore';
 import TaskConfigForm from './TaskConfigForm';
-import { SpeechBubble, Globe, Edit, Palette, Document } from '../icons';
+import { SpeechBubble, Globe, Edit, Palette, Document, People } from '../icons';
 import './GeneralPanel.css';
 
 interface GeneralPanelProps {
-  taskConfigs: {
-    agent: TaskAIConfig;
-    translation: TaskAIConfig;
-    editAssistant: TaskAIConfig;
-    imagePrompt: TaskAIConfig;
-    summary: TaskAIConfig;
-  };
+  taskConfigs: Record<AITaskType, TaskAIConfig>;
   credentials: ProviderCredentials;
   activeTask: AITaskType;
   onTaskChange: (taskType: AITaskType) => void;
@@ -25,6 +19,7 @@ const TASK_ICONS: Record<AITaskType, React.ReactNode> = {
   editAssistant: <Edit size="sm" />,
   imagePrompt: <Palette size="sm" />,
   summary: <Document size="sm" />,
+  subAgent: <People size="sm" />,
 };
 
 const GeneralPanel: React.FC<GeneralPanelProps> = ({
@@ -37,7 +32,7 @@ const GeneralPanel: React.FC<GeneralPanelProps> = ({
   const { t } = useTranslation();
   const currentConfig = taskConfigs[activeTask];
 
-  const taskTypes: AITaskType[] = ['agent', 'translation', 'editAssistant', 'imagePrompt', 'summary'];
+  const taskTypes: AITaskType[] = ['agent', 'translation', 'editAssistant', 'imagePrompt', 'summary', 'subAgent'];
 
   return (
     <div className="general-panel">

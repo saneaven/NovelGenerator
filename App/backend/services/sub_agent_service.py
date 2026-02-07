@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 import re
 import uuid
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
@@ -62,7 +62,8 @@ class SubAgentService:
                 allowed_invocation_modes=i.allowed_invocation_modes,
                 allowed_tool_names=i.allowed_tool_names,
                 allowed_sub_agent_ids=i.allowed_sub_agent_ids,
-                llm_config=i.llm_config,
+                use_custom_llm_config=i.use_custom_llm_config,
+                llm_config_override=i.llm_config_override,
             )
             for i in items
         ]
@@ -104,6 +105,9 @@ class SubAgentService:
         preset_id: uuid.UUID,
         data: SubAgentCreate,
         *,
+        prompt_templates: Optional[Dict[str, str]] = None,
+        prompt_is_default: bool = False,
+        prompt_note: str = "SubAgent auto-created",
         commit: bool = True,
     ) -> SubAgentDefinition:
         agent_name = data.agent_name.strip()
@@ -124,6 +128,35 @@ class SubAgentService:
 
         now = datetime.utcnow()
 
+        use_custom_llm_config = bool(getattr(data, "use_custom_llm_config", False))
+        llm_config_override = (
+            data.llm_config_override.model_dump(exclude_none=True) if data.llm_config_override is not None else None
+        )
+        if use_custom_llm_config and not llm_config_override:
+            raise ValueError("llm_config_override is required when use_custom_llm_config is true")
+
+        prompt_templates = prompt_templates or {}
+
+        if "systemPrompt" in prompt_templates:
+            system_content = prompt_templates["systemPrompt"]
+        else:
+            system_content = DEFAULT_SUB_AGENT_SYSTEM_PROMPT
+
+        if "userPrompt" in prompt_templates:
+            user_content = prompt_templates["userPrompt"]
+        else:
+            user_content = DEFAULT_SUB_AGENT_USER_PROMPT
+
+        if "prefill" in prompt_templates:
+            prefill_content = prompt_templates["prefill"]
+        else:
+            prefill_content = DEFAULT_SUB_AGENT_PREFILL
+
+        if not system_content.strip():
+            raise ValueError("systemPrompt is required")
+        if not user_content.strip():
+            raise ValueError("userPrompt is required")
+
         model = SubAgentDefinitionModel(
             id=uuid.uuid4(),
             user_id=user_id,
@@ -135,13 +168,14 @@ class SubAgentService:
             allowed_invocation_modes=data.allowed_invocation_modes,
             allowed_tool_names=data.allowed_tool_names,
             allowed_sub_agent_ids=[str(x) for x in data.allowed_sub_agent_ids],
-            llm_config=data.llm_config,
+            use_custom_llm_config=use_custom_llm_config,
+            llm_config_override=llm_config_override,
             created_at=now,
             updated_at=now,
         )
         db.add(model)
 
-        # Create the 3 required prompt templates (no fallback).
+        # Create the 3 required prompt templates (defaults or overrides).
         db.add_all([
             PromptVersion(
                 id=uuid.uuid4(),
@@ -150,10 +184,10 @@ class SubAgentService:
                 task_type="subAgent",
                 prompt_category="systemPrompt",
                 prompt_name=agent_name,
-                content=DEFAULT_SUB_AGENT_SYSTEM_PROMPT,
+                content=system_content,
                 version_number=1,
-                is_default=False,
-                note="SubAgent auto-created",
+                is_default=prompt_is_default,
+                note=prompt_note,
                 created_at=now,
             ),
             PromptVersion(
@@ -163,10 +197,10 @@ class SubAgentService:
                 task_type="subAgent",
                 prompt_category="userPrompt",
                 prompt_name=agent_name,
-                content=DEFAULT_SUB_AGENT_USER_PROMPT,
+                content=user_content,
                 version_number=1,
-                is_default=False,
-                note="SubAgent auto-created",
+                is_default=prompt_is_default,
+                note=prompt_note,
                 created_at=now,
             ),
             PromptVersion(
@@ -176,10 +210,10 @@ class SubAgentService:
                 task_type="subAgent",
                 prompt_category="prefill",
                 prompt_name=agent_name,
-                content=DEFAULT_SUB_AGENT_PREFILL,
+                content=prefill_content,
                 version_number=1,
-                is_default=False,
-                note="SubAgent auto-created",
+                is_default=prompt_is_default,
+                note=prompt_note,
                 created_at=now,
             ),
         ])
@@ -200,7 +234,8 @@ class SubAgentService:
             allowed_invocation_modes=model.allowed_invocation_modes,
             allowed_tool_names=model.allowed_tool_names,
             allowed_sub_agent_ids=model.allowed_sub_agent_ids,
-            llm_config=model.llm_config,
+            use_custom_llm_config=model.use_custom_llm_config,
+            llm_config_override=model.llm_config_override,
         )
 
     @staticmethod
@@ -260,8 +295,13 @@ class SubAgentService:
             model.allowed_tool_names = data.allowed_tool_names
         if data.allowed_sub_agent_ids is not None:
             model.allowed_sub_agent_ids = [str(x) for x in data.allowed_sub_agent_ids]
-        if data.llm_config is not None:
-            model.llm_config = data.llm_config
+        if data.use_custom_llm_config is not None:
+            model.use_custom_llm_config = bool(data.use_custom_llm_config)
+        if data.llm_config_override is not None:
+            model.llm_config_override = data.llm_config_override.model_dump(exclude_none=True)
+
+        if model.use_custom_llm_config and not model.llm_config_override:
+            raise ValueError("llm_config_override is required when use_custom_llm_config is true")
 
         model.updated_at = datetime.utcnow()
 
@@ -277,7 +317,8 @@ class SubAgentService:
             allowed_invocation_modes=model.allowed_invocation_modes,
             allowed_tool_names=model.allowed_tool_names,
             allowed_sub_agent_ids=model.allowed_sub_agent_ids,
-            llm_config=model.llm_config,
+            use_custom_llm_config=model.use_custom_llm_config,
+            llm_config_override=model.llm_config_override,
         )
 
     @staticmethod

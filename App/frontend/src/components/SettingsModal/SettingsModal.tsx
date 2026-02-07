@@ -106,7 +106,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   }, [showToast]);
 
   const validateTaskModels = (): { taskType: AITaskType; message: string } | null => {
-    const taskTypes: AITaskType[] = ['agent', 'translation', 'editAssistant', 'imagePrompt', 'summary'];
+    const taskTypes: AITaskType[] = ['agent', 'translation', 'editAssistant', 'imagePrompt', 'summary', 'subAgent'];
     for (const taskType of taskTypes) {
       const cfg = localSettings.taskConfigs?.[taskType];
       const model = (cfg as any)?.model;

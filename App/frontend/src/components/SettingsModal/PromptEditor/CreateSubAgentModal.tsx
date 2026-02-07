@@ -1,8 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BaseModal } from '../../BaseModal';
 import { TextButton } from '../../TextButton';
-import { useSettingsStore } from '../../../store/settingsStore';
 import { useSubAgentStore } from '../../../store/subAgentStore';
 import type { SubAgentCreate, SubAgentAllowedInvocation } from '../../../types/subAgents';
 import { SUB_AGENT_CALL_PREFIX, isValidAgentName } from '../../../subAgent/tools/SubAgentCallTools';
@@ -18,9 +17,6 @@ const DEFAULT_ALLOWED_MODES: SubAgentAllowedInvocation[] = ['planMode', 'agentMo
 const CreateSubAgentModal: React.FC<CreateSubAgentModalProps> = ({ isOpen, onClose, onCreated }) => {
   const { t } = useTranslation();
   const { createSubAgent } = useSubAgentStore();
-  const getTaskConfig = useSettingsStore((s) => s.getTaskConfig);
-
-  const defaultConfig = useMemo(() => getTaskConfig('agent'), [getTaskConfig]);
 
   const [agentName, setAgentName] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -83,7 +79,8 @@ const CreateSubAgentModal: React.FC<CreateSubAgentModalProps> = ({ isOpen, onClo
       allowed_invocation_modes: DEFAULT_ALLOWED_MODES,
       allowed_tool_names: [],
       allowed_sub_agent_ids: [],
-      llm_config: defaultConfig,
+      use_custom_llm_config: false,
+      llm_config_override: null,
     };
 
     try {

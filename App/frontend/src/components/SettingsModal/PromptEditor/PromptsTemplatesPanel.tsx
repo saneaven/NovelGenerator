@@ -754,7 +754,8 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
               (n) => !n.startsWith('call_') && n !== 'return_sub_agent_result'
             ),
             allowed_sub_agent_ids: d.current.allowed_sub_agent_ids,
-            llm_config: d.current.llm_config,
+            use_custom_llm_config: d.current.use_custom_llm_config,
+            llm_config_override: d.current.llm_config_override,
           });
 
           const previousName = d.original.agent_name;
@@ -777,7 +778,8 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
               allowed_invocation_modes: [...updated.allowed_invocation_modes],
               allowed_tool_names: [...updated.allowed_tool_names],
               allowed_sub_agent_ids: [...updated.allowed_sub_agent_ids],
-              llm_config: updated.llm_config,
+              use_custom_llm_config: updated.use_custom_llm_config,
+              llm_config_override: updated.llm_config_override,
             };
 
             return {
@@ -1205,7 +1207,8 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
         allowed_invocation_modes: [...agent.allowed_invocation_modes],
         allowed_tool_names: [...agent.allowed_tool_names],
         allowed_sub_agent_ids: [...agent.allowed_sub_agent_ids],
-        llm_config: agent.llm_config,
+        use_custom_llm_config: agent.use_custom_llm_config,
+        llm_config_override: agent.llm_config_override,
       };
 
       const draft: SubAgentDefinitionDraft = {

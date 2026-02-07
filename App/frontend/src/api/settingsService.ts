@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { Settings } from '../store/settingsStore';
+import type { Settings, AITaskType, TaskAIConfig } from '../store/settingsStore';
 
 export const settingsService = {
     /**
@@ -20,8 +20,8 @@ export const settingsService = {
      * Update a specific task's configuration
      */
     async updateTaskConfig(
-        taskType: 'agent' | 'translation' | 'editAssistant' | 'imagePrompt',
-        config: Settings['taskConfigs']['agent']
+        taskType: AITaskType,
+        config: TaskAIConfig
     ): Promise<Settings> {
         return await apiClient.patch<Settings>(
             `/api/v1/settings/task/${taskType}`,

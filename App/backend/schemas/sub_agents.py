@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field, ConfigDict
 import uuid
+
+from .settings import TaskAIConfig
 
 
 class SubAgentDefinition(BaseModel):
@@ -24,8 +26,12 @@ class SubAgentDefinition(BaseModel):
     # UUID list of other Sub Agents that this Sub Agent is allowed to call.
     allowed_sub_agent_ids: List[uuid.UUID]
 
-    # TaskAIConfig-like JSON payload (provider/model/temp/thinking settings etc.)
-    llm_config: Dict[str, Any]
+    # If true, use llm_config_override for this Sub Agent; otherwise inherit the global config.
+    use_custom_llm_config: bool = False
+
+    # TaskAIConfig-like payload used when use_custom_llm_config=true.
+    llm_config_override: Optional[TaskAIConfig] = None
+
 
 class SubAgentCreate(BaseModel):
     """Create a new sub agent."""
@@ -40,7 +46,8 @@ class SubAgentCreate(BaseModel):
     allowed_tool_names: List[str]
     allowed_sub_agent_ids: List[uuid.UUID]
 
-    llm_config: Dict[str, Any]
+    use_custom_llm_config: bool = False
+    llm_config_override: Optional[TaskAIConfig] = None
 
 
 class SubAgentUpdate(BaseModel):
@@ -55,4 +62,5 @@ class SubAgentUpdate(BaseModel):
     allowed_invocation_modes: Optional[List[str]] = None
     allowed_tool_names: Optional[List[str]] = None
     allowed_sub_agent_ids: Optional[List[uuid.UUID]] = None
-    llm_config: Optional[Dict[str, Any]] = None
+    use_custom_llm_config: Optional[bool] = None
+    llm_config_override: Optional[TaskAIConfig] = None

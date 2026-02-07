@@ -25,3 +25,4 @@ export { Toggle } from './Toggle';
 export { List } from './List';
 export { Sliders } from './Sliders';
 export { Eye } from './Eye';
+export { Search } from './Search';

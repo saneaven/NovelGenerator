@@ -303,7 +303,10 @@ export const SubAgentManager = {
     }
 
     const tools = await buildToolSchemas(definition);
-    const llmConfig = definition.llm_config as TaskAIConfig;
+    const settingsStore = useSettingsStore.getState();
+    const globalConfig = settingsStore.getTaskConfig('subAgent');
+
+    const llmConfig: TaskAIConfig = definition.use_custom_llm_config ? definition.llm_config_override! : globalConfig;
 
     const runtime = useSubAgentRuntimeStore.getState();
     const existing = runtime.getInvocation(parentToolCallId);

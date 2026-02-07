@@ -30,6 +30,7 @@ class AITaskType(str, Enum):
     EDIT_ASSISTANT = "editAssistant"
     IMAGE_PROMPT = "imagePrompt"
     SUMMARY = "summary"
+    SUB_AGENT = "subAgent"
 
 
 class ProviderPreference(BaseModel):

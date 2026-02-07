@@ -56,7 +56,8 @@ class UserSettings(Base):
         "translation": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.2, "maxOutputTokens": null, "contextWindowTokens": 32000, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
         "editAssistant": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "maxOutputTokens": null, "contextWindowTokens": 32000, "advanced": {"enablePrefill": true, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
         "imagePrompt": {"provider": "openrouter", "model": "gpt-4o", "temperature": 0.7, "maxOutputTokens": null, "contextWindowTokens": 32000, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
-        "summary": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.2, "maxOutputTokens": null, "contextWindowTokens": 32000, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}}
+        "summary": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.2, "maxOutputTokens": null, "contextWindowTokens": 32000, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}},
+        "subAgent": {"provider": "openrouter", "model": "gpt-4o-mini", "temperature": 0.7, "maxOutputTokens": null, "contextWindowTokens": 32000, "advanced": {"enablePrefill": false, "thinkingMode": "off", "thinkingConfig": {"effort": "medium"}}}
     }""")
 
     # Language settings
@@ -266,8 +267,11 @@ class SubAgentDefinitionModel(Base):
     # UUID list of sub_agent_definitions.id that this Sub Agent is allowed to call.
     allowed_sub_agent_ids = Column(JSONB, nullable=False)
 
-    # TaskAIConfig-like payload (provider/model/temp/thinking settings etc.)
-    llm_config = Column(JSONB, nullable=False)
+    # If true, use llm_config_override for this Sub Agent; otherwise inherit the global config.
+    use_custom_llm_config = Column(Boolean, default=False, nullable=False)
+
+    # TaskAIConfig-like payload (provider/model/temp/thinking settings etc.) used when use_custom_llm_config=true.
+    llm_config_override = Column(JSONB, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

@@ -23,7 +23,11 @@ export interface SubAgentDefinition {
   /** UUID list of other Sub Agents this Sub Agent can call (by id). */
   allowed_sub_agent_ids: string[];
 
-  llm_config: TaskAIConfig;
+  /** If true, this Sub Agent uses llm_config_override instead of the global Sub Agent config. */
+  use_custom_llm_config: boolean;
+
+  /** Per-Sub-Agent LLM config (only used when use_custom_llm_config=true). */
+  llm_config_override: TaskAIConfig | null;
 }
 
 export type SubAgentCreate = Omit<SubAgentDefinition, 'id'>;

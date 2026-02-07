@@ -5,6 +5,8 @@ from typing import Optional, List, Dict
 from datetime import datetime
 import uuid
 
+from pydantic import ValidationError
+
 from ..models.db_models import (
     PromptPreset,
     PromptVersion,
@@ -13,6 +15,7 @@ from ..models.db_models import (
     UserSettings,
     SubAgentDefinitionModel,
 )
+from ..schemas.settings import TaskAIConfig
 from ..schemas.presets import (
     PresetListItem,
     PresetResponse,
@@ -517,7 +520,8 @@ class PresetService:
                 allowed_invocation_modes=s.allowed_invocation_modes,
                 allowed_tool_names=s.allowed_tool_names,
                 allowed_sub_agent_ids=mapped_allowed,
-                llm_config=s.llm_config,
+                use_custom_llm_config=s.use_custom_llm_config,
+                llm_config_override=s.llm_config_override,
                 created_at=now,
                 updated_at=now,
             ))
@@ -759,6 +763,9 @@ class PresetService:
         default_fragments = get_default_fragments()
         PresetService._initialize_fragments_for_preset(db, user_id, preset.id, default_fragments)
 
+        # Seed default Sub Agents (user-editable, per preset)
+        seed_default_sub_agents(db, user_id=user_id, preset_id=preset.id)
+
         return preset
 
     @staticmethod
@@ -862,7 +869,8 @@ class PresetService:
                 "allowed_invocation_modes": s.allowed_invocation_modes,
                 "allowed_tool_names": s.allowed_tool_names,
                 "allowed_sub_agent_ids": s.allowed_sub_agent_ids,
-                "llm_config": s.llm_config,
+                "use_custom_llm_config": s.use_custom_llm_config,
+                "llm_config_override": s.llm_config_override,
             }
             for s in sub_agents
         ]
@@ -1009,7 +1017,8 @@ class PresetService:
                 "allowed_invocation_modes",
                 "allowed_tool_names",
                 "allowed_sub_agent_ids",
-                "llm_config",
+                "use_custom_llm_config",
+                "llm_config_override",
                 "enabled",
             ]
             missing = [k for k in required if k not in sa_data]
@@ -1036,6 +1045,19 @@ class PresetService:
             if not description:
                 raise ValueError("Invalid preset file: sub_agents.description is required")
 
+            use_custom_llm_config = bool(sa_data.get("use_custom_llm_config", False))
+            llm_config_override = sa_data.get("llm_config_override")
+            if use_custom_llm_config and not llm_config_override:
+                raise ValueError("Invalid preset file: sub_agents.llm_config_override is required when use_custom_llm_config is true")
+
+            if llm_config_override is not None:
+                if not isinstance(llm_config_override, dict):
+                    raise ValueError("Invalid preset file: sub_agents.llm_config_override must be an object or null")
+                try:
+                    TaskAIConfig.model_validate(llm_config_override)
+                except ValidationError as e:
+                    raise ValueError(f"Invalid preset file: sub_agents.llm_config_override is invalid: {e}") from e
+
             db.add(SubAgentDefinitionModel(
                 id=new_id,
                 user_id=user_id,
@@ -1047,7 +1069,8 @@ class PresetService:
                 allowed_invocation_modes=sa_data.get("allowed_invocation_modes", []),
                 allowed_tool_names=sa_data.get("allowed_tool_names", []),
                 allowed_sub_agent_ids=mapped_allowed,
-                llm_config=sa_data.get("llm_config", {}),
+                use_custom_llm_config=use_custom_llm_config,
+                llm_config_override=llm_config_override,
                 created_at=now,
                 updated_at=now,
             ))

@@ -48,6 +48,16 @@ async def get_user_settings(
                         'thinkingConfig': {'effort': 'medium'}
                     },
                 },
+                'subAgent': {
+                    'provider': 'openrouter',
+                    'model': 'gpt-5-mini',
+                    'temperature': 0.7,
+                    'advanced': {
+                        'enablePrefill': False,
+                        'thinkingMode': 'off',
+                        'thinkingConfig': {'effort': 'medium'}
+                    },
+                },
                 'translation': {
                     'provider': 'openrouter',
                     'model': 'gpt-5',

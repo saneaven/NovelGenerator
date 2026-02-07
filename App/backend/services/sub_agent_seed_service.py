@@ -6,14 +6,25 @@ No legacy compatibility / migrations: this seeds only the current default set.
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 from typing import Any, Dict, List
 
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from ..models.db_models import SubAgentDefinitionModel, UserSettings
+from ..models.db_models import SubAgentDefinitionModel
 from ..schemas.sub_agents import SubAgentCreate
 from .sub_agent_service import sub_agent_service
+
+
+_TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "prompts" / "templates" / "subAgentDefaults"
+
+
+def _read_required(agent_name: str, filename: str) -> str:
+    path = _TEMPLATES_DIR / agent_name / filename
+    if not path.exists():
+        raise RuntimeError(f"Missing built-in sub-agent prompt template: {path}")
+    return path.read_text(encoding="utf-8")
 
 
 DEFAULT_SUB_AGENT_SPECS: List[Dict[str, Any]] = [
@@ -85,25 +96,31 @@ def seed_default_sub_agents(db: Session, *, user_id: uuid.UUID, preset_id: uuid.
     if existing:
         return 0
 
-    settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
-    task_configs: Dict[str, Any] = (settings.task_configs or {}) if settings else {}
-    default_llm_config: Dict[str, Any] = task_configs.get("agent") or {}
-
     for spec in DEFAULT_SUB_AGENT_SPECS:
+        agent_name = spec["agent_name"]
+        prompt_templates = {
+            "systemPrompt": _read_required(agent_name, "systemPrompt.md"),
+            "userPrompt": _read_required(agent_name, "userPrompt.md"),
+            "prefill": _read_required(agent_name, "prefill.md"),
+        }
         sub_agent_service.create_sub_agent(
             db=db,
             user_id=user_id,
             preset_id=preset_id,
             data=SubAgentCreate(
-                agent_name=spec["agent_name"],
+                agent_name=agent_name,
                 display_name=spec["display_name"],
                 description=spec["description"],
                 enabled=True,
                 allowed_invocation_modes=spec["allowed_invocation_modes"],
                 allowed_tool_names=spec["allowed_tool_names"],
                 allowed_sub_agent_ids=[],
-                llm_config=default_llm_config,
+                use_custom_llm_config=False,
+                llm_config_override=None,
             ),
+            prompt_templates=prompt_templates,
+            prompt_is_default=True,
+            prompt_note="System default (built-in SubAgent)",
             commit=False,
         )
 
