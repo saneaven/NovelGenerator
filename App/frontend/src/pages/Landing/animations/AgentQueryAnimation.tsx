@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { TypingText } from './TypingText';
 import { Search, People, Lightning, Document } from '../../../components/icons';
+
 import './LandingAnimations.css';
 
 interface AgentQueryAnimationProps {
@@ -127,9 +128,13 @@ const AgentQueryContent: React.FC = () => {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ...SPRING }}
-          onAnimationComplete={() => setPhase('done')}
         >
-          {ANSWER}
+          <TypingText
+            text={ANSWER}
+            active
+            speed={12}
+            onComplete={() => setPhase('done')}
+          />
         </motion.div>
       )}
     </>

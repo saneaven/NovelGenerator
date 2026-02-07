@@ -86,9 +86,15 @@ const AgentWritingContent: React.FC = () => {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ...SPRING }}
-          onAnimationComplete={() => setPhase('done')}
         >
-          <span className="landing-anim-prose">{PROSE}</span>
+          <span className="landing-anim-prose">
+            <TypingText
+              text={PROSE}
+              active
+              speed={15}
+              onComplete={() => setPhase('done')}
+            />
+          </span>
         </motion.div>
       )}
     </>

@@ -139,11 +139,13 @@ const PromptEditorContent: React.FC = () => {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -6 }}
                     transition={{ duration: 0.4 }}
-                    onAnimationComplete={() => {
-                      if (phase === 'proseA') setPhase('pauseA');
-                    }}
                   >
-                    {PROSE_A}
+                    <TypingText
+                      text={PROSE_A}
+                      active
+                      speed={12}
+                      onComplete={() => setPhase('pauseA')}
+                    />
                   </motion.div>
                 )}
                 {showProseB && (
@@ -153,11 +155,13 @@ const PromptEditorContent: React.FC = () => {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -6 }}
                     transition={{ duration: 0.4 }}
-                    onAnimationComplete={() => {
-                      if (phase === 'proseB') setPhase('done');
-                    }}
                   >
-                    {PROSE_B}
+                    <TypingText
+                      text={PROSE_B}
+                      active
+                      speed={12}
+                      onComplete={() => setPhase('done')}
+                    />
                   </motion.div>
                 )}
               </AnimatePresence>

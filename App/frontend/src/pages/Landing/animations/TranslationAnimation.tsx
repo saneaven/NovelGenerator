@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import { Globe } from '../../../components/icons';
+import { TypingText } from './TypingText';
 import './LandingAnimations.css';
 
 interface TranslationAnimationProps {
@@ -95,9 +96,15 @@ const TranslationContent: React.FC = () => {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ...SPRING }}
-            onAnimationComplete={() => setPhase('done')}
           >
-            <span className="landing-anim-prose">{targetText}</span>
+            <span className="landing-anim-prose">
+              <TypingText
+                text={targetText}
+                active
+                speed={15}
+                onComplete={() => setPhase('done')}
+              />
+            </span>
           </motion.div>
         )}
       </AnimatePresence>
