@@ -63,8 +63,6 @@
         "sourceText": "Moonlight streamed through the old library windows, casting long shadows across the dusty shelves. Eleanor walked quietly down the aisle, her fingertips tracing the leather spines as she passed.",
         "sourceLang": "en",
         "targetText": "달빛이 오래된 도서관 창문 사이로 스며들어, 먼지 쌓인 책장 위에 긴 그림자를 드리우고 있었다. 엘레노어는 조용히 통로를 걸으며, 손끝으로 가죽 책등을 더듬었다.",
-        "sourceCode": "EN",
-        "targetCode": "KO",
         "buttonLabel": "한국어로 번역"
       }
     },

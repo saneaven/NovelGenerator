@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useTranslation } from 'react-i18next';
-import { Globe, ArrowRight } from '../../../components/icons';
+import { Globe } from '../../../components/icons';
 import './LandingAnimations.css';
 
 interface TranslationAnimationProps {
@@ -10,7 +10,7 @@ interface TranslationAnimationProps {
 
 const SPRING = { type: 'spring' as const, stiffness: 400, damping: 30 };
 
-type Phase = 'source' | 'action' | 'click' | 'thinking' | 'target' | 'badge' | 'done';
+type Phase = 'source' | 'action' | 'click' | 'thinking' | 'target' | 'done';
 
 const TranslationContent: React.FC = () => {
   const { t } = useTranslation();
@@ -19,8 +19,6 @@ const TranslationContent: React.FC = () => {
   const sourceText = t('landing.translation.anim.sourceText');
   const sourceLang = t('landing.translation.anim.sourceLang');
   const targetText = t('landing.translation.anim.targetText');
-  const sourceCode = t('landing.translation.anim.sourceCode');
-  const targetCode = t('landing.translation.anim.targetCode');
   const buttonLabel = t('landing.translation.anim.buttonLabel');
 
   useEffect(() => {
@@ -43,8 +41,7 @@ const TranslationContent: React.FC = () => {
 
   const showAction = phase !== 'source';
   const showTyping = phase === 'thinking';
-  const showTarget = phase === 'target' || phase === 'badge' || phase === 'done';
-  const showBadge = phase === 'badge' || phase === 'done';
+  const showTarget = phase === 'target' || phase === 'done';
 
   return (
     <>
@@ -98,23 +95,9 @@ const TranslationContent: React.FC = () => {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ...SPRING }}
-            onAnimationComplete={() => setPhase('badge')}
+            onAnimationComplete={() => setPhase('done')}
           >
             <span className="landing-anim-prose">{targetText}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Language badge */}
-      <AnimatePresence>
-        {showBadge && (
-          <motion.div
-            className="landing-anim-lang-badge"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.2, ...SPRING }}
-          >
-            {sourceCode} <ArrowRight size="xs" /> {targetCode}
           </motion.div>
         )}
       </AnimatePresence>

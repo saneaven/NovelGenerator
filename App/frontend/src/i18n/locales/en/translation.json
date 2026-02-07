@@ -63,8 +63,6 @@
         "sourceText": "月明かりが古い図書館の窓から差し込み、埃っぽい本棚に長い影を落としていた。エレノアは静かに通路を歩きながら、指先で革の背表紙をなぞった。",
         "sourceLang": "ja",
         "targetText": "Moonlight streamed through the old library windows, casting long shadows across the dusty shelves. Eleanor walked quietly down the aisle, her fingertips tracing the leather spines as she passed.",
-        "sourceCode": "JA",
-        "targetCode": "EN",
         "buttonLabel": "Translate to English"
       }
     },
