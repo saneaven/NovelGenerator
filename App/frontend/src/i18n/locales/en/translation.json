@@ -8,6 +8,7 @@
     "edit": "Edit",
     "loading": "Loading...",
     "error": "Error",
+    "warning": "Warning",
     "success": "Success",
     "confirm": "Confirm",
     "yes": "Yes",
@@ -1076,6 +1077,26 @@
     "switchToLanguage": "Switch to {{language}}",
     "translateTo": "Translate to {{language}}",
     "refreshTranslation": "Refresh {{language}}",
+    "sidebar": {
+      "createAgent": "Create new agent",
+      "closeSidebar": "Close sidebar",
+      "renameAgent": "Rename agent",
+      "deleteAgent": "Delete agent",
+      "cannotDeleteLast": "Cannot delete the last agent",
+      "deleteConfirm": "Are you sure you want to delete this agent?",
+      "noMessagesYet": "No messages yet",
+      "noContent": "No content",
+      "unknownTime": "Unknown",
+      "justNow": "Just now",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "daysAgo": "{{count}}d ago",
+      "status": {
+        "running": "Running",
+        "done": "Done",
+        "tools": "Tools"
+      }
+    },
     "memory": {
       "preflight": {
         "summarizing": "Summarizing…",

@@ -134,6 +134,44 @@
   text-overflow: ellipsis;
 }
 
+.agent-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 3px;
+}
+
+.agent-status-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.2;
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+}
+
+.agent-status-chip.running {
+  border-color: color-mix(in srgb, var(--color-primary-main) 30%, var(--color-border-subtle));
+  background: color-mix(in srgb, var(--color-primary-main) 14%, transparent);
+  color: var(--color-primary-main);
+}
+
+.agent-status-chip.done {
+  border-color: color-mix(in srgb, #22c55e 35%, var(--color-border-subtle));
+  background: color-mix(in srgb, #22c55e 14%, transparent);
+  color: #15803d;
+}
+
+.agent-status-chip.tools {
+  border-color: color-mix(in srgb, #f59e0b 35%, var(--color-border-subtle));
+  background: color-mix(in srgb, #f59e0b 16%, transparent);
+  color: #b45309;
+}
+
 .agent-preview {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);

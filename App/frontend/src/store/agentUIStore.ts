@@ -24,6 +24,10 @@ export type AgentPreflightToast = {
   message: string;
 };
 
+export function makeProjectAgentKey(projectId: string, agentId: string): string {
+  return `${projectId}:${agentId}`;
+}
+
 interface EditingState {
   messageId: string | null;
   language: string | null;
@@ -34,8 +38,11 @@ interface AgentUIState {
   // Per-project visibility state (agent panel only - sidebar visibility is in sidebarStore)
   agentVisibleByProject: Record<string, boolean>;
 
-  // Per-project loading state
-  loadingByProject: Record<string, boolean>;
+  // Per-agent loading state (keyed by `${projectId}:${agentId}`)
+  loadingByProjectAgent: Record<string, boolean>;
+
+  // Per-agent "last opened" timestamp for sidebar status badges
+  lastViewedAtByProjectAgent: Record<string, number>;
 
   // Per-project input state
   inputByProject: Record<string, string>;
@@ -60,8 +67,12 @@ interface AgentUIActions {
   toggleAgentVisible: (projectId: string) => void;
 
   // Loading state
-  setLoading: (projectId: string, loading: boolean) => void;
-  isLoading: (projectId: string) => boolean;
+  setLoading: (projectId: string, agentId: string, loading: boolean) => void;
+  isLoading: (projectId: string, agentId: string) => boolean;
+
+  // Per-agent viewed timestamp
+  markAgentViewed: (projectId: string, agentId: string, at?: number) => void;
+  getLastViewedAt: (projectId: string, agentId: string) => number;
 
   // Input state
   setInput: (projectId: string, input: string) => void;
@@ -102,7 +113,8 @@ const defaultEditingState: EditingState = {
 
 const initialState: AgentUIState = {
   agentVisibleByProject: {},
-  loadingByProject: {},
+  loadingByProjectAgent: {},
+  lastViewedAtByProjectAgent: {},
   inputByProject: {},
   editingByProject: {},
   preflightToastByProject: {},
@@ -136,17 +148,35 @@ export const useAgentUIStore = create<AgentUIStore>()((set, get) => ({
   },
 
   // Loading state
-  setLoading: (projectId: string, loading: boolean) => {
+  setLoading: (projectId: string, agentId: string, loading: boolean) => {
+    const key = makeProjectAgentKey(projectId, agentId);
     set((state) => ({
-      loadingByProject: {
-        ...state.loadingByProject,
-        [projectId]: loading,
+      loadingByProjectAgent: {
+        ...state.loadingByProjectAgent,
+        [key]: loading,
       },
     }));
   },
 
-  isLoading: (projectId: string) => {
-    return get().loadingByProject[projectId] ?? false;
+  isLoading: (projectId: string, agentId: string) => {
+    const key = makeProjectAgentKey(projectId, agentId);
+    return get().loadingByProjectAgent[key] ?? false;
+  },
+
+  markAgentViewed: (projectId: string, agentId: string, at?: number) => {
+    const key = makeProjectAgentKey(projectId, agentId);
+    const viewedAt = typeof at === 'number' ? at : Date.now();
+    set((state) => ({
+      lastViewedAtByProjectAgent: {
+        ...state.lastViewedAtByProjectAgent,
+        [key]: viewedAt,
+      },
+    }));
+  },
+
+  getLastViewedAt: (projectId: string, agentId: string) => {
+    const key = makeProjectAgentKey(projectId, agentId);
+    return get().lastViewedAtByProjectAgent[key] ?? 0;
   },
 
   // Input state
@@ -251,14 +281,42 @@ export const useAgentUIStore = create<AgentUIStore>()((set, get) => ({
   // Reset project state
   resetProjectState: (projectId: string) => {
     set((state) => {
-      const newState = { ...state };
-      delete newState.agentVisibleByProject[projectId];
-      delete newState.loadingByProject[projectId];
-      delete newState.inputByProject[projectId];
-      delete newState.editingByProject[projectId];
-      delete newState.preflightToastByProject[projectId];
-      delete newState.runModeByProject[projectId];
-      return newState;
+      const projectPrefix = `${projectId}:`;
+      const nextLoadingByProjectAgent = { ...state.loadingByProjectAgent };
+      const nextLastViewedAtByProjectAgent = { ...state.lastViewedAtByProjectAgent };
+      for (const key of Object.keys(nextLoadingByProjectAgent)) {
+        if (key.startsWith(projectPrefix)) {
+          delete nextLoadingByProjectAgent[key];
+        }
+      }
+      for (const key of Object.keys(nextLastViewedAtByProjectAgent)) {
+        if (key.startsWith(projectPrefix)) {
+          delete nextLastViewedAtByProjectAgent[key];
+        }
+      }
+
+      const nextAgentVisibleByProject = { ...state.agentVisibleByProject };
+      const nextInputByProject = { ...state.inputByProject };
+      const nextEditingByProject = { ...state.editingByProject };
+      const nextPreflightToastByProject = { ...state.preflightToastByProject };
+      const nextRunModeByProject = { ...state.runModeByProject };
+
+      delete nextAgentVisibleByProject[projectId];
+      delete nextInputByProject[projectId];
+      delete nextEditingByProject[projectId];
+      delete nextPreflightToastByProject[projectId];
+      delete nextRunModeByProject[projectId];
+
+      return {
+        ...state,
+        agentVisibleByProject: nextAgentVisibleByProject,
+        loadingByProjectAgent: nextLoadingByProjectAgent,
+        lastViewedAtByProjectAgent: nextLastViewedAtByProjectAgent,
+        inputByProject: nextInputByProject,
+        editingByProject: nextEditingByProject,
+        preflightToastByProject: nextPreflightToastByProject,
+        runModeByProject: nextRunModeByProject,
+      };
     });
   },
 

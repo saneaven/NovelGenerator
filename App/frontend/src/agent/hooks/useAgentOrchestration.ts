@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useAgentStore } from '../../store/agentStore';
 import { useAgentUIStore } from '../../store/agentUIStore';
 import { useSidebarStore } from '../../store/sidebarStore';
@@ -20,6 +21,10 @@ import type { AgentOrchestrationConfig, AgentOrchestrationReturn, AgentHandlersR
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
+}
+
+function isAgentSessionActive(status: string | undefined): boolean {
+  return status === 'running' || status === 'applying';
 }
 
 export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOrchestrationReturn {
@@ -43,6 +48,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
   const updateEditContent = useAgentUIStore(state => state.updateEditContent);
   const getEditing = useAgentUIStore(state => state.getEditing);
   const cancelEditing = useAgentUIStore(state => state.cancelEditing);
+  const markAgentViewed = useAgentUIStore(state => state.markAgentViewed);
   const closeSidebar = useSidebarStore(state => state.closeSidebar);
   const getObjectsMissingMainLanguage = useUnifiedObjectStore(state => state.getObjectsMissingMainLanguage);
 
@@ -72,29 +78,53 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
   // Active session tracking (for Stop button + loading state)
   // ============================================================================
 
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const activeSessionIdRef = useRef<string | null>(null);
-  const preflightAbortControllerRef = useRef<AbortController | null>(null);
+  const [activeSessionIdByAgent, setActiveSessionIdByAgent] = useState<Record<string, string>>({});
+  const activeSessionIdByAgentRef = useRef<Record<string, string>>({});
+  const preflightAbortControllerByAgentRef = useRef<Record<string, AbortController>>({});
 
-  // Keep ref in sync with state for handleStop to avoid stale closure
+  // Keep ref in sync for handleStop to avoid stale closure
   useEffect(() => {
-    activeSessionIdRef.current = activeSessionId;
-  }, [activeSessionId]);
+    activeSessionIdByAgentRef.current = activeSessionIdByAgent;
+  }, [activeSessionIdByAgent]);
 
-  const activeSessionStatus = useLLMSessionStore(
-    (state) => (activeSessionId ? state.sessions[activeSessionId]?.status : undefined)
+  const activeSessionStatusSelector = useMemo(
+    () => (state: ReturnType<typeof useLLMSessionStore.getState>) => {
+      const statuses: Record<string, string | undefined> = {};
+      for (const [agentId, sessionId] of Object.entries(activeSessionIdByAgent)) {
+        statuses[agentId] = state.sessions[sessionId]?.status;
+      }
+      return statuses;
+    },
+    [activeSessionIdByAgent]
   );
+  const activeSessionStatusByAgent = useLLMSessionStore(useShallow(activeSessionStatusSelector));
 
   useEffect(() => {
     if (!projectId) return;
-    if (!activeSessionId) return;
-    if (!activeSessionStatus) return;
-
-    if (activeSessionStatus !== 'running' && activeSessionStatus !== 'applying') {
-      useAgentUIStore.getState().setLoading(projectId, false);
-      setActiveSessionId(null);
+    const finishedAgentIds: string[] = [];
+    for (const [agentId, status] of Object.entries(activeSessionStatusByAgent)) {
+      if (isAgentSessionActive(status)) continue;
+      useAgentUIStore.getState().setLoading(projectId, agentId, false);
+      finishedAgentIds.push(agentId);
     }
-  }, [activeSessionStatus, activeSessionId, projectId]);
+    if (finishedAgentIds.length === 0) return;
+
+    setActiveSessionIdByAgent((prev) => {
+      const next = { ...prev };
+      for (const agentId of finishedAgentIds) {
+        delete next[agentId];
+      }
+      return next;
+    });
+  }, [activeSessionStatusByAgent, projectId]);
+
+  useEffect(() => {
+    return () => {
+      for (const controller of Object.values(preflightAbortControllerByAgentRef.current)) {
+        controller.abort();
+      }
+    };
+  }, []);
 
   // ============================================================================
   // Agent handlers
@@ -105,17 +135,17 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
   const handleSelectAgent = useCallback((agentId: string) => {
     if (!projectId) return;
     selectAgent(projectId, agentId);
+    markAgentViewed(projectId, agentId);
     closeSidebar(projectId);
-  }, [projectId, selectAgent, closeSidebar]);
+  }, [projectId, selectAgent, markAgentViewed, closeSidebar]);
 
   const handleSubmit = useCallback(async (e: FormEvent, input: string) => {
     e.preventDefault();
     if (!projectId) return;
 
-    if (useAgentUIStore.getState().isLoading(projectId)) return;
-
     const agentId = getSelectedAgentId(projectId);
     if (!agentId) return;
+    if (useAgentUIStore.getState().isLoading(projectId, agentId)) return;
 
     const missingMainLanguageObjects = getObjectsMissingMainLanguage(projectId, mainLanguage);
     if (missingMainLanguageObjects.length > 0) {
@@ -140,7 +170,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     const userInput = input ?? '';
 
     clearInput(projectId);
-    useAgentUIStore.getState().setLoading(projectId, true);
+    useAgentUIStore.getState().setLoading(projectId, agentId, true);
     useAgentUIStore.getState().setPreflightToast(projectId, null);
 
     const agentConfig = useSettingsStore.getState().getTaskConfig('agent');
@@ -150,7 +180,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     let promptContextOverride: Record<string, any> | undefined;
     try {
       const abortController = new AbortController();
-      preflightAbortControllerRef.current = abortController;
+      preflightAbortControllerByAgentRef.current[agentId] = abortController;
 
       const prepared = await AgentMemoryManager.prepare({
         projectId,
@@ -182,11 +212,11 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
       promptContextOverride = prepared.memory as any;
     } catch (error) {
       // Cancel = cancel send.
-      if (isAbortError(error) || preflightAbortControllerRef.current?.signal.aborted) {
+      if (isAbortError(error) || preflightAbortControllerByAgentRef.current[agentId]?.signal.aborted) {
         useAgentUIStore.getState().setInput(projectId, userInput);
-        useAgentUIStore.getState().setLoading(projectId, false);
+        useAgentUIStore.getState().setLoading(projectId, agentId, false);
         useAgentUIStore.getState().setPreflightToast(projectId, null);
-        preflightAbortControllerRef.current = null;
+        delete preflightAbortControllerByAgentRef.current[agentId];
         return;
       }
 
@@ -197,12 +227,12 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
         message: t('agent.memory.preflightFailed', { error: errorMessage }),
       });
       useAgentUIStore.getState().setInput(projectId, userInput);
-      useAgentUIStore.getState().setLoading(projectId, false);
-      preflightAbortControllerRef.current = null;
+      useAgentUIStore.getState().setLoading(projectId, agentId, false);
+      delete preflightAbortControllerByAgentRef.current[agentId];
       return;
     }
 
-    preflightAbortControllerRef.current = null;
+    delete preflightAbortControllerByAgentRef.current[agentId];
     useAgentUIStore.getState().setPreflightToast(projectId, null);
 
     // Use AgentExecutor directly (no JourneyRuntime)
@@ -219,20 +249,28 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
         historyOverride,
         promptContextOverride,
       },
-      (sessionId) => setActiveSessionId(sessionId)
-    );
+      (sessionId) => setActiveSessionIdByAgent((prev) => ({ ...prev, [agentId]: sessionId }))
+    ).catch((error) => {
+      console.error('AgentExecutor.start failed:', error);
+      useAgentUIStore.getState().setLoading(projectId, agentId, false);
+    });
   }, [projectId, getSelectedAgentId, getObjectsMissingMainLanguage, mainLanguage, clearInput, runMode, surface, selectedContextIds, t]);
 
   const handleStop = useCallback(() => {
-    const preflight = preflightAbortControllerRef.current;
+    if (!projectId) return;
+    const agentId = getSelectedAgentId(projectId);
+    if (!agentId) return;
+
+    const preflight = preflightAbortControllerByAgentRef.current[agentId];
     if (preflight) {
       preflight.abort();
+      delete preflightAbortControllerByAgentRef.current[agentId];
       return;
     }
-    const sessionId = activeSessionIdRef.current;
+    const sessionId = activeSessionIdByAgentRef.current[agentId];
     if (!sessionId) return;
     useLLMSessionStore.getState().cancelSession(sessionId);
-  }, []);
+  }, [projectId, getSelectedAgentId]);
 
   const adjustTextareaHeight = useCallback(() => {
     if (editTextareaRef.current) {
@@ -283,12 +321,12 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
 
   const triggerAutoContinue = useCallback(async () => {
     if (!projectId) return;
-    if (useAgentUIStore.getState().isLoading(projectId)) return;
 
     const agentId = getSelectedAgentId(projectId);
     if (!agentId) return;
+    if (useAgentUIStore.getState().isLoading(projectId, agentId)) return;
 
-    useAgentUIStore.getState().setLoading(projectId, true);
+    useAgentUIStore.getState().setLoading(projectId, agentId, true);
     useAgentUIStore.getState().setPreflightToast(projectId, null);
 
     const agentConfig = useSettingsStore.getState().getTaskConfig('agent');
@@ -298,7 +336,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     let promptContextOverride: Record<string, any> | undefined;
     try {
       const abortController = new AbortController();
-      preflightAbortControllerRef.current = abortController;
+      preflightAbortControllerByAgentRef.current[agentId] = abortController;
 
       const prepared = await AgentMemoryManager.prepare({
         projectId,
@@ -329,10 +367,10 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
       historyOverride = prepared.historyForLLM;
       promptContextOverride = prepared.memory as any;
     } catch (error) {
-      if (isAbortError(error) || preflightAbortControllerRef.current?.signal.aborted) {
-        useAgentUIStore.getState().setLoading(projectId, false);
+      if (isAbortError(error) || preflightAbortControllerByAgentRef.current[agentId]?.signal.aborted) {
+        useAgentUIStore.getState().setLoading(projectId, agentId, false);
         useAgentUIStore.getState().setPreflightToast(projectId, null);
-        preflightAbortControllerRef.current = null;
+        delete preflightAbortControllerByAgentRef.current[agentId];
         return;
       }
 
@@ -342,12 +380,12 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
         type: 'error',
         message: t('agent.memory.preflightFailed', { error: errorMessage }),
       });
-      useAgentUIStore.getState().setLoading(projectId, false);
-      preflightAbortControllerRef.current = null;
+      useAgentUIStore.getState().setLoading(projectId, agentId, false);
+      delete preflightAbortControllerByAgentRef.current[agentId];
       return;
     }
 
-    preflightAbortControllerRef.current = null;
+    delete preflightAbortControllerByAgentRef.current[agentId];
     useAgentUIStore.getState().setPreflightToast(projectId, null);
 
     // Empty userInput - tool results are already in the message history
@@ -363,8 +401,11 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
         historyOverride,
         promptContextOverride,
       },
-      (sessionId) => setActiveSessionId(sessionId)
-    );
+      (sessionId) => setActiveSessionIdByAgent((prev) => ({ ...prev, [agentId]: sessionId }))
+    ).catch((error) => {
+      console.error('AgentExecutor.start (auto-continue) failed:', error);
+      useAgentUIStore.getState().setLoading(projectId, agentId, false);
+    });
   }, [projectId, getSelectedAgentId, runMode, surface, mainLanguage, selectedContextIds, t]);
 
   const agentHandlers: AgentHandlersReturn = {

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { useAgentStore, type StoredAgentMessage } from '../../../store/agentStore';
-import { useAgentUIStore } from '../../../store/agentUIStore';
+import { makeProjectAgentKey, useAgentUIStore } from '../../../store/agentUIStore';
 import { useSidebarStore } from '../../../store/sidebarStore';
 import { useProjectStore } from '../../../store/projectStore';
 import { useSettings } from '../../../store/settingsStore';
@@ -71,14 +71,14 @@ const AgentContextTrigger: React.FC<AgentContextTriggerProps> = React.memo(({
 // Separate component for input form to avoid re-rendering messages on typing
 interface AgentInputFormProps {
     projectId: string;
+    isLoading: boolean;
     onSubmit: (e: React.FormEvent, input: string) => Promise<void>;
     onStop: () => void;
 }
 
-const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({ projectId, onSubmit, onStop }) => {
+const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({ projectId, isLoading, onSubmit, onStop }) => {
     const { t } = useTranslation();
     const input = useAgentUIStore((state) => state.inputByProject[projectId] ?? '');
-    const isLoading = useAgentUIStore((state) => state.loadingByProject[projectId] ?? false);
     const setInput = useAgentUIStore((state) => state.setInput);
 
     const handleSubmit = useCallback((e: React.FormEvent) => {
@@ -219,13 +219,19 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     const displayProcessor = useMemo(() => new DefaultDisplayProcessor(), []);
     const { convertToDisplayMessage } = useAgentStore();
 
+    const selectedAgentId = useAgentStore((state) => state.selectedAgentByProject[projectId]);
+    const isLoading = useAgentUIStore((state) => {
+        if (!selectedAgentId) return false;
+        return state.loadingByProjectAgent[makeProjectAgentKey(projectId, selectedAgentId)] ?? false;
+    });
+
     // Use shallow selector to combine multiple store reads into one (reduces re-renders)
-    const { isLoading, agentVisibleState, editingMessageId, setAgentVisible } = useAgentUIStore(
+    const { agentVisibleState, editingMessageId, setAgentVisible, markAgentViewed } = useAgentUIStore(
         useShallow((state) => ({
-            isLoading: state.loadingByProject[projectId] ?? false,
             agentVisibleState: state.agentVisibleByProject[projectId] ?? false,
             editingMessageId: state.editingByProject[projectId]?.messageId ?? null,
             setAgentVisible: state.setAgentVisible,
+            markAgentViewed: state.markAgentViewed,
         }))
     );
 
@@ -246,9 +252,6 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     const mainLanguage = settings.mainLanguage;
     const defaultSubLanguage = settings.defaultSubLanguage;
 
-    // Use state selectors for proper Zustand reactivity (re-render when store changes)
-    // IMPORTANT: Get agentId from state inside selector, not from closure (avoids stale value)
-    const selectedAgentId = useAgentStore((state) => state.selectedAgentByProject[projectId]);
     // Memoize the selector function to avoid creating new function references on each render
     const agentSelector = useMemo(
         () => (state: ReturnType<typeof useAgentStore.getState>) => {
@@ -376,6 +379,11 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         setTranslatingMessages({});
         setTranslationErrors({});
     }, [selectedAgentId]);
+
+    useEffect(() => {
+        if (!projectId || !selectedAgentId) return;
+        markAgentViewed(projectId, selectedAgentId);
+    }, [projectId, selectedAgentId, markAgentViewed]);
 
     useEffect(() =>
     {
@@ -1047,6 +1055,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                 </div>
                 <AgentInputForm
                     projectId={projectId}
+                    isLoading={isLoading}
                     onSubmit={onSubmit}
                     onStop={onStop}
                 />

@@ -8,6 +8,7 @@
     "edit": "편집",
     "loading": "로딩 중...",
     "error": "오류",
+    "warning": "경고",
     "success": "성공",
     "confirm": "확인",
     "yes": "예",
@@ -1075,6 +1076,26 @@
     "switchToLanguage": "{{language}}(으)로 전환",
     "translateTo": "{{language}}(으)로 번역",
     "refreshTranslation": "{{language}} 번역 새로고침",
+    "sidebar": {
+      "createAgent": "새 에이전트 만들기",
+      "closeSidebar": "사이드바 닫기",
+      "renameAgent": "에이전트 이름 변경",
+      "deleteAgent": "에이전트 삭제",
+      "cannotDeleteLast": "마지막 에이전트는 삭제할 수 없습니다",
+      "deleteConfirm": "이 에이전트를 삭제하시겠습니까?",
+      "noMessagesYet": "아직 메시지가 없습니다",
+      "noContent": "내용 없음",
+      "unknownTime": "알 수 없음",
+      "justNow": "방금 전",
+      "minutesAgo": "{{count}}분 전",
+      "hoursAgo": "{{count}}시간 전",
+      "daysAgo": "{{count}}일 전",
+      "status": {
+        "running": "진행중",
+        "done": "완료",
+        "tools": "도구요청"
+      }
+    },
     "memory": {
       "preflight": {
         "summarizing": "요약중...",
