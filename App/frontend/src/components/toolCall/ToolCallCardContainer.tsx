@@ -1,15 +1,35 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getToolDisplayName } from '../../toolCall';
 import type { ToolCallProgress } from '../../llm/requestTypes';
 import { resolveStoryObjectName } from '../../agent/utils/objectNameResolver';
 import { useStoryObjects } from '../../store/unifiedObjectStore';
 import { useSettingsStore, type ToolCallAutoApproveConfig } from '../../store/settingsStore';
+import type { EditCard, ToolCallDecision } from '../../toolCall/types';
 import type { ToolCallCardContainerProps, CardMode } from './types';
-import { useCardSelection } from './hooks';
+import { useOperationDecisions } from './hooks';
+import { groupPatchOperations } from './utils/groupPatchOperations';
 import { OperationItem } from './OperationItem';
 import './ToolCallCard.css';
 
 type AutoApproveOperation = keyof ToolCallAutoApproveConfig;
+
+type CardOperationView = {
+  card: EditCard;
+  action?: string;
+  type?: string;
+  targetId?: string;
+  label: string;
+  isPatch: boolean;
+};
+
+function isDecisionEligible(card: EditCard): boolean {
+  return card.toolCall.status === 'pending' || card.toolCall.status === 'validating';
+}
+
+function isValidationFailure(card: EditCard): boolean {
+  return card.toolCall.status === 'failed' && card.toolCall.failureType === 'validation';
+}
 
 function getAutoApproveOperation(toolName: string): AutoApproveOperation | null {
   if (!toolName) return null;
@@ -88,7 +108,6 @@ function getLabel(params: {
 }): string {
   const { toolName, fallbackTitle, action, type, args, storyObjects } = params;
 
-  // Create operations should show the provided name/title when present.
   if (action === 'create') {
     const name = args?.name;
     if (typeof name === 'string' && name.trim()) return name;
@@ -123,16 +142,24 @@ function modeLabel(mode: CardMode): string {
   }
 }
 
+function omitKey(map: Record<string, boolean>, key: string): Record<string, boolean> {
+  if (!(key in map)) return map;
+  const next = { ...map };
+  delete next[key];
+  return next;
+}
+
 export const ToolCallCardContainer: React.FC<ToolCallCardContainerProps> = ({
   mode,
   cards = [],
   streamingProgress = [],
-  onConfirm,
-  onConfirmAndPause,
+  onCommitDecisions,
+  onCommitDecisionsAndPause,
   projectId,
   isApplyDisabled = false,
   applyDisabledReason,
 }) => {
+  const { t } = useTranslation();
   const mainLanguage = useSettingsStore((state) => state.getSettings().mainLanguage);
   const toolCallAutoApprove = useSettingsStore((state) => state.getSettings().toolCallAutoApprove);
   const storyObjects = useStoryObjects(projectId, mainLanguage);
@@ -141,29 +168,30 @@ export const ToolCallCardContainer: React.FC<ToolCallCardContainerProps> = ({
   const isPending = mode === 'pending';
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [isConfirming, setIsConfirming] = useState(false);
   const [isCardCollapsed, setIsCardCollapsed] = useState(false);
+  const [committingItemIds, setCommittingItemIds] = useState<Record<string, boolean>>({});
+  const [committingGroupIds, setCommittingGroupIds] = useState<Record<string, boolean>>({});
+
+  const decisionDisabled = !isPending || isApplyDisabled;
+  const {
+    acceptedCount,
+    rejectedCount,
+    getDecision,
+    setDecision,
+    isDecisionLocked,
+    buildDecisionMap,
+  } = useOperationDecisions(cards, decisionDisabled);
 
   const handleToggleCardCollapse = useCallback(() => {
-    setIsCardCollapsed(prev => !prev);
+    setIsCardCollapsed((prev) => !prev);
   }, []);
 
-  // Auto-collapse when mode changes to 'confirmed'
   useEffect(() => {
     if (mode === 'confirmed') {
       setIsCardCollapsed(true);
     }
   }, [mode]);
 
-  // Selection is only relevant for pending mode
-  const selectionDisabled = !isPending || isConfirming || isApplyDisabled;
-  const {
-    selections,
-    selectedCount,
-    toggleSelection,
-  } = useCardSelection(cards, selectionDisabled);
-
-  // In streaming mode, treat the "last" tool call as the one with the highest draft.index.
   const activeStreamingId = useMemo(() => {
     if (!isStreaming || streamingProgress.length === 0) return null;
 
@@ -200,59 +228,130 @@ export const ToolCallCardContainer: React.FC<ToolCallCardContainerProps> = ({
     const prevActiveId = prevActiveStreamingIdRef.current;
 
     setExpandedId((prevExpandedId) => {
-      // Initial streaming: default to expanding the active tool call.
       if (prevExpandedId === null) {
         return prevActiveId ? null : nextActiveId;
       }
-
-      // If the user was viewing the previous "last" tool call, follow the new "last" tool call.
       if (prevActiveId && prevExpandedId === prevActiveId && prevActiveId !== nextActiveId) {
         return nextActiveId;
       }
-
-      // Otherwise, respect user selection.
       return prevExpandedId;
     });
 
     prevActiveStreamingIdRef.current = nextActiveId;
   }, [isStreaming, activeStreamingId]);
 
-  // Reset when leaving streaming or changing modes
   useEffect(() => {
     if (isStreaming) return;
     setExpandedId(null);
   }, [isStreaming, mode]);
 
   const handleToggleExpanded = useCallback((id: string) => {
-    setExpandedId(prev => (prev === id ? null : id));
+    setExpandedId((prev) => (prev === id ? null : id));
   }, []);
 
-  const handleConfirm = useCallback(async () => {
-    if (!onConfirm || isConfirming || !isPending) return;
-    setIsCardCollapsed(true);
-    setIsConfirming(true);
-    try {
-      await onConfirm(selections);
-    } finally {
-      setIsConfirming(false);
-    }
-  }, [onConfirm, isConfirming, isPending, selections]);
+  const cardOperations = useMemo<CardOperationView[]>(() => {
+    return cards.map((card) => {
+      const toolName = card.toolCall.toolName;
+      const args = card.data;
+      const action = getAction(toolName);
+      const type = getType(toolName, args);
+      const targetId = getTargetId(type, args);
+      const label = getLabel({
+        toolName,
+        fallbackTitle: card.title,
+        action,
+        type,
+        args,
+        storyObjects,
+      });
+      return {
+        card,
+        action,
+        type,
+        targetId,
+        label,
+        isPatch: toolName.startsWith('patch_'),
+      };
+    });
+  }, [cards, storyObjects]);
 
-  const handleConfirmAndPause = useCallback(async () => {
-    if (!onConfirmAndPause || isConfirming || !isPending) return;
-    setIsCardCollapsed(true);
-    setIsConfirming(true);
-    try {
-      await onConfirmAndPause(selections);
-    } finally {
-      setIsConfirming(false);
-    }
-  }, [onConfirmAndPause, isConfirming, isPending, selections]);
+  const immediateOperations = useMemo(
+    () => cardOperations.filter((op) => !op.isPatch),
+    [cardOperations]
+  );
+
+  const patchGroups = useMemo(
+    () =>
+      groupPatchOperations(
+        cardOperations
+          .filter((op) => op.isPatch)
+          .map((op) => ({
+            id: op.card.id,
+            type: op.type,
+            targetId: op.targetId,
+            label: op.label,
+            value: op,
+          }))
+      ),
+    [cardOperations]
+  );
+
+  const commitDecisions = useCallback(
+    async (decisions: Record<string, ToolCallDecision>, andPause: boolean = false) => {
+      if (!isPending || isApplyDisabled) return;
+      const hasDecisions = Object.keys(decisions).length > 0;
+      if (!hasDecisions) return;
+
+      if (andPause) {
+        if (!onCommitDecisionsAndPause) return;
+        await onCommitDecisionsAndPause(decisions);
+        return;
+      }
+
+      if (!onCommitDecisions) return;
+      await onCommitDecisions(decisions);
+    },
+    [isPending, isApplyDisabled, onCommitDecisions, onCommitDecisionsAndPause]
+  );
+
+  const handleImmediateDecision = useCallback(
+    async (card: EditCard, decision: ToolCallDecision) => {
+      if (decisionDisabled) return;
+      if (!isDecisionEligible(card) || isValidationFailure(card)) return;
+      if (committingItemIds[card.id]) return;
+
+      setDecision(card.id, decision);
+      setCommittingItemIds((prev) => ({ ...prev, [card.id]: true }));
+      try {
+        await commitDecisions({ [card.id]: decision });
+      } finally {
+        setCommittingItemIds((prev) => omitKey(prev, card.id));
+      }
+    },
+    [decisionDisabled, committingItemIds, setDecision, commitDecisions]
+  );
+
+  const handleConfirmPatchGroup = useCallback(
+    async (groupId: string, cardIds: string[], andPause: boolean = false) => {
+      if (decisionDisabled) return;
+      if (committingGroupIds[groupId]) return;
+
+      const decisions = buildDecisionMap(cardIds);
+      if (Object.keys(decisions).length === 0) return;
+
+      setCommittingGroupIds((prev) => ({ ...prev, [groupId]: true }));
+      try {
+        await commitDecisions(decisions, andPause);
+      } finally {
+        setCommittingGroupIds((prev) => omitKey(prev, groupId));
+      }
+    },
+    [decisionDisabled, committingGroupIds, buildDecisionMap, commitDecisions]
+  );
 
   const autoConfirmSignature = useMemo(() => {
-    if (!isPending || !onConfirm || isApplyDisabled) return null;
+    if (!isPending || !onCommitDecisions || isApplyDisabled) return null;
     if (cards.length === 0) return null;
-    // Only auto-confirm when every card is validated and pending.
     if (!cards.every((c) => c.toolCall.status === 'pending')) return null;
 
     for (const card of cards) {
@@ -264,16 +363,23 @@ export const ToolCallCardContainer: React.FC<ToolCallCardContainerProps> = ({
     const ids = cards.map((c) => c.id).join(',');
     const config = JSON.stringify(toolCallAutoApprove ?? {});
     return `${ids}|${config}`;
-  }, [isPending, onConfirm, isApplyDisabled, cards, toolCallAutoApprove]);
+  }, [isPending, onCommitDecisions, isApplyDisabled, cards, toolCallAutoApprove]);
 
   const lastAutoConfirmedRef = useRef<string | null>(null);
   useEffect(() => {
     if (!autoConfirmSignature) return;
-    if (isConfirming) return;
     if (lastAutoConfirmedRef.current === autoConfirmSignature) return;
     lastAutoConfirmedRef.current = autoConfirmSignature;
-    void handleConfirm();
-  }, [autoConfirmSignature, isConfirming, handleConfirm]);
+
+    const autoAcceptMap: Record<string, ToolCallDecision> = {};
+    cards.forEach((card) => {
+      if (card.toolCall.status === 'pending') {
+        autoAcceptMap[card.id] = 'accept';
+      }
+    });
+
+    void commitDecisions(autoAcceptMap);
+  }, [autoConfirmSignature, cards, commitDecisions]);
 
   if (isStreaming && streamingProgress.length === 0) return null;
   if (!isStreaming && cards.length === 0) return null;
@@ -342,77 +448,127 @@ export const ToolCallCardContainer: React.FC<ToolCallCardContainerProps> = ({
           );
         })}
 
-        {!isStreaming && cards.map((card) => {
-          const toolName = card.toolCall.toolName;
-          const args = card.data;
-          const action = getAction(toolName);
-          const type = getType(toolName, args);
-          const label = getLabel({
-            toolName,
-            fallbackTitle: card.title,
-            action,
-            type,
-            args,
-            storyObjects,
-          });
+        {!isStreaming && isPending && (
+          <div className="tool-call-card__decision-summary">
+            {t('toolCall.pendingDecisionSummary', {
+              accepted: acceptedCount,
+              rejected: rejectedCount,
+            })}
+          </div>
+        )}
 
-          const fcStatus = card.toolCall.status;
-          const isValidationFailed = fcStatus === 'failed' && card.toolCall.failureType === 'validation';
-          const showCheckbox = isPending;
+        {!isStreaming && isApplyDisabled && applyDisabledReason && (
+          <div className="tool-call-card__warning">{applyDisabledReason}</div>
+        )}
 
-          return (
-            <OperationItem
-              key={card.id}
-              mode={mode}
-              id={card.id}
-              label={label}
-              action={action}
-              type={type}
-              status={fcStatus as any}
-              isExpanded={expandedId === card.id}
-              onToggle={() => handleToggleExpanded(card.id)}
-              showCheckbox={showCheckbox}
-              isSelected={selections[card.id] ?? true}
-              isCheckboxDisabled={selectionDisabled || isValidationFailed}
-              onToggleSelected={() => toggleSelection(card.id)}
-              detailsData={args}
-              result={card.toolCall.result}
-              errorMessage={card.toolCall.reason}
-            />
-          );
-        })}
+        {!isStreaming && immediateOperations.length > 0 && (
+          <div className="tool-call-section">
+            <div className="tool-call-section__title">{t('toolCall.sectionImmediate')}</div>
+            {immediateOperations.map((op) => {
+              const card = op.card;
+              const showDecisionControls =
+                isPending && (isDecisionEligible(card) || isValidationFailure(card));
+              const decisionLocked = isDecisionLocked(card) || committingItemIds[card.id] === true;
+
+              return (
+                <OperationItem
+                  key={card.id}
+                  mode={mode}
+                  id={card.id}
+                  label={op.label}
+                  action={op.action}
+                  type={op.type}
+                  status={card.toolCall.status as any}
+                  isExpanded={expandedId === card.id}
+                  onToggle={() => handleToggleExpanded(card.id)}
+                  showDecisionControls={showDecisionControls}
+                  decisionControlStyle="buttons"
+                  decision={getDecision(card)}
+                  isDecisionDisabled={decisionLocked}
+                  onAccept={() => void handleImmediateDecision(card, 'accept')}
+                  onReject={() => void handleImmediateDecision(card, 'reject')}
+                  detailsData={card.data}
+                  result={card.toolCall.result}
+                  errorMessage={card.toolCall.reason}
+                />
+              );
+            })}
+          </div>
+        )}
+
+        {!isStreaming && patchGroups.length > 0 && (
+          <div className="tool-call-section">
+            <div className="tool-call-section__title">{t('toolCall.sectionPatchGroups')}</div>
+            {patchGroups.map((group) => {
+              const isGroupCommitting = committingGroupIds[group.id] === true;
+              const groupCardIds = group.items.map((item) => item.id);
+              const canCommitGroup = Object.keys(buildDecisionMap(groupCardIds)).length > 0;
+
+              return (
+                <div key={group.id} className="tool-call-patch-group">
+                  <div className="tool-call-patch-group__header">
+                    <div className="tool-call-patch-group__title">{group.label}</div>
+                    <div className="tool-call-patch-group__count">
+                      {t('toolCall.patchCount', { count: group.items.length })}
+                    </div>
+                  </div>
+
+                  {group.items.map(({ value: op }) => {
+                    const card = op.card;
+                    const showDecisionControls =
+                      isPending && (isDecisionEligible(card) || isValidationFailure(card));
+                    const decisionLocked = isDecisionLocked(card) || isGroupCommitting;
+                    return (
+                      <OperationItem
+                        key={card.id}
+                        mode={mode}
+                        id={card.id}
+                        label={op.label}
+                        action={op.action}
+                        type={op.type}
+                        status={card.toolCall.status as any}
+                        isExpanded={expandedId === card.id}
+                        onToggle={() => handleToggleExpanded(card.id)}
+                        showDecisionControls={showDecisionControls}
+                        decision={getDecision(card)}
+                        isDecisionDisabled={decisionLocked}
+                        onAccept={() => setDecision(card.id, 'accept')}
+                        onReject={() => setDecision(card.id, 'reject')}
+                        detailsData={card.data}
+                        result={card.toolCall.result}
+                        errorMessage={card.toolCall.reason}
+                      />
+                    );
+                  })}
+
+                  {isPending && (
+                    <div className="tool-call-patch-group__actions">
+                      {onCommitDecisionsAndPause && (
+                        <button
+                          type="button"
+                          className="tool-call-btn tool-call-btn--secondary"
+                          onClick={() => void handleConfirmPatchGroup(group.id, groupCardIds, true)}
+                          disabled={isGroupCommitting || !canCommitGroup || isApplyDisabled}
+                        >
+                          {isGroupCommitting ? t('toolCall.applying') : t('toolCall.confirmAndPause')}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="tool-call-btn tool-call-btn--primary"
+                        onClick={() => void handleConfirmPatchGroup(group.id, groupCardIds)}
+                        disabled={isGroupCommitting || !canCommitGroup || isApplyDisabled}
+                      >
+                        {isGroupCommitting ? t('toolCall.applying') : t('toolCall.confirmPatchGroup')}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
-
-      {isPending && !isCardCollapsed && (
-        <div className="tool-call-card__footer">
-          <div className="tool-call-card__footer-left">
-            <span className="tool-call-card__footer-count">{selectedCount} selected</span>
-            {isApplyDisabled && applyDisabledReason && (
-              <span className="tool-call-card__footer-warning">{applyDisabledReason}</span>
-            )}
-          </div>
-          <div className="tool-call-card__footer-buttons">
-            {onConfirmAndPause && (
-              <button
-                type="button"
-                className="tool-call-btn tool-call-btn--secondary"
-                onClick={handleConfirmAndPause}
-                disabled={isConfirming || isApplyDisabled}
-              >
-                {isConfirming ? 'Applying…' : 'Confirm & Pause'}
-              </button>
-            )}
-            <button
-              type="button"
-              className="tool-call-btn tool-call-btn--primary"
-              onClick={handleConfirm}
-              disabled={isConfirming || isApplyDisabled}
-            >
-              {isConfirming ? 'Applying…' : 'Confirm'}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

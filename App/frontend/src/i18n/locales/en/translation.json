@@ -1019,6 +1019,17 @@
     "skipped": "Skipped",
     "failed": "Failed"
   },
+  "toolCall": {
+    "accept": "Accept",
+    "reject": "Reject",
+    "sectionImmediate": "Immediate Operations",
+    "sectionPatchGroups": "Patch Groups",
+    "confirmPatchGroup": "Confirm Group",
+    "confirmAndPause": "Confirm & Pause",
+    "applying": "Applying...",
+    "patchCount": "{{count}} operation(s)",
+    "pendingDecisionSummary": "Decisions: {{accepted}} accept / {{rejected}} reject"
+  },
   "storyObjectPanel": {
     "title": "Story Objects",
     "scrollTabsLeft": "Scroll tabs left",

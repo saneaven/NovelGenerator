@@ -16,6 +16,8 @@ export type {
   ExecutionMode,
   ToolCallStatus,
   ToolCallFailureType,
+  ToolCallDecision,
+  ToolCallDecisionMap,
   RawToolCall,
   NormalizedToolCall,
   ToolCallWithStatus,

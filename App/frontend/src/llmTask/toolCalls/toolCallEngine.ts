@@ -13,7 +13,12 @@ import {
 } from '../../toolCall';
 import type { HandlerContext, Handler, HandlerOptions, StoreActions } from '../../toolCall/apply/types';
 import type { StoredEditCard } from '../uiTypes';
-import type { ApplicationResult, ToolCallFailureType, ToolCallStatus } from '../../toolCall/types';
+import type {
+  ApplicationResult,
+  ToolCallDecisionMap,
+  ToolCallFailureType,
+  ToolCallStatus,
+} from '../../toolCall/types';
 import { CRUD_HANDLERS } from '../../toolCall/apply/handlers/CrudHandlers';
 import { PATCH_HANDLERS } from '../../toolCall/apply/handlers/PatchHandlers';
 import { REPLACE_HANDLERS } from '../../toolCall/apply/handlers/ReplaceHandlers';
@@ -92,6 +97,61 @@ const HANDLERS: Record<string, Handler> = {
   ...READ_HANDLERS,
   ...SUB_AGENT_HANDLERS,
 };
+
+function isValidationFailure(status: ToolCallStatus, failureType?: ToolCallFailureType): boolean {
+  return status === 'failed' && failureType === 'validation';
+}
+
+function isDecisionEligibleStatus(status: ToolCallStatus): boolean {
+  return status === 'pending' || status === 'validating';
+}
+
+function evaluateSessionStatus(cards: StoredEditCard[]): {
+  status: 'pending_confirmation' | 'success' | 'error' | 'cancelled';
+  error?: string;
+  warning?: string;
+} {
+  const acceptedCount = cards.filter((c) => c.toolCall.status === 'accepted').length;
+  const rejectedCount = cards.filter((c) => c.toolCall.status === 'rejected').length;
+  const pendingCount = cards.filter((c) => isDecisionEligibleStatus(c.toolCall.status)).length;
+  const failedValidationCount = cards.filter((c) => isValidationFailure(c.toolCall.status, c.toolCall.failureType)).length;
+  const failedApplyCount = cards.filter(
+    (c) => c.toolCall.status === 'failed' && c.toolCall.failureType !== 'validation'
+  ).length;
+
+  if (pendingCount > 0) {
+    return {
+      status: 'pending_confirmation',
+      error: failedApplyCount > 0 ? `${failedApplyCount} action(s) failed to apply.` : undefined,
+      warning: failedValidationCount > 0 ? `${failedValidationCount} action(s) failed validation.` : undefined,
+    };
+  }
+
+  if (acceptedCount === 0 && failedApplyCount === 0 && rejectedCount > 0 && failedValidationCount === 0) {
+    return { status: 'cancelled' };
+  }
+
+  if (failedApplyCount > 0) {
+    return {
+      status: 'error',
+      error: `${failedApplyCount} action(s) failed to apply.`,
+      warning: failedValidationCount > 0 ? `${failedValidationCount} action(s) failed validation.` : undefined,
+    };
+  }
+
+  if (failedValidationCount > 0) {
+    return {
+      status: acceptedCount > 0 ? 'success' : rejectedCount > 0 ? 'cancelled' : 'success',
+      warning: `${failedValidationCount} action(s) failed validation.`,
+    };
+  }
+
+  if (acceptedCount === 0) {
+    return { status: 'cancelled' };
+  }
+
+  return { status: 'success' };
+}
 
 async function applyToolCall(params: {
   toolCall: RawToolCall;
@@ -287,14 +347,31 @@ export async function applySessionEdits(params: {
   sessionId: string;
   projectId: string;
   language: string;
-  selections: Record<string, boolean>;
+  decisions: ToolCallDecisionMap;
   options: HandlerOptions;
   invocationCaller?: InvocationCaller;
 }): Promise<void> {
-  const { sessionId, projectId, language, selections, options, invocationCaller } = params;
+  const { sessionId, projectId, language, decisions, options, invocationCaller } = params;
   const store = useLLMSessionStore.getState();
   const session = store.getSessionById(sessionId);
   if (!session?.editCards || session.editCards.length === 0) return;
+
+  const hasAnyDecision = session.editCards.some((card) => {
+    const decision = decisions[card.id];
+    if (!decision) return false;
+    if (isValidationFailure(card.toolCall.status, card.toolCall.failureType)) return false;
+    return isDecisionEligibleStatus(card.toolCall.status);
+  });
+
+  if (!hasAnyDecision) {
+    const evaluated = evaluateSessionStatus(session.editCards);
+    store.updateSession(sessionId, {
+      status: evaluated.status,
+      error: evaluated.error,
+      warning: evaluated.warning,
+    });
+    return;
+  }
 
   store.updateSession(sessionId, { status: 'applying' });
 
@@ -303,14 +380,13 @@ export async function applySessionEdits(params: {
   const flushStore = new ToolCallBatchStore({ baseStore, shared });
   const manuscriptBatch = new ManuscriptBatch();
 
-  // Mark selected tool calls as running so the UI shows progress for long-running calls (e.g. call_*).
+  // Mark explicitly accepted tool calls as running so the UI shows progress for long-running calls (e.g. call_*).
   store.updateSession(sessionId, {
     editCards: session.editCards.map((card) => {
-      const isSelected = selections[card.id] ?? true;
-      const isValidationFailed =
-        card.toolCall.status === 'failed' && card.toolCall.failureType === 'validation';
-      if (!isSelected || isValidationFailed) return card;
-      if (card.toolCall.status !== 'pending' && card.toolCall.status !== 'validating') return card;
+      const decision = decisions[card.id];
+      if (decision !== 'accept') return card;
+      if (isValidationFailure(card.toolCall.status, card.toolCall.failureType)) return card;
+      if (!isDecisionEligibleStatus(card.toolCall.status)) return card;
       return {
         ...card,
         toolCall: {
@@ -328,13 +404,22 @@ export async function applySessionEdits(params: {
       arguments: card.toolCall.arguments,
     };
 
-    // Skip validation failures
-    if (card.toolCall.status === 'failed' && card.toolCall.failureType === 'validation') {
+    // Keep validation failures untouched.
+    if (isValidationFailure(card.toolCall.status, card.toolCall.failureType)) {
       return card;
     }
 
-    const isSelected = selections[card.id] ?? true;
-    if (!isSelected) {
+    // Only explicitly decided pending/validating cards are processed.
+    if (!isDecisionEligibleStatus(card.toolCall.status)) {
+      return card;
+    }
+
+    const decision = decisions[card.id];
+    if (!decision) {
+      return card;
+    }
+
+    if (decision === 'reject') {
       return {
         ...card,
         toolCall: {
@@ -446,44 +531,12 @@ export async function applySessionEdits(params: {
 
   store.updateSession(sessionId, { editCards: finalizedCards });
 
-  const acceptedCount = finalizedCards.filter((c) => c.toolCall.status === 'accepted').length;
-  const rejectedCount = finalizedCards.filter((c) => c.toolCall.status === 'rejected').length;
-  const failedValidationCount = finalizedCards.filter(
-    (c) => c.toolCall.status === 'failed' && c.toolCall.failureType === 'validation'
-  ).length;
-  const failedApplyCount = finalizedCards.filter(
-    (c) => c.toolCall.status === 'failed' && c.toolCall.failureType !== 'validation'
-  ).length;
-
-  if (acceptedCount === 0 && failedApplyCount === 0 && rejectedCount > 0 && failedValidationCount === 0) {
-    store.updateSession(sessionId, { status: 'cancelled' });
-    return;
-  }
-
-  if (failedApplyCount > 0) {
-    store.updateSession(sessionId, {
-      status: 'error',
-      error: `${failedApplyCount} action(s) failed to apply.`,
-      warning: failedValidationCount > 0 ? `${failedValidationCount} action(s) failed validation.` : undefined,
-    });
-    return;
-  }
-
-  if (failedValidationCount > 0) {
-    store.updateSession(sessionId, {
-      status: acceptedCount > 0 ? 'success' : rejectedCount > 0 ? 'cancelled' : 'success',
-      warning: `${failedValidationCount} action(s) failed validation.`,
-      error: undefined,
-    });
-    return;
-  }
-
-  if (acceptedCount === 0) {
-    store.updateSession(sessionId, { status: 'cancelled' });
-    return;
-  }
-
-  store.updateSession(sessionId, { status: 'success', warning: undefined, error: undefined });
+  const evaluated = evaluateSessionStatus(finalizedCards);
+  store.updateSession(sessionId, {
+    status: evaluated.status,
+    error: evaluated.error,
+    warning: evaluated.warning,
+  });
 }
 
 export function rejectAllSessionEdits(params: { sessionId: string; reason?: string }): void {
@@ -492,28 +545,39 @@ export function rejectAllSessionEdits(params: { sessionId: string; reason?: stri
   const session = store.getSessionById(sessionId);
   if (!session?.editCards || session.editCards.length === 0) return;
 
-  const next = session.editCards.map(card => ({
-    ...card,
-    toolCall: {
-      ...card.toolCall,
-      status: 'rejected' as const,
-      reason: reason ?? 'User rejected all',
-      failureType: undefined,
-    },
-  }));
+  const next = session.editCards.map((card) => {
+    if (!isDecisionEligibleStatus(card.toolCall.status)) {
+      return card;
+    }
+    return {
+      ...card,
+      toolCall: {
+        ...card.toolCall,
+        status: 'rejected' as const,
+        reason: reason ?? 'User rejected all pending actions',
+        failureType: undefined,
+      },
+    };
+  });
 
-  store.updateSession(sessionId, { editCards: next, status: 'cancelled' });
+  const evaluated = evaluateSessionStatus(next);
+  store.updateSession(sessionId, {
+    editCards: next,
+    status: evaluated.status,
+    error: evaluated.error,
+    warning: evaluated.warning,
+  });
 }
 
 export async function applyToolCallsDirect(params: {
   projectId: string;
   language: string;
   toolCalls: ToolCallMetadata[];
-  selections: Record<string, boolean>;
+  decisions: ToolCallDecisionMap;
   options: HandlerOptions;
   invocationCaller?: InvocationCaller;
 }): Promise<ToolCallMetadata[]> {
-  const { projectId, language, toolCalls, selections, options, invocationCaller } = params;
+  const { projectId, language, toolCalls, decisions, options, invocationCaller } = params;
 
   const baseStore = createBaseStore();
   const shared = new ToolCallBatchSharedState();
@@ -523,16 +587,20 @@ export async function applyToolCallsDirect(params: {
   const nextCalls = await Promise.all(toolCalls.map(async (tc): Promise<ToolCallMetadata> => {
     const status = (tc.status ?? 'pending') as ToolCallStatus;
 
-    if (status === 'failed' && tc.failureType === 'validation') {
+    if (isValidationFailure(status, tc.failureType)) {
       return tc;
     }
 
-    if (status !== 'pending' && status !== 'validating') {
+    if (!isDecisionEligibleStatus(status)) {
       return tc;
     }
 
-    const isSelected = selections[tc.id] ?? true;
-    if (!isSelected) {
+    const decision = decisions[tc.id];
+    if (!decision) {
+      return tc;
+    }
+
+    if (decision === 'reject') {
       return {
         ...tc,
         status: 'rejected',

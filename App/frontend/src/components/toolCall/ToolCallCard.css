@@ -78,9 +78,11 @@
 .tool-call-card__list {
   display: flex;
   flex-direction: column;
+  gap: var(--spacing-md);
   overflow-y: auto;
   transition: max-height 0.25s ease-in-out, opacity 0.2s ease-in-out;
-  max-height: 300px;
+  max-height: 420px;
+  padding: var(--spacing-md);
   opacity: 1;
   will-change: max-height, opacity;
 }
@@ -88,33 +90,36 @@
 .tool-call-card__list--collapsed {
   max-height: 0;
   opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
-.tool-call-card__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-md);
-  padding: var(--spacing-md) var(--spacing-lg);
-  background: var(--color-surface-subtle);
-  border-top: 1px solid var(--color-border-default);
-}
-
-.tool-call-card__footer-left {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.tool-call-card__footer-count {
+.tool-call-card__decision-summary {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
 }
 
-.tool-call-card__footer-warning {
+.tool-call-card__warning {
   font-size: var(--font-size-xs);
   color: var(--color-warning-dark);
+  background: var(--color-warning-light);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-sm);
+}
+
+.tool-call-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.tool-call-section__title {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: var(--font-weight-semibold);
 }
 
 /* =====================
@@ -195,14 +200,6 @@
   background: var(--color-surface-hover);
 }
 
-.tool-call-op__checkbox {
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  flex: 0 0 auto;
-  accent-color: var(--color-brand-primary);
-}
-
 .tool-call-op__left {
   display: flex;
   align-items: center;
@@ -237,6 +234,58 @@
 
 .tool-call-op__details {
   padding: 0;
+}
+
+.tool-call-op__decision {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--border-radius-full);
+  padding: 2px;
+}
+
+.tool-call-op__decision--buttons {
+  gap: var(--spacing-xs);
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.tool-call-op__decision--buttons .text-button--sm {
+  padding: 4px 10px;
+}
+
+.tool-call-decision-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-radius: var(--border-radius-full);
+  padding: 4px 10px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.tool-call-decision-btn:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.tool-call-decision-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.tool-call-decision-btn.is-active:not(.is-reject) {
+  background: var(--color-success-light);
+  color: var(--color-success-dark);
+}
+
+.tool-call-decision-btn.is-reject.is-active {
+  background: var(--color-feedback-error-soft);
+  color: var(--color-feedback-error-strong);
 }
 
 /* =====================
@@ -420,4 +469,42 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+}
+
+.tool-call-patch-group {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-surface-base);
+  overflow: hidden;
+}
+
+.tool-call-patch-group__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-subtle);
+}
+
+.tool-call-patch-group__title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.tool-call-patch-group__count {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.tool-call-patch-group__actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-top: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-subtle);
 }

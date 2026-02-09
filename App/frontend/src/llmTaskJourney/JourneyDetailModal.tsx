@@ -19,6 +19,7 @@ import { buildEditCardsFromToolCallMetadata } from '../toolCall';
 import { JourneyRuntime, applyJourneyEdits, rejectAllJourneyEdits } from './index';
 import type { HandlerOptions } from '../toolCall/apply/types';
 import { CRUD_OPTIONS, TRANSLATION_OPTIONS } from '../toolCall/apply/types';
+import type { ToolCallDecisionMap } from '../toolCall/types';
 import '../llmTask/LLMTaskModals.css';
 
 function getApplyLanguage(journey: Journey, mainLanguage: string): string {
@@ -138,13 +139,13 @@ export const JourneyDetailModal: React.FC = () => {
     cancelJourney(journey.id);
   }, [cancelJourney, journey?.id]);
 
-  const handleConfirm = useCallback(async (selections: Record<string, boolean>) => {
+  const handleConfirm = useCallback(async (decisions: ToolCallDecisionMap) => {
     if (!projectId || !journey) return;
     await applyJourneyEdits({
       journeyId: journey.id,
       projectId,
       language: applyLanguage,
-      selections,
+      decisions,
       options: handlerOptions,
     });
   }, [projectId, journey?.id, applyLanguage, handlerOptions]);
@@ -377,7 +378,7 @@ export const JourneyDetailModal: React.FC = () => {
                           <ToolCallCard
                             mode={isPending ? 'pending' : 'confirmed'}
                             cards={journey.editCards}
-                            onConfirm={isPending ? handleConfirm : undefined}
+                            onCommitDecisions={isPending ? handleConfirm : undefined}
                             projectId={projectId}
                             isApplyDisabled={isApplying}
                             applyDisabledReason={isApplying ? 'Applying changes...' : undefined}

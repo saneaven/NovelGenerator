@@ -1,10 +1,11 @@
 import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown } from '../icons';
+import { TextButton } from '../TextButton';
 import { ActionBadge } from './ActionBadge';
 import { OperationDetails } from './OperationDetails';
 import type { CardMode } from './types';
-import type { ApplicationResult } from '../../toolCall/types';
+import type { ApplicationResult, ToolCallDecision } from '../../toolCall/types';
 
 type StreamingStatus = 'collecting' | 'validating' | 'ready' | 'error';
 type CallStatus = 'validating' | 'pending' | 'running' | 'failed' | 'accepted' | 'rejected';
@@ -34,11 +35,13 @@ export interface OperationItemProps {
   isExpanded: boolean;
   onToggle?: () => void;
 
-  // Pending-only selection
-  showCheckbox?: boolean;
-  isSelected?: boolean;
-  isCheckboxDisabled?: boolean;
-  onToggleSelected?: () => void;
+  // Pending-only decision controls
+  showDecisionControls?: boolean;
+  decisionControlStyle?: 'toggle' | 'buttons';
+  decision?: ToolCallDecision;
+  isDecisionDisabled?: boolean;
+  onAccept?: () => void;
+  onReject?: () => void;
 
   // Details
   detailsData?: unknown;
@@ -56,10 +59,12 @@ export const OperationItem: React.FC<OperationItemProps> = ({
   status,
   isExpanded,
   onToggle,
-  showCheckbox = false,
-  isSelected = true,
-  isCheckboxDisabled = false,
-  onToggleSelected,
+  showDecisionControls = false,
+  decisionControlStyle = 'toggle',
+  decision = 'accept',
+  isDecisionDisabled = false,
+  onAccept,
+  onReject,
   detailsData,
   rawText,
   errorMessage,
@@ -80,14 +85,21 @@ export const OperationItem: React.FC<OperationItemProps> = ({
     onToggle?.();
   }, [onToggle]);
 
-  const handleCheckboxClick = useCallback((e: React.MouseEvent) => {
+  const stopHeaderToggle = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
   }, []);
 
-  const handleCheckboxChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAccept = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    onToggleSelected?.();
-  }, [onToggleSelected]);
+    if (isDecisionDisabled) return;
+    onAccept?.();
+  }, [isDecisionDisabled, onAccept]);
+
+  const handleReject = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isDecisionDisabled) return;
+    onReject?.();
+  }, [isDecisionDisabled, onReject]);
 
   return (
     <div className={`tool-call-op tool-call-op--${mode} ${isExpanded ? 'tool-call-op--expanded' : ''}`}>
@@ -98,23 +110,58 @@ export const OperationItem: React.FC<OperationItemProps> = ({
         aria-expanded={isExpanded}
         aria-controls={panelId}
       >
-        {showCheckbox && (
-          <input
-            type="checkbox"
-            className="tool-call-op__checkbox"
-            checked={isSelected}
-            disabled={isCheckboxDisabled}
-            onClick={handleCheckboxClick}
-            onChange={handleCheckboxChange}
-          />
-        )}
-
         <div className="tool-call-op__left">
           <ActionBadge action={action} type={type} />
           <div className="tool-call-op__label">{label}</div>
         </div>
 
         <div className="tool-call-op__right">
+          {showDecisionControls && (
+            <div
+              className={`tool-call-op__decision${decisionControlStyle === 'buttons' ? ' tool-call-op__decision--buttons' : ''}`}
+              onClick={stopHeaderToggle}
+            >
+              {decisionControlStyle === 'buttons' ? (
+                <>
+                  <TextButton
+                    size="sm"
+                    variant="primary"
+                    onClick={handleAccept}
+                    disabled={isDecisionDisabled}
+                  >
+                    {t('toolCall.accept')}
+                  </TextButton>
+                  <TextButton
+                    size="sm"
+                    variant="danger"
+                    onClick={handleReject}
+                    disabled={isDecisionDisabled}
+                  >
+                    {t('toolCall.reject')}
+                  </TextButton>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className={`tool-call-decision-btn ${decision === 'accept' ? 'is-active' : ''}`}
+                    onClick={handleAccept}
+                    disabled={isDecisionDisabled}
+                  >
+                    {t('toolCall.accept')}
+                  </button>
+                  <button
+                    type="button"
+                    className={`tool-call-decision-btn ${decision === 'reject' ? 'is-active is-reject' : 'is-reject'}`}
+                    onClick={handleReject}
+                    disabled={isDecisionDisabled}
+                  >
+                    {t('toolCall.reject')}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
           {status && (
             <span className={`tool-call-pill tool-call-pill--${status}`}>
               {getStatusLabel(status)}

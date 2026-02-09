@@ -1014,9 +1014,21 @@
     "ready": "준비됨",
     "error": "오류",
     "pending": "대기 중",
+    "running": "적용 중",
     "applied": "적용됨",
     "skipped": "건너뜀",
     "failed": "실패"
+  },
+  "toolCall": {
+    "accept": "수락",
+    "reject": "거절",
+    "sectionImmediate": "즉시 처리 항목",
+    "sectionPatchGroups": "패치 그룹",
+    "confirmPatchGroup": "그룹 확인",
+    "confirmAndPause": "확인 후 일시정지",
+    "applying": "적용 중...",
+    "patchCount": "{{count}}개 작업",
+    "pendingDecisionSummary": "결정 상태: 수락 {{accepted}} / 거절 {{rejected}}"
   },
   "storyObjectPanel": {
     "title": "스토리 객체",

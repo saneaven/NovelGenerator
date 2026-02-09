@@ -45,6 +45,12 @@ export type ToolCallStatus = 'validating' | 'pending' | 'running' | 'failed' | '
 /** Type of failure when status is 'failed' */
 export type ToolCallFailureType = 'validation' | 'execution' | 'partial';
 
+/** User decision for a pending tool call */
+export type ToolCallDecision = 'accept' | 'reject';
+
+/** Explicit decisions keyed by tool call ID (only listed IDs are processed) */
+export type ToolCallDecisionMap = Record<string, ToolCallDecision>;
+
 // ============================================================================
 // TOOL CALL TYPES
 // ============================================================================

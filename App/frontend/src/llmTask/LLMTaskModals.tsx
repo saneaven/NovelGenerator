@@ -23,6 +23,7 @@ import {
 } from '../agent';
 import type { InvocationCaller } from '../types/agentRuntime';
 import { CRUD_OPTIONS } from '../toolCall/apply/types';
+import type { ToolCallDecisionMap } from '../toolCall/types';
 import './LLMTaskModals.css';
 
 export const LLMTaskModals: React.FC = () => {
@@ -129,7 +130,7 @@ export const LLMTaskModals: React.FC = () => {
     cancelSession(session.id);
   }, [cancelSession, session?.id]);
 
-  const handleConfirm = useCallback(async (selections: Record<string, boolean>) => {
+  const handleConfirm = useCallback(async (decisions: ToolCallDecisionMap) => {
     if (!projectId || !session) return;
     const invocationCaller: InvocationCaller | undefined =
       session.kind === 'agent'
@@ -139,7 +140,7 @@ export const LLMTaskModals: React.FC = () => {
       sessionId: session.id,
       projectId,
       language: mainLanguage,
-      selections,
+      decisions,
       options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
       invocationCaller,
     });
@@ -265,7 +266,7 @@ export const LLMTaskModals: React.FC = () => {
             <ToolCallCard
               mode={isPending ? 'pending' : 'confirmed'}
               cards={session.editCards}
-              onConfirm={isPending ? handleConfirm : undefined}
+              onCommitDecisions={isPending ? handleConfirm : undefined}
               projectId={projectId}
               isApplyDisabled={isApplying}
               applyDisabledReason={isApplying ? 'Applying changes...' : undefined}

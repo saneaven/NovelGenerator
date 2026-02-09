@@ -15,6 +15,7 @@ import type { ToolCallSchema } from '../../toolCall';
 import type { TaskAIConfig } from '../../store/settingsStore';
 import { stageSessionEdits, applySessionEdits, toToolCallMetadata } from '../../llmTask/toolCalls/toolCallEngine';
 import type { HandlerOptions } from '../../toolCall/apply/types';
+import type { ToolCallDecisionMap } from '../../toolCall/types';
 import { generateTempId } from '../../utils/tempId';
 import type { SubAgentDefinition } from '../../types/subAgents';
 import type { StoredEditCard } from '../../llmTask/uiTypes';
@@ -489,10 +490,10 @@ export const SubAgentManager = {
    */
   async applyAndContinue(params: {
     invocationKey: string;
-    selections: Record<string, boolean>;
+    decisions: ToolCallDecisionMap;
     autoContinue: boolean;
   }): Promise<void> {
-    const { invocationKey, selections, autoContinue } = params;
+    const { invocationKey, decisions, autoContinue } = params;
     const runtime = useSubAgentRuntimeStore.getState();
     const initial = runtime.getInvocationByKey(invocationKey);
     if (!initial?.activeSessionId) return;
@@ -510,7 +511,7 @@ export const SubAgentManager = {
       sessionId: invocation.activeSessionId,
       projectId: invocation.projectId,
       language: invocation.language,
-      selections,
+      decisions,
       options: {
         ...(invocation.handlerOptions ?? {}),
         userRequest: invocation.handlerOptions?.userRequest ?? 'SubAgent',
@@ -535,6 +536,15 @@ export const SubAgentManager = {
       }
     }
     await persistInvocationSnapshot(invocationKey);
+
+    const hasPendingDecisions = cards?.some(
+      (c) => c.toolCall.status === 'pending' || c.toolCall.status === 'validating'
+    ) ?? false;
+    if (hasPendingDecisions) {
+      runtime.updateInvocation(invocationKey, { status: 'awaiting_confirmation' });
+      await persistInvocationSnapshot(invocationKey);
+      return;
+    }
 
     // If Sub Agent returned a final result, complete immediately (do not continue to next turn).
     const acceptedReturn = cards?.find(

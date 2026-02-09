@@ -8,7 +8,7 @@ export { OperationItem } from './OperationItem';
 export { OperationDetails } from './OperationDetails';
 
 // Hooks
-export { useCardSelection } from './hooks';
+export { useOperationDecisions } from './hooks';
 
 // Types
 export type {

@@ -28,6 +28,7 @@ import {
   toToolCallMetadata,
 } from '../llmTask/toolCalls/toolCallEngine';
 import type { HandlerOptions } from '../toolCall/apply/types';
+import type { ToolCallDecisionMap } from '../toolCall/types';
 import { generateTempId } from '../utils/tempId';
 import { registerSessionNotification, updateSessionNotification } from '../llmTask/notificationHelpers';
 
@@ -405,7 +406,7 @@ export async function executeAgentToolCalls(params: {
   sessionId: string;
   projectId: string;
   language: string;
-  selections: Record<string, boolean>;
+  decisions: ToolCallDecisionMap;
   options: HandlerOptions;
   invocationCaller?: InvocationCaller;
 }): Promise<{ hasAcceptedReads: boolean }> {

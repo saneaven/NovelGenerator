@@ -11,6 +11,7 @@ import {
   toToolCallMetadata,
 } from '../llmTask/toolCalls/toolCallEngine';
 import type { HandlerOptions } from '../toolCall/apply/types';
+import type { ToolCallDecisionMap } from '../toolCall/types';
 import { registerJourneyNotification, updateJourneyNotification } from './notificationHelpers';
 import { generateTempId } from '../utils/tempId';
 import { getJourneySpec, type JourneyKind } from './journeySpecs';
@@ -103,10 +104,10 @@ export async function applyJourneyEdits(params: {
   journeyId: string;
   projectId: string;
   language: string;
-  selections: Record<string, boolean>;
+  decisions: ToolCallDecisionMap;
   options: HandlerOptions;
 }): Promise<void> {
-  const { journeyId, projectId, language, selections, options } = params;
+  const { journeyId, projectId, language, decisions, options } = params;
   const journeyStore = useJourneyStore.getState();
   const journey = journeyStore.getJourneyById(journeyId);
   const assistantMessageId = journey ? findLastAssistantMessageId(journey) : null;
@@ -117,7 +118,7 @@ export async function applyJourneyEdits(params: {
   }
 
   // Use journey.sessionId for applySessionEdits
-  await applySessionEdits({ sessionId, projectId, language, selections, options });
+  await applySessionEdits({ sessionId, projectId, language, decisions, options });
 
   // Copy updated editCards and status from llmSessionStore to journeyStore
   const session = useLLMSessionStore.getState().getSessionById(sessionId);

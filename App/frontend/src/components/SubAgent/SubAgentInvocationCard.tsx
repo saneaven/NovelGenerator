@@ -11,6 +11,7 @@ import type { ChatMessage, ToolCallMetadata } from '../../llm/requestTypes';
 import { ToolCallCard } from '../toolCall';
 import { buildEditCardsFromToolCallMetadata } from '../../toolCall';
 import { TextButton } from '../TextButton';
+import type { ToolCallDecisionMap } from '../../toolCall/types';
 import './SubAgentInvocationCard.css';
 
 function contentText(parts: Array<{ type: string; text: string }>): string {
@@ -97,19 +98,19 @@ export const SubAgentInvocationCard: React.FC<SubAgentInvocationCardProps> = ({
     await SubAgentManager.resume(invocationKey);
   }, [invocationKey]);
 
-  const handleConfirm = useCallback(async (selections: Record<string, boolean>) => {
+  const handleConfirm = useCallback(async (decisions: ToolCallDecisionMap) => {
     setIsApplying(true);
     try {
-      await SubAgentManager.applyAndContinue({ invocationKey, selections, autoContinue: true });
+      await SubAgentManager.applyAndContinue({ invocationKey, decisions, autoContinue: true });
     } finally {
       setIsApplying(false);
     }
   }, [invocationKey]);
 
-  const handleConfirmAndPause = useCallback(async (selections: Record<string, boolean>) => {
+  const handleConfirmAndPause = useCallback(async (decisions: ToolCallDecisionMap) => {
     setIsApplying(true);
     try {
-      await SubAgentManager.applyAndContinue({ invocationKey, selections, autoContinue: false });
+      await SubAgentManager.applyAndContinue({ invocationKey, decisions, autoContinue: false });
     } finally {
       setIsApplying(false);
     }
@@ -179,8 +180,8 @@ export const SubAgentInvocationCard: React.FC<SubAgentInvocationCardProps> = ({
                       <ToolCallCard
                         mode={isAwaiting ? 'pending' : 'confirmed'}
                         cards={cardsToRender as any}
-                        onConfirm={isAwaiting ? handleConfirm : undefined}
-                        onConfirmAndPause={isAwaiting ? handleConfirmAndPause : undefined}
+                        onCommitDecisions={isAwaiting ? handleConfirm : undefined}
+                        onCommitDecisionsAndPause={isAwaiting ? handleConfirmAndPause : undefined}
                         projectId={invocation.projectId}
                         isApplyDisabled={isApplying}
                         applyDisabledReason={isApplying ? 'Applying changes...' : undefined}

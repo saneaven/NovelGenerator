@@ -28,6 +28,7 @@ import { AgentExecutor, applyAgentEdits } from '../../../agent';
 import { applyToolCallsDirect } from '../../../llmTask/toolCalls/toolCallEngine';
 import { CRUD_OPTIONS } from '../../../toolCall/apply/types';
 import { buildEditCardsFromToolCallMetadata } from '../../../toolCall';
+import type { ToolCallDecisionMap } from '../../../toolCall/types';
 import type { AgentRunMode, WorkspaceSurface } from '../../../types/agentRuntime';
 import { subAgentInvocationService } from '../../../api/subAgentInvocationService';
 import { useSubAgentRuntimeStore } from '../../../store/subAgentRuntimeStore';
@@ -847,9 +848,9 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                 <ToolCallCard
                                                     mode={cardMode as any}
                                                     cards={cardsToRender as any}
-                                                    onConfirm={
+                                                    onCommitDecisions={
                                                         cardMode === 'pending'
-                                                            ? async (selections: Record<string, boolean>) => {
+                                                            ? async (decisions: ToolCallDecisionMap) => {
                                                                 if (hasUnsavedChanges) {
                                                                     showError('Cannot Apply', 'Save your changes first - unsaved work will be overwritten.');
                                                                     return;
@@ -860,12 +861,18 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                         sessionId: agentSession.id,
                                                                         projectId,
                                                                         language: mainLanguage,
-                                                                        selections,
+                                                                        decisions,
                                                                         options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
                                                                         invocationCaller: runMode,
                                                                     });
-                                                                    // Auto-continue: trigger next LLM turn with tool results
-                                                                    await triggerAutoContinue();
+                                                                    const latestSession = useLLMSessionStore.getState().getSessionById(agentSession.id);
+                                                                    const hasPendingAfterApply = latestSession?.editCards?.some(
+                                                                        (card: any) =>
+                                                                            card.toolCall.status === 'pending' || card.toolCall.status === 'validating'
+                                                                    ) ?? false;
+                                                                    if (!hasPendingAfterApply) {
+                                                                        await triggerAutoContinue();
+                                                                    }
                                                                     return;
                                                                 }
 
@@ -876,8 +883,8 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                     // Optimistically mark selected operations as running so the UI reflects long-running calls.
                                                                     const runningToolCalls = storedToolCalls.map((tc: any) => {
                                                                         const status = (tc.status ?? 'pending') as string;
-                                                                        const isSelected = selections[tc.id] ?? true;
-                                                                        if (!isSelected) return tc;
+                                                                        const decision = decisions[tc.id];
+                                                                        if (decision !== 'accept') return tc;
                                                                         if (status !== 'pending' && status !== 'validating') return tc;
                                                                         return {
                                                                             ...tc,
@@ -897,7 +904,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                         projectId,
                                                                         language: mainLanguage,
                                                                         toolCalls: storedToolCalls,
-                                                                        selections,
+                                                                        decisions,
                                                                         options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
                                                                         invocationCaller: runMode,
                                                                     });
@@ -908,17 +915,22 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                         message.chatMessage.id,
                                                                         nextToolCalls
                                                                     );
+                                                                    const hasPendingAfterApply = nextToolCalls.some((tc: any) => {
+                                                                        const status = String(tc?.status ?? 'pending');
+                                                                        return status === 'pending' || status === 'validating';
+                                                                    });
+                                                                    if (!hasPendingAfterApply) {
+                                                                        await triggerAutoContinue();
+                                                                    }
                                                                 } finally {
                                                                     setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: false }));
                                                                 }
-                                                                // Auto-continue: trigger next LLM turn with tool results
-                                                                await triggerAutoContinue();
                                                             }
                                                             : undefined
                                                     }
-                                                    onConfirmAndPause={
+                                                    onCommitDecisionsAndPause={
                                                         cardMode === 'pending'
-                                                            ? async (selections: Record<string, boolean>) => {
+                                                            ? async (decisions: ToolCallDecisionMap) => {
                                                                 if (hasUnsavedChanges) {
                                                                     showError('Cannot Apply', 'Save your changes first - unsaved work will be overwritten.');
                                                                     return;
@@ -929,7 +941,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                         sessionId: agentSession.id,
                                                                         projectId,
                                                                         language: mainLanguage,
-                                                                        selections,
+                                                                        decisions,
                                                                         options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
                                                                         invocationCaller: runMode,
                                                                     });
@@ -943,8 +955,8 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                     // Optimistically mark selected operations as running so the UI reflects long-running calls.
                                                                     const runningToolCalls = storedToolCalls.map((tc: any) => {
                                                                         const status = (tc.status ?? 'pending') as string;
-                                                                        const isSelected = selections[tc.id] ?? true;
-                                                                        if (!isSelected) return tc;
+                                                                        const decision = decisions[tc.id];
+                                                                        if (decision !== 'accept') return tc;
                                                                         if (status !== 'pending' && status !== 'validating') return tc;
                                                                         return {
                                                                             ...tc,
@@ -964,7 +976,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                         projectId,
                                                                         language: mainLanguage,
                                                                         toolCalls: storedToolCalls,
-                                                                        selections,
+                                                                        decisions,
                                                                         options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
                                                                         invocationCaller: runMode,
                                                                     });
