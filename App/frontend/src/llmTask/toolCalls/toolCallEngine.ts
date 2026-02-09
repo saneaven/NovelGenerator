@@ -144,6 +144,35 @@ async function applyToolCall(params: {
         };
       }
 
+      const agentId = context.options?.agentId;
+      if (!agentId) {
+        return {
+          success: false,
+          message: 'Missing agentId for Sub Agent call',
+          error: 'Missing agentId for Sub Agent call',
+        };
+      }
+
+      let parentType: 'agent' | 'sub_agent';
+      let parentId: string;
+      let parentMessageId: string;
+
+      if (context.options?.parentSubInvocationId && context.options?.parentSubMessageId) {
+        parentType = 'sub_agent';
+        parentId = context.options.parentSubInvocationId;
+        parentMessageId = context.options.parentSubMessageId;
+      } else if (context.options?.parentAgentMessageId) {
+        parentType = 'agent';
+        parentId = agentId;
+        parentMessageId = context.options.parentAgentMessageId;
+      } else {
+        return {
+          success: false,
+          message: 'Missing parent context for Sub Agent call',
+          error: 'Missing parent context for Sub Agent call',
+        };
+      }
+
       const input = (normalized.arguments as any).input;
       if (typeof input !== 'string' || !input.trim()) {
         return {
@@ -169,7 +198,11 @@ async function applyToolCall(params: {
 
       const output = await SubAgentManager.invoke({
         projectId: context.projectId,
+        agentId,
         language: context.language,
+        parentType,
+        parentId,
+        parentMessageId,
         parentToolCallId: normalized.id,
         caller,
         subAgentId: def.id,

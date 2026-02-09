@@ -657,6 +657,98 @@ class AgentMessage(Base):
 
 
 # ============================================================================
+# SUB AGENT INVOCATION LOGS
+# ============================================================================
+
+class SubAgentInvocationModel(Base):
+    """Persistent Sub Agent invocation snapshots."""
+    __tablename__ = 'sub_agent_invocations'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
+    agent_id = Column(UUID(as_uuid=True), ForeignKey('agents.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    # Polymorphic parent reference:
+    # - parent_type='agent': parent_id -> agents.id, parent_message_id -> agent_messages.id
+    # - parent_type='sub_agent': parent_id -> sub_agent_invocations.id, parent_message_id -> sub_agent_invocation_messages.id
+    parent_type = Column(String(20), nullable=False)
+    parent_id = Column(UUID(as_uuid=True), nullable=False)
+    parent_message_id = Column(UUID(as_uuid=True), nullable=False)
+    parent_tool_call_id = Column(String(255), nullable=False)
+
+    sub_agent_id = Column(UUID(as_uuid=True), ForeignKey('sub_agent_definitions.id', ondelete='CASCADE'), nullable=False, index=True)
+    agent_name = Column(String(50), nullable=False)
+    display_name = Column(String(200), nullable=False)
+    caller = Column(String(20), nullable=False)
+
+    language = Column(String(50), nullable=False)
+    input = Column(Text, nullable=False)
+    status = Column(String(50), nullable=False)
+    final_output = Column(Text, nullable=True)
+    error = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Relationships
+    project = relationship("Project")
+    agent = relationship("Agent")
+    sub_agent = relationship("SubAgentDefinitionModel")
+    messages = relationship(
+        "SubAgentInvocationMessageModel",
+        back_populates="invocation",
+        cascade="all, delete-orphan",
+        order_by="SubAgentInvocationMessageModel.seq",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            'parent_type',
+            'parent_id',
+            'parent_message_id',
+            'parent_tool_call_id',
+            name='uq_sub_agent_invocation_parent_tool',
+        ),
+        Index('ix_sub_agent_invocations_project_agent_parent_message', 'project_id', 'agent_id', 'parent_message_id'),
+        Index('ix_sub_agent_invocations_parent_ref', 'parent_type', 'parent_id', 'parent_message_id'),
+        Index('ix_sub_agent_invocations_status', 'status'),
+    )
+
+
+class SubAgentInvocationMessageModel(Base):
+    """Persistent message history for a Sub Agent invocation."""
+    __tablename__ = 'sub_agent_invocation_messages'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    invocation_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey('sub_agent_invocations.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True,
+    )
+    seq = Column(BigInteger, nullable=False)
+    role = Column(String(50), nullable=False)
+
+    content_parts = Column(JSONB, nullable=False)
+    tool_calls = Column(JSONB, nullable=True)
+    thinking_details = Column(JSONB, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    invocation = relationship("SubAgentInvocationModel", back_populates="messages")
+
+    __table_args__ = (
+        UniqueConstraint(
+            'invocation_id',
+            'seq',
+            name='uq_sub_agent_invocation_messages_invocation_seq',
+        ),
+        Index('ix_sub_agent_invocation_messages_invocation_created', 'invocation_id', 'created_at'),
+    )
+
+
+# ============================================================================
 # ASSET MANAGEMENT
 # ============================================================================
 

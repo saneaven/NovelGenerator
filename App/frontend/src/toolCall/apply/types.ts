@@ -68,6 +68,14 @@ export interface HandlerOptions {
   createNewVersion?: boolean;
   /** User request label for the operation */
   userRequest?: string;
+  /** Root agent id scope (required for Sub Agent persistence). */
+  agentId?: string;
+  /** Parent agent assistant message id (for root Sub Agent calls). */
+  parentAgentMessageId?: string;
+  /** Parent Sub Agent invocation id (for nested Sub Agent calls). */
+  parentSubInvocationId?: string;
+  /** Parent Sub Agent assistant message id (for nested Sub Agent calls). */
+  parentSubMessageId?: string;
 }
 
 /** Default options for CRUD operations */

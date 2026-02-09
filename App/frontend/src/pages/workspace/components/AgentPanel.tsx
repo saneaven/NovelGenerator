@@ -29,6 +29,8 @@ import { applyToolCallsDirect } from '../../../llmTask/toolCalls/toolCallEngine'
 import { CRUD_OPTIONS } from '../../../toolCall/apply/types';
 import { buildEditCardsFromToolCallMetadata } from '../../../toolCall';
 import type { AgentRunMode, WorkspaceSurface } from '../../../types/agentRuntime';
+import { subAgentInvocationService } from '../../../api/subAgentInvocationService';
+import { useSubAgentRuntimeStore } from '../../../store/subAgentRuntimeStore';
 
 interface AgentPanelProps
 {
@@ -503,6 +505,84 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         [storedMessages, resolveDisplayInfo]
     );
 
+    const subAgentRootMessageIds = useMemo(() => {
+        return storedMessages
+            .filter((msg) =>
+                msg.role === 'assistant' &&
+                Array.isArray(msg.toolCalls) &&
+                msg.toolCalls.some((tc: any) => typeof tc?.tool_name === 'string' && tc.tool_name.startsWith('call_'))
+            )
+            .map((msg) => msg.id);
+    }, [storedMessages]);
+
+    const subAgentRootMessageKey = useMemo(
+        () => [...subAgentRootMessageIds].sort().join('|'),
+        [subAgentRootMessageIds]
+    );
+
+    useEffect(() => {
+        if (!projectId || !selectedAgentId) return;
+        if (subAgentRootMessageIds.length === 0) return;
+
+        let cancelled = false;
+
+        void subAgentInvocationService
+            .queryByMessages(projectId, selectedAgentId, {
+                message_ids: subAgentRootMessageIds,
+            })
+            .then((response) => {
+                if (cancelled) return;
+                const runtime = useSubAgentRuntimeStore.getState();
+
+                for (const item of response.items ?? []) {
+                    const history = [...(item.messages ?? [])]
+                        .sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))
+                        .map((msg) => ({
+                            id: msg.id,
+                            role: msg.role as any,
+                            contentParts: (msg.content_parts ?? []) as any,
+                            timestamp: new Date(msg.created_at),
+                            toolCalls: (msg.tool_calls ?? undefined) as any,
+                            thinking_details: (msg.thinking_details ?? undefined) as any,
+                        }));
+
+                    const caller =
+                        item.caller === 'planMode' || item.caller === 'agentMode' || item.caller === 'subAgent'
+                            ? item.caller
+                            : 'subAgent';
+
+                    runtime.upsertInvocation({
+                        id: item.id,
+                        persistentId: item.id,
+                        parentType: item.parent_type as any,
+                        parentId: item.parent_id,
+                        parentMessageId: item.parent_message_id,
+                        parentToolCallId: item.parent_tool_call_id,
+                        projectId: item.project_id,
+                        agentId: item.agent_id,
+                        language: item.language,
+                        caller,
+                        agentName: item.agent_name,
+                        subAgentId: item.sub_agent_id,
+                        displayName: item.display_name,
+                        input: item.input ?? '',
+                        status: item.status as any,
+                        history: history as any,
+                        activeSessionId: null,
+                        finalOutput: item.final_output ?? undefined,
+                        error: item.error ?? undefined,
+                    });
+                }
+            })
+            .catch((error) => {
+                console.error('Failed to restore Sub Agent invocations:', error);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [projectId, selectedAgentId, subAgentRootMessageKey]);
+
     useEffect(() => {
         const entries = Object.entries(translationSessionByMessageId);
         if (entries.length === 0) return;
@@ -911,11 +991,14 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                 : undefined
                                                     }
                                                 />
-                                                {cardsToRender
+                                                {selectedAgentId && cardsToRender
                                                     .filter((card: any) => typeof card?.toolCall?.toolName === 'string' && card.toolCall.toolName.startsWith('call_'))
                                                     .map((card: any) => (
                                                         <SubAgentInvocationCard
                                                             key={card.toolCall.id}
+                                                            parentType="agent"
+                                                            parentId={selectedAgentId}
+                                                            parentMessageId={String(message.chatMessage.id)}
                                                             parentToolCallId={card.toolCall.id}
                                                         />
                                                     ))}

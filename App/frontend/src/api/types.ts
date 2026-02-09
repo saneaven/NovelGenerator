@@ -291,6 +291,79 @@ export interface AgentMessageResponse {
   created_at: string;
 }
 
+export type SubAgentParentType = 'agent' | 'sub_agent';
+
+export interface SubAgentInvocationSnapshotMessage {
+  role: string;
+  content_parts?: Array<Record<string, any>>;
+  tool_calls?: Array<Record<string, any>>;
+  thinking_details?: Array<Record<string, any>>;
+  created_at?: string;
+}
+
+export interface SubAgentInvocationSnapshotRequest {
+  parent_type: SubAgentParentType;
+  parent_id: string;
+  parent_message_id: string;
+  parent_tool_call_id: string;
+  sub_agent_id: string;
+  agent_name: string;
+  display_name: string;
+  caller: string;
+  language: string;
+  input: string;
+  status: string;
+  final_output?: string;
+  error?: string;
+  history: SubAgentInvocationSnapshotMessage[];
+}
+
+export interface SubAgentInvocationMessageResponse {
+  id: string;
+  invocation_id: string;
+  seq: number;
+  role: string;
+  content_parts: Array<Record<string, any>>;
+  tool_calls?: Array<Record<string, any>>;
+  thinking_details?: Array<Record<string, any>>;
+  created_at: string;
+}
+
+export interface SubAgentInvocationResponse {
+  id: string;
+  project_id: string;
+  agent_id: string;
+  parent_type: SubAgentParentType;
+  parent_id: string;
+  parent_message_id: string;
+  parent_tool_call_id: string;
+  sub_agent_id: string;
+  agent_name: string;
+  display_name: string;
+  caller: string;
+  language: string;
+  input: string;
+  status: string;
+  final_output?: string;
+  error?: string;
+  created_at: string;
+  updated_at: string;
+  messages: SubAgentInvocationMessageResponse[];
+}
+
+export interface SubAgentInvocationSnapshotResponse {
+  invocation: SubAgentInvocationResponse;
+}
+
+export interface SubAgentInvocationQueryByMessagesRequest {
+  message_ids: string[];
+  status_filter?: string[];
+}
+
+export interface SubAgentInvocationQueryByMessagesResponse {
+  items: SubAgentInvocationResponse[];
+}
+
 // ============================================================================
 // USER SETTINGS
 // ============================================================================

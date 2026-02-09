@@ -409,15 +409,27 @@ export async function executeAgentToolCalls(params: {
   options: HandlerOptions;
   invocationCaller?: InvocationCaller;
 }): Promise<{ hasAcceptedReads: boolean }> {
-  await applySessionEdits(params);
+  const session = useLLMSessionStore.getState().getSessionById(params.sessionId);
+  const sessionAgentId = (session?.input as AgentExecutorInput | undefined)?.agentId;
+  const assistantMessageId = (session?.result as AgentExecutorResult | undefined)?.assistantMessageId;
+
+  const effectiveOptions: HandlerOptions = { ...params.options };
+  if (!effectiveOptions.agentId && sessionAgentId) {
+    effectiveOptions.agentId = sessionAgentId;
+  }
+  if (!effectiveOptions.parentAgentMessageId && assistantMessageId) {
+    effectiveOptions.parentAgentMessageId = assistantMessageId;
+  }
+
+  await applySessionEdits({ ...params, options: effectiveOptions });
   await syncAgentToolCalls(params.sessionId);
 
   // Check if we have accepted read operations that need continuation
-  const session = useLLMSessionStore.getState().getSessionById(params.sessionId);
-  if (!session?.editCards) return { hasAcceptedReads: false };
+  const updatedSession = useLLMSessionStore.getState().getSessionById(params.sessionId);
+  if (!updatedSession?.editCards) return { hasAcceptedReads: false };
 
   const { isReadTool } = await import('../toolCall/schemas/schemaRegistry');
-  const hasAcceptedReads = session.editCards.some(
+  const hasAcceptedReads = updatedSession.editCards.some(
     c => c.toolCall.status === 'accepted' && isReadTool(c.toolCall.toolName)
   );
 

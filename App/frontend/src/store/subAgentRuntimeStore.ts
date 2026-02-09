@@ -3,6 +3,7 @@ import type { ChatMessage } from '../llm/requestTypes';
 import type { TaskAIConfig } from './settingsStore';
 import type { ToolCallSchema } from '../toolCall';
 import type { HandlerOptions } from '../toolCall/apply/types';
+import type { InvocationCaller } from '../types/agentRuntime';
 
 export type SubAgentInvocationStatus =
   | 'running'
@@ -12,24 +13,44 @@ export type SubAgentInvocationStatus =
   | 'error'
   | 'cancelled';
 
+export type SubAgentParentType = 'agent' | 'sub_agent';
+
+export interface SubAgentInvocationRef {
+  parentType: SubAgentParentType;
+  parentId: string;
+  parentMessageId: string;
+  parentToolCallId: string;
+}
+
+export function buildSubAgentInvocationKey(ref: SubAgentInvocationRef): string {
+  return `${ref.parentType}:${ref.parentId}:${ref.parentMessageId}:${ref.parentToolCallId}`;
+}
+
 export interface SubAgentInvocation {
-  /** Invocation ID (same as parentToolCallId for 1:1 mapping) */
+  /** Local runtime id */
   id: string;
+  /** Persistent DB id (set once snapshot is saved) */
+  persistentId?: string;
+
+  parentType: SubAgentParentType;
+  parentId: string;
+  parentMessageId: string;
   parentToolCallId: string;
 
   projectId: string;
+  agentId: string;
   language: string;
+  caller: InvocationCaller;
 
   /** Tool suffix (call_{agentName}) used for prompt template name. */
   agentName: string;
-
   subAgentId: string;
   displayName: string;
-  input: any;
+  input: string;
 
-  llmConfig: TaskAIConfig;
-  tools: ToolCallSchema[];
-  handlerOptions: HandlerOptions;
+  llmConfig?: TaskAIConfig;
+  tools?: ToolCallSchema[];
+  handlerOptions?: HandlerOptions;
 
   status: SubAgentInvocationStatus;
   history: ChatMessage[];
@@ -42,39 +63,51 @@ export interface SubAgentInvocation {
 }
 
 interface SubAgentRuntimeState {
-  invocationsByToolCallId: Record<string, SubAgentInvocation | undefined>;
+  invocationsByKey: Record<string, SubAgentInvocation | undefined>;
 }
 
 interface SubAgentRuntimeActions {
-  getInvocation: (parentToolCallId: string) => SubAgentInvocation | undefined;
+  getInvocationByKey: (invocationKey: string) => SubAgentInvocation | undefined;
+  getInvocation: (ref: SubAgentInvocationRef) => SubAgentInvocation | undefined;
   upsertInvocation: (invocation: SubAgentInvocation) => void;
-  updateInvocation: (parentToolCallId: string, partial: Partial<SubAgentInvocation>) => void;
-  appendHistory: (parentToolCallId: string, message: ChatMessage) => void;
-  replaceHistory: (parentToolCallId: string, history: ChatMessage[]) => void;
-  clearInvocation: (parentToolCallId: string) => void;
+  updateInvocation: (invocationKey: string, partial: Partial<SubAgentInvocation>) => void;
+  appendHistory: (invocationKey: string, message: ChatMessage) => void;
+  replaceHistory: (invocationKey: string, history: ChatMessage[]) => void;
+  clearInvocation: (invocationKey: string) => void;
 }
 
 export const useSubAgentRuntimeStore = create<SubAgentRuntimeState & SubAgentRuntimeActions>((set, get) => ({
-  invocationsByToolCallId: {},
+  invocationsByKey: {},
 
-  getInvocation: (parentToolCallId) => get().invocationsByToolCallId[parentToolCallId],
+  getInvocationByKey: (invocationKey) => get().invocationsByKey[invocationKey],
+
+  getInvocation: (ref) => get().invocationsByKey[buildSubAgentInvocationKey(ref)],
 
   upsertInvocation: (invocation) =>
-    set((state) => ({
-      invocationsByToolCallId: {
-        ...state.invocationsByToolCallId,
-        [invocation.parentToolCallId]: invocation,
-      },
-    })),
-
-  updateInvocation: (parentToolCallId, partial) =>
     set((state) => {
-      const existing = state.invocationsByToolCallId[parentToolCallId];
+      const key = buildSubAgentInvocationKey({
+        parentType: invocation.parentType,
+        parentId: invocation.parentId,
+        parentMessageId: invocation.parentMessageId,
+        parentToolCallId: invocation.parentToolCallId,
+      });
+
+      return {
+        invocationsByKey: {
+          ...state.invocationsByKey,
+          [key]: invocation,
+        },
+      };
+    }),
+
+  updateInvocation: (invocationKey, partial) =>
+    set((state) => {
+      const existing = state.invocationsByKey[invocationKey];
       if (!existing) return state;
       return {
-        invocationsByToolCallId: {
-          ...state.invocationsByToolCallId,
-          [parentToolCallId]: {
+        invocationsByKey: {
+          ...state.invocationsByKey,
+          [invocationKey]: {
             ...existing,
             ...partial,
           },
@@ -82,14 +115,14 @@ export const useSubAgentRuntimeStore = create<SubAgentRuntimeState & SubAgentRun
       };
     }),
 
-  appendHistory: (parentToolCallId, message) =>
+  appendHistory: (invocationKey, message) =>
     set((state) => {
-      const existing = state.invocationsByToolCallId[parentToolCallId];
+      const existing = state.invocationsByKey[invocationKey];
       if (!existing) return state;
       return {
-        invocationsByToolCallId: {
-          ...state.invocationsByToolCallId,
-          [parentToolCallId]: {
+        invocationsByKey: {
+          ...state.invocationsByKey,
+          [invocationKey]: {
             ...existing,
             history: [...existing.history, message],
           },
@@ -97,14 +130,14 @@ export const useSubAgentRuntimeStore = create<SubAgentRuntimeState & SubAgentRun
       };
     }),
 
-  replaceHistory: (parentToolCallId, history) =>
+  replaceHistory: (invocationKey, history) =>
     set((state) => {
-      const existing = state.invocationsByToolCallId[parentToolCallId];
+      const existing = state.invocationsByKey[invocationKey];
       if (!existing) return state;
       return {
-        invocationsByToolCallId: {
-          ...state.invocationsByToolCallId,
-          [parentToolCallId]: {
+        invocationsByKey: {
+          ...state.invocationsByKey,
+          [invocationKey]: {
             ...existing,
             history,
           },
@@ -112,11 +145,12 @@ export const useSubAgentRuntimeStore = create<SubAgentRuntimeState & SubAgentRun
       };
     }),
 
-  clearInvocation: (parentToolCallId) =>
+  clearInvocation: (invocationKey) =>
     set((state) => {
-      if (!state.invocationsByToolCallId[parentToolCallId]) return state;
-      const next = { ...state.invocationsByToolCallId };
-      delete next[parentToolCallId];
-      return { invocationsByToolCallId: next };
+      if (!state.invocationsByKey[invocationKey]) return state;
+      const next = { ...state.invocationsByKey };
+      delete next[invocationKey];
+      return { invocationsByKey: next };
     }),
 }));
+

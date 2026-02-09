@@ -61,6 +61,7 @@ from .routes.variable_routes import router as variable_router
 # Preset management routes
 from .routes.preset_routes import router as preset_router
 from .routes.sub_agent_routes import router as sub_agent_router
+from .routes.sub_agent_invocation_routes import router as sub_agent_invocation_router
 
 # Token counting routes
 from .routes.token_routes import router as token_router
@@ -103,6 +104,7 @@ app.include_router(variable_router)
 # Include preset management router
 app.include_router(preset_router)
 app.include_router(sub_agent_router)
+app.include_router(sub_agent_invocation_router)
 
 # Include token counting router
 app.include_router(token_router)

@@ -7,6 +7,7 @@ export * from './types';
 export { authService } from './authService';
 export { projectService } from './projectService';
 export { agentService } from './agentService';
+export { subAgentInvocationService } from './subAgentInvocationService';
 export { novelService } from './novelService';
 export { assetService } from './assetService';
 export { presetService } from './presetService';

@@ -1,7 +1,11 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
-import { useSubAgentRuntimeStore } from '../../store/subAgentRuntimeStore';
+import {
+  buildSubAgentInvocationKey,
+  type SubAgentParentType,
+  useSubAgentRuntimeStore,
+} from '../../store/subAgentRuntimeStore';
 import { SubAgentManager } from '../../subAgent/runtime/SubAgentManager';
 import type { ChatMessage, ToolCallMetadata } from '../../llm/requestTypes';
 import { ToolCallCard } from '../toolCall';
@@ -43,13 +47,32 @@ function pillVariantForStatus(status: string): string {
 }
 
 export interface SubAgentInvocationCardProps {
+  parentType: SubAgentParentType;
+  parentId: string;
+  parentMessageId: string;
   parentToolCallId: string;
   depth?: number;
 }
 
-export const SubAgentInvocationCard: React.FC<SubAgentInvocationCardProps> = ({ parentToolCallId, depth = 0 }) => {
+export const SubAgentInvocationCard: React.FC<SubAgentInvocationCardProps> = ({
+  parentType,
+  parentId,
+  parentMessageId,
+  parentToolCallId,
+  depth = 0,
+}) => {
   const { t } = useTranslation();
-  const invocation = useSubAgentRuntimeStore((s) => s.invocationsByToolCallId[parentToolCallId]);
+  const invocationKey = useMemo(
+    () =>
+      buildSubAgentInvocationKey({
+        parentType,
+        parentId,
+        parentMessageId,
+        parentToolCallId,
+      }),
+    [parentType, parentId, parentMessageId, parentToolCallId]
+  );
+  const invocation = useSubAgentRuntimeStore((s) => s.invocationsByKey[invocationKey]);
   const activeSessionId = invocation?.activeSessionId ?? null;
   const activeSession = useLLMSessionStore((s) => (activeSessionId ? s.sessions[activeSessionId] : undefined));
 
@@ -67,35 +90,36 @@ export const SubAgentInvocationCard: React.FC<SubAgentInvocationCardProps> = ({ 
   }, [invocation]);
 
   const handleCancel = useCallback(() => {
-    SubAgentManager.cancel(parentToolCallId);
-  }, [parentToolCallId]);
+    void SubAgentManager.cancel(invocationKey);
+  }, [invocationKey]);
 
   const handleResume = useCallback(async () => {
-    await SubAgentManager.resume(parentToolCallId);
-  }, [parentToolCallId]);
+    await SubAgentManager.resume(invocationKey);
+  }, [invocationKey]);
 
   const handleConfirm = useCallback(async (selections: Record<string, boolean>) => {
     setIsApplying(true);
     try {
-      await SubAgentManager.applyAndContinue({ parentToolCallId, selections, autoContinue: true });
+      await SubAgentManager.applyAndContinue({ invocationKey, selections, autoContinue: true });
     } finally {
       setIsApplying(false);
     }
-  }, [parentToolCallId]);
+  }, [invocationKey]);
 
   const handleConfirmAndPause = useCallback(async (selections: Record<string, boolean>) => {
     setIsApplying(true);
     try {
-      await SubAgentManager.applyAndContinue({ parentToolCallId, selections, autoContinue: false });
+      await SubAgentManager.applyAndContinue({ invocationKey, selections, autoContinue: false });
     } finally {
       setIsApplying(false);
     }
-  }, [parentToolCallId]);
+  }, [invocationKey]);
 
   if (!invocation) return null;
 
   const statusPill = pillVariantForStatus(invocation.status);
   const containerStyle = depth > 0 ? { marginLeft: depth * 16 } : undefined;
+  const nestedParentId = invocation.persistentId ?? invocation.id;
 
   return (
     <div className="sub-agent-card" style={containerStyle}>
@@ -168,6 +192,9 @@ export const SubAgentInvocationCard: React.FC<SubAgentInvocationCardProps> = ({ 
                         .map((tc) => (
                           <SubAgentInvocationCard
                             key={tc.id}
+                            parentType="sub_agent"
+                            parentId={nestedParentId}
+                            parentMessageId={String(msg.id)}
                             parentToolCallId={tc.id}
                             depth={depth + 1}
                           />

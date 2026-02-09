@@ -17,7 +17,7 @@ export interface SubAgentDefinition {
 
   allowed_invocation_modes: SubAgentAllowedInvocation[];
 
-  /** Static tool names only (create_*/read_*/patch_*/replace_* etc). Never store call_* here. */
+  /** Static tool names only (create_x/read_x/patch_x/replace_x etc). Never store call_x here. */
   allowed_tool_names: string[];
 
   /** UUID list of other Sub Agents this Sub Agent can call (by id). */
