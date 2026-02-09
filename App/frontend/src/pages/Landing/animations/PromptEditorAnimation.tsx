@@ -23,7 +23,8 @@ const PROSE_B =
 
 type Phase =
   | 'promptA'
-  | 'userTyping'
+  | 'inputTyping'
+  | 'messageSent'
   | 'thinking'
   | 'proseA'
   | 'pauseA'
@@ -37,6 +38,9 @@ const PromptEditorContent: React.FC = () => {
   useEffect(() => {
     let t: ReturnType<typeof setTimeout>;
     switch (phase) {
+      case 'messageSent':
+        t = setTimeout(() => setPhase('thinking'), 400);
+        break;
       case 'thinking':
         t = setTimeout(() => setPhase('proseA'), 800);
         break;
@@ -49,7 +53,8 @@ const PromptEditorContent: React.FC = () => {
     return () => clearTimeout(t);
   }, [phase]);
 
-  const showUser = phase !== 'promptA';
+  const isInputting = phase === 'inputTyping';
+  const showBubble = phase !== 'promptA' && phase !== 'inputTyping';
   const showTyping = phase === 'thinking';
   const isSecondary =
     phase === 'promptB' || phase === 'proseB' || phase === 'done';
@@ -76,7 +81,7 @@ const PromptEditorContent: React.FC = () => {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
             onAnimationComplete={() => {
-              if (phase === 'promptA') setPhase('userTyping');
+              if (phase === 'promptA') setPhase('inputTyping');
               if (phase === 'promptB') setPhase('proseB');
             }}
           >
@@ -85,20 +90,15 @@ const PromptEditorContent: React.FC = () => {
         </AnimatePresence>
       </motion.div>
 
-      {/* User message */}
-      {showUser && (
+      {/* User message bubble */}
+      {showBubble && (
         <motion.div
           className="landing-anim-bubble landing-anim-bubble--user"
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, ...SPRING }}
         >
-          <TypingText
-            text={USER_MSG}
-            active
-            speed={30}
-            onComplete={() => setPhase('thinking')}
-          />
+          {USER_MSG}
         </motion.div>
       )}
 
@@ -113,62 +113,64 @@ const PromptEditorContent: React.FC = () => {
         </div>
       </motion.div>
 
-      {/* Prose output with color-changing avatar */}
+      {/* Assistant prose */}
       {showProse && (
-        <div className="landing-anim-bubble landing-anim-bubble--assistant">
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-sm)' }}>
-            <motion.div
-              className="landing-anim-avatar"
-              animate={{
-                background: isSecondary
-                  ? 'var(--gradient-secondary)'
-                  : 'var(--gradient-primary)',
-              }}
-              transition={{ duration: 0.5 }}
-              style={{ background: 'var(--gradient-primary)' }}
-            >
-              AI
-            </motion.div>
-
-            <div className="landing-anim-prose" style={{ flex: 1 }}>
-              <AnimatePresence mode="wait">
-                {showProseA && (
-                  <motion.div
-                    key="proseA"
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.4 }}
-                  >
-                    <TypingText
-                      text={PROSE_A}
-                      active
-                      speed={12}
-                      onComplete={() => setPhase('pauseA')}
-                    />
-                  </motion.div>
-                )}
-                {showProseB && (
-                  <motion.div
-                    key="proseB"
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.4 }}
-                  >
-                    <TypingText
-                      text={PROSE_B}
-                      active
-                      speed={12}
-                      onComplete={() => setPhase('done')}
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-        </div>
+        <motion.div
+          className={`landing-anim-bubble landing-anim-bubble--assistant ${isSecondary ? 'landing-anim-bubble--accent-b' : 'landing-anim-bubble--accent-a'}`}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ...SPRING }}
+        >
+          <span className="landing-anim-prose">
+            <AnimatePresence mode="wait">
+              {showProseA && (
+                <motion.div
+                  key="proseA"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <TypingText
+                    text={PROSE_A}
+                    active
+                    speed={12}
+                    onComplete={() => setPhase('pauseA')}
+                  />
+                </motion.div>
+              )}
+              {showProseB && (
+                <motion.div
+                  key="proseB"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <TypingText
+                    text={PROSE_B}
+                    active
+                    speed={12}
+                    onComplete={() => setPhase('done')}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </span>
+        </motion.div>
       )}
+
+      {/* Input bar */}
+      <div className="landing-anim-input">
+        {isInputting && (
+          <TypingText
+            text={USER_MSG}
+            active
+            speed={25}
+            onComplete={() => setPhase('messageSent')}
+          />
+        )}
+      </div>
     </>
   );
 };

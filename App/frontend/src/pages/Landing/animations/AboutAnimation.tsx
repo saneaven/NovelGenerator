@@ -34,7 +34,8 @@ const CARDS: CardData[] = [
 ];
 
 type Phase =
-  | 'userTyping'
+  | 'inputTyping'
+  | 'messageSent'
   | 'thinking'
   | 'aiResponse'
   | 'cardsReveal'
@@ -97,7 +98,7 @@ const MiniStoryCard: React.FC<MiniStoryCardProps> = ({
 /* ------------------------------------------------------------------ */
 
 const AboutContent: React.FC = () => {
-  const [phase, setPhase] = useState<Phase>('userTyping');
+  const [phase, setPhase] = useState<Phase>('inputTyping');
   const [card1Active, setCard1Active] = useState(false);
   const [card2Active, setCard2Active] = useState(false);
   const completedCards = useRef(0);
@@ -106,6 +107,9 @@ const AboutContent: React.FC = () => {
     let timer: ReturnType<typeof setTimeout>;
 
     switch (phase) {
+      case 'messageSent':
+        timer = setTimeout(() => setPhase('thinking'), 400);
+        break;
       case 'thinking':
         timer = setTimeout(() => setPhase('aiResponse'), 700);
         break;
@@ -134,8 +138,13 @@ const AboutContent: React.FC = () => {
     }
   }, []);
 
+  const isInputting = phase === 'inputTyping';
+  const showBubble = phase !== 'inputTyping';
   const showTyping = phase === 'thinking';
-  const showAiResponse = phase !== 'userTyping' && phase !== 'thinking';
+  const showAiResponse =
+    phase !== 'inputTyping' &&
+    phase !== 'messageSent' &&
+    phase !== 'thinking';
   const showCards =
     phase === 'cardsReveal' || phase === 'cardsFilling' || phase === 'done';
 
@@ -143,19 +152,16 @@ const AboutContent: React.FC = () => {
     <>
       {/* ===== Chat Frame ===== */}
       <div className="landing-anim-frame">
-        <motion.div
-          className="landing-anim-bubble landing-anim-bubble--user"
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.3, ...SPRING }}
-        >
-          <TypingText
-            text={USER_MSG}
-            active
-            speed={25}
-            onComplete={() => setPhase('thinking')}
-          />
-        </motion.div>
+        {showBubble && (
+          <motion.div
+            className="landing-anim-bubble landing-anim-bubble--user"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, ...SPRING }}
+          >
+            {USER_MSG}
+          </motion.div>
+        )}
 
         <motion.div
           className="landing-anim-typing"
@@ -182,6 +188,18 @@ const AboutContent: React.FC = () => {
             />
           </motion.div>
         )}
+
+        {/* Input bar */}
+        <div className="landing-anim-input">
+          {isInputting && (
+            <TypingText
+              text={USER_MSG}
+              active
+              speed={25}
+              onComplete={() => setPhase('messageSent')}
+            />
+          )}
+        </div>
       </div>
 
       {/* ===== Card Zone (outside chat frame) ===== */}

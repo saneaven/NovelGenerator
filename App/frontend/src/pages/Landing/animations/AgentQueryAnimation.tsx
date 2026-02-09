@@ -24,14 +24,17 @@ const REFERENCE_CHIPS = ['Ch.2', 'Eleanor', 'Council'];
 const ANSWER =
   "Eleanor's primary conflict with the Council stems from her refusal to surrender the Archive's forbidden texts. In Chapter 2, the Tribunal demanded she relinquish access, but she invoked the Keeper's Oath — an ancient clause the Council had long forgotten.";
 
-type Phase = 'userTyping' | 'searching' | 'scan0' | 'scan1' | 'scan2' | 'refs' | 'answerTyping' | 'done';
+type Phase = 'inputTyping' | 'messageSent' | 'searching' | 'scan0' | 'scan1' | 'scan2' | 'refs' | 'answerTyping' | 'done';
 
 const AgentQueryContent: React.FC = () => {
-  const [phase, setPhase] = useState<Phase>('userTyping');
+  const [phase, setPhase] = useState<Phase>('inputTyping');
 
   useEffect(() => {
     let t: ReturnType<typeof setTimeout>;
     switch (phase) {
+      case 'messageSent':
+        t = setTimeout(() => setPhase('searching'), 400);
+        break;
       case 'searching':
         t = setTimeout(() => setPhase('scan0'), 300);
         break;
@@ -53,6 +56,8 @@ const AgentQueryContent: React.FC = () => {
     return () => clearTimeout(t);
   }, [phase]);
 
+  const isInputting = phase === 'inputTyping';
+  const showBubble = phase !== 'inputTyping';
   const showSearch =
     phase === 'searching' || phase === 'scan0' || phase === 'scan1' || phase === 'scan2';
   const highlightIndex =
@@ -63,20 +68,17 @@ const AgentQueryContent: React.FC = () => {
 
   return (
     <>
-      {/* User message */}
-      <motion.div
-        className="landing-anim-bubble landing-anim-bubble--user"
-        initial={{ opacity: 0, x: 20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.3, ...SPRING }}
-      >
-        <TypingText
-          text={USER_MSG}
-          active
-          speed={22}
-          onComplete={() => setPhase('searching')}
-        />
-      </motion.div>
+      {/* User message bubble */}
+      {showBubble && (
+        <motion.div
+          className="landing-anim-bubble landing-anim-bubble--user"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ...SPRING }}
+        >
+          {USER_MSG}
+        </motion.div>
+      )}
 
       {/* Search panel */}
       <AnimatePresence>
@@ -137,6 +139,18 @@ const AgentQueryContent: React.FC = () => {
           />
         </motion.div>
       )}
+
+      {/* Input bar */}
+      <div className="landing-anim-input">
+        {isInputting && (
+          <TypingText
+            text={USER_MSG}
+            active
+            speed={22}
+            onComplete={() => setPhase('messageSent')}
+          />
+        )}
+      </div>
     </>
   );
 };

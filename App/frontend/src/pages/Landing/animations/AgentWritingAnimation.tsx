@@ -14,23 +14,29 @@ const USER_MSG = 'Write the scene where Eleanor discovers the hidden manuscript'
 const PROSE =
   'Eleanor traced her fingers along the cracked spine of the manuscript, its leather cover warm beneath her touch as if the words inside still breathed with a life of their own. The Archive had kept this secret for three hundred years — and now it trembled in her hands.';
 
-type Phase = 'chips' | 'userTyping' | 'thinking' | 'proseTyping' | 'done';
+type Phase = 'chips' | 'inputTyping' | 'messageSent' | 'thinking' | 'proseTyping' | 'done';
 
 const AgentWritingContent: React.FC = () => {
   const [phase, setPhase] = useState<Phase>('chips');
 
   useEffect(() => {
-    if (phase === 'chips') {
-      const t = setTimeout(() => setPhase('userTyping'), CONTEXT_CHIPS.length * 150 + 200);
-      return () => clearTimeout(t);
+    let t: ReturnType<typeof setTimeout>;
+    switch (phase) {
+      case 'chips':
+        t = setTimeout(() => setPhase('inputTyping'), CONTEXT_CHIPS.length * 150 + 200);
+        break;
+      case 'messageSent':
+        t = setTimeout(() => setPhase('thinking'), 400);
+        break;
+      case 'thinking':
+        t = setTimeout(() => setPhase('proseTyping'), 900);
+        break;
     }
-    if (phase === 'thinking') {
-      const t = setTimeout(() => setPhase('proseTyping'), 900);
-      return () => clearTimeout(t);
-    }
+    return () => clearTimeout(t);
   }, [phase]);
 
-  const showUser = phase !== 'chips';
+  const isInputting = phase === 'inputTyping';
+  const showUser = phase !== 'chips' && phase !== 'inputTyping';
   const showTyping = phase === 'thinking';
   const showProse = phase === 'proseTyping' || phase === 'done';
 
@@ -51,20 +57,15 @@ const AgentWritingContent: React.FC = () => {
         ))}
       </div>
 
-      {/* User message */}
+      {/* User message bubble */}
       {showUser && (
         <motion.div
           className="landing-anim-bubble landing-anim-bubble--user"
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, ...SPRING }}
         >
-          <TypingText
-            text={USER_MSG}
-            active
-            speed={20}
-            onComplete={() => setPhase('thinking')}
-          />
+          {USER_MSG}
         </motion.div>
       )}
 
@@ -97,6 +98,18 @@ const AgentWritingContent: React.FC = () => {
           </span>
         </motion.div>
       )}
+
+      {/* Input bar */}
+      <div className="landing-anim-input">
+        {isInputting && (
+          <TypingText
+            text={USER_MSG}
+            active
+            speed={20}
+            onComplete={() => setPhase('messageSent')}
+          />
+        )}
+      </div>
     </>
   );
 };
