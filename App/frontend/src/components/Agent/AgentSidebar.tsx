@@ -6,6 +6,7 @@ import { makeProjectAgentKey, useAgentUIStore } from '../../store/agentUIStore';
 import { useSidebarStore } from '../../store/sidebarStore';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
 import { useSettings } from '../../store/settingsStore';
+import { useSubAgentRuntimeStore } from '../../store/subAgentRuntimeStore';
 import { useErrorStore } from '../../store/errorStore';
 import type { TaskSessionState } from '../../llmTask/types';
 import { getBestLanguageData } from '../../utils/languageData';
@@ -78,6 +79,7 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
       return sessions;
     })
   );
+  const subAgentInvocationsByKey = useSubAgentRuntimeStore((state) => state.invocationsByKey);
 
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -118,15 +120,21 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
         );
       });
       const hasPendingToolRequestFromMessage = hasPendingToolCallsInMessages(agent);
+      const hasPendingToolRequestFromSubAgent = Object.values(subAgentInvocationsByKey).some((invocation) => {
+        if (!invocation) return false;
+        if (invocation.parentType !== 'agent') return false;
+        if (invocation.parentId !== agent.id) return false;
+        return invocation.status === 'running' || invocation.status === 'awaiting_confirmation' || invocation.status === 'paused';
+      });
 
       signals[agent.id] = {
         isRunning: isRunningFromSession || isRunningFromPreflight,
         hasCompletedSinceViewed: isSelectedAgent ? false : hasCompletedSinceViewed,
-        hasPendingToolRequest: hasPendingToolRequestFromSession || hasPendingToolRequestFromMessage,
+        hasPendingToolRequest: hasPendingToolRequestFromSession || hasPendingToolRequestFromMessage || hasPendingToolRequestFromSubAgent,
       };
     }
     return signals;
-  }, [agents, selectedAgentId, projectId, projectAgentSessions, loadingByProjectAgent, lastViewedAtByProjectAgent]);
+  }, [agents, selectedAgentId, projectId, projectAgentSessions, loadingByProjectAgent, lastViewedAtByProjectAgent, subAgentInvocationsByKey]);
 
   useEffect(() => {
     if (editingAgentId && editInputRef.current) {

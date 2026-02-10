@@ -1,0 +1,182 @@
+.sub-agent-peek-dock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.sub-agent-peek-header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-surface-subtle);
+  padding: var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.sub-agent-peek-header__main {
+  width: 100%;
+  border: 0;
+  padding: var(--spacing-sm);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface-base);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  cursor: pointer;
+}
+
+.sub-agent-peek-header__left {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.sub-agent-peek-header__title {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.sub-agent-peek-header__status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--border-radius-full);
+  padding: 2px var(--spacing-sm);
+  border: 1px solid var(--color-border-subtle);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.sub-agent-peek-header__status--running {
+  background: var(--color-info-light);
+  color: var(--color-info-dark);
+  border-color: var(--color-info);
+}
+
+.sub-agent-peek-header__status--pending {
+  background: var(--color-warning-light);
+  color: var(--color-warning-dark);
+  border-color: var(--color-warning);
+}
+
+.sub-agent-peek-header__status--accepted {
+  background: var(--color-success-light);
+  color: var(--color-success-dark);
+  border-color: var(--color-success);
+}
+
+.sub-agent-peek-header__status--rejected {
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+  border-color: var(--color-border-default);
+}
+
+.sub-agent-peek-header__status--failed {
+  background: var(--color-feedback-error-soft);
+  color: var(--color-feedback-error-strong);
+  border-color: var(--color-feedback-error-base);
+}
+
+.sub-agent-peek-header__chevron {
+  color: var(--color-text-tertiary);
+  transition: transform var(--transition-base);
+}
+
+.sub-agent-peek-header__chevron--open {
+  transform: rotate(180deg);
+}
+
+.sub-agent-peek-header__switches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.sub-agent-peek-switch {
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-base);
+  color: var(--color-text-secondary);
+  border-radius: var(--border-radius-md);
+  padding: 4px var(--spacing-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+}
+
+.sub-agent-peek-switch--active {
+  border-color: var(--color-brand-secondary-border);
+  background: var(--color-info-light);
+  color: var(--color-text-primary);
+}
+
+.sub-agent-peek-switch__label {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub-agent-peek-switch__badge {
+  min-width: 1.2rem;
+  height: 1.2rem;
+  border-radius: var(--border-radius-full);
+  border: 1px solid var(--color-warning);
+  background: var(--color-warning-light);
+  color: var(--color-warning-dark);
+  font-weight: var(--font-weight-semibold);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.sub-agent-peek-dock__body {
+  overflow: hidden;
+}
+
+/* Timeline container — uses different background to visually distinguish
+   sub-agent messages from the main agent chat. Messages inside use the
+   same .agent-message classes as the main panel. */
+.sub-agent-peek-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-surface-subtle);
+  padding: var(--spacing-md);
+}
+
+.sub-agent-peek-alert {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-border-subtle);
+  font-size: var(--font-size-sm);
+}
+
+.sub-agent-peek-alert--error {
+  background: var(--color-feedback-error-soft);
+  color: var(--color-feedback-error-strong);
+  border-color: var(--color-feedback-error-base);
+}
+
+.sub-agent-peek-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
+}
+
+@media (max-width: 768px) {
+  .sub-agent-peek-switch__label {
+    max-width: 120px;
+  }
+}

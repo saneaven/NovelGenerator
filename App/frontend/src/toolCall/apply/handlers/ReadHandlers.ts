@@ -251,6 +251,17 @@ export async function ragSearch(
 
   const lines: string[] = [];
   lines.push('RAG Results:');
+  const payloadGroups: Array<{
+    objectType: string;
+    objectId: string;
+    displayName: string;
+    entries: Array<{
+      text: string;
+      fieldPath?: string;
+      chunkIndex?: number;
+      distance?: number;
+    }>;
+  }> = [];
 
   for (const g of groups) {
     const obj = context.store.getObject(g.objectId);
@@ -274,15 +285,42 @@ export async function ragSearch(
     lines.push('');
     lines.push(`<object type="${g.objectType}" id="${g.objectId}">`);
     lines.push(`${displayName}`);
+    const payloadEntries: Array<{
+      text: string;
+      fieldPath?: string;
+      chunkIndex?: number;
+      distance?: number;
+    }> = [];
     for (const item of g.items) {
       lines.push('<result>');
       lines.push(item.text);
       lines.push('</result>');
+      payloadEntries.push({
+        text: item.text,
+        fieldPath: typeof (item as any).field_path === 'string' ? (item as any).field_path : undefined,
+        chunkIndex: typeof item.chunk_index === 'number' ? item.chunk_index : undefined,
+        distance: typeof item.distance === 'number' ? item.distance : undefined,
+      });
     }
     lines.push('</object>');
+    payloadGroups.push({
+      objectType: g.objectType,
+      objectId: g.objectId,
+      displayName,
+      entries: payloadEntries,
+    });
   }
 
-  return ok(lines.join('\n'), { count: all.length, returned_chunks: selected.length, returned_objects: groups.length });
+  return ok(lines.join('\n'), {
+    count: all.length,
+    returned_chunks: selected.length,
+    returned_objects: groups.length,
+    searchPayload: {
+      type: 'rag',
+      queries: queries.map(q => String(q)),
+      groups: payloadGroups,
+    },
+  });
 }
 
 /**
@@ -337,6 +375,16 @@ export async function keywordSearch(
   lines.push('Keyword Search Results:');
   lines.push(`keyword: ${keyword.trim()}`);
   lines.push(`page: ${res.page} (page_size: ${res.page_size}, total: ${res.total}, returned: ${all.length})`);
+  const payloadGroups: Array<{
+    objectType: string;
+    objectId: string;
+    displayName: string;
+    entries: Array<{
+      text: string;
+      fieldPath?: string;
+      chunkIndex?: number;
+    }>;
+  }> = [];
 
   for (const g of groups) {
     const obj = context.store.getObject(g.objectId);
@@ -356,15 +404,45 @@ export async function keywordSearch(
     lines.push('');
     lines.push(`<object type="${g.objectType}" id="${g.objectId}">`);
     lines.push(`${displayName}`);
+    const payloadEntries: Array<{
+      text: string;
+      fieldPath?: string;
+      chunkIndex?: number;
+    }> = [];
     for (const item of g.items) {
       lines.push('<result>');
       lines.push(item.text);
       lines.push('</result>');
+      payloadEntries.push({
+        text: item.text,
+        fieldPath: typeof (item as any).field_path === 'string' ? (item as any).field_path : undefined,
+        chunkIndex: typeof item.chunk_index === 'number' ? item.chunk_index : undefined,
+      });
     }
     lines.push('</object>');
+    payloadGroups.push({
+      objectType: g.objectType,
+      objectId: g.objectId,
+      displayName,
+      entries: payloadEntries,
+    });
   }
 
-  return ok(lines.join('\n'), { total: res.total, page: res.page, page_size: res.page_size, returned_chunks: all.length, returned_objects: groups.length });
+  return ok(lines.join('\n'), {
+    total: res.total,
+    page: res.page,
+    page_size: res.page_size,
+    returned_chunks: all.length,
+    returned_objects: groups.length,
+    searchPayload: {
+      type: 'keyword',
+      keyword: keyword.trim(),
+      page: res.page,
+      pageSize: res.page_size,
+      total: res.total,
+      groups: payloadGroups,
+    },
+  });
 }
 
 // ============================================================================

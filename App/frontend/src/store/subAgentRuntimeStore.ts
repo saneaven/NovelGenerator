@@ -69,6 +69,8 @@ interface SubAgentRuntimeState {
 interface SubAgentRuntimeActions {
   getInvocationByKey: (invocationKey: string) => SubAgentInvocation | undefined;
   getInvocation: (ref: SubAgentInvocationRef) => SubAgentInvocation | undefined;
+  listInvocationsByParent: (parentType: SubAgentParentType, parentId: string, parentMessageId?: string) => SubAgentInvocation[];
+  hasBlockingInvocationsForAgent: (agentId: string) => boolean;
   upsertInvocation: (invocation: SubAgentInvocation) => void;
   updateInvocation: (invocationKey: string, partial: Partial<SubAgentInvocation>) => void;
   appendHistory: (invocationKey: string, message: ChatMessage) => void;
@@ -82,6 +84,28 @@ export const useSubAgentRuntimeStore = create<SubAgentRuntimeState & SubAgentRun
   getInvocationByKey: (invocationKey) => get().invocationsByKey[invocationKey],
 
   getInvocation: (ref) => get().invocationsByKey[buildSubAgentInvocationKey(ref)],
+
+  listInvocationsByParent: (parentType, parentId, parentMessageId) => {
+    return Object.values(get().invocationsByKey).filter((invocation): invocation is SubAgentInvocation => {
+      if (!invocation) return false;
+      if (invocation.parentType !== parentType) return false;
+      if (invocation.parentId !== parentId) return false;
+      if (parentMessageId && invocation.parentMessageId !== parentMessageId) return false;
+      return true;
+    });
+  },
+
+  hasBlockingInvocationsForAgent: (agentId) =>
+    Object.values(get().invocationsByKey).some((invocation) => {
+      if (!invocation) return false;
+      if (invocation.parentType !== 'agent') return false;
+      if (invocation.parentId !== agentId) return false;
+      return (
+        invocation.status === 'running' ||
+        invocation.status === 'awaiting_confirmation' ||
+        invocation.status === 'paused'
+      );
+    }),
 
   upsertInvocation: (invocation) =>
     set((state) => {
@@ -153,4 +177,3 @@ export const useSubAgentRuntimeStore = create<SubAgentRuntimeState & SubAgentRun
       return { invocationsByKey: next };
     }),
 }));
-

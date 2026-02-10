@@ -15,8 +15,8 @@ import AgentSidebar from '../../../components/Agent/AgentSidebar';
 import { DefaultDisplayProcessor } from '../../../agent/processors/DisplayProcessor';
 import type { ChatMessage } from '../../../llm/requestTypes';
 import ThinkingDisplay from '../../../components/common/ThinkingDisplay';
-import { ToolCallCard } from '../../../components/toolCall';
-import SubAgentInvocationCard from '../../../components/SubAgent/SubAgentInvocationCard';
+import { FunctionCallsThread } from '../../../components/functionCalls';
+import { SubAgentPeekDock } from '../../../components/SubAgentPeek';
 import { TextButton } from '../../../components/TextButton';
 import { IconButton } from '../../../components/IconButton';
 import AgentRunModeToggle from '../../../components/ui/AgentRunModeToggle';
@@ -32,6 +32,7 @@ import type { ToolCallDecisionMap } from '../../../toolCall/types';
 import type { AgentRunMode, WorkspaceSurface } from '../../../types/agentRuntime';
 import { subAgentInvocationService } from '../../../api/subAgentInvocationService';
 import { useSubAgentRuntimeStore } from '../../../store/subAgentRuntimeStore';
+import { getSendBlockingState } from '../../../functionCalls/blockingSelectors';
 
 interface AgentPanelProps
 {
@@ -75,28 +76,47 @@ const AgentContextTrigger: React.FC<AgentContextTriggerProps> = React.memo(({
 interface AgentInputFormProps {
     projectId: string;
     isLoading: boolean;
+    isSendBlocked: boolean;
+    sendBlockedReason?: string | null;
     onSubmit: (e: React.FormEvent, input: string) => Promise<void>;
     onStop: () => void;
 }
 
-const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({ projectId, isLoading, onSubmit, onStop }) => {
+const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({
+    projectId,
+    isLoading,
+    isSendBlocked,
+    sendBlockedReason,
+    onSubmit,
+    onStop
+}) => {
     const { t } = useTranslation();
     const input = useAgentUIStore((state) => state.inputByProject[projectId] ?? '');
     const setInput = useAgentUIStore((state) => state.setInput);
 
     const handleSubmit = useCallback((e: React.FormEvent) => {
+        if (isSendBlocked || isLoading) {
+            e.preventDefault();
+            return;
+        }
         onSubmit(e, input);
-    }, [onSubmit, input, isLoading]);
+    }, [onSubmit, input, isSendBlocked, isLoading]);
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
+            if (isSendBlocked || isLoading) return;
             onSubmit(e as any, input);
         }
-    }, [onSubmit, input, isLoading]);
+    }, [onSubmit, input, isSendBlocked, isLoading]);
 
     return (
         <form onSubmit={handleSubmit} className="agent-form">
+            {!isLoading && isSendBlocked && sendBlockedReason && (
+                <div className="agent-send-blocker-hint" role="status">
+                    {sendBlockedReason}
+                </div>
+            )}
             <div className="input-group">
                 <textarea
                     value={input}
@@ -104,7 +124,6 @@ const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({ projectId, i
                     placeholder={t('agent.enterMessage')}
                     rows={1}
                     className="agent-input"
-                    disabled={isLoading}
                     onKeyDown={handleKeyDown}
                 />
                 {isLoading ? (
@@ -124,6 +143,7 @@ const AgentInputForm: React.FC<AgentInputFormProps> = React.memo(({ projectId, i
                         variant="primary"
                         title={t('agent.send')}
                         className="agent-submit-btn"
+                        disabled={isSendBlocked}
                     />
                 )}
             </div>
@@ -506,6 +526,36 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         [storedMessages, resolveDisplayInfo]
     );
 
+    const lastAssistantMessageId = useMemo(() => {
+        for (let i = storedMessages.length - 1; i >= 0; i--) {
+            if (storedMessages[i]?.role === 'assistant') {
+                return String(storedMessages[i].id);
+            }
+        }
+        return null;
+    }, [storedMessages]);
+
+    const sendBlockingState = useMemo(
+        () =>
+            getSendBlockingState({
+                selectedAgentId,
+                messages: storedMessages,
+                sessions: Object.values(projectAgentSessions),
+            }),
+        [selectedAgentId, storedMessages, projectAgentSessions]
+    );
+
+    const sendBlockedReason = useMemo(() => {
+        if (!sendBlockingState.blocked) return null;
+        if (sendBlockingState.unresolvedToolCalls.count > 0) {
+            return `Resolve ${sendBlockingState.unresolvedToolCalls.count} pending operation(s) before sending.`;
+        }
+        if (sendBlockingState.rootSessionBlocked) {
+            return 'The agent is still running or applying operations.';
+        }
+        return 'Resolve pending operations before sending.';
+    }, [sendBlockingState]);
+
     const subAgentRootMessageIds = useMemo(() => {
         return storedMessages
             .filter((msg) =>
@@ -582,7 +632,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         return () => {
             cancelled = true;
         };
-    }, [projectId, selectedAgentId, subAgentRootMessageKey]);
+    }, [projectId, selectedAgentId, subAgentRootMessageIds, subAgentRootMessageKey]);
 
     useEffect(() => {
         const entries = Object.entries(translationSessionByMessageId);
@@ -724,6 +774,36 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
         );
     };
 
+    const scrollToFirstBlockedMessage = useCallback(() => {
+        const firstMessageId = sendBlockingState.unresolvedToolCalls.firstMessageId;
+        if (!firstMessageId || !scrollContainerRef.current) return;
+
+        const target = scrollContainerRef.current.querySelector(
+            `[data-function-call-message-id="${firstMessageId}"]`
+        );
+        if (target instanceof HTMLElement) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }, [sendBlockingState.unresolvedToolCalls.firstMessageId]);
+
+    const handleSubmitFromInput = useCallback(async (e: React.FormEvent, input: string) => {
+        if (isLoading) {
+            e.preventDefault();
+            return;
+        }
+
+        if (sendBlockingState.blocked) {
+            e.preventDefault();
+            scrollToFirstBlockedMessage();
+            if (sendBlockedReason) {
+                showError('Cannot Send', sendBlockedReason);
+            }
+            return;
+        }
+
+        await onSubmit(e, input);
+    }, [isLoading, sendBlockingState.blocked, scrollToFirstBlockedMessage, sendBlockedReason, showError, onSubmit]);
+
     const translationEnabled = Boolean(defaultSubLanguage && defaultSubLanguage !== mainLanguage);
     const translationTargetLabel = defaultSubLanguage || 'secondary language';
 
@@ -800,6 +880,12 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                     const cardMode = hasSessionCards
                         ? (agentSession?.status === 'pending_confirmation' || isApplying || hasPendingCards ? 'pending' : 'confirmed')
                         : (hasPendingCards || isApplying ? 'pending' : 'confirmed');
+                    const functionThreadId = `agent:${selectedAgentId ?? 'none'}:${message.chatMessage.id}`;
+                    const subAgentToolCallIds = cardsToRender
+                        .filter((card: any) => typeof card?.toolCall?.toolName === 'string' && card.toolCall.toolName.startsWith('call_'))
+                        .map((card: any) => card.toolCall.id);
+                    const hasSubAgentCalls = subAgentToolCallIds.length > 0;
+                    const isActiveSubAgentParent = message.chatMessage.id === lastAssistantMessageId;
 
                     return (
                         <React.Fragment key={message.chatMessage.id}>
@@ -833,189 +919,184 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                     />
                                                 )}
                                                 {renderMessageContent(message, processingResult)}
-                                        {hasStreamingCalls && (
-                                            <div className="message-edit-cards">
-                                                <ToolCallCard
-                                                    mode="streaming"
-                                                    streamingProgress={agentSession.toolCallProgress}
-                                                    projectId={projectId}
-                                                />
-                                            </div>
-                                        )}
-
-                                        {hasEditCards && (
-                                            <div className="message-edit-cards">
-                                                <ToolCallCard
-                                                    mode={cardMode as any}
-                                                    cards={cardsToRender as any}
-                                                    onCommitDecisions={
-                                                        cardMode === 'pending'
-                                                            ? async (decisions: ToolCallDecisionMap) => {
-                                                                if (hasUnsavedChanges) {
-                                                                    showError('Cannot Apply', 'Save your changes first - unsaved work will be overwritten.');
-                                                                    return;
-                                                                }
-
-                                                                if (hasSessionCards && agentSession) {
-                                                                    await applyAgentEdits({
-                                                                        sessionId: agentSession.id,
-                                                                        projectId,
-                                                                        language: mainLanguage,
-                                                                        decisions,
-                                                                        options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
-                                                                        invocationCaller: runMode,
-                                                                    });
-                                                                    const latestSession = useLLMSessionStore.getState().getSessionById(agentSession.id);
-                                                                    const hasPendingAfterApply = latestSession?.editCards?.some(
-                                                                        (card: any) =>
-                                                                            card.toolCall.status === 'pending' || card.toolCall.status === 'validating'
-                                                                    ) ?? false;
-                                                                    if (!hasPendingAfterApply) {
-                                                                        await triggerAutoContinue();
-                                                                    }
-                                                                    return;
-                                                                }
-
-                                                                if (!selectedAgentId || storedToolCalls.length === 0) return;
-
-                                                                setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: true }));
-                                                                try {
-                                                                    // Optimistically mark selected operations as running so the UI reflects long-running calls.
-                                                                    const runningToolCalls = storedToolCalls.map((tc: any) => {
-                                                                        const status = (tc.status ?? 'pending') as string;
-                                                                        const decision = decisions[tc.id];
-                                                                        if (decision !== 'accept') return tc;
-                                                                        if (status !== 'pending' && status !== 'validating') return tc;
-                                                                        return {
-                                                                            ...tc,
-                                                                            status: 'running',
-                                                                            reason: undefined,
-                                                                            failureType: undefined,
-                                                                        };
-                                                                    });
-                                                                    await useAgentStore.getState().updateMessageToolCalls(
-                                                                        projectId,
-                                                                        selectedAgentId,
-                                                                        message.chatMessage.id,
-                                                                        runningToolCalls
-                                                                    );
-
-                                                                    const nextToolCalls = await applyToolCallsDirect({
-                                                                        projectId,
-                                                                        language: mainLanguage,
-                                                                        toolCalls: storedToolCalls,
-                                                                        decisions,
-                                                                        options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
-                                                                        invocationCaller: runMode,
-                                                                    });
-
-                                                                    await useAgentStore.getState().updateMessageToolCalls(
-                                                                        projectId,
-                                                                        selectedAgentId,
-                                                                        message.chatMessage.id,
-                                                                        nextToolCalls
-                                                                    );
-                                                                    const hasPendingAfterApply = nextToolCalls.some((tc: any) => {
-                                                                        const status = String(tc?.status ?? 'pending');
-                                                                        return status === 'pending' || status === 'validating';
-                                                                    });
-                                                                    if (!hasPendingAfterApply) {
-                                                                        await triggerAutoContinue();
-                                                                    }
-                                                                } finally {
-                                                                    setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: false }));
-                                                                }
-                                                            }
-                                                            : undefined
-                                                    }
-                                                    onCommitDecisionsAndPause={
-                                                        cardMode === 'pending'
-                                                            ? async (decisions: ToolCallDecisionMap) => {
-                                                                if (hasUnsavedChanges) {
-                                                                    showError('Cannot Apply', 'Save your changes first - unsaved work will be overwritten.');
-                                                                    return;
-                                                                }
-
-                                                                if (hasSessionCards && agentSession) {
-                                                                    await applyAgentEdits({
-                                                                        sessionId: agentSession.id,
-                                                                        projectId,
-                                                                        language: mainLanguage,
-                                                                        decisions,
-                                                                        options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
-                                                                        invocationCaller: runMode,
-                                                                    });
-                                                                    return;
-                                                                }
-
-                                                                if (!selectedAgentId || storedToolCalls.length === 0) return;
-
-                                                                setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: true }));
-                                                                try {
-                                                                    // Optimistically mark selected operations as running so the UI reflects long-running calls.
-                                                                    const runningToolCalls = storedToolCalls.map((tc: any) => {
-                                                                        const status = (tc.status ?? 'pending') as string;
-                                                                        const decision = decisions[tc.id];
-                                                                        if (decision !== 'accept') return tc;
-                                                                        if (status !== 'pending' && status !== 'validating') return tc;
-                                                                        return {
-                                                                            ...tc,
-                                                                            status: 'running',
-                                                                            reason: undefined,
-                                                                            failureType: undefined,
-                                                                        };
-                                                                    });
-                                                                    await useAgentStore.getState().updateMessageToolCalls(
-                                                                        projectId,
-                                                                        selectedAgentId,
-                                                                        message.chatMessage.id,
-                                                                        runningToolCalls
-                                                                    );
-
-                                                                    const nextToolCalls = await applyToolCallsDirect({
-                                                                        projectId,
-                                                                        language: mainLanguage,
-                                                                        toolCalls: storedToolCalls,
-                                                                        decisions,
-                                                                        options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
-                                                                        invocationCaller: runMode,
-                                                                    });
-
-                                                                    await useAgentStore.getState().updateMessageToolCalls(
-                                                                        projectId,
-                                                                        selectedAgentId,
-                                                                        message.chatMessage.id,
-                                                                        nextToolCalls
-                                                                    );
-                                                                } finally {
-                                                                    setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: false }));
-                                                                }
-                                                            }
-                                                            : undefined
-                                                    }
-                                                    projectId={projectId}
-                                                    isApplyDisabled={hasUnsavedChanges || isApplying}
-                                                    applyDisabledReason={
-                                                        hasUnsavedChanges
-                                                            ? 'Save your changes first - unsaved work will be overwritten'
-                                                            : isApplying
-                                                                ? 'Applying changes...'
-                                                                : undefined
-                                                    }
-                                                />
-                                                {selectedAgentId && cardsToRender
-                                                    .filter((card: any) => typeof card?.toolCall?.toolName === 'string' && card.toolCall.toolName.startsWith('call_'))
-                                                    .map((card: any) => (
-                                                        <SubAgentInvocationCard
-                                                            key={card.toolCall.id}
-                                                            parentType="agent"
-                                                            parentId={selectedAgentId}
-                                                            parentMessageId={String(message.chatMessage.id)}
-                                                            parentToolCallId={card.toolCall.id}
+                                                {hasStreamingCalls && (
+                                                    <div
+                                                        className="message-function-calls"
+                                                        data-function-call-message-id={message.chatMessage.id}
+                                                    >
+                                                        <FunctionCallsThread
+                                                            threadId={`${functionThreadId}:stream`}
+                                                            mode="streaming"
+                                                            streamingProgress={agentSession.toolCallProgress}
+                                                            projectId={projectId}
                                                         />
-                                                    ))}
-                                            </div>
-                                        )}
+                                                    </div>
+                                                )}
+
+                                                {hasEditCards && (
+                                                    <div
+                                                        className="message-function-calls"
+                                                        data-function-call-message-id={message.chatMessage.id}
+                                                    >
+                                                        <FunctionCallsThread
+                                                            threadId={`${functionThreadId}:cards`}
+                                                            mode={cardMode as any}
+                                                            cards={cardsToRender as any}
+                                                            onCommitDecisions={
+                                                                cardMode === 'pending'
+                                                                    ? async (decisions: ToolCallDecisionMap) => {
+                                                                        if (hasUnsavedChanges) {
+                                                                            showError('Cannot Apply', 'Save your changes first - unsaved work will be overwritten.');
+                                                                            return;
+                                                                        }
+
+                                                                        if (hasSessionCards && agentSession) {
+                                                                            await applyAgentEdits({
+                                                                                sessionId: agentSession.id,
+                                                                                projectId,
+                                                                                language: mainLanguage,
+                                                                                decisions,
+                                                                                options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
+                                                                                invocationCaller: runMode,
+                                                                            });
+                                                                            const latestSession = useLLMSessionStore.getState().getSessionById(agentSession.id);
+                                                                            const hasPendingAfterApply = latestSession?.editCards?.some(
+                                                                                (card: any) =>
+                                                                                    card.toolCall.status === 'pending' || card.toolCall.status === 'validating'
+                                                                            ) ?? false;
+                                                                            if (!hasPendingAfterApply) {
+                                                                                await triggerAutoContinue();
+                                                                            }
+                                                                            return;
+                                                                        }
+
+                                                                        if (!selectedAgentId || storedToolCalls.length === 0) return;
+
+                                                                        setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: true }));
+                                                                        try {
+                                                                            const runningToolCalls = storedToolCalls.map((tc: any) => {
+                                                                                const status = (tc.status ?? 'pending') as string;
+                                                                                const decision = decisions[tc.id];
+                                                                                if (decision !== 'accept') return tc;
+                                                                                if (status !== 'pending' && status !== 'validating') return tc;
+                                                                                return {
+                                                                                    ...tc,
+                                                                                    status: 'running',
+                                                                                    reason: undefined,
+                                                                                    failureType: undefined,
+                                                                                };
+                                                                            });
+                                                                            await useAgentStore.getState().updateMessageToolCalls(
+                                                                                projectId,
+                                                                                selectedAgentId,
+                                                                                message.chatMessage.id,
+                                                                                runningToolCalls
+                                                                            );
+
+                                                                            const nextToolCalls = await applyToolCallsDirect({
+                                                                                projectId,
+                                                                                language: mainLanguage,
+                                                                                toolCalls: storedToolCalls,
+                                                                                decisions,
+                                                                                options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
+                                                                                invocationCaller: runMode,
+                                                                            });
+
+                                                                            await useAgentStore.getState().updateMessageToolCalls(
+                                                                                projectId,
+                                                                                selectedAgentId,
+                                                                                message.chatMessage.id,
+                                                                                nextToolCalls
+                                                                            );
+                                                                            const hasPendingAfterApply = nextToolCalls.some((tc: any) => {
+                                                                                const status = String(tc?.status ?? 'pending');
+                                                                                return status === 'pending' || status === 'validating';
+                                                                            });
+                                                                            if (!hasPendingAfterApply) {
+                                                                                await triggerAutoContinue();
+                                                                            }
+                                                                        } finally {
+                                                                            setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: false }));
+                                                                        }
+                                                                    }
+                                                                    : undefined
+                                                            }
+                                                            onCommitDecisionsAndPause={
+                                                                cardMode === 'pending'
+                                                                    ? async (decisions: ToolCallDecisionMap) => {
+                                                                        if (hasUnsavedChanges) {
+                                                                            showError('Cannot Apply', 'Save your changes first - unsaved work will be overwritten.');
+                                                                            return;
+                                                                        }
+
+                                                                        if (hasSessionCards && agentSession) {
+                                                                            await applyAgentEdits({
+                                                                                sessionId: agentSession.id,
+                                                                                projectId,
+                                                                                language: mainLanguage,
+                                                                                decisions,
+                                                                                options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
+                                                                                invocationCaller: runMode,
+                                                                            });
+                                                                            return;
+                                                                        }
+
+                                                                        if (!selectedAgentId || storedToolCalls.length === 0) return;
+
+                                                                        setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: true }));
+                                                                        try {
+                                                                            const runningToolCalls = storedToolCalls.map((tc: any) => {
+                                                                                const status = (tc.status ?? 'pending') as string;
+                                                                                const decision = decisions[tc.id];
+                                                                                if (decision !== 'accept') return tc;
+                                                                                if (status !== 'pending' && status !== 'validating') return tc;
+                                                                                return {
+                                                                                    ...tc,
+                                                                                    status: 'running',
+                                                                                    reason: undefined,
+                                                                                    failureType: undefined,
+                                                                                };
+                                                                            });
+                                                                            await useAgentStore.getState().updateMessageToolCalls(
+                                                                                projectId,
+                                                                                selectedAgentId,
+                                                                                message.chatMessage.id,
+                                                                                runningToolCalls
+                                                                            );
+
+                                                                            const nextToolCalls = await applyToolCallsDirect({
+                                                                                projectId,
+                                                                                language: mainLanguage,
+                                                                                toolCalls: storedToolCalls,
+                                                                                decisions,
+                                                                                options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
+                                                                                invocationCaller: runMode,
+                                                                            });
+
+                                                                            await useAgentStore.getState().updateMessageToolCalls(
+                                                                                projectId,
+                                                                                selectedAgentId,
+                                                                                message.chatMessage.id,
+                                                                                nextToolCalls
+                                                                            );
+                                                                        } finally {
+                                                                            setApplyingMessageEdits((prev) => ({ ...prev, [message.chatMessage.id]: false }));
+                                                                        }
+                                                                    }
+                                                                    : undefined
+                                                            }
+                                                            projectId={projectId}
+                                                            isApplyDisabled={hasUnsavedChanges || isApplying}
+                                                            applyDisabledReason={
+                                                                hasUnsavedChanges
+                                                                    ? 'Save your changes first - unsaved work will be overwritten'
+                                                                    : isApplying
+                                                                        ? 'Applying changes...'
+                                                                        : undefined
+                                                            }
+                                                        />
+                                                    </div>
+                                                )}
                                                                                 <div className="message-actions">
                                             {translationErrors[message.storedMessage.id] && (
                                                 <div className="translation-error">{translationErrors[message.storedMessage.id]}</div>
@@ -1078,6 +1159,17 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                 )}
                                 </div>
                             </div>
+
+                            {selectedAgentId && hasSubAgentCalls && (
+                                <SubAgentPeekDock
+                                    threadId={`${functionThreadId}:peek`}
+                                    parentType="agent"
+                                    parentId={selectedAgentId}
+                                    parentMessageId={String(message.chatMessage.id)}
+                                    parentToolCallIds={subAgentToolCallIds}
+                                    isActiveParent={isActiveSubAgentParent}
+                                />
+                            )}
 
                             {archiveBoundaryId === message.chatMessage.id && (
                                 <div className="agent-archive-divider" role="separator" aria-label="Memory boundary">
@@ -1151,7 +1243,9 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                 <AgentInputForm
                     projectId={projectId}
                     isLoading={isLoading}
-                    onSubmit={onSubmit}
+                    isSendBlocked={sendBlockingState.blocked}
+                    sendBlockedReason={sendBlockedReason}
+                    onSubmit={handleSubmitFromInput}
                     onStop={onStop}
                 />
             </div>

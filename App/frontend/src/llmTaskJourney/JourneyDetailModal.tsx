@@ -14,9 +14,9 @@ import NotificationProgressBar from '../components/Notification/NotificationProg
 import { Close, Edit, Trash } from '../components/icons';
 import { TextButton } from '../components/TextButton';
 import { IconButton } from '../components/IconButton';
-import { ToolCallCard } from '../components/toolCall';
+import { FunctionCallsThread } from '../components/functionCalls';
 import { buildEditCardsFromToolCallMetadata } from '../toolCall';
-import { JourneyRuntime, applyJourneyEdits, rejectAllJourneyEdits } from './index';
+import { JourneyRuntime, applyJourneyEdits } from './index';
 import type { HandlerOptions } from '../toolCall/apply/types';
 import { CRUD_OPTIONS, TRANSLATION_OPTIONS } from '../toolCall/apply/types';
 import type { ToolCallDecisionMap } from '../toolCall/types';
@@ -149,11 +149,6 @@ export const JourneyDetailModal: React.FC = () => {
       options: handlerOptions,
     });
   }, [projectId, journey?.id, applyLanguage, handlerOptions]);
-
-  const handleRejectAll = useCallback(() => {
-    if (!journey) return;
-    rejectAllJourneyEdits({ journeyId: journey.id });
-  }, [journey?.id]);
 
   const handleSendFeedback = useCallback(() => {
     if (!journey) return;
@@ -355,7 +350,8 @@ export const JourneyDetailModal: React.FC = () => {
                     <>
                       {historicalCards.length > 0 && (
                         <div className="llm-task-modal-journey-message-tool-calls">
-                          <ToolCallCard
+                          <FunctionCallsThread
+                            threadId={`journey:${journey.id}:${m.id}:history`}
                             mode="confirmed"
                             cards={historicalCards}
                             projectId={projectId}
@@ -365,7 +361,8 @@ export const JourneyDetailModal: React.FC = () => {
 
                       {isLastAssistant && hasStreamingCalls && (
                         <div className="llm-task-modal-journey-message-tool-calls">
-                          <ToolCallCard
+                          <FunctionCallsThread
+                            threadId={`journey:${journey.id}:${m.id}:stream`}
                             mode="streaming"
                             streamingProgress={session?.toolCallProgress}
                             projectId={projectId}
@@ -375,7 +372,8 @@ export const JourneyDetailModal: React.FC = () => {
 
                       {isLastAssistant && hasCards && (
                         <div className="llm-task-modal-journey-message-tool-calls">
-                          <ToolCallCard
+                          <FunctionCallsThread
+                            threadId={`journey:${journey.id}:${m.id}:cards`}
                             mode={isPending ? 'pending' : 'confirmed'}
                             cards={journey.editCards}
                             onCommitDecisions={isPending ? handleConfirm : undefined}
@@ -383,13 +381,6 @@ export const JourneyDetailModal: React.FC = () => {
                             isApplyDisabled={isApplying}
                             applyDisabledReason={isApplying ? 'Applying changes...' : undefined}
                           />
-                          {journey.status === 'pending_confirmation' && (
-                            <div className="llm-task-modal-reject-all">
-                              <TextButton variant="secondary" onClick={handleRejectAll}>
-                                Reject All
-                              </TextButton>
-                            </div>
-                          )}
                         </div>
                       )}
                     </>

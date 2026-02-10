@@ -1,0 +1,138 @@
+import React, { useMemo } from 'react';
+import { useSettingsStore } from '../../../store/settingsStore';
+import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
+import { computeChangedFields, pickChangedValues } from '../../../functionCalls/fieldDiff';
+import { FunctionCallCardShell } from '../FunctionCallCardShell';
+import { ReadOnlyItemDisplay } from '../displays/ReadOnlyItemDisplay';
+import { ReadOnlyOutlineItemDisplay } from '../displays/ReadOnlyOutlineItemDisplay';
+import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay';
+import type { ObjectCardProps } from './types';
+import { getObjectSnapshot } from './helpers';
+
+function replaceKeysForObjectType(objectType: ObjectCardProps['operation']['objectType']): string[] {
+  switch (objectType) {
+    case 'basic_info':
+      return ['title', 'logline', 'genre'];
+    case 'guidelines':
+      return ['authorNote'];
+    case 'story_object':
+      return ['name', 'description', 'content'];
+    case 'outline':
+      return ['name', 'description', 'content'];
+    case 'outline_act':
+      return ['name', 'description', 'content', 'order'];
+    case 'outline_chapter':
+      return ['actId', 'name', 'description', 'content', 'order'];
+    case 'manuscript':
+      return ['content'];
+    default:
+      return [];
+  }
+}
+
+function metadataMapForObjectType(objectType: ObjectCardProps['operation']['objectType']): Record<string, string> {
+  switch (objectType) {
+    case 'outline_act':
+      return { order: 'order' };
+    case 'outline_chapter':
+      return {
+        actId: 'act_id',
+        order: 'order',
+      };
+    default:
+      return {};
+  }
+}
+
+export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
+  threadId,
+  projectId,
+  operation,
+  showDecisionButtons,
+  decisionDisabled,
+  onAccept,
+  onReject,
+}) => {
+  const language = useSettingsStore((state) => state.getSettings().mainLanguage);
+  const objects = useUnifiedObjectStore((state) => state.objects);
+
+  const snapshot = useMemo(
+    () => getObjectSnapshot({ operation, objects, projectId, language }),
+    [operation, objects, projectId, language]
+  );
+
+  const replaceKeys = useMemo(() => replaceKeysForObjectType(operation.objectType), [operation.objectType]);
+
+  const changedFields = useMemo(
+    () =>
+      computeChangedFields({
+        args: operation.args,
+        currentData: snapshot.data,
+        currentMetadata: snapshot.metadata,
+        keys: replaceKeys,
+        metadataKeys: metadataMapForObjectType(operation.objectType),
+      }),
+    [operation.args, operation.objectType, snapshot.data, snapshot.metadata, replaceKeys]
+  );
+
+  const changedValues = useMemo(
+    () => pickChangedValues(operation.args, changedFields),
+    [operation.args, changedFields]
+  );
+
+  const targetLabel = snapshot.displayName || operation.targetLabel;
+  const title = `${operation.title}${changedFields.length > 0 ? ` (${changedFields.length})` : ''}`;
+
+  const renderBody = () => {
+    if (operation.objectType === 'outline' || operation.objectType === 'outline_act' || operation.objectType === 'outline_chapter') {
+      return (
+        <ReadOnlyOutlineItemDisplay
+          variant={operation.objectType}
+          title={targetLabel || 'Outline'}
+          values={changedValues}
+          mode="replace"
+          changedFields={changedFields}
+        />
+      );
+    }
+
+    if (operation.objectType === 'manuscript') {
+      return (
+        <ReadOnlyManuscriptDisplay
+          title={targetLabel || 'Manuscript'}
+          content={typeof changedValues.content === 'string' ? changedValues.content : ''}
+        />
+      );
+    }
+
+    return (
+      <ReadOnlyItemDisplay
+        title={targetLabel || 'Item'}
+        values={changedValues}
+        mode="replace"
+        changedFields={changedFields}
+      />
+    );
+  };
+
+  return (
+    <FunctionCallCardShell
+      threadId={threadId}
+      cardId={operation.id}
+      category="replace"
+      status={operation.status}
+      title={title}
+      targetLabel={targetLabel}
+      subtitle={changedFields.length === 0 ? 'No effective field changes' : undefined}
+      showDecisionButtons={showDecisionButtons}
+      decisionDisabled={decisionDisabled}
+      onAccept={onAccept}
+      onReject={onReject}
+      defaultExpanded={operation.status === 'pending' || operation.status === 'running'}
+    >
+      {renderBody()}
+    </FunctionCallCardShell>
+  );
+};
+
+export default ReplaceCallCard;

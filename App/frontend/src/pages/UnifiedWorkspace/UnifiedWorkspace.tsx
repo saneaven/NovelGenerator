@@ -32,7 +32,6 @@ import '../workspace/styles/AgentHeader.css';
 import '../workspace/styles/AgentMessages.css';
 import '../workspace/styles/MessageEdit.css';
 import '../workspace/styles/AgentInput.css';
-import '../workspace/styles/MessageEditCards.css';
 import '../../components/Agent/MobileAgent.css';
 
 // Tab label keys for mobile subtitle (story-object mode) - will be localized in component

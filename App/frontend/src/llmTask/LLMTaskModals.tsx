@@ -13,13 +13,12 @@ import NotificationProgressBar from '../components/Notification/NotificationProg
 import { Close } from '../components/icons';
 import { TextButton } from '../components/TextButton';
 import { IconButton } from '../components/IconButton';
-import { ToolCallCard } from '../components/toolCall';
+import { FunctionCallsThread } from '../components/functionCalls';
 import {
   AgentExecutor,
   type AgentExecutorInput,
   type AgentTranslationInput,
   applyAgentEdits,
-  rejectAllAgentEdits,
 } from '../agent';
 import type { InvocationCaller } from '../types/agentRuntime';
 import { CRUD_OPTIONS } from '../toolCall/apply/types';
@@ -146,11 +145,6 @@ export const LLMTaskModals: React.FC = () => {
     });
   }, [projectId, session?.id, mainLanguage]);
 
-  const handleRejectAll = useCallback(() => {
-    if (!session) return;
-    rejectAllAgentEdits({ sessionId: session.id });
-  }, [session?.id]);
-
   if (!session) return null;
 
   const footer = (
@@ -253,7 +247,8 @@ export const LLMTaskModals: React.FC = () => {
 
         {hasStreamingCalls && (
           <div className="llm-task-modal-tool-calls">
-            <ToolCallCard
+            <FunctionCallsThread
+              threadId={`llm-session:${session.id}:stream`}
               mode="streaming"
               streamingProgress={session.toolCallProgress}
               projectId={projectId}
@@ -263,7 +258,8 @@ export const LLMTaskModals: React.FC = () => {
 
         {hasCards && (
           <div className="llm-task-modal-tool-calls">
-            <ToolCallCard
+            <FunctionCallsThread
+              threadId={`llm-session:${session.id}:cards`}
               mode={isPending ? 'pending' : 'confirmed'}
               cards={session.editCards}
               onCommitDecisions={isPending ? handleConfirm : undefined}
@@ -271,13 +267,6 @@ export const LLMTaskModals: React.FC = () => {
               isApplyDisabled={isApplying}
               applyDisabledReason={isApplying ? 'Applying changes...' : undefined}
             />
-            {session.status === 'pending_confirmation' && (
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
-                <TextButton variant="secondary" onClick={handleRejectAll}>
-                  Reject All
-                </TextButton>
-              </div>
-            )}
           </div>
         )}
       </div>

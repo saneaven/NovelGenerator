@@ -1,0 +1,106 @@
+import type { ApplicationResult, ToolCallStatus } from '../toolCall/types';
+
+export type OperationCategory =
+  | 'read'
+  | 'create'
+  | 'replace'
+  | 'patch'
+  | 'delete'
+  | 'search'
+  | 'call_agent';
+
+export type ObjectType =
+  | 'story_object'
+  | 'basic_info'
+  | 'guidelines'
+  | 'outline'
+  | 'outline_act'
+  | 'outline_chapter'
+  | 'manuscript';
+
+export type SearchType = 'rag' | 'keyword';
+
+export type StoryObjectSubtype = 'character' | 'location' | 'organization' | 'lorebook';
+
+export type HeaderStatus =
+  | 'collecting'
+  | 'validating'
+  | 'pending'
+  | 'running'
+  | 'accepted'
+  | 'rejected'
+  | 'failed';
+
+export type PatchDecision = 'accept' | 'reject';
+
+export interface OperationBaseVM {
+  id: string;
+  toolName: string;
+  status: HeaderStatus;
+  reason?: string;
+  result?: ApplicationResult;
+  args: Record<string, unknown>;
+  title: string;
+  targetId?: string;
+  targetLabel?: string;
+  decisionEligible: boolean;
+  isValidationFailure: boolean;
+  isRunning: boolean;
+}
+
+export interface ObjectOperationVM extends OperationBaseVM {
+  category: Exclude<OperationCategory, 'search' | 'call_agent'>;
+  objectType: ObjectType;
+  storySubtype?: StoryObjectSubtype;
+}
+
+export interface SearchOperationVM extends OperationBaseVM {
+  category: 'search';
+  searchType: SearchType;
+}
+
+export interface CallAgentOperationVM extends OperationBaseVM {
+  category: 'call_agent';
+  agentName: string;
+  displayName: string;
+  input: string;
+}
+
+/**
+ * Internal VM for `return_sub_agent_result`.
+ * Kept out of user-facing object taxonomy.
+ */
+export interface InternalReadOperationVM extends OperationBaseVM {
+  category: 'read';
+  objectType: 'story_object';
+  internalKind: 'return_sub_agent_result';
+}
+
+export type OperationVM =
+  | ObjectOperationVM
+  | SearchOperationVM
+  | CallAgentOperationVM
+  | InternalReadOperationVM;
+
+export type OperationSource = 'stored' | 'streaming';
+
+export interface OperationBuildContext {
+  source: OperationSource;
+}
+
+export const DECISION_ELIGIBLE_STATUSES: ReadonlySet<HeaderStatus | ToolCallStatus> = new Set([
+  'pending',
+  'validating',
+]);
+
+export const BLOCKING_STATUSES: ReadonlySet<HeaderStatus | ToolCallStatus> = new Set([
+  'pending',
+  'validating',
+  'running',
+]);
+
+export const STREAMING_STATUSES: ReadonlySet<HeaderStatus> = new Set([
+  'collecting',
+  'validating',
+  'running',
+]);

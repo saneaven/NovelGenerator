@@ -15,9 +15,11 @@ import { useSidebarStore } from '../../store/sidebarStore';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSettings, useSettingsStore } from '../../store/settingsStore';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
+import { useSubAgentRuntimeStore } from '../../store/subAgentRuntimeStore';
 import { AgentExecutor } from '../AgentExecutor';
 import { AgentMemoryManager } from '../memory/AgentMemoryManager';
 import type { AgentOrchestrationConfig, AgentOrchestrationReturn, AgentHandlersReturn, ContextIdState } from './types';
+import { getSendBlockingState } from '../../functionCalls/blockingSelectors';
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
@@ -146,6 +148,28 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     const agentId = getSelectedAgentId(projectId);
     if (!agentId) return;
     if (useAgentUIStore.getState().isLoading(projectId, agentId)) return;
+
+    const selectedAgent = useAgentStore.getState().getSelectedAgent(projectId);
+    const messages = selectedAgent?.messages ?? [];
+    const sessions = Object.values(useLLMSessionStore.getState().sessions)
+      .filter((session): session is NonNullable<typeof session> => Boolean(session))
+      .filter((session) => {
+        if (session.kind !== 'agent') return false;
+        return (session.input as any)?.projectId === projectId;
+      });
+    const sendBlockingState = getSendBlockingState({
+      selectedAgentId: agentId,
+      messages,
+      sessions,
+      invocationsByKey: useSubAgentRuntimeStore.getState().invocationsByKey,
+    });
+    if (sendBlockingState.blocked) {
+      useAgentUIStore.getState().setPreflightToast(projectId, {
+        type: 'error',
+        message: 'Resolve pending or running operations before sending a new message.',
+      });
+      return;
+    }
 
     const missingMainLanguageObjects = getObjectsMissingMainLanguage(projectId, mainLanguage);
     if (missingMainLanguageObjects.length > 0) {
