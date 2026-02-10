@@ -4,7 +4,7 @@ import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { computeChangedFields, pickChangedValues } from '../../../functionCalls/fieldDiff';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import { ReadOnlyStoryObjectDisplay } from '../displays/ReadOnlyStoryObjectDisplay';
-import { ReadOnlyOutlineItemDisplay } from '../displays/ReadOnlyOutlineItemDisplay';
+import { OutlineItemCard, toOutlineItemVariant } from '../../OutlineItemCard';
 import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay';
 import type { ObjectCardProps } from './types';
 import { getObjectSnapshot } from './helpers';
@@ -85,13 +85,15 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
 
   const renderBody = () => {
     if (operation.objectType === 'outline' || operation.objectType === 'outline_act' || operation.objectType === 'outline_chapter') {
+      const desc = typeof changedValues.description === 'string' && changedValues.description.trim() ? changedValues.description : undefined;
+      const body = typeof changedValues.content === 'string' && changedValues.content.trim() ? changedValues.content : undefined;
       return (
-        <ReadOnlyOutlineItemDisplay
-          variant={operation.objectType}
-          title={targetLabel || 'Outline'}
-          values={changedValues}
-          mode="replace"
-          changedFields={changedFields}
+        <OutlineItemCard
+          variant={toOutlineItemVariant(operation.objectType)}
+          name={targetLabel || 'Outline'}
+          description={desc}
+          content={body}
+          readOnly
         />
       );
     }

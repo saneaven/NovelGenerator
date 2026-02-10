@@ -1,0 +1,295 @@
+/* OutlineItemCard.css - Shared card styles for outline/act/chapter items */
+
+/* ============================================================================
+   BASE CARD
+   ============================================================================ */
+
+.outline-item-card {
+  width: 100%;
+}
+
+.outline-item-card .content-card {
+  background-color: var(--color-surface-base);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-lg);
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-lg);
+}
+
+.outline-item-card .outline-card {
+  border-width: 2px;
+}
+
+/* ============================================================================
+   CARD HEADER (Act / Outline variants)
+   ============================================================================ */
+
+.outline-item-card .card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+}
+
+.outline-item-card .card-title-section {
+  cursor: pointer;
+  flex: 1;
+}
+
+.outline-item-card .title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.outline-item-card .card-title-section h3 {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  line-height: 1.2;
+}
+
+.outline-item-card .card-title-section h4 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  line-height: 1.2;
+}
+
+.outline-item-card .card-meta {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  margin-top: var(--spacing-xs);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ============================================================================
+   CARD BODY (Act / Outline variants — expand/collapse)
+   ============================================================================ */
+
+.outline-item-card .card-body-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--transition-slow);
+  overflow: hidden;
+  margin-top: var(--spacing-md);
+}
+
+.outline-item-card .card-body-wrapper.is-expanded {
+  grid-template-rows: 1fr;
+}
+
+.outline-item-card .card-body-content {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.outline-item-card .card-body-wrapper.is-expanded .card-body-content {
+  overflow: visible;
+}
+
+.outline-item-card .card-body-content p {
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-relaxed);
+  margin: 0 0 var(--spacing-lg) 0;
+  white-space: pre-wrap;
+}
+
+.outline-item-card .placeholder-text {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.outline-item-card .card-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+/* ============================================================================
+   CHAPTER VARIANT
+   ============================================================================ */
+
+.outline-item-card .chapter-card {
+  padding: var(--spacing-md) var(--spacing-lg);
+}
+
+.outline-item-card .chapter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--spacing-md);
+}
+
+.outline-item-card .chapter-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  cursor: pointer;
+  flex: 1;
+}
+
+.outline-item-card .chapter-index {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-secondary-main);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.outline-item-card .chapter-info h4 {
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+/* Chapter Expand Animation Wrapper */
+.outline-item-card .chapter-expand-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--transition-slow), padding var(--transition-slow);
+  overflow: hidden;
+  padding: 0 var(--spacing-md);
+}
+
+.outline-item-card .chapter-expand-wrapper.is-expanded {
+  grid-template-rows: 1fr;
+  padding: var(--spacing-md);
+}
+
+.outline-item-card .chapter-expand-content {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.outline-item-card .chapter-expand-wrapper.is-expanded .chapter-expand-content {
+  overflow: visible;
+}
+
+.outline-item-card .chapter-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: var(--spacing-sm);
+}
+
+/* ============================================================================
+   DESCRIPTION SUBTITLE (new)
+   ============================================================================ */
+
+.outline-item-card .card-description {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin: var(--spacing-xs) 0 0 0;
+  line-height: 1.4;
+}
+
+/* ============================================================================
+   MARKDOWN CONTENT
+   ============================================================================ */
+
+.outline-item-card .markdown-content {
+  max-height: 400px;
+  overflow-y: auto;
+  margin: var(--spacing-lg);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text-primary);
+}
+
+.outline-item-card .markdown-content p {
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.outline-item-card .markdown-content p:last-child {
+  margin-bottom: 0;
+}
+
+.outline-item-card .markdown-content h1,
+.outline-item-card .markdown-content h2,
+.outline-item-card .markdown-content h3,
+.outline-item-card .markdown-content h4,
+.outline-item-card .markdown-content h5,
+.outline-item-card .markdown-content h6 {
+  margin: var(--spacing-md) 0 var(--spacing-sm) 0;
+  font-weight: var(--font-weight-semibold);
+}
+
+.outline-item-card .markdown-content h1:first-child,
+.outline-item-card .markdown-content h2:first-child,
+.outline-item-card .markdown-content h3:first-child,
+.outline-item-card .markdown-content h4:first-child,
+.outline-item-card .markdown-content h5:first-child,
+.outline-item-card .markdown-content h6:first-child {
+  margin-top: 0;
+}
+
+.outline-item-card .markdown-content ul,
+.outline-item-card .markdown-content ol {
+  margin: var(--spacing-sm) 0;
+  padding-left: var(--spacing-lg);
+}
+
+.outline-item-card .markdown-content blockquote {
+  margin: var(--spacing-sm) 0;
+  padding-left: var(--spacing-md);
+  border-left: 3px solid var(--color-border-default);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.outline-item-card .markdown-content code {
+  background-color: var(--color-surface-elevated);
+  padding: 2px 6px;
+  border-radius: var(--border-radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.outline-item-card .markdown-content pre {
+  background-color: var(--color-surface-elevated);
+  padding: var(--spacing-md);
+  border-radius: var(--border-radius-md);
+  overflow-x: auto;
+}
+
+.outline-item-card .markdown-content pre code {
+  background: none;
+  padding: 0;
+}
+
+/* ============================================================================
+   FALLBACK / WARNING
+   ============================================================================ */
+
+.outline-item-card .fallback-badge {
+  color: var(--color-warning-main);
+}
+
+.outline-item-card .warning-icon {
+  color: var(--color-warning-main);
+  margin-left: var(--spacing-xs);
+}
+
+/* ============================================================================
+   READ-ONLY OVERRIDES
+   ============================================================================ */
+
+.outline-item-card--readonly .card-title-section {
+  cursor: default;
+}
+
+.outline-item-card--readonly .chapter-info {
+  cursor: default;
+}

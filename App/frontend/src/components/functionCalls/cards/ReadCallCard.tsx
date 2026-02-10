@@ -5,7 +5,7 @@ import { useAssetStore } from '../../../store/assetStore';
 import { getAssetUrl } from '../../../utils/assetUrl';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import { ReadOnlyStoryObjectDisplay } from '../displays/ReadOnlyStoryObjectDisplay';
-import { ReadOnlyOutlineItemDisplay } from '../displays/ReadOnlyOutlineItemDisplay';
+import { OutlineItemCard, toOutlineItemVariant } from '../../OutlineItemCard';
 import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay';
 import type { ObjectCardProps } from './types';
 import { getObjectSnapshot } from './helpers';
@@ -51,12 +51,15 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
 
   const renderBody = () => {
     if (operation.objectType === 'outline' || operation.objectType === 'outline_act' || operation.objectType === 'outline_chapter') {
+      const desc = typeof snapshot.data.description === 'string' && snapshot.data.description.trim() ? snapshot.data.description : undefined;
+      const body = typeof snapshot.data.content === 'string' && snapshot.data.content.trim() ? snapshot.data.content : undefined;
       return (
-        <ReadOnlyOutlineItemDisplay
-          variant={operation.objectType}
-          title={snapshot.displayName || 'Outline'}
-          values={snapshot.data}
-          mode="read"
+        <OutlineItemCard
+          variant={toOutlineItemVariant(operation.objectType)}
+          name={snapshot.displayName || 'Outline'}
+          description={desc}
+          content={body}
+          readOnly
         />
       );
     }

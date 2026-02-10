@@ -12,10 +12,9 @@ import { DropdownMenu, DropdownItem } from '../../../components/ui/DropdownMenu'
 import { IconButton } from '../../../components/IconButton';
 import { TextButton } from '../../../components/TextButton';
 import { Plus, Edit, Trash, AIAssist, Books, MoreHorizontal, Save, Close, HamburgerMenu, ChevronRight, Scroll } from '../../../components/icons';
-import { Warning } from '../../../components/icons';
 import type { UnifiedObject, OutlineObject, ActObject, ChapterObject } from '../../../types/unifiedObject';
 import { RichTextEditor, type RichTextEditorRef } from '../../../components/RichTextEditor';
-import { MarkdownRenderer } from '../../../components/MarkdownRenderer';
+import { OutlineItemCard } from '../../../components/OutlineItemCard';
 import './OutlinePanel.css';
 
 interface OutlinePanelProps {
@@ -661,116 +660,108 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                         </div>
 
                         <div className="act-content-wrapper">
-                          <div className={`content-card act-card ${editingAct === act.id ? 'is-editing' : ''}`}>
-                            <div className="card-header">
-                              {editingAct === act.id ? (
-                                <div className="card-title-section" style={{ flex: 1 }}>
-                                  <input
-                                    type="text"
-                                    className="inline-title-input"
-                                    value={editActData.name}
-                                    onChange={(e) => setEditActData(prev => ({ ...prev, name: e.target.value }))}
-                                    placeholder="Act Title"
-                                    autoFocus
-                                  />
-                                </div>
-                              ) : (
-                                <div className="card-title-section" onClick={() => toggleActExpand(act.id)}>
-                                  <div className="title-row">
-                                    <h4>{actData.name || 'Untitled Act'}</h4>
-                                    {actFallback && <span className="fallback-badge" title="Translation missing"><Warning size="xs" /></span>}
+                          {editingAct === act.id ? (
+                            <div className="outline-item-card">
+                              <div className="content-card act-card is-editing">
+                                <div className="card-header">
+                                  <div className="card-title-section" style={{ flex: 1 }}>
+                                    <input
+                                      type="text"
+                                      className="inline-title-input"
+                                      value={editActData.name}
+                                      onChange={(e) => setEditActData(prev => ({ ...prev, name: e.target.value }))}
+                                      placeholder="Act Title"
+                                      autoFocus
+                                    />
                                   </div>
-                                  <span className="card-meta">{actChapters.length} Chapters</span>
                                 </div>
-                              )}
-                            </div>
-
-                                    {editingAct === act.id ? (
-                                      <div className="card-body-wrapper is-expanded">
-                                        <div className="card-body-content">
-                                          <textarea
-                                            className="inline-description-input"
-                                            value={editActData.description}
-                                            onChange={(e) => setEditActData(prev => ({ ...prev, description: e.target.value }))}
-                                            placeholder="Describe the main events that happen in this act"
-                                            rows={4}
-                                          />
-                                          <div className="inline-content-editor">
-                                            <RichTextEditor
-                                              ref={actEditorRef}
-                                              key={editingAct}
-                                              initialContent={editActData.content}
-                                              onChange={(markdown) => setEditActData(prev => ({ ...prev, content: markdown }))}
-                                              placeholder="Full act content..."
-                                            />
-                                          </div>
-                                          <div className="edit-actions-split">
-                                            <TextButton
-                                              variant="ghost"
-                                              size="sm"
-                                              onClick={() => setShowActAIModal(act.id)}
-                                              iconLeft={<AIAssist size="xs" />}
-                                            >
-                                              AI Edit
-                                            </TextButton>
-                                            <div className="edit-actions-right">
-                                              <TextButton
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={cancelEditingAct}
-                                                iconLeft={<Close size="xs" />}
-                                              >
-                                                Cancel
-                                              </TextButton>
-                                              <TextButton
-                                                variant="secondary"
-                                                size="sm"
-                                                onClick={handleUpdateAct}
-                                                iconLeft={<Save size="xs" />}
-                                              >
-                                                Save
-                                              </TextButton>
-                                            </div>
-                                          </div>
-                                        </div>
+                                <div className="card-body-wrapper is-expanded">
+                                  <div className="card-body-content">
+                                    <textarea
+                                      className="inline-description-input"
+                                      value={editActData.description}
+                                      onChange={(e) => setEditActData(prev => ({ ...prev, description: e.target.value }))}
+                                      placeholder="Describe the main events that happen in this act"
+                                      rows={4}
+                                    />
+                                    <div className="inline-content-editor">
+                                      <RichTextEditor
+                                        ref={actEditorRef}
+                                        key={editingAct}
+                                        initialContent={editActData.content}
+                                        onChange={(markdown) => setEditActData(prev => ({ ...prev, content: markdown }))}
+                                        placeholder="Full act content..."
+                                      />
+                                    </div>
+                                    <div className="edit-actions-split">
+                                      <TextButton
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setShowActAIModal(act.id)}
+                                        iconLeft={<AIAssist size="xs" />}
+                                      >
+                                        AI Edit
+                                      </TextButton>
+                                      <div className="edit-actions-right">
+                                        <TextButton
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={cancelEditingAct}
+                                          iconLeft={<Close size="xs" />}
+                                        >
+                                          Cancel
+                                        </TextButton>
+                                        <TextButton
+                                          variant="secondary"
+                                          size="sm"
+                                          onClick={handleUpdateAct}
+                                          iconLeft={<Save size="xs" />}
+                                        >
+                                          Save
+                                        </TextButton>
                                       </div>
-                                    ) : (
-                                      <div className={`card-body-wrapper ${isActExpanded ? 'is-expanded' : ''}`}>
-                                        <div className="card-body-content">
-                                          {actData.content ? (
-                                            <MarkdownRenderer>
-                                              {actData.content}
-                                            </MarkdownRenderer>
-                                          ) : (
-                                            <p className="placeholder-text">No content provided.</p>
-                                          )}
-                                          <div className="card-footer-actions">
-                                            <DropdownMenu
-                                              trigger={
-                                                <TextButton size="sm" variant="ghost" iconLeft={<MoreHorizontal size="xs" />}>
-                                                  More
-                                                </TextButton>
-                                              }
-                                            >
-                                              <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => handleDeleteAct(act.id)} variant="danger" />
-                                            </DropdownMenu>
-                                            <TextButton
-                                              size="sm"
-                                              variant="secondary"
-                                              iconLeft={<Edit size="xs" />}
-                                              onClick={() => startEditingAct(act.id)}
-                                            >
-                                              Edit
-                                            </TextButton>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    )}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
+                            </div>
+                          ) : (
+                            <OutlineItemCard
+                              variant="act"
+                              name={actData.name || 'Untitled Act'}
+                              description={actData.description}
+                              content={actData.content}
+                              meta={`${actChapters.length} Chapters`}
+                              expanded={isActExpanded}
+                              showFallbackWarning={actFallback}
+                              onHeaderClick={() => toggleActExpand(act.id)}
+                              footerActions={
+                                <>
+                                  <DropdownMenu
+                                    trigger={
+                                      <TextButton size="sm" variant="ghost" iconLeft={<MoreHorizontal size="xs" />}>
+                                        More
+                                      </TextButton>
+                                    }
+                                  >
+                                    <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => handleDeleteAct(act.id)} variant="danger" />
+                                  </DropdownMenu>
+                                  <TextButton
+                                    size="sm"
+                                    variant="secondary"
+                                    iconLeft={<Edit size="xs" />}
+                                    onClick={() => startEditingAct(act.id)}
+                                  >
+                                    Edit
+                                  </TextButton>
+                                </>
+                              }
+                            />
+                          )}
+                        </div>
+                      </div>
 
-                              {/* Chapter Stream */}
+                      {/* Chapter Stream */}
                               <div className="chapter-stream-wrapper">
                                 <div className="timeline-chapter-stream">
                                   <div className="stream-line"></div>
@@ -788,9 +779,9 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                       >
                                         <div className="chapter-marker"></div>
                                         <div className="chapter-content-wrapper">
-                                          <div className={`content-card chapter-card ${editingChapter === chapter.id ? 'is-editing' : ''}`}>
-                                            {editingChapter === chapter.id ? (
-                                              <>
+                                          {editingChapter === chapter.id ? (
+                                            <div className="outline-item-card">
+                                              <div className="content-card chapter-card is-editing">
                                                 <div className="chapter-header">
                                                   <div className="chapter-info" style={{ flex: 1 }}>
                                                     <span className="chapter-index">CH {chapterIndex + 1}</span>
@@ -852,49 +843,41 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                                     </div>
                                                   </div>
                                                 </div>
-                                              </>
-                                            ) : (
-                                              <>
-                                                <div className="chapter-header">
-                                                  <div className="chapter-info" onClick={() => toggleChapterExpand(chapter.id)}>
-                                                    <span className="chapter-index">CH {chapterIndex + 1}</span>
-                                                    <h4>{chData.name || 'Untitled Chapter'}</h4>
-                                                    {chFallback && <Warning size="xs" className="warning-icon" />}
-                                                  </div>
-                                                </div>
-                                                <div className={`chapter-expand-wrapper ${isChapterExpanded ? 'is-expanded' : ''}`}>
-                                                  <div className="chapter-expand-content">
-                                                    {chData.content ? (
-                                                      <MarkdownRenderer className="markdown-content chapter-content">
-                                                        {chData.content}
-                                                      </MarkdownRenderer>
-                                                    ) : (
-                                                      <p className="placeholder-text">No content provided.</p>
-                                                    )}
-                                                    <div className="chapter-footer-actions">
-                                                      <DropdownMenu
-                                                        trigger={
-                                                          <TextButton size="sm" variant="ghost" iconLeft={<MoreHorizontal size="xs" />}>
-                                                            More
-                                                          </TextButton>
-                                                        }
-                                                      >
-                                                        <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => handleDeleteChapter(chapter.id)} variant="danger" />
-                                                      </DropdownMenu>
-                                                      <TextButton
-                                                        size="sm"
-                                                        variant="secondary"
-                                                        iconLeft={<Edit size="xs" />}
-                                                        onClick={() => startEditingChapter(chapter.id)}
-                                                      >
-                                                        Edit
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <OutlineItemCard
+                                              variant="chapter"
+                                              name={chData.name || 'Untitled Chapter'}
+                                              description={chData.description}
+                                              content={chData.content}
+                                              chapterIndex={chapterIndex + 1}
+                                              expanded={isChapterExpanded}
+                                              showFallbackWarning={chFallback}
+                                              onHeaderClick={() => toggleChapterExpand(chapter.id)}
+                                              footerActions={
+                                                <>
+                                                  <DropdownMenu
+                                                    trigger={
+                                                      <TextButton size="sm" variant="ghost" iconLeft={<MoreHorizontal size="xs" />}>
+                                                        More
                                                       </TextButton>
-                                                    </div>
-                                                  </div>
-                                                </div>
-                                              </>
-                                            )}
-                                          </div>
+                                                    }
+                                                  >
+                                                    <DropdownItem icon={<Trash size="sm" />} label="Delete" onClick={() => handleDeleteChapter(chapter.id)} variant="danger" />
+                                                  </DropdownMenu>
+                                                  <TextButton
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    iconLeft={<Edit size="xs" />}
+                                                    onClick={() => startEditingChapter(chapter.id)}
+                                                  >
+                                                    Edit
+                                                  </TextButton>
+                                                </>
+                                              }
+                                            />
+                                          )}
                                         </div>
                                       </div>
                                     );

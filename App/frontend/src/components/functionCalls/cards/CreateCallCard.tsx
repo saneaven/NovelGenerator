@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import { ReadOnlyStoryObjectDisplay } from '../displays/ReadOnlyStoryObjectDisplay';
-import { ReadOnlyOutlineItemDisplay } from '../displays/ReadOnlyOutlineItemDisplay';
+import { OutlineItemCard, toOutlineItemVariant } from '../../OutlineItemCard';
 import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay';
 import type { ObjectCardProps } from './types';
 import { pickExistingKeys, pickValues } from './helpers';
@@ -42,12 +42,15 @@ export const CreateCallCard: React.FC<ObjectCardProps> = ({
 
   const renderBody = () => {
     if (operation.objectType === 'outline' || operation.objectType === 'outline_act' || operation.objectType === 'outline_chapter') {
+      const desc = typeof fields.description === 'string' && fields.description.trim() ? fields.description : undefined;
+      const body = typeof fields.content === 'string' && fields.content.trim() ? fields.content : undefined;
       return (
-        <ReadOnlyOutlineItemDisplay
-          variant={operation.objectType}
-          title={titleValue}
-          values={fields}
-          mode="create"
+        <OutlineItemCard
+          variant={toOutlineItemVariant(operation.objectType)}
+          name={titleValue}
+          description={desc}
+          content={body}
+          readOnly
         />
       );
     }
