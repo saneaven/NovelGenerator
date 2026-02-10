@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
-import { ReadOnlyItemDisplay } from '../displays/ReadOnlyItemDisplay';
+import { ReadOnlyStoryObjectDisplay } from '../displays/ReadOnlyStoryObjectDisplay';
 import { ReadOnlyOutlineItemDisplay } from '../displays/ReadOnlyOutlineItemDisplay';
 import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay';
 import type { ObjectCardProps } from './types';
@@ -57,10 +57,11 @@ export const CreateCallCard: React.FC<ObjectCardProps> = ({
     }
 
     return (
-      <ReadOnlyItemDisplay
+      <ReadOnlyStoryObjectDisplay
         title={titleValue}
         values={fields}
         mode="create"
+        objectType={operation.objectType}
       />
     );
   };

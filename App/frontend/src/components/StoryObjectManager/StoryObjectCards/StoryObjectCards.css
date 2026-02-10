@@ -226,6 +226,18 @@
   line-height: var(--line-height-tight);
 }
 
+/* Subtitle — one-line description shown in expanded / text-only state */
+.story-object-card__subtitle {
+  margin: 0 var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+  font-style: italic;
+  line-height: var(--line-height-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .story-object-card__description-wrapper {
   overflow: hidden;
   transition: max-height var(--transition-base), opacity var(--transition-base), margin-top var(--transition-base);

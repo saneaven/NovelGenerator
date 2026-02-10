@@ -3,7 +3,7 @@ import { useSettingsStore } from '../../../store/settingsStore';
 import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { computeChangedFields, pickChangedValues } from '../../../functionCalls/fieldDiff';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
-import { ReadOnlyItemDisplay } from '../displays/ReadOnlyItemDisplay';
+import { ReadOnlyStoryObjectDisplay } from '../displays/ReadOnlyStoryObjectDisplay';
 import { ReadOnlyOutlineItemDisplay } from '../displays/ReadOnlyOutlineItemDisplay';
 import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay';
 import type { ObjectCardProps } from './types';
@@ -106,11 +106,12 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
     }
 
     return (
-      <ReadOnlyItemDisplay
+      <ReadOnlyStoryObjectDisplay
         title={targetLabel || 'Item'}
         values={changedValues}
         mode="replace"
         changedFields={changedFields}
+        objectType={operation.objectType}
       />
     );
   };

@@ -41,17 +41,17 @@ import VersionHistoryModal from '../Modal/VersionHistoryModal';
 import TranslationModal from '../Modal/TranslationModal';
 import { UnifiedImageModal } from '../AssetManager';
 import StoryObjectCardExpanded from './StoryObjectCards/StoryObjectCardExpanded';
+import { StoryObjectCard } from './StoryObjectCards/StoryObjectCard';
 import { DropdownMenu, DropdownItem, DropdownDivider } from '../ui/DropdownMenu';
 import { IconButton } from '../IconButton';
 import { TextButton } from '../TextButton';
 import { Expand, Collapse, Plus, MoreHorizontal } from '../icons';
 import { getSpanType, type SpanType } from '../../hooks/useCardSpanType';
-import { useFitText } from '../../hooks/useFitText';
 import { useGridColumnCount } from '../../hooks/useGridColumnCount';
 import type { UnifiedObject, ObjectType } from '../../types/unifiedObject';
 import type { Asset } from '../../api/assetService';
 import { getAssetUrl } from '../../utils/assetUrl';
-import { MarkdownRenderer } from '../MarkdownRenderer';
+
 
 interface NameDescriptionData {
   name: string;
@@ -155,7 +155,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
     setExpandedCardId(null);
   };
 
-  // Called when card animation completes (from ItemDisplay callbacks)
+  // Called when card animation completes (from StoryObjectDisplay callbacks)
   const handleAnimationComplete = (cardId: string) => {
     if (animatingCardId === cardId) {
       setAnimatingCardId(null);
@@ -480,7 +480,7 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 
                     return (
                       <SortableStoryObjectCard key={item.id} id={item.id} disabled={isFullExpanded} spanType={spanType}>
-                        <ItemDisplay
+                        <StoryObjectDisplay
                           item={item}
                           itemData={itemData}
                           isExpanded={isExpanded}
@@ -641,9 +641,9 @@ const NameDescriptionManager: React.FC<NameDescriptionManagerProps> = ({
 // SUB-COMPONENTS
 // ============================================================================
 
-// Item Display Component with Motion - 3-state card system
-// State 1 & 2 only - State 3 is rendered as overlay
-interface ItemDisplayProps {
+// StoryObjectDisplay — 3-state card system wrapper
+// State 1 & 2 only — State 3 is rendered as overlay
+interface StoryObjectDisplayProps {
   item: NameDescriptionObject;
   itemData: NameDescriptionData;
   isExpanded: boolean;        // State 2: description visible
@@ -656,7 +656,7 @@ interface ItemDisplayProps {
   onAnimationComplete: () => void; // Called when layout animation completes
 }
 
-const ItemDisplay = React.memo<ItemDisplayProps>(({
+const StoryObjectDisplay = React.memo<StoryObjectDisplayProps>(({
   item,
   itemData,
   isExpanded,
@@ -668,96 +668,25 @@ const ItemDisplay = React.memo<ItemDisplayProps>(({
   onOpenFullExpand,
   onAnimationComplete,
 }) => {
-  const isTextOnly = spanType === 'text-only';
-
-  // Dynamic font scaling for text-only cards
-  const { containerRef, textRef, fontSize, isReady } = useFitText({
-    minFontSize: 16,
-    maxFontSize: 48,
-    text: itemData.name,
-  });
+  const imageUrl = mainAsset ? getAssetUrl(mainAsset) : null;
 
   return (
-    <motion.article
+    <StoryObjectCard
+      name={itemData.name}
+      description={itemData.description}
+      content={itemData.content}
+      imageUrl={imageUrl}
+      expanded={isExpanded}
+      spanType={spanType}
       layoutId={`card-${item.id}`}
-      className={`story-object-card ${isAnimating ? 'story-object-card--animating' : ''}`}
-      data-expanded={isExpanded}
-      data-has-image={Boolean(mainAsset)}
-      data-span={spanType}
-      initial={false}
-      animate={{ opacity: isFullExpanded ? 0 : 1 }}
-      whileHover={{ y: -4 }}
-      transition={{ opacity: { duration: 0.15 } }}
+      isFullExpanded={isFullExpanded}
+      isAnimating={isAnimating}
+      onToggleExpand={onToggleExpand}
+      onOpenFullExpand={onOpenFullExpand}
       onAnimationComplete={onAnimationComplete}
-    >
-      {/* Expand button - top right, always visible */}
-      <IconButton
-        icon={<Expand size="md" />}
-        onClick={onOpenFullExpand}
-        ariaLabel="Open edit panel"
-        title="Edit"
-        size="sm"
-        className="story-object-card__full-expand-btn"
-      />
-
-      {/* Content */}
-      <div className="story-object-card__content">
-        {/* Header - always visible */}
-        <header className="story-object-card__header">
-          {isTextOnly ? (
-            <div
-              ref={containerRef}
-              className="story-object-card__title-container"
-            >
-              <h4
-                ref={textRef as React.RefObject<HTMLHeadingElement>}
-                className="story-object-card__title story-object-card__title--no-toggle story-object-card__title--fit"
-                style={{
-                  fontSize: isReady ? `${fontSize}px` : undefined,
-                  opacity: isReady ? 1 : 0,
-                }}
-              >
-                {itemData.name}
-              </h4>
-            </div>
-          ) : (
-            <h4
-              className="story-object-card__title"
-              onClick={onToggleExpand}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && onToggleExpand()}
-            >
-              {itemData.name}
-            </h4>
-          )}
-        </header>
-
-        {/* Content - always in DOM, CSS controls visibility via max-height */}
-        <div className="story-object-card__description-wrapper">
-          <div className="story-object-card__description">
-            <MarkdownRenderer>
-              {itemData.content || 'No content.'}
-            </MarkdownRenderer>
-          </div>
-        </div>
-      </div>
-
-      {/* Image - plain div (no layoutId to avoid Framer Motion interference) */}
-      {mainAsset && (
-        <div className="story-object-card__image-container">
-          <img
-            src={getAssetUrl(mainAsset) || ''}
-            alt={itemData.name}
-            className="story-object-card__image"
-            loading="lazy"
-          />
-        </div>
-      )}
-    </motion.article>
+    />
   );
 }, (prevProps, nextProps) => {
-  // Custom comparison - only re-render if data props changed
   return (
     prevProps.item.id === nextProps.item.id &&
     prevProps.item.version.number === nextProps.item.version.number &&

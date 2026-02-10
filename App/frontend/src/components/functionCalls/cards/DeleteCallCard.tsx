@@ -4,7 +4,7 @@ import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import { useAssetStore } from '../../../store/assetStore';
 import { getAssetUrl } from '../../../utils/assetUrl';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
-import { ReadOnlyItemDisplay } from '../displays/ReadOnlyItemDisplay';
+import { ReadOnlyStoryObjectDisplay } from '../displays/ReadOnlyStoryObjectDisplay';
 import { ReadOnlyOutlineItemDisplay } from '../displays/ReadOnlyOutlineItemDisplay';
 import { ReadOnlyManuscriptDisplay } from '../displays/ReadOnlyManuscriptDisplay';
 import type { ObjectCardProps } from './types';
@@ -60,11 +60,12 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
     }
 
     return (
-      <ReadOnlyItemDisplay
+      <ReadOnlyStoryObjectDisplay
         title={targetLabel || 'Item'}
         values={snapshot.data}
         mode="delete"
         imageUrl={imageUrl}
+        objectType={operation.objectType}
       />
     );
   };
