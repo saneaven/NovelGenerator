@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import type { ChatMessage, TokenUsage } from '../llm/requestTypes';
 import type { ToolCallSchema } from '../toolCall';
-import type { StoredEditCard } from '../llmTask/uiTypes';
 import type { EditingTargets } from '../llmTaskJourney/types';
 import { useLLMSessionStore } from './llmSessionStore';
 
@@ -9,8 +8,7 @@ import { useLLMSessionStore } from './llmSessionStore';
  * JourneyStore - Permanent storage for Journey data
  *
  * Journeys are multi-turn AI conversations (AI Edit, Translate, etc.)
- * Unlike llmTaskStore (temporary execution tracking), journeyStore
- * persists journey data throughout the session.
+ * journeyStore persists journey data throughout the session.
  */
 
 export type JourneyKind = 'aiEdit' | 'translateObjects' | 'imagePrompt' | 'sceneImage';
@@ -47,9 +45,6 @@ export interface Journey<TInput = unknown, TResult = unknown> {
   activeSessionId?: string;
   // Optional history of attempts (oldest -> newest)
   sessionHistory?: string[];
-
-  // Tool call confirmation
-  editCards?: StoredEditCard[];
 
   // Result
   result?: TResult;

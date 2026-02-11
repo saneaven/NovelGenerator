@@ -10,15 +10,18 @@ import {
 } from '../../store/subAgentRuntimeStore';
 import { schemaRegistry } from '../../toolCall/schemas/schemaRegistry';
 import { LLMTaskMode } from '../../llm/types';
-import type { ChatMessage } from '../../llm/requestTypes';
+import type { ChatMessage, ToolCallMetadata } from '../../llm/requestTypes';
 import type { ToolCallSchema } from '../../toolCall';
 import type { TaskAIConfig } from '../../store/settingsStore';
-import { stageSessionEdits, applySessionEdits, toToolCallMetadata } from '../../llmTask/toolCalls/toolCallEngine';
+import {
+  stageToolCalls,
+  applyToolCalls,
+  markToolCallsRunning,
+} from '../../toolCall/runtime';
 import type { HandlerOptions } from '../../toolCall/apply/types';
-import type { ToolCallDecisionMap } from '../../toolCall/types';
+import type { ToolCallDecisionMap, ToolCallStatus } from '../../toolCall/types';
 import { generateTempId } from '../../utils/tempId';
 import type { SubAgentDefinition } from '../../types/subAgents';
-import type { StoredEditCard } from '../../llmTask/uiTypes';
 import { buildCallToolSchema } from '../tools/SubAgentCallTools';
 import type { InvocationCaller } from '../../types/agentRuntime';
 import { subAgentInvocationService } from '../../api/subAgentInvocationService';
@@ -51,10 +54,21 @@ function stringifyInputForUserMessage(input: string): string {
 
 function contentText(parts: Array<{ type: string; text: string }>): string {
   return parts
-    .filter((p) => p.type === 'content')
-    .map((p) => p.text)
+    .filter((part) => part.type === 'content')
+    .map((part) => part.text)
     .join('')
     .trim();
+}
+
+function normalizeToolCallStatus(status: ToolCallMetadata['status']): ToolCallStatus {
+  return (status ?? 'pending') as ToolCallStatus;
+}
+
+function hasPendingDecisionToolCalls(toolCalls: ToolCallMetadata[]): boolean {
+  return toolCalls.some((toolCall) => {
+    const status = normalizeToolCallStatus(toolCall.status);
+    return status === 'pending' || status === 'validating' || status === 'running';
+  });
 }
 
 function findLastAssistantMessageId(history: ChatMessage[]): string | null {
@@ -64,9 +78,16 @@ function findLastAssistantMessageId(history: ChatMessage[]): string | null {
   return null;
 }
 
+function findLastAssistantMessageIndex(history: ChatMessage[]): number {
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i]?.role === 'assistant') return i;
+  }
+  return -1;
+}
+
 function mapPersistedMessagesToHistory(messages: Array<any>): ChatMessage[] {
   return [...messages]
-    .sort((a, b) => Number(a.seq ?? 0) - Number(b.seq ?? 0))
+    .sort((left, right) => Number(left.seq ?? 0) - Number(right.seq ?? 0))
     .map((message) => ({
       id: String(message.id),
       seq: Number(message.seq ?? 0),
@@ -82,16 +103,16 @@ function ensureCompletion(invocationKey: string): Promise<string> {
   if (completions.has(invocationKey)) {
     return new Promise((resolve, reject) => {
       const existing = completions.get(invocationKey)!;
-      const prevResolve = existing.resolve;
-      const prevReject = existing.reject;
+      const previousResolve = existing.resolve;
+      const previousReject = existing.reject;
       completions.set(invocationKey, {
         resolve: (output) => {
-          prevResolve(output);
+          previousResolve(output);
           resolve(output);
         },
-        reject: (err) => {
-          prevReject(err);
-          reject(err);
+        reject: (error) => {
+          previousReject(error);
+          reject(error);
         },
       });
     });
@@ -102,7 +123,7 @@ function ensureCompletion(invocationKey: string): Promise<string> {
   });
 }
 
-async function loadDefinitionOrThrow(subAgentId: string) {
+async function loadDefinitionOrThrow(subAgentId: string): Promise<SubAgentDefinition> {
   const store = useSubAgentStore.getState();
   if (store.subAgents.length === 0 && !store.isLoading) {
     await store.loadSubAgents();
@@ -117,20 +138,20 @@ async function loadDefinitionOrThrow(subAgentId: string) {
 async function buildToolSchemas(definition: SubAgentDefinition): Promise<ToolCallSchema[]> {
   const schemas: ToolCallSchema[] = [];
 
-  // Static tools (no call_*).
   for (const name of definition.allowed_tool_names) {
     if (name.startsWith('call_')) {
       throw new Error(`allowed_tool_names must not contain call_* tools (found: ${name})`);
     }
     if (name === RETURN_RESULT_TOOL_NAME) continue;
+
     const schema = schemaRegistry.get(name);
     if (!schema) {
       throw new Error(`Unsupported tool in allowlist: ${name}`);
     }
+
     schemas.push({ name: schema.name, description: schema.description, parameters: schema.parameters });
   }
 
-  // Dynamic Sub Agent call tools.
   const store = useSubAgentStore.getState();
   if (store.subAgents.length === 0 && !store.isLoading) {
     await store.loadSubAgents();
@@ -142,17 +163,16 @@ async function buildToolSchemas(definition: SubAgentDefinition): Promise<ToolCal
     if (!target) {
       throw new Error(`Allowed Sub Agent not found: ${subAgentId}`);
     }
-    if (!target.enabled) {
-      continue;
-    }
+    if (!target.enabled) continue;
+
     schemas.push(buildCallToolSchema(target));
   }
 
-  // Always include return_sub_agent_result.
   const returnSchema = schemaRegistry.get(RETURN_RESULT_TOOL_NAME);
   if (!returnSchema) {
     throw new Error(`Missing schema: ${RETURN_RESULT_TOOL_NAME}`);
   }
+
   schemas.push({
     name: returnSchema.name,
     description: returnSchema.description,
@@ -162,37 +182,61 @@ async function buildToolSchemas(definition: SubAgentDefinition): Promise<ToolCal
   return schemas;
 }
 
-function applyReturnResultBatchRules(cards: StoredEditCard[]): StoredEditCard[] {
-  const returnCards = cards.filter((c) => c.toolCall.toolName === RETURN_RESULT_TOOL_NAME);
-  if (returnCards.length === 0) return cards;
+function applyReturnResultBatchRules(toolCalls: ToolCallMetadata[]): ToolCallMetadata[] {
+  const returnCalls = toolCalls.filter((toolCall) => toolCall.tool_name === RETURN_RESULT_TOOL_NAME);
+  if (returnCalls.length === 0) return toolCalls;
 
-  const hasOtherTools = cards.some((c) => c.toolCall.toolName !== RETURN_RESULT_TOOL_NAME);
-  const hasMultipleReturns = returnCards.length > 1;
+  const hasOtherTools = toolCalls.some((toolCall) => toolCall.tool_name !== RETURN_RESULT_TOOL_NAME);
+  const hasMultipleReturns = returnCalls.length > 1;
 
   let changed = false;
-  const next = cards.map((card) => {
-    if (card.toolCall.toolName !== RETURN_RESULT_TOOL_NAME) return card;
+  const next = toolCalls.map((toolCall) => {
+    if (toolCall.tool_name !== RETURN_RESULT_TOOL_NAME) return toolCall;
 
-    const result = (card.toolCall.arguments as any)?.result;
+    const result = (toolCall.arguments as any)?.result;
     const invalidResult = typeof result !== 'string' || !result.trim();
     const violatesRules = hasOtherTools || hasMultipleReturns || invalidResult;
-    if (!violatesRules) return card;
+    if (!violatesRules) return toolCall;
 
     changed = true;
     return {
-      ...card,
-      toolCall: {
-        ...card.toolCall,
-        status: 'failed' as const,
-        failureType: 'validation' as const,
-        reason: RETURN_RESULT_RULE_REASON,
-        result: undefined,
-        acceptedAt: undefined,
-      },
+      ...toolCall,
+      status: 'failed' as const,
+      failureType: 'validation' as const,
+      reason: RETURN_RESULT_RULE_REASON,
+      result: undefined,
+      acceptedAt: undefined,
     };
   });
 
-  return changed ? next : cards;
+  return changed ? next : toolCalls;
+}
+
+function replaceLastAssistantToolCalls(invocationKey: string, toolCalls: ToolCallMetadata[]): boolean {
+  const runtime = useSubAgentRuntimeStore.getState();
+  const invocation = runtime.getInvocationByKey(invocationKey);
+  if (!invocation) return false;
+
+  const history = invocation.history.slice();
+  const lastAssistantIndex = findLastAssistantMessageIndex(history);
+  if (lastAssistantIndex < 0) return false;
+
+  history[lastAssistantIndex] = {
+    ...history[lastAssistantIndex],
+    toolCalls,
+  } as any;
+
+  runtime.replaceHistory(invocationKey, history);
+  return true;
+}
+
+function appendAssistantMessage(invocationKey: string, message: ChatMessage): boolean {
+  const runtime = useSubAgentRuntimeStore.getState();
+  const invocation = runtime.getInvocationByKey(invocationKey);
+  if (!invocation) return false;
+
+  runtime.replaceHistory(invocationKey, [...invocation.history, message]);
+  return true;
 }
 
 async function persistInvocationSnapshot(invocationKey: string): Promise<void> {
@@ -254,6 +298,7 @@ async function runTurn(invocationKey: string): Promise<void> {
     runtime.updateInvocation(invocationKey, {
       status: 'error',
       error: 'Missing runtime configuration for Sub Agent invocation',
+      activeSessionId: null,
     });
     await persistInvocationSnapshot(invocationKey);
     const completion = completions.get(invocationKey);
@@ -327,7 +372,6 @@ async function runTurn(invocationKey: string): Promise<void> {
     return;
   }
 
-  // Append assistant message to history
   const assistantMessage: ChatMessage = {
     id: generateTempId(),
     role: 'assistant',
@@ -337,8 +381,9 @@ async function runTurn(invocationKey: string): Promise<void> {
     thinking_details: latest.thinkingDetails,
   } as any;
 
-  const nextHistory = [...invocation.history, assistantMessage];
-  runtime.replaceHistory(invocationKey, nextHistory);
+  if (!appendAssistantMessage(invocationKey, assistantMessage)) {
+    return;
+  }
 
   if (!latest.toolCalls || latest.toolCalls.length === 0) {
     const output = contentText(latest.contentParts);
@@ -354,46 +399,27 @@ async function runTurn(invocationKey: string): Promise<void> {
     return;
   }
 
-  // Validate tool calls and store edit cards in llmSessionStore
-  await stageSessionEdits({
-    sessionId: handle.sessionId,
+  const allowedToolNames = (invocation.tools ?? [])
+    .map((tool) => tool.name)
+    .filter((name): name is string => Boolean(name && name.trim()));
+
+  const staged = await stageToolCalls({
     projectId: invocation.projectId,
     language: invocation.language,
     toolCalls: latest.toolCalls,
+    allowedToolNames: allowedToolNames.length > 0 ? allowedToolNames : undefined,
   });
 
-  const staged = sessionStore.getSessionById(handle.sessionId);
-  if (!staged?.editCards || staged.editCards.length === 0) {
-    const errorMessage = staged?.error || 'Failed to stage tool calls';
-    runtime.updateInvocation(invocationKey, {
-      status: 'error',
-      error: errorMessage,
-      activeSessionId: null,
-    });
-    await persistInvocationSnapshot(invocationKey);
-    const completion = completions.get(invocationKey);
-    completion?.reject(new Error(errorMessage));
-    completions.delete(invocationKey);
+  const adjustedToolCalls = applyReturnResultBatchRules(staged.toolCalls);
+  if (!replaceLastAssistantToolCalls(invocationKey, adjustedToolCalls)) {
     return;
   }
 
-  // Sub Agent batch rules (non-fatal validation): mark invalid return_sub_agent_result as failed so the reason is sent via tool_results.
-  const adjustedCards = applyReturnResultBatchRules(staged.editCards as StoredEditCard[]);
-  if (adjustedCards !== staged.editCards) {
-    sessionStore.updateSession(handle.sessionId, { editCards: adjustedCards } as any);
-  }
-
-  // Sync validated statuses into invocation history
-  const updatedToolCalls = toToolCallMetadata(adjustedCards);
-  const updatedAssistant: ChatMessage = {
-    ...assistantMessage,
-    toolCalls: updatedToolCalls,
-  } as any;
-  runtime.replaceHistory(invocationKey, [...invocation.history, updatedAssistant]);
-
   runtime.updateInvocation(invocationKey, {
-    status: 'awaiting_confirmation',
+    status: hasPendingDecisionToolCalls(adjustedToolCalls) ? 'awaiting_confirmation' : 'paused',
+    activeSessionId: null,
   });
+
   await persistInvocationSnapshot(invocationKey);
 }
 
@@ -479,14 +505,13 @@ export const SubAgentManager = {
 
     const done = ensureCompletion(invocationKey);
 
-    // Start the first turn immediately.
     void runTurn(invocationKey);
 
     return done;
   },
 
   /**
-   * Apply tool calls for the active session, then optionally auto-continue the Sub Agent.
+   * Apply tool calls from invocation.history, then optionally auto-continue the Sub Agent.
    */
   async applyAndContinue(params: {
     invocationKey: string;
@@ -494,23 +519,42 @@ export const SubAgentManager = {
     autoContinue: boolean;
   }): Promise<void> {
     const { invocationKey, decisions, autoContinue } = params;
-    const runtime = useSubAgentRuntimeStore.getState();
-    const initial = runtime.getInvocationByKey(invocationKey);
-    if (!initial?.activeSessionId) return;
 
-    // Ensure nested parent references use persisted IDs from backend.
     await persistInvocationSnapshot(invocationKey);
 
-    const invocation = useSubAgentRuntimeStore.getState().getInvocationByKey(invocationKey);
-    if (!invocation?.activeSessionId) return;
+    const runtime = useSubAgentRuntimeStore.getState();
+    const invocation = runtime.getInvocationByKey(invocationKey);
+    if (!invocation) return;
+
+    const lastAssistantIndex = findLastAssistantMessageIndex(invocation.history);
+    if (lastAssistantIndex < 0) return;
+
+    const assistantMessage = invocation.history[lastAssistantIndex];
+    const currentToolCalls = assistantMessage.toolCalls ?? [];
+    if (!currentToolCalls.length) {
+      if (!autoContinue) {
+        runtime.updateInvocation(invocationKey, { status: 'paused', activeSessionId: null });
+        await persistInvocationSnapshot(invocationKey);
+        return;
+      }
+      await runTurn(invocationKey);
+      return;
+    }
 
     const parentSubMessageId = findLastAssistantMessageId(invocation.history);
     const parentSubInvocationId = invocation.persistentId;
 
-    await applySessionEdits({
-      sessionId: invocation.activeSessionId,
+    const runningToolCalls = markToolCallsRunning({
+      toolCalls: currentToolCalls,
+      decisions,
+    });
+
+    replaceLastAssistantToolCalls(invocationKey, runningToolCalls);
+
+    const applied = await applyToolCalls({
       projectId: invocation.projectId,
       language: invocation.language,
+      toolCalls: runningToolCalls,
       decisions,
       options: {
         ...(invocation.handlerOptions ?? {}),
@@ -523,35 +567,24 @@ export const SubAgentManager = {
       invocationCaller: 'subAgent',
     });
 
-    // Sync applied statuses back into invocation history
-    const session = useLLMSessionStore.getState().getSessionById(invocation.activeSessionId);
-    const cards = session?.editCards;
-    if (cards) {
-      const updatedToolCalls = toToolCallMetadata(cards);
-      const history = invocation.history.slice();
-      const lastIdx = history.map((m) => m.role).lastIndexOf('assistant');
-      if (lastIdx >= 0) {
-        history[lastIdx] = { ...history[lastIdx], toolCalls: updatedToolCalls } as any;
-        runtime.replaceHistory(invocationKey, history);
-      }
-    }
+    replaceLastAssistantToolCalls(invocationKey, applied.toolCalls);
     await persistInvocationSnapshot(invocationKey);
 
-    const hasPendingDecisions = cards?.some(
-      (c) => c.toolCall.status === 'pending' || c.toolCall.status === 'validating'
-    ) ?? false;
-    if (hasPendingDecisions) {
-      runtime.updateInvocation(invocationKey, { status: 'awaiting_confirmation' });
+    if (hasPendingDecisionToolCalls(applied.toolCalls)) {
+      runtime.updateInvocation(invocationKey, {
+        status: 'awaiting_confirmation',
+        activeSessionId: null,
+      });
       await persistInvocationSnapshot(invocationKey);
       return;
     }
 
-    // If Sub Agent returned a final result, complete immediately (do not continue to next turn).
-    const acceptedReturn = cards?.find(
-      (c) => c.toolCall.toolName === RETURN_RESULT_TOOL_NAME && c.toolCall.status === 'accepted'
+    const acceptedReturn = applied.toolCalls.find(
+      (toolCall) => toolCall.tool_name === RETURN_RESULT_TOOL_NAME && toolCall.status === 'accepted'
     );
+
     if (acceptedReturn) {
-      const output = acceptedReturn.toolCall.result?.message ?? '';
+      const output = acceptedReturn.result?.message ?? '';
       runtime.updateInvocation(invocationKey, {
         status: 'completed',
         finalOutput: output,
@@ -566,7 +599,10 @@ export const SubAgentManager = {
     }
 
     if (!autoContinue) {
-      runtime.updateInvocation(invocationKey, { status: 'paused' });
+      runtime.updateInvocation(invocationKey, {
+        status: 'paused',
+        activeSessionId: null,
+      });
       await persistInvocationSnapshot(invocationKey);
       return;
     }

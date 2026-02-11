@@ -1,5 +1,4 @@
 import type { ContentPart, ToolCallProgress, ToolCallMetadata, TokenUsage } from '../llm/requestTypes';
-import type { StoredEditCard } from './uiTypes';
 
 export type TaskKind =
   | 'aiEdit'
@@ -43,8 +42,6 @@ export interface TaskSessionState<TInput = unknown, TResult = unknown> {
 
   /** Tool names provided to the model for this session (used for validation). */
   availableToolNames?: string[];
-
-  editCards?: StoredEditCard[];
 
   result?: TResult;
   error?: string;

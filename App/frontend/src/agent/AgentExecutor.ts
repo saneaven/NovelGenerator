@@ -1,11 +1,8 @@
 /**
  * AgentExecutor - Direct LLM execution for Agent workspace
  *
- * Uses LLMTaskExecutor directly without JourneyRuntime.
- * Manages agent-specific concerns:
- * - Message creation in agentStore
- * - Streaming via llmTaskStore (LLMTask handles session management)
- * - Tool call handling
+ * Uses LLMTask directly and persists tool call state into agentStore messages.
+ * llmSessionStore is used only for streaming/cancellation lifecycle.
  */
 
 import { useAgentStore } from '../store/agentStore';
@@ -14,21 +11,23 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useCredentialsStore } from '../store/credentialsStore';
 import { useLLMSessionStore } from '../store/llmSessionStore';
 import { useSubAgentStore } from '../store/subAgentStore';
+import { useErrorStore } from '../store/errorStore';
 import { startLLMSession } from '../llmSession';
 import { LLMTaskMode, type AgentPromptContext, type AgentTranslationPromptContext, createEmptyUserHistory } from '../llm';
 import type { OutputMode } from '../llm/types';
-import type { ChatMessage, ContentPart } from '../llm/requestTypes';
+import type { ChatMessage, ContentPart, ToolCallMetadata } from '../llm/requestTypes';
 import { getToolsForSet } from '../toolCall';
 import { buildCallToolSchema } from '../subAgent/tools/SubAgentCallTools';
 import type { AgentRunMode, WorkspaceSurface, InvocationCaller } from '../types/agentRuntime';
 import {
-  stageSessionEdits,
-  applySessionEdits,
-  rejectAllSessionEdits,
-  toToolCallMetadata,
-} from '../llmTask/toolCalls/toolCallEngine';
+  stageToolCalls,
+  applyToolCalls,
+  rejectAllToolCalls,
+  markToolCallsRunning,
+} from '../toolCall/runtime';
 import type { HandlerOptions } from '../toolCall/apply/types';
-import type { ToolCallDecisionMap } from '../toolCall/types';
+import type { ToolCallDecisionMap, ToolCallStatus } from '../toolCall/types';
+import { isReadTool } from '../toolCall/schemas/schemaRegistry';
 import { generateTempId } from '../utils/tempId';
 import { registerSessionNotification, updateSessionNotification } from '../llmTask/notificationHelpers';
 
@@ -67,9 +66,42 @@ export interface AgentTranslationResult {
 
 function getMessageText(contentParts: Array<{ type: string; text: string }>): string {
   return contentParts
-    .filter((p) => p.type === 'content')
-    .map((p) => p.text)
+    .filter((part) => part.type === 'content')
+    .map((part) => part.text)
     .join('');
+}
+
+function getAllowedToolNames(tools: Array<{ name?: unknown }> | undefined): string[] | undefined {
+  if (!Array.isArray(tools)) return undefined;
+  const names = tools
+    .map((tool) => (typeof tool?.name === 'string' ? tool.name : null))
+    .filter((name): name is string => Boolean(name && name.trim()));
+  return names.length > 0 ? names : undefined;
+}
+
+function getMessageToolCalls(params: {
+  projectId: string;
+  agentId: string;
+  assistantMessageId: string;
+}): ToolCallMetadata[] {
+  const { projectId, agentId, assistantMessageId } = params;
+  const agent = useAgentStore.getState().getAgent(projectId, agentId);
+  const message = agent?.messages.find((item) => item.id === assistantMessageId);
+  if (!Array.isArray(message?.toolCalls)) return [];
+  return message.toolCalls;
+}
+
+async function removePlaceholderMessage(params: {
+  projectId: string;
+  agentId: string;
+  assistantMessageId: string;
+}): Promise<void> {
+  const { projectId, agentId, assistantMessageId } = params;
+  try {
+    await useAgentStore.getState().deleteMessage(projectId, agentId, assistantMessageId);
+  } catch (error) {
+    console.error('Failed to remove placeholder assistant message:', error);
+  }
 }
 
 export const AgentExecutor = {
@@ -166,8 +198,8 @@ export const AgentExecutor = {
       }
 
       const dynamicSubAgentTools = subAgentStore.subAgents
-        .filter((s) => s.enabled && s.allowed_invocation_modes.includes(input.runMode))
-        .sort((a, b) => a.display_name.localeCompare(b.display_name))
+        .filter((subAgent) => subAgent.enabled && subAgent.allowed_invocation_modes.includes(input.runMode))
+        .sort((left, right) => left.display_name.localeCompare(right.display_name))
         .map(buildCallToolSchema);
 
       tools = [...(baseTools ?? []), ...dynamicSubAgentTools];
@@ -218,8 +250,18 @@ export const AgentExecutor = {
     onSessionCreated?.(sessionId);
 
     void handle.done.then(async (finalSession) => {
-
       if (finalSession.status !== 'success') {
+        await removePlaceholderMessage({
+          projectId: input.projectId,
+          agentId: input.agentId,
+          assistantMessageId,
+        });
+
+        const message =
+          finalSession.status === 'cancelled'
+            ? 'Agent request was cancelled.'
+            : (finalSession.error ?? 'Agent request failed.');
+        useErrorStore.getState().showError('Agent Request Failed', message);
         return;
       }
 
@@ -246,16 +288,30 @@ export const AgentExecutor = {
         console.error('Failed to sync message to backend:', error);
       }
 
-      // 5) Handle tool calls
+      // 5) Stage tool calls directly into the assistant message
       if (finalSession.toolCalls.length > 0) {
-        await stageSessionEdits({
-          sessionId,
-          projectId: input.projectId,
-          language: settings.mainLanguage,
-          toolCalls: finalSession.toolCalls,
-        });
-        // Sync to agentStore
-        await syncAgentToolCalls(sessionId);
+        try {
+          const allowedToolNames = getAllowedToolNames((mergedPromptContext as any).tools);
+          const staged = await stageToolCalls({
+            projectId: input.projectId,
+            language: settings.mainLanguage,
+            toolCalls: finalSession.toolCalls,
+            allowedToolNames,
+          });
+
+          await agentStore.updateMessageToolCalls(
+            input.projectId,
+            input.agentId,
+            assistantMessageId,
+            staged.toolCalls
+          );
+        } catch (error) {
+          console.error('Failed to stage agent tool calls:', error);
+          useErrorStore.getState().showError(
+            'Tool Call Error',
+            error instanceof Error ? error.message : String(error)
+          );
+        }
       }
     });
 
@@ -309,14 +365,12 @@ export const AgentExecutor = {
 
     const initialSession = sessionStore.getSessionById(sessionId);
     if (initialSession) {
-      // Register notification now that we have sessionId
       registerSessionNotification(initialSession, {
         onClick: () => useAgentUIStore.getState().openDetailModal(sessionId),
         onDismiss: () => sessionStore.clearSession(sessionId),
       });
     }
 
-    // Notify caller of sessionId
     onSessionCreated?.(sessionId);
 
     void handle.done.then(async (finalSession) => {
@@ -328,8 +382,8 @@ export const AgentExecutor = {
       }
 
       const translated = finalSession.contentParts
-        .filter((p: ContentPart) => p.type === 'content')
-        .map((p: ContentPart) => p.text)
+        .filter((part: ContentPart) => part.type === 'content')
+        .map((part: ContentPart) => part.text)
         .join('')
         .trim();
 
@@ -343,7 +397,6 @@ export const AgentExecutor = {
         return;
       }
 
-      // Replace content in original content parts
       const translatedContentParts = input.originalContentParts.map((part) => {
         if (part.type === 'content') {
           return { ...part, text: translated };
@@ -372,82 +425,73 @@ export const AgentExecutor = {
 };
 
 /**
- * Sync tool call status from editCards to agentStore message
- */
-async function syncAgentToolCalls(sessionId: string): Promise<void> {
-  const sessionStore = useLLMSessionStore.getState();
-  const agentStore = useAgentStore.getState();
-  const session = sessionStore.getSessionById(sessionId);
-
-  if (!session || session.kind !== 'agent') return;
-
-  const agentId = (session.input as AgentExecutorInput)?.agentId;
-  const projectId = (session.input as AgentExecutorInput)?.projectId;
-  const assistantMessageId = (session.result as AgentExecutorResult)?.assistantMessageId;
-
-  if (!agentId || !projectId || !assistantMessageId) return;
-
-  const cards = session.editCards ?? [];
-  if (cards.length === 0) return;
-
-  await agentStore.updateMessageToolCalls(
-    projectId,
-    agentId,
-    assistantMessageId,
-    toToolCallMetadata(cards)
-  );
-}
-
-/**
- * Execute confirmed agent tool calls with sync.
+ * Execute confirmed agent tool calls from message.toolCalls.
  * After read operations are confirmed, tool_results will be included in the next LLM call.
  */
 export async function executeAgentToolCalls(params: {
-  sessionId: string;
   projectId: string;
+  agentId: string;
+  assistantMessageId: string;
   language: string;
   decisions: ToolCallDecisionMap;
   options: HandlerOptions;
   invocationCaller?: InvocationCaller;
-}): Promise<{ hasAcceptedReads: boolean }> {
-  const session = useLLMSessionStore.getState().getSessionById(params.sessionId);
-  const sessionAgentId = (session?.input as AgentExecutorInput | undefined)?.agentId;
-  const assistantMessageId = (session?.result as AgentExecutorResult | undefined)?.assistantMessageId;
+}): Promise<{ hasAcceptedReads: boolean; hasPendingDecisions: boolean }> {
+  const { projectId, agentId, assistantMessageId, language, decisions, options, invocationCaller } = params;
+  const agentStore = useAgentStore.getState();
 
-  const effectiveOptions: HandlerOptions = { ...params.options };
-  if (!effectiveOptions.agentId && sessionAgentId) {
-    effectiveOptions.agentId = sessionAgentId;
-  }
-  if (!effectiveOptions.parentAgentMessageId && assistantMessageId) {
-    effectiveOptions.parentAgentMessageId = assistantMessageId;
+  const toolCalls = getMessageToolCalls({ projectId, agentId, assistantMessageId });
+  if (toolCalls.length === 0) {
+    return { hasAcceptedReads: false, hasPendingDecisions: false };
   }
 
-  await applySessionEdits({ ...params, options: effectiveOptions });
-  await syncAgentToolCalls(params.sessionId);
+  const effectiveOptions: HandlerOptions = {
+    ...options,
+    agentId: options.agentId ?? agentId,
+    parentAgentMessageId: options.parentAgentMessageId ?? assistantMessageId,
+  };
 
-  // Check if we have accepted read operations that need continuation
-  const updatedSession = useLLMSessionStore.getState().getSessionById(params.sessionId);
-  if (!updatedSession?.editCards) return { hasAcceptedReads: false };
+  const runningToolCalls = markToolCallsRunning({ toolCalls, decisions });
+  await agentStore.updateMessageToolCalls(projectId, agentId, assistantMessageId, runningToolCalls);
 
-  const { isReadTool } = await import('../toolCall/schemas/schemaRegistry');
-  const hasAcceptedReads = updatedSession.editCards.some(
-    c => c.toolCall.status === 'accepted' && isReadTool(c.toolCall.toolName)
+  const applied = await applyToolCalls({
+    projectId,
+    language,
+    toolCalls: runningToolCalls,
+    decisions,
+    options: effectiveOptions,
+    invocationCaller,
+  });
+
+  await agentStore.updateMessageToolCalls(projectId, agentId, assistantMessageId, applied.toolCalls);
+
+  const hasAcceptedReads = applied.toolCalls.some(
+    (toolCall) => toolCall.status === 'accepted' && isReadTool(toolCall.tool_name)
   );
 
-  // Return whether continuation is needed - caller handles the continuation
-  return { hasAcceptedReads };
+  const hasPendingDecisions = applied.toolCalls.some((toolCall) => {
+    const status = (toolCall.status ?? 'pending') as ToolCallStatus;
+    return status === 'pending' || status === 'validating' || status === 'running';
+  });
+
+  return { hasAcceptedReads, hasPendingDecisions };
 }
 
-/** @deprecated Use executeAgentToolCalls instead */
-export const applyAgentEdits = executeAgentToolCalls;
-
 /**
- * Reject all agent edits with sync
+ * Reject all pending agent tool calls in message.toolCalls.
  */
 export async function rejectAllAgentEdits(params: {
-  sessionId: string;
+  projectId: string;
+  agentId: string;
+  assistantMessageId: string;
   reason?: string;
 }): Promise<void> {
-  rejectAllSessionEdits(params);
-  await syncAgentToolCalls(params.sessionId);
+  const { projectId, agentId, assistantMessageId, reason } = params;
+  const agentStore = useAgentStore.getState();
+
+  const toolCalls = getMessageToolCalls({ projectId, agentId, assistantMessageId });
+  if (toolCalls.length === 0) return;
+
+  const rejected = rejectAllToolCalls({ toolCalls, reason });
+  await agentStore.updateMessageToolCalls(projectId, agentId, assistantMessageId, rejected.toolCalls);
 }

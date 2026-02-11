@@ -5,11 +5,11 @@ import { useLLMSessionStore } from '../store/llmSessionStore';
 import { useJourneyStore, type Journey } from '../store/journeyStore';
 import { startLLMSession } from '../llmSession';
 import {
-  stageSessionEdits,
-  applySessionEdits,
-  rejectAllSessionEdits,
-  toToolCallMetadata,
-} from '../llmTask/toolCalls/toolCallEngine';
+  stageToolCalls,
+  applyToolCalls,
+  rejectAllToolCalls,
+  markToolCallsRunning,
+} from '../toolCall/runtime';
 import type { HandlerOptions } from '../toolCall/apply/types';
 import type { ToolCallDecisionMap } from '../toolCall/types';
 import { registerJourneyNotification, updateJourneyNotification } from './notificationHelpers';
@@ -18,16 +18,22 @@ import { getJourneySpec, type JourneyKind } from './journeySpecs';
 import type { LLMTaskJourney, JourneySpec } from './types';
 import { createChatMessage, collapseContentParts } from './types';
 
-// =====================================================================
-// Journey Tool Call Sync Helpers (Simplified)
-// =====================================================================
-
 function findLastAssistantMessageId(journey: Journey | LLMTaskJourney): string | null {
   for (let i = journey.messages.length - 1; i >= 0; i--) {
-    const msg = journey.messages[i];
-    if (msg.role === 'assistant') return msg.id;
+    const message = journey.messages[i];
+    if (message.role === 'assistant') return message.id;
   }
   return null;
+}
+
+function getMessageToolCalls(params: {
+  journey: Journey;
+  assistantMessageId: string;
+}): ToolCallMetadata[] {
+  const { journey, assistantMessageId } = params;
+  const message = journey.messages.find((item) => item.id === assistantMessageId);
+  if (!Array.isArray(message?.toolCalls)) return [];
+  return message.toolCalls;
 }
 
 function updateJourneyAssistantToolCalls(params: {
@@ -40,65 +46,47 @@ function updateJourneyAssistantToolCalls(params: {
   const journey = journeyStore.getJourneyById(journeyId);
   if (!journey) return;
 
-  const nextMessages = journey.messages.map((m) =>
-    m.id === assistantMessageId ? { ...m, toolCalls } : m
+  const nextMessages = journey.messages.map((message) =>
+    message.id === assistantMessageId ? { ...message, toolCalls } : message
   );
+
   journeyStore.updateJourney(journeyId, { messages: nextMessages });
 }
 
-function syncAssistantToolCallsFromCards(params: {
-  journeyId: string;
-  assistantMessageId: string;
-}): void {
-  const { journeyId, assistantMessageId } = params;
-  const journeyStore = useJourneyStore.getState();
-  const journey = journeyStore.getJourneyById(journeyId);
-  const cards = journey?.editCards ?? [];
-  if (!cards.length) return;
-  updateJourneyAssistantToolCalls({
-    journeyId,
-    assistantMessageId,
-    toolCalls: toToolCallMetadata(cards),
-  });
-}
-
-/**
- * Stage edits for journey - stores in both llmTaskStore and journeyStore
- */
-async function stageJourneyEdits(params: {
+async function stageJourneyToolCalls(params: {
   journeyId: string;
   assistantMessageId: string;
   projectId: string;
   language: string;
   toolCalls: ToolCallMetadata[];
+  allowedToolNames?: string[];
 }): Promise<void> {
-  const { journeyId, assistantMessageId, projectId, language, toolCalls } = params;
+  const { journeyId, assistantMessageId, projectId, language, toolCalls, allowedToolNames } = params;
   const journeyStore = useJourneyStore.getState();
-  const journey = journeyStore.getJourneyById(journeyId);
-  const sessionId = journey?.activeSessionId;
 
-  if (!sessionId) {
-    throw new Error('No session found for journey');
-  }
+  const staged = await stageToolCalls({
+    projectId,
+    language,
+    toolCalls,
+    allowedToolNames,
+  });
 
-  // Store initial (pending) tool calls on the assistant message
-  updateJourneyAssistantToolCalls({ journeyId, assistantMessageId, toolCalls });
+  updateJourneyAssistantToolCalls({
+    journeyId,
+    assistantMessageId,
+    toolCalls: staged.toolCalls,
+  });
 
-  // Stage edits using journey.sessionId
-  await stageSessionEdits({ sessionId, projectId, language, toolCalls });
-
-  // Copy editCards from llmSessionStore to journeyStore
-  const session = useLLMSessionStore.getState().getSessionById(sessionId);
-  if (session?.editCards) {
-    journeyStore.updateJourney(journeyId, { editCards: session.editCards });
-  }
-
-  // Mirror validation results back into assistant message
-  syncAssistantToolCallsFromCards({ journeyId, assistantMessageId });
+  journeyStore.updateJourney(journeyId, {
+    status: staged.status,
+    error: staged.error,
+    warning: staged.warning,
+    activeSessionId: undefined,
+  });
 }
 
 /**
- * Apply journey edits with sync
+ * Apply journey tool calls from journey.messages[lastAssistant].toolCalls.
  */
 export async function applyJourneyEdits(params: {
   journeyId: string;
@@ -110,31 +98,58 @@ export async function applyJourneyEdits(params: {
   const { journeyId, projectId, language, decisions, options } = params;
   const journeyStore = useJourneyStore.getState();
   const journey = journeyStore.getJourneyById(journeyId);
-  const assistantMessageId = journey ? findLastAssistantMessageId(journey) : null;
-  const sessionId = journey?.activeSessionId;
-
-  if (!sessionId) {
-    throw new Error('No session found for journey');
+  if (!journey) {
+    throw new Error(`Journey not found: ${journeyId}`);
   }
 
-  // Use journey.sessionId for applySessionEdits
-  await applySessionEdits({ sessionId, projectId, language, decisions, options });
-
-  // Copy updated editCards and status from llmSessionStore to journeyStore
-  const session = useLLMSessionStore.getState().getSessionById(sessionId);
-  if (session) {
-    journeyStore.updateJourney(journeyId, {
-      editCards: session.editCards,
-      status: session.status,
-      error: session.error,
-    });
+  const assistantMessageId = findLastAssistantMessageId(journey);
+  if (!assistantMessageId) {
+    throw new Error('No assistant message found for journey');
   }
 
-  if (assistantMessageId) {
-    syncAssistantToolCallsFromCards({ journeyId, assistantMessageId });
+  const currentToolCalls = getMessageToolCalls({ journey, assistantMessageId });
+  if (currentToolCalls.length === 0) {
+    return;
   }
 
-  // Update notification with new status
+  journeyStore.updateJourney(journeyId, {
+    status: 'applying',
+    error: undefined,
+    warning: undefined,
+  });
+
+  const runningToolCalls = markToolCallsRunning({
+    toolCalls: currentToolCalls,
+    decisions,
+  });
+
+  updateJourneyAssistantToolCalls({
+    journeyId,
+    assistantMessageId,
+    toolCalls: runningToolCalls,
+  });
+
+  const applied = await applyToolCalls({
+    projectId,
+    language,
+    toolCalls: runningToolCalls,
+    decisions,
+    options,
+  });
+
+  updateJourneyAssistantToolCalls({
+    journeyId,
+    assistantMessageId,
+    toolCalls: applied.toolCalls,
+  });
+
+  journeyStore.updateJourney(journeyId, {
+    status: applied.status,
+    error: applied.error,
+    warning: applied.warning,
+    activeSessionId: undefined,
+  });
+
   const updatedJourney = journeyStore.getJourneyById(journeyId);
   if (updatedJourney) {
     updateJourneyNotification(journeyId, updatedJourney);
@@ -142,37 +157,38 @@ export async function applyJourneyEdits(params: {
 }
 
 /**
- * Reject all journey edits with sync
+ * Reject all pending journey tool calls.
  */
 export function rejectAllJourneyEdits(params: { journeyId: string; reason?: string }): void {
   const { journeyId, reason } = params;
   const journeyStore = useJourneyStore.getState();
   const journey = journeyStore.getJourneyById(journeyId);
-  const assistantMessageId = journey ? findLastAssistantMessageId(journey) : null;
-  const sessionId = journey?.activeSessionId;
+  if (!journey) return;
 
-  if (!sessionId) {
-    console.error('No session found for journey');
-    return;
-  }
+  const assistantMessageId = findLastAssistantMessageId(journey);
+  if (!assistantMessageId) return;
 
-  // Use journey.sessionId for rejectAllSessionEdits
-  rejectAllSessionEdits({ sessionId, reason });
+  const currentToolCalls = getMessageToolCalls({ journey, assistantMessageId });
+  if (currentToolCalls.length === 0) return;
 
-  // Copy updated editCards and status from llmSessionStore to journeyStore
-  const session = useLLMSessionStore.getState().getSessionById(sessionId);
-  if (session) {
-    journeyStore.updateJourney(journeyId, {
-      editCards: session.editCards,
-      status: session.status,
-    });
-  }
+  const rejected = rejectAllToolCalls({
+    toolCalls: currentToolCalls,
+    reason,
+  });
 
-  if (assistantMessageId) {
-    syncAssistantToolCallsFromCards({ journeyId, assistantMessageId });
-  }
+  updateJourneyAssistantToolCalls({
+    journeyId,
+    assistantMessageId,
+    toolCalls: rejected.toolCalls,
+  });
 
-  // Update notification with new status
+  journeyStore.updateJourney(journeyId, {
+    status: rejected.status,
+    error: rejected.error,
+    warning: rejected.warning,
+    activeSessionId: undefined,
+  });
+
   const updatedJourney = journeyStore.getJourneyById(journeyId);
   if (updatedJourney) {
     updateJourneyNotification(journeyId, updatedJourney);
@@ -183,16 +199,16 @@ export function rejectAllJourneyEdits(params: { journeyId: string; reason?: stri
  * Get language for journey based on editing targets
  */
 function getJourneyLanguage(journey: Journey): string {
-  const t = journey.editingTargets;
-  if (t.kind === 'translateObjects') return t.targetLanguage;
-  if (t.kind === 'aiEdit') return t.language;
+  const targets = journey.editingTargets;
+  if (targets.kind === 'translateObjects') return targets.targetLanguage;
+  if (targets.kind === 'aiEdit') return targets.language;
   return useSettingsStore.getState().getSettings().mainLanguage;
 }
 
 /**
  * Convert Journey to LLMTaskJourney for spec compatibility
  */
-function toLegacyJourney(journey: Journey): LLMTaskJourney {
+function toSpecJourney(journey: Journey): LLMTaskJourney {
   return {
     id: journey.id,
     label: journey.label,
@@ -204,11 +220,7 @@ function toLegacyJourney(journey: Journey): LLMTaskJourney {
   };
 }
 
-// =====================================================================
-// Core Runtime Functions (Simplified like Agent)
-// =====================================================================
-
-function extractUserInput(kind: JourneyKind, input: any): string {
+function extractUserInput(kind: JourneyKind, input: unknown): string {
   if (kind === 'aiEdit') return (input as any).userRequest || '';
   if (kind === 'translateObjects') return (input as any).userInput || '';
   if (kind === 'imagePrompt' || kind === 'sceneImage') return (input as any).userRequest || '';
@@ -226,12 +238,13 @@ type AttemptContext = {
 function createFailedSession(params: {
   kind: JourneyKind;
   label: string;
-  input: any;
+  input: unknown;
   error: string;
 }): string {
   const { kind, label, input, error } = params;
   const sessionId = `llm-${generateTempId()}`;
   const now = Date.now();
+
   useLLMSessionStore.getState().createSession({
     id: sessionId,
     kind: kind as any,
@@ -245,6 +258,7 @@ function createFailedSession(params: {
     toolCalls: [],
     error,
   } as any);
+
   return sessionId;
 }
 
@@ -257,11 +271,11 @@ function startAttempt(params: { journeyId: string }): AttemptContext {
   }
 
   const spec = getJourneySpec(journey.kind) as JourneySpec<any>;
-  const legacyJourney = toLegacyJourney(journey);
+  const specJourney = toSpecJourney(journey);
 
   let llmConfig: ReturnType<JourneySpec<any>['buildLLMConfig']>;
   try {
-    llmConfig = spec.buildLLMConfig(journey.input, legacyJourney);
+    llmConfig = spec.buildLLMConfig(journey.input, specJourney);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const failedSessionId = createFailedSession({
@@ -270,9 +284,21 @@ function startAttempt(params: { journeyId: string }): AttemptContext {
       input: journey.input,
       error: message,
     });
-    journeyStore.updateJourney(journeyId, { status: 'error', error: message, activeSessionId: failedSessionId });
+
+    journeyStore.updateJourney(journeyId, {
+      status: 'error',
+      error: message,
+      activeSessionId: undefined,
+    });
     updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
-    return { journeyId, sessionId: failedSessionId, assistantMessageId: '', llmConfig: {} as any, spec };
+
+    return {
+      journeyId,
+      sessionId: failedSessionId,
+      assistantMessageId: '',
+      llmConfig: {} as any,
+      spec,
+    };
   }
 
   const history = [...journey.messages];
@@ -304,12 +330,22 @@ function startAttempt(params: { journeyId: string }): AttemptContext {
     warning: undefined,
     activeSessionId: handle.sessionId,
     sessionHistory,
-    editCards: undefined,
   });
 
   updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
 
-  void handle.done.then((session) => finalizeAttempt({ journeyId, sessionId: handle.sessionId, assistantMessageId, llmConfig, spec }, session));
+  void handle.done.then((session) => {
+    void finalizeAttempt(
+      {
+        journeyId,
+        sessionId: handle.sessionId,
+        assistantMessageId,
+        llmConfig,
+        spec,
+      },
+      session
+    );
+  });
 
   return { journeyId, sessionId: handle.sessionId, assistantMessageId, llmConfig, spec };
 }
@@ -322,13 +358,17 @@ async function finalizeAttempt(ctx: AttemptContext, session: any): Promise<void>
   if (!journey) return;
 
   if (session.status === 'cancelled') {
-    journeyStore.updateJourney(journeyId, { status: 'cancelled' });
+    journeyStore.updateJourney(journeyId, { status: 'cancelled', activeSessionId: undefined });
     updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
     return;
   }
 
   if (session.status === 'error') {
-    journeyStore.updateJourney(journeyId, { status: 'error', error: session.error ?? 'AI request failed.' });
+    journeyStore.updateJourney(journeyId, {
+      status: 'error',
+      error: session.error ?? 'AI request failed.',
+      activeSessionId: undefined,
+    });
     updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
     return;
   }
@@ -337,17 +377,18 @@ async function finalizeAttempt(ctx: AttemptContext, session: any): Promise<void>
   const currentJourney = journeyStore.getJourneyById(journeyId);
   if (!currentJourney) return;
 
-  const idx = currentJourney.messages.findIndex((m) => m.id === assistantMessageId);
-  if (idx < 0) return;
+  const assistantIndex = currentJourney.messages.findIndex((message) => message.id === assistantMessageId);
+  if (assistantIndex < 0) return;
 
   const finalizedAssistant: ChatMessage = {
-    ...currentJourney.messages[idx],
+    ...currentJourney.messages[assistantIndex],
     contentParts: session.contentParts ?? [],
     toolCalls: session.toolCalls ?? [],
     thinking_details: session.thinkingDetails ?? undefined,
   };
+
   const finalizedMessages = currentJourney.messages.slice();
-  finalizedMessages[idx] = finalizedAssistant;
+  finalizedMessages[assistantIndex] = finalizedAssistant;
 
   journeyStore.updateJourney(journeyId, {
     messages: finalizedMessages,
@@ -356,14 +397,16 @@ async function finalizeAttempt(ctx: AttemptContext, session: any): Promise<void>
     usage: session.usage,
   });
 
-  // Determine output mode from promptContext
   const outputMode = (llmConfig.promptContext as any).outputMode ?? 'tool_call';
 
-  // Raw output mode: delegate to spec.handleRawOutput
   if (outputMode === 'raw_output') {
     const text = collapseContentParts(session.contentParts ?? []).trim();
     if (!text) {
-      journeyStore.updateJourney(journeyId, { status: 'error', error: 'AI response was empty.' });
+      journeyStore.updateJourney(journeyId, {
+        status: 'error',
+        error: 'AI response was empty.',
+        activeSessionId: undefined,
+      });
       updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
       return;
     }
@@ -371,54 +414,69 @@ async function finalizeAttempt(ctx: AttemptContext, session: any): Promise<void>
     try {
       const specWithHandler = spec as JourneySpec<any, any>;
       const updatedJourney = journeyStore.getJourneyById(journeyId)!;
-      const updatedLegacyJourney = toLegacyJourney(updatedJourney);
+      const updatedSpecJourney = toSpecJourney(updatedJourney);
 
       if (specWithHandler.handleRawOutput) {
-        const result = await specWithHandler.handleRawOutput(updatedJourney.input, updatedLegacyJourney, text);
+        const result = await specWithHandler.handleRawOutput(updatedJourney.input, updatedSpecJourney, text);
         if (result !== undefined) {
           journeyStore.updateJourney(journeyId, { result });
         }
       }
-      journeyStore.updateJourney(journeyId, { status: 'success' });
+
+      journeyStore.updateJourney(journeyId, {
+        status: 'success',
+        activeSessionId: undefined,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      journeyStore.updateJourney(journeyId, { status: 'error', error: message });
+      journeyStore.updateJourney(journeyId, {
+        status: 'error',
+        error: message,
+        activeSessionId: undefined,
+      });
     }
+
     updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
     return;
   }
 
-  // Tool call modes: stage edit cards for confirmation
   const toolCalls = session.toolCalls ?? [];
   if (!toolCalls.length) {
-    journeyStore.updateJourney(journeyId, { status: 'error', error: 'AI response did not include any actions to apply.' });
+    journeyStore.updateJourney(journeyId, {
+      status: 'error',
+      error: 'AI response did not include any actions to apply.',
+      activeSessionId: undefined,
+    });
     updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
     return;
   }
 
   const updatedJourney = journeyStore.getJourneyById(journeyId)!;
   const language = getJourneyLanguage(updatedJourney);
+  const allowedToolNames = (updatedJourney.tools ?? [])
+    .map((tool) => tool.name)
+    .filter((name): name is string => Boolean(name && name.trim()));
 
   try {
-    await stageJourneyEdits({
+    await stageJourneyToolCalls({
       journeyId,
       assistantMessageId: finalizedAssistant.id,
       projectId: llmConfig.projectId,
       language,
       toolCalls,
+      allowedToolNames: allowedToolNames.length > 0 ? allowedToolNames : undefined,
     });
-    journeyStore.updateJourney(journeyId, { status: 'pending_confirmation' });
-    updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    journeyStore.updateJourney(journeyId, { status: 'error', error: message });
-    updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
+    journeyStore.updateJourney(journeyId, {
+      status: 'error',
+      error: message,
+      activeSessionId: undefined,
+    });
   }
-}
 
-// =====================================================================
-// Public API
-// =====================================================================
+  updateJourneyNotification(journeyId, journeyStore.getJourneyById(journeyId)!);
+}
 
 export const JourneyRuntime = {
   /**
@@ -435,7 +493,6 @@ export const JourneyRuntime = {
     const userInput = extractUserInput(kind, input);
     const userMessage = createChatMessage({ role: 'user', content: userInput, idPrefix: 'journey-user' });
 
-    // Create journey in journeyStore (permanent storage)
     const journey: Journey<TInput, unknown> = {
       id: journeyId,
       kind,
@@ -453,19 +510,17 @@ export const JourneyRuntime = {
 
     journeyStore.createJourney(journey as any);
 
-    // Register notification with journeyStore modal
     registerJourneyNotification(journey as any, {
       onClick: () => useJourneyStore.getState().openDetailModal(journeyId),
       onDismiss: () => useJourneyStore.getState().clearJourney(journeyId),
     });
 
-    const ctx = startAttempt({ journeyId });
-    return { journeyId, sessionId: ctx.sessionId };
+    const context = startAttempt({ journeyId });
+    return { journeyId, sessionId: context.sessionId };
   },
 
   /**
    * Send feedback to continue a journey (multi-turn)
-   * Like Agent: just add raw user message and run attempt
    */
   sendFeedback(params: { journeyId: string; text: string }): { sessionId: string } | undefined {
     const { journeyId, text } = params;
@@ -483,7 +538,6 @@ export const JourneyRuntime = {
     const trimmed = text.trim();
     if (!trimmed) return;
 
-    // Like Agent: just add raw user message
     journeyStore.updateJourney(journeyId, {
       messages: [
         ...journey.messages,
@@ -491,7 +545,7 @@ export const JourneyRuntime = {
       ],
     });
 
-    const ctx = startAttempt({ journeyId });
-    return { sessionId: ctx.sessionId };
+    const context = startAttempt({ journeyId });
+    return { sessionId: context.sessionId };
   },
 };

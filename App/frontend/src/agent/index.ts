@@ -8,6 +8,5 @@ export {
   type AgentTranslationInput,
   type AgentTranslationResult,
   executeAgentToolCalls,
-  applyAgentEdits, // deprecated, use executeAgentToolCalls
   rejectAllAgentEdits,
 } from './AgentExecutor';

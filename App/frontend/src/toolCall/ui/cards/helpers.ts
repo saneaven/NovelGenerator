@@ -1,0 +1,151 @@
+import type { UnifiedObject, ObjectType as UnifiedObjectType } from '../../../types/unifiedObject';
+import type { ObjectOperationVM, StoryObjectSubtype } from '../../viewModel/types';
+
+export interface ObjectSnapshot {
+  id?: string;
+  unifiedType?: UnifiedObjectType;
+  data: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  displayName?: string;
+  object?: UnifiedObject;
+}
+
+function dataForLanguage(object: UnifiedObject | undefined, language: string): Record<string, unknown> {
+  if (!object) return {};
+  if (object.data?.[language]) {
+    return object.data[language] as Record<string, unknown>;
+  }
+
+  const fallbackLanguage = Object.keys(object.data ?? {})[0];
+  if (fallbackLanguage) {
+    return object.data[fallbackLanguage] as Record<string, unknown>;
+  }
+
+  return {};
+}
+
+function storySubtypeToUnifiedType(storySubtype?: StoryObjectSubtype): UnifiedObjectType | undefined {
+  if (storySubtype === 'character' || storySubtype === 'location' || storySubtype === 'organization' || storySubtype === 'lorebook') {
+    return storySubtype;
+  }
+  return undefined;
+}
+
+export function resolveUnifiedType(operation: ObjectOperationVM): UnifiedObjectType | undefined {
+  switch (operation.objectType) {
+    case 'basic_info':
+      return 'basic_info';
+    case 'guidelines':
+      return 'guidelines';
+    case 'outline':
+      return 'outline';
+    case 'outline_act':
+      return 'act';
+    case 'outline_chapter':
+      return 'chapter';
+    case 'manuscript':
+      return 'manuscript';
+    case 'story_object':
+      return storySubtypeToUnifiedType(operation.storySubtype);
+    default:
+      return undefined;
+  }
+}
+
+function resolveByTypeAndId(
+  objects: Record<string, UnifiedObject>,
+  type: UnifiedObjectType,
+  id?: string,
+  projectId?: string
+): UnifiedObject | undefined {
+  if (id && objects[id]?.type === type) {
+    return objects[id];
+  }
+
+  if (id) {
+    return undefined;
+  }
+
+  // Fallback for singleton-like objects (basic_info/guidelines)
+  const all = Object.values(objects);
+  return all.find((object) => {
+    if (!object || object.type !== type) return false;
+    if (!projectId) return true;
+    return object.metadata?.project_id === projectId;
+  });
+}
+
+function resolveDisplayName(object: UnifiedObject | undefined, data: Record<string, unknown>): string | undefined {
+  if (!object) return undefined;
+
+  if (object.type === 'basic_info') {
+    if (typeof data.title === 'string' && data.title.trim()) return data.title;
+    return 'Basic Info';
+  }
+
+  if (object.type === 'guidelines') {
+    return 'Guidelines';
+  }
+
+  if (object.type === 'manuscript') {
+    return 'Manuscript';
+  }
+
+  if (typeof data.name === 'string' && data.name.trim()) {
+    return data.name;
+  }
+
+  return object.id;
+}
+
+export function getObjectSnapshot(params: {
+  operation: ObjectOperationVM;
+  objects: Record<string, UnifiedObject>;
+  projectId?: string;
+  language: string;
+}): ObjectSnapshot {
+  const { operation, objects, projectId, language } = params;
+  const unifiedType = resolveUnifiedType(operation);
+
+  if (!unifiedType) {
+    return {
+      id: operation.targetId,
+      unifiedType: undefined,
+      data: {},
+      metadata: {},
+      displayName: operation.targetLabel,
+      object: undefined,
+    };
+  }
+
+  const object = resolveByTypeAndId(objects, unifiedType, operation.targetId, projectId);
+  const data = dataForLanguage(object, language);
+  const metadata = (object?.metadata ?? {}) as Record<string, unknown>;
+
+  return {
+    id: object?.id ?? operation.targetId,
+    unifiedType,
+    data,
+    metadata,
+    displayName: resolveDisplayName(object, data) ?? operation.targetLabel,
+    object,
+  };
+}
+
+export function pickExistingKeys(
+  args: Record<string, unknown>,
+  blockedKeys: string[] = []
+): string[] {
+  const blocked = new Set(blockedKeys);
+  return Object.keys(args).filter((key) => !blocked.has(key));
+}
+
+export function pickValues(args: Record<string, unknown>, keys: string[]): Record<string, unknown> {
+  const next: Record<string, unknown> = {};
+  for (const key of keys) {
+    if (key in args) {
+      next[key] = args[key];
+    }
+  }
+  return next;
+}

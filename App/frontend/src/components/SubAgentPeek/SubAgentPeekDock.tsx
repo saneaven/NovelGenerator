@@ -4,7 +4,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useLLMSessionStore } from '../../store/llmSessionStore';
 import type { SubAgentInvocation, SubAgentParentType } from '../../store/subAgentRuntimeStore';
 import { useSubAgentRuntimeStore } from '../../store/subAgentRuntimeStore';
-import { useFunctionCallUIStore } from '../../store/functionCallUIStore';
+import { useFunctionCallUIStore } from '../../toolCall/ui/store';
 import { SubAgentPeekHeader } from './SubAgentPeekHeader';
 import { SubAgentPeekTimeline } from './SubAgentPeekTimeline';
 import './subAgentPeek.css';
@@ -14,18 +14,16 @@ interface InvocationEntry {
   invocation: SubAgentInvocation;
 }
 
-function hasPendingToolDecisions(invocation: SubAgentInvocation, activeSession: any): number {
-  const sessionCards = Array.isArray(activeSession?.editCards) ? activeSession.editCards : [];
-  const pendingInSession = sessionCards.filter(
-    (card: any) => card?.toolCall?.status === 'pending' || card?.toolCall?.status === 'validating'
-  ).length;
-  if (pendingInSession > 0) return pendingInSession;
-
+function hasPendingToolDecisions(invocation: SubAgentInvocation): number {
   for (let i = invocation.history.length - 1; i >= 0; i--) {
     const message = invocation.history[i];
     if (message.role !== 'assistant') continue;
     const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : [];
-    return toolCalls.filter((toolCall: any) => toolCall?.status === 'pending' || toolCall?.status === 'validating').length;
+    return toolCalls.filter((toolCall: any) =>
+      toolCall?.status === 'pending' ||
+      toolCall?.status === 'validating' ||
+      toolCall?.status === 'running'
+    ).length;
   }
 
   return 0;
@@ -114,13 +112,10 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
   const pendingCountByKey = useMemo(() => {
     const map: Record<string, number> = {};
     for (const entry of entries) {
-      const activeSession = entry.invocation.activeSessionId
-        ? activeSessionsById[entry.invocation.activeSessionId]
-        : undefined;
-      map[entry.key] = hasPendingToolDecisions(entry.invocation, activeSession);
+      map[entry.key] = hasPendingToolDecisions(entry.invocation);
     }
     return map;
-  }, [entries, activeSessionsById]);
+  }, [entries]);
 
   const orderedKeys = useMemo(() => entries.map((entry) => entry.key), [entries]);
   const pendingKeys = useMemo(

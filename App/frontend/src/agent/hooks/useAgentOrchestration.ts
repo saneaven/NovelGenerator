@@ -19,7 +19,7 @@ import { useSubAgentRuntimeStore } from '../../store/subAgentRuntimeStore';
 import { AgentExecutor } from '../AgentExecutor';
 import { AgentMemoryManager } from '../memory/AgentMemoryManager';
 import type { AgentOrchestrationConfig, AgentOrchestrationReturn, AgentHandlersReturn, ContextIdState } from './types';
-import { getSendBlockingState } from '../../functionCalls/blockingSelectors';
+import { getSendBlockingState } from '../../toolCall/viewModel/blockingSelectors';
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';

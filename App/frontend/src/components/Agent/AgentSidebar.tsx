@@ -113,11 +113,7 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
           (session.updatedAt ?? 0) > lastViewedAt
       );
       const hasPendingToolRequestFromSession = sessions.some((session) => {
-        if (session.status === 'pending_confirmation') return true;
-        const cards = Array.isArray(session.editCards) ? session.editCards : [];
-        return cards.some((card: any) =>
-          PENDING_TOOL_STATUSES.has(String(card?.toolCall?.status ?? ''))
-        );
+        return session.status === 'running' || session.status === 'applying';
       });
       const hasPendingToolRequestFromMessage = hasPendingToolCallsInMessages(agent);
       const hasPendingToolRequestFromSubAgent = Object.values(subAgentInvocationsByKey).some((invocation) => {

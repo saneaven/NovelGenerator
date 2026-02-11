@@ -7,7 +7,7 @@ import { buildEditCardsFromToolCallMetadata } from '../../toolCall';
 import { collapseContentParts } from '../../agent/utils/contentParts';
 import { SubAgentManager } from '../../subAgent/runtime/SubAgentManager';
 import type { SubAgentInvocation } from '../../store/subAgentRuntimeStore';
-import { FunctionCallsThread } from '../functionCalls';
+import { FunctionCallsThread } from '../../toolCall/ui';
 import { TextButton } from '../TextButton';
 
 function formatRole(role: string, t: (key: string) => string): string {
@@ -27,7 +27,7 @@ function messageText(message: ChatMessage): string {
 }
 
 function hasPendingStatus(status: string | undefined): boolean {
-  return status === 'pending' || status === 'validating';
+  return status === 'pending' || status === 'validating' || status === 'running';
 }
 
 export interface SubAgentPeekTimelineProps {
@@ -103,9 +103,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
         const toolCalls = (message.toolCalls ?? []) as ToolCallMetadata[];
         const isLatestAssistant = message.role === 'assistant' && index === lastAssistantIndex;
         const awaitingDecision = isLatestAssistant && invocation.status === 'awaiting_confirmation';
-        const historicalCards = toolCalls.length > 0 ? buildEditCardsFromToolCallMetadata(toolCalls) : [];
-        const sessionCards = awaitingDecision ? activeSession?.editCards ?? [] : [];
-        const cards = sessionCards.length > 0 ? sessionCards : historicalCards;
+        const cards = toolCalls.length > 0 ? buildEditCardsFromToolCallMetadata(toolCalls) : [];
         const hasPendingCards = cards.some((card) => hasPendingStatus(card.toolCall.status));
 
         return (
@@ -124,10 +122,10 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
                 <div className="message-function-calls">
                   <FunctionCallsThread
                     threadId={`${threadId}:message:${invocation.id}:${message.id}`}
-                    mode={awaitingDecision || hasPendingCards ? 'pending' : 'confirmed'}
+                    mode={awaitingDecision && hasPendingCards ? 'pending' : 'confirmed'}
                     cards={cards}
-                    onCommitDecisions={awaitingDecision ? handleConfirm : undefined}
-                    onCommitDecisionsAndPause={awaitingDecision ? handleConfirmAndPause : undefined}
+                    onCommitDecisions={awaitingDecision && hasPendingCards ? handleConfirm : undefined}
+                    onCommitDecisionsAndPause={awaitingDecision && hasPendingCards ? handleConfirmAndPause : undefined}
                     projectId={invocation.projectId}
                     isApplyDisabled={isApplying}
                     applyDisabledReason={isApplying ? 'Applying changes...' : undefined}

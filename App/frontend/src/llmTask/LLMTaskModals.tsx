@@ -6,6 +6,7 @@
 import React, { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import { BaseModal } from '../components/BaseModal';
 import { useLLMSessionStore } from '../store/llmSessionStore';
+import { useAgentStore } from '../store/agentStore';
 import { useAgentUIStore } from '../store/agentUIStore';
 import { useSettingsStore } from '../store/settingsStore';
 import ThinkingDisplay from '../components/common/ThinkingDisplay';
@@ -13,63 +14,102 @@ import NotificationProgressBar from '../components/Notification/NotificationProg
 import { Close } from '../components/icons';
 import { TextButton } from '../components/TextButton';
 import { IconButton } from '../components/IconButton';
-import { FunctionCallsThread } from '../components/functionCalls';
+import { FunctionCallsThread } from '../toolCall/ui';
+import { buildEditCardsFromToolCallMetadata } from '../toolCall';
 import {
   AgentExecutor,
   type AgentExecutorInput,
+  type AgentExecutorResult,
   type AgentTranslationInput,
-  applyAgentEdits,
+  executeAgentToolCalls,
 } from '../agent';
 import type { InvocationCaller } from '../types/agentRuntime';
 import { CRUD_OPTIONS } from '../toolCall/apply/types';
-import type { ToolCallDecisionMap } from '../toolCall/types';
+import type { ToolCallDecisionMap, ToolCallStatus } from '../toolCall/types';
 import './LLMTaskModals.css';
 
-export const LLMTaskModals: React.FC = () => {
-  // Read from agent UI store
-  const detailSessionId = useAgentUIStore((s) => s.detailSessionId);
-  const closeDetailModal = useAgentUIStore((s) => s.closeDetailModal);
+function isPendingStatus(status: string | undefined): boolean {
+  const normalized = (status ?? 'pending') as ToolCallStatus;
+  return normalized === 'pending' || normalized === 'validating' || normalized === 'running';
+}
 
-  const session = useLLMSessionStore((s) =>
-    detailSessionId ? s.sessions[detailSessionId] : null
+export const LLMTaskModals: React.FC = () => {
+  const detailSessionId = useAgentUIStore((state) => state.detailSessionId);
+  const closeDetailModal = useAgentUIStore((state) => state.closeDetailModal);
+
+  const session = useLLMSessionStore((state) =>
+    detailSessionId ? state.sessions[detailSessionId] : null
   );
-  const cancelSession = useLLMSessionStore((s) => s.cancelSession);
-  const mainLanguage = useSettingsStore((s) => s.getSettings().mainLanguage);
+  const cancelSession = useLLMSessionStore((state) => state.cancelSession);
+  const mainLanguage = useSettingsStore((state) => state.getSettings().mainLanguage);
 
   const [outputExpanded, setOutputExpanded] = useState(false);
   const [errorExpanded, setErrorExpanded] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
 
-  // Auto-scroll to bottom unless user has scrolled up
   const bodyRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
 
-  // Reset scroll state when session changes
   useEffect(() => {
     userScrolledUpRef.current = false;
+    setIsApplying(false);
   }, [detailSessionId]);
 
-  // Handle scroll events to detect if user scrolled up
   const handleBodyScroll = useCallback(() => {
-    const el = bodyRef.current;
-    if (!el) return;
+    const element = bodyRef.current;
+    if (!element) return;
     const threshold = 50;
-    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+    const isAtBottom = element.scrollHeight - element.scrollTop - element.clientHeight < threshold;
     userScrolledUpRef.current = !isAtBottom;
   }, []);
 
-  // Auto-scroll to bottom when content changes
   const lastContentPart = session?.contentParts?.[session.contentParts.length - 1]?.text ?? '';
   const toolCallProgressLength = session?.toolCallProgress?.length ?? 0;
 
   useEffect(() => {
     if (userScrolledUpRef.current) return;
-    const el = bodyRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    const element = bodyRef.current;
+    if (!element) return;
+    element.scrollTop = element.scrollHeight;
   }, [lastContentPart, toolCallProgressLength, session?.status]);
 
+  const agentContext = useMemo(() => {
+    if (!session || session.kind !== 'agent') return null;
+    const input = session.input as AgentExecutorInput;
+    const result = session.result as AgentExecutorResult | undefined;
+    const assistantMessageId = result?.assistantMessageId;
+    if (!assistantMessageId) return null;
+
+    return {
+      projectId: input.projectId,
+      agentId: input.agentId,
+      assistantMessageId,
+      runMode: input.runMode,
+    };
+  }, [session?.id, session?.kind, session?.input, session?.result]);
+
+  const agentToolCallsSelector = useMemo(
+    () => (state: ReturnType<typeof useAgentStore.getState>) => {
+      if (!agentContext) return undefined;
+      const agent = state.getAgent(agentContext.projectId, agentContext.agentId);
+      return agent?.messages.find((message) => message.id === agentContext.assistantMessageId)?.toolCalls;
+    },
+    [agentContext]
+  );
+  const messageToolCalls = useAgentStore(agentToolCallsSelector);
+
+  const displayedToolCalls = useMemo(() => {
+    if (Array.isArray(messageToolCalls)) return messageToolCalls;
+    if (Array.isArray(session?.toolCalls)) return session.toolCalls;
+    return [];
+  }, [messageToolCalls, session?.toolCalls]);
+
   const hasStreamingCalls = session?.status === 'running' && (session.toolCallProgress?.length ?? 0) > 0;
-  const hasCards = (session?.editCards?.length ?? 0) > 0;
+  const cards = useMemo(
+    () => (displayedToolCalls.length > 0 ? buildEditCardsFromToolCallMetadata(displayedToolCalls) : []),
+    [displayedToolCalls]
+  );
+  const hasCards = cards.length > 0;
   const hasToolCalls = hasStreamingCalls || hasCards;
 
   useEffect(() => {
@@ -101,18 +141,14 @@ export const LLMTaskModals: React.FC = () => {
   const contentText = useMemo(() => {
     if (!session) return '';
     return session.contentParts
-      .filter(p => p.type === 'content')
-      .map(p => p.text)
+      .filter((part) => part.type === 'content')
+      .map((part) => part.text)
       .join('');
   }, [session?.contentParts]);
 
-  const projectId = ((session?.input as any)?.projectId as string | undefined) ?? '';
-
-  const isApplying = session?.status === 'applying';
-  const hasPendingCards = session?.editCards?.some(
-    c => c.toolCall.status === 'pending' || c.toolCall.status === 'validating'
-  ) ?? false;
-  const isPending = session?.status === 'pending_confirmation' || isApplying || hasPendingCards;
+  const projectId = agentContext?.projectId ?? ((session?.input as any)?.projectId as string | undefined) ?? '';
+  const hasPendingCards = displayedToolCalls.some((toolCall: any) => isPendingStatus(toolCall?.status));
+  const isPending = hasPendingCards || isApplying;
 
   const handleRetry = useCallback(() => {
     if (!session) return;
@@ -130,20 +166,24 @@ export const LLMTaskModals: React.FC = () => {
   }, [cancelSession, session?.id]);
 
   const handleConfirm = useCallback(async (decisions: ToolCallDecisionMap) => {
-    if (!projectId || !session) return;
-    const invocationCaller: InvocationCaller | undefined =
-      session.kind === 'agent'
-        ? (session.input as AgentExecutorInput).runMode
-        : undefined;
-    await applyAgentEdits({
-      sessionId: session.id,
-      projectId,
-      language: mainLanguage,
-      decisions,
-      options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
-      invocationCaller,
-    });
-  }, [projectId, session?.id, mainLanguage]);
+    if (!agentContext) return;
+
+    setIsApplying(true);
+    try {
+      const invocationCaller: InvocationCaller | undefined = agentContext.runMode;
+      await executeAgentToolCalls({
+        projectId: agentContext.projectId,
+        agentId: agentContext.agentId,
+        assistantMessageId: agentContext.assistantMessageId,
+        language: mainLanguage,
+        decisions,
+        options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
+        invocationCaller,
+      });
+    } finally {
+      setIsApplying(false);
+    }
+  }, [agentContext, mainLanguage]);
 
   if (!session) return null;
 
@@ -181,7 +221,7 @@ export const LLMTaskModals: React.FC = () => {
           {session.status === 'error' && session.error && (
             <div
               className={`llm-task-modal-error-container ${errorExpanded ? 'llm-task-modal-error-container--expanded' : ''}`}
-              onClick={() => setErrorExpanded(prev => !prev)}
+              onClick={() => setErrorExpanded((prev) => !prev)}
             >
               <div className="llm-task-modal-error-summary-text">{session.error}</div>
             </div>
@@ -233,7 +273,7 @@ export const LLMTaskModals: React.FC = () => {
         <div className="llm-task-modal-stream">
           <button
             className="llm-task-modal-stream-toggle"
-            onClick={() => setOutputExpanded(prev => !prev)}
+            onClick={() => setOutputExpanded((prev) => !prev)}
           >
             <span className="toggle-icon">{outputExpanded ? '-' : '+'}</span>
             <span className="llm-task-modal-stream-label">Output</span>
@@ -261,7 +301,7 @@ export const LLMTaskModals: React.FC = () => {
             <FunctionCallsThread
               threadId={`llm-session:${session.id}:cards`}
               mode={isPending ? 'pending' : 'confirmed'}
-              cards={session.editCards}
+              cards={cards}
               onCommitDecisions={isPending ? handleConfirm : undefined}
               projectId={projectId}
               isApplyDisabled={isApplying}

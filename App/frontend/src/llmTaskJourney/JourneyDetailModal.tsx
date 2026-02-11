@@ -14,12 +14,12 @@ import NotificationProgressBar from '../components/Notification/NotificationProg
 import { Close, Edit, Trash } from '../components/icons';
 import { TextButton } from '../components/TextButton';
 import { IconButton } from '../components/IconButton';
-import { FunctionCallsThread } from '../components/functionCalls';
+import { FunctionCallsThread } from '../toolCall/ui';
 import { buildEditCardsFromToolCallMetadata } from '../toolCall';
 import { JourneyRuntime, applyJourneyEdits } from './index';
 import type { HandlerOptions } from '../toolCall/apply/types';
 import { CRUD_OPTIONS, TRANSLATION_OPTIONS } from '../toolCall/apply/types';
-import type { ToolCallDecisionMap } from '../toolCall/types';
+import type { ToolCallDecisionMap, ToolCallStatus } from '../toolCall/types';
 import '../llmTask/LLMTaskModals.css';
 
 function getApplyLanguage(journey: Journey, mainLanguage: string): string {
@@ -43,23 +43,27 @@ function getHandlerOptions(journey: Journey): HandlerOptions {
   return CRUD_OPTIONS;
 }
 
+function isPendingStatus(status: string | undefined): boolean {
+  const normalized = (status ?? 'pending') as ToolCallStatus;
+  return normalized === 'pending' || normalized === 'validating' || normalized === 'running';
+}
+
 export const JourneyDetailModal: React.FC = () => {
-  const detailJourneyId = useJourneyStore((s) => s.detailJourneyId);
-  const closeDetailModal = useJourneyStore((s) => s.closeDetailModal);
-  const cancelJourney = useJourneyStore((s) => s.cancelJourney);
-  const updateMessage = useJourneyStore((s) => s.updateMessage);
-  const deleteMessage = useJourneyStore((s) => s.deleteMessage);
+  const detailJourneyId = useJourneyStore((state) => state.detailJourneyId);
+  const closeDetailModal = useJourneyStore((state) => state.closeDetailModal);
+  const cancelJourney = useJourneyStore((state) => state.cancelJourney);
+  const updateMessage = useJourneyStore((state) => state.updateMessage);
+  const deleteMessage = useJourneyStore((state) => state.deleteMessage);
 
-  const journey = useJourneyStore((s) =>
-    detailJourneyId ? s.journeys[detailJourneyId] : null
+  const journey = useJourneyStore((state) =>
+    detailJourneyId ? state.journeys[detailJourneyId] : null
   );
 
-  // Get streaming data from llmSessionStore via journey.activeSessionId
-  const session = useLLMSessionStore((s) =>
-    journey?.activeSessionId ? s.sessions[journey.activeSessionId] : undefined
+  const session = useLLMSessionStore((state) =>
+    journey?.status === 'running' && journey?.activeSessionId ? state.sessions[journey.activeSessionId] : undefined
   );
 
-  const mainLanguage = useSettingsStore((s) => s.getSettings().mainLanguage);
+  const mainLanguage = useSettingsStore((state) => state.getSettings().mainLanguage);
 
   const [errorExpanded, setErrorExpanded] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
@@ -67,34 +71,30 @@ export const JourneyDetailModal: React.FC = () => {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
 
-  // Auto-scroll to bottom unless user has scrolled up
   const bodyRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
 
-  // Reset scroll state when journey changes
   useEffect(() => {
     userScrolledUpRef.current = false;
   }, [detailJourneyId]);
 
-  // Handle scroll events to detect if user scrolled up
   const handleBodyScroll = useCallback(() => {
-    const el = bodyRef.current;
-    if (!el) return;
+    const element = bodyRef.current;
+    if (!element) return;
     const threshold = 50;
-    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+    const isAtBottom = element.scrollHeight - element.scrollTop - element.clientHeight < threshold;
     userScrolledUpRef.current = !isAtBottom;
   }, []);
 
-  // Auto-scroll to bottom when content changes
   const journeyMessagesLength = journey?.messages?.length ?? 0;
   const lastContentPart = session?.contentParts?.[session.contentParts.length - 1]?.text ?? '';
   const toolCallProgressLength = session?.toolCallProgress?.length ?? 0;
 
   useEffect(() => {
     if (userScrolledUpRef.current) return;
-    const el = bodyRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    const element = bodyRef.current;
+    if (!element) return;
+    element.scrollTop = element.scrollHeight;
   }, [journeyMessagesLength, lastContentPart, toolCallProgressLength, journey?.status]);
 
   useEffect(() => {
@@ -102,8 +102,22 @@ export const JourneyDetailModal: React.FC = () => {
     setFeedbackText('');
   }, [detailJourneyId]);
 
+  const lastAssistantMessageId = useMemo(() => {
+    if (!journey) return null;
+    for (let i = journey.messages.length - 1; i >= 0; i--) {
+      const message = journey.messages[i];
+      if (message.role === 'assistant') return message.id;
+    }
+    return null;
+  }, [journey?.messages]);
+
+  const lastAssistantToolCalls = useMemo(() => {
+    if (!journey || !lastAssistantMessageId) return [];
+    const message = journey.messages.find((item) => item.id === lastAssistantMessageId);
+    return message?.toolCalls ?? [];
+  }, [journey, lastAssistantMessageId]);
+
   const hasStreamingCalls = journey?.status === 'running' && (session?.toolCallProgress?.length ?? 0) > 0;
-  const hasCards = (journey?.editCards?.length ?? 0) > 0;
 
   const statusLabel = useMemo(() => {
     if (!journey) return '';
@@ -125,13 +139,17 @@ export const JourneyDetailModal: React.FC = () => {
   }, [journey?.kind, journey?.input]);
 
   const projectId = ((journey?.input as any)?.projectId as string | undefined) ?? '';
-  const applyLanguage = useMemo(() => journey ? getApplyLanguage(journey, mainLanguage) : mainLanguage, [journey, mainLanguage]);
-  const handlerOptions = useMemo(() => journey ? getHandlerOptions(journey) : CRUD_OPTIONS, [journey]);
+  const applyLanguage = useMemo(
+    () => (journey ? getApplyLanguage(journey, mainLanguage) : mainLanguage),
+    [journey, mainLanguage]
+  );
+  const handlerOptions = useMemo(
+    () => (journey ? getHandlerOptions(journey) : CRUD_OPTIONS),
+    [journey]
+  );
 
   const isApplying = journey?.status === 'applying';
-  const hasPendingCards = journey?.editCards?.some(
-    c => c.toolCall.status === 'pending' || c.toolCall.status === 'validating'
-  ) ?? false;
+  const hasPendingCards = lastAssistantToolCalls.some((toolCall) => isPendingStatus(toolCall?.status));
   const isPending = journey?.status === 'pending_confirmation' || isApplying || hasPendingCards;
 
   const handleCancel = useCallback(() => {
@@ -181,16 +199,6 @@ export const JourneyDetailModal: React.FC = () => {
     deleteMessage(journey.id, messageId);
   }, [journey, deleteMessage]);
 
-  // Find the last assistant message ID
-  const lastAssistantMessageId = useMemo(() => {
-    if (!journey) return null;
-    for (let i = journey.messages.length - 1; i >= 0; i--) {
-      const msg = journey.messages[i];
-      if (msg.role === 'assistant') return msg.id;
-    }
-    return null;
-  }, [journey?.messages]);
-
   const isStreamingStatus = journey?.status === 'running';
 
   if (!journey) return null;
@@ -224,7 +232,7 @@ export const JourneyDetailModal: React.FC = () => {
           {journey.status === 'error' && journey.error && (
             <div
               className={`llm-task-modal-error-container ${errorExpanded ? 'llm-task-modal-error-container--expanded' : ''}`}
-              onClick={() => setErrorExpanded(prev => !prev)}
+              onClick={() => setErrorExpanded((prev) => !prev)}
             >
               <div className="llm-task-modal-error-summary-text">{journey.error}</div>
             </div>
@@ -269,46 +277,47 @@ export const JourneyDetailModal: React.FC = () => {
             {journey.messages.length === 0 && (
               <div className="llm-task-modal-no-content">No messages yet.</div>
             )}
-            {journey.messages.map((m) => {
-              const isLastAssistant = m.id === lastAssistantMessageId;
+            {journey.messages.map((message) => {
+              const isLastAssistant = message.id === lastAssistantMessageId;
               const displayContentParts =
-                isLastAssistant && isStreamingStatus ? (session?.contentParts ?? m.contentParts) : m.contentParts;
+                isLastAssistant && isStreamingStatus ? (session?.contentParts ?? message.contentParts) : message.contentParts;
 
               const text = displayContentParts
-                .filter(p => p.type === 'content')
-                .map(p => p.text)
+                .filter((part) => part.type === 'content')
+                .map((part) => part.text)
                 .join('')
                 .trim();
 
-              const storedToolCalls = m.toolCalls ?? [];
-              const historicalCards = !isLastAssistant && storedToolCalls.length > 0
+              const storedToolCalls = message.toolCalls ?? [];
+              const messageCards = storedToolCalls.length > 0
                 ? buildEditCardsFromToolCallMetadata(storedToolCalls)
                 : [];
 
-              const messageHasToolCalls = historicalCards.length > 0 ||
-                (isLastAssistant && (hasStreamingCalls || hasCards));
+              const messageHasToolCalls =
+                messageCards.length > 0 ||
+                (isLastAssistant && hasStreamingCalls);
 
-              const showContent = text || (m.role === 'assistant' && !messageHasToolCalls);
-              const isEditing = editingMessageId === m.id;
+              const showContent = text || (message.role === 'assistant' && !messageHasToolCalls);
+              const isEditing = editingMessageId === message.id;
               const canEditDelete = !['running', 'applying', 'pending_confirmation'].includes(journey.status);
 
               return (
-                <div key={m.id} className={`llm-task-modal-journey-message llm-task-modal-journey-message--${m.role}`}>
+                <div key={message.id} className={`llm-task-modal-journey-message llm-task-modal-journey-message--${message.role}`}>
                   <div className="llm-task-modal-journey-message-header">
                     <div className="llm-task-modal-journey-message-role">
-                      {m.role === 'user' ? 'User' : m.role === 'assistant' ? 'AI' : m.role}
+                      {message.role === 'user' ? 'User' : message.role === 'assistant' ? 'AI' : message.role}
                     </div>
                     {canEditDelete && !isEditing && (
                       <div className="llm-task-modal-journey-message-actions">
                         <button
-                          onClick={() => handleStartEdit(m.id, text)}
+                          onClick={() => handleStartEdit(message.id, text)}
                           title="Edit message"
                         >
                           <Edit size="sm" />
                         </button>
                         <button
                           className="delete"
-                          onClick={() => handleDeleteMessage(m.id)}
+                          onClick={() => handleDeleteMessage(message.id)}
                           title="Delete message"
                         >
                           <Trash size="sm" />
@@ -316,45 +325,50 @@ export const JourneyDetailModal: React.FC = () => {
                       </div>
                     )}
                   </div>
-                  {m.role === 'assistant' && !isEditing && (
+
+                  {message.role === 'assistant' && !isEditing && (
                     <ThinkingDisplay
-                      messageId={m.id}
+                      messageId={message.id}
                       contentParts={displayContentParts}
-                      isStreaming={isStreamingStatus && m.id === lastAssistantMessageId}
+                      isStreaming={isStreamingStatus && message.id === lastAssistantMessageId}
                     />
                   )}
+
                   {isEditing ? (
                     <>
                       <textarea
                         className="llm-task-modal-journey-message-edit-textarea"
                         value={editingText}
-                        onChange={(e) => setEditingText(e.target.value)}
+                        onChange={(event) => setEditingText(event.target.value)}
                         autoFocus
                       />
                       <div className="llm-task-modal-journey-message-edit-actions">
                         <TextButton variant="secondary" onClick={handleCancelEdit}>
                           Cancel
                         </TextButton>
-                        <TextButton variant="primary" onClick={() => handleSaveEdit(m.id)}>
+                        <TextButton variant="primary" onClick={() => handleSaveEdit(message.id)}>
                           Save
                         </TextButton>
                       </div>
                     </>
                   ) : showContent && (
                     <div className="llm-task-modal-journey-message-content">
-                      {text || (m.role === 'assistant' ? <span className="llm-task-modal-waiting">Waiting...</span> : null)}
+                      {text || (message.role === 'assistant' ? <span className="llm-task-modal-waiting">Waiting...</span> : null)}
                     </div>
                   )}
 
-                  {m.role === 'assistant' && (
+                  {message.role === 'assistant' && (
                     <>
-                      {historicalCards.length > 0 && (
+                      {messageCards.length > 0 && (
                         <div className="llm-task-modal-journey-message-tool-calls">
                           <FunctionCallsThread
-                            threadId={`journey:${journey.id}:${m.id}:history`}
-                            mode="confirmed"
-                            cards={historicalCards}
+                            threadId={`journey:${journey.id}:${message.id}:calls`}
+                            mode={isLastAssistant && isPending ? 'pending' : 'confirmed'}
+                            cards={messageCards}
+                            onCommitDecisions={isLastAssistant && isPending ? handleConfirm : undefined}
                             projectId={projectId}
+                            isApplyDisabled={Boolean(isLastAssistant && isApplying)}
+                            applyDisabledReason={isLastAssistant && isApplying ? 'Applying changes...' : undefined}
                           />
                         </div>
                       )}
@@ -362,24 +376,10 @@ export const JourneyDetailModal: React.FC = () => {
                       {isLastAssistant && hasStreamingCalls && (
                         <div className="llm-task-modal-journey-message-tool-calls">
                           <FunctionCallsThread
-                            threadId={`journey:${journey.id}:${m.id}:stream`}
+                            threadId={`journey:${journey.id}:${message.id}:stream`}
                             mode="streaming"
                             streamingProgress={session?.toolCallProgress}
                             projectId={projectId}
-                          />
-                        </div>
-                      )}
-
-                      {isLastAssistant && hasCards && (
-                        <div className="llm-task-modal-journey-message-tool-calls">
-                          <FunctionCallsThread
-                            threadId={`journey:${journey.id}:${m.id}:cards`}
-                            mode={isPending ? 'pending' : 'confirmed'}
-                            cards={journey.editCards}
-                            onCommitDecisions={isPending ? handleConfirm : undefined}
-                            projectId={projectId}
-                            isApplyDisabled={isApplying}
-                            applyDisabledReason={isApplying ? 'Applying changes...' : undefined}
                           />
                         </div>
                       )}
@@ -391,7 +391,6 @@ export const JourneyDetailModal: React.FC = () => {
           </div>
         </div>
 
-        {/* Feedback section */}
         <div className={`llm-task-modal-feedback-container ${feedbackOpen ? 'expanded' : ''}`}>
           <button
             className="llm-task-modal-feedback-header"
@@ -414,7 +413,7 @@ export const JourneyDetailModal: React.FC = () => {
                   <textarea
                     className="llm-task-modal-feedback-textarea"
                     value={feedbackText}
-                    onChange={(e) => setFeedbackText(e.target.value)}
+                    onChange={(event) => setFeedbackText(event.target.value)}
                     placeholder="Tell the AI what to change..."
                     rows={4}
                   />
