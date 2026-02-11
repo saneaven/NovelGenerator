@@ -93,12 +93,16 @@ export const useFunctionCallUIStore = create<FunctionCallUIState & FunctionCallU
   },
 
   setPeekOpen: (threadId, open) =>
-    set((state) => ({
-      peekOpenByThread: {
-        ...state.peekOpenByThread,
-        [threadId]: open,
-      },
-    })),
+    set((state) => {
+      const current = state.peekOpenByThread[threadId];
+      if (current === open) return state;
+      return {
+        peekOpenByThread: {
+          ...state.peekOpenByThread,
+          [threadId]: open,
+        },
+      };
+    }),
 
   togglePeekOpen: (threadId, defaultOpen = true) => {
     const current = get().isPeekOpen(threadId, defaultOpen);
@@ -108,12 +112,16 @@ export const useFunctionCallUIStore = create<FunctionCallUIState & FunctionCallU
   getSelectedPeekInvocation: (threadId) => get().selectedPeekInvocationByThread[threadId],
 
   setSelectedPeekInvocation: (threadId, invocationKey) =>
-    set((state) => ({
-      selectedPeekInvocationByThread: {
-        ...state.selectedPeekInvocationByThread,
-        [threadId]: invocationKey,
-      },
-    })),
+    set((state) => {
+      const current = state.selectedPeekInvocationByThread[threadId];
+      if (current === invocationKey) return state;
+      return {
+        selectedPeekInvocationByThread: {
+          ...state.selectedPeekInvocationByThread,
+          [threadId]: invocationKey,
+        },
+      };
+    }),
 
   clearThread: (threadId) =>
     set((state) => {

@@ -1,4 +1,4 @@
-"""Service for persistent Sub Agent invocation snapshots."""
+"""Service for persistent Sub Agent invocation states."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from ..models.db_models import (
 )
 from ..schemas.sub_agent_invocations import (
     SubAgentInvocationQueryByMessagesRequest,
-    SubAgentInvocationSnapshotRequest,
+    SubAgentInvocationStateRequest,
 )
 
 
@@ -102,13 +102,13 @@ class SubAgentInvocationService:
         cleaned = [str(v).strip() for v in values if str(v).strip()]
         return cleaned if cleaned else None
 
-    def upsert_snapshot(
+    def upsert_state(
         self,
         db: Session,
         *,
         project_id: uuid.UUID,
         agent_id: uuid.UUID,
-        data: SubAgentInvocationSnapshotRequest,
+        data: SubAgentInvocationStateRequest,
     ) -> SubAgentInvocationModel:
         self._validate_parent(
             db,

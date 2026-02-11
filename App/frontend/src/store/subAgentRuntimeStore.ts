@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { ChatMessage } from '../llm/requestTypes';
+import type { TemplateData } from '../llm/types';
 import type { TaskAIConfig } from './settingsStore';
 import type { ToolCallSchema } from '../toolCall';
 import type { HandlerOptions } from '../toolCall/apply/types';
@@ -29,7 +30,7 @@ export function buildSubAgentInvocationKey(ref: SubAgentInvocationRef): string {
 export interface SubAgentInvocation {
   /** Local runtime id */
   id: string;
-  /** Persistent DB id (set once snapshot is saved) */
+  /** Persistent DB id (set once state is saved) */
   persistentId?: string;
 
   parentType: SubAgentParentType;
@@ -60,6 +61,9 @@ export interface SubAgentInvocation {
 
   finalOutput?: string;
   error?: string;
+
+  /** Frozen project data snapshot for auto-continue context drift prevention (in-memory only). */
+  frozenProjectData?: TemplateData['project'];
 }
 
 interface SubAgentRuntimeState {

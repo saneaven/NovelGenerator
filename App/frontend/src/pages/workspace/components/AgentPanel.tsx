@@ -263,7 +263,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
 
     const { getCurrentProject } = useProjectStore();
     const settings = useSettings();
-    const { showError } = useErrorStore();
+    const showError = useErrorStore((state) => state.showError);
     const novelEditorStore = useNovelEditorStore();
 
     // Check if editor has unsaved changes (only relevant in novel-editor surface)
@@ -301,7 +301,9 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
             return filtered;
         })
     );
-    const subAgentInvocationsByKey = useSubAgentRuntimeStore((state) => state.invocationsByKey);
+    const hasBlockingSubAgentInvocations = useSubAgentRuntimeStore(
+        (state) => state.hasBlockingInvocationsForAgent(selectedAgentId ?? '')
+    );
 
     const agentSessionByMessageId = useMemo(() => {
         const map: Record<string, any> = {};
@@ -322,23 +324,11 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     const [translatingMessages, setTranslatingMessages] = useState<Record<string, boolean>>({});
     const [translationErrors, setTranslationErrors] = useState<Record<string, string | null>>({});
     const [translationSessionByMessageId, setTranslationSessionByMessageId] = useState<Record<string, string>>({});
+    const translationSessionByMessageIdRef = useRef(translationSessionByMessageId);
+    useEffect(() => {
+        translationSessionByMessageIdRef.current = translationSessionByMessageId;
+    }, [translationSessionByMessageId]);
 
-    // Track translation session statuses - use a stable selector to avoid infinite loops
-    const translationSessionIds = useMemo(
-        () => Object.values(translationSessionByMessageId),
-        [translationSessionByMessageId]
-    );
-    const translationSessionStatusesSelector = useMemo(
-        () => (state: ReturnType<typeof useLLMSessionStore.getState>) => {
-            const statuses: Record<string, string | undefined> = {};
-            for (const sessionId of translationSessionIds) {
-                statuses[sessionId] = state.sessions[sessionId]?.status;
-            }
-            return statuses;
-        },
-        [translationSessionIds]
-    );
-    const translationSessionStatuses = useLLMSessionStore(useShallow(translationSessionStatusesSelector));
     // Per-message language view: tracks which messages are showing translation
     const [messageLanguageView, setMessageLanguageView] = useState<Record<string, 'primary' | 'secondary'>>({});
     const [applyingMessageEdits, setApplyingMessageEdits] = useState<Record<string, boolean>>({});
@@ -541,9 +531,9 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                 selectedAgentId,
                 messages: storedMessages,
                 sessions: Object.values(projectAgentSessions),
-                invocationsByKey: subAgentInvocationsByKey,
+                hasBlockingSubAgent: hasBlockingSubAgentInvocations,
             }),
-        [selectedAgentId, storedMessages, projectAgentSessions, subAgentInvocationsByKey]
+        [selectedAgentId, storedMessages, projectAgentSessions, hasBlockingSubAgentInvocations]
     );
 
     const sendBlockedReason = useMemo(() => {
@@ -636,61 +626,70 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
     }, [projectId, selectedAgentId, subAgentRootMessageIds, subAgentRootMessageKey]);
 
     useEffect(() => {
-        const entries = Object.entries(translationSessionByMessageId);
-        if (entries.length === 0) return;
+        function processFinished() {
+            const sessionMap = translationSessionByMessageIdRef.current;
+            if (Object.keys(sessionMap).length === 0) return;
 
-        // Use getState() for translation session tracking to avoid subscribing to all sessions
-        const allSessions = useLLMSessionStore.getState().sessions;
-        const finished: Array<{ messageId: string; sessionId: string; status: string; error?: string }> = [];
-        for (const [messageId, sessionId] of entries) {
-            const session = allSessions[sessionId];
-            if (!session) continue;
-            if (session.status === 'running' || session.status === 'applying') continue;
-            finished.push({ messageId, sessionId, status: session.status, error: session.error });
-        }
+            const allSessions = useLLMSessionStore.getState().sessions;
+            const finished: Array<{ messageId: string; sessionId: string; status: string; error?: string }> = [];
 
-        if (finished.length === 0) return;
-
-        setTranslationSessionByMessageId(prev => {
-            const next = { ...prev };
-            for (const item of finished) {
-                delete next[item.messageId];
+            for (const [messageId, sessionId] of Object.entries(sessionMap)) {
+                const session = allSessions[sessionId];
+                if (!session) continue;
+                if (session.status === 'running' || session.status === 'applying') continue;
+                finished.push({ messageId, sessionId, status: session.status, error: session.error });
             }
-            return next;
-        });
 
-        setTranslatingMessages(prev => {
-            const next = { ...prev };
-            for (const item of finished) {
-                next[item.messageId] = false;
-            }
-            return next;
-        });
+            if (finished.length === 0) return;
 
-        setTranslationErrors(prev => {
-            const next = { ...prev };
-            for (const item of finished) {
-                next[item.messageId] = item.status === 'error' ? (item.error ?? 'Unknown error occurred during translation.') : null;
-            }
-            return next;
-        });
+            setTranslationSessionByMessageId(prev => {
+                const next = { ...prev };
+                for (const item of finished) {
+                    delete next[item.messageId];
+                }
+                return next;
+            });
 
-        setMessageLanguageView(prev => {
-            const next = { ...prev };
+            setTranslatingMessages(prev => {
+                const next = { ...prev };
+                for (const item of finished) {
+                    next[item.messageId] = false;
+                }
+                return next;
+            });
+
+            setTranslationErrors(prev => {
+                const next = { ...prev };
+                for (const item of finished) {
+                    next[item.messageId] = item.status === 'error' ? (item.error ?? 'Unknown error occurred during translation.') : null;
+                }
+                return next;
+            });
+
+            setMessageLanguageView(prev => {
+                const next = { ...prev };
+                for (const item of finished) {
+                    if (item.status === 'success') {
+                        next[item.messageId] = 'secondary';
+                    }
+                }
+                return next;
+            });
+
             for (const item of finished) {
-                if (item.status === 'success') {
-                    next[item.messageId] = 'secondary';
+                if (item.status === 'error') {
+                    showError('Translation Failed', item.error ?? 'Unknown error occurred during translation.');
                 }
             }
-            return next;
-        });
-
-        for (const item of finished) {
-            if (item.status === 'error') {
-                showError('Translation Failed', item.error ?? 'Unknown error occurred during translation.');
-            }
         }
-    }, [translationSessionByMessageId, translationSessionStatuses, showError]);
+
+        // Process immediately in case sessions already finished
+        processFinished();
+
+        // Subscribe to LLM session store to detect when translation sessions complete
+        const unsubscribe = useLLMSessionStore.subscribe(processFinished);
+        return unsubscribe;
+    }, [showError]);
 
     const translateMessage = async (message: StoredAgentMessage) =>
     {

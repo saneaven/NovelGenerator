@@ -55,6 +55,7 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
   isActiveParent,
 }) => {
   const invocationsByKey = useSubAgentRuntimeStore((state) => state.invocationsByKey);
+
   const setPeekOpen = useFunctionCallUIStore((state) => state.setPeekOpen);
   const setSelectedPeekInvocation = useFunctionCallUIStore((state) => state.setSelectedPeekInvocation);
 
@@ -65,20 +66,25 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
     (state) => state.selectedPeekInvocationByThread[threadId]
   );
 
-  const entries = useMemo<InvocationEntry[]>(() => {
+  const relevantInvocations = useMemo(() => {
     const allowedToolCalls = new Set(parentToolCallIds);
+    const result: Record<string, SubAgentInvocation> = {};
+    for (const [key, invocation] of Object.entries(invocationsByKey)) {
+      if (!invocation) continue;
+      if (invocation.parentType !== parentType) continue;
+      if (invocation.parentId !== parentId) continue;
+      if (invocation.parentMessageId !== parentMessageId) continue;
+      if (allowedToolCalls.size > 0 && !allowedToolCalls.has(invocation.parentToolCallId)) continue;
+      result[key] = invocation;
+    }
+    return result;
+  }, [invocationsByKey, parentToolCallIds, parentType, parentId, parentMessageId]);
+
+  const entries = useMemo<InvocationEntry[]>(() => {
     const order = buildToolCallOrder(parentToolCallIds);
 
-    const filtered = Object.entries(invocationsByKey)
-      .filter(([, invocation]) => {
-        if (!invocation) return false;
-        if (invocation.parentType !== parentType) return false;
-        if (invocation.parentId !== parentId) return false;
-        if (invocation.parentMessageId !== parentMessageId) return false;
-        if (allowedToolCalls.size > 0 && !allowedToolCalls.has(invocation.parentToolCallId)) return false;
-        return true;
-      })
-      .map(([key, invocation]) => ({ key, invocation: invocation as SubAgentInvocation }));
+    const filtered = Object.entries(relevantInvocations)
+      .map(([key, invocation]) => ({ key, invocation }));
 
     filtered.sort((a, b) => {
       const ai = order.get(a.invocation.parentToolCallId);
@@ -90,14 +96,14 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
     });
 
     return filtered;
-  }, [invocationsByKey, parentToolCallIds, parentType, parentId, parentMessageId]);
+  }, [relevantInvocations, parentToolCallIds]);
 
   const activeSessionIds = useMemo(
     () => entries.map((entry) => entry.invocation.activeSessionId).filter((id): id is string => typeof id === 'string' && id.length > 0),
     [entries]
   );
 
-  const sessionSelector = useMemo(
+  const activeSessionSelector = useMemo(
     () => (state: ReturnType<typeof useLLMSessionStore.getState>) => {
       const sessions: Record<string, any> = {};
       for (const sessionId of activeSessionIds) {
@@ -107,7 +113,7 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
     },
     [activeSessionIds]
   );
-  const activeSessionsById = useLLMSessionStore(useShallow(sessionSelector));
+  const activeSessionsById = useLLMSessionStore(useShallow(activeSessionSelector));
 
   const pendingCountByKey = useMemo(() => {
     const map: Record<string, number> = {};
@@ -125,16 +131,18 @@ export const SubAgentPeekDock: React.FC<SubAgentPeekDockProps> = ({
 
   useEffect(() => {
     if (orderedKeys.length === 0) return;
+    let nextSelectedKey = selectedKey;
     if (!selectedKey || !orderedKeys.includes(selectedKey)) {
-      setSelectedPeekInvocation(threadId, orderedKeys[0]);
-      return;
+      nextSelectedKey = orderedKeys[0];
+    } else if (isActiveParent) {
+      const selectedHasPending = (pendingCountByKey[selectedKey] ?? 0) > 0;
+      if (!selectedHasPending && pendingKeys.length > 0) {
+        nextSelectedKey = pendingKeys[0];
+      }
     }
 
-    if (!isActiveParent) return;
-
-    const selectedHasPending = (pendingCountByKey[selectedKey] ?? 0) > 0;
-    if (!selectedHasPending && pendingKeys.length > 0) {
-      setSelectedPeekInvocation(threadId, pendingKeys[0]);
+    if (nextSelectedKey !== selectedKey) {
+      setSelectedPeekInvocation(threadId, nextSelectedKey);
     }
   }, [
     orderedKeys,

@@ -96,6 +96,11 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
     setNewOption('');
   }, [variableId]);
 
+  const canUseSlider = useMemo(() => {
+    if (!draft) return false;
+    return draft.current.number_options.min !== '' && draft.current.number_options.max !== '';
+  }, [draft]);
+
   if (!variable || !draft) {
     return (
       <div className="variable-editor variable-editor--empty">
@@ -224,10 +229,6 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
       })
     );
   };
-
-  const canUseSlider = useMemo(() => {
-    return draft.current.number_options.min !== '' && draft.current.number_options.max !== '';
-  }, [draft]);
 
   const handleDelete = async () => {
     const confirmed = window.confirm(`Delete variable "${variable.name}"? This cannot be undone.`);

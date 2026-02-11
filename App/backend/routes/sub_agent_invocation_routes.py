@@ -1,4 +1,4 @@
-"""Routes for persistent Sub Agent invocation snapshots."""
+"""Routes for persistent Sub Agent invocation states."""
 
 from __future__ import annotations
 
@@ -13,8 +13,8 @@ from ..models.db_models import Agent, Project, User
 from ..schemas.sub_agent_invocations import (
     SubAgentInvocationQueryByMessagesRequest,
     SubAgentInvocationQueryByMessagesResponse,
-    SubAgentInvocationSnapshotRequest,
-    SubAgentInvocationSnapshotResponse,
+    SubAgentInvocationStateRequest,
+    SubAgentInvocationStateResponse,
 )
 from ..services.sub_agent_invocation_service import sub_agent_invocation_service
 
@@ -48,18 +48,18 @@ async def verify_agent_access(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
 
-@router.post("/snapshots", response_model=SubAgentInvocationSnapshotResponse, status_code=status.HTTP_200_OK)
-async def upsert_sub_agent_snapshot(
+@router.post("/states", response_model=SubAgentInvocationStateResponse, status_code=status.HTTP_200_OK)
+async def upsert_sub_agent_state(
     project_id: uuid.UUID,
     agent_id: uuid.UUID,
-    data: SubAgentInvocationSnapshotRequest,
+    data: SubAgentInvocationStateRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     await verify_agent_access(project_id, agent_id, current_user, db)
 
     try:
-        invocation = sub_agent_invocation_service.upsert_snapshot(
+        invocation = sub_agent_invocation_service.upsert_state(
             db=db,
             project_id=project_id,
             agent_id=agent_id,
@@ -88,4 +88,3 @@ async def query_sub_agent_invocations_by_messages(
         data=data,
     )
     return {"items": items}
-

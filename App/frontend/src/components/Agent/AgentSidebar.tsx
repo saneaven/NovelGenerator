@@ -79,14 +79,36 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
       return sessions;
     })
   );
-  const subAgentInvocationsByKey = useSubAgentRuntimeStore((state) => state.invocationsByKey);
-
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const editInputRef = useRef<HTMLInputElement>(null);
 
   const agents = getAgents(projectId);
   const selectedAgentId = getSelectedAgentId(projectId);
+  const invocationsByKey = useSubAgentRuntimeStore((state) => state.invocationsByKey);
+  const blockingSubAgentByAgentId = useMemo(() => {
+    const result: Record<string, boolean> = {};
+    const agentIds = new Set(agents.map((agent) => agent.id));
+    for (const agent of agents) {
+      result[agent.id] = false;
+    }
+
+    for (const invocation of Object.values(invocationsByKey)) {
+      if (!invocation) continue;
+      if (invocation.parentType !== 'agent') continue;
+      if (!agentIds.has(invocation.parentId)) continue;
+      if (
+        invocation.status !== 'running' &&
+        invocation.status !== 'awaiting_confirmation' &&
+        invocation.status !== 'paused'
+      ) {
+        continue;
+      }
+      result[invocation.parentId] = true;
+    }
+
+    return result;
+  }, [agents, invocationsByKey]);
 
   const agentSignalsById = useMemo<Record<string, AgentSidebarSignals>>(() => {
     const sessionsByAgent: Record<string, AnySession[]> = {};
@@ -116,12 +138,7 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
         return session.status === 'running' || session.status === 'applying';
       });
       const hasPendingToolRequestFromMessage = hasPendingToolCallsInMessages(agent);
-      const hasPendingToolRequestFromSubAgent = Object.values(subAgentInvocationsByKey).some((invocation) => {
-        if (!invocation) return false;
-        if (invocation.parentType !== 'agent') return false;
-        if (invocation.parentId !== agent.id) return false;
-        return invocation.status === 'running' || invocation.status === 'awaiting_confirmation' || invocation.status === 'paused';
-      });
+      const hasPendingToolRequestFromSubAgent = blockingSubAgentByAgentId[agent.id] ?? false;
 
       signals[agent.id] = {
         isRunning: isRunningFromSession || isRunningFromPreflight,
@@ -130,7 +147,7 @@ const AgentSidebar: React.FC<AgentSidebarProps> = ({
       };
     }
     return signals;
-  }, [agents, selectedAgentId, projectId, projectAgentSessions, loadingByProjectAgent, lastViewedAtByProjectAgent, subAgentInvocationsByKey]);
+  }, [agents, selectedAgentId, projectId, projectAgentSessions, loadingByProjectAgent, lastViewedAtByProjectAgent, blockingSubAgentByAgentId]);
 
   useEffect(() => {
     if (editingAgentId && editInputRef.current) {

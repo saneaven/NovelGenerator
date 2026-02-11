@@ -44,7 +44,7 @@
 /* Size Variants */
 .base-modal--small {
   width: 25dvw;
-  height: 80dvh;
+  max-height: 80dvh;
 }
 
 .base-modal--medium {

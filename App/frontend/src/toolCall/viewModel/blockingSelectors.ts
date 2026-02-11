@@ -69,8 +69,9 @@ export function getSendBlockingState(params: {
   messages: StoredAgentMessage[];
   sessions: AnySession[];
   invocationsByKey?: Record<string, SubAgentInvocation | undefined>;
+  hasBlockingSubAgent?: boolean;
 }): SendBlockingState {
-  const { selectedAgentId, messages, sessions, invocationsByKey } = params;
+  const { selectedAgentId, messages, sessions, invocationsByKey, hasBlockingSubAgent } = params;
 
   if (!selectedAgentId) {
     return {
@@ -81,9 +82,11 @@ export function getSendBlockingState(params: {
   }
 
   const unresolvedToolCalls = summarizeMessageToolCallBlocking(messages);
+  const subAgentBlocked = typeof hasBlockingSubAgent === 'boolean'
+    ? hasBlockingSubAgent
+    : hasBlockingSubAgentInvocations(invocationsByKey, selectedAgentId);
   const rootSessionBlocked =
-    hasRootSessionBlocker(sessions, selectedAgentId) ||
-    hasBlockingSubAgentInvocations(invocationsByKey, selectedAgentId);
+    hasRootSessionBlocker(sessions, selectedAgentId) || subAgentBlocked;
 
   return {
     blocked: rootSessionBlocked || unresolvedToolCalls.count > 0,

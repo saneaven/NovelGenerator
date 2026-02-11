@@ -105,6 +105,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
         const awaitingDecision = isLatestAssistant && invocation.status === 'awaiting_confirmation';
         const cards = toolCalls.length > 0 ? buildEditCardsFromToolCallMetadata(toolCalls) : [];
         const hasPendingCards = cards.some((card) => hasPendingStatus(card.toolCall.status));
+        const showApplyingBanner = isApplying && isLatestAssistant && hasPendingCards;
 
         return (
           <div
@@ -128,7 +129,7 @@ export const SubAgentPeekTimeline: React.FC<SubAgentPeekTimelineProps> = ({
                     onCommitDecisionsAndPause={awaitingDecision && hasPendingCards ? handleConfirmAndPause : undefined}
                     projectId={invocation.projectId}
                     isApplyDisabled={isApplying}
-                    applyDisabledReason={isApplying ? 'Applying changes...' : undefined}
+                    applyDisabledReason={showApplyingBanner ? 'Applying changes...' : undefined}
                   />
                 </div>
               )}

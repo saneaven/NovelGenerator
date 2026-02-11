@@ -293,7 +293,7 @@ export interface AgentMessageResponse {
 
 export type SubAgentParentType = 'agent' | 'sub_agent';
 
-export interface SubAgentInvocationSnapshotMessage {
+export interface SubAgentInvocationStateMessage {
   role: string;
   content_parts?: Array<Record<string, any>>;
   tool_calls?: Array<Record<string, any>>;
@@ -301,7 +301,7 @@ export interface SubAgentInvocationSnapshotMessage {
   created_at?: string;
 }
 
-export interface SubAgentInvocationSnapshotRequest {
+export interface SubAgentInvocationStateRequest {
   parent_type: SubAgentParentType;
   parent_id: string;
   parent_message_id: string;
@@ -315,7 +315,7 @@ export interface SubAgentInvocationSnapshotRequest {
   status: string;
   final_output?: string;
   error?: string;
-  history: SubAgentInvocationSnapshotMessage[];
+  history: SubAgentInvocationStateMessage[];
 }
 
 export interface SubAgentInvocationMessageResponse {
@@ -351,7 +351,7 @@ export interface SubAgentInvocationResponse {
   messages: SubAgentInvocationMessageResponse[];
 }
 
-export interface SubAgentInvocationSnapshotResponse {
+export interface SubAgentInvocationStateResponse {
   invocation: SubAgentInvocationResponse;
 }
 

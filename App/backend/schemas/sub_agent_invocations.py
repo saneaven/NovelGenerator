@@ -12,8 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field
 ParentType = Literal["agent", "sub_agent"]
 
 
-class SubAgentInvocationMessageSnapshot(BaseModel):
-    """Incoming message payload for snapshot upsert."""
+class SubAgentInvocationMessageState(BaseModel):
+    """Incoming message payload for state upsert."""
     model_config = ConfigDict(extra="forbid")
 
     role: str = Field(..., min_length=1, max_length=50)
@@ -23,8 +23,8 @@ class SubAgentInvocationMessageSnapshot(BaseModel):
     created_at: Optional[datetime] = None
 
 
-class SubAgentInvocationSnapshotRequest(BaseModel):
-    """Upsert snapshot request for one invocation."""
+class SubAgentInvocationStateRequest(BaseModel):
+    """Upsert state request for one invocation."""
     model_config = ConfigDict(extra="forbid")
 
     parent_type: ParentType
@@ -43,7 +43,7 @@ class SubAgentInvocationSnapshotRequest(BaseModel):
     final_output: Optional[str] = None
     error: Optional[str] = None
 
-    history: List[SubAgentInvocationMessageSnapshot] = Field(default_factory=list)
+    history: List[SubAgentInvocationMessageState] = Field(default_factory=list)
 
 
 class SubAgentInvocationMessageResponse(BaseModel):
@@ -90,8 +90,8 @@ class SubAgentInvocationResponse(BaseModel):
     messages: List[SubAgentInvocationMessageResponse] = Field(default_factory=list)
 
 
-class SubAgentInvocationSnapshotResponse(BaseModel):
-    """Snapshot upsert response."""
+class SubAgentInvocationStateResponse(BaseModel):
+    """State upsert response."""
     invocation: SubAgentInvocationResponse
 
 

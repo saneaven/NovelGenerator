@@ -661,7 +661,7 @@ class AgentMessage(Base):
 # ============================================================================
 
 class SubAgentInvocationModel(Base):
-    """Persistent Sub Agent invocation snapshots."""
+    """Persistent Sub Agent invocation states."""
     __tablename__ = 'sub_agent_invocations'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

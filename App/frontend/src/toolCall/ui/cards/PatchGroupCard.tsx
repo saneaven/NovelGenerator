@@ -2,10 +2,12 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { TextButton } from '../../../components/TextButton';
 import ToggleSwitch from '../../../components/common/ToggleSwitch';
 import type { ToolCallDecisionMap } from '../../types';
-import type { ObjectOperationVM } from '../../viewModel/types';
+import type { ObjectOperationVM, PatchDecision } from '../../viewModel/types';
 import { useFunctionCallUIStore } from '../store';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import type { PatchGroupCardProps } from './types';
+
+const EMPTY_PATCH_DECISIONS: Record<string, PatchDecision> = {};
 
 function patchValue(value: unknown): string {
   if (typeof value === 'string') return value;
@@ -43,8 +45,8 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
   onConfirmAndPause,
 }) => {
   const patchDecisions = useFunctionCallUIStore(
-    (state) => state.patchDecisionsByThread[threadId] ?? {}
-  );
+    (state) => state.patchDecisionsByThread[threadId]
+  ) ?? EMPTY_PATCH_DECISIONS;
   const setPatchDecision = useFunctionCallUIStore((state) => state.setPatchDecision);
   const setPatchDecisionsBulk = useFunctionCallUIStore((state) => state.setPatchDecisionsBulk);
 

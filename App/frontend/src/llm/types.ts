@@ -201,6 +201,9 @@ export interface BasePromptContext {
   enablePrefill?: boolean;
   thinkingMode?: ThinkingMode;
   outputMode?: OutputMode;
+  /** Frozen project data snapshot for auto-continue context drift prevention.
+   *  When set, PromptManager uses this instead of reading live data from unifiedObjectStore. */
+  frozenProjectData?: TemplateData['project'];
 }
 
 /**

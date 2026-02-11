@@ -10,6 +10,7 @@ import {
 } from '../../store/subAgentRuntimeStore';
 import { schemaRegistry } from '../../toolCall/schemas/schemaRegistry';
 import { LLMTaskMode } from '../../llm/types';
+import { PromptManager } from '../../llm/PromptManager';
 import type { ChatMessage, ToolCallMetadata } from '../../llm/requestTypes';
 import type { ToolCallSchema } from '../../toolCall';
 import type { TaskAIConfig } from '../../store/settingsStore';
@@ -239,13 +240,13 @@ function appendAssistantMessage(invocationKey: string, message: ChatMessage): bo
   return true;
 }
 
-async function persistInvocationSnapshot(invocationKey: string): Promise<void> {
+async function persistInvocationState(invocationKey: string): Promise<void> {
   const runtime = useSubAgentRuntimeStore.getState();
   const invocation = runtime.getInvocationByKey(invocationKey);
   if (!invocation) return;
 
   try {
-    const response = await subAgentInvocationService.upsertSnapshot(invocation.projectId, invocation.agentId, {
+    const response = await subAgentInvocationService.upsertState(invocation.projectId, invocation.agentId, {
       parent_type: invocation.parentType,
       parent_id: invocation.parentId,
       parent_message_id: invocation.parentMessageId,
@@ -282,9 +283,14 @@ async function persistInvocationSnapshot(invocationKey: string): Promise<void> {
       });
     }
 
-    store.replaceHistory(invocationKey, mapPersistedMessagesToHistory(persisted.messages ?? []));
+    const persistedHistory = mapPersistedMessagesToHistory(persisted.messages ?? []);
+    const currentIds = current.history.map((m) => String(m.id)).join(',');
+    const persistedIds = persistedHistory.map((m) => String(m.id)).join(',');
+    if (currentIds !== persistedIds) {
+      store.replaceHistory(invocationKey, persistedHistory);
+    }
   } catch (error) {
-    console.error('[SubAgentManager] Failed to persist snapshot:', error);
+    console.error('[SubAgentManager] Failed to persist state:', error);
   }
 }
 
@@ -300,7 +306,7 @@ async function runTurn(invocationKey: string): Promise<void> {
       error: 'Missing runtime configuration for Sub Agent invocation',
       activeSessionId: null,
     });
-    await persistInvocationSnapshot(invocationKey);
+    await persistInvocationState(invocationKey);
     const completion = completions.get(invocationKey);
     completion?.reject(new Error('Missing runtime configuration for Sub Agent invocation'));
     completions.delete(invocationKey);
@@ -319,6 +325,16 @@ async function runTurn(invocationKey: string): Promise<void> {
   const provider = invocation.llmConfig.provider;
   const providerConfig = credentialsStore.getProviderConfigForBackend(provider);
 
+  // Frozen project data snapshot for auto-continue context drift prevention
+  const lastMsg = invocation.history[invocation.history.length - 1];
+  const isUserTurn = lastMsg?.role === 'user';
+
+  let frozenProjectData = !isUserTurn ? invocation.frozenProjectData : undefined;
+  if (!frozenProjectData) {
+    frozenProjectData = PromptManager.buildProjectData(invocation.projectId, invocation.language);
+    runtime.updateInvocation(invocationKey, { frozenProjectData });
+  }
+
   const promptContext = {
     projectId: invocation.projectId,
     outputLanguage: invocation.language,
@@ -327,6 +343,7 @@ async function runTurn(invocationKey: string): Promise<void> {
     thinkingMode: invocation.llmConfig.advanced.thinkingMode,
     tools: invocation.tools,
     agentName: invocation.agentName,
+    frozenProjectData,
   };
 
   const handle = startLLMSession<any, any>({
@@ -354,73 +371,102 @@ async function runTurn(invocationKey: string): Promise<void> {
 
   runtime.updateInvocation(invocationKey, { activeSessionId: handle.sessionId });
 
-  const finalSession = await handle.done;
-  const sessionStore = useLLMSessionStore.getState();
-  const latest = sessionStore.getSessionById(handle.sessionId) ?? finalSession;
+  try {
+    const finalSession = await handle.done;
+    const sessionStore = useLLMSessionStore.getState();
+    const latest = sessionStore.getSessionById(handle.sessionId) ?? finalSession;
 
-  if (latest.status !== 'success') {
-    const errorMessage = latest.error || 'Sub Agent session failed';
+    if (latest.status !== 'success') {
+      const errorMessage = latest.error || 'Sub Agent session failed';
+      runtime.updateInvocation(invocationKey, {
+        status: latest.status === 'cancelled' ? 'cancelled' : 'error',
+        error: errorMessage,
+        activeSessionId: null,
+      });
+      await persistInvocationState(invocationKey);
+      const completion = completions.get(invocationKey);
+      completion?.reject(new Error(errorMessage));
+      completions.delete(invocationKey);
+      return;
+    }
+
+    const assistantMessage: ChatMessage = {
+      id: generateTempId(),
+      role: 'assistant',
+      contentParts: latest.contentParts,
+      timestamp: new Date(),
+      toolCalls: latest.toolCalls ?? [],
+      thinking_details: latest.thinkingDetails,
+    } as any;
+
+    if (!appendAssistantMessage(invocationKey, assistantMessage)) {
+      runtime.updateInvocation(invocationKey, {
+        status: 'error',
+        error: 'Failed to append assistant message to history',
+        activeSessionId: null,
+      });
+      await persistInvocationState(invocationKey);
+      return;
+    }
+
+    if (!latest.toolCalls || latest.toolCalls.length === 0) {
+      const output = contentText(latest.contentParts);
+      runtime.updateInvocation(invocationKey, {
+        status: 'completed',
+        finalOutput: output,
+        activeSessionId: null,
+      });
+      await persistInvocationState(invocationKey);
+      const completion = completions.get(invocationKey);
+      completion?.resolve(output);
+      completions.delete(invocationKey);
+      return;
+    }
+
+    const allowedToolNames = (invocation.tools ?? [])
+      .map((tool) => tool.name)
+      .filter((name): name is string => Boolean(name && name.trim()));
+
+    const staged = await stageToolCalls({
+      projectId: invocation.projectId,
+      language: invocation.language,
+      toolCalls: latest.toolCalls,
+      allowedToolNames: allowedToolNames.length > 0 ? allowedToolNames : undefined,
+    });
+
+    const adjustedToolCalls = applyReturnResultBatchRules(staged.toolCalls);
+    if (!replaceLastAssistantToolCalls(invocationKey, adjustedToolCalls)) {
+      runtime.updateInvocation(invocationKey, {
+        status: 'error',
+        error: 'Failed to update tool calls in history',
+        activeSessionId: null,
+      });
+      await persistInvocationState(invocationKey);
+      return;
+    }
+
     runtime.updateInvocation(invocationKey, {
-      status: latest.status === 'cancelled' ? 'cancelled' : 'error',
+      status: hasPendingDecisionToolCalls(adjustedToolCalls) ? 'awaiting_confirmation' : 'paused',
+      activeSessionId: null,
+    });
+
+    await persistInvocationState(invocationKey);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Sub Agent turn failed unexpectedly';
+    console.error('[SubAgentManager] runTurn error:', error);
+
+    const runtime = useSubAgentRuntimeStore.getState();
+    runtime.updateInvocation(invocationKey, {
+      status: 'error',
       error: errorMessage,
       activeSessionId: null,
     });
-    await persistInvocationSnapshot(invocationKey);
+    await persistInvocationState(invocationKey);
+
     const completion = completions.get(invocationKey);
-    completion?.reject(new Error(errorMessage));
+    completion?.reject(error instanceof Error ? error : new Error(errorMessage));
     completions.delete(invocationKey);
-    return;
   }
-
-  const assistantMessage: ChatMessage = {
-    id: generateTempId(),
-    role: 'assistant',
-    contentParts: latest.contentParts,
-    timestamp: new Date(),
-    toolCalls: latest.toolCalls ?? [],
-    thinking_details: latest.thinkingDetails,
-  } as any;
-
-  if (!appendAssistantMessage(invocationKey, assistantMessage)) {
-    return;
-  }
-
-  if (!latest.toolCalls || latest.toolCalls.length === 0) {
-    const output = contentText(latest.contentParts);
-    runtime.updateInvocation(invocationKey, {
-      status: 'completed',
-      finalOutput: output,
-      activeSessionId: null,
-    });
-    await persistInvocationSnapshot(invocationKey);
-    const completion = completions.get(invocationKey);
-    completion?.resolve(output);
-    completions.delete(invocationKey);
-    return;
-  }
-
-  const allowedToolNames = (invocation.tools ?? [])
-    .map((tool) => tool.name)
-    .filter((name): name is string => Boolean(name && name.trim()));
-
-  const staged = await stageToolCalls({
-    projectId: invocation.projectId,
-    language: invocation.language,
-    toolCalls: latest.toolCalls,
-    allowedToolNames: allowedToolNames.length > 0 ? allowedToolNames : undefined,
-  });
-
-  const adjustedToolCalls = applyReturnResultBatchRules(staged.toolCalls);
-  if (!replaceLastAssistantToolCalls(invocationKey, adjustedToolCalls)) {
-    return;
-  }
-
-  runtime.updateInvocation(invocationKey, {
-    status: hasPendingDecisionToolCalls(adjustedToolCalls) ? 'awaiting_confirmation' : 'paused',
-    activeSessionId: null,
-  });
-
-  await persistInvocationSnapshot(invocationKey);
 }
 
 export const SubAgentManager = {
@@ -498,7 +544,7 @@ export const SubAgentManager = {
         history: initialHistory,
         activeSessionId: null,
       });
-      await persistInvocationSnapshot(invocationKey);
+      await persistInvocationState(invocationKey);
     } else if (existing.status === 'completed' && typeof existing.finalOutput === 'string') {
       return existing.finalOutput;
     }
@@ -520,7 +566,7 @@ export const SubAgentManager = {
   }): Promise<void> {
     const { invocationKey, decisions, autoContinue } = params;
 
-    await persistInvocationSnapshot(invocationKey);
+    await persistInvocationState(invocationKey);
 
     const runtime = useSubAgentRuntimeStore.getState();
     const invocation = runtime.getInvocationByKey(invocationKey);
@@ -534,7 +580,7 @@ export const SubAgentManager = {
     if (!currentToolCalls.length) {
       if (!autoContinue) {
         runtime.updateInvocation(invocationKey, { status: 'paused', activeSessionId: null });
-        await persistInvocationSnapshot(invocationKey);
+        await persistInvocationState(invocationKey);
         return;
       }
       await runTurn(invocationKey);
@@ -568,14 +614,14 @@ export const SubAgentManager = {
     });
 
     replaceLastAssistantToolCalls(invocationKey, applied.toolCalls);
-    await persistInvocationSnapshot(invocationKey);
+    await persistInvocationState(invocationKey);
 
     if (hasPendingDecisionToolCalls(applied.toolCalls)) {
       runtime.updateInvocation(invocationKey, {
         status: 'awaiting_confirmation',
         activeSessionId: null,
       });
-      await persistInvocationSnapshot(invocationKey);
+      await persistInvocationState(invocationKey);
       return;
     }
 
@@ -591,7 +637,7 @@ export const SubAgentManager = {
         error: undefined,
         activeSessionId: null,
       });
-      await persistInvocationSnapshot(invocationKey);
+      await persistInvocationState(invocationKey);
       const completion = completions.get(invocationKey);
       completion?.resolve(output);
       completions.delete(invocationKey);
@@ -603,7 +649,7 @@ export const SubAgentManager = {
         status: 'paused',
         activeSessionId: null,
       });
-      await persistInvocationSnapshot(invocationKey);
+      await persistInvocationState(invocationKey);
       return;
     }
 
@@ -633,7 +679,7 @@ export const SubAgentManager = {
       error: 'Cancelled',
       activeSessionId: null,
     });
-    await persistInvocationSnapshot(invocationKey);
+    await persistInvocationState(invocationKey);
 
     const completion = completions.get(invocationKey);
     completion?.reject(new Error('Cancelled'));

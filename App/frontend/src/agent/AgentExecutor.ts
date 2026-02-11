@@ -12,8 +12,10 @@ import { useCredentialsStore } from '../store/credentialsStore';
 import { useLLMSessionStore } from '../store/llmSessionStore';
 import { useSubAgentStore } from '../store/subAgentStore';
 import { useErrorStore } from '../store/errorStore';
+import { useAgentPromptSnapshotStore } from '../store/agentPromptSnapshotStore';
 import { startLLMSession } from '../llmSession';
 import { LLMTaskMode, type AgentPromptContext, type AgentTranslationPromptContext, createEmptyUserHistory } from '../llm';
+import { PromptManager } from '../llm/PromptManager';
 import type { OutputMode } from '../llm/types';
 import type { ChatMessage, ContentPart, ToolCallMetadata } from '../llm/requestTypes';
 import { getToolsForSet } from '../toolCall';
@@ -178,6 +180,23 @@ export const AgentExecutor = {
       });
     }
 
+    // 2.5) Frozen project data snapshot for auto-continue context drift prevention
+    const lastHistoryMsg = history[history.length - 1];
+    const isUserTurn = lastHistoryMsg?.role === 'user';
+
+    const snapshotStore = useAgentPromptSnapshotStore.getState();
+    let frozenProjectData = !isUserTurn
+      ? snapshotStore.get(input.projectId, input.agentId)?.projectData
+      : undefined;
+
+    if (!frozenProjectData) {
+      frozenProjectData = PromptManager.buildProjectData(input.projectId, language);
+      snapshotStore.set(input.projectId, input.agentId, {
+        projectData: frozenProjectData,
+        capturedAt: Date.now(),
+      });
+    }
+
     const llmMode =
       input.runMode === 'planMode'
         ? LLMTaskMode.AGENT_PLAN_MODE
@@ -215,10 +234,12 @@ export const AgentExecutor = {
       runMode: input.runMode,
       surface: input.surface,
       contextObjectIds: input.contextObjectIds,
+      frozenProjectData,
     };
     const mergedPromptContext: AgentPromptContext = {
       ...promptContext,
       ...(input.promptContextOverride ?? {}),
+      frozenProjectData,  // Ensure frozen data is not overridden by promptContextOverride
     };
 
     // 3) Start session + stream via llmSessionStore

@@ -8,7 +8,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useShallow } from 'zustand/react/shallow';
 import { useAgentStore } from '../../store/agentStore';
 import { useAgentUIStore } from '../../store/agentUIStore';
 import { useSidebarStore } from '../../store/sidebarStore';
@@ -89,36 +88,41 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
     activeSessionIdByAgentRef.current = activeSessionIdByAgent;
   }, [activeSessionIdByAgent]);
 
-  const activeSessionStatusSelector = useMemo(
-    () => (state: ReturnType<typeof useLLMSessionStore.getState>) => {
-      const statuses: Record<string, string | undefined> = {};
-      for (const [agentId, sessionId] of Object.entries(activeSessionIdByAgent)) {
-        statuses[agentId] = state.sessions[sessionId]?.status;
-      }
-      return statuses;
-    },
-    [activeSessionIdByAgent]
-  );
-  const activeSessionStatusByAgent = useLLMSessionStore(useShallow(activeSessionStatusSelector));
-
   useEffect(() => {
     if (!projectId) return;
-    const finishedAgentIds: string[] = [];
-    for (const [agentId, status] of Object.entries(activeSessionStatusByAgent)) {
-      if (isAgentSessionActive(status)) continue;
-      useAgentUIStore.getState().setLoading(projectId, agentId, false);
-      finishedAgentIds.push(agentId);
-    }
-    if (finishedAgentIds.length === 0) return;
 
-    setActiveSessionIdByAgent((prev) => {
-      const next = { ...prev };
-      for (const agentId of finishedAgentIds) {
-        delete next[agentId];
+    function processFinishedSessions() {
+      const activeMap = activeSessionIdByAgentRef.current;
+      if (Object.keys(activeMap).length === 0) return;
+
+      const allSessions = useLLMSessionStore.getState().sessions;
+      const finishedAgentIds: string[] = [];
+
+      for (const [agentId, sessionId] of Object.entries(activeMap)) {
+        const status = allSessions[sessionId]?.status;
+        if (isAgentSessionActive(status)) continue;
+        useAgentUIStore.getState().setLoading(projectId, agentId, false);
+        finishedAgentIds.push(agentId);
       }
-      return next;
-    });
-  }, [activeSessionStatusByAgent, projectId]);
+
+      if (finishedAgentIds.length === 0) return;
+
+      setActiveSessionIdByAgent((prev) => {
+        const next = { ...prev };
+        for (const agentId of finishedAgentIds) {
+          delete next[agentId];
+        }
+        return next;
+      });
+    }
+
+    // Process immediately in case sessions already finished
+    processFinishedSessions();
+
+    // Subscribe to LLM session store to detect when agent sessions complete
+    const unsubscribe = useLLMSessionStore.subscribe(processFinishedSessions);
+    return unsubscribe;
+  }, [projectId]);
 
   useEffect(() => {
     return () => {

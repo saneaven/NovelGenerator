@@ -1,12 +1,12 @@
 /**
- * API service for persistent Sub Agent invocation snapshots.
+ * API service for persistent Sub Agent invocation states.
  */
 import apiClient from './client';
 import type {
   SubAgentInvocationQueryByMessagesRequest,
   SubAgentInvocationQueryByMessagesResponse,
-  SubAgentInvocationSnapshotRequest,
-  SubAgentInvocationSnapshotResponse,
+  SubAgentInvocationStateRequest,
+  SubAgentInvocationStateResponse,
 } from './types';
 
 
@@ -16,12 +16,12 @@ function basePath(projectId: string, agentId: string): string {
 
 
 export const subAgentInvocationService = {
-  async upsertSnapshot(
+  async upsertState(
     projectId: string,
     agentId: string,
-    data: SubAgentInvocationSnapshotRequest
-  ): Promise<SubAgentInvocationSnapshotResponse> {
-    return apiClient.post<SubAgentInvocationSnapshotResponse>(`${basePath(projectId, agentId)}/snapshots`, data);
+    data: SubAgentInvocationStateRequest
+  ): Promise<SubAgentInvocationStateResponse> {
+    return apiClient.post<SubAgentInvocationStateResponse>(`${basePath(projectId, agentId)}/states`, data);
   },
 
   async queryByMessages(
@@ -32,4 +32,3 @@ export const subAgentInvocationService = {
     return apiClient.post<SubAgentInvocationQueryByMessagesResponse>(`${basePath(projectId, agentId)}/query-by-messages`, data);
   },
 };
-

@@ -214,7 +214,7 @@ export class PromptManager {
     const relevantChats = Array.isArray((context as any).relevantChats) ? (context as any).relevantChats : [];
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
-      project: this.buildProjectData(context.projectId, settings.mainLanguage),
+      project: context.frozenProjectData ?? this.buildProjectData(context.projectId, settings.mainLanguage),
       input: {
         // userMessage is injected per user block in prepareMessages()
       },
@@ -260,7 +260,7 @@ export class PromptManager {
 
     const templateData: TemplateData = {
       config: this.buildConfigData(context),
-      project: this.buildProjectData(context.projectId, settings.mainLanguage),
+      project: context.frozenProjectData ?? this.buildProjectData(context.projectId, settings.mainLanguage),
       input: {},
       variables,
     };
