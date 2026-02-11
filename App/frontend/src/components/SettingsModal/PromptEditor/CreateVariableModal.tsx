@@ -189,6 +189,7 @@ const CreateVariableModal: React.FC<CreateVariableModalProps> = ({
       onClose={handleClose}
       title={t('settings.promptEditor.createVariable.title')}
       size="medium"
+      zIndexLayer={1}
     >
       <div className="create-variable-modal">
         {/* Name field */}

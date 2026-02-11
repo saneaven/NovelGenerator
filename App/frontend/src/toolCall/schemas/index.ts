@@ -12,6 +12,8 @@ export {
   isReplaceTool,
   isPatchTool,
   isReadTool,
+  getAutoApproveCategory,
+  type AutoApproveCategory,
   STORY_OBJECT_EDIT_TOOLS,
   MANUSCRIPT_EDIT_TOOLS,
   OUTLINE_EDIT_TOOLS,

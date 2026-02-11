@@ -90,6 +90,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
 
   useEffect(() => {
     if (!projectId) return;
+    const currentProjectId = projectId;
 
     function processFinishedSessions() {
       const activeMap = activeSessionIdByAgentRef.current;
@@ -101,7 +102,7 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
       for (const [agentId, sessionId] of Object.entries(activeMap)) {
         const status = allSessions[sessionId]?.status;
         if (isAgentSessionActive(status)) continue;
-        useAgentUIStore.getState().setLoading(projectId, agentId, false);
+        useAgentUIStore.getState().setLoading(currentProjectId, agentId, false);
         finishedAgentIds.push(agentId);
       }
 
@@ -137,6 +138,15 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
   // ============================================================================
 
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Stable ref-based callback for auto-continue chaining.
+  // Uses a ref to avoid circular dependency: triggerAutoContinue uses handleAutoContinueReady,
+  // and handleAutoContinueReady delegates to triggerAutoContinue.
+  const autoContinueReadyRef = useRef<(() => void) | undefined>(undefined);
+
+  const handleAutoContinueReady = useCallback(() => {
+    autoContinueReadyRef.current?.();
+  }, []);
 
   const handleSelectAgent = useCallback((agentId: string) => {
     if (!projectId) return;
@@ -277,12 +287,13 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
         historyOverride,
         promptContextOverride,
       },
-      (sessionId) => setActiveSessionIdByAgent((prev) => ({ ...prev, [agentId]: sessionId }))
+      (sessionId) => setActiveSessionIdByAgent((prev) => ({ ...prev, [agentId]: sessionId })),
+      handleAutoContinueReady,
     ).catch((error) => {
       console.error('AgentExecutor.start failed:', error);
       useAgentUIStore.getState().setLoading(projectId, agentId, false);
     });
-  }, [projectId, getSelectedAgentId, getObjectsMissingMainLanguage, mainLanguage, clearInput, runMode, surface, selectedContextIds, t]);
+  }, [projectId, getSelectedAgentId, getObjectsMissingMainLanguage, mainLanguage, clearInput, runMode, surface, selectedContextIds, handleAutoContinueReady, t]);
 
   const handleStop = useCallback(() => {
     if (!projectId) return;
@@ -429,12 +440,18 @@ export function useAgentOrchestration(config: AgentOrchestrationConfig): AgentOr
         historyOverride,
         promptContextOverride,
       },
-      (sessionId) => setActiveSessionIdByAgent((prev) => ({ ...prev, [agentId]: sessionId }))
+      (sessionId) => setActiveSessionIdByAgent((prev) => ({ ...prev, [agentId]: sessionId })),
+      handleAutoContinueReady,
     ).catch((error) => {
       console.error('AgentExecutor.start (auto-continue) failed:', error);
       useAgentUIStore.getState().setLoading(projectId, agentId, false);
     });
-  }, [projectId, getSelectedAgentId, runMode, surface, mainLanguage, selectedContextIds, t]);
+  }, [projectId, getSelectedAgentId, runMode, surface, mainLanguage, selectedContextIds, handleAutoContinueReady, t]);
+
+  // Keep autoContinueReadyRef in sync with latest triggerAutoContinue
+  useEffect(() => {
+    autoContinueReadyRef.current = () => void triggerAutoContinue();
+  }, [triggerAutoContinue]);
 
   const agentHandlers: AgentHandlersReturn = {
     editTextareaRef,

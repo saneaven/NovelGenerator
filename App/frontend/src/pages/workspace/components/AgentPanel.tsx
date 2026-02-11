@@ -961,7 +961,7 @@ const AgentPanel: React.FC<AgentPanelProps> = ({
                                                                                 options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
                                                                                 invocationCaller: runMode,
                                                                             });
-                                                                            if (!result.hasPendingDecisions) {
+                                                                            if (result.shouldAutoContinue) {
                                                                                 await triggerAutoContinue();
                                                                             }
                                                                         } finally {

@@ -40,8 +40,7 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
     : null;
   const imageUrl = getAssetUrl(mainAsset);
 
-  const title = snapshot.displayName ? `Delete ${snapshot.displayName}` : operation.title;
-  const targetLabel = snapshot.displayName || operation.targetLabel || snapshot.id;
+  const title = snapshot.displayName || operation.title;
 
   const renderBody = () => {
     if (operation.objectType === 'outline' || operation.objectType === 'outline_act' || operation.objectType === 'outline_chapter') {
@@ -50,7 +49,7 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
       return (
         <OutlineItemCard
           variant={toOutlineItemVariant(operation.objectType)}
-          name={targetLabel || 'Outline'}
+          name={title || 'Outline'}
           description={desc}
           content={body}
           readOnly
@@ -59,12 +58,12 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
     }
 
     if (operation.objectType === 'manuscript') {
-      return <ReadOnlyManuscriptDisplay title={targetLabel || 'Manuscript'} doc={snapshot.data.doc} />;
+      return <ReadOnlyManuscriptDisplay title={title || 'Manuscript'} doc={snapshot.data.doc} />;
     }
 
     return (
       <ReadOnlyStoryObjectDisplay
-        title={targetLabel || 'Item'}
+        title={title || 'Item'}
         values={snapshot.data}
         mode="delete"
         imageUrl={imageUrl}
@@ -82,16 +81,14 @@ export const DeleteCallCard: React.FC<ObjectCardProps> = ({
       category="delete"
       status={operation.status}
       title={title}
-      targetLabel={targetLabel}
       showDecisionButtons={showDecisionButtons}
       decisionDisabled={decisionDisabled}
       onAccept={onAccept}
       onReject={onReject}
       canToggle={!isDeleted}
       defaultExpanded={!isDeleted && (operation.status === 'pending' || operation.status === 'running')}
-    >
-      {!isDeleted && renderBody()}
-    </FunctionCallCardShell>
+      islands={isDeleted ? undefined : [renderBody()]}
+    />
   );
 };
 

@@ -801,6 +801,23 @@ export function isReadTool(name: string): boolean {
   return READ_TOOL_NAMES.has(name) || name.startsWith('call_');
 }
 
+/** Auto-approve category keys matching ToolCallAutoApproveConfig */
+export type AutoApproveCategory = 'read' | 'search' | 'create' | 'delete' | 'replace' | 'patch';
+
+/**
+ * Maps a tool name to its auto-approve config key.
+ * Returns undefined for tools that cannot be auto-approved (e.g., call_* sub-agent tools).
+ */
+export function getAutoApproveCategory(toolName: string): AutoApproveCategory | undefined {
+  if (toolName === 'rag_search' || toolName === 'keyword_search') return 'search';
+  if (toolName.startsWith('read_')) return 'read';
+  if (toolName.startsWith('create_')) return 'create';
+  if (toolName.startsWith('delete_')) return 'delete';
+  if (toolName.startsWith('replace_')) return 'replace';
+  if (toolName.startsWith('patch_')) return 'patch';
+  return undefined;
+}
+
 // ============================================================================
 // TOOL GROUPS FOR LLM
 // ============================================================================

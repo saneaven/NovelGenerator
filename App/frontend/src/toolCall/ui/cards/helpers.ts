@@ -75,7 +75,12 @@ function resolveByTypeAndId(
   });
 }
 
-function resolveDisplayName(object: UnifiedObject | undefined, data: Record<string, unknown>): string | undefined {
+function resolveDisplayName(
+  object: UnifiedObject | undefined,
+  data: Record<string, unknown>,
+  objects: Record<string, UnifiedObject>,
+  language: string,
+): string | undefined {
   if (!object) return undefined;
 
   if (object.type === 'basic_info') {
@@ -88,6 +93,16 @@ function resolveDisplayName(object: UnifiedObject | undefined, data: Record<stri
   }
 
   if (object.type === 'manuscript') {
+    const chapterId = object.metadata?.chapter_id;
+    if (typeof chapterId === 'string') {
+      const chapter = objects[chapterId];
+      if (chapter) {
+        const chapterData = dataForLanguage(chapter, language);
+        if (typeof chapterData.name === 'string' && chapterData.name.trim()) {
+          return `Manuscript: ${chapterData.name}`;
+        }
+      }
+    }
     return 'Manuscript';
   }
 
@@ -127,7 +142,7 @@ export function getObjectSnapshot(params: {
     unifiedType,
     data,
     metadata,
-    displayName: resolveDisplayName(object, data) ?? operation.targetLabel,
+    displayName: resolveDisplayName(object, data, objects, language) ?? operation.targetLabel,
     object,
   };
 }

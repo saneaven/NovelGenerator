@@ -20,12 +20,13 @@ import {
   markToolCallsRunning,
 } from '../../toolCall/runtime';
 import type { HandlerOptions } from '../../toolCall/apply/types';
-import type { ToolCallDecisionMap, ToolCallStatus } from '../../toolCall/types';
+import type { ToolCallDecisionMap } from '../../toolCall/types';
 import { generateTempId } from '../../utils/tempId';
 import type { SubAgentDefinition } from '../../types/subAgents';
 import { buildCallToolSchema } from '../tools/SubAgentCallTools';
 import type { InvocationCaller } from '../../types/agentRuntime';
 import { subAgentInvocationService } from '../../api/subAgentInvocationService';
+import { evaluateToolCallAutoContinue } from '../../agent/utils/autoContinuePolicy';
 
 type Completion = { resolve: (output: string) => void; reject: (error: Error) => void };
 
@@ -59,17 +60,6 @@ function contentText(parts: Array<{ type: string; text: string }>): string {
     .map((part) => part.text)
     .join('')
     .trim();
-}
-
-function normalizeToolCallStatus(status: ToolCallMetadata['status']): ToolCallStatus {
-  return (status ?? 'pending') as ToolCallStatus;
-}
-
-function hasPendingDecisionToolCalls(toolCalls: ToolCallMetadata[]): boolean {
-  return toolCalls.some((toolCall) => {
-    const status = normalizeToolCallStatus(toolCall.status);
-    return status === 'pending' || status === 'validating' || status === 'running';
-  });
 }
 
 function findLastAssistantMessageId(history: ChatMessage[]): string | null {
@@ -445,11 +435,30 @@ async function runTurn(invocationKey: string): Promise<void> {
       return;
     }
 
+    const autoContinue = evaluateToolCallAutoContinue(adjustedToolCalls);
+    if (autoContinue.hasPending) {
+      runtime.updateInvocation(invocationKey, {
+        status: 'awaiting_confirmation',
+        activeSessionId: null,
+      });
+      await persistInvocationState(invocationKey);
+      return;
+    }
+
+    if (autoContinue.shouldAutoContinue) {
+      runtime.updateInvocation(invocationKey, {
+        status: 'running',
+        activeSessionId: null,
+      });
+      await persistInvocationState(invocationKey);
+      await runTurn(invocationKey);
+      return;
+    }
+
     runtime.updateInvocation(invocationKey, {
-      status: hasPendingDecisionToolCalls(adjustedToolCalls) ? 'awaiting_confirmation' : 'paused',
+      status: 'paused',
       activeSessionId: null,
     });
-
     await persistInvocationState(invocationKey);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Sub Agent turn failed unexpectedly';
@@ -616,7 +625,8 @@ export const SubAgentManager = {
     replaceLastAssistantToolCalls(invocationKey, applied.toolCalls);
     await persistInvocationState(invocationKey);
 
-    if (hasPendingDecisionToolCalls(applied.toolCalls)) {
+    const autoContinueState = evaluateToolCallAutoContinue(applied.toolCalls);
+    if (autoContinueState.hasPending) {
       runtime.updateInvocation(invocationKey, {
         status: 'awaiting_confirmation',
         activeSessionId: null,
@@ -644,7 +654,7 @@ export const SubAgentManager = {
       return;
     }
 
-    if (!autoContinue) {
+    if (!autoContinue || !autoContinueState.shouldAutoContinue) {
       runtime.updateInvocation(invocationKey, {
         status: 'paused',
         activeSessionId: null,

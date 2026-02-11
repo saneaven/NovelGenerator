@@ -10,7 +10,6 @@ export interface FunctionCallCardShellProps {
   category: OperationCategory;
   status: HeaderStatus;
   title: string;
-  targetLabel?: string;
   subtitle?: string;
   defaultExpanded?: boolean;
   canToggle?: boolean;
@@ -22,12 +21,11 @@ export interface FunctionCallCardShellProps {
 
   rightActions?: React.ReactNode;
   /**
-   * Additional islands rendered after the collapsible content island.
-   * Accepts any ReactNode — a single element, a fragment, or an array.
-   * Each top-level element becomes a visually distinct island within the card.
+   * Content islands rendered below the header.
+   * Each element becomes a visually distinct, collapsible island
+   * that shares the same expand / collapse toggle.
    */
-  extraIslands?: React.ReactNode;
-  children?: React.ReactNode;
+  islands?: React.ReactNode[];
 }
 
 export const FunctionCallCardShell: React.FC<FunctionCallCardShellProps> = ({
@@ -36,7 +34,6 @@ export const FunctionCallCardShell: React.FC<FunctionCallCardShellProps> = ({
   category,
   status,
   title,
-  targetLabel,
   subtitle,
   defaultExpanded = false,
   canToggle = true,
@@ -45,8 +42,7 @@ export const FunctionCallCardShell: React.FC<FunctionCallCardShellProps> = ({
   onReject,
   decisionDisabled = false,
   rightActions,
-  extraIslands,
-  children,
+  islands,
 }) => {
   const expanded = useFunctionCallUIStore(
     (state) => state.expandedByThread[threadId]?.[cardId] ?? defaultExpanded
@@ -66,7 +62,6 @@ export const FunctionCallCardShell: React.FC<FunctionCallCardShellProps> = ({
         category={category}
         status={status}
         title={title}
-        targetLabel={targetLabel}
         subtitle={subtitle}
         expanded={expanded}
         onToggle={handleToggle}
@@ -78,13 +73,15 @@ export const FunctionCallCardShell: React.FC<FunctionCallCardShellProps> = ({
         rightActions={rightActions}
       />
 
-      {children && (
-        <FunctionCallContentIsland panelId={panelId} expanded={expanded}>
-          {children}
+      {islands?.map((island, index) => (
+        <FunctionCallContentIsland
+          key={index}
+          panelId={`${panelId}-${index}`}
+          expanded={expanded}
+        >
+          {island}
         </FunctionCallContentIsland>
-      )}
-
-      {extraIslands}
+      ))}
     </div>
   );
 };

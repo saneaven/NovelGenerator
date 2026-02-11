@@ -793,6 +793,7 @@
         "promptSaveFailed": "프롬프트 저장에 실패했습니다. 다시 시도해주세요.",
         "fragmentSaved": "프래그먼트가 저장되었습니다",
         "fragmentSaveFailed": "프래그먼트 저장에 실패했습니다. 다시 시도해주세요.",
+        "copyFailed": "복사에 실패했습니다. 다시 시도해주세요.",
         "templateSyntaxError": "저장할 수 없습니다: 템플릿 문법 오류가 있습니다"
       },
       "selectPromptToEdit": "편집할 프롬프트를 선택하세요",

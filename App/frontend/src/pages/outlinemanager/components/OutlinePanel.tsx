@@ -470,7 +470,26 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
   }, [selectedOutline, globalDisplayLanguage]);
 
   // Get acts for selected outline
-  const selectedOutlineActs = selectedOutlineId ? getActsForOutline(selectedOutlineId) : [];
+  const selectedOutlineActs = useMemo(
+    () => (selectedOutlineId ? actsByOutlineId.get(selectedOutlineId) || [] : []),
+    [selectedOutlineId, actsByOutlineId]
+  );
+
+  // Global chapter numbering for selected outline (across all acts)
+  const chapterNumberById = useMemo(() => {
+    const map = new Map<string, number>();
+    let chapterNumber = 1;
+
+    for (const act of selectedOutlineActs) {
+      const actChapters = chaptersByActId.get(act.id) || [];
+      for (const chapter of actChapters) {
+        map.set(chapter.id, chapterNumber);
+        chapterNumber += 1;
+      }
+    }
+
+    return map;
+  }, [selectedOutlineActs, chaptersByActId]);
 
   // Handle opening sidebar (desktop only)
   const handleOpenSidebar = () => {
@@ -770,6 +789,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                     const { effectiveLanguage: chLang, isFallback: chFallback } = getEffectiveLanguage(chapter);
                                     const chData = getDataForLanguage(chapter, chLang);
                                     const isChapterExpanded = expandedChapters.has(chapter.id);
+                                    const globalChapterIndex = chapterNumberById.get(chapter.id) ?? chapterIndex + 1;
 
                                     return (
                                       <div
@@ -784,7 +804,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                               <div className="content-card chapter-card is-editing">
                                                 <div className="chapter-header">
                                                   <div className="chapter-info" style={{ flex: 1 }}>
-                                                    <span className="chapter-index">CH {chapterIndex + 1}</span>
+                                                    <span className="chapter-index">CH {globalChapterIndex}</span>
                                                     <input
                                                       type="text"
                                                       className="inline-title-input"
@@ -851,7 +871,7 @@ const OutlinePanel: React.FC<OutlinePanelProps> = ({ globalDisplayLanguage }) =>
                                               name={chData.name || 'Untitled Chapter'}
                                               description={chData.description}
                                               content={chData.content}
-                                              chapterIndex={chapterIndex + 1}
+                                              chapterIndex={globalChapterIndex}
                                               expanded={isChapterExpanded}
                                               showFallbackWarning={chFallback}
                                               onHeaderClick={() => toggleChapterExpand(chapter.id)}

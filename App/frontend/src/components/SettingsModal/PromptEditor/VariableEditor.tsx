@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useVariableStore } from '../../../store/variableStore';
 import type { VariableType } from '../../../types/variables';
 import { getVariableTypeLabel, isValidVariableName } from '../../../types/variables';
@@ -6,6 +7,7 @@ import { Trash, Copy, Plus, Close, ChevronLeft, ChevronRight } from '../../icons
 import { TextButton } from '../../TextButton';
 import { IconButton } from '../../IconButton';
 import { CustomSelect } from '../../ui/CustomSelect';
+import { useSettingsToast } from '../SettingsToastContext';
 import './VariableEditor.css';
 
 export interface VariableDefinitionDraft {
@@ -88,6 +90,8 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
   isSidebarCollapsed,
   onToggleSidebar,
 }) => {
+  const { t } = useTranslation();
+  const toast = useSettingsToast();
   const { variables, deleteVariable } = useVariableStore();
   const variable = variables.find((v) => v.id === variableId);
   const [newOption, setNewOption] = useState('');
@@ -242,8 +246,14 @@ const VariableEditor: React.FC<VariableEditorProps> = ({
     }
   };
 
-  const handleCopyUsage = () => {
-    navigator.clipboard.writeText(`{{variables.${draft.current.name}}}`);
+  const handleCopyUsage = async () => {
+    const usage = `{{variables.${draft.current.name}}}`;
+    try {
+      await navigator.clipboard.writeText(usage);
+      toast.success(t('common.copied', { value: usage }));
+    } catch {
+      toast.error(t('settings.promptEditor.toast.copyFailed'));
+    }
   };
 
   return (

@@ -11,7 +11,7 @@ export const CallAgentCard: React.FC<CallAgentCardProps> = ({
   onAccept,
   onReject,
 }) => {
-  const title = `Call ${operation.displayName}`;
+  const title = operation.displayName;
   const input = operation.input?.trim() ? operation.input : '(no input)';
 
   return (
@@ -21,18 +21,18 @@ export const CallAgentCard: React.FC<CallAgentCardProps> = ({
       category="call_agent"
       status={operation.status}
       title={title}
-      targetLabel={operation.agentName}
       showDecisionButtons={showDecisionButtons}
       decisionDisabled={decisionDisabled}
       onAccept={onAccept}
       onReject={onReject}
       defaultExpanded={operation.status === 'pending' || operation.status === 'running'}
-    >
-      <div className="function-call-call-agent-body">
-        <div className="function-call-call-agent-body__label">Sub-agent request</div>
-        <MarkdownRenderer className="function-call-call-agent-body__content">{input}</MarkdownRenderer>
-      </div>
-    </FunctionCallCardShell>
+      islands={[
+        <div className="function-call-call-agent-body" key="body">
+          <div className="function-call-call-agent-body__label">Sub-agent request</div>
+          <MarkdownRenderer className="function-call-call-agent-body__content">{input}</MarkdownRenderer>
+        </div>,
+      ]}
+    />
   );
 };
 

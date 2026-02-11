@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { EditorView, keymap } from '@codemirror/view';
 import { EditorSelection } from '@codemirror/state';
@@ -23,6 +23,19 @@ const SyntaxHighlightedTextarea: React.FC<SyntaxHighlightedTextareaProps> = ({
 }) =>
 {
     const editorRef = useRef<any>(null);
+    const lastEmittedValueRef = useRef(value);
+
+    useEffect(() =>
+    {
+        lastEmittedValueRef.current = value;
+    }, [value]);
+
+    const emitChangeIfNeeded = useCallback((nextValue: string) =>
+    {
+        if (nextValue === lastEmittedValueRef.current) return;
+        lastEmittedValueRef.current = nextValue;
+        onChange(nextValue);
+    }, [onChange]);
 
     // Detect mobile devices
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -57,7 +70,12 @@ const SyntaxHighlightedTextarea: React.FC<SyntaxHighlightedTextareaProps> = ({
             value={value}
             height="100%"
             className="syntax-highlighted-textarea"
-            onChange={(value) => onChange(value)}
+            onChange={(nextValue) => emitChangeIfNeeded(nextValue)}
+            onUpdate={(update) =>
+            {
+                if (!update.docChanged) return;
+                emitChangeIfNeeded(update.state.doc.toString());
+            }}
             placeholder={placeholder}
             extensions={[
                 templateLanguage,

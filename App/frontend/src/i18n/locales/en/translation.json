@@ -793,6 +793,7 @@
         "promptSaveFailed": "Failed to save prompt. Please try again.",
         "fragmentSaved": "Fragment saved",
         "fragmentSaveFailed": "Failed to save fragment. Please try again.",
+        "copyFailed": "Failed to copy. Please try again.",
         "templateSyntaxError": "Cannot save: template contains syntax errors"
       },
       "selectPromptToEdit": "Select a prompt to edit",

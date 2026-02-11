@@ -1,6 +1,7 @@
 import type { ToolCallMetadata } from '../../llm/requestTypes';
 import { useUnifiedObjectStore } from '../../store/unifiedObjectStore';
 import { useSubAgentStore } from '../../store/subAgentStore';
+import type { ToolCallAutoApproveConfig } from '../../store/settingsStore';
 import { buildEditCards, applyValidationResults } from '../editCards';
 import { validate } from '../validation';
 import { normalizeToolCall } from '../normalizer';
@@ -12,6 +13,7 @@ import type {
   ToolCallFailureType,
   ToolCallStatus,
 } from '../types';
+import { getAutoApproveCategory } from '../schemas/schemaRegistry';
 import { CRUD_HANDLERS } from '../apply/handlers/CrudHandlers';
 import { PATCH_HANDLERS } from '../apply/handlers/PatchHandlers';
 import { REPLACE_HANDLERS } from '../apply/handlers/ReplaceHandlers';
@@ -554,4 +556,44 @@ export function rejectAllToolCalls(params: {
     error: evaluated.error,
     warning: evaluated.warning,
   };
+}
+
+/**
+ * Build auto-approve decisions for staged tool calls based on user config.
+ * Only tool calls in 'pending' or 'validating' status are eligible.
+ * Tool calls that failed validation are never auto-approved.
+ */
+export function buildAutoApproveDecisions(params: {
+  toolCalls: ToolCallMetadata[];
+  config: ToolCallAutoApproveConfig;
+}): {
+  decisions: ToolCallDecisionMap;
+  allAutoApproved: boolean;
+} {
+  const { toolCalls, config } = params;
+  const decisions: ToolCallDecisionMap = {};
+  let hasAnyPending = false;
+  let allAutoApproved = true;
+
+  for (const toolCall of toolCalls) {
+    const status = normalizeStatus(toolCall.status);
+
+    if (!isDecisionEligibleStatus(status)) continue;
+    if (isValidationFailure(status, toolCall.failureType)) continue;
+
+    hasAnyPending = true;
+
+    const category = getAutoApproveCategory(toolCall.tool_name);
+    if (category && config[category]) {
+      decisions[toolCall.id] = 'accept';
+    } else {
+      allAutoApproved = false;
+    }
+  }
+
+  if (!hasAnyPending) {
+    allAutoApproved = false;
+  }
+
+  return { decisions, allAutoApproved };
 }

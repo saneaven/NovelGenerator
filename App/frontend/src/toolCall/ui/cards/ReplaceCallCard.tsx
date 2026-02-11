@@ -125,16 +125,14 @@ export const ReplaceCallCard: React.FC<ObjectCardProps> = ({
       category="replace"
       status={operation.status}
       title={title}
-      targetLabel={targetLabel}
       subtitle={changedFields.length === 0 ? 'No effective field changes' : undefined}
       showDecisionButtons={showDecisionButtons}
       decisionDisabled={decisionDisabled}
       onAccept={onAccept}
       onReject={onReject}
       defaultExpanded={operation.status === 'pending' || operation.status === 'running'}
-    >
-      {renderBody()}
-    </FunctionCallCardShell>
+      islands={[renderBody()]}
+    />
   );
 };
 

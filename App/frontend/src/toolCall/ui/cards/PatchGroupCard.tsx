@@ -1,11 +1,14 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { TextButton } from '../../../components/TextButton';
 import ToggleSwitch from '../../../components/common/ToggleSwitch';
+import { useSettingsStore } from '../../../store/settingsStore';
+import { useUnifiedObjectStore } from '../../../store/unifiedObjectStore';
 import type { ToolCallDecisionMap } from '../../types';
 import type { ObjectOperationVM, PatchDecision } from '../../viewModel/types';
 import { useFunctionCallUIStore } from '../store';
 import { FunctionCallCardShell } from '../FunctionCallCardShell';
 import type { PatchGroupCardProps } from './types';
+import { getObjectSnapshot } from './helpers';
 
 const EMPTY_PATCH_DECISIONS: Record<string, PatchDecision> = {};
 
@@ -37,6 +40,7 @@ function buildStatusSummary(operations: ObjectOperationVM[]): string {
 
 export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
   threadId,
+  projectId,
   groupId,
   targetLabel,
   operations,
@@ -44,6 +48,16 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
   onConfirm,
   onConfirmAndPause,
 }) => {
+  const language = useSettingsStore((state) => state.getSettings().mainLanguage);
+  const objects = useUnifiedObjectStore((state) => state.objects);
+
+  const displayName = useMemo(() => {
+    const firstOp = operations[0];
+    if (!firstOp) return targetLabel;
+    const snapshot = getObjectSnapshot({ operation: firstOp, objects, projectId, language });
+    return snapshot.displayName || targetLabel;
+  }, [operations, objects, projectId, language, targetLabel]);
+
   const patchDecisions = useFunctionCallUIStore(
     (state) => state.patchDecisionsByThread[threadId]
   ) ?? EMPTY_PATCH_DECISIONS;
@@ -112,16 +126,18 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
           ? 'rejected'
           : 'failed';
 
-  const headerActions = (
+  const hasEligible = eligibleIds.length > 0;
+
+  const headerActions = hasEligible ? (
     <div className="function-call-patch-header-actions">
-      <TextButton size="sm" variant="secondary" onClick={handleToggleAllApply} disabled={disabled || eligibleIds.length === 0}>
+      <TextButton size="sm" variant="secondary" onClick={handleToggleAllApply} disabled={disabled}>
         Apply All
       </TextButton>
-      <TextButton size="sm" variant="danger" onClick={handleRejectAll} disabled={disabled || eligibleIds.length === 0}>
+      <TextButton size="sm" variant="danger" onClick={handleRejectAll} disabled={disabled}>
         Reject All
       </TextButton>
     </div>
-  );
+  ) : null;
 
   return (
     <FunctionCallCardShell
@@ -129,14 +145,12 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
       cardId={groupId}
       category="patch"
       status={groupStatus}
-      title={`Patch ${targetLabel}`}
-      targetLabel={`${operations.length} change${operations.length === 1 ? '' : 's'}`}
+      title={displayName}
       subtitle={statusSummary}
       rightActions={headerActions}
       defaultExpanded={operations.some((operation) => operation.status === 'pending' || operation.status === 'running')}
-    >
-      <div className="function-call-patch-group-body">
-        {operations.map((operation) => {
+      islands={[
+        ...operations.map((operation) => {
           const field = typeof operation.args.field === 'string' ? operation.args.field : 'content';
           const oldText = patchValue(operation.args.old);
           const newText = patchValue(operation.args.new);
@@ -170,30 +184,31 @@ export const PatchGroupCard: React.FC<PatchGroupCardProps> = ({
               </div>
             </div>
           );
-        })}
-
-        <div className="function-call-patch-group-footer">
-          {onConfirmAndPause && (
+        }),
+        ...(hasEligible ? [
+          <div className="function-call-patch-group-footer" key="footer">
+            {onConfirmAndPause && (
+              <TextButton
+                size="sm"
+                variant="secondary"
+                onClick={() => void handleConfirmAndPause()}
+                disabled={disabled}
+              >
+                Confirm & Pause
+              </TextButton>
+            )}
             <TextButton
               size="sm"
-              variant="secondary"
-              onClick={() => void handleConfirmAndPause()}
-              disabled={disabled || eligibleIds.length === 0}
+              variant="primary"
+              onClick={() => void handleConfirm()}
+              disabled={disabled}
             >
-              Confirm & Pause
+              {isCommitting ? 'Applying...' : 'Confirm'}
             </TextButton>
-          )}
-          <TextButton
-            size="sm"
-            variant="primary"
-            onClick={() => void handleConfirm()}
-            disabled={disabled || eligibleIds.length === 0}
-          >
-            {isCommitting ? 'Applying...' : 'Confirm'}
-          </TextButton>
-        </div>
-      </div>
-    </FunctionCallCardShell>
+          </div>,
+        ] : []),
+      ]}
+    />
   );
 };
 

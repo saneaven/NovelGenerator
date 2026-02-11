@@ -85,6 +85,8 @@ export const LLMTaskModals: React.FC = () => {
       agentId: input.agentId,
       assistantMessageId,
       runMode: input.runMode,
+      surface: input.surface,
+      contextObjectIds: input.contextObjectIds,
     };
   }, [session?.id, session?.kind, session?.input, session?.result]);
 
@@ -171,7 +173,7 @@ export const LLMTaskModals: React.FC = () => {
     setIsApplying(true);
     try {
       const invocationCaller: InvocationCaller | undefined = agentContext.runMode;
-      await executeAgentToolCalls({
+      const result = await executeAgentToolCalls({
         projectId: agentContext.projectId,
         agentId: agentContext.agentId,
         assistantMessageId: agentContext.assistantMessageId,
@@ -180,6 +182,18 @@ export const LLMTaskModals: React.FC = () => {
         options: { ...CRUD_OPTIONS, userRequest: 'Agent' },
         invocationCaller,
       });
+
+      if (result.shouldAutoContinue) {
+        await AgentExecutor.start({
+          projectId: agentContext.projectId,
+          agentId: agentContext.agentId,
+          runMode: agentContext.runMode,
+          surface: agentContext.surface,
+          userInput: '',
+          outputLanguage: mainLanguage,
+          contextObjectIds: agentContext.contextObjectIds,
+        });
+      }
     } finally {
       setIsApplying(false);
     }

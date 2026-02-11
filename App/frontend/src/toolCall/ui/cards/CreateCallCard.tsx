@@ -75,16 +75,14 @@ export const CreateCallCard: React.FC<ObjectCardProps> = ({
       cardId={operation.id}
       category="create"
       status={operation.status}
-      title={operation.title}
-      targetLabel={titleValue}
+      title={titleValue}
       showDecisionButtons={showDecisionButtons}
       decisionDisabled={decisionDisabled}
       onAccept={onAccept}
       onReject={onReject}
       defaultExpanded={operation.status === 'pending' || operation.status === 'running'}
-    >
-      {renderBody()}
-    </FunctionCallCardShell>
+      islands={[renderBody()]}
+    />
   );
 };
 

@@ -3,6 +3,7 @@ export {
   applyToolCalls,
   rejectAllToolCalls,
   markToolCallsRunning,
+  buildAutoApproveDecisions,
   type ToolCallRunResult,
 } from './engine';
 

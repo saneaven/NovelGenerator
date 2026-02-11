@@ -46,8 +46,7 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
     : null;
   const imageUrl = getAssetUrl(mainAsset);
 
-  const title = snapshot.displayName ? `Read ${snapshot.displayName}` : operation.title;
-  const targetLabel = snapshot.displayName ?? operation.targetLabel;
+  const title = snapshot.displayName || operation.title;
 
   const renderBody = () => {
     if (operation.objectType === 'outline' || operation.objectType === 'outline_act' || operation.objectType === 'outline_chapter') {
@@ -95,15 +94,13 @@ export const ReadCallCard: React.FC<ObjectCardProps> = ({
       category="read"
       status={operation.status}
       title={title}
-      targetLabel={targetLabel}
       showDecisionButtons={showDecisionButtons}
       decisionDisabled={decisionDisabled}
       onAccept={onAccept}
       onReject={onReject}
       defaultExpanded={operation.status === 'running' || operation.status === 'pending'}
-    >
-      {renderBody()}
-    </FunctionCallCardShell>
+      islands={[renderBody()]}
+    />
   );
 };
 

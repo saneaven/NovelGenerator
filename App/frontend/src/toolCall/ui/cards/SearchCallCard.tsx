@@ -79,34 +79,34 @@ export const SearchCallCard: React.FC<SearchCardProps> = ({
       cardId={operation.id}
       category="search"
       status={operation.status}
-      title="Search"
-      targetLabel={summary}
+      title={operation.searchType === 'rag' ? 'RAG' : 'Keyword'}
       showDecisionButtons={showDecisionButtons}
       decisionDisabled={decisionDisabled}
       onAccept={onAccept}
       onReject={onReject}
       defaultExpanded={operation.status === 'pending' || operation.status === 'running'}
-      extraIslands={resultsIsland}
-    >
-      <div className="function-call-search-query-island">
-        <div className="function-call-search-query-island__label">Query</div>
-        {operation.searchType === 'rag' ? (
-          <ul className="function-call-search-query-island__list">
-            {(Array.isArray(operation.args.queries)
-              ? operation.args.queries.filter((q): q is string => typeof q === 'string' && q.trim().length > 0)
-              : [])
-              .map((query, index) => <li key={`${query}-${index}`}>{query}</li>)}
-          </ul>
-        ) : (
-          <div className="function-call-search-query-island__keyword-row">
-            <span>{typeof operation.args.keyword === 'string' ? operation.args.keyword : '(empty keyword)'}</span>
-            <span className="function-call-search-query-island__page-chip">
-              Page {typeof operation.args.page === 'number' ? operation.args.page : 1}
-            </span>
-          </div>
-        )}
-      </div>
-    </FunctionCallCardShell>
+      islands={[
+        <div className="function-call-search-query-island" key="query">
+          <div className="function-call-search-query-island__label">Query</div>
+          {operation.searchType === 'rag' ? (
+            <ul className="function-call-search-query-island__list">
+              {(Array.isArray(operation.args.queries)
+                ? operation.args.queries.filter((q): q is string => typeof q === 'string' && q.trim().length > 0)
+                : [])
+                .map((query, index) => <li key={`${query}-${index}`}>{query}</li>)}
+            </ul>
+          ) : (
+            <div className="function-call-search-query-island__keyword-row">
+              <span>{typeof operation.args.keyword === 'string' ? operation.args.keyword : '(empty keyword)'}</span>
+              <span className="function-call-search-query-island__page-chip">
+                Page {typeof operation.args.page === 'number' ? operation.args.page : 1}
+              </span>
+            </div>
+          )}
+        </div>,
+        ...(resultsIsland ? [resultsIsland] : []),
+      ]}
+    />
   );
 };
 

@@ -39,6 +39,7 @@ import type { PresetListItem } from '../../../types/presets';
 import type { PromptCategory, TaskType } from '../../../types/prompts';
 import { mapTaskTypeToSchemaType } from '../../../templateEngine/validator';
 import { extractFragmentReferences, getFragmentRegistry, validateTemplate } from '../../../templateEngine/engine';
+import { useSettingsToast } from '../SettingsToastContext';
 import {
   makeFragmentDraftKey,
   makePromptDraftKey,
@@ -363,6 +364,7 @@ interface PromptsTemplatesPanelProps {
 
 const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTemplatesPanelProps>(({ onUnsavedCountChange }, ref) => {
   const { t } = useTranslation();
+  const toast = useSettingsToast();
   const loadPrompt = useSettingsStore((s) => s.loadPrompt);
   const invalidatePromptCache = useSettingsStore((s) => s.invalidatePromptCache);
   const activePresetId = usePresetStore((s) => s.activePresetId);
@@ -524,24 +526,51 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     }));
   }, []);
 
+  const subAgentPromptDisplayName = useMemo(() => {
+    if (!subAgentPromptIdentityName) return '';
+    return currentSubAgentDraft?.current.display_name || selectedSubAgent?.display_name || subAgentPromptIdentityName;
+  }, [currentSubAgentDraft, selectedSubAgent?.display_name, subAgentPromptIdentityName]);
+
   const handleSubAgentPromptContentChange = useCallback(
     (tab: 'systemPrompt' | 'userPrompt' | 'prefill', content: string) => {
       if (!subAgentPromptIdentityName) return;
       const key = makePromptDraftKey('subAgent', tab, subAgentPromptIdentityName);
+      const nodeId = selectedSubAgentId ? `subAgent-${selectedSubAgentId}-${tab}` : undefined;
+      const label = `Sub Agent: ${subAgentPromptDisplayName} / call_${subAgentPromptIdentityName} / ${tab}`;
       setPromptDrafts((prev) => {
         const cur = prev[key];
-        if (!cur) return prev;
+        if (!cur) {
+          return {
+            ...prev,
+            [key]: {
+              key,
+              label,
+              nodeId,
+              taskType: 'subAgent',
+              category: tab,
+              name: subAgentPromptIdentityName,
+              isLoading: false,
+              originalContent: '',
+              content,
+              dirty: content !== '',
+              validation: null,
+            },
+          };
+        }
         return {
           ...prev,
           [key]: {
             ...cur,
+            label,
+            nodeId: cur.nodeId ?? nodeId,
+            name: subAgentPromptIdentityName,
             content,
             dirty: content !== cur.originalContent,
           },
         };
       });
     },
-    [subAgentPromptIdentityName]
+    [selectedSubAgentId, subAgentPromptDisplayName, subAgentPromptIdentityName]
   );
 
   const reloadSubAgentPrompt = useCallback(
@@ -1353,10 +1382,15 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
     }
   };
 
-  const handleCopyFragmentPath = () => {
+  const handleCopyFragmentPath = async () => {
     if (!selectedPath) return;
     const pathToCopy = `{{prompt "${selectedPath}"}}`;
-    navigator.clipboard.writeText(pathToCopy);
+    try {
+      await navigator.clipboard.writeText(pathToCopy);
+      toast.success(t('common.copied', { value: pathToCopy }));
+    } catch {
+      toast.error(t('settings.promptEditor.toast.copyFailed'));
+    }
   };
 
   const getEditorTitle = () => {
@@ -1683,13 +1717,35 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                   <TemplateEditor
                     content={currentPromptDraft?.content || ''}
                     onContentChange={(text) => {
-                      if (!currentPromptDraft) return;
+                      const taskType = selectedPrompt.taskType;
+                      const category = selectedPrompt.category;
+                      const name = selectedPrompt.name;
+                      if (!taskType || !category || !name) return;
+
+                      const draftKey = makePromptDraftKey(taskType, category, name);
                       setPromptDrafts((prev) => {
-                        const cur = prev[currentPromptDraft.key];
-                        if (!cur) return prev;
+                        const cur = prev[draftKey];
+                        if (!cur) {
+                          return {
+                            ...prev,
+                            [draftKey]: {
+                              key: draftKey,
+                              label: selectedPrompt.label,
+                              nodeId: selectedPrompt.id,
+                              taskType,
+                              category,
+                              name,
+                              isLoading: false,
+                              originalContent: '',
+                              content: text,
+                              dirty: text !== '',
+                              validation: null,
+                            },
+                          };
+                        }
                         return {
                           ...prev,
-                          [currentPromptDraft.key]: {
+                          [draftKey]: {
                             ...cur,
                             content: text,
                             dirty: text !== cur.originalContent,
@@ -1697,7 +1753,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                         };
                       });
                     }}
-                    validation={currentPromptDraft?.validation}
+                    validation={currentPromptDraft?.validation ?? null}
                     isLoading={!currentPromptDraft || currentPromptDraft.isLoading}
                     placeholder={t('settings.promptEditor.enterPromptTemplate')}
                   />
@@ -1722,7 +1778,7 @@ const PromptsTemplatesPanel = forwardRef<PromptsTemplatesPanelHandle, PromptsTem
                         };
                       });
                     }}
-                    validation={currentFragmentDraft?.validation}
+                    validation={currentFragmentDraft?.validation ?? null}
                     isLoading={!currentFragmentDraft || currentFragmentDraft.isLoading}
                     placeholder={t('settings.promptEditor.enterFragmentTemplate')}
                   />

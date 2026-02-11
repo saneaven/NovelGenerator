@@ -29,7 +29,6 @@ export interface FunctionCallHeaderIslandProps {
   category: OperationCategory;
   status: HeaderStatus;
   title: string;
-  targetLabel?: string;
   subtitle?: string;
   expanded: boolean;
   onToggle: () => void;
@@ -48,7 +47,6 @@ export const FunctionCallHeaderIsland: React.FC<FunctionCallHeaderIslandProps> =
   category,
   status,
   title,
-  targetLabel,
   subtitle,
   expanded,
   onToggle,
@@ -92,7 +90,6 @@ export const FunctionCallHeaderIsland: React.FC<FunctionCallHeaderIslandProps> =
           <div className="function-call-header-island__title-row">
             <span className="function-call-header-island__kind">{CATEGORY_LABELS[category]}</span>
             <h4 className="function-call-header-island__title">{title}</h4>
-            {targetLabel && <span className="function-call-header-island__target">{targetLabel}</span>}
             <span className={`function-call-status-pill function-call-status-pill--${status}`}>{statusLabel}</span>
           </div>
           {subtitle && <p className="function-call-header-island__subtitle">{subtitle}</p>}

@@ -26,12 +26,14 @@ import {
   applyToolCalls,
   rejectAllToolCalls,
   markToolCallsRunning,
+  buildAutoApproveDecisions,
 } from '../toolCall/runtime';
 import type { HandlerOptions } from '../toolCall/apply/types';
-import type { ToolCallDecisionMap, ToolCallStatus } from '../toolCall/types';
+import type { ToolCallDecisionMap } from '../toolCall/types';
 import { isReadTool } from '../toolCall/schemas/schemaRegistry';
 import { generateTempId } from '../utils/tempId';
 import { registerSessionNotification, updateSessionNotification } from '../llmTask/notificationHelpers';
+import { evaluateToolCallAutoContinue } from './utils/autoContinuePolicy';
 
 export interface AgentExecutorInput {
   projectId: string;
@@ -112,8 +114,13 @@ export const AgentExecutor = {
    * Returns sessionId for tracking
    * @param input - Agent executor input parameters
    * @param onSessionCreated - Optional callback called immediately after session creation (for stop button)
+   * @param onAutoContinueReady - Optional callback to trigger auto-continue when no pending/rejected tool calls remain
    */
-  async start(input: AgentExecutorInput, onSessionCreated?: (sessionId: string) => void): Promise<string> {
+  async start(
+    input: AgentExecutorInput,
+    onSessionCreated?: (sessionId: string) => void,
+    onAutoContinueReady?: () => void,
+  ): Promise<string> {
     const agentStore = useAgentStore.getState();
     const settingsStore = useSettingsStore.getState();
     const credentialsStore = useCredentialsStore.getState();
@@ -320,12 +327,57 @@ export const AgentExecutor = {
             allowedToolNames,
           });
 
-          await agentStore.updateMessageToolCalls(
-            input.projectId,
-            input.agentId,
-            assistantMessageId,
-            staged.toolCalls
-          );
+          // 6) Auto-approve eligible tool calls before writing to store (prevents UI flicker)
+          const { decisions: autoDecisions } = buildAutoApproveDecisions({
+            toolCalls: staged.toolCalls,
+            config: settings.toolCallAutoApprove,
+          });
+
+          const hasAutoApproveDecisions = Object.keys(autoDecisions).length > 0;
+
+          if (hasAutoApproveDecisions) {
+            const runningToolCalls = markToolCallsRunning({
+              toolCalls: staged.toolCalls,
+              decisions: autoDecisions,
+            });
+
+            const applied = await applyToolCalls({
+              projectId: input.projectId,
+              language: settings.mainLanguage,
+              toolCalls: runningToolCalls,
+              decisions: autoDecisions,
+              options: {
+                userRequest: 'Agent',
+                agentId: input.agentId,
+                parentAgentMessageId: assistantMessageId,
+              },
+              invocationCaller: input.runMode,
+            });
+
+            await agentStore.updateMessageToolCalls(
+              input.projectId,
+              input.agentId,
+              assistantMessageId,
+              applied.toolCalls
+            );
+
+            const autoContinue = evaluateToolCallAutoContinue(applied.toolCalls);
+            if (autoContinue.shouldAutoContinue) {
+              onAutoContinueReady?.();
+            }
+          } else {
+            await agentStore.updateMessageToolCalls(
+              input.projectId,
+              input.agentId,
+              assistantMessageId,
+              staged.toolCalls
+            );
+
+            const autoContinue = evaluateToolCallAutoContinue(staged.toolCalls);
+            if (autoContinue.shouldAutoContinue) {
+              onAutoContinueReady?.();
+            }
+          }
         } catch (error) {
           console.error('Failed to stage agent tool calls:', error);
           useErrorStore.getState().showError(
@@ -457,13 +509,13 @@ export async function executeAgentToolCalls(params: {
   decisions: ToolCallDecisionMap;
   options: HandlerOptions;
   invocationCaller?: InvocationCaller;
-}): Promise<{ hasAcceptedReads: boolean; hasPendingDecisions: boolean }> {
+}): Promise<{ hasAcceptedReads: boolean; hasPendingDecisions: boolean; shouldAutoContinue: boolean }> {
   const { projectId, agentId, assistantMessageId, language, decisions, options, invocationCaller } = params;
   const agentStore = useAgentStore.getState();
 
   const toolCalls = getMessageToolCalls({ projectId, agentId, assistantMessageId });
   if (toolCalls.length === 0) {
-    return { hasAcceptedReads: false, hasPendingDecisions: false };
+    return { hasAcceptedReads: false, hasPendingDecisions: false, shouldAutoContinue: false };
   }
 
   const effectiveOptions: HandlerOptions = {
@@ -490,12 +542,14 @@ export async function executeAgentToolCalls(params: {
     (toolCall) => toolCall.status === 'accepted' && isReadTool(toolCall.tool_name)
   );
 
-  const hasPendingDecisions = applied.toolCalls.some((toolCall) => {
-    const status = (toolCall.status ?? 'pending') as ToolCallStatus;
-    return status === 'pending' || status === 'validating' || status === 'running';
-  });
+  const autoContinue = evaluateToolCallAutoContinue(applied.toolCalls);
+  const hasPendingDecisions = autoContinue.hasPending;
 
-  return { hasAcceptedReads, hasPendingDecisions };
+  return {
+    hasAcceptedReads,
+    hasPendingDecisions,
+    shouldAutoContinue: autoContinue.shouldAutoContinue,
+  };
 }
 
 /**

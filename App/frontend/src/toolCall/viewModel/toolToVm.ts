@@ -185,32 +185,19 @@ function buildTitle(params: {
   objectType?: ObjectType;
   storySubtype?: StoryObjectSubtype;
   callDisplayName?: string;
+  searchType?: string;
 }): string {
-  const { category, objectType, storySubtype, callDisplayName } = params;
+  const { category, objectType, storySubtype, callDisplayName, searchType } = params;
 
   if (category === 'call_agent') {
-    return `Call ${callDisplayName || 'Sub Agent'}`;
+    return callDisplayName || 'Sub Agent';
   }
 
   if (category === 'search') {
-    return 'Search';
+    return searchType === 'rag' ? 'RAG' : 'Keyword';
   }
 
-  const label = objectType ? objectTypeLabel(objectType, storySubtype) : 'Object';
-  switch (category) {
-    case 'read':
-      return `Read ${label}`;
-    case 'create':
-      return `Create ${label}`;
-    case 'replace':
-      return `Replace ${label}`;
-    case 'patch':
-      return `Patch ${label}`;
-    case 'delete':
-      return `Delete ${label}`;
-    default:
-      return label;
-  }
+  return objectType ? objectTypeLabel(objectType, storySubtype) : 'Object';
 }
 
 function callAgentDisplay(toolName: string): { agentName: string; displayName: string } {
@@ -272,7 +259,7 @@ export function mapToolToOperationVM(params: MapToolToVmParams): OperationVM {
       reason,
       result,
       args,
-      title: buildTitle({ category }),
+      title: buildTitle({ category, searchType }),
       targetId: undefined,
       targetLabel: searchType.toUpperCase(),
       decisionEligible,
