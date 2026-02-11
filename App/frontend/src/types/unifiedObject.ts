@@ -63,6 +63,7 @@ export interface ObjectMetadata {
   outline_id?: string;
   act_id?: string;
   chapter_id?: string;
+  manuscript_id?: string;
   // Structural data
   order?: number;  // For acts and chapters
   // Image prompts (for story objects: character, location, organization, lorebook)

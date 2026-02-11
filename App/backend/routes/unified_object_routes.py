@@ -10,7 +10,7 @@ All story objects use the same pattern:
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
@@ -177,6 +177,16 @@ def get_object_or_404(db: Session, object_type: str, object_id: UUID, *, user_id
             .filter(Project.user_id == user_id)
         )
 
+    if object_type == "chapter":
+        query = query.options(
+            joinedload(Chapter.manuscript),
+            joinedload(Chapter.act).joinedload(Act.outline),
+        )
+    elif object_type == "manuscript":
+        query = query.options(
+            joinedload(Manuscript.chapter).joinedload(Chapter.act).joinedload(Act.outline),
+        )
+
     obj = query.filter(model_class.id == object_id).first()
 
     if not obj:
@@ -236,12 +246,17 @@ def get_object_metadata(obj: Any, object_type: str, db: Optional[Session] = None
         if not act:
             raise HTTPException(status_code=500, detail='Chapter is missing act relation')
 
+        manuscript = getattr(obj, 'manuscript', None)
+        if not manuscript:
+            raise HTTPException(status_code=500, detail='Chapter manuscript relation missing')
+
         outline = getattr(act, 'outline', None)
         if not outline:
             raise HTTPException(status_code=500, detail='Chapter act is missing outline relation')
 
         metadata['project_id'] = str(outline.project_id)
         metadata['act_id'] = str(obj.act_id)
+        metadata['manuscript_id'] = str(manuscript.id)
         metadata['order'] = obj.order
     elif object_type == 'manuscript':
         chapter = getattr(obj, 'chapter', None)
@@ -883,6 +898,16 @@ async def list_objects(
             # No outlines, return empty result set
             query = query.filter(model_class.id == None)
 
+    if object_type == 'chapter':
+        query = query.options(
+            joinedload(Chapter.manuscript),
+            joinedload(Chapter.act).joinedload(Act.outline),
+        )
+    elif object_type == 'manuscript':
+        query = query.options(
+            joinedload(Manuscript.chapter).joinedload(Chapter.act).joinedload(Act.outline),
+        )
+
     # Get all core objects
     core_objects = query.all()
 
@@ -1147,19 +1172,49 @@ async def create_object(
     db.add(core_obj)
     db.flush()
 
+    user_request = request.user_request or 'Initial Creation'
+
     # Create initial version (no ActiveVersion pointer needed - latest is always active)
-    version_id = uuid4()
     version = ObjectVersion(
-        id=version_id,
+        id=uuid4(),
         object_type=object_type,
         object_id=object_id,
         version_number=1,
         data={request.language: request.data},
-        user_request=request.user_request or 'Initial Creation',
+        user_request=user_request,
         created_by=current_user.id,
         created_at=datetime.utcnow()
     )
     db.add(version)
+
+    # Chapters always own one manuscript.
+    if object_type == 'chapter':
+        manuscript_id = uuid4()
+        manuscript_obj = Manuscript(
+            id=manuscript_id,
+            chapter_id=object_id,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        db.add(manuscript_obj)
+        db.flush()
+
+        manuscript_version = ObjectVersion(
+            id=uuid4(),
+            object_type='manuscript',
+            object_id=manuscript_id,
+            version_number=1,
+            data={
+                request.language: {
+                    "doc": {"type": "doc", "content": [{"type": "paragraph"}]},
+                    "wordCount": 0,
+                }
+            },
+            user_request=user_request,
+            created_by=current_user.id,
+            created_at=datetime.utcnow()
+        )
+        db.add(manuscript_version)
 
     db.commit()
     db.refresh(core_obj)

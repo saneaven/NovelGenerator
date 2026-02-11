@@ -126,11 +126,10 @@ export class ManuscriptBatch {
     callId: string;
     args: Record<string, unknown>;
     store: ToolCallBatchStore;
-    projectId: string;
     language: string;
     options: HandlerOptions;
   }): Promise<ApplicationResult> {
-    const { callId, args, store, projectId, language, options } = params;
+    const { callId, args, store, language, options } = params;
 
     const { createNewVersion, userRequest } = normalizeOptions(options);
     const id = args.id as string | undefined;
@@ -164,21 +163,7 @@ export class ManuscriptBatch {
         return ok('Updated manuscript', { id });
       }
 
-      // Fallback: create a new manuscript if it doesn't exist.
-      // Note: create endpoint requires TipTap JSON doc, so we must convert now.
-      const nextDoc = markdownToDoc(content);
-      const wordCount = docWordCount(nextDoc);
-
-      const created = await store.createObject(
-        'manuscript',
-        projectId,
-        { doc: nextDoc, wordCount },
-        language,
-        { chapter_id: id },
-        userRequest
-      );
-
-      return ok('Updated manuscript', { id: created.id });
+      return error('Manuscript not found. Chapters must have a linked manuscript.', id);
     });
   }
 

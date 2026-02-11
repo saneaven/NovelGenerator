@@ -194,7 +194,6 @@ async function applyToolCall(params: {
         callId: normalized.id,
         args: normalized.arguments,
         store,
-        projectId: context.projectId,
         language: context.language,
         options: context.options,
       });

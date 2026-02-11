@@ -392,6 +392,17 @@ export const useUnifiedObjectStore = create<UnifiedObjectStore>((set, get) => {
         loading: { ...state.loading, [newObject.id]: false },
       }));
 
+      if (type === 'chapter') {
+        const linkedManuscriptId = newObject.metadata?.manuscript_id;
+        if (typeof linkedManuscriptId === 'string' && linkedManuscriptId.length > 0) {
+          try {
+            await get().fetchObject('manuscript', linkedManuscriptId);
+          } catch (err) {
+            console.error('Failed to sync linked manuscript after chapter creation:', err);
+          }
+        }
+      }
+
       void scheduleRagIndex({ projectId, objectType: type, objectId: newObject.id });
       return newObject;
     } catch (error: any) {

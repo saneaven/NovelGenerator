@@ -92,10 +92,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
   const storeErrors = useUnifiedObjectStore((state) => state.errors);
 
   // Actions accessed via getState() - doesn't trigger re-renders
-  const listObjects = useUnifiedObjectStore.getState().listObjects;
   const fetchObject = useUnifiedObjectStore.getState().fetchObject;
   const updateObject = useUnifiedObjectStore.getState().updateObject;
-  const createObject = useUnifiedObjectStore.getState().createObject;
   const settings = useSettings();
   const { showError } = useErrorStore();
   // Get stable action references to avoid infinite loops in effects
@@ -219,6 +217,15 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
     return matchingObject || null;
   }, [selectedChapterId, storeObjects]);
 
+  const linkedManuscriptIdFromChapter = useMemo(() => {
+    if (!selectedChapterId) return null;
+    const chapterObject = storeObjects[selectedChapterId];
+    const manuscriptIdInMetadata = chapterObject?.metadata?.manuscript_id;
+    return typeof manuscriptIdInMetadata === 'string' && manuscriptIdInMetadata.length > 0
+      ? manuscriptIdInMetadata
+      : null;
+  }, [selectedChapterId, storeObjects]);
+
   // Computed values
   const wordCount = useMemo(() => {
     return docWordCount(doc);
@@ -249,90 +256,53 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
 
   // Resolve manuscript object ID when chapter selection changes
   useEffect(() => {
-    let isActive = true;
-
-    const resolveManuscriptId = async () => {
-      if (!projectId || !selectedChapterId) {
-        if (!isActive) return;
-        setManuscriptId(null);
-        setContentIdError(null);
-        setIsResolvingContentId(false);
-        return;
-      }
-
-      if (existingManuscript) {
-        if (!isActive) return;
-        setManuscriptId(existingManuscript.id);
-        setContentIdError(null);
-        setIsResolvingContentId(false);
-        return;
-      }
-
-      setIsResolvingContentId(true);
+    if (!projectId || !selectedChapterId) {
+      setManuscriptId(null);
       setContentIdError(null);
+      setIsResolvingContentId(false);
+      return;
+    }
 
-      try {
-        const manuscripts = await listObjects('manuscript', projectId);
-        if (!isActive) return;
+    // 1) Prefer manuscript already in store by chapter link.
+    if (existingManuscript) {
+      setManuscriptId(existingManuscript.id);
+      setContentIdError(null);
+      setIsResolvingContentId(false);
+      return;
+    }
 
-        const matchingManuscript = manuscripts.find(
-          (m) => m.metadata?.chapter_id === selectedChapterId
-        );
+    // 2) Resolve manuscript ID from chapter metadata.
+    if (linkedManuscriptIdFromChapter) {
+      setManuscriptId(linkedManuscriptIdFromChapter);
+      setContentIdError(null);
+      setIsResolvingContentId(!storeObjects[linkedManuscriptIdFromChapter]);
+      return;
+    }
 
-        if (matchingManuscript) {
-          setManuscriptId(matchingManuscript.id);
-          return;
-        }
-
-        // Create new manuscript if it doesn't exist
-        const primaryLanguage = settings.mainLanguage || 'en';
-        const createdManuscript = await createObject(
-          'manuscript',
-          projectId,
-          {
-            doc: emptyDoc(),
-            wordCount: 0,
-          },
-          primaryLanguage,
-          { chapter_id: selectedChapterId }
-        );
-
-        if (!isActive) return;
-        setManuscriptId(createdManuscript.id);
-      } catch (err) {
-        if (!isActive) return;
-        setManuscriptId(null);
-        setContentIdError('Failed to load or create manuscript.');
-      } finally {
-        if (isActive) {
-          setIsResolvingContentId(false);
-        }
-      }
-    };
-
-    // Defer to avoid flushSync conflict with TipTap editor during React render phase
-    queueMicrotask(() => {
-      resolveManuscriptId();
-    });
-
-    return () => {
-      isActive = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // 3) Fail fast when chapter->manuscript linkage is missing.
+    setManuscriptId(null);
+    setContentIdError('Failed to resolve linked manuscript.');
+    setIsResolvingContentId(false);
   }, [
     projectId,
     selectedChapterId,
     existingManuscript,
-    settings.mainLanguage,
+    linkedManuscriptIdFromChapter,
+    storeObjects,
   ]);
 
-  // Fetch manuscript when ID available or language changes
+  // Fetch manuscript when ID is resolved but object is not in store yet
   useEffect(() => {
     if (!manuscriptId) return;
+    if (manuscript) {
+      setContentIdError(null);
+      setIsResolvingContentId(false);
+      return;
+    }
 
     // Set a timeout to prevent infinite loading
     loadingTimeoutRef.current = setTimeout(() => {
-      if (!manuscript && loading) {
+      if (!manuscript) {
         console.error('Loading timeout - forcing error state');
         setContentIdError('Loading timeout. The manuscript is taking too long to load. Please try refreshing.');
       }
@@ -345,6 +315,8 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
       fetchObject('manuscript', manuscriptId).catch((err: Error) => {
         console.error('Failed to fetch manuscript:', err);
         setContentIdError(err.message || 'Failed to load manuscript');
+      }).finally(() => {
+        setIsResolvingContentId(false);
       });
     });
 
@@ -353,7 +325,7 @@ const NovelEditorPanel: React.FC<NovelEditorPanelProps> = ({
         clearTimeout(loadingTimeoutRef.current);
       }
     };
-  }, [manuscriptId]); // Only re-fetch when manuscriptId changes
+  }, [manuscriptId, manuscript, fetchObject]); // Fetch only when manuscript is missing
 
   // Note: RichTextEditor now handles baseline tracking internally via hasChanges()
   // No need to track baselineSetRef here anymore
